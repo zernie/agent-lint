@@ -8,5 +8,5 @@
   "repository": "https://github.com/zernie/agent-lint",
   "license": "MIT",
   "keywords": ["linting", "claude-md", "feedback-loops", "code-review"],
-  "skills": "./.claude/skills/"
+  "skills": "./skills/"
 }
