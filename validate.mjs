@@ -1,10 +1,20 @@
-import { readFileSync, lstatSync } from "node:fs";
+import { readFileSync, lstatSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 const ENFORCED_BY_RE = /\*\*Enforced by:\*\*/;
 const GUIDANCE_RE = /\*\*Guidance only\*\*/;
 const RULE_HEADER_RE = /^###\s+(.+)$/;
 
-export function parseClaudeMd(content) {
+const WELL_KNOWN_FILES = [
+  "CLAUDE.md",
+  "AGENTS.md",
+  "CONVENTIONS.md",
+  ".github/copilot-instructions.md",
+  ".cursorrules",
+  ".windsurfrules",
+];
+
+export function parseRules(content) {
   const lines = content.split("\n");
   const rules = [];
 
@@ -52,7 +62,7 @@ export function parseClaudeMd(content) {
 }
 
 export function validate(content) {
-  const rules = parseClaudeMd(content);
+  const rules = parseRules(content);
   const enforced = rules.filter((r) => r.enforcement === "enforced").length;
   const guidanceOnly = rules.filter((r) => r.enforcement === "guidance").length;
   const missing = rules.filter((r) => r.enforcement === "missing").length;
@@ -68,11 +78,21 @@ export function validate(content) {
 }
 
 /**
+ * Detect well-known agent config files in a directory.
+ * Returns an array of paths that exist.
+ */
+export function detectFiles(dir) {
+  return WELL_KNOWN_FILES.map((f) => join(dir, f)).filter((p) =>
+    existsSync(p),
+  );
+}
+
+/**
  * Read a file, optionally checking if it's a symlink.
  * Returns { content, skipped, reason } where skipped=true means the file was
  * a symlink and follow-symlinks was not enabled.
  */
-export function readClaudeMd(filePath, { followSymlinks = false } = {}) {
+export function readFile(filePath, { followSymlinks = false } = {}) {
   try {
     const stat = lstatSync(filePath);
     if (stat.isSymbolicLink() && !followSymlinks) {
@@ -106,14 +126,14 @@ export function readClaudeMd(filePath, { followSymlinks = false } = {}) {
 }
 
 /**
- * Validate multiple CLAUDE.md files. Returns a combined report.
+ * Validate multiple config files. Returns a combined report.
  */
 export function validatePaths(paths, { followSymlinks = false } = {}) {
   const fileResults = [];
   let allValid = true;
 
   for (const filePath of paths) {
-    const { content, skipped, reason } = readClaudeMd(filePath, {
+    const { content, skipped, reason } = readFile(filePath, {
       followSymlinks,
     });
 
@@ -143,7 +163,7 @@ export function validatePaths(paths, { followSymlinks = false } = {}) {
 
 function printResult(filePath, result) {
   console.log("");
-  console.log(`CLAUDE.md Validation Report: ${filePath}`);
+  console.log(`Validation Report: ${filePath}`);
   console.log("=".repeat(40));
   console.log(`  Total rules:    ${result.total}`);
   console.log(`  Enforced:       ${result.enforced}`);
@@ -162,18 +182,19 @@ function printResult(filePath, result) {
   }
 }
 
-// CLI entry point
-if (
-  process.argv[1] &&
-  (process.argv[1].endsWith("validate.mjs") ||
-    process.argv[1].endsWith("validate"))
-) {
-  const args = process.argv.slice(2);
+export function runValidate(args) {
   const followSymlinks = args.includes("--follow-symlinks");
   const paths = args.filter((a) => !a.startsWith("--"));
 
   if (paths.length === 0) {
-    paths.push("CLAUDE.md");
+    const detected = detectFiles(".");
+    if (detected.length === 0) {
+      console.log(
+        `No agent config files found. Searched for: ${WELL_KNOWN_FILES.join(", ")}`,
+      );
+      process.exit(1);
+    }
+    paths.push(...detected);
   }
 
   const { fileResults, valid } = validatePaths(paths, { followSymlinks });
@@ -201,4 +222,13 @@ if (
     console.log("::error::Validation failed — see report above");
     process.exit(1);
   }
+}
+
+// CLI entry point
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith("validate.mjs") ||
+    process.argv[1].endsWith("validate"))
+) {
+  runValidate(process.argv.slice(2));
 }
