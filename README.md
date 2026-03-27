@@ -115,13 +115,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: zernie/agent-lint@v1.0
+      - uses: zernie/agent-lint@main
 ```
 
 By default the action validates `CLAUDE.md`. Pass `paths` to validate other files:
 
 ```yaml
-- uses: zernie/agent-lint@v1.0
+- uses: zernie/agent-lint@main
   with:
     paths: "CLAUDE.md,AGENTS.md,.cursorrules"
 ```
@@ -129,7 +129,7 @@ By default the action validates `CLAUDE.md`. Pass `paths` to validate other file
 Multiple files (monorepo):
 
 ```yaml
-- uses: zernie/agent-lint@v1.0
+- uses: zernie/agent-lint@main
   with:
     paths: "CLAUDE.md,packages/api/CLAUDE.md,packages/web/CLAUDE.md"
 ```
@@ -137,7 +137,7 @@ Multiple files (monorepo):
 Follow symlinks (e.g. shared instruction file symlinked into subdirectories):
 
 ```yaml
-- uses: zernie/agent-lint@v1.0
+- uses: zernie/agent-lint@main
   with:
     paths: "CLAUDE.md,packages/api/CLAUDE.md"
     follow-symlinks: "true"
@@ -157,7 +157,7 @@ The action sets the following outputs, accessible via `steps.<id>.outputs.<name>
 | `valid`    | `true` if all rules have annotations     |
 
 ```yaml
-- uses: zernie/agent-lint@v1.0
+- uses: zernie/agent-lint@main
   id: lint
 - if: always()
   run: |
@@ -198,7 +198,7 @@ Exit codes: `0` on success, `1` if any rules are missing annotations.
 Validate multiple files across tools in a single run:
 
 ```yaml
-- uses: zernie/agent-lint@v1.0
+- uses: zernie/agent-lint@main
   with:
     paths: "CLAUDE.md,AGENTS.md,.cursorrules"
 ```
