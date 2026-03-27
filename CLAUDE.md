@@ -30,6 +30,13 @@ Named validation rules (togglable in config under `rules`):
 - `require-annotations` (default: `true`) — every rule marker needs an enforcement annotation
 - `max-lines` (default: `500`) — caps file length; set a number for custom limit, `false` to disable
 
+## Rules
+
+### Never include session links in commits or PRs
+
+**Guidance only** — cannot be mechanically enforced
+**Why:** This is a public repo. Claude Code session URLs (`https://claude.ai/code/session_...`) are private and should not be leaked in commit messages, PR descriptions, or comments.
+
 ## Example: Rules as headings
 
 ### Always use barrel file imports
