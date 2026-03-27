@@ -1,13 +1,17 @@
-# /pr-to-lint-rule
+---
+name: pr-to-lint-rule
+description: Convert a recurring PR review comment into an automated lint rule with tests and CLAUDE.md annotation
+disable-model-invocation: true
+argument-hint: <description of recurring PR feedback>
+---
 
 Convert a recurring PR review comment into an automated lint rule.
 
 ## Arguments
 
-`<description>` — A natural language description of the pattern to enforce. Examples:
+$ARGUMENTS — A natural language description of the pattern to enforce. Examples:
 - "we keep telling people not to import directly from antd, use our design system barrel file instead"
 - "people forget to use our custom logger instead of console.log"
-- "test files should always import from the test-utils barrel, not directly from @testing-library/react"
 - "don't use unwrap() in production code, use expect() or proper error handling"
 - "API route handlers must use the withAuth wrapper"
 
@@ -23,9 +27,11 @@ Look at the repository to determine:
 - **Testing framework** (Vitest, Jest, pytest, cargo test, etc.)
 - **Existing custom rules** (to match conventions)
 
+**If the language or linter cannot be confidently detected** (e.g. polyglot repo, no linter config, or multiple candidates), **ask the user** which language and linter to target before generating anything.
+
 ### Step 2: Generate the Lint Rule
 
-Based on the detected language, generate the appropriate rule type:
+Based on the detected (or user-specified) language, generate the appropriate rule type:
 
 #### For JavaScript/TypeScript (ESLint)
 

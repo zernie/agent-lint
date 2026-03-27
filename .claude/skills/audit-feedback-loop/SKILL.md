@@ -1,4 +1,8 @@
-# /audit-feedback-loop
+---
+name: audit-feedback-loop
+description: Scan the current repo and score its feedback loop maturity for AI-assisted development
+disable-model-invocation: true
+---
 
 Scan the current repository and score its feedback loop maturity for AI-assisted development.
 

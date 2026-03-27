@@ -90,11 +90,15 @@ Example:
 
 ### Installing Skills
 
-Copy the `.claude/skills/` directory to your project:
+Clone this repo and copy the skills into your project:
 
 ```bash
-cp -r .claude/skills/ /path/to/your/project/.claude/skills/
+git clone https://github.com/zernie/agent-lint.git /tmp/agent-lint
+cp -r /tmp/agent-lint/.claude/skills/ .claude/skills/
+rm -rf /tmp/agent-lint
 ```
+
+Or manually copy the `.claude/skills/audit-feedback-loop/` and `.claude/skills/pr-to-lint-rule/` directories into your project's `.claude/skills/`.
 
 ## Maturity Levels
 
