@@ -1,6 +1,6 @@
 # agent-lint
 
-Validate your CLAUDE.md, audit your feedback loops, and generate lint rules from PR comments.
+Validate your agent config files (CLAUDE.md, AGENTS.md, .cursorrules, etc.), audit your feedback loops, and generate lint rules from PR comments.
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
@@ -10,17 +10,30 @@ AI coding agents work best when they get deterministic feedback — linters, typ
 
 `agent-lint` helps you close the feedback loop:
 
-1. **CI-enforced CLAUDE.md validation** — every rule must be enforced by a linter or explicitly marked as guidance-only
+1. **CI-enforced config validation** — every rule must be enforced by a linter or explicitly marked as guidance-only
 2. **Repo maturity audit** — score how well your feedback loops support AI-assisted development
 3. **Lint rule generation** — turn recurring PR review comments into automated enforcement
 
+## Supported Config Files
+
+When no paths are specified, agent-lint auto-detects these well-known files:
+
+- `CLAUDE.md` — Claude Code
+- `AGENTS.md` — OpenAI Codex
+- `CONVENTIONS.md` — general conventions
+- `.github/copilot-instructions.md` — GitHub Copilot
+- `.cursorrules` — Cursor
+- `.windsurfrules` — Windsurf
+
+You can also pass any markdown file path explicitly.
+
 ## GitHub Action
 
-Add CLAUDE.md validation to your CI:
+Add config validation to your CI:
 
 ```yaml
-# .github/workflows/claude-md.yml
-name: Validate CLAUDE.md
+# .github/workflows/agent-lint.yml
+name: Validate agent config
 on: [push, pull_request]
 jobs:
   validate:
@@ -30,15 +43,15 @@ jobs:
       - uses: zernie/agent-lint@v1
 ```
 
-Multiple files (monorepo):
+This auto-detects whichever config files exist in your repo. To specify paths explicitly (monorepo):
 
 ```yaml
 - uses: zernie/agent-lint@v1
   with:
-    paths: "CLAUDE.md,packages/api/CLAUDE.md,packages/web/CLAUDE.md"
+    paths: "CLAUDE.md,packages/api/CLAUDE.md,packages/web/AGENTS.md"
 ```
 
-Follow symlinks (e.g. shared CLAUDE.md symlinked into subdirectories):
+Follow symlinks (e.g. shared config symlinked into subdirectories):
 
 ```yaml
 - uses: zernie/agent-lint@v1
@@ -50,11 +63,12 @@ Follow symlinks (e.g. shared CLAUDE.md symlinked into subdirectories):
 CLI usage (no GitHub Actions):
 
 ```bash
-node validate.mjs CLAUDE.md
-node validate.mjs CLAUDE.md packages/api/CLAUDE.md --follow-symlinks
+npx agent-lint                        # auto-detect config files
+npx agent-lint validate CLAUDE.md     # validate specific file
+npx agent-lint validate AGENTS.md CLAUDE.md --follow-symlinks
 ```
 
-### CLAUDE.md Format
+### Config File Format
 
 The action checks that every `###` heading has either an `**Enforced by:**` annotation or a `**Guidance only**` marker:
 
@@ -109,7 +123,14 @@ Example:
 
 ### Installing Skills
 
-Clone this repo and copy the skills into your project:
+```bash
+npx agent-lint install-skills
+```
+
+This copies the skill definitions into your project's `.claude/skills/` directory.
+
+<details>
+<summary>Manual installation</summary>
 
 ```bash
 git clone https://github.com/zernie/agent-lint.git /tmp/agent-lint
@@ -118,6 +139,8 @@ rm -rf /tmp/agent-lint
 ```
 
 Or manually copy the `.claude/skills/audit-feedback-loop/` and `.claude/skills/pr-to-lint-rule/` directories into your project's `.claude/skills/`.
+
+</details>
 
 ## Maturity Levels
 

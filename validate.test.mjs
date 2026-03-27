@@ -11,14 +11,15 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   validate,
-  parseClaudeMd,
-  readClaudeMd,
+  parseRules,
+  readFile,
   validatePaths,
+  detectFiles,
 } from "./validate.mjs";
 
-describe("parseClaudeMd", () => {
+describe("parseRules", () => {
   it("should parse enforced rules", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "### Use barrel imports\n**Enforced by:** `eslint/no-restricted-imports`\n**Why:** Consistency.\n",
     );
     assert.equal(rules.length, 1);
@@ -28,7 +29,7 @@ describe("parseClaudeMd", () => {
   });
 
   it("should parse guidance-only rules", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "### Use Tailwind spacing scale\n**Guidance only** — cannot be mechanically enforced\n",
     );
     assert.equal(rules.length, 1);
@@ -36,13 +37,13 @@ describe("parseClaudeMd", () => {
   });
 
   it("should parse rules missing annotations", () => {
-    const rules = parseClaudeMd("### Some rule\n**Why:** Just because.\n");
+    const rules = parseRules("### Some rule\n**Why:** Just because.\n");
     assert.equal(rules.length, 1);
     assert.equal(rules[0].enforcement, "missing");
   });
 
   it("should track line numbers", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "# Header\n\nSome text\n\n### First rule\n**Enforced by:** `x`\n\n### Second rule\nNo annotation\n",
     );
     assert.equal(rules[0].line, 5);
@@ -50,7 +51,7 @@ describe("parseClaudeMd", () => {
   });
 
   it("should handle multiple rules in sequence", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "### Rule A\n**Enforced by:** `a`\n### Rule B\n**Guidance only**\n### Rule C\nNothing here.\n",
     );
     assert.equal(rules.length, 3);
@@ -60,14 +61,14 @@ describe("parseClaudeMd", () => {
   });
 
   it("should not match deeper headings (####)", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "### Real rule\n**Enforced by:** `x`\n#### Not a rule\nSome details.\n",
     );
     assert.equal(rules.length, 1);
   });
 
   it("should not match shallower headings (## or #)", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "# Top level\n## Section\n### Actual rule\n**Enforced by:** `x`\n",
     );
     assert.equal(rules.length, 1);
@@ -75,19 +76,19 @@ describe("parseClaudeMd", () => {
   });
 
   it("should handle empty file", () => {
-    const rules = parseClaudeMd("");
+    const rules = parseRules("");
     assert.equal(rules.length, 0);
   });
 
   it("should handle file with no rules", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "# CLAUDE.md\n\nThis project uses TypeScript.\n",
     );
     assert.equal(rules.length, 0);
   });
 
   it("should stop looking for annotation at next header", () => {
-    const rules = parseClaudeMd(
+    const rules = parseRules(
       "### Rule A\nSome text.\nMore text.\n### Rule B\n**Enforced by:** `x`\n",
     );
     assert.equal(rules[0].enforcement, "missing");
@@ -197,7 +198,7 @@ describe("validate", () => {
   });
 });
 
-describe("readClaudeMd", () => {
+describe("readFile", () => {
   let tmpDir;
 
   before(() => {
@@ -211,13 +212,13 @@ describe("readClaudeMd", () => {
   it("should read a regular file", () => {
     const filePath = join(tmpDir, "regular.md");
     writeFileSync(filePath, "### Rule\n**Enforced by:** `x`\n");
-    const { content, skipped } = readClaudeMd(filePath);
+    const { content, skipped } = readFile(filePath);
     assert.equal(skipped, false);
     assert.ok(content.includes("### Rule"));
   });
 
   it("should return error for missing file", () => {
-    const { content, skipped, reason } = readClaudeMd(join(tmpDir, "nope.md"));
+    const { content, skipped, reason } = readFile(join(tmpDir, "nope.md"));
     assert.equal(content, null);
     assert.equal(skipped, false);
     assert.ok(reason.includes("File not found"));
@@ -228,7 +229,7 @@ describe("readClaudeMd", () => {
     const link = join(tmpDir, "link.md");
     writeFileSync(realFile, "### Rule\n**Enforced by:** `x`\n");
     symlinkSync(realFile, link);
-    const { content, skipped, reason } = readClaudeMd(link);
+    const { content, skipped, reason } = readFile(link);
     assert.equal(content, null);
     assert.equal(skipped, true);
     assert.ok(reason.includes("symlink"));
@@ -239,9 +240,62 @@ describe("readClaudeMd", () => {
     const link = join(tmpDir, "link2.md");
     writeFileSync(realFile, "### Rule\n**Enforced by:** `x`\n");
     symlinkSync(realFile, link);
-    const { content, skipped } = readClaudeMd(link, { followSymlinks: true });
+    const { content, skipped } = readFile(link, { followSymlinks: true });
     assert.equal(skipped, false);
     assert.ok(content.includes("### Rule"));
+  });
+});
+
+describe("detectFiles", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "agent-lint-detect-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should detect CLAUDE.md", () => {
+    writeFileSync(join(tmpDir, "CLAUDE.md"), "# test");
+    const found = detectFiles(tmpDir);
+    assert.ok(found.some((f) => f.endsWith("CLAUDE.md")));
+  });
+
+  it("should detect AGENTS.md", () => {
+    writeFileSync(join(tmpDir, "AGENTS.md"), "# test");
+    const found = detectFiles(tmpDir);
+    assert.ok(found.some((f) => f.endsWith("AGENTS.md")));
+  });
+
+  it("should detect .cursorrules", () => {
+    writeFileSync(join(tmpDir, ".cursorrules"), "# test");
+    const found = detectFiles(tmpDir);
+    assert.ok(found.some((f) => f.endsWith(".cursorrules")));
+  });
+
+  it("should detect .github/copilot-instructions.md", () => {
+    mkdirSync(join(tmpDir, ".github"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, ".github", "copilot-instructions.md"),
+      "# test",
+    );
+    const found = detectFiles(tmpDir);
+    assert.ok(found.some((f) => f.endsWith("copilot-instructions.md")));
+  });
+
+  it("should return empty array when no config files exist", () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), "agent-lint-empty-"));
+    const found = detectFiles(emptyDir);
+    assert.equal(found.length, 0);
+    rmSync(emptyDir, { recursive: true, force: true });
+  });
+
+  it("should detect multiple files at once", () => {
+    // tmpDir already has CLAUDE.md, AGENTS.md, .cursorrules from earlier tests
+    const found = detectFiles(tmpDir);
+    assert.ok(found.length >= 3);
   });
 });
 
