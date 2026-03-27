@@ -176,8 +176,8 @@ npx agent-lint CLAUDE.md packages/api/CLAUDE.md --follow-symlinks
 
 ### Options
 
-| Flag | Description |
-| ---- | ----------- |
+| Flag                | Description                                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
 | `--follow-symlinks` | Resolve and validate symlinked files. Without this flag, symlinks are skipped. |
 
 If no paths are provided, defaults to `CLAUDE.md`.
@@ -188,12 +188,12 @@ Exit codes: `0` on success, `1` if any rules are missing annotations.
 
 `agent-lint` works with any markdown file that follows the `###` heading + `**Enforced by:**` / `**Guidance only**` format. Here are the common instruction files by tool:
 
-| Tool | Instruction File | Example |
-| ---- | ---------------- | ------- |
-| Claude Code | `CLAUDE.md` | `npx agent-lint CLAUDE.md` |
-| OpenAI Codex | `AGENTS.md` | `npx agent-lint AGENTS.md` |
-| Cursor | `.cursorrules` | `npx agent-lint .cursorrules` |
-| Custom | any `.md` file | `npx agent-lint my-instructions.md` |
+| Tool         | Instruction File | Example                             |
+| ------------ | ---------------- | ----------------------------------- |
+| Claude Code  | `CLAUDE.md`      | `npx agent-lint CLAUDE.md`          |
+| OpenAI Codex | `AGENTS.md`      | `npx agent-lint AGENTS.md`          |
+| Cursor       | `.cursorrules`   | `npx agent-lint .cursorrules`       |
+| Custom       | any `.md` file   | `npx agent-lint my-instructions.md` |
 
 Validate multiple files across tools in a single run:
 
