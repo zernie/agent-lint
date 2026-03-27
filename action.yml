@@ -5,10 +5,14 @@ branding:
   color: "orange"
 
 inputs:
-  claude-md-path:
-    description: "Path to CLAUDE.md file"
+  paths:
+    description: "Comma-separated paths to CLAUDE.md files to validate"
     required: false
     default: "CLAUDE.md"
+  follow-symlinks:
+    description: "Follow symbolic links when reading CLAUDE.md files"
+    required: false
+    default: "false"
 
 runs:
   using: "node20"
