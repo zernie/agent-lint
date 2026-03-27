@@ -1,19 +1,29 @@
-import { validatePaths } from "./validate.mjs";
+import { validatePaths, detectFiles } from "./validate.mjs";
 
 const pathsInput =
   process.env.INPUT_PATHS ||
   process.env["INPUT_CLAUDE-MD-PATH"] ||
   process.env.INPUT_CLAUDE_MD_PATH ||
-  "CLAUDE.md";
+  "";
 const followSymlinks =
   (process.env.INPUT_FOLLOW_SYMLINKS ||
     process.env["INPUT_FOLLOW-SYMLINKS"] ||
     "false") === "true";
 
-const paths = pathsInput
+let paths = pathsInput
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
+
+if (paths.length === 0) {
+  paths = detectFiles(".");
+  if (paths.length === 0) {
+    console.log(
+      "::error::No agent config files found. Provide paths or add a CLAUDE.md, AGENTS.md, etc.",
+    );
+    process.exit(1);
+  }
+}
 
 const { fileResults, valid } = validatePaths(paths, { followSymlinks });
 
@@ -38,7 +48,7 @@ for (const { path: filePath, skipped, reason, result } of fileResults) {
   totalRules += result.total;
 
   console.log("");
-  console.log(`CLAUDE.md Validation Report: ${filePath}`);
+  console.log(`Validation Report: ${filePath}`);
   console.log("=".repeat(40));
   console.log(`  Total rules:    ${result.total}`);
   console.log(`  Enforced:       ${result.enforced}`);

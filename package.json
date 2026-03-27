@@ -1,8 +1,20 @@
 {
   "name": "agent-lint",
-  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "agent-lint": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "validate.mjs",
+    "install-skills.mjs",
+    "action.mjs",
+    "action.yml",
+    ".claude/"
+  ],
   "scripts": {
-    "test": "node --test validate.test.mjs",
+    "test": "node --test validate.test.mjs install-skills.test.mjs",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check ."
   },
