@@ -90,11 +90,10 @@ Example:
 
 ### Installing Skills
 
-Copy the skill files to your project:
+Copy the `.claude/skills/` directory to your project:
 
 ```bash
-mkdir -p .claude/skills
-cp skills/*.md .claude/skills/
+cp -r .claude/skills/ /path/to/your/project/.claude/skills/
 ```
 
 ## Maturity Levels
