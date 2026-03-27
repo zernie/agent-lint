@@ -1,7 +1,7 @@
 {
   "name": "agent-lint",
   "version": "0.1.0",
-  "description": "CLAUDE.md enforcement validator + ESLint plugin for AI-assisted codebases",
+  "description": "CLAUDE.md enforcement validator and feedback loop toolkit for AI-assisted codebases",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -42,14 +42,17 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@typescript-eslint/rule-tester": "^8.0.0",
-    "@typescript-eslint/utils": "^8.0.0",
     "eslint": "^9.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },
   "peerDependencies": {
     "eslint": ">=9.0.0"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"
