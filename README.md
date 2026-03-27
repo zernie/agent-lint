@@ -108,27 +108,19 @@ node validate.mjs AGENTS.md .cursorrules
 node validate.mjs CLAUDE.md packages/api/CLAUDE.md --follow-symlinks
 ```
 
-## Claude Code
+## Installing Skills
 
-### Installing Skills
+Install skills for all your AI agents at once with [Vercel Skills](https://github.com/vercel-labs/skills):
 
-Install via the Claude Code plugin system:
-
-```
-/plugin marketplace add zernie/agent-lint
-/plugin install agent-lint@agent-lint
+```bash
+npx skills add zernie/agent-lint
 ```
 
-Once installed, the skills are available as:
+This auto-detects your installed agents and installs the skills for each one. Works with Claude Code, Codex, Cursor, GitHub Copilot, Windsurf, and [many more](https://skills.sh).
 
-- `/agent-lint:audit-feedback-loop` — scan and score your repo's feedback loop maturity
-- `/agent-lint:pr-to-lint-rule <description>` — generate a lint rule from a recurring PR comment
+### Available Skills
 
-To install manually instead, copy `.claude/skills/audit-feedback-loop/` and `.claude/skills/pr-to-lint-rule/` into your project's `.claude/skills/` directory.
-
-### `/audit-feedback-loop`
-
-Scans your repo and scores its feedback loop maturity:
+**`audit-feedback-loop`** — Scans your repo and scores its feedback loop maturity:
 
 | Level | Name                 | Description                                                         |
 | ----- | -------------------- | ------------------------------------------------------------------- |
@@ -139,9 +131,7 @@ Scans your repo and scores its feedback loop maturity:
 
 Works with any language — detects ESLint, Ruff, Clippy, golangci-lint, RuboCop, and more.
 
-### `/pr-to-lint-rule`
-
-Takes a natural language description of a recurring PR comment and generates:
+**`pr-to-lint-rule`** — Takes a natural language description of a recurring PR comment and generates:
 
 - A lint rule for your language/toolchain (ESLint, Ruff, Clippy, go/analysis, etc.)
 - Test cases
@@ -154,17 +144,30 @@ Example:
 /pr-to-lint-rule we keep telling people not to import directly from antd, use our design system barrel file instead
 ```
 
+## Claude Code
+
+Validate your `CLAUDE.md` with the GitHub Action or CLI above.
+
+Skills installed via `npx skills add` are available as `/audit-feedback-loop` and `/pr-to-lint-rule`.
+
+Alternatively, install via the Claude Code plugin system:
+
+```
+/plugin marketplace add zernie/agent-lint
+/plugin install agent-lint@agent-lint
+```
+
+Or manually copy `skills/audit-feedback-loop/` and `skills/pr-to-lint-rule/` into your project's `.claude/skills/` directory.
+
 ## OpenAI Codex
 
-Codex uses `AGENTS.md` for agent instructions. Use the same enforcement annotation format:
+Codex uses `AGENTS.md` for agent instructions. Use the same enforcement annotation format, then validate:
 
 ```bash
-# Validate AGENTS.md locally
 node validate.mjs AGENTS.md
 ```
 
 ```yaml
-# CI validation
 - uses: zernie/agent-lint@v1
   with:
     paths: "AGENTS.md"
@@ -172,15 +175,13 @@ node validate.mjs AGENTS.md
 
 ## Cursor
 
-Cursor uses `.cursorrules` for agent instructions. Use the same enforcement annotation format:
+Cursor uses `.cursorrules` for agent instructions. Use the same enforcement annotation format, then validate:
 
 ```bash
-# Validate .cursorrules locally
 node validate.mjs .cursorrules
 ```
 
 ```yaml
-# CI validation
 - uses: zernie/agent-lint@v1
   with:
     paths: ".cursorrules"
@@ -192,12 +193,6 @@ node validate.mjs .cursorrules
 
 ```bash
 node validate.mjs my-instructions.md
-```
-
-```yaml
-- uses: zernie/agent-lint@v1
-  with:
-    paths: "my-instructions.md"
 ```
 
 You can validate multiple files across tools in a single run:
