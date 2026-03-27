@@ -1,15 +1,15 @@
-import { noConsoleInProduction } from "./rules/no-console-in-production.js";
-import { noAntdImports } from "./rules/no-antd-imports.js";
-import { noMagicSpacing } from "./rules/no-magic-spacing.js";
+import type { ESLint } from "eslint";
 
-export const plugin = {
+/**
+ * ESLint plugin shell for agent-lint.
+ *
+ * This plugin ships with no built-in rules. Use the /pr-to-lint-rule Claude
+ * Code skill to generate project-specific rules and register them here.
+ */
+export const plugin: ESLint.Plugin = {
   meta: {
     name: "eslint-plugin-agent-lint",
     version: "0.1.0",
   },
-  rules: {
-    "no-console-in-production": noConsoleInProduction,
-    "no-antd-imports": noAntdImports,
-    "no-magic-spacing": noMagicSpacing,
-  },
+  rules: {},
 };
