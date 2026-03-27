@@ -1,6 +1,9 @@
-import { describe, it } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { validate, parseClaudeMd } from "./validate.mjs";
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { validate, parseClaudeMd, readClaudeMd, validatePaths } from "./validate.mjs";
 
 describe("parseClaudeMd", () => {
   it("should parse enforced rules", () => {
@@ -166,5 +169,119 @@ describe("validate", () => {
       const result = validate(`### Rule\n${input}\n`);
       assert.equal(result.rules[0].enforcedBy, expected, `Failed for: ${input}`);
     }
+  });
+});
+
+describe("readClaudeMd", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "agent-lint-test-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should read a regular file", () => {
+    const filePath = join(tmpDir, "regular.md");
+    writeFileSync(filePath, "### Rule\n**Enforced by:** `x`\n");
+    const { content, skipped } = readClaudeMd(filePath);
+    assert.equal(skipped, false);
+    assert.ok(content.includes("### Rule"));
+  });
+
+  it("should return error for missing file", () => {
+    const { content, skipped, reason } = readClaudeMd(join(tmpDir, "nope.md"));
+    assert.equal(content, null);
+    assert.equal(skipped, false);
+    assert.ok(reason.includes("File not found"));
+  });
+
+  it("should skip symlinks by default", () => {
+    const realFile = join(tmpDir, "real.md");
+    const link = join(tmpDir, "link.md");
+    writeFileSync(realFile, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(realFile, link);
+    const { content, skipped, reason } = readClaudeMd(link);
+    assert.equal(content, null);
+    assert.equal(skipped, true);
+    assert.ok(reason.includes("symlink"));
+  });
+
+  it("should follow symlinks when opted in", () => {
+    const realFile = join(tmpDir, "real2.md");
+    const link = join(tmpDir, "link2.md");
+    writeFileSync(realFile, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(realFile, link);
+    const { content, skipped } = readClaudeMd(link, { followSymlinks: true });
+    assert.equal(skipped, false);
+    assert.ok(content.includes("### Rule"));
+  });
+});
+
+describe("validatePaths", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "agent-lint-test-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should validate multiple files", () => {
+    const file1 = join(tmpDir, "a.md");
+    const file2 = join(tmpDir, "b.md");
+    writeFileSync(file1, "### Rule A\n**Enforced by:** `x`\n");
+    writeFileSync(file2, "### Rule B\n**Guidance only**\n");
+
+    const { fileResults, valid } = validatePaths([file1, file2]);
+    assert.equal(valid, true);
+    assert.equal(fileResults.length, 2);
+    assert.equal(fileResults[0].result.enforced, 1);
+    assert.equal(fileResults[1].result.guidanceOnly, 1);
+  });
+
+  it("should fail if any file has missing annotations", () => {
+    const file1 = join(tmpDir, "ok.md");
+    const file2 = join(tmpDir, "bad.md");
+    writeFileSync(file1, "### Rule\n**Enforced by:** `x`\n");
+    writeFileSync(file2, "### Rule\nNo annotation.\n");
+
+    const { valid } = validatePaths([file1, file2]);
+    assert.equal(valid, false);
+  });
+
+  it("should fail if any file is missing", () => {
+    const file1 = join(tmpDir, "exists.md");
+    writeFileSync(file1, "### Rule\n**Enforced by:** `x`\n");
+
+    const { valid } = validatePaths([file1, join(tmpDir, "missing.md")]);
+    assert.equal(valid, false);
+  });
+
+  it("should skip symlinks by default but not fail", () => {
+    const real = join(tmpDir, "real3.md");
+    const link = join(tmpDir, "link3.md");
+    writeFileSync(real, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(real, link);
+
+    const { fileResults, valid } = validatePaths([real, link]);
+    assert.equal(valid, true);
+    assert.equal(fileResults[1].skipped, true);
+  });
+
+  it("should validate symlinks when follow-symlinks is enabled", () => {
+    const real = join(tmpDir, "real4.md");
+    const link = join(tmpDir, "link4.md");
+    writeFileSync(real, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(real, link);
+
+    const { fileResults, valid } = validatePaths([link], { followSymlinks: true });
+    assert.equal(valid, true);
+    assert.equal(fileResults[0].skipped, false);
+    assert.equal(fileResults[0].result.enforced, 1);
   });
 });

@@ -30,12 +30,28 @@ jobs:
       - uses: zernie/agent-lint@v1
 ```
 
-Custom path:
+Multiple files (monorepo):
 
 ```yaml
       - uses: zernie/agent-lint@v1
         with:
-          claude-md-path: docs/CLAUDE.md
+          paths: "CLAUDE.md,packages/api/CLAUDE.md,packages/web/CLAUDE.md"
+```
+
+Follow symlinks (e.g. shared CLAUDE.md symlinked into subdirectories):
+
+```yaml
+      - uses: zernie/agent-lint@v1
+        with:
+          paths: "CLAUDE.md,packages/api/CLAUDE.md"
+          follow-symlinks: "true"
+```
+
+CLI usage (no GitHub Actions):
+
+```bash
+node validate.mjs CLAUDE.md
+node validate.mjs CLAUDE.md packages/api/CLAUDE.md --follow-symlinks
 ```
 
 ### CLAUDE.md Format

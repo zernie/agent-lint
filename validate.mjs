@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, lstatSync } from "node:fs";
 
 const ENFORCED_BY_RE = /\*\*Enforced by:\*\*/;
 const GUIDANCE_RE = /\*\*Guidance only\*\*/;
@@ -67,23 +67,64 @@ export function validate(content) {
   };
 }
 
-// CLI entry point
-if (process.argv[1] &&
-    (process.argv[1].endsWith("validate.mjs") || process.argv[1].endsWith("validate"))) {
-  const claudeMdPath = process.argv[2] || "CLAUDE.md";
-
-  let content;
+/**
+ * Read a file, optionally checking if it's a symlink.
+ * Returns { content, skipped, reason } where skipped=true means the file was
+ * a symlink and follow-symlinks was not enabled.
+ */
+export function readClaudeMd(filePath, { followSymlinks = false } = {}) {
   try {
-    content = readFileSync(claudeMdPath, "utf-8");
+    const stat = lstatSync(filePath);
+    if (stat.isSymbolicLink() && !followSymlinks) {
+      return {
+        content: null,
+        skipped: true,
+        reason: `${filePath} is a symlink (use --follow-symlinks to include)`,
+      };
+    }
   } catch {
-    console.log(`::error::CLAUDE.md not found at ${claudeMdPath}`);
-    process.exit(1);
+    return { content: null, skipped: false, reason: `File not found: ${filePath}` };
   }
 
-  const result = validate(content);
+  try {
+    return { content: readFileSync(filePath, "utf-8"), skipped: false, reason: null };
+  } catch {
+    return { content: null, skipped: false, reason: `Could not read: ${filePath}` };
+  }
+}
 
+/**
+ * Validate multiple CLAUDE.md files. Returns a combined report.
+ */
+export function validatePaths(paths, { followSymlinks = false } = {}) {
+  const fileResults = [];
+  let allValid = true;
+
+  for (const filePath of paths) {
+    const { content, skipped, reason } = readClaudeMd(filePath, { followSymlinks });
+
+    if (skipped) {
+      fileResults.push({ path: filePath, skipped: true, reason, result: null });
+      continue;
+    }
+
+    if (content === null) {
+      fileResults.push({ path: filePath, skipped: false, reason, result: null });
+      allValid = false;
+      continue;
+    }
+
+    const result = validate(content);
+    if (!result.valid) allValid = false;
+    fileResults.push({ path: filePath, skipped: false, reason: null, result });
+  }
+
+  return { fileResults, valid: allValid };
+}
+
+function printResult(filePath, result) {
   console.log("");
-  console.log("CLAUDE.md Validation Report");
+  console.log(`CLAUDE.md Validation Report: ${filePath}`);
   console.log("=".repeat(40));
   console.log(`  Total rules:    ${result.total}`);
   console.log(`  Enforced:       ${result.enforced}`);
@@ -99,19 +140,41 @@ if (process.argv[1] &&
         console.log(`  Line ${rule.line}: "${rule.title}"`);
       }
     }
-    console.log("");
-    console.log("Add **Enforced by:** `<rule>` or **Guidance only** to each rule.");
-    console.log("");
-    console.log(`::error::${result.missing} rule(s) in CLAUDE.md are missing enforcement annotations`);
-    process.exit(1);
+  }
+}
+
+// CLI entry point
+if (process.argv[1] &&
+    (process.argv[1].endsWith("validate.mjs") || process.argv[1].endsWith("validate"))) {
+  const args = process.argv.slice(2);
+  const followSymlinks = args.includes("--follow-symlinks");
+  const paths = args.filter((a) => !a.startsWith("--"));
+
+  if (paths.length === 0) {
+    paths.push("CLAUDE.md");
   }
 
-  if (result.total === 0) {
-    console.log("");
-    console.log(`No rules (### headings) found in ${claudeMdPath}`);
-    process.exit(0);
+  const { fileResults, valid } = validatePaths(paths, { followSymlinks });
+
+  for (const { path: filePath, skipped, reason, result } of fileResults) {
+    if (skipped) {
+      console.log(`\nSkipped: ${reason}`);
+      continue;
+    }
+    if (!result) {
+      console.log(`\n::error::${reason}`);
+      continue;
+    }
+    printResult(filePath, result);
   }
 
   console.log("");
-  console.log("All rules have enforcement annotations.");
+  if (valid) {
+    console.log("All rules have enforcement annotations.");
+  } else {
+    console.log("Add **Enforced by:** `<rule>` or **Guidance only** to each rule.");
+    console.log("");
+    console.log("::error::Validation failed — see report above");
+    process.exit(1);
+  }
 }
