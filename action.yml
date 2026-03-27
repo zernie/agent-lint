@@ -1,0 +1,18 @@
+name: "agent-lint"
+description: "Validate that CLAUDE.md rules have enforcement annotations"
+branding:
+  icon: "check-circle"
+  color: "orange"
+
+inputs:
+  claude-md-path:
+    description: "Path to CLAUDE.md file"
+    required: false
+    default: "CLAUDE.md"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate CLAUDE.md
+      shell: bash
+      run: bash "${{ github.action_path }}/validate.sh" "${{ inputs.claude-md-path }}"
