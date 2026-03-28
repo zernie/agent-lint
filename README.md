@@ -11,6 +11,7 @@ Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedb
 - [Instruction File Format](#instruction-file-format)
 - [Configuration](#configuration)
 - [CLI](#cli)
+- [Organizing Rules](#organizing-rules)
 - [GitHub Action](#github-action)
 - [Supported Tools](#supported-tools)
 - [Installing Skills](#installing-skills)
@@ -152,6 +153,9 @@ npx agent-lint CLAUDE.md AGENTS.md .cursorrules
 # Monorepo — validate across packages
 npx agent-lint CLAUDE.md packages/api/CLAUDE.md packages/web/CLAUDE.md
 
+# Glob pattern — validate all matching files
+npx agent-lint "**/*.md"
+
 # Follow symlinks
 npx agent-lint CLAUDE.md --follow-symlinks
 
@@ -169,6 +173,49 @@ npx agent-lint CLAUDE.md --markers=headings,checkboxes
 If no paths are provided, defaults to `CLAUDE.md`.
 
 Exit codes: `0` on success, `1` if any rules are missing annotations.
+
+## Organizing Rules
+
+In a monorepo (or any project with subdirectories), use **progressive disclosure** — put universal rules at the root, and context-specific rules in subdirectory files. AI agents read the nearest instruction file plus all parent files, so rules naturally narrow as the agent moves deeper into the tree.
+
+### Example structure
+
+```
+CLAUDE.md                        # Universal: code style, PR conventions, testing
+packages/
+  api/
+    CLAUDE.md                    # API-specific: error handling, DB conventions
+  web/
+    CLAUDE.md                    # Frontend-specific: component patterns, Tailwind usage
+  shared/
+    CLAUDE.md -> ../CLAUDE.md    # Symlink to share rules (use --follow-symlinks)
+```
+
+**Root file** (`CLAUDE.md`) — rules every agent should follow regardless of context:
+
+- Code formatting and linting standards
+- Git commit and PR conventions
+- Testing requirements
+
+**Subdirectory files** (`packages/api/CLAUDE.md`) — rules that only apply in that context:
+
+- API error handling patterns
+- Database query conventions
+- Framework-specific idioms
+
+### Validate all files at once
+
+```bash
+# Glob pattern — finds every CLAUDE.md in the tree
+npx agent-lint "**/CLAUDE.md"
+
+# Or list them explicitly
+npx agent-lint CLAUDE.md packages/api/CLAUDE.md packages/web/CLAUDE.md
+```
+
+### Why this matters
+
+The `max-lines` rule (default: 500 lines) exists because oversized instruction files hurt agent performance — the agent spends tokens parsing rules that aren't relevant to its current task. Progressive disclosure keeps each file focused, which means faster comprehension and fewer irrelevant rules applied.
 
 ## GitHub Action
 
@@ -198,6 +245,14 @@ Multiple files (monorepo):
 - uses: zernie/agent-lint@main
   with:
     paths: "CLAUDE.md,packages/api/CLAUDE.md,packages/web/CLAUDE.md"
+```
+
+Glob pattern:
+
+```yaml
+- uses: zernie/agent-lint@main
+  with:
+    paths: "**/CLAUDE.md"
 ```
 
 Follow symlinks (e.g. shared instruction file symlinked into subdirectories):

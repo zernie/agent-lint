@@ -144,7 +144,7 @@ export function validate(content, { ruleMarkers, rules: rulesConfig } = {}) {
     if (lineCount > limit) {
       errors.push({
         rule: "max-lines",
-        message: `File has ${lineCount} lines, exceeding the limit of ${limit}`,
+        message: `File has ${lineCount} lines, exceeding the limit of ${limit}. Consider splitting into subdirectory files — see https://github.com/zernie/agent-lint#organizing-rules`,
         line: lineCount,
       });
     }
