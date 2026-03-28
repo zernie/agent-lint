@@ -272,6 +272,10 @@ Enable checkbox markers:
     markers: "headings,checkboxes"
 ```
 
+### Inline PR Annotations
+
+Errors appear as inline annotations directly on the affected lines in the PR **Files** tab — just like ESLint. No extra tools or configuration needed.
+
 ### Action Outputs
 
 The action sets the following outputs, accessible via `steps.<id>.outputs.<name>`:
