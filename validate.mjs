@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
-import { readFileSync, lstatSync, globSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, lstatSync, globSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { cosmiconfigSync } from "cosmiconfig";
 
 const ENFORCED_BY_RE = /\*\*Enforced by:\*\*/;
@@ -14,8 +16,84 @@ const VALID_MARKERS = ["headings", "checkboxes"];
 const DEFAULT_RULES = {
   "require-annotations": true,
   "max-lines": 500,
+  "require-rule-file": "auto",
 };
-const DEFAULT_CONFIG = { ruleMarkers: ["headings"], rules: DEFAULT_RULES };
+const SAFE_RULE_NAME_RE = /^[a-zA-Z0-9_\-/.:#]+$/;
+const DEFAULT_CONFIG = {
+  ruleMarkers: ["headings"],
+  rules: DEFAULT_RULES,
+  linters: {},
+};
+
+function extractLinterName(enforcedBy) {
+  const colonIdx = enforcedBy.indexOf("::");
+  const slashIdx = enforcedBy.indexOf("/");
+  if (colonIdx === -1 && slashIdx === -1) return enforcedBy;
+  if (colonIdx === -1) return enforcedBy.substring(0, slashIdx);
+  if (slashIdx === -1) return enforcedBy.substring(0, colonIdx);
+  return enforcedBy.substring(0, Math.min(slashIdx, colonIdx));
+}
+
+function extractRuleName(enforcedBy) {
+  const colonIdx = enforcedBy.indexOf("::");
+  const slashIdx = enforcedBy.indexOf("/");
+  if (colonIdx === -1 && slashIdx === -1) return null;
+  if (colonIdx === -1) return enforcedBy.substring(slashIdx + 1);
+  if (slashIdx === -1) return enforcedBy.substring(colonIdx + 2);
+  const idx = Math.min(slashIdx, colonIdx);
+  const sep = idx === colonIdx ? 2 : 1;
+  return enforcedBy.substring(idx + sep);
+}
+
+function ruleFileExists(ruleName, rulesDir, basePath) {
+  const dir = resolve(basePath, rulesDir);
+  if (!existsSync(dir)) return null;
+  const matches = globSync(`${ruleName}.*`, { cwd: dir });
+  return matches.length > 0;
+}
+
+// Built-in resolvers: return a Set of valid rule names, or null if linter not available
+const LINTER_RESOLVERS = {
+  eslint(basePath) {
+    const req = createRequire(resolve(basePath, "package.json"));
+    const { builtinRules } = req("eslint/use-at-your-own-risk");
+    return new Set(builtinRules.keys());
+  },
+  stylelint(basePath) {
+    const req = createRequire(resolve(basePath, "package.json"));
+    const mod = req("stylelint");
+    return new Set(Object.keys(mod.rules));
+  },
+};
+
+// CLI-based per-rule checks: throw on failure (rule doesn't exist)
+const CLI_RULE_CHECKS = {
+  ruff(ruleName) {
+    execSync(`ruff rule ${ruleName}`, { stdio: "ignore" });
+  },
+  clippy(ruleName) {
+    execSync(`cargo clippy --explain ${ruleName}`, { stdio: "ignore" });
+  },
+  pylint(ruleName) {
+    execSync(`pylint --help-msg=${ruleName}`, { stdio: "ignore" });
+  },
+};
+
+// Check if a CLI tool is available on PATH
+function cliAvailable(command) {
+  try {
+    execSync(`which ${command}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const CLI_TOOL_FOR_LINTER = {
+  ruff: "ruff",
+  clippy: "cargo",
+  pylint: "pylint",
+};
 
 export function loadConfig() {
   try {
@@ -30,6 +108,7 @@ export function loadConfig() {
       ...DEFAULT_CONFIG,
       ...result.config,
       rules: { ...DEFAULT_RULES, ...result.config.rules },
+      linters: { ...result.config.linters },
     };
 
     if (
@@ -109,7 +188,10 @@ export function parseClaudeMd(content, { ruleMarkers } = {}) {
   return rules;
 }
 
-export function validate(content, { ruleMarkers, rules: rulesConfig } = {}) {
+export function validate(
+  content,
+  { ruleMarkers, rules: rulesConfig, basePath, linters: lintersConfig } = {},
+) {
   const activeRules = rulesConfig || DEFAULT_RULES;
   const parsedRules = parseClaudeMd(content, { ruleMarkers });
   const enforced = parsedRules.filter(
@@ -150,6 +232,118 @@ export function validate(content, { ruleMarkers, rules: rulesConfig } = {}) {
     }
   }
 
+  const ruleFileMode = activeRules["require-rule-file"];
+  const detectedLinters = [];
+  if (ruleFileMode !== false && basePath) {
+    const resolverCache = new Map(); // linterName -> Set | "cli" | null
+    const cliAvailCache = new Map();
+
+    for (const rule of parsedRules) {
+      if (rule.enforcement !== "enforced" || !rule.enforcedBy) continue;
+      const linterName = extractLinterName(rule.enforcedBy);
+      const ruleName = extractRuleName(rule.enforcedBy);
+      if (!ruleName || !SAFE_RULE_NAME_RE.test(ruleName)) continue;
+
+      // Resolve linter rules (cached)
+      if (!resolverCache.has(linterName)) {
+        let result = null;
+
+        // Try Node API resolver
+        const resolver = LINTER_RESOLVERS[linterName];
+        if (resolver) {
+          try {
+            result = resolver(basePath);
+            if (result instanceof Set) {
+              detectedLinters.push({
+                name: linterName,
+                ruleCount: result.size,
+              });
+            }
+          } catch {
+            result = null;
+          }
+        }
+
+        // Try CLI resolver
+        if (!result && CLI_RULE_CHECKS[linterName]) {
+          const tool = CLI_TOOL_FOR_LINTER[linterName];
+          if (!cliAvailCache.has(tool)) {
+            cliAvailCache.set(tool, cliAvailable(tool));
+          }
+          if (cliAvailCache.get(tool)) {
+            result = "cli";
+            detectedLinters.push({ name: linterName, via: "cli" });
+          }
+        }
+
+        resolverCache.set(linterName, result);
+      }
+
+      const resolved = resolverCache.get(linterName);
+
+      // Check via Node API resolver (Set of rules)
+      if (resolved instanceof Set) {
+        if (!resolved.has(ruleName)) {
+          errors.push({
+            rule: "require-rule-file",
+            message: `Rule "${ruleName}" not found in ${linterName} (referenced in "${rule.title}", line ${rule.line})`,
+            line: rule.line,
+          });
+        }
+        continue;
+      }
+
+      // Check via CLI
+      if (resolved === "cli") {
+        const cliCheck = CLI_RULE_CHECKS[linterName];
+        try {
+          cliCheck(ruleName);
+        } catch {
+          errors.push({
+            rule: "require-rule-file",
+            message: `Rule "${ruleName}" not found in ${linterName} (referenced in "${rule.title}", line ${rule.line})`,
+            line: rule.line,
+          });
+        }
+        continue;
+      }
+
+      // Fallback: rulesDir from user config
+      const linterCfg = lintersConfig && lintersConfig[linterName];
+      if (linterCfg && linterCfg.rulesDir) {
+        const dirs = Array.isArray(linterCfg.rulesDir)
+          ? linterCfg.rulesDir
+          : [linterCfg.rulesDir];
+
+        let found = false;
+        let anyDirExists = false;
+        for (const dir of dirs) {
+          const absDir = resolve(basePath, dir);
+          if (!existsSync(absDir)) continue;
+          anyDirExists = true;
+          if (ruleFileExists(ruleName, dir, basePath)) {
+            found = true;
+            break;
+          }
+        }
+
+        if (!anyDirExists) {
+          errors.push({
+            rule: "require-rule-file",
+            message: `Rules directory "${dirs.join(", ")}" for linter "${linterName}" does not exist`,
+            line: rule.line,
+          });
+        } else if (!found) {
+          errors.push({
+            rule: "require-rule-file",
+            message: `Rule file for "${ruleName}" not found in ${dirs.join(", ")} (referenced in "${rule.title}", line ${rule.line})`,
+            line: rule.line,
+          });
+        }
+      }
+    }
+  }
+
   return {
     rules: parsedRules,
     enforced,
@@ -159,6 +353,7 @@ export function validate(content, { ruleMarkers, rules: rulesConfig } = {}) {
     total: parsedRules.length,
     errors,
     valid: errors.length === 0,
+    detectedLinters,
   };
 }
 
@@ -227,7 +422,12 @@ export function expandGlobs(patterns) {
  */
 export function validatePaths(
   paths,
-  { followSymlinks = false, ruleMarkers, rules: rulesConfig } = {},
+  {
+    followSymlinks = false,
+    ruleMarkers,
+    rules: rulesConfig,
+    linters: lintersConfig,
+  } = {},
 ) {
   const fileResults = [];
   let allValid = true;
@@ -253,7 +453,12 @@ export function validatePaths(
       continue;
     }
 
-    const result = validate(content, { ruleMarkers, rules: rulesConfig });
+    const result = validate(content, {
+      ruleMarkers,
+      rules: rulesConfig,
+      basePath: dirname(resolve(filePath)),
+      linters: lintersConfig,
+    });
     if (!result.valid) allValid = false;
     fileResults.push({ path: filePath, skipped: false, reason: null, result });
   }
@@ -270,6 +475,14 @@ function printResult(filePath, result) {
   console.log(`  Guidance only:  ${result.guidanceOnly}`);
   console.log(`  Disabled:       ${result.disabled}`);
   console.log(`  Missing:        ${result.missing}`);
+  if (result.detectedLinters && result.detectedLinters.length > 0) {
+    const parts = result.detectedLinters.map((l) =>
+      l.ruleCount
+        ? `${l.name} (${l.ruleCount} built-in rules)`
+        : `${l.name} (cli)`,
+    );
+    console.log(`  Linters:        ${parts.join(", ")}`);
+  }
   console.log("=".repeat(40));
 
   if (result.errors.length > 0) {
@@ -311,6 +524,7 @@ if (
     followSymlinks,
     ruleMarkers,
     rules: config.rules,
+    linters: config.linters,
   });
 
   for (const { path: filePath, skipped, reason, result } of fileResults) {
