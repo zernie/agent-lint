@@ -1058,6 +1058,130 @@ describe("require-rule-file", () => {
     // Plugin not installed, so no resolver found -> skip (no error in auto mode)
     assert.equal(ruleErrors.length, 0);
   });
+
+  // Config-enabled checks ("auto" mode now checks if rule is enabled in linter config)
+  describe("config-enabled checks", () => {
+    let eslintDir;
+
+    before(() => {
+      eslintDir = mkdtempSync(join(tmpdir(), "agent-lint-eslint-cfg-"));
+      // Create a minimal package.json and eslint config with one rule off
+      writeFileSync(
+        join(eslintDir, "package.json"),
+        JSON.stringify({ name: "test", private: true }),
+      );
+      // Symlink node_modules from cwd so eslint is available
+      const src = join(process.cwd(), "node_modules");
+      const dest = join(eslintDir, "node_modules");
+      try {
+        symlinkSync(src, dest);
+      } catch {
+        // If symlink fails (e.g. already exists), continue
+      }
+      writeFileSync(
+        join(eslintDir, "eslint.config.mjs"),
+        'export default [{ rules: { "no-console": "off", "no-unused-vars": "warn", "no-undef": "error" } }];\n',
+      );
+    });
+
+    after(() => {
+      rmSync(eslintDir, { recursive: true, force: true });
+    });
+
+    it("should error when eslint rule is disabled in config", () => {
+      const result = validate(
+        "### No console\n**Enforced by:** `eslint/no-console`\n",
+        {
+          rules: { "require-rule-file": "auto" },
+          basePath: eslintDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) => e.rule === "require-rule-file",
+      );
+      assert.equal(ruleErrors.length, 1);
+      assert.ok(ruleErrors[0].message.includes("exists but is disabled"));
+      assert.ok(ruleErrors[0].message.includes("no-console"));
+    });
+
+    it("should not error when eslint rule is enabled (warn)", () => {
+      const result = validate(
+        "### No unused vars\n**Enforced by:** `eslint/no-unused-vars`\n",
+        {
+          rules: { "require-rule-file": "auto" },
+          basePath: eslintDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) => e.rule === "require-rule-file",
+      );
+      assert.equal(ruleErrors.length, 0);
+    });
+
+    it("should not error when eslint rule is enabled (error)", () => {
+      const result = validate(
+        "### No undef\n**Enforced by:** `eslint/no-undef`\n",
+        {
+          rules: { "require-rule-file": "auto" },
+          basePath: eslintDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) => e.rule === "require-rule-file",
+      );
+      assert.equal(ruleErrors.length, 0);
+    });
+
+    it("should skip config check in catalog-only mode", () => {
+      const result = validate(
+        "### No console\n**Enforced by:** `eslint/no-console`\n",
+        {
+          rules: { "require-rule-file": "catalog-only" },
+          basePath: eslintDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) => e.rule === "require-rule-file",
+      );
+      assert.equal(ruleErrors.length, 0);
+    });
+
+    it("should gracefully skip config check when no config file exists", () => {
+      // tmpDir has no eslint config
+      const result = validate(
+        "### No console\n**Enforced by:** `eslint/no-console`\n",
+        {
+          rules: { "require-rule-file": "auto" },
+          basePath: tmpDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) =>
+          e.rule === "require-rule-file" &&
+          e.message.includes("exists but is disabled"),
+      );
+      // Should not error — config not found, so skip config check
+      assert.equal(ruleErrors.length, 0);
+    });
+
+    it("should return unknown for rules not in eslint config", () => {
+      // no-eval is a valid eslint rule but not configured in the test config
+      const result = validate(
+        "### No eval\n**Enforced by:** `eslint/no-eval`\n",
+        {
+          rules: { "require-rule-file": "auto" },
+          basePath: eslintDir,
+        },
+      );
+      const ruleErrors = result.errors.filter(
+        (e) =>
+          e.rule === "require-rule-file" &&
+          e.message.includes("exists but is disabled"),
+      );
+      // Not in config = unknown, not disabled → no error
+      assert.equal(ruleErrors.length, 0);
+    });
+  });
 });
 
 describe("discoverInstructionFiles", () => {

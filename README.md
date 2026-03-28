@@ -155,7 +155,7 @@ For custom or unsupported linters, configure a `rulesDir` to check that rule fil
 }
 ```
 
-Set `require-rule-file` to `false` to disable all linter rule checking.
+Set `require-rule-file` to `false` to disable all linter rule checking, or `"catalog-only"` to only check that rules exist in the linter catalog without verifying they're enabled in project config.
 
 ## Configuration
 
@@ -177,11 +177,11 @@ agent-lint works with zero configuration. Optionally create a `.agent-lintrc.jso
 
 ### Rules
 
-| Rule                  | Default  | Description                                                                       |
-| --------------------- | -------- | --------------------------------------------------------------------------------- |
-| `require-annotations` | `true`   | Every rule marker must have `**Enforced by:**` or `**Guidance only**`             |
-| `max-lines`           | `500`    | Maximum number of lines allowed per file. Set a number for custom limit.          |
-| `require-rule-file`   | `"auto"` | Validates that referenced linter rules actually exist. Auto-detects linter tools. |
+| Rule                  | Default  | Description                                                                                                                 |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `require-annotations` | `true`   | Every rule marker must have `**Enforced by:**` or `**Guidance only**`                                                       |
+| `max-lines`           | `500`    | Maximum number of lines allowed per file. Set a number for custom limit.                                                    |
+| `require-rule-file`   | `"auto"` | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks. |
 
 ## CLI
 
@@ -256,15 +256,15 @@ Override with action inputs:
 
 All inputs can also be set via `.agent-lintrc.json`. Action inputs take precedence.
 
-| Input                 | Default     | Description                                                 |
-| --------------------- | ----------- | ----------------------------------------------------------- |
-| `paths`               | auto-detect | Comma-separated paths or glob patterns to validate          |
-| `follow-symlinks`     | `false`     | Follow symbolic links when reading files                    |
-| `markers`             | from config | Comma-separated rule marker types: `headings`, `checkboxes` |
-| `require-annotations` | `true`      | Require enforcement annotations on rules                    |
-| `max-lines`           | `500`       | Max lines per file (number or `false` to disable)           |
-| `require-rule-file`   | `auto`      | Validate linter rules exist (`auto`, `true`, or `false`)    |
-| `linters`             | `{}`        | JSON object mapping linter names to config                  |
+| Input                 | Default     | Description                                                                              |
+| --------------------- | ----------- | ---------------------------------------------------------------------------------------- |
+| `paths`               | auto-detect | Comma-separated paths or glob patterns to validate                                       |
+| `follow-symlinks`     | `false`     | Follow symbolic links when reading files                                                 |
+| `markers`             | from config | Comma-separated rule marker types: `headings`, `checkboxes`                              |
+| `require-annotations` | `true`      | Require enforcement annotations on rules                                                 |
+| `max-lines`           | `500`       | Max lines per file (number or `false` to disable)                                        |
+| `require-rule-file`   | `auto`      | Validate linter rules exist and are enabled (`auto`, `catalog-only`, `true`, or `false`) |
+| `linters`             | `{}`        | JSON object mapping linter names to config                                               |
 
 ### Action Outputs
 

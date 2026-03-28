@@ -173,6 +173,193 @@ const CLI_RULE_CHECKS = {
   },
 };
 
+// Config-enabled checkers: verify a rule is actually enabled in project config
+// Each returns (ruleName, basePath) → "enabled" | "disabled" | "unknown"
+function createCachedChecker(loadConfig) {
+  const cache = new Map();
+  return (ruleName, basePath) => {
+    if (!cache.has(basePath)) {
+      try {
+        cache.set(basePath, loadConfig(basePath));
+      } catch {
+        cache.set(basePath, null);
+      }
+    }
+    const config = cache.get(basePath);
+    if (!config) return "unknown";
+    return config(ruleName);
+  };
+}
+
+const LINTER_CONFIG_CHECKERS = {
+  eslint: createCachedChecker((basePath) => {
+    try {
+      const script = `
+        const { loadESLint } = require("eslint");
+        (async () => {
+          try {
+            const ESLint = await loadESLint();
+            const eslint = new ESLint({ cwd: ${JSON.stringify(basePath)} });
+            const config = await eslint.calculateConfigForFile("dummy.js");
+            console.log(JSON.stringify(config.rules || {}));
+          } catch(e) {
+            console.log("{}");
+          }
+        })();
+      `;
+      const output = execSync(`node -e '${script.replace(/'/g, "'\\''")}'`, {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 15000,
+      });
+      const rules = JSON.parse(output.trim() || "{}");
+      return (ruleName) => {
+        // Handle plugin rules: "import/no-unresolved" is keyed as "import/no-unresolved" in config
+        if (!(ruleName in rules)) return "unknown";
+        const setting = rules[ruleName];
+        const severity = Array.isArray(setting) ? setting[0] : setting;
+        if (severity === 0 || severity === "off") return "disabled";
+        return "enabled";
+      };
+    } catch {
+      return null;
+    }
+  }),
+
+  stylelint: createCachedChecker((basePath) => {
+    try {
+      const script = `
+        const stylelint = require("stylelint");
+        (async () => {
+          try {
+            const linter = stylelint.createLinter({});
+            const result = await linter.getConfigForFile(${JSON.stringify(resolve(basePath, "dummy.css"))});
+            console.log(JSON.stringify(result.config.rules || {}));
+          } catch(e) {
+            console.log("{}");
+          }
+        })();
+      `;
+      const output = execSync(`node -e '${script.replace(/'/g, "'\\''")}'`, {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 15000,
+      });
+      const rules = JSON.parse(output.trim() || "{}");
+      return (ruleName) => {
+        if (!(ruleName in rules)) return "unknown";
+        const setting = rules[ruleName];
+        if (setting === null || (Array.isArray(setting) && setting[0] === null))
+          return "disabled";
+        return "enabled";
+      };
+    } catch {
+      return null;
+    }
+  }),
+
+  ruff: createCachedChecker((basePath) => {
+    try {
+      // ruff check --show-settings outputs resolved config including selected rules
+      const output = execSync(
+        "ruff check --show-settings --stdin-filename=dummy.py",
+        {
+          encoding: "utf-8",
+          cwd: basePath,
+          input: "",
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 10000,
+        },
+      );
+      // Extract the selected rules from the settings output
+      // Look for patterns like: select = ["E", "F", "W"] or rule codes in the output
+      return (ruleName) => {
+        // Ruff codes are hierarchical: selecting "E" enables "E501"
+        // Check if the rule or any prefix of it appears in the output
+        if (output.includes(`"${ruleName}"`)) return "enabled";
+        // Check prefixes: E501 is enabled if E5 or E or E50 is selected
+        for (let i = ruleName.length - 1; i >= 1; i--) {
+          if (output.includes(`"${ruleName.substring(0, i)}"`))
+            return "enabled";
+        }
+        // Check if explicitly ignored
+        return "disabled";
+      };
+    } catch {
+      return null;
+    }
+  }),
+
+  pylint: createCachedChecker((basePath) => {
+    try {
+      const output = execSync("pylint --list-msgs-enabled", {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 15000,
+      });
+      const disabledIdx = output.indexOf("Disabled messages:");
+      const enabledSection =
+        disabledIdx >= 0 ? output.substring(0, disabledIdx) : output;
+      const disabledSection =
+        disabledIdx >= 0 ? output.substring(disabledIdx) : "";
+      return (ruleName) => {
+        if (disabledSection.includes(ruleName)) return "disabled";
+        if (enabledSection.includes(ruleName)) return "enabled";
+        return "unknown";
+      };
+    } catch {
+      return null;
+    }
+  }),
+
+  rubocop(ruleName, basePath) {
+    // Reuse the --show-cops output that CLI_RULE_CHECKS already fetches
+    try {
+      const output = execSync(`rubocop --show-cops ${ruleName}`, {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      if (!output || output.trim().length === 0) return "unknown";
+      const enabledMatch = output.match(/Enabled:\s*(true|false|pending)/);
+      if (!enabledMatch) return "unknown";
+      return enabledMatch[1] === "true" ? "enabled" : "disabled";
+    } catch {
+      return "unknown";
+    }
+  },
+
+  clippy: createCachedChecker((basePath) => {
+    try {
+      const cargoPath = resolve(basePath, "Cargo.toml");
+      if (!existsSync(cargoPath)) return null;
+      const content = readFileSync(cargoPath, "utf-8");
+      // Parse [lints.clippy] section
+      const sectionMatch = content.match(
+        /\[lints\.clippy\]([\s\S]*?)(?=\n\[|$)/,
+      );
+      if (!sectionMatch) return null;
+      const section = sectionMatch[1];
+      return (ruleName) => {
+        // ruleName might be "clippy::needless_return" or just "needless_return"
+        const shortName = ruleName.replace(/^clippy::/, "");
+        const ruleMatch = section.match(
+          new RegExp(
+            `${shortName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*"(\\w+)"`,
+          ),
+        );
+        if (!ruleMatch) return "unknown";
+        return ruleMatch[1] === "allow" ? "disabled" : "enabled";
+      };
+    } catch {
+      return null;
+    }
+  }),
+};
+
 // Check if a CLI tool is available on PATH
 function cliAvailable(command) {
   try {
@@ -441,6 +628,25 @@ export function validate(
 
       const resolved = resolverCache.get(linterName);
 
+      // Helper: check if rule is enabled in linter config (for non-catalog-only modes)
+      const checkConfigEnabled = () => {
+        if (ruleFileMode === "catalog-only") return;
+        const checker = LINTER_CONFIG_CHECKERS[linterName];
+        if (!checker) return;
+        try {
+          const status = checker(ruleName, basePath);
+          if (status === "disabled") {
+            errors.push({
+              rule: "require-rule-file",
+              message: `Rule "${ruleName}" exists but is disabled in ${linterName} config (referenced in "${rule.title}", line ${rule.line})`,
+              line: rule.line,
+            });
+          }
+        } catch {
+          // Can't determine config status — skip silently
+        }
+      };
+
       // Check via Node API resolver (Set of rules)
       if (resolved instanceof Set) {
         if (!resolved.has(ruleName)) {
@@ -465,7 +671,11 @@ export function validate(
               message: `Rule "${ruleName}" not found in ${linterName} (referenced in "${rule.title}", line ${rule.line})`,
               line: rule.line,
             });
+          } else {
+            checkConfigEnabled();
           }
+        } else {
+          checkConfigEnabled();
         }
         continue;
       }
@@ -475,6 +685,7 @@ export function validate(
         const cliCheck = CLI_RULE_CHECKS[linterName];
         try {
           cliCheck(ruleName);
+          checkConfigEnabled();
         } catch {
           errors.push({
             rule: "require-rule-file",
