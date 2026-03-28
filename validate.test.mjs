@@ -806,16 +806,11 @@ describe("require-rule-file", () => {
       rules: { "require-rule-file": "auto" },
       basePath: process.cwd(),
     });
-    const ruffDetected = result.detectedLinters.some(
-      (l) => l.name === "ruff",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (ruffDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 0);
-    }
-    // If ruff not on PATH, skip gracefully
+    assert.equal(ruleErrors.length, 0);
+    assert.ok(result.detectedLinters.some((l) => l.name === "ruff"));
   });
 
   it("should error on nonexistent ruff rule", () => {
@@ -823,17 +818,11 @@ describe("require-rule-file", () => {
       rules: { "require-rule-file": "auto" },
       basePath: process.cwd(),
     });
-    const ruffDetected = result.detectedLinters.some(
-      (l) => l.name === "ruff",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (ruffDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 1);
-      assert.ok(ruleErrors[0].message.includes("FAKE999"));
-    }
-    // If ruff not on PATH, skip — no assertion needed
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("FAKE999"));
   });
 
   it("should detect clippy rules via CLI", () => {
@@ -861,7 +850,6 @@ describe("require-rule-file", () => {
   });
 
   it("should detect pylint rules via CLI", () => {
-    // pylint may or may not be on PATH — test handles both
     const result = validate("### Rule\n**Enforced by:** `pylint/C0301`\n", {
       rules: { "require-rule-file": "auto" },
       basePath: process.cwd(),
@@ -869,27 +857,20 @@ describe("require-rule-file", () => {
     const ruleErrors = result.errors.filter(
       (e) => e.rule === "require-rule-file",
     );
-    // If pylint is on PATH, C0301 (line-too-long) should be valid
-    // If pylint is not on PATH, should skip gracefully
     assert.equal(ruleErrors.length, 0);
+    assert.ok(result.detectedLinters.some((l) => l.name === "pylint"));
   });
 
-  it("should error on nonexistent pylint rule if pylint available", () => {
+  it("should error on nonexistent pylint rule", () => {
     const result = validate("### Rule\n**Enforced by:** `pylint/ZZZZ9999`\n", {
       rules: { "require-rule-file": "auto" },
       basePath: process.cwd(),
     });
-    const pylintDetected = result.detectedLinters.some(
-      (l) => l.name === "pylint",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (pylintDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 1);
-      assert.ok(ruleErrors[0].message.includes("ZZZZ9999"));
-    }
-    // If pylint not on PATH, skip — no assertion needed
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("ZZZZ9999"));
   });
 
   it("should detect rubocop rules via CLI", () => {
@@ -897,16 +878,11 @@ describe("require-rule-file", () => {
       "### Rule\n**Enforced by:** `rubocop/Style/FrozenStringLiteralComment`\n",
       { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
     );
-    const rubocopDetected = result.detectedLinters.some(
-      (l) => l.name === "rubocop",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (rubocopDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 0);
-    }
-    // If rubocop not on PATH, skip gracefully
+    assert.equal(ruleErrors.length, 0);
+    assert.ok(result.detectedLinters.some((l) => l.name === "rubocop"));
   });
 
   it("should error on nonexistent rubocop cop", () => {
@@ -914,26 +890,11 @@ describe("require-rule-file", () => {
       "### Rule\n**Enforced by:** `rubocop/Fake/NonExistentCop`\n",
       { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
     );
-    const rubocopDetected = result.detectedLinters.some(
-      (l) => l.name === "rubocop",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (rubocopDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 1);
-      assert.ok(ruleErrors[0].message.includes("Fake/NonExistentCop"));
-    }
-  });
-
-  it("should skip rubocop gracefully when not on PATH", () => {
-    // Use a basePath where rubocop definitely isn't available
-    const result = validate(
-      "### Rule\n**Enforced by:** `rubocop/Style/FrozenStringLiteralComment`\n",
-      { rules: { "require-rule-file": "auto" }, basePath: tmpDir },
-    );
-    // Should not crash regardless of rubocop availability
-    assert.ok(result);
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("Fake/NonExistentCop"));
   });
 
   it("should check rulesDir for custom rubocop cops", () => {
@@ -961,16 +922,11 @@ describe("require-rule-file", () => {
       "### Rule\n**Enforced by:** `clippy::completely_fake_lint_xyz`\n",
       { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
     );
-    const clippyDetected = result.detectedLinters.some(
-      (l) => l.name === "clippy",
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
     );
-    if (clippyDetected) {
-      const ruleErrors = result.errors.filter(
-        (e) => e.rule === "require-rule-file",
-      );
-      assert.equal(ruleErrors.length, 1);
-      assert.ok(ruleErrors[0].message.includes("completely_fake_lint_xyz"));
-    }
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("completely_fake_lint_xyz"));
   });
 
   it("should skip unknown linters with no config", () => {
