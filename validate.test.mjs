@@ -936,44 +936,77 @@ describe("discoverInstructionFiles", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should fall back to CLAUDE.md when no files found", () => {
+  it("should return empty when no agents detected", () => {
     const result = discoverInstructionFiles(tmpDir);
-    assert.deepEqual(result, ["CLAUDE.md"]);
+    assert.equal(result.detected.length, 0);
+    assert.equal(result.files.length, 0);
+    assert.equal(result.missing.length, 0);
   });
 
-  it("should discover CLAUDE.md", () => {
+  it("should detect Claude Code via .claude/ dir and find CLAUDE.md", () => {
+    mkdirSync(join(tmpDir, ".claude"), { recursive: true });
     writeFileSync(join(tmpDir, "CLAUDE.md"), "# Test\n");
     const result = discoverInstructionFiles(tmpDir);
-    assert.ok(result.includes("CLAUDE.md"));
+    assert.ok(result.detected.some((d) => d.name === "Claude Code"));
+    assert.ok(result.files.includes("CLAUDE.md"));
+    assert.equal(result.missing.length, 0);
   });
 
-  it("should discover AGENTS.md", () => {
-    writeFileSync(join(tmpDir, "AGENTS.md"), "# Test\n");
-    const result = discoverInstructionFiles(tmpDir);
-    assert.ok(result.includes("AGENTS.md"));
+  it("should error when Claude Code detected but CLAUDE.md missing", () => {
+    // .claude/ already exists from previous test
+    const dir = mkdtempSync(join(tmpdir(), "agent-lint-discover2-"));
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    const result = discoverInstructionFiles(dir);
+    assert.ok(result.detected.some((d) => d.name === "Claude Code"));
+    assert.equal(result.files.length, 0);
+    assert.equal(result.missing.length, 1);
+    assert.equal(result.missing[0].tool, "Claude Code");
+    assert.equal(result.missing[0].expected, "CLAUDE.md");
+    rmSync(dir, { recursive: true, force: true });
   });
 
-  it("should discover .cursorrules", () => {
+  it("should detect Cursor via .cursor/ dir", () => {
+    mkdirSync(join(tmpDir, ".cursor"), { recursive: true });
     writeFileSync(join(tmpDir, ".cursorrules"), "rules\n");
     const result = discoverInstructionFiles(tmpDir);
-    assert.ok(result.includes(".cursorrules"));
+    assert.ok(result.detected.some((d) => d.name === "Cursor"));
+    assert.ok(result.files.includes(".cursorrules"));
   });
 
-  it("should discover multiple files at once", () => {
+  it("should detect Codex via AGENTS.md file", () => {
+    writeFileSync(join(tmpDir, "AGENTS.md"), "# Test\n");
     const result = discoverInstructionFiles(tmpDir);
-    assert.ok(result.length >= 3);
-    assert.ok(result.includes("CLAUDE.md"));
-    assert.ok(result.includes("AGENTS.md"));
-    assert.ok(result.includes(".cursorrules"));
+    assert.ok(result.detected.some((d) => d.name === "OpenAI Codex"));
+    assert.ok(result.files.includes("AGENTS.md"));
   });
 
-  it("should discover .github/copilot-instructions.md", () => {
+  it("should detect Copilot via instruction file", () => {
     mkdirSync(join(tmpDir, ".github"), { recursive: true });
     writeFileSync(
       join(tmpDir, ".github/copilot-instructions.md"),
       "# Copilot\n",
     );
     const result = discoverInstructionFiles(tmpDir);
-    assert.ok(result.includes(".github/copilot-instructions.md"));
+    assert.ok(result.detected.some((d) => d.name === "GitHub Copilot"));
+    assert.ok(result.files.includes(".github/copilot-instructions.md"));
+  });
+
+  it("should detect multiple tools at once", () => {
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.detected.length >= 4);
+    assert.ok(result.files.length >= 4);
+  });
+
+  it("should check explicit agents list even without indicators", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-lint-discover3-"));
+    writeFileSync(join(dir, "CLAUDE.md"), "# Test\n");
+    // No .cursor/ dir, but explicitly request Cursor check
+    const result = discoverInstructionFiles(dir, ["Claude Code", "Cursor"]);
+    assert.ok(result.detected.some((d) => d.name === "Claude Code"));
+    assert.ok(result.detected.some((d) => d.name === "Cursor"));
+    assert.ok(result.files.includes("CLAUDE.md"));
+    // Cursor detected but .cursorrules missing
+    assert.ok(result.missing.some((m) => m.tool === "Cursor"));
+    rmSync(dir, { recursive: true, force: true });
   });
 });
