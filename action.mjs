@@ -1,10 +1,14 @@
-import { validatePaths, expandGlobs, loadConfig } from "./validate.mjs";
+import {
+  validatePaths,
+  expandGlobs,
+  loadConfig,
+  discoverInstructionFiles,
+} from "./validate.mjs";
 
 const pathsInput =
   process.env.INPUT_PATHS ||
   process.env["INPUT_CLAUDE-MD-PATH"] ||
-  process.env.INPUT_CLAUDE_MD_PATH ||
-  "CLAUDE.md";
+  process.env.INPUT_CLAUDE_MD_PATH;
 const followSymlinks =
   (process.env.INPUT_FOLLOW_SYMLINKS ||
     process.env["INPUT_FOLLOW-SYMLINKS"] ||
@@ -19,12 +23,14 @@ const requireRuleFileInput =
   process.env.INPUT_REQUIRE_RULE_FILE || process.env["INPUT_REQUIRE-RULE-FILE"];
 const lintersInput = process.env.INPUT_LINTERS || process.env["INPUT_LINTERS"];
 
-const paths = expandGlobs(
-  pathsInput
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean),
-);
+const paths = pathsInput
+  ? expandGlobs(
+      pathsInput
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean),
+    )
+  : discoverInstructionFiles();
 
 const config = loadConfig();
 const ruleMarkers = markersInput

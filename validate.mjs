@@ -19,8 +19,20 @@ const DEFAULT_RULES = {
   "require-rule-file": "auto",
 };
 const SAFE_RULE_NAME_RE = /^[a-zA-Z0-9_\-/.:#]+$/;
+
+// Known instruction files for AI coding tools, ordered by popularity
+const KNOWN_INSTRUCTION_FILES = [
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".cursorrules",
+  ".github/copilot-instructions.md",
+  ".windsurfrules",
+  ".clinerules",
+  "CONVENTIONS.md",
+];
+
 const DEFAULT_CONFIG = {
-  ruleMarkers: ["headings"],
+  ruleMarkers: ["headings", "checkboxes"],
   rules: DEFAULT_RULES,
   linters: {},
 };
@@ -133,6 +145,21 @@ const CLI_TOOL_FOR_LINTER = {
   clippy: "cargo",
   pylint: "pylint",
 };
+
+/**
+ * Auto-discover instruction files in the given directory.
+ * Returns an array of paths that exist, or ["CLAUDE.md"] as fallback.
+ */
+export function discoverInstructionFiles(cwd = process.cwd()) {
+  const found = [];
+  for (const file of KNOWN_INSTRUCTION_FILES) {
+    const fullPath = resolve(cwd, file);
+    if (existsSync(fullPath)) {
+      found.push(file);
+    }
+  }
+  return found.length > 0 ? found : ["CLAUDE.md"];
+}
 
 export function loadConfig() {
   try {
@@ -578,7 +605,7 @@ if (
   const rawPaths = args.filter((a) => !a.startsWith("--"));
 
   if (rawPaths.length === 0) {
-    rawPaths.push("CLAUDE.md");
+    rawPaths.push(...discoverInstructionFiles());
   }
 
   const paths = expandGlobs(rawPaths);
