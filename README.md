@@ -128,18 +128,44 @@ Create a `.agent-lintrc.json` in your project root:
 }
 ```
 
-| Option        | Default        | Description                                                             |
-| ------------- | -------------- | ----------------------------------------------------------------------- |
-| `ruleMarkers` | `["headings"]` | Which rule marker types to recognize: `headings`, `checkboxes`, or both |
+| Option        | Default        | Description                                                                                        |
+| ------------- | -------------- | -------------------------------------------------------------------------------------------------- |
+| `ruleMarkers` | `["headings"]` | Which rule marker types to recognize: `headings`, `checkboxes`, or both                            |
+| `linters`     | `{}`           | Per-linter config for rule file validation (see [Linter Rule Validation](#linter-rule-validation)) |
 
 ### Rules
 
 Rules are named checks that can be toggled individually. Set to `false` to disable.
 
-| Rule                  | Default | Description                                                              |
-| --------------------- | ------- | ------------------------------------------------------------------------ |
-| `require-annotations` | `true`  | Every rule marker must have `**Enforced by:**` or `**Guidance only**`    |
-| `max-lines`           | `500`   | Maximum number of lines allowed per file. Set a number for custom limit. |
+| Rule                  | Default  | Description                                                                       |
+| --------------------- | -------- | --------------------------------------------------------------------------------- |
+| `require-annotations` | `true`   | Every rule marker must have `**Enforced by:**` or `**Guidance only**`             |
+| `max-lines`           | `500`    | Maximum number of lines allowed per file. Set a number for custom limit.          |
+| `require-rule-file`   | `"auto"` | Validates that referenced linter rules actually exist. Auto-detects linter tools. |
+
+### Linter Rule Validation
+
+When `require-rule-file` is `"auto"` (the default), agent-lint automatically detects installed linters and validates that referenced rules exist:
+
+| Linter    | Detection                     | Method                         |
+| --------- | ----------------------------- | ------------------------------ |
+| ESLint    | `eslint` in `node_modules`    | Node API (`builtinRules`)      |
+| Stylelint | `stylelint` in `node_modules` | Node API (`rules` export)      |
+| Ruff      | `ruff` on PATH                | CLI (`ruff rule <name>`)       |
+| Clippy    | `cargo` on PATH               | CLI (`cargo clippy --explain`) |
+| Pylint    | `pylint` on PATH              | CLI (`pylint --help-msg`)      |
+
+For custom or unsupported linters, configure a `rulesDir` to check that rule files exist:
+
+```json
+{
+  "linters": {
+    "my-tool": { "rulesDir": "tools/my-tool/rules/" }
+  }
+}
+```
+
+Set `require-rule-file` to `false` to disable all rule file checking.
 
 ## CLI
 

@@ -27,6 +27,7 @@ const { fileResults, valid } = validatePaths(paths, {
   followSymlinks,
   ruleMarkers,
   rules: config.rules,
+  linters: config.linters,
 });
 
 let totalEnforced = 0;
@@ -59,6 +60,14 @@ for (const { path: filePath, skipped, reason, result } of fileResults) {
   console.log(`  Guidance only:  ${result.guidanceOnly}`);
   console.log(`  Disabled:       ${result.disabled}`);
   console.log(`  Missing:        ${result.missing}`);
+  if (result.detectedLinters && result.detectedLinters.length > 0) {
+    const parts = result.detectedLinters.map((l) =>
+      l.ruleCount
+        ? `${l.name} (${l.ruleCount} built-in rules)`
+        : `${l.name} (cli)`,
+    );
+    console.log(`  Linters:        ${parts.join(", ")}`);
+  }
   console.log("=".repeat(40));
 
   for (const error of result.errors) {

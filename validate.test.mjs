@@ -304,6 +304,7 @@ describe("loadConfig", () => {
     assert.deepEqual(config.rules, {
       "require-annotations": true,
       "max-lines": 500,
+      "require-rule-file": "auto",
     });
   });
 
@@ -729,5 +730,169 @@ describe("expandGlobs", () => {
     const result = expandGlobs(["plain.md", join(tmpDir, "*.md")]);
     assert.equal(result[0], "plain.md");
     assert.ok(result.length > 1);
+  });
+});
+
+describe("require-rule-file", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "agent-lint-rule-file-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should not check rules when disabled", () => {
+    const result = validate("### Rule\n**Enforced by:** `eslint/fake-xyz`\n", {
+      rules: { "require-rule-file": false },
+      basePath: tmpDir,
+    });
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+  });
+
+  it("should skip when no basePath is provided", () => {
+    const result = validate("### Rule\n**Enforced by:** `eslint/fake-xyz`\n", {
+      rules: { "require-rule-file": "auto" },
+    });
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+  });
+
+  it("should detect eslint built-in rules via API", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `eslint/no-console`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
+    );
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+    assert.ok(result.detectedLinters.some((l) => l.name === "eslint"));
+  });
+
+  it("should error on nonexistent eslint rule", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `eslint/completely-fake-rule-xyz`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
+    );
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("completely-fake-rule-xyz"));
+    assert.ok(ruleErrors[0].message.includes("eslint"));
+  });
+
+  it("should report detected linters with rule count", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `eslint/no-console`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
+    );
+    const eslint = result.detectedLinters.find((l) => l.name === "eslint");
+    assert.ok(eslint);
+    assert.ok(eslint.ruleCount > 0);
+  });
+
+  it("should detect ruff rules via CLI", () => {
+    const result = validate("### Rule\n**Enforced by:** `ruff/E501`\n", {
+      rules: { "require-rule-file": "auto" },
+      basePath: process.cwd(),
+    });
+    // ruff is available in this environment
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 0);
+    assert.ok(result.detectedLinters.some((l) => l.name === "ruff"));
+  });
+
+  it("should error on nonexistent ruff rule", () => {
+    const result = validate("### Rule\n**Enforced by:** `ruff/FAKE999`\n", {
+      rules: { "require-rule-file": "auto" },
+      basePath: process.cwd(),
+    });
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("FAKE999"));
+  });
+
+  it("should detect clippy rules via CLI", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `clippy::needless_return`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
+    );
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 0);
+    assert.ok(result.detectedLinters.some((l) => l.name === "clippy"));
+  });
+
+  it("should skip unknown linters with no config", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `unknown-tool/some-rule`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: tmpDir },
+    );
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+  });
+
+  it("should skip rules with unsafe characters in name", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `eslint/no-console; rm -rf /`\n",
+      { rules: { "require-rule-file": "auto" }, basePath: process.cwd() },
+    );
+    // Should not crash or execute shell commands
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+  });
+
+  it("should check rulesDir for custom linters", () => {
+    const rulesDir = join(tmpDir, "my-rules");
+    mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(rulesDir, "check-foo.js"), "module.exports = {};\n");
+
+    const result = validate(
+      "### Rule A\n**Enforced by:** `my-tool/check-foo`\n### Rule B\n**Enforced by:** `my-tool/check-bar`\n",
+      {
+        rules: { "require-rule-file": "auto" },
+        basePath: tmpDir,
+        linters: { "my-tool": { rulesDir: "my-rules" } },
+      },
+    );
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("check-bar"));
+  });
+
+  it("should error when configured rulesDir does not exist", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `my-tool/check-foo`\n",
+      {
+        rules: { "require-rule-file": "auto" },
+        basePath: tmpDir,
+        linters: { "my-tool": { rulesDir: "nonexistent-dir" } },
+      },
+    );
+    const ruleErrors = result.errors.filter(
+      (e) => e.rule === "require-rule-file",
+    );
+    assert.equal(ruleErrors.length, 1);
+    assert.ok(ruleErrors[0].message.includes("does not exist"));
   });
 });
