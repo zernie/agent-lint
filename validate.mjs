@@ -277,6 +277,9 @@ function printResult(filePath, result) {
     console.log("Errors:");
     for (const error of result.errors) {
       console.log(`  [${error.rule}] ${error.message}`);
+      console.log(
+        `::error file=${filePath},line=${error.line}::${error.message}`,
+      );
     }
   }
 }
