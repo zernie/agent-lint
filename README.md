@@ -26,6 +26,8 @@ AI coding agents work best with deterministic feedback — linters, type checker
 
 The problem: teams write rules in CLAUDE.md or AGENTS.md like "always use barrel imports" but never wire them to actual linters. The rules rot. The agent ignores them. Nobody notices until the codebase diverges.
 
+On bigger teams this gets worse — different engineers use different agents (Claude Code, Cursor, Codex, Copilot), each with its own instruction file format. Without validation, some agents get well-maintained rules while others get stale or missing files. `agent-lint` detects every agent tool configured in your repo and ensures each one has an up-to-date, properly annotated instruction file.
+
 `agent-lint` closes this gap:
 
 1. **Every rule must cite its enforcer** — `**Enforced by:** \`eslint/no-restricted-imports\``or`**Guidance only**`
@@ -105,7 +107,7 @@ To skip validation for a specific rule:
 
 ## Agent Detection
 
-agent-lint detects which AI coding tools are configured in your project and requires their instruction files to exist:
+In a team where some engineers use Claude Code, others use Cursor, and CI runs Codex, you need instruction files for all of them. agent-lint detects which tools are configured and requires their instruction files to exist:
 
 | Tool           | Detected by                       | Required file                     |
 | -------------- | --------------------------------- | --------------------------------- |
@@ -116,9 +118,9 @@ agent-lint detects which AI coding tools are configured in your project and requ
 | GitHub Copilot | `.github/copilot-instructions.md` | `.github/copilot-instructions.md` |
 | Cline          | `.clinerules` file                | `.clinerules`                     |
 
-If `.claude/` exists but `CLAUDE.md` doesn't, agent-lint errors — ensuring you don't forget to create instruction files for tools you've set up.
+If `.claude/` exists but `CLAUDE.md` doesn't, agent-lint errors — so when someone adds a new agent tool to the repo, CI catches the missing instruction file before it ships.
 
-To explicitly require specific tools (even without their config directories):
+To explicitly require specific tools across the team (even without their config directories):
 
 ```json
 {
