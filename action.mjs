@@ -61,14 +61,10 @@ for (const { path: filePath, skipped, reason, result } of fileResults) {
   console.log(`  Missing:        ${result.missing}`);
   console.log("=".repeat(40));
 
-  if (result.missing > 0) {
-    console.log("");
-    console.log("Rules missing enforcement annotations:");
-    for (const rule of result.rules) {
-      if (rule.enforcement === "missing") {
-        console.log(`  Line ${rule.line}: "${rule.title}"`);
-      }
-    }
+  for (const error of result.errors) {
+    console.log(
+      `::error file=${filePath},line=${error.line}::${error.message}`,
+    );
   }
 }
 
