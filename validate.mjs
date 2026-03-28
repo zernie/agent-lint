@@ -20,21 +20,46 @@ const DEFAULT_RULES = {
 };
 const SAFE_RULE_NAME_RE = /^[a-zA-Z0-9_\-/.:#]+$/;
 
-// Known instruction files for AI coding tools, ordered by popularity
-const KNOWN_INSTRUCTION_FILES = [
-  "CLAUDE.md",
-  "AGENTS.md",
-  ".cursorrules",
-  ".github/copilot-instructions.md",
-  ".windsurfrules",
-  ".clinerules",
-  "CONVENTIONS.md",
+// AI coding tools: presence indicators and required instruction files
+const AGENT_TOOLS = [
+  {
+    name: "Claude Code",
+    indicators: [".claude"],
+    instructionFiles: ["CLAUDE.md"],
+  },
+  {
+    name: "Cursor",
+    indicators: [".cursor"],
+    instructionFiles: [".cursorrules"],
+  },
+  {
+    name: "Windsurf",
+    indicators: [".windsurf"],
+    instructionFiles: [".windsurfrules"],
+  },
+  // Tools where the instruction file IS the indicator
+  {
+    name: "OpenAI Codex",
+    indicators: ["AGENTS.md"],
+    instructionFiles: ["AGENTS.md"],
+  },
+  {
+    name: "GitHub Copilot",
+    indicators: [".github/copilot-instructions.md"],
+    instructionFiles: [".github/copilot-instructions.md"],
+  },
+  {
+    name: "Cline",
+    indicators: [".clinerules"],
+    instructionFiles: [".clinerules"],
+  },
 ];
 
 const DEFAULT_CONFIG = {
   ruleMarkers: ["headings", "checkboxes"],
   rules: DEFAULT_RULES,
   linters: {},
+  agents: null, // null = auto-detect; array = explicit list of tool names
 };
 
 function extractLinterName(enforcedBy) {
@@ -147,18 +172,55 @@ const CLI_TOOL_FOR_LINTER = {
 };
 
 /**
- * Auto-discover instruction files in the given directory.
- * Returns an array of paths that exist, or ["CLAUDE.md"] as fallback.
+ * Detect AI coding tools and their instruction files.
+ * @param {string} cwd — directory to scan
+ * @param {string[]|null} agents — explicit list of tool names to check, or null for auto-detect
+ * Returns { detected, files, missing } where:
+ *   detected: [{ name, indicator }] — tools found in the project
+ *   files: string[] — instruction files to validate
+ *   missing: [{ tool, expected, indicator }] — detected tools missing instruction files
  */
-export function discoverInstructionFiles(cwd = process.cwd()) {
-  const found = [];
-  for (const file of KNOWN_INSTRUCTION_FILES) {
-    const fullPath = resolve(cwd, file);
-    if (existsSync(fullPath)) {
-      found.push(file);
+export function discoverInstructionFiles(cwd = process.cwd(), agents = null) {
+  const detected = [];
+  const files = [];
+  const missing = [];
+  const seen = new Set();
+
+  const toolsToCheck = agents
+    ? AGENT_TOOLS.filter((t) =>
+        agents.some((a) => t.name.toLowerCase() === a.toLowerCase()),
+      )
+    : AGENT_TOOLS;
+
+  for (const tool of toolsToCheck) {
+    // In explicit mode, always check (no indicator needed)
+    // In auto mode, require an indicator to be present
+    const indicator = agents
+      ? tool.indicators[0]
+      : tool.indicators.find((ind) => existsSync(resolve(cwd, ind)));
+    if (!agents && !indicator) continue;
+
+    detected.push({
+      name: tool.name,
+      indicator: indicator || tool.indicators[0],
+    });
+
+    for (const file of tool.instructionFiles) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      if (existsSync(resolve(cwd, file))) {
+        files.push(file);
+      } else {
+        missing.push({
+          tool: tool.name,
+          expected: file,
+          indicator: indicator || tool.indicators[0],
+        });
+      }
     }
   }
-  return found.length > 0 ? found : ["CLAUDE.md"];
+
+  return { detected, files, missing };
 }
 
 export function loadConfig() {
@@ -175,6 +237,7 @@ export function loadConfig() {
       ...result.config,
       rules: { ...DEFAULT_RULES, ...result.config.rules },
       linters: { ...result.config.linters },
+      agents: result.config.agents !== undefined ? result.config.agents : null,
     };
 
     if (
@@ -604,13 +667,23 @@ if (
   const markersArg = args.find((a) => a.startsWith("--markers="));
   const rawPaths = args.filter((a) => !a.startsWith("--"));
 
+  const config = loadConfig();
+
+  let discoveryMissing = [];
   if (rawPaths.length === 0) {
-    rawPaths.push(...discoverInstructionFiles());
+    const discovery = discoverInstructionFiles(process.cwd(), config.agents);
+    if (discovery.detected.length > 0) {
+      const tools = discovery.detected
+        .map((d) => `${d.name} (${d.indicator})`)
+        .join(", ");
+      console.log(`Detected agents: ${tools}`);
+    }
+    rawPaths.push(...discovery.files);
+    discoveryMissing = discovery.missing;
   }
 
   const paths = expandGlobs(rawPaths);
 
-  const config = loadConfig();
   const ruleMarkers = markersArg
     ? markersArg.split("=")[1].split(",")
     : config.ruleMarkers;
@@ -634,13 +707,26 @@ if (
     printResult(filePath, result);
   }
 
+  let hasMissing = false;
+  for (const m of discoveryMissing) {
+    console.log(
+      `\n::error::${m.tool} detected (${m.indicator}) but ${m.expected} is missing`,
+    );
+    hasMissing = true;
+  }
+
   console.log("");
-  if (valid) {
+  if (valid && !hasMissing) {
     console.log("All rules have enforcement annotations.");
   } else {
-    console.log(
-      "Add **Enforced by:** `<rule>` or **Guidance only** to each rule.",
-    );
+    if (!valid) {
+      console.log(
+        "Add **Enforced by:** `<rule>` or **Guidance only** to each rule.",
+      );
+    }
+    if (hasMissing) {
+      console.log("Create missing instruction files for detected agents.");
+    }
     console.log("");
     console.log("::error::Validation failed — see report above");
     process.exit(1);

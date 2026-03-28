@@ -131,6 +131,7 @@ agent-lint works with zero configuration. Optionally create a `.agent-lintrc.jso
 | ------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
 | `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize: `headings`, `checkboxes`, or both                            |
 | `linters`     | `{}`                         | Per-linter config for rule file validation (see [Linter Rule Validation](#linter-rule-validation)) |
+| `agents`      | `null` (auto-detect)         | List of agent tool names to require, or `null` to auto-detect                                      |
 
 ### Rules
 
@@ -346,19 +347,26 @@ The action sets the following outputs, accessible via `steps.<id>.outputs.<name>
 
 ## Supported Tools
 
-`agent-lint` auto-discovers instruction files for all major AI coding tools. No configuration needed — just run `npx agent-lint` and it finds what's in your repo:
+`agent-lint` detects which AI coding tools are configured in your project and validates their instruction files. If a tool is detected but its instruction file is missing, that's an error — ensuring you don't forget to create one.
 
-| Tool           | Instruction File                  | Auto-discovered |
-| -------------- | --------------------------------- | --------------- |
-| Claude Code    | `CLAUDE.md`                       | Yes             |
-| OpenAI Codex   | `AGENTS.md`                       | Yes             |
-| Cursor         | `.cursorrules`                    | Yes             |
-| GitHub Copilot | `.github/copilot-instructions.md` | Yes             |
-| Windsurf       | `.windsurfrules`                  | Yes             |
-| Cline          | `.clinerules`                     | Yes             |
-| Custom         | any `.md` file                    | Pass explicitly |
+| Tool           | Detected by                       | Required file                     |
+| -------------- | --------------------------------- | --------------------------------- |
+| Claude Code    | `.claude/` directory              | `CLAUDE.md`                       |
+| Cursor         | `.cursor/` directory              | `.cursorrules`                    |
+| Windsurf       | `.windsurf/` directory            | `.windsurfrules`                  |
+| OpenAI Codex   | `AGENTS.md` file                  | `AGENTS.md`                       |
+| GitHub Copilot | `.github/copilot-instructions.md` | `.github/copilot-instructions.md` |
+| Cline          | `.clinerules` file                | `.clinerules`                     |
 
-You can also pass explicit paths or globs to validate files not in the auto-discovery list:
+To explicitly require specific tools (even without their config directories):
+
+```json
+{
+  "agents": ["Claude Code", "Cursor"]
+}
+```
+
+You can also pass explicit paths or globs:
 
 ```bash
 npx agent-lint my-instructions.md

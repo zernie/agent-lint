@@ -23,16 +23,29 @@ const requireRuleFileInput =
   process.env.INPUT_REQUIRE_RULE_FILE || process.env["INPUT_REQUIRE-RULE-FILE"];
 const lintersInput = process.env.INPUT_LINTERS || process.env["INPUT_LINTERS"];
 
-const paths = pathsInput
-  ? expandGlobs(
-      pathsInput
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean),
-    )
-  : discoverInstructionFiles();
-
 const config = loadConfig();
+
+let discoveryMissing = [];
+let paths;
+if (pathsInput) {
+  paths = expandGlobs(
+    pathsInput
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
+  );
+} else {
+  const discovery = discoverInstructionFiles(process.cwd(), config.agents);
+  if (discovery.detected.length > 0) {
+    const tools = discovery.detected
+      .map((d) => `${d.name} (${d.indicator})`)
+      .join(", ");
+    console.log(`Detected agents: ${tools}`);
+  }
+  paths = discovery.files;
+  discoveryMissing = discovery.missing;
+}
+
 const ruleMarkers = markersInput
   ? markersInput.split(",").map((m) => m.trim())
   : config.ruleMarkers;
@@ -126,13 +139,26 @@ console.log(`::set-output name=disabled::${totalDisabled}`);
 console.log(`::set-output name=missing::${totalMissing}`);
 console.log(`::set-output name=valid::${valid}`);
 
+let hasMissingFiles = false;
+for (const m of discoveryMissing) {
+  console.log(
+    `\n::error::${m.tool} detected (${m.indicator}) but ${m.expected} is missing`,
+  );
+  hasMissingFiles = true;
+}
+
 console.log("");
-if (valid) {
+if (valid && !hasMissingFiles) {
   console.log("All rules have enforcement annotations.");
 } else {
-  console.log(
-    "Add **Enforced by:** `<rule>` or **Guidance only** to each rule.",
-  );
+  if (!valid) {
+    console.log(
+      "Add **Enforced by:** `<rule>` or **Guidance only** to each rule.",
+    );
+  }
+  if (hasMissingFiles) {
+    console.log("Create missing instruction files for detected agents.");
+  }
   console.log("");
   console.log(
     `::error::Validation failed — ${totalMissing} rule(s) missing enforcement annotations`,
