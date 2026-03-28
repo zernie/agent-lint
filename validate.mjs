@@ -152,7 +152,13 @@ const CLI_RULE_CHECKS = {
     execSync(`cargo clippy --explain ${ruleName}`, { stdio: "ignore" });
   },
   pylint(ruleName) {
-    execSync(`pylint --help-msg=${ruleName}`, { stdio: "ignore" });
+    const output = execSync(`pylint --help-msg=${ruleName}`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    if (output.includes("No such message id")) {
+      throw new Error(`Unknown pylint message: ${ruleName}`);
+    }
   },
   rubocop(ruleName) {
     // rubocop --show-cops exits 0 for both valid and invalid cops,
