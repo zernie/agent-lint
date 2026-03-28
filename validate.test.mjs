@@ -988,6 +988,50 @@ describe("require-rule-file", () => {
     assert.ok(ruleErrors[0].message.includes("does not exist"));
   });
 
+  it("should skip all CLI linters gracefully when not on PATH", () => {
+    // Use a fake PATH so no CLI tools are found
+    const origPath = process.env.PATH;
+    process.env.PATH = tmpDir; // empty dir, no binaries
+    try {
+      const content = [
+        "### R1\n**Enforced by:** `ruff/E501`",
+        "### R2\n**Enforced by:** `clippy::needless_return`",
+        "### R3\n**Enforced by:** `pylint/C0301`",
+        "### R4\n**Enforced by:** `rubocop/Style/FrozenStringLiteralComment`",
+      ].join("\n");
+      const result = validate(content, {
+        rules: { "require-rule-file": "auto" },
+        basePath: tmpDir,
+      });
+      // No CLI tools found → no require-rule-file errors (all skipped)
+      const ruleErrors = result.errors.filter(
+        (e) => e.rule === "require-rule-file",
+      );
+      assert.equal(ruleErrors.length, 0);
+      // None should be detected
+      assert.equal(
+        result.detectedLinters.filter((l) =>
+          ["ruff", "clippy", "pylint", "rubocop"].includes(l.name),
+        ).length,
+        0,
+      );
+    } finally {
+      process.env.PATH = origPath;
+    }
+  });
+
+  it("should not error on eslint rules when require-rule-file is disabled", () => {
+    const result = validate(
+      "### Rule\n**Enforced by:** `eslint/no-console`\n",
+      { rules: { "require-rule-file": false }, basePath: tmpDir },
+    );
+    assert.equal(
+      result.errors.filter((e) => e.rule === "require-rule-file").length,
+      0,
+    );
+    assert.equal(result.detectedLinters.length, 0);
+  });
+
   it("should handle eslint plugin-style rule names with slash", () => {
     // eslint/import/no-unresolved — plugin not installed, should error
     const result = validate(
