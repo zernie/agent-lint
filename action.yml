@@ -6,9 +6,8 @@ branding:
 
 inputs:
   paths:
-    description: "Comma-separated paths or glob patterns (e.g. '**/*.md') to validate"
+    description: "Comma-separated paths or glob patterns. Auto-discovers CLAUDE.md, AGENTS.md, .cursorrules, etc. if omitted."
     required: false
-    default: "CLAUDE.md"
   follow-symlinks:
     description: "Follow symbolic links when reading CLAUDE.md files"
     required: false

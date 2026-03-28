@@ -33,8 +33,8 @@ Works with any AI agent instruction file — CLAUDE.md, AGENTS.md, .cursorrules,
 ## Quick Start
 
 ```bash
-# Validate your instruction file
-npx agent-lint CLAUDE.md
+# Auto-discovers CLAUDE.md, AGENTS.md, .cursorrules, etc.
+npx agent-lint
 ```
 
 Example output when validation fails:
@@ -116,22 +116,21 @@ This works like `eslint-disable-next-line` — the rule is recognized but exclud
 
 ## Configuration
 
-Create a `.agent-lintrc.json` in your project root:
+agent-lint works with zero configuration. Optionally create a `.agent-lintrc.json` to override defaults:
 
 ```json
 {
-  "ruleMarkers": ["headings", "checkboxes"],
+  "ruleMarkers": ["headings"],
   "rules": {
-    "require-annotations": true,
-    "max-lines": 500
+    "max-lines": 300
   }
 }
 ```
 
-| Option        | Default        | Description                                                                                        |
-| ------------- | -------------- | -------------------------------------------------------------------------------------------------- |
-| `ruleMarkers` | `["headings"]` | Which rule marker types to recognize: `headings`, `checkboxes`, or both                            |
-| `linters`     | `{}`           | Per-linter config for rule file validation (see [Linter Rule Validation](#linter-rule-validation)) |
+| Option        | Default                      | Description                                                                                        |
+| ------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize: `headings`, `checkboxes`, or both                            |
+| `linters`     | `{}`                         | Per-linter config for rule file validation (see [Linter Rule Validation](#linter-rule-validation)) |
 
 ### Rules
 
@@ -172,11 +171,11 @@ Set `require-rule-file` to `false` to disable all rule file checking.
 ## CLI
 
 ```bash
-# Validate a single file
-npx agent-lint CLAUDE.md
+# Auto-discover and validate all instruction files
+npx agent-lint
 
-# Validate multiple files
-npx agent-lint CLAUDE.md AGENTS.md .cursorrules
+# Validate a specific file
+npx agent-lint CLAUDE.md
 
 # Monorepo — validate across packages
 npx agent-lint CLAUDE.md packages/api/CLAUDE.md packages/web/CLAUDE.md
@@ -185,10 +184,10 @@ npx agent-lint CLAUDE.md packages/api/CLAUDE.md packages/web/CLAUDE.md
 npx agent-lint "**/*.md"
 
 # Follow symlinks
-npx agent-lint CLAUDE.md --follow-symlinks
+npx agent-lint --follow-symlinks
 
-# Override rule markers (without a config file)
-npx agent-lint CLAUDE.md --markers=headings,checkboxes
+# Override rule markers
+npx agent-lint --markers=headings
 ```
 
 ### Options
@@ -259,13 +258,7 @@ jobs:
       - uses: zernie/agent-lint@main
 ```
 
-By default the action validates `CLAUDE.md`. Pass `paths` to validate other files:
-
-```yaml
-- uses: zernie/agent-lint@main
-  with:
-    paths: "CLAUDE.md,AGENTS.md,.cursorrules"
-```
+By default the action auto-discovers instruction files (CLAUDE.md, AGENTS.md, .cursorrules, etc.). Pass `paths` to override:
 
 Multiple files (monorepo):
 
@@ -353,21 +346,22 @@ The action sets the following outputs, accessible via `steps.<id>.outputs.<name>
 
 ## Supported Tools
 
-`agent-lint` works with any markdown file that follows the `###` heading + `**Enforced by:**` / `**Guidance only**` format. Here are the common instruction files by tool:
+`agent-lint` auto-discovers instruction files for all major AI coding tools. No configuration needed — just run `npx agent-lint` and it finds what's in your repo:
 
-| Tool         | Instruction File | Example                             |
-| ------------ | ---------------- | ----------------------------------- |
-| Claude Code  | `CLAUDE.md`      | `npx agent-lint CLAUDE.md`          |
-| OpenAI Codex | `AGENTS.md`      | `npx agent-lint AGENTS.md`          |
-| Cursor       | `.cursorrules`   | `npx agent-lint .cursorrules`       |
-| Custom       | any `.md` file   | `npx agent-lint my-instructions.md` |
+| Tool           | Instruction File                  | Auto-discovered |
+| -------------- | --------------------------------- | --------------- |
+| Claude Code    | `CLAUDE.md`                       | Yes             |
+| OpenAI Codex   | `AGENTS.md`                       | Yes             |
+| Cursor         | `.cursorrules`                    | Yes             |
+| GitHub Copilot | `.github/copilot-instructions.md` | Yes             |
+| Windsurf       | `.windsurfrules`                  | Yes             |
+| Cline          | `.clinerules`                     | Yes             |
+| Custom         | any `.md` file                    | Pass explicitly |
 
-Validate multiple files across tools in a single run:
+You can also pass explicit paths or globs to validate files not in the auto-discovery list:
 
-```yaml
-- uses: zernie/agent-lint@main
-  with:
-    paths: "CLAUDE.md,AGENTS.md,.cursorrules"
+```bash
+npx agent-lint my-instructions.md
 ```
 
 ### Claude Code Integration

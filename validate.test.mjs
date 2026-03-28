@@ -15,6 +15,7 @@ import {
   readClaudeMd,
   validatePaths,
   expandGlobs,
+  discoverInstructionFiles,
   loadConfig,
 } from "./validate.mjs";
 
@@ -300,7 +301,7 @@ describe("loadConfig", () => {
   it("should return defaults when no config file exists", () => {
     process.chdir(tmpDir);
     const config = loadConfig();
-    assert.deepEqual(config.ruleMarkers, ["headings"]);
+    assert.deepEqual(config.ruleMarkers, ["headings", "checkboxes"]);
     assert.deepEqual(config.rules, {
       "require-annotations": true,
       "max-lines": 500,
@@ -329,7 +330,7 @@ describe("loadConfig", () => {
     );
     process.chdir(configDir);
     const config = loadConfig();
-    assert.deepEqual(config.ruleMarkers, ["headings"]);
+    assert.deepEqual(config.ruleMarkers, ["headings", "checkboxes"]);
     process.chdir(originalCwd);
     rmSync(configDir, { recursive: true, force: true });
   });
@@ -921,5 +922,58 @@ describe("require-rule-file", () => {
     );
     // Plugin not installed, so no resolver found -> skip (no error in auto mode)
     assert.equal(ruleErrors.length, 0);
+  });
+});
+
+describe("discoverInstructionFiles", () => {
+  let tmpDir;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "agent-lint-discover-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should fall back to CLAUDE.md when no files found", () => {
+    const result = discoverInstructionFiles(tmpDir);
+    assert.deepEqual(result, ["CLAUDE.md"]);
+  });
+
+  it("should discover CLAUDE.md", () => {
+    writeFileSync(join(tmpDir, "CLAUDE.md"), "# Test\n");
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.includes("CLAUDE.md"));
+  });
+
+  it("should discover AGENTS.md", () => {
+    writeFileSync(join(tmpDir, "AGENTS.md"), "# Test\n");
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.includes("AGENTS.md"));
+  });
+
+  it("should discover .cursorrules", () => {
+    writeFileSync(join(tmpDir, ".cursorrules"), "rules\n");
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.includes(".cursorrules"));
+  });
+
+  it("should discover multiple files at once", () => {
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.length >= 3);
+    assert.ok(result.includes("CLAUDE.md"));
+    assert.ok(result.includes("AGENTS.md"));
+    assert.ok(result.includes(".cursorrules"));
+  });
+
+  it("should discover .github/copilot-instructions.md", () => {
+    mkdirSync(join(tmpDir, ".github"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, ".github/copilot-instructions.md"),
+      "# Copilot\n",
+    );
+    const result = discoverInstructionFiles(tmpDir);
+    assert.ok(result.includes(".github/copilot-instructions.md"));
   });
 });
