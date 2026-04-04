@@ -19,6 +19,7 @@ Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedb
 - [Configuration](#configuration)
 - [CLI](#cli)
 - [Organizing Rules](#organizing-rules)
+- [Structure Validation](#structure-validation)
 - [GitHub Action](#github-action)
 - [Installing Skills](#installing-skills)
 - [Maturity Levels](#maturity-levels)
@@ -173,11 +174,12 @@ vigiles works with zero configuration. Optionally create a `.vigilesrc.json` to 
 }
 ```
 
-| Option        | Default                      | Description                                                   |
-| ------------- | ---------------------------- | ------------------------------------------------------------- |
-| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                          |
-| `linters`     | `{}`                         | Per-linter config for rule file validation                    |
-| `agents`      | `null` (auto-detect)         | List of agent tool names to require, or `null` to auto-detect |
+| Option        | Default                      | Description                                                                                          |
+| ------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                                                                 |
+| `linters`     | `{}`                         | Per-linter config for rule file validation                                                           |
+| `agents`      | `null` (auto-detect)         | List of agent tool names to require, or `null` to auto-detect                                        |
+| `structures`  | `[]`                         | File-to-schema mappings for structure validation. See [Structure Validation](#structure-validation). |
 
 ### Rules
 
@@ -186,6 +188,7 @@ vigiles works with zero configuration. Optionally create a `.vigilesrc.json` to 
 | `require-annotations` | `true`   | Every rule marker must have `**Enforced by:**` or `**Guidance only**`                                                       |
 | `max-lines`           | `500`    | Maximum number of lines allowed per file. Set a number for custom limit.                                                    |
 | `require-rule-file`   | `"auto"` | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks. |
+| `require-structure`   | `false`  | Validates markdown structure against schemas. See [Structure Validation](#structure-validation).                            |
 
 ## CLI
 
@@ -229,6 +232,99 @@ packages/
 ```
 
 The `max-lines` rule (default: 500) nudges toward this pattern — oversized instruction files waste agent tokens on irrelevant rules.
+
+## Structure Validation
+
+The `require-structure` rule validates that instruction files follow a consistent markdown structure. This is especially useful for enforcing templates across teams — every CLAUDE.md has a Commands section, every SKILL.md has frontmatter with a description, etc.
+
+Enable it in `.vigilesrc.json`:
+
+```json
+{
+  "rules": { "require-structure": true },
+  "structures": [
+    { "files": "CLAUDE.md", "schema": "claude-md" },
+    { "files": "**/SKILL.md", "schema": "skill" }
+  ]
+}
+```
+
+Each entry in `structures` maps a glob pattern to a schema. The `files` glob is matched against the file path, so you can apply different schemas to different directories:
+
+```json
+{
+  "rules": { "require-structure": true },
+  "structures": [
+    { "files": "CLAUDE.md", "schema": "claude-md" },
+    {
+      "files": "packages/api/**/*.md",
+      "schema": {
+        "sections": [
+          { "heading": "## API Reference", "required": true },
+          { "heading": "## Examples", "required": false }
+        ]
+      }
+    },
+    { "files": "**/SKILL.md", "schema": "skill" }
+  ]
+}
+```
+
+### Built-in Presets
+
+| Preset        | What it checks                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `"claude-md"` | Heading levels don't skip (h1→h3), max depth 4. Optional section hints for Commands, Architecture, Rules. |
+| `"skill"`     | Requires YAML frontmatter with a `description` field. Max heading depth 4.                                |
+
+### Custom Schemas
+
+Schemas support four features:
+
+**Required/optional sections** — check that specific headings exist:
+
+```json
+{
+  "sections": [
+    {
+      "heading": "## Commands",
+      "required": true,
+      "description": "Build/test/lint commands"
+    },
+    { "heading": "## Architecture", "required": true },
+    { "heading": "## Principles", "required": false }
+  ]
+}
+```
+
+Heading patterns support trailing wildcards: `"## *"` matches any `##` heading.
+
+**Heading rules** — enforce heading hierarchy:
+
+```json
+{
+  "headingRules": {
+    "noSkipLevels": true,
+    "maxDepth": 3
+  }
+}
+```
+
+`noSkipLevels` errors if you jump from `#` to `###` without a `##`. `maxDepth` caps the deepest heading level allowed.
+
+**Frontmatter validation** — require YAML frontmatter and specific fields:
+
+```json
+{
+  "requireFrontmatter": true,
+  "frontmatterFields": [
+    { "name": "name", "required": false },
+    { "name": "description", "required": true }
+  ]
+}
+```
+
+All features can be combined in a single schema.
 
 ## GitHub Action
 
