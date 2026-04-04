@@ -1,26 +1,6 @@
-# Schema for CLAUDE.md instruction files
+# Default schema for CLAUDE.md — lenient, catches obviously broken structure.
+# Use "claude-md:strict" for full template enforcement.
 # See https://github.com/jackchuka/mdschema for full syntax
 
-structure:
-  - heading:
-      pattern: "# .+"
-    optional: true
-    allow_additional: true
-    children:
-      - heading:
-          pattern: "## .+"
-        optional: true
-        allow_additional: true
-        count:
-          min: 0
-        children:
-          - heading:
-              pattern: "### .+"
-            optional: true
-            allow_additional: true
-            count:
-              min: 0
-
 heading_rules:
-  no_skip_levels: true
-  max_depth: 4
+  max_depth: 6

@@ -15,20 +15,43 @@ const RULE_HEADER_RE = /^###\s+(.+)$/;
 const CHECKBOX_RE = /^- \[([ xX])\]\s+(.+)$/;
 
 const VALID_MARKERS = ["headings", "checkboxes"];
-const DEFAULT_RULES = {
-  "require-annotations": true,
-  "max-lines": 500,
-  "require-rule-file": "auto",
-  "require-structure": false,
-};
 const SAFE_RULE_NAME_RE = /^[a-zA-Z0-9_\-/.:#]+$/;
 
 // Built-in schema presets (bundled .yml files in schemas/)
 const SCHEMAS_DIR = new URL("./schemas/", import.meta.url).pathname;
 export const STRUCTURE_PRESETS = {
   "claude-md": resolve(SCHEMAS_DIR, "claude-md.yml"),
+  "claude-md:strict": resolve(SCHEMAS_DIR, "claude-md-strict.yml"),
   skill: resolve(SCHEMAS_DIR, "skill.yml"),
+  "skill:strict": resolve(SCHEMAS_DIR, "skill-strict.yml"),
 };
+
+// Rule packs — like eslint's "recommended" / "strict" configs
+export const RULE_PACKS = {
+  recommended: {
+    rules: {
+      "require-annotations": true,
+      "max-lines": 500,
+      "require-rule-file": "auto",
+      "require-structure": false,
+    },
+    structures: [],
+  },
+  strict: {
+    rules: {
+      "require-annotations": true,
+      "max-lines": 300,
+      "require-rule-file": "auto",
+      "require-structure": true,
+    },
+    structures: [
+      { files: "CLAUDE.md", schema: "claude-md:strict" },
+      { files: "**/SKILL.md", schema: "skill:strict" },
+    ],
+  },
+};
+
+const DEFAULT_RULES = RULE_PACKS.recommended.rules;
 
 // Resolve the mdschema binary path (optional dependency)
 function findMdschema() {
@@ -132,11 +155,12 @@ const AGENT_TOOLS = [
 ];
 
 const DEFAULT_CONFIG = {
+  extends: "recommended",
   ruleMarkers: ["headings", "checkboxes"],
   rules: DEFAULT_RULES,
   linters: {},
   agents: null, // null = auto-detect; array = explicit list of tool names
-  structures: [], // array of { files: "<glob>", schema: <object|preset-name> }
+  structures: [], // array of { files: "<glob>", schema: <preset-name|path> }
 };
 
 function extractLinterName(enforcedBy) {
@@ -554,13 +578,24 @@ export function loadConfig() {
     const result = explorer.search();
     if (!result || !result.config) return DEFAULT_CONFIG;
 
+    // Resolve rule pack base
+    const packName = result.config.extends || "recommended";
+    const pack = RULE_PACKS[packName];
+    if (!pack) {
+      console.warn(`Unknown rule pack: "${packName}". Using "recommended".`);
+    }
+    const basePack = pack || RULE_PACKS.recommended;
+
+    // User config overrides the pack
     const config = {
       ...DEFAULT_CONFIG,
       ...result.config,
-      rules: { ...DEFAULT_RULES, ...result.config.rules },
+      rules: { ...basePack.rules, ...result.config.rules },
       linters: { ...result.config.linters },
       agents: result.config.agents !== undefined ? result.config.agents : null,
-      structures: resolveStructures(result.config.structures),
+      structures: resolveStructures(
+        result.config.structures || basePack.structures,
+      ),
     };
 
     if (
