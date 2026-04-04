@@ -20,6 +20,7 @@ import {
   validateStructure,
   resolveSchema,
   STRUCTURE_PRESETS,
+  RULE_PACKS,
 } from "./validate.mjs";
 
 describe("parseClaudeMd", () => {
@@ -324,6 +325,46 @@ describe("loadConfig", () => {
     assert.deepEqual(config.ruleMarkers, ["headings", "checkboxes"]);
     process.chdir(originalCwd);
     rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("should apply strict rule pack via extends", () => {
+    const configDir = mkdtempSync(join(tmpdir(), "vigiles-strict-"));
+    writeFileSync(
+      join(configDir, ".vigilesrc.json"),
+      JSON.stringify({ extends: "strict" }),
+    );
+    process.chdir(configDir);
+    const config = loadConfig();
+    assert.equal(config.rules["max-lines"], 300);
+    assert.equal(config.rules["require-structure"], true);
+    assert.ok(config.structures.length > 0);
+    process.chdir(originalCwd);
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("should allow user overrides on top of strict pack", () => {
+    const configDir = mkdtempSync(join(tmpdir(), "vigiles-override-"));
+    writeFileSync(
+      join(configDir, ".vigilesrc.json"),
+      JSON.stringify({
+        extends: "strict",
+        rules: { "max-lines": 1000, "require-structure": false },
+      }),
+    );
+    process.chdir(configDir);
+    const config = loadConfig();
+    assert.equal(config.rules["max-lines"], 1000);
+    assert.equal(config.rules["require-structure"], false);
+    assert.equal(config.rules["require-annotations"], true); // from pack
+    process.chdir(originalCwd);
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("should default to recommended when extends is omitted", () => {
+    process.chdir(tmpDir);
+    const config = loadConfig();
+    assert.equal(config.rules["max-lines"], 500);
+    assert.equal(config.rules["require-structure"], false);
   });
 
   it("should fall back to defaults for invalid ruleMarkers", () => {

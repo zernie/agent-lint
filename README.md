@@ -176,19 +176,54 @@ vigiles works with zero configuration. Optionally create a `.vigilesrc.json` to 
 
 | Option        | Default                      | Description                                                                                          |
 | ------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `extends`     | `"recommended"`              | Rule pack to use as base. `"recommended"` or `"strict"`. User overrides are merged on top.           |
 | `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                                                                 |
 | `linters`     | `{}`                         | Per-linter config for rule file validation                                                           |
 | `agents`      | `null` (auto-detect)         | List of agent tool names to require, or `null` to auto-detect                                        |
 | `structures`  | `[]`                         | File-to-schema mappings for structure validation. See [Structure Validation](#structure-validation). |
 
+### Rule Packs
+
+Like ESLint's shared configs, vigiles ships with two rule packs. Set `"extends"` in `.vigilesrc.json` to select one — all rules from the pack apply, and any explicit `"rules"` you set override the pack defaults.
+
+```json
+{
+  "extends": "strict"
+}
+```
+
+| Rule                  | `recommended` (default) | `strict`                              |
+| --------------------- | ----------------------- | ------------------------------------- |
+| `require-annotations` | `true`                  | `true`                                |
+| `max-lines`           | `500`                   | `300`                                 |
+| `require-rule-file`   | `"auto"`                | `"auto"`                              |
+| `require-structure`   | `false`                 | `true`                                |
+| `structures`          | `[]`                    | CLAUDE.md + SKILL.md (strict schemas) |
+
+**`recommended`** is the zero-config default — catches missing annotations and oversized files. No structure validation, no extra dependencies.
+
+**`strict`** turns everything on: tighter line limits, structure validation with the strict schema presets (heading hierarchy, required sections, frontmatter). Requires [mdschema](https://github.com/jackchuka/mdschema) for `require-structure`.
+
+You can always override individual rules on top of either pack:
+
+```json
+{
+  "extends": "strict",
+  "rules": {
+    "max-lines": 1000,
+    "require-structure": false
+  }
+}
+```
+
 ### Rules
 
-| Rule                  | Default  | Description                                                                                                                 |
-| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `require-annotations` | `true`   | Every rule marker must have `**Enforced by:**` or `**Guidance only**`                                                       |
-| `max-lines`           | `500`    | Maximum number of lines allowed per file. Set a number for custom limit.                                                    |
-| `require-rule-file`   | `"auto"` | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks. |
-| `require-structure`   | `false`  | Validates markdown structure against schemas. See [Structure Validation](#structure-validation).                            |
+| Rule                  | Description                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `require-annotations` | Every rule marker must have `**Enforced by:**` or `**Guidance only**`                                                       |
+| `max-lines`           | Maximum number of lines allowed per file. Set a number for custom limit.                                                    |
+| `require-rule-file`   | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks. |
+| `require-structure`   | Validates markdown structure against schemas. See [Structure Validation](#structure-validation).                            |
 
 ## CLI
 
