@@ -723,7 +723,7 @@ export function parseClaudeMd(
       }
       const title = headerMatch
         ? headerMatch[1].trim()
-        : checkboxMatch![2].trim();
+        : (checkboxMatch as RegExpMatchArray)[2].trim();
       currentRule = {
         title,
         line: i + 1,
@@ -738,7 +738,7 @@ export function parseClaudeMd(
     const enforcedMatch = line.match(/\*\*Enforced by:\*\*\s*`([^`]+)`/);
     if (enforcedMatch) {
       currentRule.enforcement = "enforced";
-      currentRule.enforcedBy = enforcedMatch[1]!;
+      currentRule.enforcedBy = enforcedMatch[1] ?? null;
       continue;
     }
 
@@ -820,7 +820,7 @@ export function validate(
   // --- require-structure ---
   if (activeRules["require-structure"] !== false && structures && filePath) {
     for (const entry of structures) {
-      const basename = filePath.split("/").pop()!;
+      const basename = filePath.split("/").pop() ?? "";
       if (
         minimatch(filePath, entry.files, { matchBase: true }) ||
         minimatch(basename, entry.files)

@@ -38,8 +38,8 @@ export default [
       // Relax some strict rules that are too noisy for this codebase
       "@typescript-eslint/restrict-template-expressions": "off",
       "@typescript-eslint/no-unnecessary-condition": "off",
-      // Non-null assertions are used after regex matches and Map lookups
-      "@typescript-eslint/no-non-null-assertion": "warn",
+      // Ban non-null assertions — use proper narrowing instead
+      "@typescript-eslint/no-non-null-assertion": "error",
     },
   },
   // Test files: relax promise and type assertion rules
