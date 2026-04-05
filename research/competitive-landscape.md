@@ -110,3 +110,27 @@ GitHub analysis of 2,500+ AGENTS.md files: common omissions = executable command
 | **Pylint** (`R0801`) | Duplicate code detection | `no-duplicate-rules` across instruction files |
 | **ESLint** (`no-shadow`) | Scope shadowing — inner var hides outer | `no-shadow-rules`: subdirectory CLAUDE.md redefines root rule with different enforcement |
 | **Danger.js** | PR meta-checks — is it too big? changelog updated? | `instruction-file-hygiene`: was CLAUDE.md updated when architecture changed? |
+
+---
+
+## Decisions Log
+
+### markdownlint integration — NO (April 2026)
+
+Decided not to integrate markdownlint. Reasons:
+- **Not our job.** vigiles validates content semantics (are enforcement claims real?). markdownlint validates formatting (trailing spaces, list markers). Different concerns.
+- **Already solved.** CodeRabbit runs it on PRs by default. Teams that want CI blocking already run `npx markdownlint CLAUDE.md`.
+- **Noise.** Formatting issues in instruction files have zero impact on whether the agent follows the rules. Dilutes signal from our actual rules.
+- **Dependency weight.** Against the zero-config principle. Would own the config surface ("why is vigiles flagging MD013?").
+
+Listed as complementary tool in README instead.
+
+### Agent detection refactor — SIMPLIFIED (April 2026)
+
+Removed indicator-based agent detection (scanning `.claude/`, `.cursor/`, etc. and nagging about missing files). Replaced with simple `"files": ["CLAUDE.md"]` config.
+
+Reasons:
+- Having a `.cursor/` directory doesn't mean you owe the world a `.cursorrules` file
+- File distribution across agents is the sync tools' job (Ruler, rulesync, block/ai-rules), not ours
+- The "missing file" check was a half-baked sync tool inside a content validator
+- Simpler: validate what exists, don't nag about what doesn't
