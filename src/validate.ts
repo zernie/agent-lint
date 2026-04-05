@@ -344,9 +344,7 @@ const CLI_RULE_CHECKS: Record<string, (ruleName: string) => void> = {
 };
 
 // Config-enabled checkers
-type ConfigLoader = (
-  ruleName: string,
-) => ConfigEnabledStatus;
+type ConfigLoader = (ruleName: string) => ConfigEnabledStatus;
 
 function createCachedChecker(
   loadConfigFn: (basePath: string) => ConfigLoader | null,
@@ -434,10 +432,7 @@ const LINTER_CONFIG_CHECKERS: Record<
       return (ruleName: string): ConfigEnabledStatus => {
         if (!(ruleName in rules)) return "unknown";
         const setting = rules[ruleName];
-        if (
-          setting === null ||
-          (Array.isArray(setting) && setting[0] === null)
-        )
+        if (setting === null || (Array.isArray(setting) && setting[0] === null))
           return "disabled";
         return "enabled";
       };
@@ -626,9 +621,7 @@ export function resolveSchema(schema: unknown): string | null {
   return null;
 }
 
-function resolveStructures(
-  raw: unknown,
-): StructureEntry[] {
+function resolveStructures(raw: unknown): StructureEntry[] {
   if (!Array.isArray(raw)) return [];
   return (raw as Array<{ files: string; schema: unknown }>)
     .map((entry) => {
@@ -670,7 +663,8 @@ export function loadConfig(): VigilesConfig {
       ...userConfig,
       rules: { ...basePack.rules, ...userConfig.rules },
       linters: { ...userConfig.linters },
-      agents: userConfig.agents !== undefined ? userConfig.agents ?? null : null,
+      agents:
+        userConfig.agents !== undefined ? (userConfig.agents ?? null) : null,
       structures: resolveStructures(
         userConfig.structures ?? basePack.structures,
       ),
@@ -847,7 +841,10 @@ export function validate(
   const ruleFileMode = activeRules["require-rule-file"];
   const detectedLinters: DetectedLinter[] = [];
   if (ruleFileMode !== false && basePath) {
-    const resolverCache = new Map<string, EslintRuleSet | Set<string> | "cli" | null>();
+    const resolverCache = new Map<
+      string,
+      EslintRuleSet | Set<string> | "cli" | null
+    >();
     const cliAvailCache = new Map<string, boolean>();
 
     for (const rule of parsedRules) {

@@ -110,7 +110,7 @@ This project uses **TypeScript strict mode** with these compiler options enabled
 - Code must compile without errors (`npx tsc --noEmit`).
 - Code must be formatted (`npm run fmt:check`).
 - Update `CLAUDE.md` if you change exported APIs or add new rules.
-- Write descriptive commit messages explaining *why*, not just *what*.
+- Write descriptive commit messages explaining _why_, not just _what_.
 
 ## Architecture decisions
 
