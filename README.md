@@ -46,7 +46,7 @@ All rules have enforcement annotations.
 
 vigiles does two things:
 
-**1. Validates rule annotations** — every `###` heading or `- [ ]` checkbox in your instruction file must have `**Enforced by:** \`linter/rule\`` or `**Guidance only**`. Near-miss typos like `**Enforced By:**` (wrong case) get a helpful "did you mean?" message.
+**1. Validates rule annotations** — every `###` heading or `- [ ]` checkbox in your instruction file must have `**Enforced by:** \`linter/rule\``or`**Guidance only**`. Near-miss typos like `**Enforced By:**` (wrong case) get a helpful "did you mean?" message.
 
 **2. Verifies linters exist and are enabled** — checks that referenced linters are actually installed and that the specific rules are enabled in your config. ESLint and Stylelint are checked via Node API. Ruff, Clippy, Pylint, and RuboCop are checked via CLI.
 
@@ -126,12 +126,12 @@ vigiles works with zero configuration. It validates `CLAUDE.md` by default. Opti
 }
 ```
 
-| Option        | Default                      | Description                                                                                         |
-| ------------- | ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| `extends`     | `"recommended"`              | Rule pack to use as base. `"recommended"` or `"strict"`. User overrides are merged on top.          |
-| `files`       | `["CLAUDE.md"]`              | Instruction files to validate when no explicit paths are given                                      |
-| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                                                                |
-| `linters`     | `{}`                         | Per-linter config for rule file validation                                                          |
+| Option        | Default                      | Description                                                                                          |
+| ------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `extends`     | `"recommended"`              | Rule pack to use as base. `"recommended"` or `"strict"`. User overrides are merged on top.           |
+| `files`       | `["CLAUDE.md"]`              | Instruction files to validate when no explicit paths are given                                       |
+| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                                                                 |
+| `linters`     | `{}`                         | Per-linter config for rule file validation                                                           |
 | `structures`  | `[]`                         | File-to-schema mappings for structure validation. See [Structure Validation](#structure-validation). |
 
 ### Rule Packs
@@ -167,13 +167,13 @@ Override individual rules on top of either pack:
 
 ### Rules
 
-| Rule                  | Description                                                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require-annotations` | Every rule marker must have `**Enforced by:**` or `**Guidance only**`. Detects near-miss typos with "did you mean?" suggestions.             |
-| `max-lines`           | Maximum number of lines allowed per file. Set a number for custom limit, `false` to disable.                                                 |
-| `require-rule-file`   | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks.                  |
+| Rule                  | Description                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `require-annotations` | Every rule marker must have `**Enforced by:**` or `**Guidance only**`. Detects near-miss typos with "did you mean?" suggestions.                       |
+| `max-lines`           | Maximum number of lines allowed per file. Set a number for custom limit, `false` to disable.                                                           |
+| `require-rule-file`   | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks.                            |
 | `require-structure`   | Validates markdown structure against schemas via [mdschema](https://github.com/jackchuka/mdschema). See [Structure Validation](#structure-validation). |
-| `no-broken-links`     | Checks that relative markdown links resolve to existing files. Skips external URLs, anchors, and mailto links.                               |
+| `no-broken-links`     | Checks that relative markdown links resolve to existing files. Skips external URLs, anchors, and mailto links.                                         |
 
 ## CLI
 
@@ -269,6 +269,7 @@ Override with action inputs:
 vigiles validates instruction file **content** and **linter cross-references**. It doesn't try to do everything. Here's how it fits with the ecosystem:
 
 **File sync across agents** — If your team uses multiple agents (Claude Code, Cursor, Copilot), use a sync tool to maintain one source of truth:
+
 - [Ruler](https://github.com/intellectronica/ruler) — single `.ruler/` directory, auto-distributes to agent configs
 - [rulesync](https://github.com/dyoshikawa/rulesync) — unified rule management, 10+ agent targets
 - [block/ai-rules](https://github.com/block/ai-rules) — enterprise multi-agent rule management by Block

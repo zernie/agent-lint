@@ -601,9 +601,7 @@ export function loadConfig(): VigilesConfig {
       ...userConfig,
       rules: { ...basePack.rules, ...userConfig.rules },
       linters: { ...userConfig.linters },
-      files: Array.isArray(userConfig.files)
-        ? userConfig.files
-        : DEFAULT_FILES,
+      files: Array.isArray(userConfig.files) ? userConfig.files : DEFAULT_FILES,
       structures: resolveStructures(
         userConfig.structures ?? basePack.structures,
       ),
