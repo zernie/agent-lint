@@ -630,14 +630,16 @@ describe("readClaudeMd", () => {
     writeFileSync(filePath, "### Rule\n**Enforced by:** `x`\n");
     const { content, skipped } = readClaudeMd(filePath);
     assert.equal(skipped, false);
-    assert.ok(content!.includes("### Rule"));
+    assert.notEqual(content, null);
+    assert.ok((content as string).includes("### Rule"));
   });
 
   it("should return error for missing file", () => {
     const { content, skipped, reason } = readClaudeMd(join(tmpDir, "nope.md"));
     assert.equal(content, null);
     assert.equal(skipped, false);
-    assert.ok(reason!.includes("File not found"));
+    assert.notEqual(reason, null);
+    assert.ok((reason as string).includes("File not found"));
   });
 
   it("should skip symlinks by default", () => {
@@ -648,7 +650,8 @@ describe("readClaudeMd", () => {
     const { content, skipped, reason } = readClaudeMd(link);
     assert.equal(content, null);
     assert.equal(skipped, true);
-    assert.ok(reason!.includes("symlink"));
+    assert.notEqual(reason, null);
+    assert.ok((reason as string).includes("symlink"));
   });
 
   it("should follow symlinks when opted in", () => {
@@ -658,7 +661,8 @@ describe("readClaudeMd", () => {
     symlinkSync(realFile, link);
     const { content, skipped } = readClaudeMd(link, { followSymlinks: true });
     assert.equal(skipped, false);
-    assert.ok(content!.includes("### Rule"));
+    assert.notEqual(content, null);
+    assert.ok((content as string).includes("### Rule"));
   });
 });
 
@@ -682,8 +686,10 @@ describe("validatePaths", () => {
     const { fileResults, valid } = validatePaths([file1, file2]);
     assert.equal(valid, true);
     assert.equal(fileResults.length, 2);
-    assert.equal(fileResults[0].result!.enforced, 1);
-    assert.equal(fileResults[1].result!.guidanceOnly, 1);
+    assert.notEqual(fileResults[0].result, null);
+    assert.equal(fileResults[0].result?.enforced, 1);
+    assert.notEqual(fileResults[1].result, null);
+    assert.equal(fileResults[1].result?.guidanceOnly, 1);
   });
 
   it("should fail if any file has missing annotations", () => {
@@ -726,7 +732,8 @@ describe("validatePaths", () => {
     });
     assert.equal(valid, true);
     assert.equal(fileResults[0].skipped, false);
-    assert.equal(fileResults[0].result!.enforced, 1);
+    assert.notEqual(fileResults[0].result, null);
+    assert.equal(fileResults[0].result?.enforced, 1);
   });
 });
 
@@ -843,7 +850,7 @@ describe("require-rule-file", () => {
     );
     const eslint = result.detectedLinters.find((l) => l.name === "eslint");
     assert.ok(eslint);
-    assert.ok(eslint!.ruleCount! > 0);
+    assert.ok(typeof eslint?.ruleCount === "number" && eslint.ruleCount > 0);
   });
 
   it("should detect ruff rules via CLI", () => {
