@@ -583,6 +583,26 @@ describe("no-broken-links rule", () => {
     assert.equal(result.valid, true);
   });
 
+  it("should skip links inside nested fenced code blocks", () => {
+    const content =
+      "````md\n```\n[example](nonexistent.md)\n```\n````\n[real](existing.md)\n";
+    const result = validate(content, {
+      basePath: tmpDir,
+      rules: { "require-annotations": false, "no-broken-links": true },
+    });
+    assert.equal(result.valid, true);
+  });
+
+  it("should skip links inside indented fenced code blocks", () => {
+    const content =
+      "   ```\n   [example](nonexistent.md)\n   ```\n[real](existing.md)\n";
+    const result = validate(content, {
+      basePath: tmpDir,
+      rules: { "require-annotations": false, "no-broken-links": true },
+    });
+    assert.equal(result.valid, true);
+  });
+
   it("should skip non-http URI schemes", () => {
     const content =
       "Open [editor](vscode://file/path) or [call](tel:+1234567890).\n";
