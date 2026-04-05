@@ -71,8 +71,8 @@ const NEAR_MISS_GUIDANCE_RE = /\*\*guidance\b.*\*\*/i;
 const MD_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 // Skip any URI-scheme link (http, https, mailto, ftp, tel, vscode, etc.) and anchors
 const EXTERNAL_RE = /^([a-zA-Z][a-zA-Z0-9+.-]*:|#)/;
-// Fenced code block delimiter
-const FENCE_RE = /^(`{3,}|~{3,})/;
+// Fenced code block delimiter (up to 3 leading spaces per CommonMark)
+const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 
 // Built-in schema presets (bundled .yml files in schemas/)
 const SCHEMAS_DIR = resolve(__dirname, "..", "schemas");
@@ -795,14 +795,21 @@ export function validate(
   // --- no-broken-links ---
   if (activeRules["no-broken-links"] !== false && basePath) {
     const lines = content.split("\n");
-    let inFence = false;
+    let fenceDelimiter: string | null = null;
     for (let i = 0; i < lines.length; i++) {
-      // Track fenced code blocks to skip links inside them
-      if (FENCE_RE.test(lines[i])) {
-        inFence = !inFence;
+      // Track fenced code blocks — match opening char and min length to close
+      const fenceMatch = lines[i].match(FENCE_RE);
+      if (fenceMatch) {
+        const char = fenceMatch[1][0]; // ` or ~
+        const len = fenceMatch[1].length;
+        if (fenceDelimiter === null) {
+          fenceDelimiter = char.repeat(len);
+        } else if (char === fenceDelimiter[0] && len >= fenceDelimiter.length) {
+          fenceDelimiter = null;
+        }
         continue;
       }
-      if (inFence) continue;
+      if (fenceDelimiter !== null) continue;
 
       // Strip inline code spans before scanning for links
       const lineText = lines[i].replace(/`[^`]+`/g, "");
