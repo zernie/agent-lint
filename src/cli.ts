@@ -52,8 +52,10 @@ if (rawPaths.length === 0) {
 }
 
 if (rawPaths.length === 0) {
-  console.log("No instruction files found. Looked for: " + config.files.join(", "));
-  console.log("Specify files explicitly or set \"files\" in .vigilesrc.json.");
+  console.log(
+    "No instruction files found. Looked for: " + config.files.join(", "),
+  );
+  console.log('Specify files explicitly or set "files" in .vigilesrc.json.');
   process.exit(0);
 }
 

@@ -36,6 +36,7 @@ Method: POST, Content-Type: application/json
 List models: `GET https://api.imagerouter.io/v1/models`
 
 Known good models:
+
 - `google/nano-banana-2` — best quality, $0.07/image
 - `google/nano-banana-2:free` — free tier
 - `openai/gpt-image-1` — OpenAI's image model
@@ -46,7 +47,7 @@ Known good models:
 ```json
 {
   "created": 1775430873,
-  "data": [{"url": "https://storage.imagerouter.io/..."}],
+  "data": [{ "url": "https://storage.imagerouter.io/..." }],
   "cost": 0.069,
   "latency": 27627
 }
