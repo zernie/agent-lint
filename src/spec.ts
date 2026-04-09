@@ -263,8 +263,8 @@ export interface ClaudeSpec {
   readonly commands?: Record<string, string>;
   /** File paths → descriptions. Verified via existsSync. */
   readonly keyFiles?: Record<string, string>;
-  /** Named prose sections (positioning, architecture, etc.). */
-  readonly sections?: Record<string, string>;
+  /** Named prose sections — plain strings or tagged templates with file()/cmd()/ref(). */
+  readonly sections?: Record<string, string | InstructionFragment[]>;
   /** Rules: enforce(), prove(), or guidance(). */
   readonly rules: Record<string, Rule>;
 }
@@ -316,6 +316,10 @@ export interface VigilesV2Config {
   readonly specs?: string;
   /** Auto-discover linter rules for coverage reporting. */
   readonly discover?: boolean;
+  /** Maximum rules per spec file. */
+  readonly maxRules?: number;
+  /** Maximum estimated tokens for compiled output. ~4 chars per token. */
+  readonly maxTokens?: number;
 }
 
 export function defineConfig(config: VigilesV2Config): VigilesV2Config {
