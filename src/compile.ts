@@ -56,11 +56,31 @@ export function verifyHash(
 }
 
 // ---------------------------------------------------------------------------
+// Token estimation
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimate token count for a string.
+ *
+ * Uses the ~4 characters per token heuristic (accurate within ~10% for
+ * English text and code). Swap in a real BPE tokenizer (tiktoken, gpt-tokenizer)
+ * for exact counts if needed.
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+// ---------------------------------------------------------------------------
 // Validation errors
 // ---------------------------------------------------------------------------
 
 export interface CompileError {
-  type: "stale-file" | "stale-command" | "stale-ref" | "invalid-rule";
+  type:
+    | "stale-file"
+    | "stale-command"
+    | "stale-ref"
+    | "invalid-rule"
+    | "budget-exceeded";
   message: string;
   path?: string;
 }
@@ -150,6 +170,19 @@ function validateRefs(
   return errors;
 }
 
+function renderFragment(fragment: InstructionFragment): string {
+  if (typeof fragment === "string") return fragment;
+  const r = fragment as Ref;
+  switch (r._ref) {
+    case "file":
+      return `\`${r.path}\``;
+    case "cmd":
+      return `\`${r.command}\``;
+    case "skill":
+      return `[${basename(dirname(r.path))}](${r.path})`;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Compile CLAUDE.md spec → markdown
 // ---------------------------------------------------------------------------
@@ -206,6 +239,8 @@ export interface CompileClaudeResult {
   markdown: string;
   errors: CompileError[];
   linterResults: LinterCheckResult[];
+  /** Estimated token count of compiled output (~4 chars/token). */
+  tokens: number;
 }
 
 export interface CompileClaudeOptions {
@@ -213,6 +248,8 @@ export interface CompileClaudeOptions {
   specFile?: string;
   /** Maximum number of rules allowed. Compilation fails if exceeded. */
   maxRules?: number;
+  /** Maximum estimated tokens for compiled output. */
+  maxTokens?: number;
   /** Skip config-enabled checks, only verify rule exists in catalog. */
   catalogOnly?: boolean;
   /** Custom linter configs (rulesDir). */
@@ -250,7 +287,14 @@ export function compileClaude(
   if (spec.sections) {
     for (const [name, content] of Object.entries(spec.sections)) {
       const heading = name.charAt(0).toUpperCase() + name.slice(1);
-      sections.push(`## ${heading}\n\n${content.trim()}`);
+      if (typeof content === "string") {
+        sections.push(`## ${heading}\n\n${content.trim()}`);
+      } else {
+        // InstructionFragment[] — render and validate refs
+        errors.push(...validateRefs(content, basePath));
+        const rendered = content.map(renderFragment).join("");
+        sections.push(`## ${heading}\n\n${rendered.trim()}`);
+      }
     }
   }
 
@@ -311,27 +355,24 @@ export function compileClaude(
   }
 
   const body = sections.join("\n\n") + "\n";
+  const tokens = estimateTokens(body);
+
+  // maxTokens check
+  if (options.maxTokens && tokens > options.maxTokens) {
+    errors.push({
+      type: "budget-exceeded",
+      message: `Compiled output is ~${String(tokens)} tokens, exceeding maxTokens limit of ${String(options.maxTokens)}.`,
+    });
+  }
+
   const markdown = addHash(body, specFile);
 
-  return { markdown, errors, linterResults };
+  return { markdown, errors, linterResults, tokens };
 }
 
 // ---------------------------------------------------------------------------
 // Compile SKILL.md spec → markdown
 // ---------------------------------------------------------------------------
-
-function renderFragment(fragment: InstructionFragment): string {
-  if (typeof fragment === "string") return fragment;
-  const r = fragment as Ref;
-  switch (r._ref) {
-    case "file":
-      return `\`${r.path}\``;
-    case "cmd":
-      return `\`${r.command}\``;
-    case "skill":
-      return `[${basename(dirname(r.path))}](${r.path})`;
-  }
-}
 
 function renderBody(body: string | InstructionFragment[]): string {
   if (typeof body === "string") return body;
