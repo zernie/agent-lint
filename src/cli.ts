@@ -4,14 +4,16 @@
  * vigiles CLI — compile typed specs to instruction files.
  *
  * Commands:
- *   vigiles compile  — compile .spec.ts → .md with linter verification
- *   vigiles check    — verify hashes and validate hooks/skills
- *   vigiles init     — scaffold a spec from scratch
+ *   vigiles compile         — compile .spec.ts → .md with linter verification
+ *   vigiles check           — verify hashes and validate hooks/skills
+ *   vigiles init            — scaffold a spec from scratch
+ *   vigiles generate-types  — emit .d.ts with types from project state
  */
 
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { globSync } from "glob";
+import { generateTypes } from "./generate-types.js";
 
 import { compileClaude, compileSkill, checkFileHash } from "./compile.js";
 import type { CompileError } from "./compile.js";
@@ -287,13 +289,48 @@ switch (command) {
   case "init":
     init();
     break;
+  case "generate-types": {
+    const outPath = restArgs[0] ?? ".vigiles/generated.d.ts";
+    const fileGlobs = args
+      .filter((a) => a.startsWith("--files="))
+      .map((a) => a.split("=")[1])
+      .filter(Boolean);
+
+    console.log("Scanning project...\n");
+    const result = generateTypes({
+      basePath: process.cwd(),
+      fileGlobs: fileGlobs.length > 0 ? fileGlobs : undefined,
+    });
+
+    for (const l of result.linters) {
+      console.log(
+        `  ${l.linter}: ${String(l.rules.length)} enabled rules (via ${l.via})`,
+      );
+    }
+    if (result.scripts.length > 0) {
+      console.log(`  npm scripts: ${String(result.scripts.length)}`);
+    }
+    console.log(`  project files: ${String(result.files.length)}`);
+
+    const fullOut = resolve(process.cwd(), outPath);
+    const outDir = fullOut.substring(0, fullOut.lastIndexOf("/"));
+    if (!existsSync(outDir)) {
+      mkdirSync(outDir, { recursive: true });
+    }
+    writeFileSync(fullOut, result.dts);
+    console.log(`\n✓ Generated ${outPath}`);
+    break;
+  }
   default:
     console.log("vigiles — compile typed specs to instruction files");
     console.log("");
     console.log("Commands:");
-    console.log("  vigiles compile [files...]  Compile .spec.ts → .md");
-    console.log("  vigiles check [files...]    Verify compiled file hashes");
-    console.log("  vigiles init                Scaffold a CLAUDE.md.spec.ts");
+    console.log("  vigiles compile [files...]    Compile .spec.ts → .md");
+    console.log("  vigiles check [files...]      Verify compiled file hashes");
+    console.log("  vigiles init                  Scaffold a CLAUDE.md.spec.ts");
+    console.log(
+      "  vigiles generate-types [out]  Emit .d.ts from project state",
+    );
     console.log("");
     console.log("Options:");
     console.log("  --help    Show this help");
@@ -302,6 +339,7 @@ switch (command) {
     console.log("  vigiles compile              Compile all .spec.ts files");
     console.log("  vigiles check CLAUDE.md      Verify CLAUDE.md hash");
     console.log("  vigiles init                 Create starter spec");
+    console.log("  vigiles generate-types       Emit .vigiles/generated.d.ts");
     if (command && command !== "--help") {
       console.log(`\nUnknown command: "${command}"`);
       process.exit(1);

@@ -23,7 +23,10 @@ import {
   addHash,
   verifyHash,
   checkFileHash,
+  estimateTokens,
 } from "./compile.js";
+
+import { generateTypes } from "./generate-types.js";
 
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -397,5 +400,123 @@ describe("hash utilities", () => {
     const result = checkFileHash("/tmp/vigiles-nonexistent-file.md");
     assert.equal(result.hasHash, false);
     assert.equal(result.valid, false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Token estimation tests
+// ---------------------------------------------------------------------------
+
+describe("estimateTokens()", () => {
+  it("estimates ~1 token per 4 chars", () => {
+    const tokens = estimateTokens("a".repeat(100));
+    assert.equal(tokens, 25);
+  });
+
+  it("rounds up", () => {
+    const tokens = estimateTokens("abc");
+    assert.equal(tokens, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// maxTokens tests
+// ---------------------------------------------------------------------------
+
+describe("maxTokens budget", () => {
+  it("errors when compiled output exceeds maxTokens", () => {
+    const spec = claude({
+      sections: { prose: "x".repeat(1000) },
+      rules: {},
+    });
+    const { errors, tokens } = compileClaude(spec, { maxTokens: 100 });
+    assert.ok(tokens > 100);
+    assert.ok(errors.some((e) => e.type === "budget-exceeded"));
+  });
+
+  it("passes when under budget", () => {
+    const spec = claude({
+      rules: { test: guidance("Short.") },
+    });
+    const { errors } = compileClaude(spec, { maxTokens: 10000 });
+    assert.ok(!errors.some((e) => e.type === "budget-exceeded"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sections with file() refs
+// ---------------------------------------------------------------------------
+
+describe("sections with refs", () => {
+  it("compiles sections with file() refs and validates them", () => {
+    const spec = claude({
+      sections: {
+        architecture: instructions`Core engine in ${file("src/spec.ts")}.`,
+      },
+      rules: {},
+    });
+    const { markdown, errors } = compileClaude(spec, {
+      basePath: process.cwd(),
+    });
+    assert.ok(markdown.includes("`src/spec.ts`"));
+    assert.equal(errors.length, 0);
+  });
+
+  it("reports stale file refs in sections", () => {
+    const spec = claude({
+      sections: {
+        architecture: instructions`See ${file("src/nonexistent-xyz.ts")}.`,
+      },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-file");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generate-types tests
+// ---------------------------------------------------------------------------
+
+describe("generateTypes()", () => {
+  it("discovers eslint rules from this project", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    const eslint = result.linters.find((l) => l.linter === "eslint");
+    assert.ok(eslint, "ESLint should be detected");
+    assert.ok(eslint.rules.length > 0, "Should find enabled rules");
+    assert.ok(
+      eslint.rules.includes("no-unused-vars"),
+      "Should include no-unused-vars",
+    );
+  });
+
+  it("discovers npm scripts", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(result.scripts.includes("build"));
+    assert.ok(result.scripts.includes("test"));
+  });
+
+  it("discovers project files", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(result.files.includes("src/spec.ts"));
+    assert.ok(result.files.includes("src/compile.ts"));
+  });
+
+  it("generates valid .d.ts content", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(result.dts.includes('declare module "vigiles/generated"'));
+    assert.ok(result.dts.includes("export type EslintRule"));
+    assert.ok(result.dts.includes("export type NpmScript"));
+    assert.ok(result.dts.includes("export type ProjectFile"));
+  });
+
+  it("respects custom file globs", () => {
+    const result = generateTypes({
+      basePath: process.cwd(),
+      fileGlobs: ["examples/**/*"],
+    });
+    assert.ok(result.files.some((f) => f.startsWith("examples/")));
+    assert.ok(!result.files.some((f) => f.startsWith("src/")));
   });
 });
