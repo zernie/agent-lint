@@ -802,55 +802,77 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npx vigiles check && npx vigiles generate-types --check");
   }
 
-  // Step 7: Install Claude Code hooks directly
-  const shouldInstallHooks =
+  // Step 7: Install Claude Code plugin (hooks + skills)
+  const shouldInstallPlugin =
     detected.hasClaude || targets.includes("CLAUDE.md");
-  if (shouldInstallHooks) {
-    const settingsDir = resolve(process.cwd(), ".claude");
-    const settingsPath = resolve(settingsDir, "settings.json");
-    if (!existsSync(settingsDir)) {
-      mkdirSync(settingsDir, { recursive: true });
+  if (shouldInstallPlugin) {
+    let pluginInstalled = false;
+
+    // Try installing the full plugin via skills CLI (gives hooks + skills)
+    try {
+      const { execSync: exec } =
+        require("node:child_process") as typeof import("node:child_process");
+      exec("npx skills add zernie/vigiles", {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 30000,
+      });
+      pluginInstalled = true;
+      console.log("✓ Installed vigiles plugin (hooks + skills) via skills CLI");
+    } catch {
+      // skills CLI not available — fall back to direct hook installation
     }
 
-    let settings: Record<string, unknown> = {};
-    if (existsSync(settingsPath)) {
-      try {
-        settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
-          string,
-          unknown
-        >;
-      } catch {
-        // Ignore malformed settings
+    if (!pluginInstalled) {
+      // Fall back: write hooks directly to .claude/settings.json
+      // (gives auto-compile + block edits, but no skills)
+      const settingsDir = resolve(process.cwd(), ".claude");
+      const settingsPath = resolve(settingsDir, "settings.json");
+      if (!existsSync(settingsDir)) {
+        mkdirSync(settingsDir, { recursive: true });
       }
-    }
 
-    if (!settings["hooks"]) {
-      settings["hooks"] = {};
-    }
-    const hooks = settings["hooks"] as Record<string, unknown>;
+      let settings: Record<string, unknown> = {};
+      if (existsSync(settingsPath)) {
+        try {
+          settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
+            string,
+            unknown
+          >;
+        } catch {
+          // Ignore malformed settings
+        }
+      }
 
-    // Add PreToolUse hook (block compiled file edits)
-    if (!hooks["PreToolUse"]) {
-      hooks["PreToolUse"] = [
-        {
-          matcher: "Edit|Write",
-          command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$FILE" in *.md) [ -f "$FILE" ] && head -1 "$FILE" | grep -q 'vigiles:sha256:' && { SPEC=$(head -1 "$FILE" | sed -n 's/.*compiled from \\(.*\\) -->/\\1/p'); echo "BLOCKED: Edit $SPEC instead." >&2; exit 2; } ;; esac; exit 0`,
-        },
-      ];
-    }
+      if (!settings["hooks"]) {
+        settings["hooks"] = {};
+      }
+      const hooks = settings["hooks"] as Record<string, unknown>;
 
-    // Add PostToolUse hook (auto-compile on spec/config edits)
-    if (!hooks["PostToolUse"]) {
-      hooks["PostToolUse"] = [
-        {
-          matcher: "Edit|Write",
-          command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$(basename "$FILE")" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case "$FILE" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac`,
-        },
-      ];
-    }
+      if (!hooks["PreToolUse"]) {
+        hooks["PreToolUse"] = [
+          {
+            matcher: "Edit|Write",
+            command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$FILE" in *.md) [ -f "$FILE" ] && head -1 "$FILE" | grep -q 'vigiles:sha256:' && { SPEC=$(head -1 "$FILE" | sed -n 's/.*compiled from \\(.*\\) -->/\\1/p'); echo "BLOCKED: Edit $SPEC instead." >&2; exit 2; } ;; esac; exit 0`,
+          },
+        ];
+      }
 
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-    console.log("✓ Installed Claude Code hooks in .claude/settings.json");
+      if (!hooks["PostToolUse"]) {
+        hooks["PostToolUse"] = [
+          {
+            matcher: "Edit|Write",
+            command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$(basename "$FILE")" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case "$FILE" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac`,
+          },
+        ];
+      }
+
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+      console.log("✓ Installed hooks in .claude/settings.json");
+      console.log(
+        "  (For skills like edit-spec and migrate-to-spec, also run: npx skills add zernie/vigiles)",
+      );
+    }
   }
 
   // Step 8: Agent-specific guidance
@@ -879,7 +901,7 @@ async function setup(args: string[]): Promise<void> {
   console.log("  Run `npx vigiles strengthen` to upgrade guidance → enforce");
   console.log("\n  To commit everything now:");
   console.log(
-    `    git add ${targets.join(" ")} ${specPaths} .vigiles/generated.d.ts${shouldInstallHooks ? " .claude/settings.json" : ""} && git commit -m "Add vigiles spec"`,
+    `    git add ${targets.join(" ")} ${specPaths} .vigiles/generated.d.ts${shouldInstallPlugin ? " .claude/settings.json" : ""} && git commit -m "Add vigiles spec"`,
   );
 }
 
