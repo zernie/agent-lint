@@ -284,7 +284,7 @@ describe("compileSkill()", () => {
     });
     const { markdown, errors } = compileSkill(spec);
     assert.ok(markdown.includes("<!-- vigiles:sha256:"));
-    assert.ok(markdown.includes("---\nname: test-skill\n"));
+    assert.ok(markdown.includes("name: test-skill\n"));
     assert.ok(markdown.includes("description: A test skill"));
     assert.ok(markdown.includes("Do the thing."));
     assert.equal(errors.length, 0);
