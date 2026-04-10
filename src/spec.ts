@@ -53,21 +53,21 @@ export type EnforcementRef = LinterRule | VigilesRef;
  * Keys are linter prefixes ("eslint", "@typescript-eslint", "ruff", etc.),
  * values are unions of enabled rule names.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface KnownLinterRules {}
 
 /**
  * Populated by generate-types with project file paths.
  * Single key "files" maps to a union of relative paths.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface KnownProjectFiles {}
 
 /**
  * Populated by generate-types with npm script names.
  * Single key "scripts" maps to a union of script names.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface KnownNpmScripts {}
 
 /**
@@ -84,20 +84,18 @@ export type StrictLinterRule = [keyof KnownLinterRules] extends [never]
  * When KnownProjectFiles is populated, narrows file() to known paths.
  * Falls back to string when no generated types exist.
  */
+/* eslint-disable @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-duplicate-type-constituents */
 export type StrictFile = [keyof KnownProjectFiles] extends [never]
   ? string
   : KnownProjectFiles[keyof KnownProjectFiles] & string;
 
-/**
- * When KnownNpmScripts is populated, narrows cmd() to known scripts.
- * Falls back to string when no generated types exist.
- */
 export type StrictCmd = [keyof KnownNpmScripts] extends [never]
   ? string
   :
       | `npm run ${KnownNpmScripts[keyof KnownNpmScripts] & string}`
       | `npm ${KnownNpmScripts[keyof KnownNpmScripts] & string}`
       | (string & {}); // escape hatch for non-npm commands
+/* eslint-enable @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-duplicate-type-constituents */
 
 // ---------------------------------------------------------------------------
 // Claude Code tool types (for hook validation)
@@ -183,6 +181,7 @@ export function enforce(
 ): EnforceRule {
   return {
     _kind: "enforce",
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     linterRule: linterRule as LinterRule,
     why,
     verify: options?.verify ?? true,
