@@ -1272,6 +1272,69 @@ describe("spec file naming convention", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Output target
+// ---------------------------------------------------------------------------
+
+describe("output target", () => {
+  it("defaults to CLAUDE.md heading", () => {
+    const spec = claude({ rules: {} });
+    const { markdown } = compileClaude(spec);
+    assert.ok(markdown.includes("# CLAUDE.md"));
+  });
+
+  it("uses custom target for heading", () => {
+    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const { markdown } = compileClaude(spec);
+    assert.ok(markdown.includes("# AGENTS.md"));
+    assert.ok(!markdown.includes("# CLAUDE.md"));
+  });
+
+  it("defaults specFile based on target", () => {
+    const spec = claude({ target: "AGENTS.md", rules: {} });
+    // Without explicit specFile, it should derive from target
+    const { markdown } = compileClaude(spec);
+    assert.ok(markdown.includes("compiled from AGENTS.md.spec.ts"));
+  });
+
+  it("accepts AGENTS.md.spec.ts naming for AGENTS.md target", () => {
+    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const { errors } = compileClaude(spec, {
+      specFile: "AGENTS.md.spec.ts",
+    });
+    assert.ok(!errors.some((e) => e.type === "spec-name-mismatch"));
+  });
+
+  it("accepts custom target name", () => {
+    const spec = claude({ target: "CODEX.md", rules: {} });
+    const { markdown } = compileClaude(spec);
+    assert.ok(markdown.includes("# CODEX.md"));
+  });
+
+  it("returns all targets from array", () => {
+    const spec = claude({
+      target: ["CLAUDE.md", "AGENTS.md"],
+      rules: {},
+    });
+    const { targets, markdown } = compileClaude(spec);
+    assert.deepEqual(targets, ["CLAUDE.md", "AGENTS.md"]);
+    // Primary target is first in array
+    assert.ok(markdown.includes("# CLAUDE.md"));
+  });
+
+  it("returns single target in targets array", () => {
+    const spec = claude({ target: "AGENTS.md", rules: {} });
+    const { targets } = compileClaude(spec);
+    assert.deepEqual(targets, ["AGENTS.md"]);
+  });
+
+  it("defaults targets to CLAUDE.md", () => {
+    const spec = claude({ rules: {} });
+    const { targets } = compileClaude(spec);
+    assert.deepEqual(targets, ["CLAUDE.md"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases: empty inputs, boundaries, special characters
 // ---------------------------------------------------------------------------
 

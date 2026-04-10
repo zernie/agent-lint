@@ -18,7 +18,7 @@
 
 Your CLAUDE.md says `@typescript-eslint/no-floating-promises` is enforced. But someone disabled it last month when it got "too noisy." Your agent still thinks there's a safety net. Is there?
 
-vigiles compiles typed TypeScript specs to AI instruction files. Every linter reference is verified. Every file path is checked. Every command is validated. If something is stale, broken, or disabled — you find out at compile time, not when the agent ignores it.
+vigiles compiles typed TypeScript specs to AI instruction files (CLAUDE.md, AGENTS.md, or any markdown target). Every linter reference is verified. Every file path is checked. Every command is validated. If something is stale, broken, or disabled — you find out at compile time, not when the agent ignores it.
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
@@ -273,6 +273,62 @@ From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-al
 | 1     | Guardrails           | CI + standard linters, no custom rules                              |
 | 2     | Architecture as Code | Custom lint rules + enforced CLAUDE.md                              |
 | 3     | The Organism         | CI + custom rules + visual tests + observability + scheduled agents |
+
+## Output Targets
+
+By default, specs compile to `CLAUDE.md`. Set `target` to compile to other instruction file formats:
+
+```typescript
+// AGENTS.md.spec.ts — single target
+export default claude({
+  target: "AGENTS.md",
+  rules: { ... },
+});
+
+// CLAUDE.md.spec.ts — multiple targets from one spec
+export default claude({
+  target: ["CLAUDE.md", "AGENTS.md"],
+  rules: { ... },
+});
+```
+
+```bash
+$ npx vigiles compile
+✓ CLAUDE.md.spec.ts → CLAUDE.md, AGENTS.md
+```
+
+The compiler, linter cross-referencing, and all validations work identically — only the output filename and heading change. Use sync tools like [rule-porter](https://github.com/nichochar/rule-porter) or [rulesync](https://github.com/dyoshikawa/rulesync) to convert the compiled markdown to non-markdown formats (`.cursorrules`, Copilot, etc.).
+
+## Enforcing Spec Shape with `satisfies`
+
+Use TypeScript's `satisfies` keyword to enforce that your specs always include certain sections or rules:
+
+```typescript
+// Define your project's required spec shape
+type ProjectSpec = {
+  sections: {
+    architecture: string;
+    testing: string;
+  };
+  commands: Record<string, string>;
+  rules: Record<string, Rule>;
+};
+
+// TypeScript errors if you forget a required section
+export default claude({
+  sections: {
+    architecture: "...",
+    testing: "...",
+    // ✗ Remove 'testing' → "Property 'testing' is missing"
+  },
+  commands: {
+    "npm test": "Run all tests",
+  },
+  rules: { ... },
+} satisfies ProjectSpec);
+```
+
+This is a convention you can adopt per-project — define what a "complete" spec looks like for your team, and the compiler enforces it at type-check time.
 
 ## Related Tools
 
