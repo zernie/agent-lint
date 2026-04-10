@@ -802,30 +802,66 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npx vigiles check && npx vigiles generate-types --check");
   }
 
-  // Step 7: Agent-specific guidance
-  const specPaths = targets.map((t) => `${t}.spec.ts`).join(", ");
+  // Step 7: Install Claude Code hooks directly
+  const shouldInstallHooks =
+    detected.hasClaude || targets.includes("CLAUDE.md");
+  if (shouldInstallHooks) {
+    const settingsDir = resolve(process.cwd(), ".claude");
+    const settingsPath = resolve(settingsDir, "settings.json");
+    if (!existsSync(settingsDir)) {
+      mkdirSync(settingsDir, { recursive: true });
+    }
 
-  console.log("\n---");
-  console.log("Setup complete. Next steps:\n");
-  console.log(`  1. Edit ${specPaths} — add your project's conventions`);
-  console.log("  2. Run `npx vigiles compile` to regenerate");
-  console.log(
-    "  3. Commit the .spec.ts, compiled .md, and .vigiles/generated.d.ts",
-  );
+    let settings: Record<string, unknown> = {};
+    if (existsSync(settingsPath)) {
+      try {
+        settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        // Ignore malformed settings
+      }
+    }
 
-  if (detected.hasClaude || targets.includes("CLAUDE.md")) {
-    console.log(
-      "\n  Claude Code — install the plugin (blocks direct .md edits, auto-recompiles):",
-    );
-    console.log("    npx skills add zernie/vigiles");
+    if (!settings["hooks"]) {
+      settings["hooks"] = {};
+    }
+    const hooks = settings["hooks"] as Record<string, unknown>;
+
+    // Add PreToolUse hook (block compiled file edits)
+    if (!hooks["PreToolUse"]) {
+      hooks["PreToolUse"] = [
+        {
+          matcher: "Edit|Write",
+          command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$FILE" in *.md) [ -f "$FILE" ] && head -1 "$FILE" | grep -q 'vigiles:sha256:' && { SPEC=$(head -1 "$FILE" | sed -n 's/.*compiled from \\(.*\\) -->/\\1/p'); echo "BLOCKED: Edit $SPEC instead." >&2; exit 2; } ;; esac; exit 0`,
+        },
+      ];
+    }
+
+    // Add PostToolUse hook (auto-compile on spec/config edits)
+    if (!hooks["PostToolUse"]) {
+      hooks["PostToolUse"] = [
+        {
+          matcher: "Edit|Write",
+          command: `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$(basename "$FILE")" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case "$FILE" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac`,
+        },
+      ];
+    }
+
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+    console.log("✓ Installed Claude Code hooks in .claude/settings.json");
   }
+
+  // Step 8: Agent-specific guidance
+  const specPaths = targets.map((t) => `${t}.spec.ts`).join(", ");
 
   if (targets.includes("AGENTS.md")) {
     console.log(
-      "\n  Codex / Copilot — reads AGENTS.md directly. No plugin needed.",
+      "\n  Codex / Copilot reads AGENTS.md directly — no hooks needed.",
     );
     console.log(
-      "  CI enforces freshness. Run `npx vigiles compile` manually after spec edits.",
+      "  Run `npx vigiles compile` after spec edits. CI enforces freshness.",
     );
   }
 
@@ -836,7 +872,15 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npm install -D rule-porter");
   }
 
-  console.log("\n  Full agent workflow guide: docs/agent-workflows.md");
+  // Step 9: Summary
+  console.log("\n---");
+  console.log("Setup complete.\n");
+  console.log(`  Edit ${specPaths} — add your project's conventions`);
+  console.log("  Run `npx vigiles strengthen` to upgrade guidance → enforce");
+  console.log("\n  To commit everything now:");
+  console.log(
+    `    git add ${targets.join(" ")} ${specPaths} .vigiles/generated.d.ts${shouldInstallHooks ? " .claude/settings.json" : ""} && git commit -m "Add vigiles spec"`,
+  );
 }
 
 // ---------------------------------------------------------------------------
