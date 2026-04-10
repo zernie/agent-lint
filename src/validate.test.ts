@@ -88,9 +88,7 @@ describe("parseRules", () => {
   });
 
   it("should handle file with no rules", () => {
-    const rules = parseRules(
-      "# CLAUDE.md\n\nThis project uses TypeScript.\n",
-    );
+    const rules = parseRules("# CLAUDE.md\n\nThis project uses TypeScript.\n");
     assert.equal(rules.length, 0);
   });
 
@@ -111,9 +109,7 @@ describe("parseRules", () => {
   });
 
   it("should handle vigiles-disable with extra whitespace", () => {
-    const rules = parseRules(
-      "### Skipped rule\n<!--  vigiles-disable  -->\n",
-    );
+    const rules = parseRules("### Skipped rule\n<!--  vigiles-disable  -->\n");
     assert.equal(rules[0].enforcement, "disabled");
   });
 });
@@ -442,7 +438,9 @@ describe("readInstructionFile", () => {
   });
 
   it("should return error for missing file", () => {
-    const { content, skipped, reason } = readInstructionFile(join(tmpDir, "nope.md"));
+    const { content, skipped, reason } = readInstructionFile(
+      join(tmpDir, "nope.md"),
+    );
     assert.equal(content, null);
     assert.equal(skipped, false);
     assert.notEqual(reason, null);
@@ -466,7 +464,9 @@ describe("readInstructionFile", () => {
     const link = join(tmpDir, "link2.md");
     writeFileSync(realFile, "### Rule\n**Enforced by:** `x`\n");
     symlinkSync(realFile, link);
-    const { content, skipped } = readInstructionFile(link, { followSymlinks: true });
+    const { content, skipped } = readInstructionFile(link, {
+      followSymlinks: true,
+    });
     assert.equal(skipped, false);
     assert.notEqual(content, null);
     assert.ok((content as string).includes("### Rule"));
