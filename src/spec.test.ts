@@ -782,10 +782,14 @@ describe("executeAssertion()", () => {
   });
 
   it("fails when paired files are missing", () => {
-    // src/cli.ts does NOT have src/cli.test.ts
+    // src/action.ts does NOT have src/action.test.ts
     const result = executeAssertion(
       "test-pairing",
-      { _type: "file-pairing", glob: "src/cli.ts", pattern: "{name}.test.ts" },
+      {
+        _type: "file-pairing",
+        glob: "src/action.ts",
+        pattern: "{name}.test.ts",
+      },
       process.cwd(),
     );
     assert.equal(result.passed, false);
