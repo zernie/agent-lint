@@ -62,8 +62,8 @@ The current logo (`logo.png`) is v6: overlapping translucent flame petals on dar
 ### Prompt that produced it
 
 ```
-A premium, refined logo icon for a developer tool called vigiles that validates
-AI agent configuration files. Inspired by OpenAI geometric aesthetic and Apple
+A premium, refined logo icon for a developer tool called vigiles that compiles
+typed TypeScript specs to AI instruction files. Inspired by OpenAI geometric aesthetic and Apple
 minimalism. A single abstract geometric shape: an upward-pointing flame composed
 of 3 overlapping translucent rounded shapes, creating depth through overlap —
 similar to how the OpenAI logo uses overlapping curves. Warm amber to deep orange
