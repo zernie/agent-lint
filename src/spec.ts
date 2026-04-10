@@ -182,22 +182,32 @@ export function layers(
 // Reference helpers for skill instructions
 // ---------------------------------------------------------------------------
 
+/**
+ * Branded string types — these prove a reference has gone through
+ * vigiles's verification. The compiler only accepts branded refs,
+ * not raw strings, for path-sensitive positions.
+ */
+declare const __brand: unique symbol;
+export type VerifiedPath = string & { readonly [__brand]: "VerifiedPath" };
+export type VerifiedCmd = string & { readonly [__brand]: "VerifiedCmd" };
+export type VerifiedRef = string & { readonly [__brand]: "VerifiedRef" };
+
 /** A typed file reference — verified at compile time. */
 export interface FileRef {
   readonly _ref: "file";
-  readonly path: string;
+  readonly path: VerifiedPath;
 }
 
 /** A typed command reference — verified at compile time. */
 export interface CmdRef {
   readonly _ref: "cmd";
-  readonly command: string;
+  readonly command: VerifiedCmd;
 }
 
 /** A typed cross-reference to another instruction file/skill. */
 export interface SkillRef {
   readonly _ref: "skill";
-  readonly path: string;
+  readonly path: VerifiedRef;
 }
 
 export type Ref = FileRef | CmdRef | SkillRef;
@@ -207,7 +217,7 @@ export type Ref = FileRef | CmdRef | SkillRef;
  * Compiles to a backtick path in markdown: `path/to/file.ts`
  */
 export function file(path: string): FileRef {
-  return { _ref: "file", path };
+  return { _ref: "file", path: path as VerifiedPath };
 }
 
 /**
@@ -215,7 +225,7 @@ export function file(path: string): FileRef {
  * Compiles to a backtick command in markdown: `npm run build`
  */
 export function cmd(command: string): CmdRef {
-  return { _ref: "cmd", command };
+  return { _ref: "cmd", command: command as VerifiedCmd };
 }
 
 /**
@@ -223,7 +233,7 @@ export function cmd(command: string): CmdRef {
  * Compiles to a markdown link: [skill name](path)
  */
 export function ref(path: string): SkillRef {
-  return { _ref: "skill", path };
+  return { _ref: "skill", path: path as VerifiedRef };
 }
 
 // ---------------------------------------------------------------------------
