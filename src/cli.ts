@@ -504,24 +504,38 @@ function init(args: string[]): void {
   }
 
   const targetLine = target !== "CLAUDE.md" ? `\n  target: "${target}",` : "";
-  const template = `import { claude, enforce, guidance } from "vigiles/spec";
+  const template = `import { claude, enforce, guidance, check, every } from "vigiles/spec";
 
 export default claude({${targetLine}
+  sections: {
+    // Prose sections become ## headings in the compiled output.
+    // Do not add # or ## headers inside sections.
+    // positioning: "What this project does and why.",
+
+    // This section is included in the compiled output to help agents
+    // understand how to work with specs. Remove it once your team is familiar.
+    "how-to-edit": "This file is compiled from a .spec.ts file. Do not edit it directly — edit the spec and run 'npx vigiles compile'. To add a rule: add to the rules object in the spec. To strengthen a guidance rule to enforcement: run 'npx vigiles strengthen'.",
+  },
+
   commands: {
+    // Commands are verified against package.json at compile time.
     // "npm run build": "Compile the project",
     // "npm test": "Run all tests",
   },
 
   keyFiles: {
+    // File paths are verified to exist at compile time.
     // "src/index.ts": "Main entry point",
   },
 
-  sections: {
-    // positioning: "What this project does and why.",
-  },
-
   rules: {
+    // enforce() — backed by a linter rule, verified to exist AND be enabled:
     // "no-console": enforce("eslint/no-console", "Use structured logger."),
+    //
+    // check() — filesystem assertion:
+    // "test-pairing": check(every("src/**/*.ts").has("{name}.test.ts"), "All files need tests."),
+    //
+    // guidance() — prose only, no enforcement:
     // "research-first": guidance("Google unfamiliar APIs before implementing."),
   },
 });
@@ -826,6 +840,126 @@ async function setup(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Strengthen: guidance() → enforce() suggestions
+// ---------------------------------------------------------------------------
+
+// Keywords in guidance text that map to known linter rules
+const GUIDANCE_TO_LINTER: Array<{
+  keywords: string[];
+  rules: string[];
+}> = [
+  {
+    keywords: ["console.log", "console", "no-console", "logger", "logging"],
+    rules: ["eslint/no-console", "ruff/T201"],
+  },
+  {
+    keywords: ["any", "no-explicit-any", "unknown", "type safety"],
+    rules: ["@typescript-eslint/no-explicit-any"],
+  },
+  {
+    keywords: ["await", "promise", "floating", "async", ".catch"],
+    rules: ["@typescript-eslint/no-floating-promises"],
+  },
+  {
+    keywords: ["unused", "dead code", "no-unused"],
+    rules: ["eslint/no-unused-vars", "@typescript-eslint/no-unused-vars"],
+  },
+  {
+    keywords: ["import", "barrel", "internal", "restricted"],
+    rules: ["eslint/no-restricted-imports", "import/no-internal-modules"],
+  },
+  {
+    keywords: ["unwrap", "expect", "panic"],
+    rules: ["clippy/unwrap_used"],
+  },
+  {
+    keywords: ["print", "println", "stdout"],
+    rules: ["ruff/T201", "clippy/print_stdout"],
+  },
+  {
+    keywords: ["assert", "assertion"],
+    rules: ["ruff/S101"],
+  },
+  {
+    keywords: ["todo", "fixme", "hack"],
+    rules: ["eslint/no-warning-comments"],
+  },
+  {
+    keywords: ["debugger"],
+    rules: ["eslint/no-debugger"],
+  },
+  {
+    keywords: ["eval"],
+    rules: ["eslint/no-eval"],
+  },
+];
+
+async function strengthen(): Promise<void> {
+  console.log("Scanning specs for guidance rules that could be enforced...\n");
+
+  const specs = findSpecs();
+  if (specs.length === 0) {
+    console.log("No .spec.ts files found. Run `vigiles setup` first.");
+    return;
+  }
+
+  // Scan available linter rules
+  const typesResult = generateTypes({ basePath: process.cwd() });
+  const allLinterRules = new Set<string>();
+  for (const l of typesResult.linters) {
+    for (const r of l.rules) {
+      allLinterRules.add(`${l.linter}/${r}`);
+    }
+  }
+
+  let suggestions = 0;
+
+  for (const specPath of specs) {
+    const spec = await loadSpec(specPath);
+    if (!spec || spec._specType !== "claude") continue;
+
+    for (const [ruleId, rule] of Object.entries(spec.rules)) {
+      if (rule._kind !== "guidance") continue;
+      const text = rule.text.toLowerCase();
+
+      // Find matching linter rules via keyword matching
+      const matches: string[] = [];
+      for (const mapping of GUIDANCE_TO_LINTER) {
+        if (mapping.keywords.some((kw) => text.includes(kw))) {
+          for (const candidate of mapping.rules) {
+            if (allLinterRules.has(candidate)) {
+              matches.push(candidate);
+            }
+          }
+        }
+      }
+
+      if (matches.length > 0) {
+        suggestions++;
+        console.log(`  "${ruleId}" (guidance) → could be enforced:`);
+        for (const m of matches) {
+          console.log(`    enforce("${m}", "${rule.text.slice(0, 60)}")`);
+        }
+        console.log("");
+      }
+    }
+  }
+
+  if (suggestions === 0) {
+    console.log(
+      "No strengthening suggestions found. All guidance rules look correct,",
+    );
+    console.log("or no matching linter rules are enabled in your project.\n");
+    console.log("To see all available linter rules: npx vigiles discover");
+  } else {
+    console.log(`${String(suggestions)} rule(s) could be strengthened.`);
+    console.log(
+      "Edit the spec to replace guidance() with enforce() for the suggested rules.",
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Command handlers for main()
 // ---------------------------------------------------------------------------
 
@@ -911,6 +1045,9 @@ function printUsage(command: string | undefined): void {
   console.log("  vigiles generate-types [out]  Emit .d.ts from project state");
   console.log("  vigiles generate-types --check  Verify .d.ts is up to date");
   console.log("  vigiles discover              Show linter rule coverage gaps");
+  console.log(
+    "  vigiles strengthen            Suggest enforce() upgrades for guidance rules",
+  );
   console.log("  vigiles adopt                 Detect manual edits, show diff");
   console.log("");
   console.log("Examples:");
@@ -973,6 +1110,9 @@ async function main(): Promise<void> {
       break;
     case "discover":
       discover();
+      break;
+    case "strengthen":
+      await strengthen();
       break;
     case "adopt":
       await adopt();
