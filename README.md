@@ -16,298 +16,226 @@
 
 ---
 
-Validates that every rule in your CLAUDE.md is backed by a real linter — or explicitly marked as guidance-only. Cross-references enforcement claims against actual linter configurations (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint).
+Your CLAUDE.md says `eslint/no-console` is enforced. But is that rule actually enabled in your ESLint config? Your agent thinks there's a safety net. Is there?
+
+vigiles compiles typed TypeScript specs to AI instruction files. Every linter reference is verified. Every file path is checked. Every command is validated. If something is stale, broken, or disabled — you find out at compile time, not when the agent ignores it.
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+
+## The Problem
+
+Hand-written CLAUDE.md files rot silently:
+
+```markdown
+### Use the structured logger ← but what IS the structured logger?
+
+**Enforced by:** `eslint/no-console` ← disabled in config 3 months ago
+**Why:** Routes to Datadog.
+
+### Always import from barrel files
+
+**Enforced by:** `eslint/no-restricted-imports` ← typo: rule is no-restricted-syntax
+**Why:** Prevents path drift.
+
+Check `src/utils/logger.ts` for the API. ← file was renamed to telemetry.ts
+Run `npm run typecheck` to verify. ← script was removed last sprint
+```
+
+Four silent failures. The agent reads this, trusts it, and produces code based on lies.
+
+## The Fix
+
+Write your conventions as TypeScript. The compiler catches the lies.
+
+```typescript
+// CLAUDE.md.spec.ts
+import { claude, enforce, guidance, check, every } from "vigiles/spec";
+
+export default claude({
+  commands: {
+    "npm run build": "Compile TypeScript to dist/",
+    "npm test": "Build and run all tests",
+    // ✗ "npm run typecheck" → compile error: script not in package.json
+  },
+
+  keyFiles: {
+    "src/utils/telemetry.ts": "Structured logger API",
+    // ✗ "src/utils/logger.ts" → compile error: file not found
+  },
+
+  rules: {
+    "no-console": enforce(
+      "eslint/no-console",
+      "Use structured logger for Datadog.",
+    ),
+    // ✗ enforce("eslint/no-consolee") → type error: not a valid rule
+    // ✗ if rule is disabled in config → compile error
+
+    "test-pairing": check(
+      every("src/**/*.controller.ts").has("{name}.test.ts"),
+      "Every controller must have tests.",
+    ),
+
+    "research-first": guidance("Google unfamiliar APIs first."),
+  },
+});
+```
+
+```bash
+$ npx vigiles compile
+
+✓ CLAUDE.md.spec.ts → CLAUDE.md
+  3 rules (1 linter-verified, 1 filesystem check, 1 guidance)
+  ~180 tokens
+```
+
+The spec is the source of truth. CLAUDE.md is a build artifact.
 
 ## Quick Start
 
 ```bash
-npx vigiles
+# Start from scratch
+npx vigiles init            # creates CLAUDE.md.spec.ts
+npx vigiles compile          # compiles to CLAUDE.md
+
+# Or migrate an existing CLAUDE.md (via skill)
+npx skills add zernie/vigiles
+# then run the migrate-to-spec skill in your AI agent
 ```
 
-That's it. Finds `CLAUDE.md`, validates every rule has an enforcement annotation, and checks that referenced linters actually exist in your project.
+## Three Rule Types
 
-```
-Validation Report: CLAUDE.md
-========================================
-  Total rules:    4
-  Enforced:       3
-  Guidance only:  1
-  Disabled:       0
-  Missing:        0
-  Linters:        eslint (292 built-in rules)
-========================================
+**`enforce()`** — delegated to a linter. vigiles verifies the rule exists and is enabled.
 
-All rules have enforcement annotations.
+```typescript
+"no-console": enforce("eslint/no-console", "Use structured logger."),
+"no-print":   enforce("ruff/T201", "Use logging module."),
+"no-unwrap":  enforce("clippy/unwrap_used", "Use expect() with context."),
 ```
 
-## How It Works
+Supports ESLint, Stylelint, Ruff, Clippy, Pylint, and RuboCop. [Full linter support details →](docs/linter-support.md)
 
-vigiles does two things:
+**`check()`** — filesystem assertion that vigiles runs directly.
 
-**1. Validates rule annotations** — every `###` heading or `- [ ]` checkbox in your instruction file must have an **Enforced by** annotation or be marked **Guidance only**. Near-miss typos like `Enforced By:` (wrong case) get a helpful "did you mean?" message.
-
-**2. Verifies linters exist and are enabled** — checks that referenced linters are actually installed and that the specific rules are enabled in your config. ESLint and Stylelint are checked via Node API. Ruff, Clippy, Pylint, and RuboCop are checked via CLI.
-
-## Instruction File Format
-
-Every rule needs an enforcement annotation:
-
-```markdown
-### Always use barrel file imports
-
-**Enforced by:** `eslint/no-restricted-imports`
-**Why:** Prevents import path drift during refactoring.
-
-### Use Tailwind spacing scale, no magic numbers
-
-**Guidance only** — cannot be mechanically enforced
-**Why:** Ensures visual consistency across the design system.
+```typescript
+"test-pairing": check(
+  every("src/**/*.controller.ts").has("{name}.test.ts"),
+  "Every controller must have tests.",
+),
 ```
 
-Both `###` headings and `- [ ]` checkboxes are recognized as rules by default:
+**`guidance()`** — prose advice. No enforcement pretended.
 
-```markdown
-- [ ] No console.log in production
-      **Enforced by:** `eslint/no-console`
-
-- [x] Prefer named exports over default exports
-      **Guidance only** — cannot be mechanically enforced
+```typescript
+"research-first": guidance("Google unfamiliar APIs first."),
 ```
 
-To skip validation for a specific rule:
+## Verified References
 
-```markdown
-### Legacy rule that doesn't fit the format
+`file()`, `cmd()`, and `ref()` catch stale references at compile time:
 
-<!-- vigiles-disable -->
+```typescript
+import { claude, file, cmd, ref, instructions } from "vigiles/spec";
+
+export default claude({
+  sections: {
+    architecture: instructions`
+      Core engine in ${file("src/compile.ts")}.
+      Run ${cmd("npm test")} to verify.
+      See ${ref("skills/deploy/SKILL.md")} for deployment.
+    `,
+    // If any path is stale → compile error
+  },
+  // ...
+});
 ```
 
-## Linter Rule Validation
+Skill specs use the same helpers for verified references inside instructions. [Full spec format →](docs/spec-format.md)
 
-When a rule says `**Enforced by:** \`eslint/no-console\``, vigiles checks that `no-console` is a real ESLint rule **and** that it's enabled in your config. This catches typos, references to removed rules, disabled rules, and linters that were never set up.
+## Type-Safe Rule References
 
-Supported linters are auto-detected from your project — **no extra dependencies are installed**:
+`vigiles generate-types` scans your actual linter configs and emits a `.d.ts`:
 
-| Linter    | Detection                     | Method                              |
-| --------- | ----------------------------- | ----------------------------------- |
-| ESLint    | `eslint` in `node_modules`    | Node API (`builtinRules` + plugins) |
-| Stylelint | `stylelint` in `node_modules` | Node API (`rules` export)           |
-| Ruff      | `ruff` on PATH                | CLI (`ruff rule <name>`)            |
-| Clippy    | `cargo` on PATH               | CLI (`cargo clippy --explain`)      |
-| Pylint    | `pylint` on PATH              | CLI (`pylint --help-msg`)           |
-| RuboCop   | `rubocop` on PATH             | CLI (`rubocop --show-cops`)         |
+```bash
+$ npx vigiles generate-types
 
-ESLint plugin rules are also supported — use `eslint/<plugin>/<rule>` (e.g., `eslint/import/no-unresolved`) or the plugin name directly (e.g., `@typescript-eslint/no-explicit-any`). The plugin package must be installed in `node_modules`.
+  eslint: 64 enabled rules
+  ruff: 12 enabled rules
+  npm scripts: 5
+  project files: 42
 
-For custom or unsupported linters, configure a `rulesDir` to check that rule files exist:
-
-```json
-{
-  "linters": {
-    "my-tool": { "rulesDir": "tools/my-tool/rules/" }
-  }
-}
+✓ Generated .vigiles/generated.d.ts
 ```
 
-Set `require-rule-file` to `false` to disable all linter rule checking, or `"catalog-only"` to only check that rules exist in the linter catalog without verifying they're enabled in project config.
+The generated file contains type unions for every enabled rule, npm script, and project file:
 
-## Configuration
-
-vigiles works with zero configuration. It validates `CLAUDE.md` by default. Optionally create a `.vigilesrc.json` to override:
-
-```json
-{
-  "files": ["CLAUDE.md", "AGENTS.md"],
-  "rules": {
-    "max-lines": 300
-  }
-}
+```typescript
+// .vigiles/generated.d.ts (auto-generated, DO NOT EDIT)
+export type EslintRule = "no-console" | "no-unused-vars" | ...;
+export type RuffRule = "E501" | "F401" | "T201" | ...;
+export type NpmScript = "build" | "test" | "fmt" | ...;
+export type ProjectFile = "src/spec.ts" | "src/compile.ts" | ...;
 ```
 
-| Option        | Default                      | Description                                                                                          |
-| ------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `extends`     | `"recommended"`              | Rule pack to use as base. `"recommended"` or `"strict"`. User overrides are merged on top.           |
-| `files`       | `["CLAUDE.md"]`              | Instruction files to validate when no explicit paths are given                                       |
-| `ruleMarkers` | `["headings", "checkboxes"]` | Which rule marker types to recognize                                                                 |
-| `linters`     | `{}`                         | Per-linter config for rule file validation                                                           |
-| `structures`  | `[]`                         | File-to-schema mappings for structure validation. See [Structure Validation](#structure-validation). |
+**Commit this file to git.** It should be checked in so that:
 
-### Rule Packs
+- Editors pick up the types immediately (no setup step for new contributors)
+- CI can verify it's fresh: run `vigiles generate-types` and check for uncommitted changes
+- Anyone cloning the repo gets autocomplete and type checking out of the box
 
-Like ESLint's shared configs, vigiles ships with two rule packs:
-
-```json
-{
-  "extends": "strict"
-}
-```
-
-| Rule                  | `recommended` (default) | `strict`                              |
-| --------------------- | ----------------------- | ------------------------------------- |
-| `require-annotations` | `true`                  | `true`                                |
-| `max-lines`           | `500`                   | `300`                                 |
-| `require-rule-file`   | `"auto"`                | `"auto"`                              |
-| `require-structure`   | `false`                 | `true`                                |
-| `no-broken-links`     | `true`                  | `true`                                |
-| `structures`          | `[]`                    | CLAUDE.md + SKILL.md (strict schemas) |
-
-Override individual rules on top of either pack:
-
-```json
-{
-  "extends": "strict",
-  "rules": {
-    "max-lines": 1000,
-    "require-structure": false
-  }
-}
-```
-
-### Rules
-
-| Rule                  | Description                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `require-annotations` | Every rule marker must have `**Enforced by:**` or `**Guidance only**`. Detects near-miss typos with "did you mean?" suggestions.                       |
-| `max-lines`           | Maximum number of lines allowed per file. Set a number for custom limit, `false` to disable.                                                           |
-| `require-rule-file`   | Validates that referenced linter rules exist and are enabled in project config. Use `"catalog-only"` to skip config checks.                            |
-| `require-structure`   | Validates markdown structure against schemas via [mdschema](https://github.com/jackchuka/mdschema). See [Structure Validation](#structure-validation). |
-| `no-broken-links`     | Checks that relative markdown links resolve to existing files. Skips external URLs, anchors, and mailto links.                                         |
+Re-run `vigiles generate-types` when you add/remove linter rules, npm scripts, or source files. [Details →](docs/linter-support.md#generate-types)
 
 ## CLI
 
 ```bash
-# Validate CLAUDE.md (default)
-npx vigiles
-
-# Validate specific files
-npx vigiles CLAUDE.md AGENTS.md
-
-# Glob pattern
-npx vigiles "**/*.md"
-
-# Follow symlinks
-npx vigiles --follow-symlinks
-
-# Override rule markers
-npx vigiles --markers=headings
+npx vigiles compile          # Compile .spec.ts → .md
+npx vigiles check            # Verify hashes + run assertions
+npx vigiles init             # Scaffold a CLAUDE.md.spec.ts
+npx vigiles generate-types   # Emit .d.ts from project state
+npx vigiles discover         # Show undocumented linter rules
+npx vigiles adopt            # Detect manual edits, show diff
 ```
-
-| Flag                            | Description                                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------ |
-| `--follow-symlinks`             | Resolve and validate symlinked files. Without this flag, symlinks are skipped. |
-| `--markers=headings,checkboxes` | Override which rule markers to recognize. Comma-separated.                     |
-
-Exit codes: `0` on success, `1` if validation fails.
-
-## Organizing Rules
-
-In a monorepo, use **progressive disclosure** — universal rules at the root, context-specific rules in subdirectories:
-
-```
-CLAUDE.md                        # Universal: code style, PR conventions, testing
-packages/
-  api/
-    CLAUDE.md                    # API-specific: error handling, DB conventions
-  web/
-    CLAUDE.md                    # Frontend-specific: component patterns, Tailwind usage
-  shared/
-    CLAUDE.md -> ../CLAUDE.md    # Symlink to share rules (use --follow-symlinks)
-```
-
-The `max-lines` rule (default: 500) nudges toward this pattern — oversized instruction files waste agent tokens on irrelevant rules.
-
-## Structure Validation
-
-Optionally enforce consistent markdown templates via [mdschema](https://github.com/jackchuka/mdschema):
-
-```bash
-npm install @jackchuka/mdschema
-```
-
-```json
-{
-  "rules": { "require-structure": true },
-  "structures": [
-    { "files": "CLAUDE.md", "schema": "claude-md" },
-    { "files": "**/SKILL.md", "schema": "skill" }
-  ]
-}
-```
-
-Built-in presets: `"claude-md"`, `"claude-md:strict"`, `"skill"`, `"skill:strict"`. Or point to a custom `.mdschema.yml`. See [mdschema docs](https://github.com/jackchuka/mdschema) for the full schema format.
 
 ## GitHub Action
 
 ```yaml
-# .github/workflows/vigiles.yml
-name: Validate agent instructions
-on: [push, pull_request]
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: zernie/vigiles@main
-```
-
-Errors appear as inline annotations on the PR diff.
-
-Override with action inputs:
-
-```yaml
+- uses: zernie/vigiles@main # runs `check` by default
 - uses: zernie/vigiles@main
   with:
-    paths: "CLAUDE.md,packages/*/CLAUDE.md"
-    max-lines: "300"
-    require-rule-file: "auto"
+    command: compile # compile specs in CI
 ```
-
-## Related Tools
-
-vigiles validates instruction file **content** and **linter cross-references**. It doesn't try to do everything. Here's how it fits with the ecosystem:
-
-**File sync across agents** — If your team uses multiple agents (Claude Code, Cursor, Copilot), use a sync tool to maintain one source of truth:
-
-- [Ruler](https://github.com/intellectronica/ruler) — single `.ruler/` directory, auto-distributes to agent configs
-- [rulesync](https://github.com/dyoshikawa/rulesync) — unified rule management, 10+ agent targets
-- [block/ai-rules](https://github.com/block/ai-rules) — enterprise multi-agent rule management by Block
-
-Configure vigiles to validate the source file: `"files": ["CLAUDE.md"]`. The sync tool handles distribution.
-
-**Markdown formatting** — Use [markdownlint](https://github.com/DavidAnson/markdownlint) for formatting rules (trailing spaces, consistent lists, heading levels). vigiles doesn't check formatting — it checks semantics. Most teams already have markdownlint in their editor or CI. [CodeRabbit](https://coderabbit.ai) runs it automatically on PRs.
-
-**Prose quality** — Use [Vale](https://vale.sh) for writing style rules. vigiles doesn't check prose.
-
-**Claude Code ecosystem** — For validating hooks, MCP servers, plugins, and `.claude/` structure, see [claudelint](https://github.com/pdugan20/claudelint) or [cclint](https://github.com/carlrannaberg/cclint).
-
-**Stale references** — For checking that file paths and npm scripts in AGENTS.md files are still valid, see [agents-lint](https://github.com/giacomo/agents-lint).
 
 ## Skills
 
-Install skills for all your AI agents at once with [Vercel Skills](https://github.com/vercel-labs/skills):
+Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
 
-```bash
-npx skills add zernie/vigiles
-```
-
-**`audit-feedback-loop`** — Scores your repo's feedback loop maturity (see [Maturity Levels](#maturity-levels)).
-
-**`pr-to-lint-rule`** — Converts a recurring PR comment into a lint rule + tests + CLAUDE.md annotation.
-
-**`enforce-rules-format`** — Validates and fixes enforcement annotations in your instruction files.
+| Skill                  | What it does                                                     |
+| ---------------------- | ---------------------------------------------------------------- |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`           |
+| `generate-rule`        | Add a new `enforce()` / `check()` / `guidance()` rule to a spec  |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry |
+| `enforce-rules-format` | Validate all rules have enforcement classification               |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                         |
 
 ## Maturity Levels
 
-From the [article](https://zernie.com/blog/feedback-loop-is-all-you-need):
+From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need):
 
-| Level | Name                 | Description                                                         |
+| Level | Name                 | What it means                                                       |
 | ----- | -------------------- | ------------------------------------------------------------------- |
 | 0     | Vibes                | No CI, no linters, no CLAUDE.md                                     |
 | 1     | Guardrails           | CI + standard linters, no custom rules                              |
 | 2     | Architecture as Code | Custom lint rules + enforced CLAUDE.md                              |
 | 3     | The Organism         | CI + custom rules + visual tests + observability + scheduled agents |
+
+## Related Tools
+
+vigiles doesn't try to do everything:
+
+- **Architectural linting** — [ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser), [Steiger](https://github.com/feature-sliced/steiger). Reference their rules via `enforce()`.
+- **File sync** — [Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync), [block/ai-rules](https://github.com/block/ai-rules). vigiles compiles the source; sync tools distribute.
+- **Markdown linting** — [markdownlint](https://github.com/DavidAnson/markdownlint). vigiles generates the markdown; structure is correct by construction.
+- **Prose quality** — [Vale](https://vale.sh). Different concern.
 
 ## License
 
