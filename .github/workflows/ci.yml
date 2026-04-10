@@ -55,13 +55,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Check generated types are fresh
-        run: |
-          npx vigiles generate-types
-          if [ -n "$(git diff --name-only)" ]; then
-            echo "::error::Generated types are stale. Run 'npx vigiles generate-types' and commit."
-            git diff
-            exit 1
-          fi
+        run: npx vigiles generate-types --check
 
       - name: Lint
         run: npm run lint

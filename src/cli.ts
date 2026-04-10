@@ -472,6 +472,7 @@ function findInstructionFiles(restArgs: string[]): string[] {
 }
 
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
+  const checkOnly = args.includes("--check");
   const outPath = restArgs[0] ?? ".vigiles/generated.d.ts";
   const fileGlobs = args
     .filter((a) => a.startsWith("--files="))
@@ -495,6 +496,27 @@ function handleGenerateTypes(args: string[], restArgs: string[]): void {
   console.log(`  project files: ${String(result.files.length)}`);
 
   const fullOut = resolve(process.cwd(), outPath);
+
+  if (checkOnly) {
+    // --check: compare against existing file, exit 1 if stale
+    if (!existsSync(fullOut)) {
+      console.log(
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate-types\` to create it.`,
+      );
+      process.exit(1);
+    }
+    const existing = readFileSync(fullOut, "utf-8");
+    if (existing === result.dts) {
+      console.log(`\n✓ ${outPath} is up to date`);
+    } else {
+      console.log(
+        `\n✗ ${outPath} is stale. Run \`vigiles generate-types\` to update.`,
+      );
+      process.exit(1);
+    }
+    return;
+  }
+
   const outDir = fullOut.substring(0, fullOut.lastIndexOf("/"));
   if (!existsSync(outDir)) {
     mkdirSync(outDir, { recursive: true });
@@ -511,6 +533,7 @@ function printUsage(command: string | undefined): void {
   console.log("  vigiles check [files...]      Verify hashes + run assertions");
   console.log("  vigiles init                  Scaffold a CLAUDE.md.spec.ts");
   console.log("  vigiles generate-types [out]  Emit .d.ts from project state");
+  console.log("  vigiles generate-types --check  Verify .d.ts is up to date");
   console.log("  vigiles discover              Show linter rule coverage gaps");
   console.log("  vigiles adopt                 Detect manual edits, show diff");
   console.log("");
