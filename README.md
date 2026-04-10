@@ -106,11 +106,10 @@ The spec is the source of truth. CLAUDE.md is a build artifact.
 ## Quick Start
 
 ```bash
-npx vigiles setup                # creates spec, scans linters, compiles, adds CI step
-npx skills add zernie/vigiles    # install plugin — agent edits spec, not markdown
+npx vigiles setup
 ```
 
-That's it. The wizard auto-detects your project. No flags needed.
+That's it. One command. The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks — all automatically.
 
 ```
   npx vigiles setup              guidance() rules, zero config
