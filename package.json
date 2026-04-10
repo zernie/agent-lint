@@ -4,11 +4,17 @@
   "bin": {
     "vigiles": "./dist/cli.js"
   },
-  "main": "./dist/validate.js",
-  "types": "./dist/validate.d.ts",
+  "main": "./dist/spec.js",
+  "types": "./dist/spec.d.ts",
+  "exports": {
+    ".": "./dist/spec.js",
+    "./spec": "./dist/spec.js",
+    "./compile": "./dist/compile.js",
+    "./linters": "./dist/linters.js"
+  },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/validate.test.js",
+    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js",
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check ."
@@ -20,6 +26,7 @@
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
     "eslint": "^10.1.0",
+    "eslint-plugin-sonarjs": "^4.0.2",
     "globals": "^17.4.0",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3"
