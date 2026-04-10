@@ -152,7 +152,7 @@ function runCheck(): boolean {
 // Main
 // ---------------------------------------------------------------------------
 
-(async () => {
+void (async () => {
   let valid: boolean;
   if (command === "compile") {
     valid = await runCompile();
