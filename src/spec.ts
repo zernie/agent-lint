@@ -311,8 +311,16 @@ export function instructions(
 // CLAUDE.md spec (#5 — conditional maxSectionLines)
 // ---------------------------------------------------------------------------
 
+/** Known markdown instruction file targets. */
+export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {}); // escape hatch for custom targets
+
 export interface ClaudeSpec {
   readonly _specType: "claude";
+  /**
+   * Output filename(s). Defaults to "CLAUDE.md". Also used as the h1 heading.
+   * Pass an array to compile one spec to multiple targets (e.g., CLAUDE.md + AGENTS.md).
+   */
+  readonly target?: InstructionTarget | InstructionTarget[];
   /** npm scripts / shell commands → descriptions. Verified against package.json. */
   readonly commands?: Record<string, string>;
   /** File paths → descriptions. Verified via existsSync. */
@@ -330,6 +338,7 @@ export interface ClaudeSpec {
  * TypeScript errors if you set maxSectionLines without defining sections.
  */
 type ClaudeSpecBase = {
+  readonly target?: InstructionTarget | InstructionTarget[];
   readonly commands?: Record<string, string>;
   readonly keyFiles?: Record<string, string>;
   readonly rules: Record<string, Rule>;

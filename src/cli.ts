@@ -135,10 +135,7 @@ async function compile(
     const basePath = process.cwd();
 
     if (spec._specType === "claude") {
-      const outputPath = specPath
-        .replace(/\.spec\.ts$/, "")
-        .replace(/^examples\//, "");
-      const { markdown, errors, linterResults } = compileClaude(spec, {
+      const { markdown, errors, linterResults, targets } = compileClaude(spec, {
         basePath,
         specFile: specPath,
         maxRules: config.maxRules,
@@ -147,10 +144,31 @@ async function compile(
       });
 
       const linterCount = linterResults.filter((r) => r.exists).length;
+      const primaryOutput = specPath
+        .replace(/\.spec\.ts$/, "")
+        .replace(/^examples\//, "");
 
       if (errors.length === 0) {
-        writeFileSync(resolve(basePath, outputPath), markdown);
-        console.log(`\n✓ ${specPath} → ${outputPath}`);
+        // Write primary target
+        writeFileSync(resolve(basePath, primaryOutput), markdown);
+        const outputNames = [primaryOutput];
+
+        // Write additional targets with swapped heading
+        for (const t of targets.slice(1)) {
+          const additional = markdown.replace(
+            /^(<!-- vigiles:[^\n]+\n)# [^\n]+/,
+            `$1# ${t}`,
+          );
+          const dir = primaryOutput.substring(
+            0,
+            primaryOutput.lastIndexOf("/") + 1,
+          );
+          const targetPath = dir + t;
+          writeFileSync(resolve(basePath, targetPath), additional);
+          outputNames.push(targetPath);
+        }
+
+        console.log(`\n✓ ${specPath} → ${outputNames.join(", ")}`);
         console.log(
           `  ${String(Object.keys(spec.rules).length)} rules (${String(linterCount)} linter-verified)`,
         );
@@ -159,7 +177,7 @@ async function compile(
         printErrors(specPath, errors);
         allValid = false;
         // Still write the file so the user can see partial output
-        writeFileSync(resolve(basePath, outputPath), markdown);
+        writeFileSync(resolve(basePath, primaryOutput), markdown);
       }
     } else if (spec._specType === "skill") {
       const outputPath = specPath.replace(/\.spec\.ts$/, "");

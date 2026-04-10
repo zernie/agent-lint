@@ -236,6 +236,8 @@ export interface CompileClaudeResult {
   linterResults: LinterCheckResult[];
   /** Estimated token count of compiled output (~4 chars/token). */
   tokens: number;
+  /** All targets from the spec (for multi-target compilation). */
+  targets: string[];
 }
 
 export interface CompileClaudeOptions {
@@ -456,12 +458,14 @@ export function compileClaude(
   spec: ClaudeSpec,
   options: CompileClaudeOptions = {},
 ): CompileClaudeResult {
+  const targets = spec.target ?? "CLAUDE.md";
+  const target = Array.isArray(targets) ? targets[0] : targets;
   const basePath = options.basePath ?? process.cwd();
-  const specFile = options.specFile ?? "CLAUDE.md.spec.ts";
+  const specFile = options.specFile ?? `${target}.spec.ts`;
   const errors: CompileError[] = [];
-  const sections: string[] = ["# CLAUDE.md"];
+  const sections: string[] = [`# ${target}`];
 
-  // #11: Verify spec file naming convention — CLAUDE.md.spec.ts → CLAUDE.md
+  // #11: Verify spec file naming convention — <target>.spec.ts → <target>
   if (!specFile.endsWith(".spec.ts")) {
     errors.push({
       type: "spec-name-mismatch",
@@ -473,7 +477,7 @@ export function compileClaude(
     if (!/\.md$/i.test(baseName)) {
       errors.push({
         type: "spec-name-mismatch",
-        message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., CLAUDE.md.spec.ts)`,
+        message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., ${target}.spec.ts)`,
       });
     }
   }
@@ -518,7 +522,14 @@ export function compileClaude(
   }
 
   const markdown = addHash(body, specFile);
-  return { markdown, errors, linterResults: rules.linterResults, tokens };
+  const allTargets = Array.isArray(targets) ? targets : [targets];
+  return {
+    markdown,
+    errors,
+    linterResults: rules.linterResults,
+    tokens,
+    targets: allTargets,
+  };
 }
 
 // ---------------------------------------------------------------------------
