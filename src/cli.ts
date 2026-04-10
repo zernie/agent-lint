@@ -321,7 +321,17 @@ function validateSpecs(
     const hashMatch = content.match(
       /<!-- vigiles:sha256:[a-f0-9]+ compiled from (.+) -->/,
     );
-    if (hashMatch) continue; // compiled file — spec exists by definition
+    if (hashMatch) {
+      // Verify the referenced spec still exists
+      const specRef = resolve(process.cwd(), hashMatch[1]);
+      if (!existsSync(specRef)) {
+        console.log(
+          `  ✗ [require-spec] ${filePath} references "${hashMatch[1]}" but that spec no longer exists.`,
+        );
+        allValid = false;
+      }
+      continue;
+    }
 
     const result = validate(content, {
       filePath: fullPath,
