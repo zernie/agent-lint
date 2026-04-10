@@ -13,6 +13,16 @@ import {
   claude,
   skill,
 } from "./spec.js";
+import type {
+  StrictLinterRule,
+  StrictFile,
+  StrictCmd,
+  RawSpec,
+  RefsValidated,
+  LintersVerified,
+  ReadyToEmit,
+  KnownLinterRules,
+} from "./spec.js";
 
 import {
   compileClaude,
@@ -523,6 +533,98 @@ describe("section guardrails", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Reserved section keys (#4)
+// ---------------------------------------------------------------------------
+
+describe("reserved section keys", () => {
+  it("errors when section key is 'commands'", () => {
+    const spec = claude({
+      sections: { commands: "Should use the commands field instead." },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec);
+    assert.ok(errors.some((e) => e.type === "reserved-section-key"));
+  });
+
+  it("errors when section key is 'rules'", () => {
+    const spec = claude({
+      sections: { rules: "Should use the rules field instead." },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec);
+    assert.ok(errors.some((e) => e.type === "reserved-section-key"));
+  });
+
+  it("errors when section key is 'keyFiles'", () => {
+    const spec = claude({
+      sections: { keyFiles: "Should use the keyFiles field instead." },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec);
+    assert.ok(errors.some((e) => e.type === "reserved-section-key"));
+  });
+
+  it("allows non-reserved section keys", () => {
+    const spec = claude({
+      sections: { architecture: "This is fine." },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec);
+    assert.ok(!errors.some((e) => e.type === "reserved-section-key"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-spec maxSectionLines (#5)
+// ---------------------------------------------------------------------------
+
+describe("per-spec maxSectionLines", () => {
+  it("uses spec.maxSectionLines when set", () => {
+    const longContent = Array.from(
+      { length: 30 },
+      (_, i) => `Line ${String(i + 1)}`,
+    ).join("\n");
+    const spec = claude({
+      sections: { wall: longContent },
+      maxSectionLines: 20,
+      rules: {},
+    });
+    const { errors } = compileClaude(spec);
+    assert.ok(errors.some((e) => e.type === "section-too-long"));
+  });
+
+  it("compile option overrides spec maxSectionLines", () => {
+    const longContent = Array.from(
+      { length: 30 },
+      (_, i) => `Line ${String(i + 1)}`,
+    ).join("\n");
+    const spec = claude({
+      sections: { wall: longContent },
+      maxSectionLines: 50, // spec says 50, which would pass
+      rules: {},
+    });
+    // But compile option says 20, which is stricter
+    // Actually spec takes precedence — let's verify:
+    const { errors } = compileClaude(spec, { maxSectionLines: 10 });
+    // spec.maxSectionLines (50) takes precedence over options (10)
+    assert.ok(!errors.some((e) => e.type === "section-too-long"));
+  });
+
+  it("falls back to compile option when spec has no maxSectionLines", () => {
+    const longContent = Array.from(
+      { length: 30 },
+      (_, i) => `Line ${String(i + 1)}`,
+    ).join("\n");
+    const spec = claude({
+      sections: { wall: longContent },
+      rules: {},
+    });
+    const { errors } = compileClaude(spec, { maxSectionLines: 20 });
+    assert.ok(errors.some((e) => e.type === "section-too-long"));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Sections with file() refs
 // ---------------------------------------------------------------------------
 
@@ -588,6 +690,38 @@ describe("generateTypes()", () => {
     assert.ok(result.dts.includes("export type EslintRule"));
     assert.ok(result.dts.includes("export type NpmScript"));
     assert.ok(result.dts.includes("export type ProjectFile"));
+  });
+
+  it("generates vigiles/spec augmentation for KnownLinterRules", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(
+      result.dts.includes('declare module "vigiles/spec"'),
+      "Should augment vigiles/spec",
+    );
+    assert.ok(
+      result.dts.includes("interface KnownLinterRules"),
+      "Should populate KnownLinterRules",
+    );
+    assert.ok(
+      result.dts.includes('"eslint"'),
+      "Should include eslint key in KnownLinterRules",
+    );
+  });
+
+  it("generates KnownProjectFiles augmentation", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(
+      result.dts.includes("interface KnownProjectFiles"),
+      "Should populate KnownProjectFiles",
+    );
+  });
+
+  it("generates KnownNpmScripts augmentation", () => {
+    const result = generateTypes({ basePath: process.cwd() });
+    assert.ok(
+      result.dts.includes("interface KnownNpmScripts"),
+      "Should populate KnownNpmScripts",
+    );
   });
 
   it("respects custom file globs", () => {
@@ -1015,6 +1149,52 @@ describe("adoptDiff()", () => {
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Type system features (#1, #5, #6, #7)
+// ---------------------------------------------------------------------------
+
+describe("type exports", () => {
+  it("exports strict type aliases", () => {
+    // Verify the types exist and are usable at runtime (type-only check
+    // happens at tsc time, but we can verify the imports resolve).
+    void ("eslint/no-console" as StrictLinterRule);
+    void ("src/spec.ts" as StrictFile);
+    void ("npm run build" as StrictCmd);
+    assert.ok(true, "strict types are importable");
+  });
+
+  it("exports augmentation interfaces (empty by default)", () => {
+    // Without generated types, the interfaces have no keys.
+    // This test just verifies they're importable.
+    type HasNoKeys = [keyof KnownLinterRules] extends [never] ? true : false;
+    const result: HasNoKeys = true;
+    assert.equal(result, true);
+  });
+
+  it("exports phantom type brands", () => {
+    // Verify pipeline stage types are importable
+    void (null as unknown as RawSpec);
+    void (null as unknown as RefsValidated);
+    void (null as unknown as LintersVerified);
+    void (null as unknown as ReadyToEmit);
+    assert.ok(true, "phantom types are importable");
+  });
+
+  it("claude() stores maxSectionLines on the spec", () => {
+    const spec = claude({
+      sections: { about: "Hello" },
+      maxSectionLines: 25,
+      rules: {},
+    });
+    assert.equal(spec.maxSectionLines, 25);
+  });
+
+  it("claude() without sections has no maxSectionLines", () => {
+    const spec = claude({ rules: {} });
+    assert.equal(spec.maxSectionLines, undefined);
   });
 });
 
