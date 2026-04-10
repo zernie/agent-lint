@@ -14,6 +14,8 @@ import {
   skill,
 } from "./spec.js";
 import type {
+  SpecPath,
+  OutputPath,
   StrictLinterRule,
   StrictFile,
   StrictCmd,
@@ -1195,6 +1197,77 @@ describe("type exports", () => {
   it("claude() without sections has no maxSectionLines", () => {
     const spec = claude({ rules: {} });
     assert.equal(spec.maxSectionLines, undefined);
+  });
+
+  it("SpecPath and OutputPath are inverse type-level operations", () => {
+    // SpecPath<"CLAUDE.md"> = "CLAUDE.md.spec.ts"
+    void ("CLAUDE.md.spec.ts" as SpecPath<"CLAUDE.md">);
+    // OutputPath<"CLAUDE.md.spec.ts"> = "CLAUDE.md"
+    void ("CLAUDE.md" as OutputPath<"CLAUDE.md.spec.ts">);
+    assert.ok(true, "spec path types are importable and correct");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spec file naming convention (#11)
+// ---------------------------------------------------------------------------
+
+describe("spec file naming convention", () => {
+  it("accepts valid CLAUDE.md.spec.ts name", () => {
+    const spec = claude({ rules: {} });
+    const { errors } = compileClaude(spec, {
+      specFile: "CLAUDE.md.spec.ts",
+    });
+    assert.ok(!errors.some((e) => e.type === "spec-name-mismatch"));
+  });
+
+  it("accepts valid nested path spec name", () => {
+    const spec = claude({ rules: {} });
+    const { errors } = compileClaude(spec, {
+      specFile: "src/CLAUDE.md.spec.ts",
+    });
+    assert.ok(!errors.some((e) => e.type === "spec-name-mismatch"));
+  });
+
+  it("errors when spec file does not end with .spec.ts", () => {
+    const spec = claude({ rules: {} });
+    const { errors } = compileClaude(spec, {
+      specFile: "CLAUDE.md.ts",
+    });
+    assert.ok(errors.some((e) => e.type === "spec-name-mismatch"));
+  });
+
+  it("errors when spec file does not map to a .md output", () => {
+    const spec = claude({ rules: {} });
+    const { errors } = compileClaude(spec, {
+      specFile: "config.spec.ts",
+    });
+    assert.ok(errors.some((e) => e.type === "spec-name-mismatch"));
+    assert.ok(errors[0].message.includes("should be named"));
+  });
+
+  it("accepts SKILL.md.spec.ts for skills", () => {
+    const spec = skill({
+      name: "test",
+      description: "Test skill",
+      body: "Do the thing.",
+    });
+    const { errors } = compileSkill(spec, {
+      specFile: "skills/test/SKILL.md.spec.ts",
+    });
+    assert.ok(!errors.some((e) => e.type === "spec-name-mismatch"));
+  });
+
+  it("errors for skills with wrong spec name", () => {
+    const spec = skill({
+      name: "test",
+      description: "Test skill",
+      body: "Do the thing.",
+    });
+    const { errors } = compileSkill(spec, {
+      specFile: "skills/test/skill.spec.ts",
+    });
+    assert.ok(errors.some((e) => e.type === "spec-name-mismatch"));
   });
 });
 

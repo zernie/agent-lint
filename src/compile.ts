@@ -83,7 +83,8 @@ export interface CompileError {
     | "budget-exceeded"
     | "section-too-long"
     | "section-has-header"
-    | "reserved-section-key";
+    | "reserved-section-key"
+    | "spec-name-mismatch";
   message: string;
   path?: string;
 }
@@ -460,6 +461,23 @@ export function compileClaude(
   const errors: CompileError[] = [];
   const sections: string[] = ["# CLAUDE.md"];
 
+  // #11: Verify spec file naming convention — CLAUDE.md.spec.ts → CLAUDE.md
+  if (!specFile.endsWith(".spec.ts")) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" must end with .spec.ts`,
+    });
+  } else {
+    const expectedOutput = specFile.replace(/\.spec\.ts$/, "");
+    const baseName = expectedOutput.split("/").pop() ?? expectedOutput;
+    if (!/\.md$/i.test(baseName)) {
+      errors.push({
+        type: "spec-name-mismatch",
+        message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., CLAUDE.md.spec.ts)`,
+      });
+    }
+  }
+
   // maxRules check
   const ruleCount = Object.keys(spec.rules).length;
   if (options.maxRules && ruleCount > options.maxRules) {
@@ -527,6 +545,23 @@ export function compileSkill(
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "SKILL.md.spec.ts";
   const errors: CompileError[] = [];
+
+  // #11: Verify spec file naming convention — SKILL.md.spec.ts → SKILL.md
+  if (!specFile.endsWith(".spec.ts")) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" must end with .spec.ts`,
+    });
+  } else {
+    const expectedOutput = specFile.replace(/\.spec\.ts$/, "");
+    const baseName = expectedOutput.split("/").pop() ?? expectedOutput;
+    if (!/\.md$/i.test(baseName)) {
+      errors.push({
+        type: "spec-name-mismatch",
+        message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., SKILL.md.spec.ts)`,
+      });
+    }
+  }
 
   // Validate refs in body
   if (Array.isArray(spec.body)) {
