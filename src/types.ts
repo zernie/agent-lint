@@ -22,6 +22,7 @@ export interface ValidationResult {
   missing: number;
   total: number;
   errors: ValidationError[];
+  warnings: ValidationError[];
   valid: boolean;
 }
 
@@ -47,9 +48,14 @@ export interface ValidatePathsResult {
 }
 
 /** Toggleable rule settings. */
+/** Rule severity: "warn" prints but exits 0, "error" fails, false disables. */
+export type RuleSeverity = "warn" | "error" | false;
+
 export interface RulesConfig {
-  /** Check that every instruction file has a corresponding .spec.ts. */
-  "require-spec"?: boolean;
+  /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
+  "require-spec"?: RuleSeverity;
+  /** Require .spec.ts for SKILL.md files. Default: false. */
+  "require-skill-spec"?: RuleSeverity;
 }
 
 /** Full vigiles configuration. */

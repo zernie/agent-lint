@@ -54,7 +54,8 @@ const VALID_MARKERS: readonly MarkerType[] = ["headings", "checkboxes"];
 const DEFAULT_FILES: string[] = ["CLAUDE.md"];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
-  "require-spec": true,
+  "require-spec": "warn",
+  "require-skill-spec": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {
@@ -207,24 +208,47 @@ export function validate(
   ).length;
 
   const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
+  const disableComment = /<!--\s*vigiles-disable\s+require-spec\s*-->/;
 
-  // --- require-spec ---
-  // Check that the instruction file has a corresponding .spec.ts.
-  // Only applies to CLAUDE.md and AGENTS.md, not SKILL.md (skills are hand-written).
-  // Disable per-file with <!-- vigiles-disable require-spec -->.
-  const basename = filePath?.split("/").pop() ?? "";
-  const isInstructionFile =
-    basename === "CLAUDE.md" || basename === "AGENTS.md";
-  if (activeRules["require-spec"] !== false && filePath && isInstructionFile) {
-    const disableComment = /<!--\s*vigiles-disable\s+require-spec\s*-->/;
-    if (!disableComment.test(content)) {
+  if (filePath) {
+    const basename = filePath.split("/").pop() ?? "";
+    const isInstruction = basename === "CLAUDE.md" || basename === "AGENTS.md";
+    const isSkill = basename === "SKILL.md";
+
+    // --- require-spec (CLAUDE.md / AGENTS.md) ---
+    const specSeverity = activeRules["require-spec"];
+    if (specSeverity && isInstruction && !disableComment.test(content)) {
       const specPath = filePath + ".spec.ts";
       if (!existsSync(specPath)) {
-        errors.push({
+        const msg: ValidationError = {
           rule: "require-spec",
-          message: `No spec file found for "${filePath}". Expected "${specPath}". Migrate with \`vigiles init\` or disable with <!-- vigiles-disable require-spec -->.`,
+          message: `No spec file found for "${filePath}". Expected "${specPath}". Migrate with \`vigiles migrate\` or disable with <!-- vigiles-disable require-spec -->.`,
           line: 1,
-        });
+        };
+        if (specSeverity === "error") {
+          errors.push(msg);
+        } else {
+          warnings.push(msg);
+        }
+      }
+    }
+
+    // --- require-skill-spec (SKILL.md) ---
+    const skillSeverity = activeRules["require-skill-spec"];
+    if (skillSeverity && isSkill && !disableComment.test(content)) {
+      const specPath = filePath + ".spec.ts";
+      if (!existsSync(specPath)) {
+        const msg: ValidationError = {
+          rule: "require-skill-spec",
+          message: `No spec file found for "${filePath}". Expected "${specPath}".`,
+          line: 1,
+        };
+        if (skillSeverity === "error") {
+          errors.push(msg);
+        } else {
+          warnings.push(msg);
+        }
       }
     }
   }
@@ -237,6 +261,7 @@ export function validate(
     missing: missingCount,
     total: parsedRules.length,
     errors,
+    warnings,
     valid: errors.length === 0,
   };
 }
