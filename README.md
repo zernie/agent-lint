@@ -110,22 +110,33 @@ npx vigiles setup                # creates spec, scans linters, compiles, adds C
 npx skills add zernie/vigiles    # install plugin — agent edits spec, not markdown
 ```
 
-The wizard auto-detects your project — existing instruction files, linter configs, agent tools (Claude Code, Codex, Cursor). No flags needed. It creates a `.spec.ts`, generates type-safe rule references, compiles to markdown, and wires up your CI.
+That's it. The wizard auto-detects your project. No flags needed.
 
-**What happens after install:**
+```
+  npx vigiles setup              guidance() rules, zero config
+          │
+          ▼
+  agent edits spec ◄────────── hooks auto-compile (self-maintaining)
+          │
+          ▼
+  npx vigiles strengthen         guidance() → enforce() where possible
+          │
+          ▼
+  CI catches drift               full enforcement, types narrowed
+```
+
+**After install, it just works:**
 
 - Agent says "update CLAUDE.md" → plugin blocks the edit, redirects to `.spec.ts`
 - Agent edits the spec → plugin auto-compiles → CLAUDE.md regenerated
 - Agent edits `eslint.config.ts` → plugin auto-regenerates types
 - CI runs `vigiles check` → catches stale specs, disabled rules, missing files
 
-**It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync automatically.
+**It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync.
 
-**Already have a hand-written CLAUDE.md?** The wizard detects it and suggests the `migrate-to-spec` skill. Or start fresh — the existing file stays untouched until you compile.
+**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `vigiles strengthen` — it scans your linter configs, finds matching rules, and suggests `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
 
-For Codex / GitHub Copilot: `npx vigiles setup --target=AGENTS.md`. [Agent workflow details →](docs/agent-workflows.md)
-
-For agent-driven installation (non-interactive): [Agent setup guide →](docs/agent-setup.md)
+**Already have a hand-written CLAUDE.md?** The wizard detects it and suggests migration. [Agent workflow details →](docs/agent-workflows.md) | [Agent setup guide →](docs/agent-setup.md)
 
 ## Three Rule Types
 

@@ -229,6 +229,28 @@ export default claude({
 });
 
 // ---------------------------------------------------------------------------
+// vigiles strengthen
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles strengthen", () => {
+  it("should run without errors on project root", () => {
+    const { exitCode } = run("strengthen", process.cwd());
+    assert.equal(exitCode, 0);
+  });
+
+  it("should report when no specs found", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-strengthen-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: {} }),
+    );
+    const { stdout } = run("strengthen", tmpDir);
+    assert.ok(stdout.includes("No .spec.ts files found"));
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // vigiles discover
 // ---------------------------------------------------------------------------
 
