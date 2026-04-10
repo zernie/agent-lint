@@ -283,6 +283,7 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 
 | Skill                  | What it does                                                     |
 | ---------------------- | ---------------------------------------------------------------- |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step             |
 | `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`           |
 | `generate-rule`        | Add a new `enforce()` / `check()` / `guidance()` rule to a spec  |
 | `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry |

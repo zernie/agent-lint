@@ -377,9 +377,18 @@ describe("plugin hook: pre-edit.sh", () => {
     } catch (e: unknown) {
       const err = e as { status?: number; stderr?: string };
       assert.equal(err.status, 2);
+      const stderr = err.stderr ?? "";
       assert.ok(
-        (err.stderr ?? "").includes("CLAUDE.md.spec.ts"),
+        stderr.includes("CLAUDE.md.spec.ts"),
         "Should mention the spec file",
+      );
+      assert.ok(
+        stderr.includes("BLOCKED"),
+        "Should clearly indicate the action was blocked",
+      );
+      assert.ok(
+        stderr.includes("edit-spec"),
+        "Should reference the edit-spec skill",
       );
     }
   });
