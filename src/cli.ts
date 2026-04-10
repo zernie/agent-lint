@@ -315,8 +315,11 @@ function validateSpecs(filePaths: string[]): boolean {
     }
     const result = validate(content, { filePath: fullPath });
     for (const err of result.errors) {
-      console.log(`  [${err.rule}] ${err.message}`);
+      console.log(`  ✗ [${err.rule}] ${err.message}`);
       allValid = false;
+    }
+    for (const warn of result.warnings) {
+      console.log(`  ⚠ [${warn.rule}] ${warn.message}`);
     }
   }
   return allValid;
@@ -1210,7 +1213,15 @@ function handleGenerateTypes(args: string[], restArgs: string[]): void {
       process.exit(1);
     }
     const existing = readFileSync(fullOut, "utf-8");
-    if (existing === result.dts) {
+    // Normalize for formatter differences (trailing whitespace, blank lines)
+    const normalize = (s: string): string =>
+      s
+        .split("\n")
+        .map((l) => l.trimEnd())
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    if (normalize(existing) === normalize(result.dts)) {
       console.log(`\n✓ ${outPath} is up to date`);
     } else {
       console.log(

@@ -288,7 +288,7 @@ describe("require-spec", () => {
 
     const result = validate("# CLAUDE.md\n### Rule\n**Enforced by:** `x`\n", {
       filePath: mdPath,
-      rules: { "require-spec": true },
+      rules: { "require-spec": "error" },
     });
     assert.equal(result.valid, false);
     assert.ok(result.errors.some((e) => e.rule === "require-spec"));
@@ -305,7 +305,7 @@ describe("require-spec", () => {
 
     const result = validate("# Test\n", {
       filePath: mdPath,
-      rules: { "require-spec": true },
+      rules: { "require-spec": "error" },
     });
     assert.ok(!result.errors.some((e) => e.rule === "require-spec"));
   });
@@ -318,7 +318,7 @@ describe("require-spec", () => {
 
     const result = validate("<!-- vigiles-disable require-spec -->\n# Test\n", {
       filePath: mdPath,
-      rules: { "require-spec": true },
+      rules: { "require-spec": "error" },
     });
     assert.ok(!result.errors.some((e) => e.rule === "require-spec"));
   });
@@ -338,29 +338,63 @@ describe("require-spec", () => {
 
   it("should not run when filePath is not provided", () => {
     const result = validate("# Test\n", {
-      rules: { "require-spec": true },
+      rules: { "require-spec": "error" },
     });
     assert.equal(result.valid, true);
   });
 
-  it("should be enabled by default", () => {
-    const mdPath = join(tmpDir, "CLAUDE.md");
+  it("should warn by default (not error)", () => {
+    const subDir = join(tmpDir, "warn-default");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
     writeFileSync(mdPath, "# Test\n");
 
-    // No explicit rules config — uses defaults (require-spec: true)
+    // Default is "warn" — valid stays true, warning emitted
     const result = validate("# Test\n", { filePath: mdPath });
-    assert.equal(result.valid, false);
-    assert.ok(result.errors.some((e) => e.rule === "require-spec"));
+    assert.equal(result.valid, true);
+    assert.ok(result.warnings.some((e) => e.rule === "require-spec"));
+    assert.equal(result.errors.length, 0);
   });
 
-  it("should not fire for SKILL.md files", () => {
-    const mdPath = join(tmpDir, "SKILL.md");
+  it("should error when severity is 'error'", () => {
+    const subDir = join(tmpDir, "error-mode");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
     writeFileSync(mdPath, "# Test\n");
 
     const result = validate("# Test\n", {
       filePath: mdPath,
-      rules: { "require-spec": true },
+      rules: { "require-spec": "error" },
     });
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.rule === "require-spec"));
+  });
+
+  it("should warn for SKILL.md when require-skill-spec is warn", () => {
+    const subDir = join(tmpDir, "skill-warn");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "SKILL.md");
+    writeFileSync(mdPath, "# Test\n");
+
+    const result = validate("# Test\n", {
+      filePath: mdPath,
+      rules: { "require-skill-spec": "warn" },
+    });
+    assert.ok(result.warnings.some((e) => e.rule === "require-skill-spec"));
+    assert.equal(result.valid, true);
+  });
+
+  it("should not fire require-spec on SKILL.md", () => {
+    const subDir = join(tmpDir, "skill-no-spec");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "SKILL.md");
+    writeFileSync(mdPath, "# Test\n");
+
+    const result = validate("# Test\n", {
+      filePath: mdPath,
+      rules: { "require-spec": "error" },
+    });
+    // require-spec only applies to CLAUDE.md/AGENTS.md
     assert.ok(!result.errors.some((e) => e.rule === "require-spec"));
   });
 });
@@ -388,7 +422,8 @@ describe("loadConfig", () => {
     const config = loadConfig();
     assert.deepEqual(config.ruleMarkers, ["headings", "checkboxes"]);
     assert.deepEqual(config.rules, {
-      "require-spec": true,
+      "require-spec": "warn",
+      "require-skill-spec": "warn",
     });
   });
 
