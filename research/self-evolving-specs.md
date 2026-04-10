@@ -97,6 +97,7 @@ Where C() is the compressed size (using zlib/gzip). Range: [0, 1+ε] where 0 = i
 **Use case**: Detect semantically similar rules that should be merged. Two rules about "no console.log" and "use structured logger instead of console" have low NCD because they share information content — even though they use different words.
 
 **Why NCD over cosine similarity or embeddings?**
+
 - Deterministic — same input always produces same output
 - No model dependency — works offline, no API calls
 - Language-agnostic — works on any string content
@@ -121,6 +122,7 @@ A space-efficient probabilistic data structure for approximate set membership.
 **Use case**: Fast pre-filtering for rule similarity. Before computing expensive NCD comparisons (O(n²) for n rules), use a Bloom filter to quickly identify candidate pairs that share tokens.
 
 **Parameters**:
+
 - m = bit array size (calculated from desired false positive rate)
 - k = number of hash functions (optimal: k = (m/n) × ln2)
 - FPR ≈ (1 - e^(-kn/m))^k
@@ -135,16 +137,17 @@ Every spec version is a node in a content-addressed DAG:
 
 ```typescript
 interface HistoryNode {
-  hash: string;         // SHA-256 of this node's content
-  parentHash: string;   // hash of previous version (or "genesis")
-  specHash: string;     // hash of the compiled spec
-  mutation: Mutation;    // what changed
+  hash: string; // SHA-256 of this node's content
+  parentHash: string; // hash of previous version (or "genesis")
+  specHash: string; // hash of the compiled spec
+  mutation: Mutation; // what changed
   proofs: ProofResult[]; // which proofs were run and passed
   timestamp: number;
 }
 ```
 
 **Properties**:
+
 - **Tamper-evident**: Changing any node invalidates all descendant hashes
 - **Append-only**: New versions append to the DAG, never modify history
 - **Verifiable**: Anyone can recompute the hash chain and verify integrity
@@ -157,12 +160,14 @@ interface HistoryNode {
 Generate random valid mutations and verify that invariants hold across all of them.
 
 **Invariants**:
+
 - **Idempotency**: Compiling a spec twice produces identical output (hash equality)
 - **Monotonic coverage**: Adding a rule never decreases coverage percentage
 - **Hash stability**: The hash of unchanged content is stable across compilations
 - **Serialization roundtrip**: spec → JSON → spec produces equivalent result
 
 **Mutation generators**:
+
 - Add random guidance/check/enforce rule
 - Strengthen random guidance → check or check → enforce
 - Remove random rule
@@ -177,13 +182,13 @@ Generate random valid mutations and verify that invariants hold across all of th
 
 ### Mutation Operators
 
-| Operator | Input | Output | Proof Required |
-|----------|-------|--------|----------------|
-| `addRule` | rule definition | spec + new rule | NCD (no duplicates), Bloom filter |
-| `strengthen` | rule ID | guidance→check or check→enforce | Monotonicity (always passes by definition) |
-| `weaken` | rule ID + justification | enforce→check or check→guidance | Monotonicity (requires allowWeaken) |
-| `merge` | two rule IDs | single combined rule | NCD (verify similarity > threshold) |
-| `reword` | rule ID + new text | updated rule text | NCD (verify not too different from original) |
+| Operator     | Input                   | Output                          | Proof Required                               |
+| ------------ | ----------------------- | ------------------------------- | -------------------------------------------- |
+| `addRule`    | rule definition         | spec + new rule                 | NCD (no duplicates), Bloom filter            |
+| `strengthen` | rule ID                 | guidance→check or check→enforce | Monotonicity (always passes by definition)   |
+| `weaken`     | rule ID + justification | enforce→check or check→guidance | Monotonicity (requires allowWeaken)          |
+| `merge`      | two rule IDs            | single combined rule            | NCD (verify similarity > threshold)          |
+| `reword`     | rule ID + new text      | updated rule text               | NCD (verify not too different from original) |
 
 ### Fitness Function
 
@@ -192,6 +197,7 @@ fitness(spec) = coverage × (1 - redundancy) × (1 - budget_pressure)
 ```
 
 Where:
+
 - **coverage** = (enforced rules + checked rules) / total rules — fraction with teeth
 - **redundancy** = average NCD similarity of all rule pairs below threshold — penalizes duplication
 - **budget_pressure** = tokens_used / max_tokens — penalizes bloat
@@ -240,15 +246,16 @@ The agent can run this loop continuously. Each iteration is deterministically ve
 
 ### Core Modules
 
-| Module | Purpose | Key Exports |
-|--------|---------|-------------|
-| `src/proofs.ts` | Proof algorithms | `MonotonicityLattice`, `ncd`, `BloomFilter`, `fixedPoint`, `MerkleHistory`, `propertyTest` |
-| `src/evolve.ts` | Evolution engine | `EvolutionEngine`, mutations, fitness, selection |
-| `src/proofs.test.ts` | Proof tests | Comprehensive test suite for all algorithms |
+| Module               | Purpose          | Key Exports                                                                                |
+| -------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `src/proofs.ts`      | Proof algorithms | `MonotonicityLattice`, `ncd`, `BloomFilter`, `fixedPoint`, `MerkleHistory`, `propertyTest` |
+| `src/evolve.ts`      | Evolution engine | `EvolutionEngine`, mutations, fitness, selection                                           |
+| `src/proofs.test.ts` | Proof tests      | Comprehensive test suite for all algorithms                                                |
 
 ### Dependencies
 
 All algorithms use only Node.js built-ins:
+
 - `node:crypto` — SHA-256 for Merkle hashing
 - `node:zlib` — gzip for NCD compression
 - No external dependencies added
@@ -257,14 +264,14 @@ All algorithms use only Node.js built-ins:
 
 ## Theoretical Foundations
 
-| Algorithm | Theory | Complexity | Reference |
-|-----------|--------|------------|-----------|
-| Monotonicity lattice | Order theory, lattice algebra | O(n) per comparison | Davey & Priestley, "Introduction to Lattices and Order" |
-| NCD | Kolmogorov complexity, information theory | O(n log n) per pair (compression) | Li et al. 2004, "The Similarity Metric" |
-| Fixed-point convergence | Banach fixed-point theorem, discrete dynamical systems | O(k × compile_time) | Granas & Dugundji, "Fixed Point Theory" |
-| Bloom filter | Probabilistic data structures | O(k) per insert/query | Bloom 1970, "Space/Time Trade-offs in Hash Coding" |
-| Merkle DAG | Cryptographic hash chains, content addressing | O(n) verification | Merkle 1987 |
-| Property-based testing | QuickCheck, fuzzing theory | O(n × m) for n tests × m mutations | Claessen & Hughes 2000 |
+| Algorithm               | Theory                                                 | Complexity                         | Reference                                               |
+| ----------------------- | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------- |
+| Monotonicity lattice    | Order theory, lattice algebra                          | O(n) per comparison                | Davey & Priestley, "Introduction to Lattices and Order" |
+| NCD                     | Kolmogorov complexity, information theory              | O(n log n) per pair (compression)  | Li et al. 2004, "The Similarity Metric"                 |
+| Fixed-point convergence | Banach fixed-point theorem, discrete dynamical systems | O(k × compile_time)                | Granas & Dugundji, "Fixed Point Theory"                 |
+| Bloom filter            | Probabilistic data structures                          | O(k) per insert/query              | Bloom 1970, "Space/Time Trade-offs in Hash Coding"      |
+| Merkle DAG              | Cryptographic hash chains, content addressing          | O(n) verification                  | Merkle 1987                                             |
+| Property-based testing  | QuickCheck, fuzzing theory                             | O(n × m) for n tests × m mutations | Claessen & Hughes 2000                                  |
 
 ---
 

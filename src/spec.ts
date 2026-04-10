@@ -4,9 +4,8 @@
  * Specs are TypeScript files that compile to instruction files (CLAUDE.md, SKILL.md).
  * The spec is the source of truth. The markdown is a build artifact.
  *
- * Three rule types:
+ * Two rule types:
  *   enforce() — delegated to an external linter (ESLint, Ruff, Clippy, etc.)
- *   check()   — checked by vigiles itself (filesystem, AST patterns)
  *   guidance() — prose only, no mechanical enforcement
  */
 
@@ -122,17 +121,6 @@ export type HookEvent =
   | "Notification";
 
 // ---------------------------------------------------------------------------
-// Filesystem assertions (the ONE thing vigiles owns)
-// ---------------------------------------------------------------------------
-
-/** A file-pairing assertion: for every file matching `glob`, expect a sibling. */
-export interface FilePairingAssertion {
-  readonly _type: "file-pairing";
-  readonly glob: string;
-  readonly pattern: string;
-}
-
-// ---------------------------------------------------------------------------
 // Rule types
 // ---------------------------------------------------------------------------
 
@@ -145,20 +133,13 @@ export interface EnforceRule {
   readonly verify: boolean;
 }
 
-/** A filesystem check owned by vigiles (e.g., test file pairing). */
-export interface CheckRule {
-  readonly _kind: "check";
-  readonly assertion: FilePairingAssertion;
-  readonly why: string;
-}
-
 /** A guidance-only rule (prose, no enforcement). */
 export interface GuidanceRule {
   readonly _kind: "guidance";
   readonly text: string;
 }
 
-export type Rule = EnforceRule | CheckRule | GuidanceRule;
+export type Rule = EnforceRule | GuidanceRule;
 
 // ---------------------------------------------------------------------------
 // Builder functions
@@ -195,30 +176,6 @@ export function enforce(
  */
 export function guidance(text: string): GuidanceRule {
   return { _kind: "guidance", text };
-}
-
-/**
- * Declare a filesystem check owned by vigiles.
- *
- *   check(every("src/*.controller.ts").has("{name}.test.ts"), "Controllers need tests.")
- */
-export function check(assertion: FilePairingAssertion, why: string): CheckRule {
-  return { _kind: "check", assertion, why };
-}
-
-// ---------------------------------------------------------------------------
-// Filesystem assertion builder
-// ---------------------------------------------------------------------------
-
-/** Start a file-pairing assertion: every(glob).has(pattern). */
-export function every(glob: string): {
-  has(pattern: string): FilePairingAssertion;
-} {
-  return {
-    has(pattern: string): FilePairingAssertion {
-      return { _type: "file-pairing", glob, pattern };
-    },
-  };
 }
 
 // ---------------------------------------------------------------------------

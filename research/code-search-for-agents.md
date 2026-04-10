@@ -6,7 +6,7 @@ Research on how AI coding agents find and read code. Agents spend ~99% of their 
 
 ## The Problem
 
-AI coding agents (Claude Code, Codex, Cursor, Aider) spend most of their time *finding* code, not *writing* it. The search strategy determines both cost (tokens burned) and quality (did the agent find the right context?).
+AI coding agents (Claude Code, Codex, Cursor, Aider) spend most of their time _finding_ code, not _writing_ it. The search strategy determines both cost (tokens burned) and quality (did the agent find the right context?).
 
 The fundamental tension: **exact matching** (fast, deterministic, requires knowing what to search for) vs. **semantic matching** (slower, approximate, works when you don't know the symbol name).
 
@@ -25,11 +25,11 @@ Ripgrep (`rg`) is a Rust text search tool. Performance comes from:
 
 ### Performance
 
-| Benchmark | Ripgrep | GNU grep | Speedup |
-|-----------|---------|----------|---------|
-| Linux kernel full search | ~0.06s | ~0.67s | 10x |
-| Node.js project (with .gitignore) | — | — | 302x (skips node_modules) |
-| Common identifier search | — | — | 9.2x |
+| Benchmark                         | Ripgrep | GNU grep | Speedup                   |
+| --------------------------------- | ------- | -------- | ------------------------- |
+| Linux kernel full search          | ~0.06s  | ~0.67s   | 10x                       |
+| Node.js project (with .gitignore) | —       | —        | 302x (skips node_modules) |
+| Common identifier search          | —       | —        | 9.2x                      |
 
 Typical AI agent usage: 10-30 searches per task, each completing in 20-50ms.
 
@@ -90,12 +90,13 @@ Queries impossible with text grep become natural: "find all async functions with
 
 ### Performance
 
-| Benchmark | ast-grep | Ripgrep |
-|-----------|----------|---------|
-| Single pattern on TypeScript | ~0.5s | ~0.02s |
-| Six rules on same codebase | 0.975s (after optimization) | — |
+| Benchmark                    | ast-grep                    | Ripgrep |
+| ---------------------------- | --------------------------- | ------- |
+| Single pattern on TypeScript | ~0.5s                       | ~0.02s  |
+| Six rules on same codebase   | 0.975s (after optimization) | —       |
 
 Optimization history on six-rule benchmark:
+
 - Original: 10.8s
 - Avoid expensive regex cloning: 5.3s
 - BitSet-based `potential_kinds` (skip non-matching AST node types): 3.6s
@@ -134,6 +135,7 @@ ast-grep provides an MCP server (`ast-grep-mcp`) and a Claude Code skill. As of 
 5. **Privacy**: File paths obfuscated with client-side encryption. Only embeddings stored remotely.
 
 **Cursor's own benchmark results**:
+
 - 12.5% higher accuracy vs. grep alone
 - 2.6% code retention improvement on large codebases (1,000+ files)
 - 2.2% fewer dissatisfied follow-up requests
@@ -156,12 +158,14 @@ No GPU, no embedding model, no vector database, works offline. Achieves **4.3-6.
 ### Augment Code's Context Engine
 
 The most ambitious approach:
+
 - Hybrid analysis: AST + dataflow + control flow + semantic embeddings + graph neural networks
 - Processes 400,000+ files, indexes commit history, PR history, external docs
 - Custom embedding and retrieval models trained in pairs
 - Millisecond sync with code changes
 
 **Claimed results** (blind study, 500 PRs on Elasticsearch's 3.6M-line Java codebase):
+
 - +12.8 overall quality vs. competitors at -13.9/-11.8
 - Claude Code + Opus 4.5 saw 80% quality improvement with Context Engine MCP vs. without
 
@@ -194,15 +198,15 @@ Incremental parsing library (C) that generates concrete syntax trees:
 
 ### What builds on tree-sitter
 
-| Tool | Use |
-|------|-----|
-| **Aider repo-map** | Definition/reference extraction (40+ langs) |
-| **ast-grep** | Full AST pattern matching + rewriting |
-| **Cursor** | AST-based code chunking for embeddings |
-| **Kiro** | Built-in code intelligence (18 languages) |
-| **Probe** | AST-aware search returning complete functions |
-| **Codebase-Memory** | Knowledge graph construction (66 languages) |
-| **GitHub** | Code navigation, semantic search |
+| Tool                | Use                                           |
+| ------------------- | --------------------------------------------- |
+| **Aider repo-map**  | Definition/reference extraction (40+ langs)   |
+| **ast-grep**        | Full AST pattern matching + rewriting         |
+| **Cursor**          | AST-based code chunking for embeddings        |
+| **Kiro**            | Built-in code intelligence (18 languages)     |
+| **Probe**           | AST-aware search returning complete functions |
+| **Codebase-Memory** | Knowledge graph construction (66 languages)   |
+| **GitHub**          | Code navigation, semantic search              |
 
 ### Performance (Codebase-Memory benchmarks)
 
@@ -213,6 +217,7 @@ Incremental parsing library (C) that generates concrete syntax trees:
 ### The cAST paper (EMNLP 2025)
 
 AST-based chunking improves retrieval significantly:
+
 - Recall@5 up 4.3 points on RepoEval
 - Pass@1 up 2.67 points on SWE-bench generation
 - StarCoder2-7B: average 5.5 point gain on RepoEval
@@ -245,11 +250,11 @@ SCIP indexes are 4x smaller than equivalent LSIF payloads. Sourcegraph's philoso
 
 ## 6. SWE-bench Evidence
 
-| Agent | Search Strategy | SWE-bench Lite | Cost/Issue |
-|-------|----------------|----------------|------------|
-| **Agentless** | LLM + embeddings (hierarchical localization) | 32% | $0.70 |
-| **Moatless Tools** | FAISS + Voyage AI embeddings + MCTS | 39% | $0.14 |
-| **SweRank** | Custom embedding model (retrieve-and-rerank) | Beats Claude-3.5 agent | — |
+| Agent              | Search Strategy                              | SWE-bench Lite         | Cost/Issue |
+| ------------------ | -------------------------------------------- | ---------------------- | ---------- |
+| **Agentless**      | LLM + embeddings (hierarchical localization) | 32%                    | $0.70      |
+| **Moatless Tools** | FAISS + Voyage AI embeddings + MCTS          | 39%                    | $0.14      |
+| **SweRank**        | Custom embedding model (retrieve-and-rerank) | Beats Claude-3.5 agent | —          |
 
 **Key insight**: The relationship between search sophistication and end-to-end performance is weak on current benchmarks. For SWE-bench-scale repositories, grep is sufficient because repos are small and code is structured. Agent persistence compensates for unsophisticated search.
 
@@ -279,14 +284,14 @@ Each layer adds capability at the cost of complexity. Hybrid retrieval combining
 
 ## Summary
 
-| Approach | Latency | Indexing | Deterministic | Best For | Worst For |
-|----------|---------|---------|---------------|----------|-----------|
-| **Ripgrep** | 20-50ms | None | Yes | Known symbols, exact match | Concept search |
-| **ast-grep** | 0.5-1s | None | Yes | Structural patterns | Simple text search |
-| **Embeddings** | 50-200ms query | Hours | No | Concept search, huge codebases | Exact symbols |
-| **Tree-sitter graph** | <<1ms query | Seconds | Yes | Dependencies, call chains | Full text search |
-| **LSP** | ~50ms | Background | Yes | Go-to-def, find-refs | Setup overhead |
-| **Code graph DB** | ms query | Minutes | Yes | Enterprise navigation | Small repos |
+| Approach              | Latency        | Indexing   | Deterministic | Best For                       | Worst For          |
+| --------------------- | -------------- | ---------- | ------------- | ------------------------------ | ------------------ |
+| **Ripgrep**           | 20-50ms        | None       | Yes           | Known symbols, exact match     | Concept search     |
+| **ast-grep**          | 0.5-1s         | None       | Yes           | Structural patterns            | Simple text search |
+| **Embeddings**        | 50-200ms query | Hours      | No            | Concept search, huge codebases | Exact symbols      |
+| **Tree-sitter graph** | <<1ms query    | Seconds    | Yes           | Dependencies, call chains      | Full text search   |
+| **LSP**               | ~50ms          | Background | Yes           | Go-to-def, find-refs           | Setup overhead     |
+| **Code graph DB**     | ms query       | Minutes    | Yes           | Enterprise navigation          | Small repos        |
 
 The biggest opportunity for vigiles: tree-sitter-based structural understanding powers both `check()` assertions (ast-grep) and smarter type generation (dependency-aware). It's deterministic, fast, and requires no external services.
 

@@ -23,14 +23,13 @@ import type { Rule, ClaudeSpec } from "./spec.js";
 /**
  * Ordinal strength of each rule kind.
  *
- *   guidance (0) < check (1) < enforce (2)
+ *   guidance (0) < enforce (1)
  *
  * The lattice ensures specs only get stricter over time.
  */
 const STRENGTH: Record<Rule["_kind"], number> = {
   guidance: 0,
-  check: 1,
-  enforce: 2,
+  enforce: 1,
 };
 
 export interface MonotonicityViolation {
@@ -213,8 +212,6 @@ function ruleToText(rule: Rule): string {
   switch (rule._kind) {
     case "enforce":
       return `${rule.linterRule} ${rule.why}`;
-    case "check":
-      return `${rule.assertion.glob} ${rule.assertion.pattern} ${rule.why}`;
     case "guidance":
       return rule.text;
   }
@@ -511,11 +508,7 @@ export class MerkleHistory {
    * Append a new version to the history.
    * Returns the hash of the new node.
    */
-  append(
-    specHash: string,
-    mutation: Mutation,
-    proofs: ProofReceipt[],
-  ): string {
+  append(specHash: string, mutation: Mutation, proofs: ProofReceipt[]): string {
     const parentHash =
       this.nodes.length > 0
         ? this.nodes[this.nodes.length - 1].hash
@@ -724,10 +717,8 @@ export function fitness(
     return { score: 0, coverage: 0, redundancy: 0, budgetPressure: 0 };
   }
 
-  // Coverage: fraction with teeth
-  const enforced = rules.filter(
-    (r) => r._kind === "enforce" || r._kind === "check",
-  ).length;
+  // Coverage: fraction with teeth (enforce vs guidance)
+  const enforced = rules.filter((r) => r._kind === "enforce").length;
   const coverage = enforced / total;
 
   // Redundancy: fraction of pairs that are near-duplicates
