@@ -2,6 +2,23 @@
 
 vigiles compiles typed specs to markdown instruction files. Different AI agents read different files, but the compilation and validation pipeline is the same.
 
+## Auto-Detection
+
+`npx vigiles setup` scans your project and auto-detects:
+
+| Signal                                     | What it means                                     |
+| ------------------------------------------ | ------------------------------------------------- |
+| `CLAUDE.md` exists                         | Claude Code in use — suggest migration if no spec |
+| `AGENTS.md` exists                         | Codex / GitHub Copilot in use                     |
+| `.claude/` directory                       | Claude Code project config                        |
+| `.cursorrules`                             | Cursor in use — suggest rule-porter               |
+| `.github/copilot-instructions.md`          | GitHub Copilot custom instructions                |
+| `.windsurfrules`                           | Windsurf in use                                   |
+| `rule-porter` / `rulesync` in package.json | Sync tool already installed                       |
+| Symlinked instruction files                | Notes them in output                              |
+
+The wizard creates specs for detected targets, generates types, compiles, and adds a CI step. No `--target` flag needed unless you want to override the auto-detection.
+
 ## Claude Code
 
 **Instruction file:** `CLAUDE.md`

@@ -11,6 +11,7 @@ import {
   readFileSync,
   rmSync,
   existsSync,
+  mkdirSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -273,6 +274,52 @@ describe("CLI: vigiles setup", () => {
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("AGENTS.md.spec.ts"));
     assert.ok(existsSync(join(tmpDir, "AGENTS.md.spec.ts")));
+  });
+});
+
+describe("CLI: vigiles setup auto-detection", () => {
+  let tmpDir: string;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-detect-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should detect existing CLAUDE.md and suggest migration", () => {
+    writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
+    const { stdout } = run("setup", tmpDir);
+    assert.ok(stdout.includes("without a spec") || stdout.includes("migrate"));
+  });
+
+  it("should detect .cursorrules and suggest sync tool", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-detect-cursor-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "test", scripts: {} }),
+    );
+    writeFileSync(join(dir, ".cursorrules"), "Use TypeScript.\n");
+    const { stdout } = run("setup", dir);
+    assert.ok(stdout.includes("Cursor") || stdout.includes("Non-markdown"));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("should detect .claude directory as Claude Code project", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-detect-claude-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "test", scripts: {} }),
+    );
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    const { stdout } = run("setup", dir);
+    assert.ok(stdout.includes("Claude Code"));
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 
