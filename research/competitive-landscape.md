@@ -41,12 +41,22 @@ Collected April 2026. 15+ tools exist in this space across four categories.
 
 ---
 
-## vigiles Moat Analysis
+## vigiles Moat Analysis (Updated April 2026 — v2)
 
 **What we have that nobody else does:**
 
-- `require-rule-file` — cross-references `**Enforced by:**` annotations against actual linter APIs (ESLint builtinRules, Stylelint rules, Ruff CLI, Clippy, Pylint, RuboCop). Checks both rule existence AND config-enabled status
-- The annotation model itself — forcing every rule to declare enforcement mechanism or explicitly mark as guidance-only
+1. **Spec compilation** — `.spec.ts` files compile to CLAUDE.md/SKILL.md. The spec is TypeScript (type-checked at authoring time). The markdown is a build artifact. Nobody else does this — other tools lint markdown after the fact.
+2. **Linter cross-referencing** — `enforce("eslint/no-console")` verifies the rule exists AND is enabled in your ESLint config. Same for Ruff, Clippy, Pylint, RuboCop, Stylelint. 6 linter APIs. No other tool does this.
+3. **Type generation** — `vigiles generate-types` scans all 6 linter APIs + package.json + filesystem → emits `.d.ts` with type unions. The TS compiler PROVES references are valid at authoring time. Like Prisma for databases, but for linter rules.
+4. **Branded reference types** — `file()` returns `VerifiedPath`, `cmd()` returns `VerifiedCmd`. Distinguishes verified from unverified at the type level.
+5. **SHA-256 integrity hash** on compiled output — detects manual edits to generated files.
+
+**What we explicitly DON'T do (and why):**
+
+- **Architectural linting** — use ast-grep, Dependency Cruiser, Steiger, eslint-plugin-boundaries. vigiles references their rules via `enforce()`.
+- **Per-file code linting** — use ESLint, Ruff, Clippy. vigiles verifies they're configured, doesn't reimplement them.
+- **Markdown formatting** — use markdownlint. vigiles generates the markdown, structure is correct by construction.
+- **File sync** — use Ruler, rulesync, block/ai-rules. vigiles compiles the source, sync tools handle distribution.
 
 **Gaps relative to competitors:**
 

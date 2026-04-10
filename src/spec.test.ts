@@ -4,10 +4,8 @@ import assert from "node:assert/strict";
 import {
   enforce,
   guidance,
-  prove,
+  check,
   every,
-  no,
-  layers,
   file,
   cmd,
   ref,
@@ -75,42 +73,16 @@ describe("guidance()", () => {
   });
 });
 
-describe("prove()", () => {
-  it("creates a file-pairing proof", () => {
-    const rule = prove(
+describe("check()", () => {
+  it("creates a file-pairing check", () => {
+    const rule = check(
       every("src/**/*.controller.ts").has("{name}.test.ts"),
       "Every controller needs tests.",
     );
-    assert.equal(rule._kind, "prove");
+    assert.equal(rule._kind, "check");
     assert.equal(rule.assertion._type, "file-pairing");
     assert.equal(rule.assertion.glob, "src/**/*.controller.ts");
-    if (rule.assertion._type === "file-pairing") {
-      assert.equal(rule.assertion.pattern, "{name}.test.ts");
-    }
-  });
-
-  it("creates a pattern-absence proof", () => {
-    const rule = prove(
-      no("src/**/*.ts").matches('import $_ from "moment"'),
-      "Migrating to dayjs.",
-    );
-    assert.equal(rule.assertion._type, "pattern-absence");
-    if (rule.assertion._type === "pattern-absence") {
-      assert.equal(rule.assertion.glob, "src/**/*.ts");
-      assert.equal(rule.assertion.astPattern, 'import $_ from "moment"');
-    }
-  });
-
-  it("creates a layer-boundary proof", () => {
-    const rule = prove(
-      layers({
-        "src/ui/**": { canImport: ["src/api/**"] },
-        "src/api/**": { canImport: ["src/db/**"] },
-        "src/db/**": { canImport: [] },
-      }),
-      "UI → API → DB, never reverse.",
-    );
-    assert.equal(rule.assertion._type, "layer-boundary");
+    assert.equal(rule.assertion.pattern, "{name}.test.ts");
   });
 });
 
@@ -247,10 +219,10 @@ describe("compileClaude()", () => {
     assert.ok(markdown.includes("TypeScript strict-mode codebase."));
   });
 
-  it("compiles prove rules with assertion description", () => {
+  it("compiles check rules with assertion description", () => {
     const spec = claude({
       rules: {
-        "test-pairing": prove(
+        "test-pairing": check(
           every("src/**/*.ts").has("{name}.test.ts"),
           "Every source needs tests.",
         ),
@@ -258,7 +230,7 @@ describe("compileClaude()", () => {
     });
     const { markdown } = compileClaude(spec);
     assert.ok(markdown.includes("**Enforced by:** `vigiles/test-pairing`"));
-    assert.ok(markdown.includes("**Proof:**"));
+    assert.ok(markdown.includes("**Check:**"));
   });
 
   it("enforces maxRules limit", () => {

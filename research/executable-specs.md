@@ -6,7 +6,7 @@ Design document for vigiles v2's spec-driven compilation model. The spec is the 
 
 ## Summary
 
-vigiles v2 introduces `.spec.ts` files — TypeScript source files that compile to instruction files (CLAUDE.md, SKILL.md). TypeScript's type system catches errors at authoring time. vigiles validates everything else at build time. The annotation model from v1 becomes a compile-time guarantee: you can't create a rule without calling `enforce()`, `prove()`, or `guidance()`.
+vigiles v2 introduces `.spec.ts` files — TypeScript source files that compile to instruction files (CLAUDE.md, SKILL.md). TypeScript's type system catches errors at authoring time. vigiles validates everything else at build time. The annotation model from v1 becomes a compile-time guarantee: you can't create a rule without calling `enforce()`, `check()`, or `guidance()`.
 
 ---
 
@@ -28,10 +28,10 @@ SKILL.md.spec.ts   → compiles to →  SKILL.md
 | Type          | Builder      | What it means                                                     | vigiles responsibility                              |
 | ------------- | ------------ | ----------------------------------------------------------------- | --------------------------------------------------- |
 | **Delegated** | `enforce()`  | Backed by external linter (ESLint, Ruff, Clippy, Pylint, RuboCop) | Verify rule exists and is enabled in project config |
-| **Proven**    | `prove()`    | vigiles runs the check itself via ast-grep / filesystem analysis  | Execute the assertion, fail build on violation      |
+| **Checked**   | `check()`    | vigiles-owned filesystem assertion (e.g., test file pairing)      | Execute the assertion, fail build on violation      |
 | **Guidance**  | `guidance()` | Prose-only, not mechanically enforced                             | Compile to `**Guidance only**` annotation           |
 
-Delegated rules reuse the existing `require-rule-file` infrastructure. Proven rules are the new capability — cross-file structural properties that no single linter can express. Guidance rules are pass-through.
+Delegated rules reuse the existing linter cross-referencing engine and extend to additional tools (ast-grep, Dependency Cruiser, Steiger). Checked rules are scoped to filesystem assertions only — vigiles does NOT reimplement architectural linting. Guidance rules are pass-through.
 
 ---
 
@@ -40,7 +40,7 @@ Delegated rules reuse the existing `require-rule-file` infrastructure. Proven ru
 ### `claude()` — CLAUDE.md spec
 
 ```ts
-import { claude, enforce, prove, guidance, every } from "vigiles/spec";
+import { claude, enforce, check, guidance, every } from "vigiles/spec";
 
 export default claude({
   commands: {
@@ -76,7 +76,7 @@ export default claude({
       "Use spacing scale values (p-4, m-8) instead of arbitrary values.",
     ),
 
-    "controllers-have-tests": prove(
+    "controllers-have-tests": check(
       every("src/**/*.controller.ts").has("{name}.test.ts"),
       "Every controller must have a co-located test file.",
     ),
@@ -89,7 +89,7 @@ Fields:
 - `commands` — map of npm scripts/commands to descriptions. Verified against `package.json` at compile time.
 - `keyFiles` — map of file paths to descriptions. Verified via `existsSync` at compile time.
 - `sections` — map of section names to markdown prose. Pass-through.
-- `rules` — map of rule IDs to `enforce()`, `prove()`, or `guidance()` calls.
+- `rules` — map of rule IDs to `enforce()`, `check()`, or `guidance()` calls.
 
 ### `skill()` — SKILL.md spec
 
@@ -124,7 +124,7 @@ enforce(linterRule: `${LinterName}/${string}`, why: string)
 guidance(text: string)
 
 // Proven — vigiles executes the check
-prove(assertion: Assertion, why: string)
+check(assertion: Assertion, why: string)
 ```
 
 ### Proof assertions (future — ast-grep powered)
@@ -228,7 +228,7 @@ Generated SKILL.md includes:
 | `ref()` target doesn't exist                 | Broken cross-reference |
 | `enforce()` rule not found in linter catalog | Unknown linter rule    |
 | `enforce()` rule disabled in project config  | Dead enforcement       |
-| `prove()` assertion fails                    | Proof violation        |
+| `check()` assertion fails                    | Proof violation        |
 | Compiled output exceeds `max-lines`          | File too long          |
 
 ---
@@ -266,8 +266,8 @@ Existing v1 commands (`vigiles validate`, `vigiles` with file args) continue to 
 vigiles does NOT replace linters. Three relationships:
 
 1. **Verify** — `enforce("eslint/no-console")` checks that the rule exists and is enabled. This is the existing `require-rule-file` behavior, moved to compile time.
-2. **Fill gaps** — `prove()` handles properties no single linter can express: cross-file pairing, import boundaries, AST absence across a codebase. Powered by ast-grep.
-3. **Recommend** — if a `prove()` assertion could be expressed as an existing linter rule, suggest delegating. Example: `no("src/**/*.ts").matches("console.log($$$)")` could be `enforce("eslint/no-console")`.
+2. **Fill gaps** — `check()` handles properties no single linter can express: cross-file pairing, import boundaries, AST absence across a codebase. Powered by ast-grep.
+3. **Recommend** — if a `check()` assertion could be expressed as an existing linter rule, suggest delegating. Example: `no("src/**/*.ts").matches("console.log($$$)")` could be `enforce("eslint/no-console")`.
 
 ---
 
@@ -300,7 +300,7 @@ v1 validation remains available for projects that don't adopt specs. No breaking
 
 ### Phase 1: Foundation
 
-- Type definitions for spec system (`claude()`, `skill()`, `enforce()`, `guidance()`, `prove()`)
+- Type definitions for spec system (`claude()`, `skill()`, `enforce()`, `guidance()`, `check()`)
 - Builder functions with TypeScript template literal types
 - Compiler: spec to markdown with hash
 - `vigiles compile` and `vigiles check` commands
@@ -338,7 +338,7 @@ v1 validation remains available for projects that don't adopt specs. No breaking
 
 ### Future considerations
 
-- **ESLint v10 inline plugins** — potential target for generating ESLint rules from `prove()` assertions
+- **ESLint v10 inline plugins** — potential target for generating ESLint rules from `check()` assertions
 - **TypeSpec emitter pattern** — one source, multiple outputs (CLAUDE.md + .cursorrules + AGENTS.md from single spec)
 - **Pulumi model** — TypeScript as the authoring language for declarative output is a proven pattern
 
