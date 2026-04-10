@@ -629,6 +629,10 @@ async function setup(args: string[]): Promise<void> {
   }
 
   // Step 5: Summary
+  const isClaude = target === "CLAUDE.md";
+  const isAgents =
+    target === "AGENTS.md" || target.toLowerCase().includes("agent");
+
   console.log("\n---");
   console.log("Setup complete. Next steps:\n");
   console.log(`  1. Edit ${specPath} — add your project's conventions`);
@@ -636,10 +640,27 @@ async function setup(args: string[]): Promise<void> {
   console.log(
     "  3. Commit the .spec.ts, compiled .md, and .vigiles/generated.d.ts",
   );
-  console.log(
-    "\n  Install the Claude Code plugin (blocks direct .md edits, auto-recompiles):",
-  );
-  console.log("    npx skills add zernie/vigiles");
+
+  if (isClaude) {
+    console.log(
+      "\n  Install the Claude Code plugin (blocks direct .md edits, auto-recompiles):",
+    );
+    console.log("    npx skills add zernie/vigiles");
+  } else if (isAgents) {
+    console.log(
+      "\n  Codex and GitHub Copilot read AGENTS.md directly — no plugin needed.",
+    );
+    console.log(
+      "  CI enforces freshness: `npx vigiles check && npx vigiles generate-types --check`",
+    );
+    console.log("  Run `npx vigiles compile` manually after editing the spec.");
+    console.log(
+      "\n  Also using Claude Code? Install the plugin for auto-recompilation:",
+    );
+    console.log("    npx skills add zernie/vigiles");
+  } else {
+    console.log("\n  Run `npx vigiles compile` after editing the spec.");
+  }
 }
 
 // ---------------------------------------------------------------------------
