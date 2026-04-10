@@ -10,7 +10,6 @@
 import type { Rule, ClaudeSpec, EnforceRule, GuidanceRule } from "./spec.js";
 import {
   checkMonotonicity,
-  ncd,
   findSimilarRules,
   BloomFilter,
   ruleToBloomFilter,
@@ -141,28 +140,13 @@ export function applyMutation(
             verify: true,
           } as EnforceRule;
         } else {
-          // guidance → check (would need an assertion — placeholder)
           return {
             rules,
             error: {
               mutation,
               reason:
-                "Strengthening guidance to check requires an assertion. Use linterRule to strengthen to enforce.",
+                "Strengthening guidance requires a linterRule to enforce against.",
             },
-          };
-        }
-      } else if (rule._kind === "check") {
-        if (mutation.linterRule) {
-          next[mutation.ruleId] = {
-            _kind: "enforce",
-            linterRule: mutation.linterRule,
-            why: rule.why,
-            verify: true,
-          } as EnforceRule;
-        } else {
-          return {
-            rules,
-            error: { mutation, reason: "Already a check rule. Provide linterRule to strengthen to enforce." },
           };
         }
       } else {
@@ -190,11 +174,6 @@ export function applyMutation(
       }
 
       if (rule._kind === "enforce") {
-        next[mutation.ruleId] = {
-          _kind: "guidance",
-          text: rule.why,
-        } as GuidanceRule;
-      } else if (rule._kind === "check") {
         next[mutation.ruleId] = {
           _kind: "guidance",
           text: rule.why,
@@ -243,8 +222,6 @@ export function applyMutation(
       if (rule._kind === "guidance") {
         next[mutation.ruleId] = { ...rule, text: mutation.newText };
       } else if (rule._kind === "enforce") {
-        next[mutation.ruleId] = { ...rule, why: mutation.newText };
-      } else if (rule._kind === "check") {
         next[mutation.ruleId] = { ...rule, why: mutation.newText };
       }
       return { rules: next };
@@ -410,7 +387,11 @@ export class EvolutionEngine {
       const specHash = computeHash(JSON.stringify(this.rules));
       this.history.append(
         specHash,
-        { type: "add", ruleIds: Object.keys(this.rules), description: "Genesis" },
+        {
+          type: "add",
+          ruleIds: Object.keys(this.rules),
+          description: "Genesis",
+        },
         [{ name: "genesis", passed: true }],
       );
     }
@@ -485,13 +466,7 @@ export class EvolutionEngine {
         ruleIds:
           mutation.type === "merge"
             ? [...mutation.sourceIds, mutation.mergedId]
-            : [
-                "ruleId" in mutation
-                  ? mutation.ruleId
-                  : mutation.type === "add"
-                    ? mutation.ruleId
-                    : "unknown",
-              ],
+            : ["ruleId" in mutation ? mutation.ruleId : "unknown"],
         description: describeMutation(mutation),
       };
       historyHash = this.history.append(

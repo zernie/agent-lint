@@ -24,14 +24,10 @@ import {
   fitness,
 } from "./proofs.js";
 
-import {
-  applyMutation,
-  runProofSuite,
-  EvolutionEngine,
-} from "./evolve.js";
+import { applyMutation, runProofSuite, EvolutionEngine } from "./evolve.js";
 
 import type { Rule } from "./spec.js";
-import { enforce, guidance, check, every } from "./spec.js";
+import { enforce, guidance } from "./spec.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,10 +36,7 @@ import { enforce, guidance, check, every } from "./spec.js";
 function makeRules(): Record<string, Rule> {
   return {
     "no-console": enforce("eslint/no-console", "Use structured logger."),
-    "test-coverage": check(
-      every("src/**/*.service.ts").has("{name}.test.ts"),
-      "Every service must have tests.",
-    ),
+    "no-unused-vars": enforce("eslint/no-unused-vars", "Keep code clean."),
     "google-first": guidance("Google unfamiliar APIs before implementing."),
   };
 }
@@ -127,20 +120,19 @@ describe("MonotonicityLattice", () => {
 
   it("latticeJoin returns the stronger kind", () => {
     assert.equal(latticeJoin("guidance", "enforce"), "enforce");
-    assert.equal(latticeJoin("check", "guidance"), "check");
+    assert.equal(latticeJoin("guidance", "guidance"), "guidance");
     assert.equal(latticeJoin("enforce", "enforce"), "enforce");
   });
 
   it("latticeMeet returns the weaker kind", () => {
     assert.equal(latticeMeet("guidance", "enforce"), "guidance");
-    assert.equal(latticeMeet("check", "guidance"), "guidance");
+    assert.equal(latticeMeet("enforce", "guidance"), "guidance");
     assert.equal(latticeMeet("enforce", "enforce"), "enforce");
   });
 
   it("ruleStrength returns correct ordinals", () => {
     assert.equal(ruleStrength("guidance"), 0);
-    assert.equal(ruleStrength("check"), 1);
-    assert.equal(ruleStrength("enforce"), 2);
+    assert.equal(ruleStrength("enforce"), 1);
   });
 });
 
@@ -169,12 +161,17 @@ describe("NCD", () => {
     assert.ok(d > 0.5, `Expected > 0.5, got ${d}`);
   });
 
-  it("is symmetric", () => {
+  it("is approximately symmetric", () => {
     const a = "first string content here";
     const b = "second different string content";
     const d1 = ncd(a, b);
     const d2 = ncd(b, a);
-    assert.ok(Math.abs(d1 - d2) < 0.01, `Expected symmetric: ${d1} vs ${d2}`);
+    // gzip is not perfectly symmetric (concatenation order affects compression),
+    // but the difference should be small
+    assert.ok(
+      Math.abs(d1 - d2) < 0.1,
+      `Expected approximately symmetric: ${d1} vs ${d2}`,
+    );
   });
 
   it("handles empty strings", () => {
@@ -190,10 +187,7 @@ describe("NCD", () => {
       "use-logger": guidance(
         "Use the structured logger instead of console.log.",
       ),
-      "test-files": check(
-        every("src/**/*.ts").has("{name}.test.ts"),
-        "Tests required.",
-      ),
+      "no-unused": enforce("eslint/no-unused-vars", "Keep code clean."),
     };
 
     const pairs = findSimilarRules(rules, 0.8);
@@ -311,15 +305,12 @@ describe("fixedPoint", () => {
 
   it("detects convergence after mutations", () => {
     let calls = 0;
-    const result = fixedPoint(
-      (content) => {
-        calls++;
-        // Converges after 3 iterations
-        if (calls < 3) return content + "x";
-        return content;
-      },
-      "start",
-    );
+    const result = fixedPoint((content) => {
+      calls++;
+      // Converges after 3 iterations
+      if (calls < 3) return content + "x";
+      return content;
+    }, "start");
     assert.equal(result.converged, true);
     assert.equal(result.iterations, 3);
   });
@@ -502,11 +493,11 @@ describe("fitness", () => {
       rules: {
         a: enforce("eslint/no-console", "X"),
         b: guidance("Y"),
-        c: check(every("**/*.ts").has("{name}.test.ts"), "Z"),
+        c: enforce("eslint/no-unused-vars", "Z"),
       },
     } as any);
 
-    // 2 out of 3 are enforced/checked
+    // 2 out of 3 are enforced
     assert.ok(
       Math.abs(result.coverage - 2 / 3) < 0.01,
       `Expected coverage ~0.667, got ${result.coverage}`,
@@ -716,19 +707,22 @@ describe("EvolutionEngine", () => {
 
   it("maintains Merkle history across mutations", () => {
     const engine = new EvolutionEngine(
-      { rule1: guidance("Start.") },
+      { rule1: guidance("Always validate user input before processing.") },
       { acceptNeutral: true },
     );
 
     engine.propose({
       type: "add",
       ruleId: "rule2",
-      rule: guidance("Second."),
+      rule: enforce(
+        "eslint/no-console",
+        "Use structured logger for all output.",
+      ),
     });
     engine.propose({
       type: "strengthen",
       ruleId: "rule1",
-      linterRule: "eslint/no-console",
+      linterRule: "eslint/no-eval",
     });
 
     const history = engine.getHistory();

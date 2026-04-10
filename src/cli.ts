@@ -28,11 +28,10 @@ import {
   compileClaude,
   compileSkill,
   checkFileHash,
-  executeChecks,
   adoptDiff,
   addHash,
 } from "./compile.js";
-import type { CompileError, AssertionResult } from "./compile.js";
+import type { CompileError } from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -267,42 +266,6 @@ function verifyHashes(filePaths: string[]): boolean {
   return allValid;
 }
 
-function printAssertionResult(r: AssertionResult): boolean {
-  if (r.passed) {
-    console.log(
-      `\n✓ ${r.id} — ${String(r.matched)}/${String(r.total)} files pass`,
-    );
-    return true;
-  }
-  console.log(
-    `\n✗ ${r.id} — ${String(r.matched)}/${String(r.total)} files pass (${String(r.missing.length)} missing)`,
-  );
-  for (const m of r.missing) {
-    console.log(`  ${m}`);
-  }
-  return false;
-}
-
-async function runAssertions(): Promise<boolean> {
-  let allValid = true;
-  const specs = findSpecs();
-  for (const specPath of specs) {
-    const spec = await loadSpec(specPath);
-    if (!spec || spec._specType !== "claude") continue;
-
-    const hasChecks = Object.values(spec.rules).some(
-      (r) => r._kind === "check",
-    );
-    if (!hasChecks) continue;
-
-    const results = executeChecks(spec, process.cwd());
-    for (const r of results) {
-      if (!printAssertionResult(r)) allValid = false;
-    }
-  }
-  return allValid;
-}
-
 function validateSpecs(
   filePaths: string[],
   rulesConfig?: import("./types.js").RulesConfig,
@@ -350,10 +313,9 @@ function validateSpecs(
 
 async function check(filePaths: string[]): Promise<boolean> {
   const hashesValid = verifyHashes(filePaths);
-  const assertionsValid = await runAssertions();
   const vConfig = loadValidateConfig();
   const specsValid = validateSpecs(filePaths, vConfig.rules);
-  return hashesValid && assertionsValid && specsValid;
+  return hashesValid && specsValid;
 }
 
 function printDiffLines(lines: string[], label: string, prefix: string): void {
@@ -560,9 +522,6 @@ export default claude({${targetLine}
   rules: {
     // enforce() — backed by a linter rule, verified to exist AND be enabled:
     // "no-console": enforce("eslint/no-console", "Use structured logger."),
-    //
-    // check() — filesystem assertion:
-    // "test-pairing": check(every("src/**/*.ts").has("{name}.test.ts"), "All files need tests."),
     //
     // guidance() — prose only, no enforcement:
     // "research-first": guidance("Google unfamiliar APIs before implementing."),
