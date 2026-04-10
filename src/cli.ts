@@ -575,10 +575,23 @@ async function setup(args: string[]): Promise<void> {
 
   console.log("vigiles setup\n");
 
-  // Step 1: Create spec
+  // Step 1: Create spec (or detect existing hand-written file)
   const specPath = `${target}.spec.ts`;
+  const targetExists = existsSync(resolve(process.cwd(), target));
   if (existsSync(resolve(process.cwd(), specPath))) {
     console.log(`✓ ${specPath} already exists`);
+  } else if (targetExists) {
+    console.log(
+      `Found existing ${target} without a spec. To migrate it to a typed spec,`,
+    );
+    console.log(
+      `install the plugin and ask your agent to run the migrate-to-spec skill:\n`,
+    );
+    console.log(`  npx skills add zernie/vigiles\n`);
+    console.log(
+      `Or create a blank spec and migrate manually: npx vigiles init --target=${target}`,
+    );
+    return;
   } else {
     init(args);
   }
@@ -611,9 +624,8 @@ async function setup(args: string[]): Promise<void> {
   console.log("");
   const addedGha = addGhaStep();
   if (!addedGha) {
-    console.log("  No CI workflow found. Add this to your CI pipeline:\n");
-    console.log("    npx vigiles check");
-    console.log("    npx vigiles generate-types --check");
+    console.log("  No CI workflow found. Add this step to your CI:\n");
+    console.log("    npx vigiles check && npx vigiles generate-types --check");
   }
 
   // Step 5: Summary
