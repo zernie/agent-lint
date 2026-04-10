@@ -27,6 +27,7 @@ import {
 } from "./compile.js";
 
 import { generateTypes } from "./generate-types.js";
+import { checkLinterRule } from "./linters.js";
 
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -542,5 +543,166 @@ describe("executeChecks()", () => {
     assert.equal(results.length, 1);
     assert.equal(results[0].id, "has-test");
     assert.equal(results[0].passed, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Linter integration tests (checkLinterRule)
+// ---------------------------------------------------------------------------
+
+describe("checkLinterRule()", () => {
+  it("detects eslint built-in rules", () => {
+    const result = checkLinterRule("eslint/no-console", process.cwd());
+    assert.equal(result.exists, true);
+    assert.equal(result.linter, "eslint");
+    assert.equal(result.rule, "no-console");
+  });
+
+  it("errors on nonexistent eslint rule", () => {
+    const result = checkLinterRule(
+      "eslint/completely-fake-rule-xyz",
+      process.cwd(),
+    );
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("completely-fake-rule-xyz"));
+  });
+
+  it("detects ruff rules via CLI", () => {
+    const result = checkLinterRule("ruff/E501", process.cwd());
+    assert.equal(result.exists, true);
+    assert.equal(result.linter, "ruff");
+  });
+
+  it("errors on nonexistent ruff rule", () => {
+    const result = checkLinterRule("ruff/FAKE999", process.cwd());
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("FAKE999"));
+  });
+
+  it("detects clippy rules via CLI", () => {
+    const result = checkLinterRule("clippy/needless_return", process.cwd());
+    assert.equal(result.exists, true);
+    assert.equal(result.linter, "clippy");
+  });
+
+  it("errors on nonexistent clippy lint", () => {
+    const result = checkLinterRule(
+      "clippy/completely_fake_lint_xyz",
+      process.cwd(),
+    );
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("completely_fake_lint_xyz"));
+  });
+
+  it("detects pylint rules via CLI", () => {
+    const result = checkLinterRule("pylint/C0301", process.cwd());
+    assert.equal(result.exists, true);
+    assert.equal(result.linter, "pylint");
+  });
+
+  it("errors on nonexistent pylint rule", () => {
+    const result = checkLinterRule("pylint/ZZZZ9999", process.cwd());
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("ZZZZ9999"));
+  });
+
+  it("detects rubocop cops via CLI", () => {
+    const result = checkLinterRule(
+      "rubocop/Style/FrozenStringLiteralComment",
+      process.cwd(),
+    );
+    assert.equal(result.exists, true);
+    assert.equal(result.linter, "rubocop");
+  });
+
+  it("errors on nonexistent rubocop cop", () => {
+    const result = checkLinterRule(
+      "rubocop/Fake/NonExistentCop",
+      process.cwd(),
+    );
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("Fake/NonExistentCop"));
+  });
+
+  it("rejects unsafe rule names", () => {
+    const result = checkLinterRule(
+      "eslint/no-console; rm -rf /",
+      process.cwd(),
+    );
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("Invalid rule reference"));
+  });
+
+  it("handles unknown linters gracefully", () => {
+    const result = checkLinterRule("unknown-tool/some-rule", process.cwd());
+    assert.equal(result.exists, false);
+    assert.ok(result.error?.includes("Unknown linter"));
+  });
+
+  it("checks custom rulesDir", () => {
+    const tmpDir = join(process.cwd(), ".vigiles-test-linter-tmp");
+    const rulesDir = join(tmpDir, "my-rules");
+    mkdirSync(rulesDir, { recursive: true });
+    try {
+      writeFileSync(join(rulesDir, "check-foo.js"), "module.exports = {};\n");
+
+      const found = checkLinterRule("my-tool/check-foo", tmpDir, {
+        linters: { "my-tool": { rulesDir: "my-rules" } },
+      });
+      assert.equal(found.exists, true);
+
+      const missing = checkLinterRule("my-tool/check-bar", tmpDir, {
+        linters: { "my-tool": { rulesDir: "my-rules" } },
+      });
+      assert.equal(missing.exists, false);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: enforce() → compileClaude → linter verification
+// ---------------------------------------------------------------------------
+
+describe("enforce() linter integration in compileClaude", () => {
+  it("verifies eslint rules during compilation", () => {
+    const spec = claude({
+      rules: {
+        "no-console": enforce("eslint/no-console", "Use logger."),
+      },
+    });
+    const { errors, linterResults } = compileClaude(spec, {
+      basePath: process.cwd(),
+    });
+    assert.equal(linterResults.length, 1);
+    assert.equal(linterResults[0].exists, true);
+    assert.equal(errors.filter((e) => e.type === "invalid-rule").length, 0);
+  });
+
+  it("errors on nonexistent linter rule during compilation", () => {
+    const spec = claude({
+      rules: {
+        fake: enforce("eslint/completely-fake-xyz", "Doesn't exist."),
+      },
+    });
+    const { errors } = compileClaude(spec, { basePath: process.cwd() });
+    assert.ok(errors.some((e) => e.type === "invalid-rule"));
+    assert.ok(errors.some((e) => e.message.includes("completely-fake-xyz")));
+  });
+
+  it("respects catalogOnly option", () => {
+    const spec = claude({
+      rules: {
+        "no-console": enforce("eslint/no-console", "Use logger."),
+      },
+    });
+    const { linterResults } = compileClaude(spec, {
+      basePath: process.cwd(),
+      catalogOnly: true,
+    });
+    // In catalog-only mode, should still find the rule but not check config
+    assert.equal(linterResults.length, 1);
+    assert.equal(linterResults[0].exists, true);
   });
 });
