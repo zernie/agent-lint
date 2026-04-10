@@ -16,6 +16,7 @@ import { writeFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
+import { validate } from "./validate.js";
 
 import {
   compileClaude,
@@ -267,10 +268,30 @@ async function runAssertions(): Promise<boolean> {
   return allValid;
 }
 
+function validateSpecs(filePaths: string[]): boolean {
+  let allValid = true;
+  for (const filePath of filePaths) {
+    const fullPath = resolve(process.cwd(), filePath);
+    let content: string;
+    try {
+      content = readFileSync(fullPath, "utf-8");
+    } catch {
+      continue;
+    }
+    const result = validate(content, { filePath: fullPath });
+    for (const err of result.errors) {
+      console.log(`  [${err.rule}] ${err.message}`);
+      allValid = false;
+    }
+  }
+  return allValid;
+}
+
 async function check(filePaths: string[]): Promise<boolean> {
   const hashesValid = verifyHashes(filePaths);
   const assertionsValid = await runAssertions();
-  return hashesValid && assertionsValid;
+  const specsValid = validateSpecs(filePaths);
+  return hashesValid && assertionsValid && specsValid;
 }
 
 function printDiffLines(lines: string[], label: string, prefix: string): void {
@@ -439,16 +460,20 @@ function discover(): void {
   }
 }
 
-function init(): void {
-  const specPath = "CLAUDE.md.spec.ts";
+function init(args: string[]): void {
+  const targetFlag = args.find((a) => a.startsWith("--target="));
+  const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
+  const specPath = `${target}.spec.ts`;
+
   if (existsSync(resolve(process.cwd(), specPath))) {
     console.log(`${specPath} already exists.`);
     return;
   }
 
+  const targetLine = target !== "CLAUDE.md" ? `\n  target: "${target}",` : "";
   const template = `import { claude, enforce, guidance } from "vigiles/spec";
 
-export default claude({
+export default claude({${targetLine}
   commands: {
     // "npm run build": "Compile the project",
     // "npm test": "Run all tests",
@@ -549,7 +574,9 @@ function printUsage(command: string | undefined): void {
   console.log("Commands:");
   console.log("  vigiles compile [files...]    Compile .spec.ts → .md");
   console.log("  vigiles check [files...]      Verify hashes + run assertions");
-  console.log("  vigiles init                  Scaffold a CLAUDE.md.spec.ts");
+  console.log(
+    "  vigiles init [--target=X.md]  Scaffold a spec (default: CLAUDE.md)",
+  );
   console.log("  vigiles generate-types [out]  Emit .d.ts from project state");
   console.log("  vigiles generate-types --check  Verify .d.ts is up to date");
   console.log("  vigiles discover              Show linter rule coverage gaps");
@@ -608,7 +635,7 @@ async function main(): Promise<void> {
       break;
     }
     case "init":
-      init();
+      init(args);
       break;
     case "discover":
       discover();
