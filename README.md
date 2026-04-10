@@ -185,20 +185,41 @@ $ npx vigiles generate-types
 ✓ Generated .vigiles/generated.d.ts
 ```
 
-The generated file contains type unions for every enabled rule, npm script, and project file:
+The generated file does two things:
+
+**1. Standalone types** for direct import:
 
 ```typescript
 // .vigiles/generated.d.ts (auto-generated, DO NOT EDIT)
-export type EslintRule = "no-console" | "no-unused-vars" | ...;
-export type RuffRule = "E501" | "F401" | "T201" | ...;
-export type NpmScript = "build" | "test" | "fmt" | ...;
-export type ProjectFile = "src/spec.ts" | "src/compile.ts" | ...;
+declare module "vigiles/generated" {
+  export type EslintRule = "no-console" | "no-unused-vars" | ...;
+  export type RuffRule = "E501" | "F401" | "T201" | ...;
+  export type NpmScript = "build" | "test" | "fmt" | ...;
+  export type ProjectFile = "src/spec.ts" | "src/compile.ts" | ...;
+}
 ```
+
+**2. Automatic narrowing** of `enforce()`, `file()`, and `cmd()` via declaration merging:
+
+```typescript
+// Also in generated.d.ts — augments vigiles/spec automatically
+declare module "vigiles/spec" {
+  interface KnownLinterRules {
+    eslint: "no-console" | "no-unused-vars" | ...;
+    "@typescript-eslint": "no-floating-promises" | "no-explicit-any" | ...;
+    ruff: "E501" | "F401" | "T201" | ...;
+  }
+  interface KnownProjectFiles { files: "src/spec.ts" | ...; }
+  interface KnownNpmScripts { scripts: "build" | "test" | ...; }
+}
+```
+
+With this file present, `enforce("eslint/no-consolee")` is a red squiggle in your editor — not a runtime surprise. Without it, everything falls back to broad types and still works.
 
 **Commit this file to git.** It should be checked in so that:
 
 - Editors pick up the types immediately (no setup step for new contributors)
-- CI can verify it's fresh: run `vigiles generate-types` and check for uncommitted changes
+- CI can verify it's fresh: `npx vigiles generate-types --check`
 - Anyone cloning the repo gets autocomplete and type checking out of the box
 
 Re-run `vigiles generate-types` when you add/remove linter rules, npm scripts, or source files. [Details →](docs/linter-support.md#generate-types)
@@ -206,12 +227,13 @@ Re-run `vigiles generate-types` when you add/remove linter rules, npm scripts, o
 ## CLI
 
 ```bash
-npx vigiles compile          # Compile .spec.ts → .md
-npx vigiles check            # Verify hashes + run assertions
-npx vigiles init             # Scaffold a CLAUDE.md.spec.ts
-npx vigiles generate-types   # Emit .d.ts from project state
-npx vigiles discover         # Show undocumented linter rules
-npx vigiles adopt            # Detect manual edits, show diff
+npx vigiles compile               # Compile .spec.ts → .md
+npx vigiles check                 # Verify hashes + run assertions
+npx vigiles init                  # Scaffold a CLAUDE.md.spec.ts
+npx vigiles generate-types        # Emit .d.ts from project state
+npx vigiles generate-types --check  # Verify .d.ts is up to date
+npx vigiles discover              # Show undocumented linter rules
+npx vigiles adopt                 # Detect manual edits, show diff
 ```
 
 ## GitHub Action
@@ -221,6 +243,12 @@ npx vigiles adopt            # Detect manual edits, show diff
 - uses: zernie/vigiles@main
   with:
     command: compile # compile specs in CI
+```
+
+To verify generated types are fresh in CI:
+
+```yaml
+- run: npx vigiles generate-types --check
 ```
 
 ## Skills
