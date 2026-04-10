@@ -67,6 +67,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 **Enforced by:** `code-review`
 **Why:** Architectural linting belongs in ast-grep/Dependency Cruiser/Steiger. Per-file code rules belong in ESLint/Ruff/Clippy. vigiles owns: compilation, linter cross-referencing, type generation, filesystem assertions, and stale reference detection.
 
+### Smooth adoption from zero to fully integrated
+
+**Enforced by:** `code-review`
+**Why:** Every adoption surface (CLI, GHA, plugin, skills, types) must work together. `npx vigiles check` should be the first thing a new user runs and it should tell them exactly what to do next. Support both incremental migration (`require-spec: false`) and strict enforcement (`require-spec: true`). Multi-target output (CLAUDE.md, AGENTS.md) from one spec. See `research/adoption-strategy.md` for the full adoption level breakdown.
+
 ## Rules
 
 ### Run `npm run fmt:check` before committing
