@@ -60,7 +60,7 @@ jobs:
       - name: Check formatting
         run: npm run fmt:check
 
-  validate-claude-md:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,5 +74,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Validate CLAUDE.md
-        uses: ./
+      - name: Check compiled files
+        run: npx vigiles check
