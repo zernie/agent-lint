@@ -4,7 +4,7 @@
  * This is the source of truth. CLAUDE.md is a compiled build artifact.
  * Run `vigiles compile` to generate CLAUDE.md from this spec.
  */
-import { claude, enforce, guidance, prove, every } from "../src/spec.js";
+import { claude, enforce, guidance, check, every } from "../src/spec.js";
 
 export default claude({
   sections: {
@@ -53,7 +53,7 @@ By default, validates \`CLAUDE.md\` only. Configure \`"files"\` in \`.vigilesrc.
       "This is a public repo. Claude Code session URLs are private and should not be leaked in commit messages, PR descriptions, or comments.",
     ),
 
-    "test-file-pairing": prove(
+    "test-file-pairing": check(
       every("src/**/*.ts").has("{name}.test.ts"),
       "Every source module should have a corresponding test file.",
     ),

@@ -60,7 +60,7 @@ export type HookEvent =
   | "Notification";
 
 // ---------------------------------------------------------------------------
-// Proof assertions (structural/filesystem checks)
+// Filesystem assertions (the ONE thing vigiles owns)
 // ---------------------------------------------------------------------------
 
 /** A file-pairing assertion: for every file matching `glob`, expect a sibling. */
@@ -70,39 +70,21 @@ export interface FilePairingAssertion {
   readonly pattern: string;
 }
 
-/** An AST pattern absence assertion: no file in `glob` matches `astPattern`. */
-export interface PatternAbsenceAssertion {
-  readonly _type: "pattern-absence";
-  readonly glob: string;
-  readonly astPattern: string;
-}
-
-/** An import boundary assertion. */
-export interface LayerBoundaryAssertion {
-  readonly _type: "layer-boundary";
-  readonly layers: Record<string, { canImport: string[] }>;
-}
-
-export type ProofAssertion =
-  | FilePairingAssertion
-  | PatternAbsenceAssertion
-  | LayerBoundaryAssertion;
-
 // ---------------------------------------------------------------------------
 // Rule types
 // ---------------------------------------------------------------------------
 
-/** A rule delegated to an external linter. */
+/** A rule delegated to an external tool (linter, ast-grep, dependency-cruiser, etc.). */
 export interface EnforceRule {
   readonly _kind: "enforce";
   readonly linterRule: LinterRule;
   readonly why: string;
 }
 
-/** A rule proven by vigiles via static analysis. */
-export interface ProveRule {
-  readonly _kind: "prove";
-  readonly assertion: ProofAssertion;
+/** A filesystem check owned by vigiles (e.g., test file pairing). */
+export interface CheckRule {
+  readonly _kind: "check";
+  readonly assertion: FilePairingAssertion;
   readonly why: string;
 }
 
@@ -112,16 +94,22 @@ export interface GuidanceRule {
   readonly text: string;
 }
 
-export type Rule = EnforceRule | ProveRule | GuidanceRule;
+export type Rule = EnforceRule | CheckRule | GuidanceRule;
 
 // ---------------------------------------------------------------------------
 // Builder functions
 // ---------------------------------------------------------------------------
 
 /**
- * Declare a rule enforced by an external linter.
+ * Declare a rule enforced by an external tool.
  *
- *   enforce("eslint/no-console", "Use structured logger for Datadog.")
+ * Supports linters (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint),
+ * architectural tools (ast-grep, dependency-cruiser, steiger), or any
+ * tool with a rulesDir config.
+ *
+ *   enforce("eslint/no-console", "Use structured logger.")
+ *   enforce("ast-grep/no-moment-import", "Migrating to dayjs.")
+ *   enforce("dependency-cruiser/no-circular", "No circular deps.")
  */
 export function enforce(linterRule: LinterRule, why: string): EnforceRule {
   return { _kind: "enforce", linterRule, why };
@@ -137,16 +125,16 @@ export function guidance(text: string): GuidanceRule {
 }
 
 /**
- * Declare a rule proven by vigiles via static analysis.
+ * Declare a filesystem check owned by vigiles.
  *
- *   prove(every("src/*.controller.ts").has("{name}.test.ts"), "All controllers need tests.")
+ *   check(every("src/*.controller.ts").has("{name}.test.ts"), "Controllers need tests.")
  */
-export function prove(assertion: ProofAssertion, why: string): ProveRule {
-  return { _kind: "prove", assertion, why };
+export function check(assertion: FilePairingAssertion, why: string): CheckRule {
+  return { _kind: "check", assertion, why };
 }
 
 // ---------------------------------------------------------------------------
-// Proof assertion builders
+// Filesystem assertion builder
 // ---------------------------------------------------------------------------
 
 /** Start a file-pairing assertion: every(glob).has(pattern). */
@@ -158,24 +146,6 @@ export function every(glob: string): {
       return { _type: "file-pairing", glob, pattern };
     },
   };
-}
-
-/** Start a pattern-absence assertion: no(glob).matches(astPattern). */
-export function no(glob: string): {
-  matches(astPattern: string): PatternAbsenceAssertion;
-} {
-  return {
-    matches(astPattern: string): PatternAbsenceAssertion {
-      return { _type: "pattern-absence", glob, astPattern };
-    },
-  };
-}
-
-/** Declare import layer boundaries. */
-export function layers(
-  defs: Record<string, { canImport: string[] }>,
-): LayerBoundaryAssertion {
-  return { _type: "layer-boundary", layers: defs };
 }
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import type {
   Rule,
   InstructionFragment,
   Ref,
-  ProofAssertion,
+  FilePairingAssertion,
 } from "./spec.js";
 
 import { checkLinterRule } from "./linters.js";
@@ -187,22 +187,8 @@ function renderFragment(fragment: InstructionFragment): string {
 // Compile CLAUDE.md spec → markdown
 // ---------------------------------------------------------------------------
 
-function describeAssertion(assertion: ProofAssertion): string {
-  switch (assertion._type) {
-    case "file-pairing":
-      return `every \`${assertion.glob}\` has \`${assertion.pattern}\``;
-    case "pattern-absence":
-      return `no match for \`${assertion.astPattern}\` in \`${assertion.glob}\``;
-    case "layer-boundary": {
-      const pairs = Object.entries(assertion.layers)
-        .map(
-          ([layer, { canImport }]) =>
-            `${layer} → ${canImport.length > 0 ? canImport.join(", ") : "(none)"}`,
-        )
-        .join("; ");
-      return `layer boundaries: ${pairs}`;
-    }
-  }
+function describeAssertion(assertion: FilePairingAssertion): string {
+  return `every \`${assertion.glob}\` has \`${assertion.pattern}\``;
 }
 
 function compileRule(id: string, rule: Rule): string {
@@ -219,13 +205,13 @@ function compileRule(id: string, rule: Rule): string {
         `**Why:** ${rule.why}`,
       ].join("\n");
 
-    case "prove":
+    case "check":
       return [
         `### ${title}`,
         "",
         `**Enforced by:** \`vigiles/${id}\``,
         `**Why:** ${rule.why}`,
-        `**Proof:** ${describeAssertion(rule.assertion)}`,
+        `**Check:** ${describeAssertion(rule.assertion)}`,
       ].join("\n");
 
     case "guidance":
