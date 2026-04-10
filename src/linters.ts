@@ -45,7 +45,7 @@ interface EslintRuleSet extends Set<string> {
 // Parsing enforcement references
 // ---------------------------------------------------------------------------
 
-export function extractLinterName(enforcedBy: string): string {
+/** @internal */ export function extractLinterName(enforcedBy: string): string {
   const colonIdx = enforcedBy.indexOf("::");
   const slashIdx = enforcedBy.indexOf("/");
   if (colonIdx === -1 && slashIdx === -1) return enforcedBy;
@@ -54,7 +54,9 @@ export function extractLinterName(enforcedBy: string): string {
   return enforcedBy.substring(0, Math.min(slashIdx, colonIdx));
 }
 
-export function extractRuleName(enforcedBy: string): string | null {
+/** @internal */ export function extractRuleName(
+  enforcedBy: string,
+): string | null {
   const colonIdx = enforcedBy.indexOf("::");
   const slashIdx = enforcedBy.indexOf("/");
   if (colonIdx === -1 && slashIdx === -1) return null;

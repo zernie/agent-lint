@@ -28,19 +28,19 @@ import type { LinterCheckResult } from "./linters.js";
 
 const HASH_RE = /^<!-- vigiles:sha256:([a-f0-9]+) compiled from (.+) -->\n/;
 
-/** Compute SHA-256 hash of content (excluding any existing hash line). */
+/** @internal Compute SHA-256 hash of content (excluding any existing hash line). */
 export function computeHash(content: string): string {
   const body = content.replace(HASH_RE, "");
   return createHash("sha256").update(body).digest("hex").slice(0, 16);
 }
 
-/** Prepend a hash comment to compiled content. */
+/** @internal Prepend a hash comment to compiled content. */
 export function addHash(content: string, specFile: string): string {
   const hash = computeHash(content);
   return `<!-- vigiles:sha256:${hash} compiled from ${specFile} -->\n${content}`;
 }
 
-/** Check if a file's hash matches its content. Returns null if no hash found. */
+/** @internal Check if a file's hash matches its content. Returns null if no hash found. */
 export function verifyHash(
   content: string,
 ): { valid: boolean; specFile: string } | null {
@@ -67,7 +67,7 @@ export function verifyHash(
  * English text and code). Swap in a real BPE tokenizer (tiktoken, gpt-tokenizer)
  * for exact counts if needed.
  */
-export function estimateTokens(text: string): number {
+/** @internal */ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
@@ -447,7 +447,7 @@ export interface AssertionResult {
  *
  * `{name}` in the pattern is replaced with the file's basename (without extension).
  */
-export function executeAssertion(
+/** @internal */ export function executeAssertion(
   id: string,
   assertion: FilePairingAssertion,
   basePath: string,
