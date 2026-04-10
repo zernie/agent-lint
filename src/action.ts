@@ -8,7 +8,12 @@ import { writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { globSync } from "glob";
 
-import { compileClaude, compileSkill, checkFileHash } from "./compile.js";
+import {
+  compileClaude,
+  compileSkill,
+  checkFileHash,
+  addHash,
+} from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -98,12 +103,12 @@ async function runCompile(): Promise<boolean> {
       writeFileSync(resolve(basePath, primaryOutput), markdown);
       const outputNames = [primaryOutput];
 
-      // Write additional targets with swapped heading
+      // Write additional targets with swapped heading + recomputed hash
       for (const t of targets.slice(1)) {
-        const additional = markdown.replace(
-          /^(<!-- vigiles:[^\n]+\n\n?)# [^\n]+/,
-          `$1# ${t}`,
-        );
+        const body = markdown
+          .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
+          .replace(/^# [^\n]+/, `# ${t}`);
+        const additional = addHash(body, specPath);
         const dir = primaryOutput.substring(
           0,
           primaryOutput.lastIndexOf("/") + 1,
