@@ -177,7 +177,7 @@ export type Rule = EnforceRule | CheckRule | GuidanceRule;
  *   enforce("ruff/T201", "Use logging module.")
  */
 export function enforce(
-  linterRule: StrictLinterRule,
+  linterRule: NoInfer<StrictLinterRule>,
   why: string,
   options?: { verify?: boolean },
 ): EnforceRule {
@@ -260,7 +260,7 @@ export type Ref = FileRef | CmdRef | SkillRef;
  * Reference a file path — verified to exist at compile time.
  * When generated types are present, narrowed to known project files.
  */
-export function file(path: StrictFile): FileRef {
+export function file(path: NoInfer<StrictFile>): FileRef {
   return { _ref: "file", path: path as VerifiedPath };
 }
 
@@ -268,7 +268,7 @@ export function file(path: StrictFile): FileRef {
  * Reference a command — verified against package.json at compile time.
  * When generated types are present, narrowed to known npm scripts.
  */
-export function cmd(command: StrictCmd): CmdRef {
+export function cmd(command: NoInfer<StrictCmd>): CmdRef {
   return { _ref: "cmd", command: command as VerifiedCmd };
 }
 
@@ -381,6 +381,20 @@ export interface SkillSpec {
 export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec {
   return { _specType: "skill", ...spec };
 }
+
+// ---------------------------------------------------------------------------
+// Spec file naming convention (#11)
+//
+// Type-level proof that a spec filename maps to its output.
+// SpecPath<"CLAUDE.md"> = "CLAUDE.md.spec.ts"
+// ---------------------------------------------------------------------------
+
+/** Derive the spec filename from an output filename. */
+export type SpecPath<Output extends `${string}.md`> = `${Output}.spec.ts`;
+
+/** Extract the output filename from a spec filename. */
+export type OutputPath<Spec extends `${string}.md.spec.ts`> =
+  Spec extends `${infer Base}.spec.ts` ? Base : never;
 
 // ---------------------------------------------------------------------------
 // Compile pipeline phantom types (#7)
