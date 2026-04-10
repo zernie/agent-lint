@@ -111,29 +111,16 @@ The spec is the source of truth. CLAUDE.md is a build artifact.
 
 ## Quick Start
 
-One command sets up everything — creates a spec, scans your linters, generates types, and compiles:
-
 ```bash
-npx vigiles setup                      # → CLAUDE.md.spec.ts + CLAUDE.md
-npx vigiles setup --target=AGENTS.md   # → AGENTS.md.spec.ts + AGENTS.md
+npx vigiles setup
 ```
 
-Then install the Claude Code plugin so the agent edits your spec (not the compiled markdown):
+That's it. The wizard creates a spec, scans your linters, generates types, compiles to markdown, and adds a CI step to your workflow if one exists. For AGENTS.md (Codex, GitHub Copilot): `npx vigiles setup --target=AGENTS.md`.
+
+Already have a hand-written CLAUDE.md? Install the plugin and ask your agent to run the `migrate-to-spec` skill:
 
 ```bash
 npx skills add zernie/vigiles
-```
-
-The plugin does two things:
-
-- **Blocks edits to compiled files** — if the agent tries to edit CLAUDE.md directly, the PreToolUse hook redirects it to the `.spec.ts` source
-- **Auto-recompiles on change** — editing a `.spec.ts` or linter config triggers `compile` / `generate-types` automatically
-
-Already have a hand-written CLAUDE.md? Use the migrate skill:
-
-```bash
-npx skills add zernie/vigiles
-# then ask your agent to run the migrate-to-spec skill
 ```
 
 ## Three Rule Types

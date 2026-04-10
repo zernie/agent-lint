@@ -528,6 +528,47 @@ export default claude({${targetLine}
 // Setup wizard
 // ---------------------------------------------------------------------------
 
+const VIGILES_CI_STEP = `      - name: Verify specs
+        run: npx vigiles check && npx vigiles generate-types --check`;
+
+function addGhaStep(): boolean {
+  // Find existing GHA workflow
+  const ciPaths = [
+    ".github/workflows/ci.yml",
+    ".github/workflows/ci.yaml",
+    ".github/workflows/main.yml",
+    ".github/workflows/main.yaml",
+    ".github/workflows/test.yml",
+    ".github/workflows/test.yaml",
+  ];
+  for (const ciPath of ciPaths) {
+    const fullPath = resolve(process.cwd(), ciPath);
+    if (existsSync(fullPath)) {
+      const content = readFileSync(fullPath, "utf-8");
+      if (content.includes("vigiles")) {
+        console.log(`✓ ${ciPath} already has vigiles steps`);
+        return true;
+      }
+      // Find the last "run:" line and add after it
+      const lines = content.split("\n");
+      let lastRunIdx = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (/^\s+-?\s*run:/.test(lines[i])) {
+          lastRunIdx = i;
+          break;
+        }
+      }
+      if (lastRunIdx >= 0) {
+        lines.splice(lastRunIdx + 1, 0, "", VIGILES_CI_STEP);
+        writeFileSync(fullPath, lines.join("\n"));
+        console.log(`✓ Added vigiles check step to ${ciPath}`);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function setup(args: string[]): Promise<void> {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
@@ -566,19 +607,27 @@ async function setup(args: string[]): Promise<void> {
     await compile(specs, loadConfig());
   }
 
-  // Step 4: Summary
+  // Step 4: Add CI step
+  console.log("");
+  const addedGha = addGhaStep();
+  if (!addedGha) {
+    console.log("  No CI workflow found. Add this to your CI pipeline:\n");
+    console.log("    npx vigiles check");
+    console.log("    npx vigiles generate-types --check");
+  }
+
+  // Step 5: Summary
   console.log("\n---");
   console.log("Setup complete. Next steps:\n");
   console.log(`  1. Edit ${specPath} — add your project's conventions`);
+  console.log("  2. Run `npx vigiles compile` to regenerate");
   console.log(
-    "  2. Run `npx vigiles compile` to regenerate the instruction file",
+    "  3. Commit the .spec.ts, compiled .md, and .vigiles/generated.d.ts",
   );
-  console.log("  3. Commit both the .spec.ts and compiled .md");
   console.log(
-    "  4. Add to CI: `npx vigiles check && npx vigiles generate-types --check`",
+    "\n  Install the Claude Code plugin (blocks direct .md edits, auto-recompiles):",
   );
-  console.log("\nInstall the Claude Code plugin for auto-compilation on edit:");
-  console.log("  npx skills add zernie/vigiles");
+  console.log("    npx skills add zernie/vigiles");
 }
 
 // ---------------------------------------------------------------------------
