@@ -12,7 +12,13 @@
  *   vigiles adopt           — detect manual edits, show diff
  */
 
-import { writeFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  lstatSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
@@ -569,34 +575,188 @@ function addGhaStep(): boolean {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Project detection for setup wizard
+// ---------------------------------------------------------------------------
+
+interface DetectedProject {
+  /** Instruction files found (with or without specs). */
+  instructionFiles: { path: string; hasSpec: boolean; isSymlink: boolean }[];
+  /** Agent tools detected. */
+  agents: string[];
+  /** Sync tools detected in package.json. */
+  syncTools: string[];
+  /** Non-markdown agent config files. */
+  otherConfigs: string[];
+  /** Whether Claude Code project config exists. */
+  hasClaude: boolean;
+}
+
+const KNOWN_INSTRUCTION_FILES = ["CLAUDE.md", "AGENTS.md"];
+const KNOWN_OTHER_CONFIGS: Record<string, string> = {
+  ".cursorrules": "Cursor",
+  ".github/copilot-instructions.md": "GitHub Copilot",
+  ".windsurfrules": "Windsurf",
+};
+const KNOWN_SYNC_TOOLS = [
+  "rule-porter",
+  "rulesync",
+  "vibe-cli",
+  "@nichochar/rule-porter",
+];
+
+function detectProject(): DetectedProject {
+  const cwd = process.cwd();
+  const instructionFiles: DetectedProject["instructionFiles"] = [];
+  const agents: string[] = [];
+  const otherConfigs: string[] = [];
+
+  // Check known instruction files
+  for (const f of KNOWN_INSTRUCTION_FILES) {
+    const full = resolve(cwd, f);
+    if (existsSync(full)) {
+      let isSymlink = false;
+      try {
+        isSymlink = lstatSync(full).isSymbolicLink();
+      } catch {
+        // ignore
+      }
+      const hasSpec = existsSync(resolve(cwd, `${f}.spec.ts`));
+      instructionFiles.push({ path: f, hasSpec, isSymlink });
+    }
+  }
+
+  // Detect agents from files
+  if (
+    instructionFiles.some((f) => f.path === "CLAUDE.md") ||
+    existsSync(resolve(cwd, ".claude"))
+  ) {
+    agents.push("Claude Code");
+  }
+  if (instructionFiles.some((f) => f.path === "AGENTS.md")) {
+    agents.push("Codex / GitHub Copilot");
+  }
+
+  // Check non-markdown configs
+  for (const [path, agent] of Object.entries(KNOWN_OTHER_CONFIGS)) {
+    if (existsSync(resolve(cwd, path))) {
+      otherConfigs.push(`${path} (${agent})`);
+      if (!agents.includes(agent)) agents.push(agent);
+    }
+  }
+
+  // Check for sync tools in package.json
+  const syncTools: string[] = [];
+  const pkgPath = resolve(cwd, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      const allDeps = {
+        ...pkg.dependencies,
+        ...pkg.devDependencies,
+      };
+      for (const tool of KNOWN_SYNC_TOOLS) {
+        if (tool in allDeps) syncTools.push(tool);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    instructionFiles,
+    agents,
+    syncTools,
+    otherConfigs,
+    hasClaude: existsSync(resolve(cwd, ".claude")),
+  };
+}
+
 async function setup(args: string[]): Promise<void> {
   const targetFlag = args.find((a) => a.startsWith("--target="));
-  const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
 
   console.log("vigiles setup\n");
 
-  // Step 1: Create spec (or detect existing hand-written file)
-  const specPath = `${target}.spec.ts`;
-  const targetExists = existsSync(resolve(process.cwd(), target));
-  if (existsSync(resolve(process.cwd(), specPath))) {
-    console.log(`✓ ${specPath} already exists`);
-  } else if (targetExists) {
-    console.log(
-      `Found existing ${target} without a spec. To migrate it to a typed spec,`,
-    );
-    console.log(
-      `install the plugin and ask your agent to run the migrate-to-spec skill:\n`,
-    );
-    console.log(`  npx skills add zernie/vigiles\n`);
-    console.log(
-      `Or create a blank spec and migrate manually: npx vigiles init --target=${target}`,
-    );
-    return;
-  } else {
-    init(args);
+  // Step 1: Detect project
+  const detected = detectProject();
+
+  if (detected.agents.length > 0) {
+    console.log(`Detected: ${detected.agents.join(", ")}`);
+  }
+  if (detected.otherConfigs.length > 0) {
+    console.log(`Other agent configs: ${detected.otherConfigs.join(", ")}`);
+  }
+  if (detected.syncTools.length > 0) {
+    console.log(`Sync tools: ${detected.syncTools.join(", ")}`);
+  }
+  for (const f of detected.instructionFiles) {
+    if (f.isSymlink) {
+      console.log(`Note: ${f.path} is a symlink`);
+    }
+  }
+  if (
+    detected.agents.length > 0 ||
+    detected.otherConfigs.length > 0 ||
+    detected.syncTools.length > 0
+  ) {
+    console.log("");
   }
 
-  // Step 2: Generate types
+  // Step 2: Determine targets
+  let targets: string[];
+  if (targetFlag) {
+    targets = [targetFlag.split("=")[1]];
+  } else {
+    // Auto-detect: create specs for instruction files that need them
+    const needsSpec = detected.instructionFiles.filter((f) => !f.hasSpec);
+    if (needsSpec.length > 0) {
+      // Existing files without specs — suggest migration
+      for (const f of needsSpec) {
+        console.log(
+          `Found ${f.path} without a spec. Migrate with the migrate-to-spec skill`,
+        );
+        console.log(
+          `  or create a blank spec: npx vigiles init --target=${f.path}\n`,
+        );
+      }
+      if (needsSpec.every((f) => detected.instructionFiles.includes(f))) {
+        // All existing files need migration — don't create new ones
+        console.log("Install the plugin to use the migration skill:");
+        console.log("  npx skills add zernie/vigiles");
+        return;
+      }
+    }
+
+    // Default: CLAUDE.md, plus AGENTS.md if Codex detected
+    targets = ["CLAUDE.md"];
+    const hasAgentsMd = detected.instructionFiles.some(
+      (f) => f.path === "AGENTS.md",
+    );
+    const hasCodex =
+      detected.agents.includes("Codex / GitHub Copilot") || hasAgentsMd;
+    if (hasCodex && !hasAgentsMd) {
+      targets.push("AGENTS.md");
+    }
+  }
+
+  // Step 3: Create specs
+  for (const target of targets) {
+    const specPath = `${target}.spec.ts`;
+    if (existsSync(resolve(process.cwd(), specPath))) {
+      console.log(`✓ ${specPath} already exists`);
+    } else if (existsSync(resolve(process.cwd(), target))) {
+      console.log(
+        `⚠ ${target} exists without spec — migrate with migrate-to-spec skill`,
+      );
+    } else {
+      init(["--target=" + target]);
+    }
+  }
+
+  // Step 4: Generate types
   console.log("\nScanning linters and project files...");
   const typesResult = generateTypes({ basePath: process.cwd() });
   const outPath = ".vigiles/generated.d.ts";
@@ -613,14 +773,14 @@ async function setup(args: string[]): Promise<void> {
   }
   console.log(`✓ Generated ${outPath}`);
 
-  // Step 3: Compile spec
-  console.log("\nCompiling spec...");
+  // Step 5: Compile specs
+  console.log("\nCompiling specs...");
   const specs = findSpecs();
   if (specs.length > 0) {
     await compile(specs, loadConfig());
   }
 
-  // Step 4: Add CI step
+  // Step 6: Add CI step
   console.log("");
   const addedGha = addGhaStep();
   if (!addedGha) {
@@ -628,39 +788,41 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npx vigiles check && npx vigiles generate-types --check");
   }
 
-  // Step 5: Summary
-  const isClaude = target === "CLAUDE.md";
-  const isAgents =
-    target === "AGENTS.md" || target.toLowerCase().includes("agent");
+  // Step 7: Agent-specific guidance
+  const specPaths = targets.map((t) => `${t}.spec.ts`).join(", ");
 
   console.log("\n---");
   console.log("Setup complete. Next steps:\n");
-  console.log(`  1. Edit ${specPath} — add your project's conventions`);
+  console.log(`  1. Edit ${specPaths} — add your project's conventions`);
   console.log("  2. Run `npx vigiles compile` to regenerate");
   console.log(
     "  3. Commit the .spec.ts, compiled .md, and .vigiles/generated.d.ts",
   );
 
-  if (isClaude) {
+  if (detected.hasClaude || targets.includes("CLAUDE.md")) {
     console.log(
-      "\n  Install the Claude Code plugin (blocks direct .md edits, auto-recompiles):",
+      "\n  Claude Code — install the plugin (blocks direct .md edits, auto-recompiles):",
     );
     console.log("    npx skills add zernie/vigiles");
-  } else if (isAgents) {
-    console.log(
-      "\n  Codex and GitHub Copilot read AGENTS.md directly — no plugin needed.",
-    );
-    console.log(
-      "  CI enforces freshness: `npx vigiles check && npx vigiles generate-types --check`",
-    );
-    console.log("  Run `npx vigiles compile` manually after editing the spec.");
-    console.log(
-      "\n  Also using Claude Code? Install the plugin for auto-recompilation:",
-    );
-    console.log("    npx skills add zernie/vigiles");
-  } else {
-    console.log("\n  Run `npx vigiles compile` after editing the spec.");
   }
+
+  if (targets.includes("AGENTS.md")) {
+    console.log(
+      "\n  Codex / Copilot — reads AGENTS.md directly. No plugin needed.",
+    );
+    console.log(
+      "  CI enforces freshness. Run `npx vigiles compile` manually after spec edits.",
+    );
+  }
+
+  if (detected.otherConfigs.length > 0 && detected.syncTools.length === 0) {
+    console.log(
+      "\n  Non-markdown agent configs detected. Use a sync tool to convert:",
+    );
+    console.log("    npm install -D rule-porter");
+  }
+
+  console.log("\n  Full agent workflow guide: docs/agent-workflows.md");
 }
 
 // ---------------------------------------------------------------------------
