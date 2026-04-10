@@ -1,6 +1,6 @@
 ---
 name: pr-to-lint-rule
-description: Convert a recurring PR review comment into an automated lint rule with tests and CLAUDE.md annotation
+description: Convert a recurring PR review comment into an automated lint rule with tests and spec entry
 disable-model-invocation: true
 argument-hint: <description of recurring PR feedback>
 ---

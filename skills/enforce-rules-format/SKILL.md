@@ -1,6 +1,6 @@
 ---
 name: enforce-rules-format
-description: Validate that all rules in a spec file or CLAUDE.md have proper enforcement annotations
+description: Validate that all rules have proper enforcement classification (enforce/check/guidance)
 disable-model-invocation: true
 ---
 
