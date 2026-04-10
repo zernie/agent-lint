@@ -82,7 +82,8 @@ export interface CompileError {
     | "invalid-rule"
     | "budget-exceeded"
     | "section-too-long"
-    | "section-has-header";
+    | "section-has-header"
+    | "reserved-section-key";
   message: string;
   path?: string;
 }
@@ -301,6 +302,14 @@ function validateSectionContent(
   return errors;
 }
 
+const RESERVED_SECTION_KEYS = new Set([
+  "commands",
+  "keyFiles",
+  "key-files",
+  "key_files",
+  "rules",
+]);
+
 function compileSectionsSection(
   spec: ClaudeSpec,
   basePath: string,
@@ -310,6 +319,13 @@ function compileSectionsSection(
   const lines: string[] = [];
   const errors: CompileError[] = [];
   for (const [name, content] of Object.entries(spec.sections)) {
+    // #4: reject reserved section keys that clash with structured fields
+    if (RESERVED_SECTION_KEYS.has(name)) {
+      errors.push({
+        type: "reserved-section-key",
+        message: `Section key "${name}" is reserved — use the dedicated \`${name}\` field on the spec instead.`,
+      });
+    }
     const heading = name.charAt(0).toUpperCase() + name.slice(1);
     if (typeof content === "string") {
       errors.push(...validateSectionContent(name, content, maxSectionLines));
@@ -453,7 +469,9 @@ export function compileClaude(
     });
   }
 
-  const prose = compileSectionsSection(spec, basePath, options.maxSectionLines);
+  // Per-spec maxSectionLines takes precedence, then compile options
+  const maxSectionLines = spec.maxSectionLines ?? options.maxSectionLines;
+  const prose = compileSectionsSection(spec, basePath, maxSectionLines);
   const keyFiles = compileKeyFilesSection(spec, basePath);
   const commands = compileCommandsSection(spec, basePath);
   const rules = compileRulesSection(spec, basePath, options);
