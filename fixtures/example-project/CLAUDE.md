@@ -1,3 +1,5 @@
+<!-- vigiles-disable require-spec -->
+
 # CLAUDE.md
 
 ## Code Style

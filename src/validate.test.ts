@@ -281,7 +281,9 @@ describe("require-spec", () => {
   });
 
   it("should error when no .spec.ts file exists", () => {
-    const mdPath = join(tmpDir, "CLAUDE.md");
+    const subDir = join(tmpDir, "no-spec");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
     writeFileSync(mdPath, "# CLAUDE.md\n### Rule\n**Enforced by:** `x`\n");
 
     const result = validate("# CLAUDE.md\n### Rule\n**Enforced by:** `x`\n", {
@@ -294,8 +296,10 @@ describe("require-spec", () => {
   });
 
   it("should pass when .spec.ts file exists", () => {
-    const mdPath = join(tmpDir, "HAS_SPEC.md");
-    const specPath = join(tmpDir, "HAS_SPEC.md.spec.ts");
+    const subDir = join(tmpDir, "has-spec");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
+    const specPath = join(subDir, "CLAUDE.md.spec.ts");
     writeFileSync(mdPath, "# Test\n");
     writeFileSync(specPath, "export default {};\n");
 
@@ -307,7 +311,9 @@ describe("require-spec", () => {
   });
 
   it("should be disabled via HTML comment", () => {
-    const mdPath = join(tmpDir, "DISABLED.md");
+    const subDir = join(tmpDir, "disabled");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
     writeFileSync(mdPath, "<!-- vigiles-disable require-spec -->\n# Test\n");
 
     const result = validate("<!-- vigiles-disable require-spec -->\n# Test\n", {
@@ -318,7 +324,9 @@ describe("require-spec", () => {
   });
 
   it("should be disabled via config", () => {
-    const mdPath = join(tmpDir, "CONFIG.md");
+    const subDir = join(tmpDir, "config-off");
+    mkdirSync(subDir, { recursive: true });
+    const mdPath = join(subDir, "CLAUDE.md");
     writeFileSync(mdPath, "# Test\n");
 
     const result = validate("# Test\n", {
@@ -336,13 +344,24 @@ describe("require-spec", () => {
   });
 
   it("should be enabled by default", () => {
-    const mdPath = join(tmpDir, "DEFAULT.md");
+    const mdPath = join(tmpDir, "CLAUDE.md");
     writeFileSync(mdPath, "# Test\n");
 
     // No explicit rules config — uses defaults (require-spec: true)
     const result = validate("# Test\n", { filePath: mdPath });
     assert.equal(result.valid, false);
     assert.ok(result.errors.some((e) => e.rule === "require-spec"));
+  });
+
+  it("should not fire for SKILL.md files", () => {
+    const mdPath = join(tmpDir, "SKILL.md");
+    writeFileSync(mdPath, "# Test\n");
+
+    const result = validate("# Test\n", {
+      filePath: mdPath,
+      rules: { "require-spec": true },
+    });
+    assert.ok(!result.errors.some((e) => e.rule === "require-spec"));
   });
 });
 

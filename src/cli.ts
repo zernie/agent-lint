@@ -30,6 +30,7 @@ import {
   checkFileHash,
   executeChecks,
   adoptDiff,
+  addHash,
 } from "./compile.js";
 import type { CompileError, AssertionResult } from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
@@ -187,12 +188,13 @@ async function compile(
         writeFileSync(resolve(basePath, primaryOutput), markdown);
         const outputNames = [primaryOutput];
 
-        // Write additional targets with swapped heading
+        // Write additional targets with swapped heading + recomputed hash
         for (const t of targets.slice(1)) {
-          const additional = markdown.replace(
-            /^(<!-- vigiles:[^\n]+\n\n?)# [^\n]+/,
-            `$1# ${t}`,
-          );
+          // Strip hash, replace heading, recompute hash
+          const body = markdown
+            .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
+            .replace(/^# [^\n]+/, `# ${t}`);
+          const additional = addHash(body, specPath);
           const dir = primaryOutput.substring(
             0,
             primaryOutput.lastIndexOf("/") + 1,
@@ -1108,7 +1110,10 @@ function migrate(args: string[]): void {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      const escaped = s.body.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+      const escaped = s.body
+        .replace(/\\/g, "\\\\")
+        .replace(/`/g, "\\`")
+        .replace(/\$\{/g, "\\${");
       specLines.push(`    "${key}": \`${escaped}\`,`);
       specLines.push(``);
     }
@@ -1124,12 +1129,13 @@ function migrate(args: string[]): void {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
+      const safeTitle = rule.title.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       if (rule.enforcement === "enforced" && rule.enforcedBy) {
         specLines.push(
-          `    "${key}": enforce("${rule.enforcedBy}", "${rule.title}"),`,
+          `    "${key}": enforce("${rule.enforcedBy}", "${safeTitle}"),`,
         );
       } else {
-        specLines.push(`    "${key}": guidance("${rule.title}"),`);
+        specLines.push(`    "${key}": guidance("${safeTitle}"),`);
       }
     }
     specLines.push(`  },`);

@@ -210,8 +210,12 @@ export function validate(
 
   // --- require-spec ---
   // Check that the instruction file has a corresponding .spec.ts.
+  // Only applies to CLAUDE.md and AGENTS.md, not SKILL.md (skills are hand-written).
   // Disable per-file with <!-- vigiles-disable require-spec -->.
-  if (activeRules["require-spec"] !== false && filePath) {
+  const basename = filePath?.split("/").pop() ?? "";
+  const isInstructionFile =
+    basename === "CLAUDE.md" || basename === "AGENTS.md";
+  if (activeRules["require-spec"] !== false && filePath && isInstructionFile) {
     const disableComment = /<!--\s*vigiles-disable\s+require-spec\s*-->/;
     if (!disableComment.test(content)) {
       const specPath = filePath + ".spec.ts";
