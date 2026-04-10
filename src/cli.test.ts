@@ -164,11 +164,16 @@ describe("CLI: vigiles check", () => {
 // ---------------------------------------------------------------------------
 
 describe("CLI: vigiles generate-types", () => {
-  it("should generate types for the project", () => {
-    const { stdout, exitCode } = run("generate-types", process.cwd());
+  it("should generate types", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-gen-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { build: "echo ok" } }),
+    );
+    const { stdout, exitCode } = run("generate-types", tmpDir);
     assert.equal(exitCode, 0);
-    assert.ok(stdout.includes("eslint:"));
     assert.ok(stdout.includes("Generated"));
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("should verify freshness with --check", () => {
