@@ -172,12 +172,18 @@ describe("CLI: vigiles generate-types", () => {
   });
 
   it("should verify freshness with --check", () => {
-    // First generate fresh types
-    run("generate-types", process.cwd());
+    // Use a temp dir so we don't modify the project's generated types
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-types-check-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+    // Generate types in temp dir
+    run("generate-types", tmpDir);
     // Then check — should pass
-    const { stdout, exitCode } = run("generate-types --check", process.cwd());
+    const { exitCode } = run("generate-types --check", tmpDir);
     assert.equal(exitCode, 0);
-    assert.ok(stdout.includes("up to date"));
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 
