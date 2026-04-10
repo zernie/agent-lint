@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:de7517bae370191c compiled from examples/SKILL.md.spec.ts -->
+<!-- vigiles:sha256:da271d5e41e8e90e compiled from examples/SKILL.md.spec.ts -->
 
 ---
 

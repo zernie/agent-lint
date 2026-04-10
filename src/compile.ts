@@ -579,8 +579,8 @@ export function compileSkill(
     errors.push(...validateRefs(spec.body, basePath));
   }
 
-  // Build frontmatter
-  const fm: string[] = ["---"];
+  // Build frontmatter (blank lines after opening/before closing --- for prettier)
+  const fm: string[] = ["---", ""];
   fm.push(`name: ${spec.name}`);
   fm.push(`description: ${spec.description}`);
   if (spec.disableModelInvocation !== undefined) {
@@ -589,7 +589,7 @@ export function compileSkill(
   if (spec.argumentHint) {
     fm.push(`argument-hint: ${spec.argumentHint}`);
   }
-  fm.push("---");
+  fm.push("", "---");
 
   const body = renderBody(spec.body);
   const content = fm.join("\n") + "\n\n" + body.trim() + "\n";
