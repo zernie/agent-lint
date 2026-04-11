@@ -122,18 +122,18 @@ selling a demo.
 This is the core decision. Both can be driven by an LLM agent. They are not
 equivalent.
 
-| Dimension | Dafny | Lean 4 |
-|---|---|---|
-| Target user | Programmers | Mathematicians, PL researchers |
-| Proof style | Declarative pre/post + SMT auto-discharge | Interactive tactic proofs |
-| Typical burden | 3-20 lines per function | 50-500 lines per theorem |
-| What you verify | Imperative/OO code | Arbitrary propositions |
-| Backend | Z3 (automatic) | Kernel (manual) |
-| Tooling maturity for code | Production (AWS) | Research |
-| LLM pass rate in-domain | ~68% (DafnyBench, GPT-4) | ~30-88% (miniF2F, math only) |
-| Production users | AWS (ESDK, S3 ShardStore) | None at code level; mathlib for math |
-| Error messages | SMT counterexamples, often cryptic | Type errors, very precise |
-| Install footprint | ~50 MB, single binary | ~500 MB, elan toolchain |
+| Dimension                 | Dafny                                     | Lean 4                               |
+| ------------------------- | ----------------------------------------- | ------------------------------------ |
+| Target user               | Programmers                               | Mathematicians, PL researchers       |
+| Proof style               | Declarative pre/post + SMT auto-discharge | Interactive tactic proofs            |
+| Typical burden            | 3-20 lines per function                   | 50-500 lines per theorem             |
+| What you verify           | Imperative/OO code                        | Arbitrary propositions               |
+| Backend                   | Z3 (automatic)                            | Kernel (manual)                      |
+| Tooling maturity for code | Production (AWS)                          | Research                             |
+| LLM pass rate in-domain   | ~68% (DafnyBench, GPT-4)                  | ~30-88% (miniF2F, math only)         |
+| Production users          | AWS (ESDK, S3 ShardStore)                 | None at code level; mathlib for math |
+| Error messages            | SMT counterexamples, often cryptic        | Type errors, very precise            |
+| Install footprint         | ~50 MB, single binary                     | ~500 MB, elan toolchain              |
 
 **The honest comparison.** Dafny is for verifying that a function satisfies a
 spec. Lean 4 is for proving theorems. If you want to say "this sort function
