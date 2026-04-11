@@ -635,6 +635,26 @@ describe("applyMutation", () => {
     assert.ok("no-console" in next);
     assert.ok(!("combined-rule" in next));
   });
+
+  it("does not share rule references with the caller's mutation object", () => {
+    const rule = enforce("eslint/no-eval", "Original reason.");
+    const { rules: next } = applyMutation(
+      {},
+      {
+        type: "add",
+        ruleId: "new-rule",
+        rule,
+      },
+    );
+
+    // Mutate the caller's rule after the fact — engine state must be
+    // unaffected because add should have cloned it.
+    (rule as { why: string }).why = "Tampered reason.";
+
+    const stored = next["new-rule"];
+    assert.ok(stored._kind === "enforce");
+    assert.equal(stored.why, "Original reason.");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -691,6 +711,37 @@ describe("EvolutionEngine", () => {
     assert.equal(result.accepted, true);
     assert.ok("rule2" in engine.getRules());
     assert.ok(result.historyHash);
+  });
+
+  it("isolates Merkle history receipts from the returned proof result", () => {
+    const engine = new EvolutionEngine(
+      { rule1: guidance("Existing.") },
+      { acceptNeutral: true },
+    );
+
+    const result = engine.propose({
+      type: "add",
+      ruleId: "rule2",
+      rule: enforce("eslint/no-console", "New enforced rule."),
+    });
+
+    assert.equal(result.accepted, true);
+    const historyBefore = engine.getHistory().getNodes();
+    const receiptsBefore = historyBefore[historyBefore.length - 1].proofs.map(
+      (r) => ({ ...r }),
+    );
+
+    // Tamper with the returned proof receipts — the Merkle-recorded
+    // receipts must not change, because propose() should defensively
+    // copy before writing to history.
+    for (const r of result.proofs.receipts) {
+      r.passed = false;
+      r.detail = "tampered";
+    }
+
+    const historyAfter = engine.getHistory().getNodes();
+    const storedReceipts = historyAfter[historyAfter.length - 1].proofs;
+    assert.deepEqual(storedReceipts, receiptsBefore);
   });
 
   it("rejects weakening mutation", () => {
