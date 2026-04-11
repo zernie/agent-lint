@@ -536,6 +536,81 @@ function isEslintPluginRule(ruleName: string, basePath: string): boolean {
   return makeResult(ctx, true, enabled);
 }
 
+/**
+ * Enumerate all rules for a CLI-based linter so `tryCliCheck` can emit
+ * closest-match suggestions on typos. Result is cached per (linter,
+ * basePath) so each linter's discovery CLI runs at most once per audit.
+ */
+const CLI_RULE_SET_CACHE = new Map<string, Set<string>>();
+function getCliRuleSet(linterName: string, basePath: string): Set<string> {
+  const key = `${linterName}:${basePath}`;
+  const cached = CLI_RULE_SET_CACHE.get(key);
+  if (cached) return cached;
+  const rules = new Set<string>();
+  try {
+    if (linterName === "ruff") {
+      const output = execSync(
+        `ruff check --show-settings ${resolve(basePath, "dummy.py")}`,
+        { encoding: "utf-8", cwd: basePath, stdio: ["pipe", "pipe", "pipe"] },
+      );
+      const enabledMatch = output.match(
+        /linter\.rules\.enabled\s*=\s*\[([\s\S]*?)\]/,
+      );
+      if (enabledMatch?.[1]) {
+        const codeRe = /\(([A-Z]+\d*)\)/g;
+        let m: RegExpExecArray | null;
+        while ((m = codeRe.exec(enabledMatch[1])) !== null) {
+          rules.add(m[1]);
+        }
+      }
+    } else if (linterName === "pylint") {
+      const output = execSync("pylint --list-msgs-enabled", {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      const codeRe = /\b([a-z][a-z0-9-]+)\s*\([A-Z]\d+\)/g;
+      let m: RegExpExecArray | null;
+      while ((m = codeRe.exec(output)) !== null) {
+        rules.add(m[1]);
+      }
+    } else if (linterName === "rubocop") {
+      const output = execSync("rubocop --show-cops", {
+        encoding: "utf-8",
+        cwd: basePath,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      const copRe = /^([A-Z][A-Za-z]+\/[A-Z][A-Za-z0-9]+):/gm;
+      let m: RegExpExecArray | null;
+      while ((m = copRe.exec(output)) !== null) {
+        rules.add(m[1]);
+      }
+    } else if (linterName === "clippy") {
+      // Read Cargo.toml [lints.clippy] section — same source of truth
+      // generate-types uses. Full clippy catalogue is enormous and
+      // only partially enabled per project.
+      const cargoPath = resolve(basePath, "Cargo.toml");
+      if (existsSync(cargoPath)) {
+        const content = readFileSync(cargoPath, "utf-8");
+        const sectionMatch = content.match(
+          /\[lints\.clippy\]([\s\S]*?)(?=\n\[|$)/,
+        );
+        if (sectionMatch?.[1]) {
+          const ruleRe = /^([a-z][a-z_]*)\s*=/gm;
+          let m: RegExpExecArray | null;
+          while ((m = ruleRe.exec(sectionMatch[1])) !== null) {
+            rules.add(m[1]);
+          }
+        }
+      }
+    }
+  } catch {
+    // CLI failed — return empty set, caller will just skip suggestions
+  }
+  CLI_RULE_SET_CACHE.set(key, rules);
+  return rules;
+}
+
 /** @internal */ function tryCliCheck(
   ctx: RuleContext,
 ): LinterCheckResult | null {
@@ -560,11 +635,21 @@ function isEslintPluginRule(ruleName: string, basePath: string): boolean {
     );
     return makeResult(ctx, true, enabled);
   } catch {
+    // Rule not found — try to suggest closest matches from the full
+    // rule set. Uses the same edit-distance helper as the Node
+    // resolver path; caching means this runs the CLI at most once.
+    const ruleSet = getCliRuleSet(ctx.linterName, ctx.basePath);
+    const suggestions =
+      ruleSet.size > 0 ? closestRuleNames(ctx.ruleName, ruleSet) : [];
+    const hint =
+      suggestions.length > 0
+        ? ` Did you mean: ${suggestions.map((s) => `"${ctx.linterName}/${s}"`).join(", ")}?`
+        : "";
     return makeResult(
       ctx,
       false,
       "unknown",
-      `Rule "${ctx.ruleName}" not found in ${ctx.linterName}`,
+      `Rule "${ctx.ruleName}" not found in ${ctx.linterName}.${hint}`,
     );
   }
 }
