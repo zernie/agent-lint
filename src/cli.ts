@@ -384,14 +384,35 @@ async function findDuplicateRules(
   // If audit was invoked with explicit file arguments, only scan the specs
   // for those files — otherwise an unrelated duplicate elsewhere in the
   // repo would fail a targeted CI check (e.g. `vigiles audit path/foo.md`).
-  // Paths are normalized to absolute form on both sides so "CLAUDE.md",
-  // "./CLAUDE.md", and "/repo/CLAUDE.md" all match the same spec.
+  //
+  // Resolve each requested file to its real source spec by reading the
+  // compiled-from header. Multi-target projects compile one spec to
+  // several targets (e.g. CLAUDE.md.spec.ts → CLAUDE.md + AGENTS.md), so
+  // naive `${file}.spec.ts` concatenation would miss the real source for
+  // the secondary targets. Fall back to the concatenation rule if the
+  // file has no hash header (e.g. freshly hand-written).
   const specs =
     scopeFiles && scopeFiles.length > 0
       ? (() => {
-          const wanted = new Set(
-            scopeFiles.map((f) => resolve(process.cwd(), `${f}.spec.ts`)),
-          );
+          const wanted = new Set<string>();
+          const compiledFromRe =
+            /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from (.+?)\s*-->/;
+          for (const f of scopeFiles) {
+            let resolved: string | undefined;
+            try {
+              const content = readFileSync(resolve(process.cwd(), f), "utf-8");
+              const m = compiledFromRe.exec(content);
+              if (m) {
+                resolved = resolve(process.cwd(), m[1].trim());
+              }
+            } catch {
+              // File unreadable — fall through to the naming convention
+            }
+            if (!resolved) {
+              resolved = resolve(process.cwd(), `${f}.spec.ts`);
+            }
+            wanted.add(resolved);
+          }
           return allSpecs.filter((specPath) =>
             wanted.has(resolve(process.cwd(), specPath)),
           );
