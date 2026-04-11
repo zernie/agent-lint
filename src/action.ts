@@ -1,7 +1,8 @@
 /**
  * GitHub Action entry point for vigiles v2.
  *
- * Runs `compile` or `check` depending on the action input.
+ * Runs `compile` or `audit` depending on the action input.
+ * `check` is accepted as an alias for `audit` (backward compat).
  */
 
 import { writeFileSync, existsSync } from "node:fs";
@@ -20,7 +21,7 @@ import type { ClaudeSpec, SkillSpec } from "./spec.js";
 // Read action inputs
 // ---------------------------------------------------------------------------
 
-const command = process.env["INPUT_COMMAND"] ?? "check";
+const command = process.env["INPUT_COMMAND"] ?? "audit";
 const pathsInput = process.env["INPUT_PATHS"];
 const maxRulesInput =
   process.env["INPUT_MAX-RULES"] ?? process.env["INPUT_MAX_RULES"];
@@ -182,6 +183,7 @@ void (async () => {
   if (command === "compile") {
     valid = await runCompile();
   } else {
+    // "audit" or "check" (backward compat) both run hash verification
     valid = runCheck();
   }
 

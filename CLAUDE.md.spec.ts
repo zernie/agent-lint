@@ -40,7 +40,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/generate-types.ts":
       "Type generator: scans linters/package.json/filesystem → emits .d.ts",
     "src/cli.ts":
-      "CLI: compile, check, init, setup, generate-types, discover, strengthen, adopt",
+      "CLI: init, compile, audit (3 primary commands + generate-types plumbing)",
     "src/action.ts": "GitHub Action wrapper",
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/validate.test.ts": "Validation test suite (node:test)",
