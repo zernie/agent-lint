@@ -373,11 +373,21 @@ interface DuplicateResult {
 async function findDuplicateRules(
   threshold: number = 0.3,
   silent = false,
+  scopeFiles?: string[],
 ): Promise<DuplicateResult> {
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
-  const specs = findSpecs();
+  const allSpecs = findSpecs();
+  // If audit was invoked with explicit file arguments, only scan the specs
+  // for those files — otherwise an unrelated duplicate elsewhere in the
+  // repo would fail a targeted CI check (e.g. `vigiles audit path/foo.md`).
+  const specs =
+    scopeFiles && scopeFiles.length > 0
+      ? allSpecs.filter((specPath) =>
+          scopeFiles.some((f) => specPath === `${f}.spec.ts`),
+        )
+      : allSpecs;
   if (specs.length === 0) return { valid: true, pairCount: 0 };
 
   let totalPairs = 0;
@@ -475,9 +485,15 @@ async function audit(
   if (!silent) console.log("\nLinter rule coverage:\n");
   const coverage = discover(silent);
 
-  // 3. Duplicate rule detection (NCD)
+  // 3. Duplicate rule detection (NCD). Scope to the requested files when
+  // audit was invoked with explicit paths, so targeted CI checks don't
+  // fail on unrelated duplicates elsewhere in the repo.
   if (!silent) console.log("\nDuplicate rule detection:\n");
-  const dups = await findDuplicateRules(0.3, silent);
+  const dups = await findDuplicateRules(
+    0.3,
+    silent,
+    restArgs.length > 0 ? files : undefined,
+  );
 
   // 4. Strengthen suggestions
   if (!silent) console.log("");

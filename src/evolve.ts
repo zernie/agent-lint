@@ -477,7 +477,11 @@ export class EvolutionEngine {
     );
     this.history = options.history ?? new MerkleHistory();
     this.options = {
-      allowWeaken: options.allowWeaken ?? new Set(),
+      // Clone the Set so a caller mutating their own reference after
+      // construction can't silently change acceptance policy (e.g. by
+      // adding a rule id to allow a weakening mutation that would
+      // otherwise be rejected).
+      allowWeaken: new Set(options.allowWeaken ?? []),
       ncdThreshold: options.ncdThreshold ?? 0.3,
       maxTokens: options.maxTokens ?? 2000,
       acceptNeutral: options.acceptNeutral ?? false,
