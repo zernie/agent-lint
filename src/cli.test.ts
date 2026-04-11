@@ -186,6 +186,61 @@ export default claude({
       rmSync(dupDir, { recursive: true, force: true });
     }
   });
+
+  it("should skip inline verification for spec-managed files", () => {
+    // A file with a sibling .spec.ts (and compiled-from header) must
+    // not run inline verification, so literal vigiles:enforce snippets
+    // in prose cannot trip audit when the file is spec-managed.
+    // We use a sibling-.spec.ts with the spec snippet embedded as a
+    // prose section — compile generates the valid hash, then audit
+    // must ignore the inline marker in the output.
+    const specDir = mkdtempSync(join(tmpdir(), "vigiles-audit-spec-skip-"));
+    try {
+      writeFileSync(
+        join(specDir, "package.json"),
+        JSON.stringify({ name: "test", scripts: {} }),
+      );
+      const specSrc = resolve(process.cwd(), "dist", "spec.js");
+      writeFileSync(
+        join(specDir, "CLAUDE.md.spec.ts"),
+        `import { claude, guidance } from "${specSrc}";
+export default claude({
+  sections: {
+    // A literal enforce marker embedded in prose — would be picked
+    // up as an inline rule if audit didn't skip spec-managed files.
+    example: 'Example: <!-- vigiles:enforce eslint/total-nonsense "prose" -->',
+  },
+  rules: {
+    "some-rule": guidance("Something."),
+  },
+});
+`,
+      );
+
+      // Compile first so CLAUDE.md has a valid hash.
+      const compileResult = run("compile", specDir);
+      assert.equal(
+        compileResult.exitCode,
+        0,
+        `compile failed: ${compileResult.stdout}`,
+      );
+
+      const { stdout, exitCode } = run("audit CLAUDE.md", specDir);
+      // Should NOT surface the bogus rule as an inline error.
+      assert.ok(
+        !stdout.includes("total-nonsense"),
+        `Spec-managed file should skip inline verification, got: ${stdout.slice(0, 800)}`,
+      );
+      // And should not have exited with the hard-error code.
+      assert.notEqual(
+        exitCode,
+        2,
+        `Expected no inline errors, got exit ${String(exitCode)}: ${stdout.slice(0, 600)}`,
+      );
+    } finally {
+      rmSync(specDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
