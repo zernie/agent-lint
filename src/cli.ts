@@ -4,12 +4,10 @@
  * vigiles CLI — compile typed specs to instruction files.
  *
  * Commands:
- *   vigiles compile         — compile .spec.ts → .md with linter verification
- *   vigiles check           — verify hashes, run assertions
  *   vigiles init            — scaffold a spec from scratch
+ *   vigiles compile         — compile .spec.ts → .md with linter verification
+ *   vigiles audit           — verify hashes, report coverage, detect duplicates
  *   vigiles generate-types  — emit .d.ts with types from project state
- *   vigiles discover        — scan linter configs, report coverage gaps
- *   vigiles adopt           — detect manual edits, show diff
  */
 
 import {

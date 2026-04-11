@@ -407,6 +407,29 @@ export class EvolutionEngine {
       acceptNeutral: options.acceptNeutral ?? false,
     };
 
+    // If a history was supplied, verify its chain integrity and that its
+    // head corresponds to initialRules. A stale or mismatched history would
+    // produce misleading provenance for subsequent mutations.
+    if (options.history) {
+      const verification = this.history.verify();
+      if (!verification.valid) {
+        throw new Error(
+          `Supplied Merkle history is invalid at node ${String(verification.invalidAt)}. Tamper detected or corrupted chain.`,
+        );
+      }
+      if (this.history.length > 0) {
+        const expectedHash = computeHash(JSON.stringify(this.rules));
+        const head = this.history.head();
+        if (head && head.specHash !== expectedHash) {
+          throw new Error(
+            `Supplied Merkle history head does not match initialRules. ` +
+              `History head specHash="${head.specHash}", expected="${expectedHash}". ` +
+              `The history and rules are mismatched; refusing to record new mutations on the wrong chain.`,
+          );
+        }
+      }
+    }
+
     // Record genesis state
     if (this.history.length === 0) {
       const specHash = computeHash(JSON.stringify(this.rules));

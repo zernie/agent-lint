@@ -522,9 +522,18 @@ export class MerkleHistory implements ReadonlyMerkleHistory {
     }));
   }
 
-  /** Get the latest node, or null if empty. */
+  /**
+   * Get the latest node, or null if empty. Returned as a deep defensive
+   * copy — see getNodes() for rationale.
+   */
   head(): HistoryNode | null {
-    return this.nodes.length > 0 ? this.nodes[this.nodes.length - 1] : null;
+    const last = this.nodes[this.nodes.length - 1];
+    if (!last) return null;
+    return {
+      ...last,
+      mutation: { ...last.mutation, ruleIds: [...last.mutation.ruleIds] },
+      proofs: last.proofs.map((r) => ({ ...r })),
+    };
   }
 
   /**
