@@ -81,6 +81,16 @@ export interface MutationError {
 }
 
 /**
+ * Shallow-clone a Rule. Rules are simple value types (primitive fields only),
+ * so a spread is sufficient to decouple engine state from the caller's
+ * mutation object — without this, later caller-side edits would silently
+ * alter accepted engine state without re-running proofs.
+ */
+function cloneRule(rule: Rule): Rule {
+  return { ...rule };
+}
+
+/**
  * Apply a mutation to a spec's rules, producing a new rule map.
  * Returns null + error if the mutation is invalid.
  */
@@ -101,7 +111,7 @@ export function applyMutation(
           },
         };
       }
-      next[mutation.ruleId] = mutation.rule;
+      next[mutation.ruleId] = cloneRule(mutation.rule);
       return { rules: next };
     }
 
@@ -216,7 +226,7 @@ export function applyMutation(
       void _a;
       void _b;
       return {
-        rules: { ...rest, [mutation.mergedId]: mutation.mergedRule },
+        rules: { ...rest, [mutation.mergedId]: cloneRule(mutation.mergedRule) },
       };
     }
 
@@ -488,10 +498,13 @@ export class EvolutionEngine {
             : ["ruleId" in mutation ? mutation.ruleId : "unknown"],
         description: describeMutation(mutation),
       };
+      // Defensive copy: the same proofResult is returned to the caller,
+      // so without this clone a caller mutating result.proofs.receipts
+      // would retroactively alter the stored history node.
       historyHash = this.history.append(
         specHash,
         historyMutation,
-        proofResult.receipts,
+        proofResult.receipts.map((r) => ({ ...r })),
       );
     }
 
