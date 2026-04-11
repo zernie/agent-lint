@@ -31,17 +31,17 @@ The key principle: **LLM proposes, deterministic algorithm disposes.** AI agents
               │     Proof Suite        │
               │                        │
               │  ┌──────────────────┐  │
-              │  │ Monotonicity     │  │  ← rules only strengthen
-              │  │ Lattice          │  │
+              │  │ Monotonicity     │  │  ← rules only strengthen;
+              │  │ Lattice          │  │    removals require allowlist
               │  ├──────────────────┤  │
-              │  │ NCD Similarity   │  │  ← no duplicate rules
-              │  │ Distance         │  │
+              │  │ NCD Similarity   │  │  ← no NEW duplicate pairs
+              │  │ Distance         │  │    (pre-existing dups ignored)
               │  ├──────────────────┤  │
               │  │ Fixed-Point      │  │  ← compilation converges
               │  │ Convergence      │  │
               │  ├──────────────────┤  │
-              │  │ Bloom Filter     │  │  ← fast approximate matching
-              │  │ Index            │  │
+              │  │ Bloom Filter     │  │  ← token overlap vs surviving
+              │  │ Index            │  │    rules only (excludes removed)
               │  ├──────────────────┤  │
               │  │ Property-Based   │  │  ← invariants hold under
               │  │ Testing          │  │    random mutations
@@ -69,18 +69,16 @@ The key principle: **LLM proposes, deterministic algorithm disposes.** AI agents
 Rules form a lattice ordered by enforcement strength:
 
 ```
-    enforce (2)      ← strongest: backed by external linter
-        │
-    check (1)        ← middle: vigiles-owned filesystem assertion
+    enforce (1)      ← strongest: backed by external linter
         │
     guidance (0)     ← weakest: prose only
 ```
 
-**Monotonicity proof**: Given spec version N and proposed version N+1, for every rule that exists in both versions, its strength in N+1 must be ≥ its strength in N. Weakening requires an explicit `allowWeaken` flag.
+**Monotonicity proof**: Given spec version N and proposed version N+1, for every rule that exists in both versions, its strength in N+1 must be ≥ its strength in N. Weakening requires an explicit `allowWeaken` flag. **Removing** a rule is also a violation unless the rule ID is in `allowWeaken` — otherwise a bare `remove` mutation could pass on neutral fitness and silently delete constraints.
 
-This is a **partial order** — rules can be added or removed freely, but existing rules can only move UP the lattice (guidance → check → enforce). This catches the silent regression where someone downgrades an enforced rule to guidance-only.
+This is a **partial order** — rules can be added freely, but existing rules can only move UP the lattice (guidance → enforce). Catches the silent regression where someone downgrades an enforced rule or deletes it entirely.
 
-The lattice extends to coverage: the set of enforced rules in N+1 must be a superset of N's enforced rules. Uses set inclusion as the ordering.
+The lattice extends to coverage: the set of enforced rule IDs in N+1 must be a superset of N's enforced IDs (minus any explicit allowlist).
 
 **Algorithm**: O(n) comparison of rule maps. For each rule ID present in both versions, compare ordinal values.
 
@@ -107,7 +105,7 @@ Where C() is the compressed size (using zlib/gzip). Range: [0, 1+ε] where 0 = i
 
 ### 3. Fixed-Point Convergence
 
-Specs can trigger recompilation (e.g., a `check()` assertion that scans for spec files). The compilation must converge — running the compiler repeatedly must reach a fixed point where the output stops changing.
+Specs can trigger recompilation (e.g., a rule that references a generated file). The compilation must converge — running the compiler repeatedly must reach a fixed point where the output stops changing.
 
 **Algorithm**: Iterate compilation up to N times (default 10). At each step, hash the output. If hash[i] === hash[i-1], fixed point reached. If after N iterations no fixed point, the spec is **divergent** — report the cycle.
 
@@ -168,8 +166,8 @@ Generate random valid mutations and verify that invariants hold across all of th
 
 **Mutation generators**:
 
-- Add random guidance/check/enforce rule
-- Strengthen random guidance → check or check → enforce
+- Add random guidance/enforce rule
+- Strengthen random `guidance → enforce`
 - Remove random rule
 - Reorder rules
 - Modify rule text
@@ -182,13 +180,17 @@ Generate random valid mutations and verify that invariants hold across all of th
 
 ### Mutation Operators
 
-| Operator     | Input                   | Output                          | Proof Required                               |
-| ------------ | ----------------------- | ------------------------------- | -------------------------------------------- |
-| `addRule`    | rule definition         | spec + new rule                 | NCD (no duplicates), Bloom filter            |
-| `strengthen` | rule ID                 | guidance→check or check→enforce | Monotonicity (always passes by definition)   |
-| `weaken`     | rule ID + justification | enforce→check or check→guidance | Monotonicity (requires allowWeaken)          |
-| `merge`      | two rule IDs            | single combined rule            | NCD (verify similarity > threshold)          |
-| `reword`     | rule ID + new text      | updated rule text               | NCD (verify not too different from original) |
+| Operator     | Input                        | Output                             | Proof Required                                                                                        |
+| ------------ | ---------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `add`        | rule definition              | spec + new rule                    | NCD (no _new_ duplicate pairs), bloom (vs surviving rules)                                            |
+| `remove`     | rule ID                      | spec − rule                        | Monotonicity (rejects unless rule in `allowWeaken`)                                                   |
+| `strengthen` | rule ID + linterRule         | `guidance → enforce`               | Monotonicity (always passes by definition)                                                            |
+| `weaken`     | rule ID + justification      | `enforce → guidance`               | Monotonicity (requires `allowWeaken`)                                                                 |
+| `merge`      | two source IDs + merged rule | sources removed, merged rule added | Sources allowlisted for this call; merged rule must be ≥ strongest source; bloom excludes removed IDs |
+| `reword`     | rule ID + new text           | updated rule text                  | NCD (no new duplicate pair introduced)                                                                |
+
+Two rule kinds today (`enforce`, `guidance`) — the earlier `check` kind
+was dropped. Strength ordering is `guidance < enforce`.
 
 ### Fitness Function
 
@@ -198,8 +200,8 @@ fitness(spec) = coverage × (1 - redundancy) × (1 - budget_pressure)
 
 Where:
 
-- **coverage** = (enforced rules + checked rules) / total rules — fraction with teeth
-- **redundancy** = average NCD similarity of all rule pairs below threshold — penalizes duplication
+- **coverage** = enforced rules / total rules — fraction with teeth
+- **redundancy** = fraction of rule pairs below the NCD threshold — penalizes duplication
 - **budget_pressure** = tokens_used / max_tokens — penalizes bloat
 
 Higher fitness = better spec. Range: [0, 1].
@@ -228,9 +230,9 @@ The full loop for autonomous spec improvement:
    a. Apply mutation to spec
    b. Run proof suite:
       - Monotonicity: ✓ (adding a rule, not weakening)
-      - NCD: ✓ (no existing rule within 0.3 distance)
+      - NCD: ✓ (no NEW near-duplicate pair vs baseline)
       - Fixed-point: ✓ (compilation converges in 1 iteration)
-      - Bloom filter: ✓ (no token overlap above threshold)
+      - Bloom filter: ✓ (no token overlap against surviving rules)
    c. Compute fitness: 0.73 → 0.76 (improvement)
    d. Accept mutation
 4. Append to Merkle history with proof receipts
