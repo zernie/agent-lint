@@ -593,15 +593,35 @@ async function audit(
       ? check(files, silent)
       : { valid: true, hashErrors: 0, validationErrors: 0 };
 
-  // 1b. Verify inline vigiles:enforce comments in any instruction file.
-  // This supports projects that haven't adopted .spec.ts mode yet — see
-  // docs/inline-mode.md.
+  // 1b. Verify inline vigiles:enforce comments in any instruction file
+  // that isn't already managed by a .spec.ts. Spec mode is the source of
+  // truth when it exists, so a literal `<!-- vigiles:enforce ... -->`
+  // snippet that survived into the compiled markdown (or an
+  // explanatory example in a spec-managed file) must not trip audit.
+  // A file is spec-managed iff it has a sibling `<file>.spec.ts` OR its
+  // own `<!-- vigiles:sha256:... compiled from <spec> -->` header.
+  // See docs/inline-mode.md.
   let inlineErrors = 0;
   let inlineRules = 0;
   if (!silent && files.length > 0) {
     console.log("\nInline rule verification:");
   }
+  const compiledFromRe =
+    /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from .+?\s*-->/;
   for (const filePath of files) {
+    const abs = resolve(process.cwd(), filePath);
+    if (existsSync(`${abs}.spec.ts`)) {
+      continue; // managed by sibling spec
+    }
+    let content: string;
+    try {
+      content = readFileSync(abs, "utf-8");
+    } catch {
+      continue;
+    }
+    if (compiledFromRe.test(content)) {
+      continue; // managed by the spec referenced in the hash header
+    }
     const result = verifyInlineRules(filePath, silent);
     inlineErrors += result.errorCount;
     inlineRules += result.ruleCount;
