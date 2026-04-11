@@ -26,7 +26,7 @@ import {
 
 import { applyMutation, runProofSuite, EvolutionEngine } from "./evolve.js";
 
-import type { Rule } from "./spec.js";
+import type { Rule, ClaudeSpec } from "./spec.js";
 import { enforce, guidance } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -414,11 +414,11 @@ describe("MerkleHistory", () => {
 
 describe("propertyTest", () => {
   it("passes when invariant always holds", () => {
-    const result = propertyTest<number>(
+    const result = propertyTest(
       0,
-      (n, seed) => n + (seed % 10), // always increases
+      (n: number, seed: number) => n + (seed % 10), // always increases
       {
-        "non-negative": (n) => n >= 0,
+        "non-negative": (n: number) => n >= 0,
       },
       { iterations: 50, sequenceLength: 3 },
     );
@@ -426,11 +426,11 @@ describe("propertyTest", () => {
   });
 
   it("detects invariant violation", () => {
-    const result = propertyTest<number>(
+    const result = propertyTest(
       100,
-      (n, seed) => n - (seed % 200), // can go negative
+      (n: number, seed: number) => n - (seed % 200), // can go negative
       {
-        "non-negative": (n) => n >= 0,
+        "non-negative": (n: number) => n >= 0,
       },
       { iterations: 100, seed: 12345 },
     );
@@ -442,10 +442,10 @@ describe("propertyTest", () => {
 
   it("is deterministic with same seed", () => {
     const run = (seed: number) =>
-      propertyTest<number>(
+      propertyTest(
         0,
-        (n, s) => n + (s % 100) - 50,
-        { positive: (n) => n >= 0 },
+        (n: number, s: number) => n + (s % 100) - 50,
+        { positive: (n: number) => n >= 0 },
         { iterations: 20, seed },
       );
 
@@ -460,27 +460,32 @@ describe("propertyTest", () => {
 // Fitness function
 // ---------------------------------------------------------------------------
 
+const mkSpec = (rules: Record<string, Rule>): ClaudeSpec => ({
+  _specType: "claude",
+  rules,
+});
+
 describe("fitness", () => {
   it("returns 0 for empty spec", () => {
-    const result = fitness({ rules: {} } as any);
+    const result = fitness(mkSpec({}));
     assert.equal(result.score, 0);
     assert.equal(result.coverage, 0);
   });
 
   it("scores higher for more enforcement", () => {
-    const allGuidance = fitness({
-      rules: {
+    const allGuidance = fitness(
+      mkSpec({
         a: guidance("Do X."),
         b: guidance("Do Y."),
-      },
-    } as any);
+      }),
+    );
 
-    const allEnforced = fitness({
-      rules: {
+    const allEnforced = fitness(
+      mkSpec({
         a: enforce("eslint/no-console", "Do X."),
         b: enforce("eslint/no-unused-vars", "Do Y."),
-      },
-    } as any);
+      }),
+    );
 
     assert.ok(
       allEnforced.score > allGuidance.score,
@@ -489,13 +494,13 @@ describe("fitness", () => {
   });
 
   it("computes coverage correctly", () => {
-    const result = fitness({
-      rules: {
+    const result = fitness(
+      mkSpec({
         a: enforce("eslint/no-console", "X"),
         b: guidance("Y"),
         c: enforce("eslint/no-unused-vars", "Z"),
-      },
-    } as any);
+      }),
+    );
 
     // 2 out of 3 are enforced
     assert.ok(
