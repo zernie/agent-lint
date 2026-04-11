@@ -1061,6 +1061,52 @@ describe("EvolutionEngine", () => {
     );
   });
 
+  it("accepts supplied history when rule keys are reordered", () => {
+    // Build an engine + history with rules in one insertion order.
+    const rulesOrderA: Record<string, Rule> = {
+      first: enforce("eslint/no-console", "No console."),
+      second: guidance("Use the logger."),
+    };
+    const engineA = new EvolutionEngine(rulesOrderA);
+    const history = engineA.getHistory() as unknown as MerkleHistory;
+
+    // Rebuild the same rules in a different insertion order. Without a
+    // canonical hash, JSON.stringify would produce a different string and
+    // the constructor would falsely throw "head does not match".
+    const rulesOrderB: Record<string, Rule> = {
+      second: guidance("Use the logger."),
+      first: enforce("eslint/no-console", "No console."),
+    };
+    assert.doesNotThrow(
+      () => new EvolutionEngine(rulesOrderB, { history }),
+      "Canonical hashing should tolerate key-order differences",
+    );
+  });
+
+  it("returns a structured rejection when baseline fitness throws", () => {
+    // Manually build an engine with bad rules, bypassing the normal
+    // validation path. This simulates a legacy compiled spec or JS caller
+    // sneaking a _kind:"check" object into engine state.
+    const engine = new EvolutionEngine({
+      rule1: guidance("Real rule."),
+    });
+    // Tamper with internal state via cast
+    (engine as unknown as { rules: Record<string, Rule> }).rules = {
+      legacy: { _kind: "check", text: "stale" } as unknown as Rule,
+    };
+
+    const result = engine.propose({
+      type: "add",
+      ruleId: "rule2",
+      rule: guidance("New."),
+    });
+    assert.equal(result.accepted, false);
+    assert.ok(
+      /Baseline fitness failed/.test(result.error ?? ""),
+      `Expected structured rejection; got: ${result.error ?? "(none)"}`,
+    );
+  });
+
   it("rejects weakening mutation", () => {
     const engine = new EvolutionEngine({
       rule1: enforce("eslint/no-console", "Important."),
