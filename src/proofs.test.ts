@@ -974,6 +974,30 @@ describe("EvolutionEngine", () => {
     );
   });
 
+  it("clones allowWeaken on construction so later caller mutations cannot alter policy", () => {
+    const allow = new Set<string>(); // initially empty
+    const engine = new EvolutionEngine(
+      { rule1: enforce("eslint/no-console", "Keep it.") },
+      { allowWeaken: allow, acceptNeutral: true },
+    );
+
+    // Mutate the caller's set AFTER construction — a naive reference-store
+    // would let this add rule1 to the engine's allowWeaken and let the
+    // next weaken mutation pass.
+    allow.add("rule1");
+
+    const result = engine.propose({
+      type: "weaken",
+      ruleId: "rule1",
+      justification: "Trying to sneak through.",
+    });
+    assert.equal(
+      result.accepted,
+      false,
+      "Engine must not see caller-side mutations to allowWeaken after construction",
+    );
+  });
+
   it("getRules returns a deep defensive copy that does not alter engine state", () => {
     const engine = new EvolutionEngine({
       rule1: enforce("eslint/no-console", "Original reason."),
