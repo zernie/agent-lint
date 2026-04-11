@@ -92,6 +92,34 @@ function cloneRule(rule: Rule): Rule {
 }
 
 /**
+ * Canonical string representation of a rules map for hashing.
+ *
+ * `JSON.stringify` preserves insertion order, so two logically identical
+ * rule maps built in a different order would hash to different values.
+ * That would make the Merkle head/specHash comparison in the constructor
+ * falsely reject a valid imported history just because the caller
+ * reconstructed rules in a different order.
+ *
+ * Sort by rule id, stringify each entry with its own stable key order,
+ * and join with a separator.
+ */
+function canonicalRulesJson(rules: Record<string, Rule>): string {
+  const sortedIds = Object.keys(rules).sort();
+  const entries = sortedIds.map((id) => {
+    const rule = rules[id];
+    // Also sort the keys within each rule object so { _kind, text } and
+    // { text, _kind } produce the same output.
+    const ruleKeys = Object.keys(rule).sort();
+    const orderedRule: Record<string, unknown> = {};
+    for (const k of ruleKeys) {
+      orderedRule[k] = (rule as unknown as Record<string, unknown>)[k];
+    }
+    return [id, orderedRule];
+  });
+  return JSON.stringify(entries);
+}
+
+/**
  * Apply a mutation to a spec's rules, producing a new rule map.
  * Returns null + error if the mutation is invalid.
  */
@@ -498,7 +526,7 @@ export class EvolutionEngine {
         );
       }
       if (this.history.length > 0) {
-        const expectedHash = computeHash(JSON.stringify(this.rules));
+        const expectedHash = computeHash(canonicalRulesJson(this.rules));
         const head = this.history.head();
         if (head && head.specHash !== expectedHash) {
           throw new Error(
@@ -512,7 +540,7 @@ export class EvolutionEngine {
 
     // Record genesis state
     if (this.history.length === 0) {
-      const specHash = computeHash(JSON.stringify(this.rules));
+      const specHash = computeHash(canonicalRulesJson(this.rules));
       this.history.append(
         specHash,
         {
@@ -562,7 +590,39 @@ export class EvolutionEngine {
    * Returns a detailed result including proof receipts and fitness comparison.
    */
   propose(mutation: SpecMutation): EvolutionResult {
-    const beforeFitness = this.getFitness();
+    // Guard baseline fitness: if engine state contains a malformed rule
+    // (legacy _kind, JS caller, cast bypass), fitness() reaches ruleToText
+    // and throws BEFORE we enter runProofSuite's own try/catch. Return a
+    // clean rejection with a neutral fitness instead of crashing the flow.
+    let beforeFitness: FitnessResult;
+    try {
+      beforeFitness = this.getFitness();
+    } catch (e) {
+      const neutral: FitnessResult = {
+        score: 0,
+        coverage: 0,
+        redundancy: 0,
+        budgetPressure: 0,
+      };
+      return {
+        accepted: false,
+        mutation,
+        proofs: {
+          passed: false,
+          receipts: [
+            {
+              name: "baseline-fitness",
+              passed: false,
+              detail: `Baseline fitness failed: ${e instanceof Error ? e.message : String(e)}`,
+            },
+          ],
+          fitness: neutral,
+        },
+        beforeFitness: neutral,
+        afterFitness: neutral,
+        error: `Baseline fitness failed: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
 
     // Apply the mutation
     const { rules: candidateRules, error } = applyMutation(
@@ -619,7 +679,7 @@ export class EvolutionEngine {
       this.rules = candidateRules;
 
       // Record in Merkle history
-      const specHash = computeHash(JSON.stringify(this.rules));
+      const specHash = computeHash(canonicalRulesJson(this.rules));
       const historyMutation: Mutation = {
         type: mutation.type === "merge" ? "merge" : mutation.type,
         ruleIds:
