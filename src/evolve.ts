@@ -114,8 +114,9 @@ export function applyMutation(
           },
         };
       }
-      delete next[mutation.ruleId];
-      return { rules: next };
+      const { [mutation.ruleId]: _removed, ...rest } = next;
+      void _removed;
+      return { rules: rest };
     }
 
     case "strengthen": {
@@ -201,10 +202,12 @@ export function applyMutation(
           },
         };
       }
-      delete next[idA];
-      delete next[idB];
-      next[mutation.mergedId] = mutation.mergedRule;
-      return { rules: next };
+      const { [idA]: _a, [idB]: _b, ...rest } = next;
+      void _a;
+      void _b;
+      return {
+        rules: { ...rest, [mutation.mergedId]: mutation.mergedRule },
+      };
     }
 
     case "reword": {

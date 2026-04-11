@@ -311,7 +311,7 @@ function validateSpecs(
   return allValid;
 }
 
-async function check(filePaths: string[]): Promise<boolean> {
+function check(filePaths: string[]): boolean {
   const hashesValid = verifyHashes(filePaths);
   const vConfig = loadValidateConfig();
   const specsValid = validateSpecs(filePaths, vConfig.rules);
@@ -380,7 +380,7 @@ async function audit(restArgs: string[]): Promise<boolean> {
   const files = findInstructionFiles(restArgs);
   if (files.length > 0) {
     console.log("Verifying compiled files...\n");
-    const valid = await check(files);
+    const valid = check(files);
     if (!valid) allValid = false;
   } else {
     console.log("No compiled instruction files found.\n");
