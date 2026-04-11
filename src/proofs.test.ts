@@ -406,6 +406,28 @@ describe("MerkleHistory", () => {
     assert.equal(restored.verify().valid, true);
     assert.equal(restored.head()?.specHash, "v1");
   });
+
+  it("returns defensive copies from head()", () => {
+    const history = new MerkleHistory();
+    history.append(
+      "v1",
+      { type: "add", ruleIds: ["r1"], description: "Genesis" },
+      [{ name: "test", passed: true }],
+    );
+
+    const head1 = history.head();
+    assert.ok(head1);
+    // Tamper with the returned node
+    head1.specHash = "tampered";
+    head1.mutation.description = "tampered";
+    head1.proofs[0].passed = false;
+
+    // Internal state is unchanged
+    const head2 = history.head();
+    assert.equal(head2?.specHash, "v1");
+    assert.equal(head2?.mutation.description, "Genesis");
+    assert.equal(head2?.proofs[0].passed, true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -742,6 +764,47 @@ describe("EvolutionEngine", () => {
     const historyAfter = engine.getHistory().getNodes();
     const storedReceipts = historyAfter[historyAfter.length - 1].proofs;
     assert.deepEqual(storedReceipts, receiptsBefore);
+  });
+
+  it("rejects construction with a tampered supplied history", () => {
+    const history = new MerkleHistory();
+    history.append(
+      "v1",
+      { type: "add", ruleIds: ["rule1"], description: "Genesis" },
+      [{ name: "genesis", passed: true }],
+    );
+
+    // Corrupt the serialized form, then rehydrate
+    const serialized = history.toJSON();
+    const parsed = JSON.parse(serialized) as { specHash: string }[];
+    parsed[0].specHash = "tampered";
+    const corrupted = MerkleHistory.fromJSON(JSON.stringify(parsed));
+
+    assert.throws(
+      () =>
+        new EvolutionEngine(
+          { rule1: guidance("Existing.") },
+          { history: corrupted },
+        ),
+      /invalid at node/,
+    );
+  });
+
+  it("rejects construction when supplied history head does not match rules", () => {
+    // Build a history whose head corresponds to rule set A
+    const rulesA = { rule1: guidance("Version A.") };
+    const engineA = new EvolutionEngine(rulesA);
+    const historyA = engineA.getHistory();
+
+    // Try to construct a new engine with rule set B but history A
+    const rulesB = { rule1: guidance("Version B — different.") };
+    // The ReadonlyMerkleHistory returned by getHistory is the same underlying
+    // instance; cast back to MerkleHistory for the test
+    const historyInstance = historyA as unknown as MerkleHistory;
+    assert.throws(
+      () => new EvolutionEngine(rulesB, { history: historyInstance }),
+      /head does not match initialRules/,
+    );
   });
 
   it("rejects weakening mutation", () => {
