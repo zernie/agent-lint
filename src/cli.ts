@@ -187,9 +187,7 @@ async function compile(
       });
 
       const linterCount = linterResults.filter((r) => r.exists).length;
-      const primaryOutput = specPath
-        .replace(/\.spec\.ts$/, "")
-        .replace(/^examples\//, "");
+      const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
 
       if (errors.length === 0) {
         // Write primary target
