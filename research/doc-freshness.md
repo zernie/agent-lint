@@ -293,44 +293,117 @@ No manifest, no input tracking, no false positives from whitespace reformatting.
 
 Input fingerprinting only wins when compilation is expensive enough that you want to **avoid** running it. For vigiles today, it isn't.
 
-### Recommended: configurable freshness rule
+### Recommended: `freshness` validation rule
 
-Make freshness checking a configurable rule in `vigiles.json` (or `package.json` under `"vigiles"`), defaulting to strict:
+Add `freshness` to `RulesConfig` alongside `require-spec` and `require-skill-spec`. Global rule in `.vigilesrc.json`, optional per-spec override in the spec itself.
 
 ```json
 {
   "rules": {
-    "freshness": "strict"
-  }
+    "require-spec": "warn",
+    "freshness": "error"
+  },
+  "freshnessMode": "strict"
 }
 ```
 
-| Mode                 | What `vigiles audit` does                                                                  | Cost                     | False positives                                    |
-| -------------------- | ------------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------- |
-| `"strict"` (default) | Recompiles in memory, diffs output. Fails if compiled markdown would change.               | 2-5s (runs full compile) | Zero — it checks the actual output                 |
-| `"input-hash"`       | Checks input fingerprint only. Fails if any tracked input file changed since last compile. | <100ms (hash comparison) | Possible — whitespace changes in config trigger it |
-| `"output-hash"`      | Current behavior. Only checks if the `.md` was hand-edited.                                | <1ms (single hash)       | Zero — but misses input drift entirely             |
-| `false`              | Skip freshness checks.                                                                     | 0                        | N/A                                                |
+Severity controls what happens when staleness is detected (`"error"` = CI fails, `"warn"` = prints warning, `false` = skip). Mode controls **how** staleness is detected:
 
-**Strict mode is correct by default.** It's the only mode with zero false positives AND zero false negatives. The cost is re-running compilation, which takes the same time as `vigiles compile`.
+| Mode                 | What `vigiles audit` does                                                                  | Cost                     | False positives                                    | False negatives                 |
+| -------------------- | ------------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------- | ------------------------------- |
+| `"strict"` (default) | Recompiles in memory, diffs output. Fails if compiled markdown would change.               | 2-5s (runs full compile) | Zero — it checks the actual output                 | Zero                            |
+| `"input-hash"`       | Checks input fingerprint only. Fails if any tracked input file changed since last compile. | <100ms (hash comparison) | Possible — whitespace changes in config trigger it | Possible — transitive deps      |
+| `"output-hash"`      | Current behavior. Only checks if the `.md` was hand-edited.                                | <1ms (single hash)       | Zero — but misses input drift entirely             | Many — misses all input changes |
 
-**Input-hash mode is the fast-path optimization.** Projects where compilation is slow (many specs, large linter configs, slow ESLint plugin loading) can opt into input fingerprinting to skip the full recompile. They accept occasional false positives (config reformatting, irrelevant package.json changes) in exchange for faster CI.
+**Strict mode is correct by default.** Zero false positives AND zero false negatives. The cost is re-running compilation, which takes the same time as `vigiles compile`.
 
-**Output-hash mode is the minimal fallback.** For projects that just want "don't hand-edit the markdown" enforcement.
+**Input-hash mode is the fast-path optimization.** For projects where compilation is slow (many specs, large linter configs, slow ESLint plugin loading). Accepts occasional false positives in exchange for faster CI.
+
+**Output-hash mode is the minimal fallback.** "Don't hand-edit the markdown" enforcement only.
+
+### Per-spec override
+
+A spec can override the global freshness mode:
+
+```typescript
+export default claude({
+  freshness: "input-hash", // override global "strict" for this slow spec
+  rules: { ... },
+});
+```
+
+### Lock files as inputs
+
+For input-hash mode, the lock file is a better signal than `package.json` for dependency changes. vigiles auto-detects lock files by language:
+
+| Lock file           | Language | What it catches                              |
+| ------------------- | -------- | -------------------------------------------- |
+| `package-lock.json` | Node.js  | ESLint/Stylelint plugin version changes      |
+| `yarn.lock`         | Node.js  | Same as above (Yarn)                         |
+| `pnpm-lock.yaml`    | Node.js  | Same as above (pnpm)                         |
+| `bun.lockb`         | Node.js  | Same as above (Bun)                          |
+| `Gemfile.lock`      | Ruby     | RuboCop gem version changes                  |
+| `poetry.lock`       | Python   | Pylint plugin version changes                |
+| `uv.lock`           | Python   | Same as above (uv)                           |
+| `Cargo.lock`        | Rust     | Clippy version changes (via rustc version)   |
+| `requirements.txt`  | Python   | Fallback if no lock file (pip freeze output) |
+
+Detection is simple: check `existsSync` for each. First match wins (projects rarely have competing lock files for the same language). The lock file goes into the input hash alongside linter configs and `package.json`.
+
+Why the lock file and not just `package.json`? Because `package.json` can stay identical while the resolved dependency tree changes (version ranges). A Stylelint plugin upgrade from 15.0.0 to 16.0.0 might add/remove rules — `package.json` says `"^15.0.0"` in both cases, but the lock file changes.
+
+For strict mode this doesn't matter (it recompiles from scratch). For input-hash mode it prevents a class of false negatives where dependencies change but `package.json` doesn't.
+
+If the auto-detection is wrong (e.g., monorepo with lock file at a non-standard location), it can be configured explicitly:
+
+```json
+{
+  "freshnessInputs": ["../../yarn.lock"]
+}
+```
+
+### Type changes
+
+```typescript
+// src/types.ts
+
+export type FreshnessMode = "strict" | "input-hash" | "output-hash";
+
+export interface RulesConfig {
+  "require-spec"?: RuleSeverity;
+  "require-skill-spec"?: RuleSeverity;
+  freshness?: RuleSeverity; // NEW
+}
+
+export interface VigilesConfig {
+  ruleMarkers: MarkerType[];
+  rules: Required<RulesConfig>;
+  files: string[];
+  freshnessMode?: FreshnessMode; // NEW — default "strict"
+  freshnessInputs?: string[]; // NEW — extra files to include in input hash
+}
+```
+
+### Default behavior change
+
+Today: `vigiles audit` only checks output hashes (hand-edit detection).
+After: `vigiles audit` also recompiles in memory and diffs (freshness: "error", strict mode by default).
+
+This is a **breaking change** for projects where the compiled markdown has drifted from the spec. But that's the point — those projects have stale instructions. The `"warn"` severity softens the migration, and `false` opts out entirely.
 
 ### Phase 1: `compile --check` (strict mode)
 
 1. `compile.ts` — add `--check` / `dryRun` flag that compiles in memory, compares to existing file
-2. `cli.ts` (`audit`) — when `freshness: "strict"` (default), run compile in check mode
+2. `cli.ts` (`audit`) — when `freshness` rule is enabled and mode is `"strict"`, run compile in check mode
 3. Error message: `"CLAUDE.md is stale — run vigiles compile"`
-4. Fast path: skip if output hash hasn't changed (same as today, but then also run full check)
 
-### Phase 2: Input fingerprinting (opt-in)
+### Phase 2: Input fingerprinting (input-hash mode)
 
 1. `compile.ts` — compute input hash after compilation, embed as second HTML comment
-2. `cli.ts` (`audit`) — when `freshness: "input-hash"`, extract and verify input hash
-3. Error message: `"Inputs changed since last compile (eslint.config.mjs, package.json) — run vigiles compile"`
-4. Show which files changed (diff input list against current state)
+2. Auto-detect lock files + linter configs as inputs
+3. `cli.ts` (`audit`) — when mode is `"input-hash"`, extract and verify input hash
+4. Error message: `"Inputs changed since last compile (eslint.config.mjs, yarn.lock) — run vigiles compile"`
+5. Show which files changed (diff input list against current state)
 
 ### Phase 3: Granular reporting
 
