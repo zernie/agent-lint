@@ -20,7 +20,8 @@ import {
 import { resolve } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
-import { validate, loadConfig as loadValidateConfig } from "./validate.js";
+import { validate, loadConfig } from "./validate.js";
+import type { VigilesConfig } from "./types.js";
 
 import {
   compileClaude,
@@ -48,34 +49,8 @@ import type { FreshnessResult } from "./freshness.js";
 
 const IGNORE_NODE_MODULES = ["node_modules/**"];
 
-// ---------------------------------------------------------------------------
-// Config loading
-// ---------------------------------------------------------------------------
-
-interface VigilesConfig {
-  maxRules?: number;
-  maxTokens?: number;
-  maxSectionLines?: number;
-  catalogOnly?: boolean;
-  linters?: Record<string, { rulesDir?: string | string[] }>;
-  /** How to detect staleness. Default: "strict" (recompile and diff). */
-  freshnessMode?: "strict" | "input-hash" | "output-hash";
-  /** Extra files to track in input-hash mode. */
-  freshnessInputs?: string[];
-}
-
-function loadConfig(): VigilesConfig {
-  const configPath = resolve(process.cwd(), "vigiles.config.ts");
-  // For now, fall back to .vigilesrc.json-style detection.
-  // Full TS config loading (via tsx/jiti) is a future enhancement.
-  if (existsSync(configPath)) {
-    console.log(
-      `Note: vigiles.config.ts found but TS config loading is not yet supported.`,
-    );
-    console.log(`Using default config. TS config support coming soon.`);
-  }
-  return {};
-}
+// Config is loaded from .vigilesrc.json via validate.ts::loadConfig().
+// All settings (validation, compilation, freshness) are in one place.
 
 // ---------------------------------------------------------------------------
 // Spec loading
@@ -406,7 +381,7 @@ interface CombinedCheckResult {
 
 function check(filePaths: string[], silent = false): CombinedCheckResult {
   const hashes = verifyHashes(filePaths, silent);
-  const vConfig = loadValidateConfig();
+  const vConfig = loadConfig();
   const specsValid = validateSpecs(filePaths, vConfig.rules, silent);
   return {
     valid: hashes.valid && specsValid,
@@ -719,13 +694,11 @@ async function audit(
   const guidanceCount = await countGuidanceRules(silent);
 
   // 5. Freshness check
-  const validateConfig = loadValidateConfig();
-  const freshnessSeverity = validateConfig.rules.freshness;
+  const freshnessSeverity = config?.rules.freshness;
   let freshnessErrors = 0;
   if (freshnessSeverity) {
     if (!silent) console.log("\nFreshness check:\n");
-    const mode =
-      config?.freshnessMode ?? validateConfig.freshnessMode ?? "strict";
+    const mode = config?.freshnessMode ?? "strict";
     freshnessErrors = await checkFreshness(
       files,
       mode,
