@@ -125,6 +125,81 @@ describe("CLI: vigiles compile", () => {
     assert.ok(stdout.includes("CLAUDE.md.spec.ts"));
     rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("should compile subdirectory spec to same directory", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-compile-subdir-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+    const subDir = join(tmpDir, "examples");
+    mkdirSync(subDir);
+    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    writeFileSync(
+      join(subDir, "CLAUDE.md.spec.ts"),
+      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { r: guidance("test") } });\n`,
+    );
+    const { stdout, exitCode } = run(
+      "compile examples/CLAUDE.md.spec.ts",
+      tmpDir,
+    );
+    assert.equal(exitCode, 0, stdout);
+    // Output should be in examples/, not root
+    assert.ok(
+      existsSync(join(subDir, "CLAUDE.md")),
+      "Expected examples/CLAUDE.md to exist",
+    );
+    assert.ok(
+      !existsSync(join(tmpDir, "CLAUDE.md")),
+      "Root CLAUDE.md should NOT exist — spec in subdirectory must write to same directory",
+    );
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should not clobber root spec output when compiling all specs", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-compile-noclobber-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+
+    // Root spec
+    writeFileSync(
+      join(tmpDir, "CLAUDE.md.spec.ts"),
+      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { "root-rule": guidance("from root") } });\n`,
+    );
+    // Subdirectory spec
+    const subDir = join(tmpDir, "examples");
+    mkdirSync(subDir);
+    writeFileSync(
+      join(subDir, "CLAUDE.md.spec.ts"),
+      `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { "sub-rule": guidance("from subdir") } });\n`,
+    );
+
+    const { stdout, exitCode } = run("compile", tmpDir);
+    assert.equal(exitCode, 0, stdout);
+
+    // Root CLAUDE.md should come from root spec
+    const rootMd = readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8");
+    assert.ok(
+      rootMd.includes("from root"),
+      "Root CLAUDE.md should contain root spec content",
+    );
+    assert.ok(
+      !rootMd.includes("from subdir"),
+      "Root CLAUDE.md must not be overwritten by subdirectory spec",
+    );
+
+    // Subdirectory CLAUDE.md should come from subdirectory spec
+    const subMd = readFileSync(join(subDir, "CLAUDE.md"), "utf-8");
+    assert.ok(
+      subMd.includes("from subdir"),
+      "examples/CLAUDE.md should contain subdirectory spec content",
+    );
+
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
 });
 
 // ---------------------------------------------------------------------------
