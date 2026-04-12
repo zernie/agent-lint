@@ -66,6 +66,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)",
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
+    "research/doc-freshness.md":
+      "Research: input fingerprinting, TOC manifests, and stale spec detection",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":
