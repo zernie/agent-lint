@@ -75,6 +75,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Linter support details (6 linters + generate-types)",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
+    "skills/pr-to-lint-rule/eslint.md":
+      "ESLint deep-dive for pr-to-lint-rule skill: plugin lookup, AST selectors, type-aware rules, auto-fix, edge cases",
   },
 
   commands: {
