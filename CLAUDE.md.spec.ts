@@ -79,6 +79,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "docs/spec-format.md": "Spec format reference (target, sections, rules)",
     "docs/linter-support.md":
       "Linter support details (6 linters + generate-types)",
+    "docs/comparison.md":
+      "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
     "docs/freshness.md":
       "Freshness detection: strict/input-hash/output-hash modes, lock file detection, input fingerprinting",
     "docs/inline-mode.md":
@@ -127,6 +129,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
     "no-session-links": guidance(
       "This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.",
+    ),
+
+    "readme-brevity": guidance(
+      "README.md should be a concise pitch + quick start, not a reference manual. Extract detailed sections into docs/ and link with `[Details →](docs/X.md)`. Target ~300 lines max.",
     ),
   },
 });
