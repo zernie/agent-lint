@@ -58,6 +58,7 @@ const DEFAULT_FILES: string[] = ["CLAUDE.md"];
 const DEFAULT_RULES: Required<RulesConfig> = {
   "require-spec": "warn",
   "require-skill-spec": "warn",
+  freshness: "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {
