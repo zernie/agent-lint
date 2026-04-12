@@ -34,11 +34,21 @@ const maxRules = maxRulesInput ? Number(maxRulesInput) : undefined;
 async function loadSpec(
   specPath: string,
 ): Promise<ClaudeSpec | SkillSpec | null> {
-  const distPath = resolve(
-    process.cwd(),
-    specPath.replace(/\/src\//, "/dist/").replace(/\.ts$/, ".js"),
-  );
-  if (existsSync(distPath)) {
+  // Try several resolution strategies:
+  // 1. Replace /src/ with /dist/ (standard TS project layout)
+  // 2. Look under dist/ directly (root-level specs like CLAUDE.md.spec.ts)
+  // 3. Use the .js extension in-place (pre-compiled specs)
+  const jsName = specPath.replace(/\.ts$/, ".js");
+  const candidates = [
+    resolve(process.cwd(), jsName.replace(/\/src\//, "/dist/")),
+    resolve(process.cwd(), "dist", jsName),
+    resolve(process.cwd(), jsName),
+  ];
+  // Deduplicate (candidate 1 and 3 may match when there's no /src/)
+  const unique = [...new Set(candidates)];
+
+  for (const distPath of unique) {
+    if (!existsSync(distPath)) continue;
     try {
       const mod = (await import(distPath)) as {
         default: ClaudeSpec | SkillSpec | { default: ClaudeSpec | SkillSpec };
@@ -53,7 +63,7 @@ async function loadSpec(
       }
       return raw;
     } catch {
-      return null;
+      continue;
     }
   }
   return null;

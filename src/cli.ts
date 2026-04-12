@@ -275,6 +275,19 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
   };
   for (const filePath of filePaths) {
     const fullPath = resolve(process.cwd(), filePath);
+
+    // If the file doesn't exist at all (typo, deleted), that's an error —
+    // not a "no hash" informational message. Without this check, a scoped
+    // audit like `vigiles audit typo.md` would silently exit clean.
+    if (!existsSync(fullPath)) {
+      log(`\n✗ ${filePath} — file not found`);
+      if (!silent) {
+        ghAnnotate("error", `File not found: ${filePath}`, filePath);
+      }
+      errorCount++;
+      continue;
+    }
+
     const result = checkFileHash(fullPath);
 
     if (!result.hasHash) {
