@@ -37,16 +37,26 @@ Based on the detected (or user-specified) language, generate the appropriate rul
 
 #### For JavaScript/TypeScript (ESLint)
 
-Generate:
+**Read `eslint.md` in this skill directory before generating.** It covers plugin lookup, AST selectors, type-aware rules, auto-fix safety, and common gotchas.
+
+Before writing a custom rule:
+
+1. **Check existing plugins** — see the plugin table in `eslint.md`. Most "don't import X", "don't call Y()", and naming patterns are already covered by `no-restricted-imports`, `no-restricted-syntax`, or `@typescript-eslint/naming-convention`.
+2. **Try `no-restricted-syntax`** with an AST selector — this handles ~80% of one-off patterns with zero custom code.
+3. **Only write a custom rule** when you need type information, multi-node analysis, auto-fix, or configurable options.
+
+If a custom rule is needed, generate:
 
 1. **Rule file** (`eslint-rules/<rule-name>.js` or `.ts`) — an ESLint rule using the AST visitor pattern
-2. **Test file** (`eslint-rules/<rule-name>.test.js` or `.ts`) — using RuleTester with valid/invalid cases
-3. **Registration** — show how to add the rule to `eslint.config.js` (flat config)
+2. **Test file** (`eslint-rules/<rule-name>.test.js` or `.ts`) — using `RuleTester` with valid/invalid cases (include TypeScript edge cases if the project uses TS)
+3. **Registration** — add to `eslint.config.js` via a local plugin object (flat config)
 
 Use the ESLint `RuleModule` format with:
 
-- `meta` (type, docs, messages, schema)
+- `meta` (type, docs, messages, schema) — set `type` correctly: `"problem"` for bugs, `"suggestion"` for conventions
 - `create(context)` returning AST visitor methods
+- Prescriptive error messages: always tell the developer **what to do**, not just what's wrong
+- Auto-fix via `fix` only if the change is semantics-preserving; use `suggest` otherwise
 
 #### For Python (Ruff custom rules or flake8 plugin)
 
