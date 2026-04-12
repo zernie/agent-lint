@@ -75,8 +75,14 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Linter support details (6 linters + generate-types)",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
-    "skills/pr-to-lint-rule/eslint.md":
-      "ESLint deep-dive for pr-to-lint-rule skill: plugin lookup, AST selectors, type-aware rules, auto-fix, edge cases",
+    "skills/linter-docs/eslint.md":
+      "ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases",
+    "skills/linter-docs/rubocop.md":
+      "RuboCop reference: gem table, node pattern DSL, auto-correct, custom cops",
+    "skills/linter-docs/pylint.md":
+      "Pylint reference: plugin table, astroid AST, type inference, custom checkers",
+    "skills/strengthen/SKILL.md":
+      "Strengthen skill: upgrade guidance() → enforce() by finding existing linter rules",
   },
 
   commands: {

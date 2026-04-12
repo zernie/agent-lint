@@ -37,11 +37,11 @@ Based on the detected (or user-specified) language, generate the appropriate rul
 
 #### For JavaScript/TypeScript (ESLint)
 
-**Read `eslint.md` in this skill directory before generating.** It covers plugin lookup, AST selectors, type-aware rules, auto-fix safety, and common gotchas.
+**Read `../linter-docs/eslint.md` before generating.** It covers plugin lookup, AST selectors, type-aware rules, auto-fix safety, and common gotchas.
 
 Before writing a custom rule:
 
-1. **Check existing plugins** — see the plugin table in `eslint.md`. Most "don't import X", "don't call Y()", and naming patterns are already covered by `no-restricted-imports`, `no-restricted-syntax`, or `@typescript-eslint/naming-convention`.
+1. **Check existing plugins** — see the plugin table in `../linter-docs/eslint.md`. Most "don't import X", "don't call Y()", and naming patterns are already covered by `no-restricted-imports`, `no-restricted-syntax`, or `@typescript-eslint/naming-convention`.
 2. **Try `no-restricted-syntax`** with an AST selector — this handles ~80% of one-off patterns with zero custom code.
 3. **Only write a custom rule** when you need type information, multi-node analysis, auto-fix, or configurable options.
 

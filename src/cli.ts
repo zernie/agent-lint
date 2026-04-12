@@ -524,7 +524,7 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
   )
     return 2;
   if (report.duplicatePairs > 0) return 1;
-  // Coverage gaps and strengthen suggestions are informational, not failures
+  // Coverage gaps and guidance counts are informational, not failures
   return 0;
 }
 
@@ -683,9 +683,8 @@ async function audit(
     restArgs.length > 0 ? files : undefined,
   );
 
-  // 4. Strengthen suggestions
-  if (!silent) console.log("");
-  const strengthenCount = await strengthen(silent);
+  // 4. Guidance rule count (strengthen suggestions moved to /strengthen skill)
+  const guidanceCount = await countGuidanceRules(silent);
 
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
@@ -695,7 +694,7 @@ async function audit(
     duplicatePairs: dups.pairCount,
     coverageEnabled: coverage.enabled,
     coverageDocumented: coverage.documented,
-    strengthenSuggestions: strengthenCount,
+    strengthenSuggestions: guidanceCount,
     files,
   };
 
@@ -722,7 +721,9 @@ function printAuditSummary(report: AuditReport): void {
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
   if (report.strengthenSuggestions > 0)
-    parts.push(`${String(report.strengthenSuggestions)} strengthenable`);
+    parts.push(
+      `${String(report.strengthenSuggestions)} guidance (run /strengthen to upgrade)`,
+    );
   if (parts.length === 0) {
     console.log("vigiles: clean");
   } else {
@@ -1255,7 +1256,7 @@ async function setup(args: string[]): Promise<void> {
   console.log("Setup complete.\n");
   console.log(`  1. Edit ${specPaths} — add your project's conventions`);
   console.log(
-    "  2. Run `npx vigiles strengthen` to upgrade guidance → enforce",
+    "  2. Run `/strengthen` in Claude Code to upgrade guidance → enforce",
   );
   if (!strict) {
     console.log(
@@ -1279,121 +1280,25 @@ async function setup(args: string[]): Promise<void> {
 // Strengthen: guidance() → enforce() suggestions
 // ---------------------------------------------------------------------------
 
-// Keywords in guidance text that map to known linter rules
-const GUIDANCE_TO_LINTER: Array<{
-  keywords: string[];
-  rules: string[];
-}> = [
-  {
-    keywords: ["console.log", "console", "no-console", "logger", "logging"],
-    rules: ["eslint/no-console", "ruff/T201"],
-  },
-  {
-    keywords: ["any", "no-explicit-any", "unknown", "type safety"],
-    rules: ["@typescript-eslint/no-explicit-any"],
-  },
-  {
-    keywords: ["await", "promise", "floating", "async", ".catch"],
-    rules: ["@typescript-eslint/no-floating-promises"],
-  },
-  {
-    keywords: ["unused", "dead code", "no-unused"],
-    rules: ["eslint/no-unused-vars", "@typescript-eslint/no-unused-vars"],
-  },
-  {
-    keywords: ["import", "barrel", "internal", "restricted"],
-    rules: ["eslint/no-restricted-imports", "import/no-internal-modules"],
-  },
-  {
-    keywords: ["unwrap", "expect", "panic"],
-    rules: ["clippy/unwrap_used"],
-  },
-  {
-    keywords: ["print", "println", "stdout"],
-    rules: ["ruff/T201", "clippy/print_stdout"],
-  },
-  {
-    keywords: ["assert", "assertion"],
-    rules: ["ruff/S101"],
-  },
-  {
-    keywords: ["todo", "fixme", "hack"],
-    rules: ["eslint/no-warning-comments"],
-  },
-  {
-    keywords: ["debugger"],
-    rules: ["eslint/no-debugger"],
-  },
-  {
-    keywords: ["eval"],
-    rules: ["eslint/no-eval"],
-  },
-];
-
-async function strengthen(silent = false): Promise<number> {
-  const log = (msg: string): void => {
-    if (!silent) console.log(msg);
-  };
-  log("Scanning specs for guidance rules that could be enforced...\n");
-
+async function countGuidanceRules(silent = false): Promise<number> {
   const specs = findSpecs();
-  if (specs.length === 0) {
-    log("No .spec.ts files found. Run `vigiles init` first.");
-    return 0;
-  }
+  if (specs.length === 0) return 0;
 
-  // Scan available linter rules
-  const typesResult = generateTypes({ basePath: process.cwd() });
-  const allLinterRules = new Set<string>();
-  for (const l of typesResult.linters) {
-    for (const r of l.rules) {
-      allLinterRules.add(`${l.linter}/${r}`);
-    }
-  }
-
-  let suggestions = 0;
-
+  let count = 0;
   for (const specPath of specs) {
     const spec = await loadSpec(specPath);
     if (!spec || spec._specType !== "claude") continue;
-
-    for (const [ruleId, rule] of Object.entries(spec.rules)) {
-      if (rule._kind !== "guidance") continue;
-      const text = rule.text.toLowerCase();
-
-      // Find matching linter rules via keyword matching
-      const matches: string[] = [];
-      for (const mapping of GUIDANCE_TO_LINTER) {
-        if (mapping.keywords.some((kw) => text.includes(kw))) {
-          for (const candidate of mapping.rules) {
-            if (allLinterRules.has(candidate)) {
-              matches.push(candidate);
-            }
-          }
-        }
-      }
-
-      if (matches.length > 0) {
-        suggestions++;
-        log(`  "${ruleId}" (guidance) → could be enforced:`);
-        for (const m of matches) {
-          log(`    enforce("${m}", "${rule.text.slice(0, 60)}")`);
-        }
-        log("");
-      }
+    for (const rule of Object.values(spec.rules)) {
+      if (rule._kind === "guidance") count++;
     }
   }
 
-  if (suggestions === 0) {
-    log("No strengthening suggestions found. All guidance rules look correct,");
-    log("or no matching linter rules are enabled in your project.");
-  } else {
-    log(`${String(suggestions)} rule(s) could be strengthened.`);
-    log(
-      "Edit the spec to replace guidance() with enforce() for the suggested rules.",
+  if (!silent && count > 0) {
+    console.log(
+      `${String(count)} guidance rule(s) — run /strengthen to find enforce() upgrades\n`,
     );
   }
-  return suggestions;
+  return count;
 }
 
 // ---------------------------------------------------------------------------
@@ -1550,7 +1455,7 @@ async function main(): Promise<void> {
     }
 
     case "audit": {
-      // audit = verify + discover + strengthen
+      // audit = verify + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
       const exitCode = auditExitCode(report);

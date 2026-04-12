@@ -142,7 +142,7 @@ Running `vigiles audit CLAUDE.md` verifies each inline rule against your real li
 
 **It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync.
 
-**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `vigiles audit` — it scans your linter configs, finds matching rules, and suggests `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
+**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` — it reads your linter configs and per-linter reference docs to find `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
 
 **Already have a hand-written CLAUDE.md?** The wizard detects it and suggests migration.
 
@@ -316,14 +316,15 @@ Or in `.vigilesrc.json`:
 
 Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
 
-| Skill                  | What it does                                                     |
-| ---------------------- | ---------------------------------------------------------------- |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step             |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`           |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec              |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry |
-| `enforce-rules-format` | Validate all rules have enforcement classification               |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                         |
+| Skill                  | What it does                                                            |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step                    |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                  |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                     |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
+| `enforce-rules-format` | Validate all rules have enforcement classification                      |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
 
 ## Maturity Levels
 
