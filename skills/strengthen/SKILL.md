@@ -25,9 +25,12 @@ Also check which linters are present:
 
 Based on which linters are present, read the corresponding reference docs:
 
-- ESLint / Stylelint → `../linter-docs/eslint.md`
-- RuboCop → `../linter-docs/rubocop.md`
+- ESLint → `../linter-docs/eslint.md`
+- Stylelint → `../linter-docs/stylelint.md`
+- Ruff → `../linter-docs/ruff.md`
 - Pylint → `../linter-docs/pylint.md`
+- RuboCop → `../linter-docs/rubocop.md`
+- Clippy → `../linter-docs/clippy.md`
 
 These docs contain plugin tables, recommended rules, and decision matrices for mapping patterns to rules.
 
