@@ -63,11 +63,26 @@ export interface RulesConfig {
   freshness?: RuleSeverity;
 }
 
-/** Full vigiles configuration. */
+/** Full vigiles configuration. Loaded from .vigilesrc.json. */
 export interface VigilesConfig {
+  // --- Validation ---
   ruleMarkers: MarkerType[];
   rules: Required<RulesConfig>;
   files: string[];
+
+  // --- Compilation ---
+  /** Maximum number of rules allowed per spec. */
+  maxRules?: number;
+  /** Maximum estimated tokens for compiled output. */
+  maxTokens?: number;
+  /** Maximum lines per prose section. */
+  maxSectionLines?: number;
+  /** Skip config-enabled checks, only verify rule exists in catalog. */
+  catalogOnly?: boolean;
+  /** Custom linter configs (rulesDir). */
+  linters?: Record<string, { rulesDir?: string | string[] }>;
+
+  // --- Freshness ---
   /** How to detect staleness. Default: "strict" (recompile and diff). */
   freshnessMode?: FreshnessMode;
   /** Extra files to track in input-hash mode (e.g., monorepo root lock file). */
