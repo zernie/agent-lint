@@ -51,11 +51,16 @@ export interface ValidatePathsResult {
 /** Rule severity: "warn" prints but exits 0, "error" fails, false disables. */
 export type RuleSeverity = "warn" | "error" | false;
 
+/** Freshness detection mode for the `freshness` rule. */
+export type FreshnessMode = "strict" | "input-hash" | "output-hash";
+
 export interface RulesConfig {
   /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
   "require-spec"?: RuleSeverity;
   /** Require .spec.ts for SKILL.md files. Default: false. */
   "require-skill-spec"?: RuleSeverity;
+  /** Detect stale compiled output. Default: "warn". */
+  freshness?: RuleSeverity;
 }
 
 /** Full vigiles configuration. */
@@ -63,6 +68,10 @@ export interface VigilesConfig {
   ruleMarkers: MarkerType[];
   rules: Required<RulesConfig>;
   files: string[];
+  /** How to detect staleness. Default: "strict" (recompile and diff). */
+  freshnessMode?: FreshnessMode;
+  /** Extra files to track in input-hash mode (e.g., monorepo root lock file). */
+  freshnessInputs?: string[];
 }
 
 /** Valid marker types for rule detection. */
