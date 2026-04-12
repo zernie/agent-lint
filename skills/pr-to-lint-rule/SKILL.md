@@ -35,60 +35,32 @@ Look at the repository to determine:
 
 Based on the detected (or user-specified) language, generate the appropriate rule type:
 
-#### For JavaScript/TypeScript (ESLint)
+**Read the linter-specific reference doc before generating.** Each doc covers existing plugins to check first, rule/lint anatomy, AST patterns, auto-fix safety, testing, and edge cases.
 
-**Read `../linter-docs/eslint.md` before generating.** It covers plugin lookup, AST selectors, type-aware rules, auto-fix safety, and common gotchas.
+| Language | Linter | Reference doc |
+| --- | --- | --- |
+| JavaScript/TypeScript | ESLint | `../linter-docs/eslint.md` |
+| Python | Ruff | `../linter-docs/ruff.md` |
+| Python | Pylint | `../linter-docs/pylint.md` |
+| Ruby | RuboCop | `../linter-docs/rubocop.md` |
+| Rust | Clippy | `../linter-docs/clippy.md` |
+| CSS | Stylelint | `../linter-docs/stylelint.md` |
 
-Before writing a custom rule:
+For all linters, follow this order:
 
-1. **Check existing plugins** — see the plugin table in `../linter-docs/eslint.md`. Most "don't import X", "don't call Y()", and naming patterns are already covered by `no-restricted-imports`, `no-restricted-syntax`, or `@typescript-eslint/naming-convention`.
-2. **Try `no-restricted-syntax`** with an AST selector — this handles ~80% of one-off patterns with zero custom code.
-3. **Only write a custom rule** when you need type information, multi-node analysis, auto-fix, or configurable options.
+1. **Check existing plugins/rules first** — see the plugin table in the linter doc
+2. **Try built-in config options** — most linters have `no-restricted-*` or equivalent rules that handle one-off patterns without custom code
+3. **Only write a custom rule** when you need AST analysis, auto-fix, or configurable options beyond what exists
 
-If a custom rule is needed, generate:
-
-1. **Rule file** (`eslint-rules/<rule-name>.js` or `.ts`) — an ESLint rule using the AST visitor pattern
-2. **Test file** (`eslint-rules/<rule-name>.test.js` or `.ts`) — using `RuleTester` with valid/invalid cases (include TypeScript edge cases if the project uses TS)
-3. **Registration** — add to `eslint.config.js` via a local plugin object (flat config)
-
-Use the ESLint `RuleModule` format with:
-
-- `meta` (type, docs, messages, schema) — set `type` correctly: `"problem"` for bugs, `"suggestion"` for conventions
-- `create(context)` returning AST visitor methods
-- Prescriptive error messages: always tell the developer **what to do**, not just what's wrong
-- Auto-fix via `fix` only if the change is semantics-preserving; use `suggest` otherwise
-
-#### For Python (Ruff custom rules or flake8 plugin)
-
-Generate:
-
-1. A Ruff rule definition if the project uses Ruff, OR a flake8 plugin if using flake8
-2. Test cases
-3. Configuration to add to `pyproject.toml` or `setup.cfg`
-
-#### For Rust (Clippy)
-
-Generate:
-
-1. A `clippy.toml` configuration if the pattern can be caught by existing Clippy lints
-2. Or a custom lint using `dylint` if it requires AST analysis
-3. Test cases
+If a custom rule is needed, the reference doc provides: rule anatomy, AST node cheat sheet, auto-fix/suggest patterns, testing examples, and registration instructions.
 
 #### For Go (go/analysis)
 
-Generate:
-
-1. An analyzer using `golang.org/x/tools/go/analysis`
-2. Test cases using `analysistest`
-3. Integration instructions
+No linter doc yet. Generate an analyzer using `golang.org/x/tools/go/analysis` with `analysistest` tests.
 
 #### For other languages
 
-Generate:
-
-1. The most idiomatic linting approach for that language
-2. Test cases
-3. Integration instructions
+Generate the most idiomatic linting approach with test cases and integration instructions.
 
 ### Step 3: Add to Instruction File
 
