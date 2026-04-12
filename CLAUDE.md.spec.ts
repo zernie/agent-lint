@@ -91,6 +91,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "RuboCop reference: gem table, node pattern DSL, auto-correct, custom cops",
     "skills/linter-docs/pylint.md":
       "Pylint reference: plugin table, astroid AST, type inference, custom checkers",
+    "skills/linter-docs/ruff.md":
+      "Ruff reference: 800+ reimplemented rules, rule selection, auto-fix, pyproject.toml config",
+    "skills/linter-docs/stylelint.md":
+      "Stylelint reference: plugin table, PostCSS AST, custom rules, CSS-in-JS, SCSS",
     "skills/strengthen/SKILL.md":
       "Strengthen skill: upgrade guidance() → enforce() by finding existing linter rules",
   },
