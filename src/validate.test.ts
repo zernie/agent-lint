@@ -424,6 +424,7 @@ describe("loadConfig", () => {
     assert.deepEqual(config.rules, {
       "require-spec": "warn",
       "require-skill-spec": "warn",
+      freshness: "warn",
     });
   });
 

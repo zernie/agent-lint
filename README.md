@@ -60,6 +60,38 @@ Reads fine. Four things are wrong:
 
 The agent reads this, trusts it, and writes code based on stale claims nobody verified.
 
+## What Changes With vigiles
+
+### Claude Code
+
+|                                     | Without vigiles              | With vigiles                                                   |
+| ----------------------------------- | ---------------------------- | -------------------------------------------------------------- |
+| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                      |
+| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                   |
+| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
+| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
+| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
+| **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                        |
+| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
+| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
+| **CI**                              | Nothing to verify            | `vigiles audit` catches hash drift, disabled rules, stale refs |
+
+<details>
+<summary><b>Codex</b> (same compile-time checks, no hooks)</summary>
+
+|                               | Without vigiles                  | With vigiles                                            |
+| ----------------------------- | -------------------------------- | ------------------------------------------------------- |
+| **Instructions**              | Hand-written AGENTS.md           | Compiled from `.spec.ts`                                |
+| **Linter rule references**    | Trust-based                      | Verified at compile time                                |
+| **File paths / commands**     | Rot silently                     | Checked at compile time                                 |
+| **Direct edits to AGENTS.md** | Undetected                       | CI catches hash mismatch                                |
+| **Hooks / auto-compile**      | Not available (no plugin system) | Not available — run `vigiles compile` manually or in CI |
+| **CI**                        | Nothing to verify                | Same `vigiles audit` pipeline as Claude                 |
+
+</details>
+
+Everything vigiles compiles and audits is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](docs/comparison.md)
+
 ## The Fix
 
 Write your conventions as TypeScript. The compiler catches the lies.
@@ -142,7 +174,7 @@ Running `vigiles audit CLAUDE.md` verifies each inline rule against your real li
 
 **It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync.
 
-**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `vigiles audit` — it scans your linter configs, finds matching rules, and suggests `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
+**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` — it reads your linter configs and per-linter reference docs to find `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
 
 **Already have a hand-written CLAUDE.md?** The wizard detects it and suggests migration.
 
@@ -198,57 +230,15 @@ Skill specs use the same helpers for verified references inside instructions. [F
 
 ## Type-Safe Rule References
 
-`vigiles generate-types` scans your actual linter configs and emits a `.d.ts`:
+`vigiles generate-types` scans your linter configs and emits `.vigiles/generated.d.ts`. With this file, `enforce("eslint/no-consolee")` is a red squiggle in your editor — a typo caught at authoring time, not a runtime surprise. Without it, everything falls back to broad types and still works.
 
 ```bash
 $ npx vigiles generate-types
-
-  eslint: 64 enabled rules
-  ruff: 12 enabled rules
-  npm scripts: 5
-  project files: 42
-
+  eslint: 64 enabled rules  |  ruff: 12  |  npm scripts: 5  |  project files: 42
 ✓ Generated .vigiles/generated.d.ts
 ```
 
-The generated file does two things:
-
-**1. Standalone types** for direct import:
-
-```typescript
-// .vigiles/generated.d.ts (auto-generated, DO NOT EDIT)
-declare module "vigiles/generated" {
-  export type EslintRule = "no-console" | "no-unused-vars" | ...;
-  export type RuffRule = "E501" | "F401" | "T201" | ...;
-  export type NpmScript = "build" | "test" | "fmt" | ...;
-  export type ProjectFile = "src/spec.ts" | "src/compile.ts" | ...;
-}
-```
-
-**2. Automatic narrowing** of `enforce()`, `file()`, and `cmd()` via declaration merging:
-
-```typescript
-// Also in generated.d.ts — augments vigiles/spec automatically
-declare module "vigiles/spec" {
-  interface KnownLinterRules {
-    eslint: "no-console" | "no-unused-vars" | ...;
-    "@typescript-eslint": "no-floating-promises" | "no-explicit-any" | ...;
-    ruff: "E501" | "F401" | "T201" | ...;
-  }
-  interface KnownProjectFiles { files: "src/spec.ts" | ...; }
-  interface KnownNpmScripts { scripts: "build" | "test" | ...; }
-}
-```
-
-With this file present, `enforce("eslint/no-consolee")` is a red squiggle in your editor — not a runtime surprise. Without it, everything falls back to broad types and still works.
-
-**Commit this file to git.** It should be checked in so that:
-
-- Editors pick up the types immediately (no setup step for new contributors)
-- CI can verify it's fresh: `npx vigiles generate-types --check`
-- Anyone cloning the repo gets autocomplete and type checking out of the box
-
-Re-run `vigiles generate-types` when you add/remove linter rules, npm scripts, or source files. [Details →](docs/linter-support.md#generate-types)
+Commit the file to git. CI can verify it's fresh: `npx vigiles generate-types --check`. [How it works →](docs/linter-support.md#generate-types)
 
 ## CLI
 
@@ -290,10 +280,27 @@ The plugin provides two hooks:
 
 ## Validation
 
-`vigiles audit` validates instruction files. One rule: `require-spec` (enabled by default) — checks that every CLAUDE.md/AGENTS.md has a corresponding `.spec.ts` file, and verifies SHA-256 integrity hashes to detect manual edits.
+`vigiles audit` validates instruction files with three rules:
+
+| Rule                 | Default  | What it checks                                |
+| -------------------- | -------- | --------------------------------------------- |
+| `require-spec`       | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`    |
+| `require-skill-spec` | `"warn"` | Every SKILL.md has a `.spec.ts`               |
+| `freshness`          | `"warn"` | Compiled output matches current project state |
 
 ```bash
-npx vigiles audit    # errors if CLAUDE.md has no spec, or hash is stale
+npx vigiles audit    # checks specs, hashes, freshness, coverage, duplicates
+```
+
+Configure in `.vigilesrc.json`:
+
+```json
+{
+  "rules": {
+    "require-spec": "error",
+    "freshness": "error"
+  }
+}
 ```
 
 Disable per-file with an HTML comment:
@@ -306,24 +313,40 @@ Disable per-file with an HTML comment:
 ...
 ```
 
-Or in `.vigilesrc.json`:
+### Freshness
+
+The `freshness` rule detects when compiled markdown has drifted from project state — disabled linter rules, deleted files, changed configs. Three detection modes:
+
+| Mode                 | What it does                                                            | Cost   |
+| -------------------- | ----------------------------------------------------------------------- | ------ |
+| `"strict"` (default) | Recompiles in memory, diffs output                                      | 2-5s   |
+| `"input-hash"`       | Checks fingerprint of tracked inputs (spec, linter configs, lock files) | <100ms |
+| `"output-hash"`      | Only detects hand-edits to compiled markdown                            | <1ms   |
+
+Strict mode has zero false positives and zero false negatives. Input-hash mode is faster but can false-positive on config whitespace changes. Set the mode in `.vigilesrc.json`:
 
 ```json
-{ "rules": { "require-spec": false } }
+{
+  "freshnessMode": "input-hash",
+  "freshnessInputs": ["../../yarn.lock"]
+}
 ```
+
+In input-hash mode, vigiles auto-detects lock files across 15 ecosystems (npm, Yarn, pnpm, Bun, Bundler, Poetry, uv, PDM, pip, Cargo, Go, Composer, NuGet, SPM, Mix) and tracks them alongside linter configs, package.json, keyFiles references, and generated types. [Full details →](docs/freshness.md)
 
 ## Skills
 
 Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
 
-| Skill                  | What it does                                                     |
-| ---------------------- | ---------------------------------------------------------------- |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step             |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`           |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec              |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry |
-| `enforce-rules-format` | Validate all rules have enforcement classification               |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                         |
+| Skill                  | What it does                                                            |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step                    |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                  |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                     |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
+| `enforce-rules-format` | Validate all rules have enforcement classification                      |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
 
 ## Maturity Levels
 
@@ -338,59 +361,7 @@ From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-al
 
 ## Output Targets
 
-By default, specs compile to `CLAUDE.md`. Set `target` to compile to other instruction file formats:
-
-```typescript
-// AGENTS.md.spec.ts — single target
-export default claude({
-  target: "AGENTS.md",
-  rules: { ... },
-});
-
-// CLAUDE.md.spec.ts — multiple targets from one spec
-export default claude({
-  target: ["CLAUDE.md", "AGENTS.md"],
-  rules: { ... },
-});
-```
-
-```bash
-$ npx vigiles compile
-✓ CLAUDE.md.spec.ts → CLAUDE.md, AGENTS.md
-```
-
-The compiler, linter cross-referencing, and all validations work identically — only the output filename and heading change. Use sync tools like [rule-porter](https://github.com/nichochar/rule-porter) or [rulesync](https://github.com/dyoshikawa/rulesync) to convert the compiled markdown to non-markdown formats (`.cursorrules`, Copilot, etc.).
-
-## Enforcing Spec Shape with `satisfies`
-
-Use TypeScript's `satisfies` keyword to enforce that your specs always include certain sections or rules:
-
-```typescript
-// Define your project's required spec shape
-type ProjectSpec = {
-  sections: {
-    architecture: string;
-    testing: string;
-  };
-  commands: Record<string, string>;
-  rules: Record<string, Rule>;
-};
-
-// TypeScript errors if you forget a required section
-export default claude({
-  sections: {
-    architecture: "...",
-    testing: "...",
-    // ✗ Remove 'testing' → "Property 'testing' is missing"
-  },
-  commands: {
-    "npm test": "Run all tests",
-  },
-  rules: { ... },
-} satisfies ProjectSpec);
-```
-
-This is a convention you can adopt per-project — define what a "complete" spec looks like for your team, and the compiler enforces it at type-check time.
+Specs compile to `CLAUDE.md` by default. Set `target: "AGENTS.md"` or `target: ["CLAUDE.md", "AGENTS.md"]` for multiple outputs from one spec. For non-markdown formats (`.cursorrules`, Copilot), use [rule-porter](https://github.com/nichochar/rule-porter) or [rulesync](https://github.com/dyoshikawa/rulesync) to convert. [Spec format →](docs/spec-format.md)
 
 ## Related Tools
 

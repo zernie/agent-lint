@@ -20,7 +20,8 @@ import {
 import { resolve } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
-import { validate, loadConfig as loadValidateConfig } from "./validate.js";
+import { validate, loadConfig } from "./validate.js";
+import type { VigilesConfig } from "./types.js";
 
 import {
   compileClaude,
@@ -33,6 +34,14 @@ import type { ClaudeSpec, SkillSpec } from "./spec.js";
 import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { checkLinterRule } from "./linters.js";
+import {
+  discoverInputs,
+  computeInputHash,
+  addInputHash,
+  checkOutputHashFreshness,
+  checkInputHashFreshness,
+} from "./freshness.js";
+import type { FreshnessResult } from "./freshness.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,30 +49,8 @@ import { checkLinterRule } from "./linters.js";
 
 const IGNORE_NODE_MODULES = ["node_modules/**"];
 
-// ---------------------------------------------------------------------------
-// Config loading
-// ---------------------------------------------------------------------------
-
-interface VigilesConfig {
-  maxRules?: number;
-  maxTokens?: number;
-  maxSectionLines?: number;
-  catalogOnly?: boolean;
-  linters?: Record<string, { rulesDir?: string | string[] }>;
-}
-
-function loadConfig(): VigilesConfig {
-  const configPath = resolve(process.cwd(), "vigiles.config.ts");
-  // For now, fall back to .vigilesrc.json-style detection.
-  // Full TS config loading (via tsx/jiti) is a future enhancement.
-  if (existsSync(configPath)) {
-    console.log(
-      `Note: vigiles.config.ts found but TS config loading is not yet supported.`,
-    );
-    console.log(`Using default config. TS config support coming soon.`);
-  }
-  return {};
-}
+// Config is loaded from .vigilesrc.json via validate.ts::loadConfig().
+// All settings (validation, compilation, freshness) are in one place.
 
 // ---------------------------------------------------------------------------
 // Spec loading
@@ -176,7 +163,12 @@ async function compile(
     const basePath = process.cwd();
 
     if (spec._specType === "claude") {
-      const { markdown, errors, linterResults, targets } = compileClaude(spec, {
+      const {
+        markdown: rawMarkdown,
+        errors,
+        linterResults,
+        targets,
+      } = compileClaude(spec, {
         basePath,
         specFile: specPath,
         maxRules: config.maxRules,
@@ -185,6 +177,19 @@ async function compile(
         catalogOnly: config.catalogOnly,
         linters: config.linters,
       });
+
+      // Embed input hash for freshness tracking
+      let markdown = rawMarkdown;
+      if (config.freshnessMode === "input-hash") {
+        const inputs = discoverInputs(
+          specPath,
+          spec,
+          basePath,
+          config.freshnessInputs,
+        );
+        const inputHash = computeInputHash(inputs.files, basePath);
+        markdown = addInputHash(rawMarkdown, inputHash);
+      }
 
       const linterCount = linterResults.filter((r) => r.exists).length;
       const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
@@ -376,7 +381,7 @@ interface CombinedCheckResult {
 
 function check(filePaths: string[], silent = false): CombinedCheckResult {
   const hashes = verifyHashes(filePaths, silent);
-  const vConfig = loadValidateConfig();
+  const vConfig = loadConfig();
   const specsValid = validateSpecs(filePaths, vConfig.rules, silent);
   return {
     valid: hashes.valid && specsValid,
@@ -512,6 +517,7 @@ interface AuditReport {
   coverageEnabled: number;
   coverageDocumented: number;
   strengthenSuggestions: number;
+  freshnessErrors: number;
   files: string[];
 }
 
@@ -520,11 +526,12 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
   if (
     report.hashErrors > 0 ||
     report.validationErrors > 0 ||
-    report.inlineErrors > 0
+    report.inlineErrors > 0 ||
+    report.freshnessErrors > 0
   )
     return 2;
   if (report.duplicatePairs > 0) return 1;
-  // Coverage gaps and strengthen suggestions are informational, not failures
+  // Coverage gaps and guidance counts are informational, not failures
   return 0;
 }
 
@@ -683,9 +690,23 @@ async function audit(
     restArgs.length > 0 ? files : undefined,
   );
 
-  // 4. Strengthen suggestions
-  if (!silent) console.log("");
-  const strengthenCount = await strengthen(silent);
+  // 4. Guidance rule count (strengthen suggestions moved to /strengthen skill)
+  const guidanceCount = await countGuidanceRules(silent);
+
+  // 5. Freshness check
+  const freshnessSeverity = config?.rules.freshness;
+  let freshnessErrors = 0;
+  if (freshnessSeverity) {
+    if (!silent) console.log("\nFreshness check:\n");
+    const mode = config?.freshnessMode ?? "strict";
+    freshnessErrors = await checkFreshness(
+      files,
+      mode,
+      config,
+      freshnessSeverity,
+      silent,
+    );
+  }
 
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
@@ -695,7 +716,8 @@ async function audit(
     duplicatePairs: dups.pairCount,
     coverageEnabled: coverage.enabled,
     coverageDocumented: coverage.documented,
-    strengthenSuggestions: strengthenCount,
+    strengthenSuggestions: guidanceCount,
+    freshnessErrors,
     files,
   };
 
@@ -722,7 +744,11 @@ function printAuditSummary(report: AuditReport): void {
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
   if (report.strengthenSuggestions > 0)
-    parts.push(`${String(report.strengthenSuggestions)} strengthenable`);
+    parts.push(
+      `${String(report.strengthenSuggestions)} guidance (run /strengthen to upgrade)`,
+    );
+  if (report.freshnessErrors > 0)
+    parts.push(`${String(report.freshnessErrors)} stale (run vigiles compile)`);
   if (parts.length === 0) {
     console.log("vigiles: clean");
   } else {
@@ -1255,7 +1281,7 @@ async function setup(args: string[]): Promise<void> {
   console.log("Setup complete.\n");
   console.log(`  1. Edit ${specPaths} — add your project's conventions`);
   console.log(
-    "  2. Run `npx vigiles strengthen` to upgrade guidance → enforce",
+    "  2. Run `/strengthen` in Claude Code to upgrade guidance → enforce",
   );
   if (!strict) {
     console.log(
@@ -1279,121 +1305,125 @@ async function setup(args: string[]): Promise<void> {
 // Strengthen: guidance() → enforce() suggestions
 // ---------------------------------------------------------------------------
 
-// Keywords in guidance text that map to known linter rules
-const GUIDANCE_TO_LINTER: Array<{
-  keywords: string[];
-  rules: string[];
-}> = [
-  {
-    keywords: ["console.log", "console", "no-console", "logger", "logging"],
-    rules: ["eslint/no-console", "ruff/T201"],
-  },
-  {
-    keywords: ["any", "no-explicit-any", "unknown", "type safety"],
-    rules: ["@typescript-eslint/no-explicit-any"],
-  },
-  {
-    keywords: ["await", "promise", "floating", "async", ".catch"],
-    rules: ["@typescript-eslint/no-floating-promises"],
-  },
-  {
-    keywords: ["unused", "dead code", "no-unused"],
-    rules: ["eslint/no-unused-vars", "@typescript-eslint/no-unused-vars"],
-  },
-  {
-    keywords: ["import", "barrel", "internal", "restricted"],
-    rules: ["eslint/no-restricted-imports", "import/no-internal-modules"],
-  },
-  {
-    keywords: ["unwrap", "expect", "panic"],
-    rules: ["clippy/unwrap_used"],
-  },
-  {
-    keywords: ["print", "println", "stdout"],
-    rules: ["ruff/T201", "clippy/print_stdout"],
-  },
-  {
-    keywords: ["assert", "assertion"],
-    rules: ["ruff/S101"],
-  },
-  {
-    keywords: ["todo", "fixme", "hack"],
-    rules: ["eslint/no-warning-comments"],
-  },
-  {
-    keywords: ["debugger"],
-    rules: ["eslint/no-debugger"],
-  },
-  {
-    keywords: ["eval"],
-    rules: ["eslint/no-eval"],
-  },
-];
-
-async function strengthen(silent = false): Promise<number> {
+async function checkFreshness(
+  files: string[],
+  mode: "strict" | "input-hash" | "output-hash",
+  config: VigilesConfig | undefined,
+  severity: "warn" | "error",
+  silent: boolean,
+): Promise<number> {
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
-  log("Scanning specs for guidance rules that could be enforced...\n");
 
-  const specs = findSpecs();
-  if (specs.length === 0) {
-    log("No .spec.ts files found. Run `vigiles init` first.");
-    return 0;
-  }
+  let errorCount = 0;
+  const basePath = process.cwd();
 
-  // Scan available linter rules
-  const typesResult = generateTypes({ basePath: process.cwd() });
-  const allLinterRules = new Set<string>();
-  for (const l of typesResult.linters) {
-    for (const r of l.rules) {
-      allLinterRules.add(`${l.linter}/${r}`);
+  for (const filePath of files) {
+    const abs = resolve(basePath, filePath);
+    if (!existsSync(abs)) continue;
+    const content = readFileSync(abs, "utf-8");
+
+    // Find the spec that compiled this file
+    const hashMatch = content.match(
+      /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from (.+?)\s*-->/,
+    );
+    if (!hashMatch) {
+      // No hash = hand-written file, skip freshness check
+      continue;
+    }
+
+    let result: FreshnessResult;
+    const specFile = hashMatch[1];
+
+    if (mode === "strict") {
+      // Recompile in memory and diff
+      const spec = await loadSpec(specFile);
+      if (!spec || spec._specType !== "claude") {
+        log(`  ? ${filePath} — can't load spec "${specFile}", skipping`);
+        continue;
+      }
+      const compiled = compileClaude(spec, {
+        basePath,
+        specFile,
+        maxRules: config?.maxRules,
+        maxTokens: config?.maxTokens,
+        maxSectionLines: config?.maxSectionLines,
+        catalogOnly: config?.catalogOnly,
+        linters: config?.linters,
+      });
+      // Compare markdown body (strip hash/input lines)
+      const metaRe = /^<!-- vigiles:(sha256|inputs):[^\n]+ -->\r?\n?/gm;
+      const existingBody = content.replace(metaRe, "").trim();
+      const compiledBody = compiled.markdown.replace(metaRe, "").trim();
+      if (existingBody === compiledBody) {
+        result = { fresh: true, mode: "strict" };
+      } else {
+        result = {
+          fresh: false,
+          mode: "strict",
+          reason: "Output would differ if recompiled — run `vigiles compile`",
+        };
+      }
+    } else if (mode === "input-hash") {
+      const specFile = hashMatch[1];
+      const spec = await loadSpec(specFile);
+      if (!spec || spec._specType !== "claude") {
+        log(`  ? ${filePath} — can't load spec "${specFile}", skipping`);
+        continue;
+      }
+      const inputs = discoverInputs(
+        specFile,
+        spec,
+        basePath,
+        config?.freshnessInputs,
+      );
+      result = checkInputHashFreshness(content, inputs.files, basePath);
+    } else {
+      // output-hash mode
+      result = checkOutputHashFreshness(content);
+    }
+
+    if (!result.fresh) {
+      errorCount++;
+      const marker = severity === "error" ? "✗" : "⚠";
+      log(`  ${marker} ${filePath} — ${result.reason ?? "stale"}`);
+      if (result.changedFiles && result.changedFiles.length > 0) {
+        for (const f of result.changedFiles) {
+          log(`    changed: ${f}`);
+        }
+      }
+    } else if (!silent) {
+      log(`  ✓ ${filePath} — fresh (${mode})`);
     }
   }
 
-  let suggestions = 0;
+  if (errorCount === 0) {
+    log("  All files fresh.");
+  }
 
+  return severity === "error" ? errorCount : 0;
+}
+
+async function countGuidanceRules(silent = false): Promise<number> {
+  const specs = findSpecs();
+  if (specs.length === 0) return 0;
+
+  let count = 0;
   for (const specPath of specs) {
     const spec = await loadSpec(specPath);
     if (!spec || spec._specType !== "claude") continue;
-
-    for (const [ruleId, rule] of Object.entries(spec.rules)) {
-      if (rule._kind !== "guidance") continue;
-      const text = rule.text.toLowerCase();
-
-      // Find matching linter rules via keyword matching
-      const matches: string[] = [];
-      for (const mapping of GUIDANCE_TO_LINTER) {
-        if (mapping.keywords.some((kw) => text.includes(kw))) {
-          for (const candidate of mapping.rules) {
-            if (allLinterRules.has(candidate)) {
-              matches.push(candidate);
-            }
-          }
-        }
-      }
-
-      if (matches.length > 0) {
-        suggestions++;
-        log(`  "${ruleId}" (guidance) → could be enforced:`);
-        for (const m of matches) {
-          log(`    enforce("${m}", "${rule.text.slice(0, 60)}")`);
-        }
-        log("");
-      }
+    for (const rule of Object.values(spec.rules)) {
+      if (rule._kind === "guidance") count++;
     }
   }
 
-  if (suggestions === 0) {
-    log("No strengthening suggestions found. All guidance rules look correct,");
-    log("or no matching linter rules are enabled in your project.");
-  } else {
-    log(`${String(suggestions)} rule(s) could be strengthened.`);
-    log(
-      "Edit the spec to replace guidance() with enforce() for the suggested rules.",
+  if (!silent && count > 0) {
+    console.log(
+      `${String(count)} guidance rule(s) — run /strengthen to find enforce() upgrades\n`,
     );
   }
-  return suggestions;
+  return count;
 }
 
 // ---------------------------------------------------------------------------
@@ -1550,7 +1580,7 @@ async function main(): Promise<void> {
     }
 
     case "audit": {
-      // audit = verify + discover + strengthen
+      // audit = verify + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
       const exitCode = auditExitCode(report);

@@ -47,6 +47,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/validate.test.ts": "Validation test suite (node:test)",
     "src/cli.test.ts": "CLI integration + E2E test suite (node:test)",
+    "src/freshness.ts":
+      "Freshness detection: lock file detection, input discovery, hash computation, staleness checks",
+    "src/freshness.test.ts":
+      "Freshness test suite: lock files (15 ecosystems), input discovery, hash computation, staleness",
     "src/proofs.ts":
       "Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)",
     "src/evolve.ts":
@@ -66,6 +70,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)",
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
+    "research/doc-freshness.md":
+      "Research: input fingerprinting, TOC manifests, and stale spec detection",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":
@@ -73,8 +79,24 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "docs/spec-format.md": "Spec format reference (target, sections, rules)",
     "docs/linter-support.md":
       "Linter support details (6 linters + generate-types)",
+    "docs/comparison.md":
+      "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
+    "docs/freshness.md":
+      "Freshness detection: strict/input-hash/output-hash modes, lock file detection, input fingerprinting",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
+    "skills/linter-docs/eslint.md":
+      "ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases",
+    "skills/linter-docs/rubocop.md":
+      "RuboCop reference: gem table, node pattern DSL, auto-correct, custom cops",
+    "skills/linter-docs/pylint.md":
+      "Pylint reference: plugin table, astroid AST, type inference, custom checkers",
+    "skills/linter-docs/ruff.md":
+      "Ruff reference: 800+ reimplemented rules, rule selection, auto-fix, pyproject.toml config",
+    "skills/linter-docs/stylelint.md":
+      "Stylelint reference: plugin table, PostCSS AST, custom rules, CSS-in-JS, SCSS",
+    "skills/strengthen/SKILL.md":
+      "Strengthen skill: upgrade guidance() → enforce() by finding existing linter rules",
   },
 
   commands: {
@@ -111,6 +133,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
     "no-session-links": guidance(
       "This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.",
+    ),
+
+    "readme-brevity": guidance(
+      "README.md should be a concise pitch + quick start, not a reference manual. Extract detailed sections into docs/ and link with `[Details →](docs/X.md)`. Target ~300 lines max.",
     ),
   },
 });
