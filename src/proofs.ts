@@ -635,11 +635,35 @@ export class MerkleHistory implements ReadonlyMerkleHistory {
   }
 
   /**
-   * Deserialize a history from JSON.
+   * Deserialize a history from JSON. Rejects non-array payloads and
+   * validates that each entry has the required HistoryNode shape so
+   * malformed persisted data can't produce a "valid" history that
+   * later crashes on append/verify.
    */
   static fromJSON(json: string): MerkleHistory {
+    const parsed: unknown = JSON.parse(json);
+    if (!Array.isArray(parsed)) {
+      throw new Error(
+        `MerkleHistory.fromJSON: expected an array, got ${typeof parsed}`,
+      );
+    }
+    for (let i = 0; i < parsed.length; i++) {
+      const node = parsed[i] as Record<string, unknown>;
+      if (
+        typeof node !== "object" ||
+        node === null ||
+        typeof node.hash !== "string" ||
+        typeof node.parentHash !== "string" ||
+        typeof node.specHash !== "string" ||
+        typeof node.timestamp !== "number"
+      ) {
+        throw new Error(
+          `MerkleHistory.fromJSON: invalid node at index ${String(i)}`,
+        );
+      }
+    }
     const history = new MerkleHistory();
-    history.nodes = JSON.parse(json) as HistoryNode[];
+    history.nodes = parsed as HistoryNode[];
     return history;
   }
 }
