@@ -1538,7 +1538,13 @@ async function main(): Promise<void> {
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
       const exitCode = auditExitCode(report);
-      if (isGitHubActions()) {
+      // Skip GH annotations when --json or --summary is active —
+      // those modes promise clean machine-readable stdout, and
+      // ::error/::warning lines would contaminate the output for
+      // callers parsing it as JSON.
+      const structuredOutput =
+        flags.includes("--json") || flags.includes("--summary");
+      if (isGitHubActions() && !structuredOutput) {
         if (report.hashErrors > 0) {
           ghAnnotate(
             "error",
