@@ -1,6 +1,6 @@
-# ESLint — Custom Rules Deep Dive
+# ESLint — Reference
 
-Sub-doc for the `pr-to-lint-rule` skill. Read this before generating an ESLint custom rule.
+Shared linter reference for vigiles skills. Used by `strengthen` (find existing rules) and `pr-to-lint-rule` (write custom rules).
 
 ## Check Existing Plugins First
 
