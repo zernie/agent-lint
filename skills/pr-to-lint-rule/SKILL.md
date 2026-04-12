@@ -37,14 +37,14 @@ Based on the detected (or user-specified) language, generate the appropriate rul
 
 **Read the linter-specific reference doc before generating.** Each doc covers existing plugins to check first, rule/lint anatomy, AST patterns, auto-fix safety, testing, and edge cases.
 
-| Language | Linter | Reference doc |
-| --- | --- | --- |
-| JavaScript/TypeScript | ESLint | `../linter-docs/eslint.md` |
-| Python | Ruff | `../linter-docs/ruff.md` |
-| Python | Pylint | `../linter-docs/pylint.md` |
-| Ruby | RuboCop | `../linter-docs/rubocop.md` |
-| Rust | Clippy | `../linter-docs/clippy.md` |
-| CSS | Stylelint | `../linter-docs/stylelint.md` |
+| Language              | Linter    | Reference doc                 |
+| --------------------- | --------- | ----------------------------- |
+| JavaScript/TypeScript | ESLint    | `../linter-docs/eslint.md`    |
+| Python                | Ruff      | `../linter-docs/ruff.md`      |
+| Python                | Pylint    | `../linter-docs/pylint.md`    |
+| Ruby                  | RuboCop   | `../linter-docs/rubocop.md`   |
+| Rust                  | Clippy    | `../linter-docs/clippy.md`    |
+| CSS                   | Stylelint | `../linter-docs/stylelint.md` |
 
 For all linters, follow this order:
 
