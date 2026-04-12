@@ -23,7 +23,7 @@ Your CLAUDE.md is a plain text file. Anyone can edit it. Nobody verifies it. The
 **Markdown can't be validated. TypeScript can.**
 
 ```bash
-npx vigiles setup
+npx vigiles init
 ```
 
 vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md). Every linter reference is verified against your actual config — not just that it exists, but that it's enabled. Every file path is checked against the filesystem. Every command is validated against package.json. If something is stale, broken, or disabled — you find out at compile time, not when the agent silently ignores your instructions.
@@ -66,7 +66,7 @@ Write your conventions as TypeScript. The compiler catches the lies.
 
 ```typescript
 // CLAUDE.md.spec.ts
-import { claude, enforce, guidance, check, every } from "vigiles/spec";
+import { claude, enforce, guidance } from "vigiles/spec";
 
 export default claude({
   commands: {
@@ -87,11 +87,6 @@ export default claude({
     ),
     // ✗ if rule is disabled in config → compile error
 
-    "test-pairing": check(
-      every("src/**/*.service.ts").has("{name}.test.ts"),
-      "Every service must have tests.",
-    ),
-
     "research-first": guidance("Google unfamiliar APIs first."),
   },
 });
@@ -101,7 +96,7 @@ export default claude({
 $ npx vigiles compile
 
 ✓ CLAUDE.md.spec.ts → CLAUDE.md
-  3 rules (1 linter-verified, 1 filesystem check, 1 guidance)
+  2 rules (1 linter-verified, 1 guidance)
   ~180 tokens
 ```
 
@@ -147,11 +142,11 @@ Running `vigiles audit CLAUDE.md` verifies each inline rule against your real li
 
 **It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync.
 
-**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `vigiles strengthen` — it scans your linter configs, finds matching rules, and suggests `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
+**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `vigiles audit` — it scans your linter configs, finds matching rules, and suggests `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
 
 **Already have a hand-written CLAUDE.md?** The wizard detects it and suggests migration.
 
-**Ready to enforce?** Run `npx vigiles setup --strict` to set rules to `"error"` — CI fails if any instruction file lacks a spec.
+**Ready to enforce?** Run `npx vigiles init --strict` to set rules to `"error"` — CI fails if any instruction file lacks a spec.
 
 | Flag                 | Effect                                                |
 | -------------------- | ----------------------------------------------------- |
@@ -161,7 +156,7 @@ Running `vigiles audit CLAUDE.md` verifies each inline rule against your real li
 
 Works the same for humans and agents — fully non-interactive. [Agent setup guide →](docs/agent-setup.md) | [Agent workflows →](docs/agent-workflows.md)
 
-## Three Rule Types
+## Two Rule Types
 
 **`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the catalog AND is enabled in your project config. A disabled rule is a compile error.
 
@@ -173,16 +168,7 @@ Works the same for humans and agents — fully non-interactive. [Agent setup gui
 
 Supports ESLint, Stylelint, Ruff, Clippy, Pylint, and RuboCop. [Full linter support details →](docs/linter-support.md)
 
-**`check()`** — filesystem assertion that vigiles runs directly.
-
-```typescript
-"test-pairing": check(
-  every("src/**/*.controller.ts").has("{name}.test.ts"),
-  "Every controller must have tests.",
-),
-```
-
-**`guidance()`** — prose advice. No enforcement pretended.
+**`guidance()`** — prose advice. No mechanical enforcement, but not untracked: guidance rules participate in the monotonicity proof system. Once a rule exists, it can be strengthened ( `guidance` → `enforce` ) but never weakened or removed without an explicit allowlist. This prevents silent erosion of conventions over time.
 
 ```typescript
 "research-first": guidance("Google unfamiliar APIs first."),
@@ -267,20 +253,17 @@ Re-run `vigiles generate-types` when you add/remove linter rules, npm scripts, o
 ## CLI
 
 ```bash
-npx vigiles setup                   # One-command setup: init + types + compile
-npx vigiles compile               # Compile .spec.ts → .md
-npx vigiles check                 # Verify hashes + run assertions
-npx vigiles init [--target=X.md]  # Scaffold a spec
-npx vigiles generate-types        # Emit .d.ts from project state
+npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
+npx vigiles compile [files...]      # Compile .spec.ts → .md
+npx vigiles audit [files...]        # Verify hashes + linter rules + coverage + suggest upgrades
+npx vigiles generate-types          # Emit .d.ts from project state
 npx vigiles generate-types --check  # Verify .d.ts is up to date
-npx vigiles discover              # Show undocumented linter rules
-npx vigiles adopt                 # Detect manual edits, show diff
 ```
 
 ## GitHub Action
 
 ```yaml
-- uses: zernie/vigiles@main # runs `check` by default
+- uses: zernie/vigiles@main # runs `audit` by default
 - uses: zernie/vigiles@main
   with:
     command: compile # compile specs in CI
@@ -307,10 +290,10 @@ The plugin provides two hooks:
 
 ## Validation
 
-`vigiles check` validates instruction files. One rule: `require-spec` (enabled by default) — checks that every CLAUDE.md/AGENTS.md has a corresponding `.spec.ts` file.
+`vigiles audit` validates instruction files. One rule: `require-spec` (enabled by default) — checks that every CLAUDE.md/AGENTS.md has a corresponding `.spec.ts` file, and verifies SHA-256 integrity hashes to detect manual edits.
 
 ```bash
-npx vigiles check    # errors if CLAUDE.md has no CLAUDE.md.spec.ts
+npx vigiles audit    # errors if CLAUDE.md has no spec, or hash is stale
 ```
 
 Disable per-file with an HTML comment:
@@ -337,7 +320,7 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 | ---------------------- | ---------------------------------------------------------------- |
 | `edit-spec`            | Edit a spec file — guided workflow with compile step             |
 | `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`           |
-| `generate-rule`        | Add a new `enforce()` / `check()` / `guidance()` rule to a spec  |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec              |
 | `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry |
 | `enforce-rules-format` | Validate all rules have enforcement classification               |
 | `audit-feedback-loop`  | Score your repo's feedback loop maturity                         |
