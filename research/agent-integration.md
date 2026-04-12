@@ -115,6 +115,18 @@ Compile-time assertion: if a spec change would delete an `enforce()` rule, requi
 
 Generalize the existing path-verification (`file("src/foo.ts")`) to a crawler that, during `audit`, walks every code-fenced path, every backticked identifier that looks like a file, every npm-script reference, every package name, and flags the ones that no longer resolve. The 59-broken-refs example was in a file no one had audited for 8 months. A cheap cron-friendly audit command closes that gap forever.
 
+### 11. Adversarial AI review loop — NOT BUILT
+
+Ship a skill that takes a spec diff and runs a second LLM pass (same model, reviewer prompt) to critique it before the evolution engine accepts. The Codex-reviews-Claude cycle on PR #16 caught ~40 real bugs across 30+ review rounds — reference leaks, merge semantics, monotonicity bypasses, stale command references. That pattern works. Bake it in: `vigiles evolve --review` proposes a mutation, runs the proof suite, THEN asks a reviewer-prompt subagent "what did I miss?", feeds the response back as a second round of mutations, and only commits the final version. Two-LLM adversarial loop with deterministic gates between rounds.
+
+### 12. Inline-to-spec graduation detector — NOT BUILT
+
+When a markdown file accumulates >N inline `<!-- vigiles:enforce ... -->` comments (default: 5), `audit --summary` includes a "graduate to spec mode" nudge. Bonus: print a ready-to-paste `.spec.ts` template pre-filled with all the inline rules already extracted. The adoption funnel becomes: add one comment → add five → see the nudge → paste the template → you're in spec mode. Zero cliff.
+
+### 13. Cross-file rule coherence — NOT BUILT
+
+When a project has multiple specs (e.g., `CLAUDE.md.spec.ts` + `docs/AGENTS.md.spec.ts`), run NCD across specs (not just within) to detect cross-file near-duplicates. Also flag contradictions: spec A enforces `eslint/no-console` while spec B's prose says "use `console.log` for debugging." Today each spec is audited in isolation; coherence requires a cross-spec pass.
+
 ## What we are NOT adding
 
 - Not a linter. Architectural and per-file rules live in ESLint / Ruff / Steiger / ast-grep. vigiles references them.

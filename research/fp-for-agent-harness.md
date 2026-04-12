@@ -127,6 +127,18 @@ None of the above asks Claude Code's harness to change. vigiles's leverage is th
 
 The runtime wrapper is optional. The spec layer is the thing. Everything else is documentation of the pattern with a compile-time check that the documentation matches reality.
 
+### 11. Adversarial differential replay — NOT BUILT
+
+Record the Merkle chain from a session (every mutation + proof receipt). Replay the same sequence through a different LLM (or different temperature) and compare: which mutations does each accept/reject? Divergence = the mutation is model-sensitive, which means the proof suite isn't strict enough (the deterministic gate should have caught it). This is differential testing applied to agent behavior, and the Merkle chain is already the exact replay log it needs.
+
+### 12. Audit stage as a composable functor — NOT BUILT
+
+Each audit stage today is an imperative function that mutates `silent` state and accumulates counters. Make each stage a pure `(AuditReport) → AuditReport` transformation. Stages compose via plain function composition. The `silent`/`loud` threading becomes a Reader effect; the counter accumulation is just field merges. Users could define custom audit pipelines in their spec: `auditStages: [verifyHashes, inlineRules, coverage]` — pick what runs, skip what doesn't apply.
+
+### 13. Hook contract testing via fast-check — NOT BUILT
+
+Treat each Claude Code hook (PreToolUse, PostToolUse, SessionStart) as a pure function of `(Request, Env) → Response` and property-test it with fast-check: generate random tool-use requests, assert invariants like "PreToolUse never returns both Allow and Block" or "PostToolUse output is always valid JSON." The existing hook scripts are bash, so the "function" is actually `echo $INPUT | bash hook.sh | read $OUTPUT` — property testing over that subprocess boundary catches the silent-matcher-ignore and trailing-wildcard anti-patterns from the agent-integration doc with machine coverage instead of manual audit.
+
 ## Priority
 
 1. **`skill()` builder with typed input/output** — the smallest change, unblocks everything else. Write the builder, compile it to the existing SKILL.md format, audit for missing referenced files.

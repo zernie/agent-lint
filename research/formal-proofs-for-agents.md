@@ -296,3 +296,43 @@ mutations" — but the honest engineering answer is "we are not there yet."
 
 Recommendation: ship 5.1. Prototype 5.2 behind a flag. Write a blog post about
 5.3 but do not build it.
+
+---
+
+## Additional Ideas (post-session)
+
+### 5.4. Dafny-in-comments — inline formal specs
+
+Mirror the inline enforce pattern but for formal contracts:
+`<!-- vigiles:verify dafny "ensures result > 0" -->` next to a function.
+vigiles extracts the contract, wraps the referenced function in a `.dfy`
+file with the contract as a postcondition, runs `dafny verify`. The
+developer writes zero Dafny — they write a one-line natural-language
+contract in a markdown comment, and the tool does the wiring. If the
+proof fails, the error goes back to the agent as a diagnostic. Same
+adoption shape as inline enforce: one comment, zero new files, zero build
+step. The agent can even generate the contract from the function's
+docstring.
+
+### 5.5. Property-test → Dafny bridge
+
+fast-check properties in the spec (from `propertyTest()` in proofs.ts)
+are already "lightweight formal methods" — they test an invariant over
+random inputs. Bridge to Dafny: when a property covers a pure function,
+offer to generate a Dafny contract from the property's invariant. The
+property test IS the spec; Dafny just machine-checks it exhaustively
+instead of sampling. The bridge is mechanical: `property("positive",
+(n) => f(n) > 0)` → `ensures f(n) > 0`. The hard part is translating
+the function body to Dafny, which is where the LLM earns its keep.
+
+### 5.6. Proof receipts in the Merkle chain
+
+When a Dafny/Lean verification passes during evolution, include the
+proof receipt in the Merkle history node alongside the existing
+monotonicity/NCD/bloom receipts. The chain becomes a certificate of
+correctness: "this spec change was not just fitness-positive and
+monotonically valid, it was FORMALLY VERIFIED by Z3/Lean kernel."
+Consumers can distinguish "verified by deterministic proofs" from
+"verified by formal prover" at the receipt level. The `verify()`
+method already checks receipt hashes, so formal receipts get
+tamper-evidence for free.

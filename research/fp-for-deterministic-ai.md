@@ -96,6 +96,18 @@ Bundle: `no-let`, `immutable-data`, `no-loop-statements`, `prefer-readonly-type`
 
 Audit-time scan: detect the pattern `{...a, b: {...a.b, c: {...a.b.c, d: value}}}` (spread nesting ≥ 3) and suggest switching to `monocle-ts` or `optics-ts`. Pure diagnostic — vigiles does not rewrite the code. But it does catch the single ugliest FP anti-pattern LLMs produce when asked to "update this field immutably": nested spreads that nobody can read and nobody tests. Flagging them directs the agent toward the lens library the project presumably already has.
 
+### 11. Immutability as a security property — NOT BUILT
+
+The 15+ defensive-copy fixes from PR #16 proved that shared mutable references are not just a style concern — they're **bypass vectors** in proof-gated systems. Every live reference the engine returned (rules, history nodes, receipts, allowWeaken Set) was a surface where a caller could mutate state without running proofs. Ship this insight as a rule: `enforce("functional/immutable-data")` in evolve.ts and proofs.ts themselves, documented with the rationale "immutability is tamper prevention, not taste." Dogfood vigiles on vigiles.
+
+### 12. Budget-aware fitness with a cliff — NOT BUILT
+
+The current fitness formula (`coverage × (1 - redundancy) × (1 - budgetPressure)`) penalizes ANY token growth linearly, which makes `acceptNeutral` nearly useless: adding a rule always increases tokens, always decreases fitness, always gets rejected. A better formula: `coverage × (1 - redundancy) × min(1, maxTokens / tokens)` — score is flat at 1.0 until you exceed the token budget, then drops off a cliff. This lets useful additions pass while still enforcing the hard cap. Simple change, fixes a real design bug discovered during the `proposeAll` test rewrite.
+
+### 13. Deterministic seed for property tests in CI — NOT BUILT
+
+`propertyTest()` in proofs.ts accepts a `seed` option, but nothing in the CI pipeline uses it. Ship a convention: `vigiles audit --pbt-seed=$GITHUB_SHA` so property-based tests are deterministic per commit (reproducible failures) but vary across commits (explore the search space over time). Combines the benefits of deterministic CI (no flakes) with the coverage of randomized testing (different inputs each push).
+
 ## Railway-oriented programming for skills
 
 Tangent worth noting: the same Result-pipe pattern applies to vigiles's own internal surface. If every audit step, every compile step, every linter-verification step is typed as `(Input) => Result<Output, Diagnostic[]>`, the whole compiler is one `pipe()` chain from spec AST to final output. Errors collect instead of throwing; the top-level command decides whether to short-circuit or aggregate. This is how Effect.ts pipelines are structured, and it would make the compiler's own behavior under partial failure **provably** correct instead of "seems to work in tests." A good reason to adopt neverthrow internally even before we ship it as a preset.
