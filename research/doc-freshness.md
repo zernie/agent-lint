@@ -737,31 +737,86 @@ This catches a class of staleness that file-level tracking misses: a file still 
 **Scope:** Medium — identifier extraction regex, word filter, source grep. ~80 lines.
 **Hooks:** `vigiles audit --refs` as a CI check. Could also run as a post-compile validation step.
 
-## Top 3 Recommendation
+## The Two Freshness Problems
 
-Evaluated against vigiles's positioning (spec-as-source-of-truth, build-artifact model, deterministic verification) and the constraints (deterministic, CLI-friendly, reasonable scope, hook-compatible):
+The options above address two fundamentally different problems that should not be conflated:
 
-### 1. Per-file sidecar manifest (Option 4)
+### Problem 1: Build artifact freshness
 
-**Why #1:** It's the foundation. Every other option benefits from per-file tracking. Without it, you can only say "something changed." With it, you can say "eslint.config.mjs changed, and it affects sections X and Y." It's also the prerequisite for the affected-specs reporter.
+"Did the inputs change since last compile?" The compiled CLAUDE.md is out of date relative to the spec. **Solution: recompile.** Strict mode already solves this with zero false positives. Options 4 (sidecar manifest), 5 (affected-specs), and 8 (AST-normalized fingerprinting) optimize it further. This is a solved problem — the remaining work is CI ergonomics and performance.
 
-The sidecar file is a build artifact, consistent with vigiles's architecture. It's `.gitignore`-able (local cache) or committable (shared baseline), user's choice.
+### Problem 2: Doc freshness (spec accuracy)
 
-### 2. Affected-specs reporter (Option 5)
+"Does the spec itself still accurately describe the project?" The spec compiles perfectly, all references resolve, linter rules are enabled — but the prose says "uses Express for routing" when the team migrated to Hono three months ago. The spec says `src/compile.ts` is "the compiler" but half the logic moved to `src/pipeline.ts`. Nothing in the build breaks. The prose is just wrong.
 
-**Why #2:** It transforms vigiles from "recompile everything" to "recompile what changed." This is the Bazel/Nx insight applied to instruction files. In a monorepo with 20 specs, recompiling only the 2 affected by a config change is a 10x speedup.
+**This is the hard problem.** No tool fully solves it deterministically. But several approaches provide strong signals:
 
-It also enables the cleanest hook pattern: pre-commit runs `vigiles affected --staged | xargs vigiles compile --check` — only validates specs whose inputs were staged. Zero wasted work.
+| Approach                           | What it detects                                        | What it misses                                        |
+| ---------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| Temporal coupling (Option 7)       | Code evolved but spec didn't keep up                   | Spec that's wrong from day one                        |
+| Code element cross-ref (Option 10) | Identifiers in prose that no longer exist              | Identifiers that exist but do something different now |
+| Spec age warning (Option 9)        | Spec hasn't been touched in months                     | Recently-written spec that's inaccurate               |
+| Drift symbol anchoring             | Specific function/class code changed since last review | Prose about unchanged code that was always wrong      |
+| Swimm auto-sync                    | Code snippets in docs changed                          | Prose around unchanged snippets                       |
 
-### 3. Git rename auto-repair (Option 6)
+None of these prove the prose is accurate. They prove the code changed since the prose was written. The inference — "code changed, therefore prose is probably stale" — is a heuristic, but a strong one backed by research (DOCER found that most projects have at least one outdated code reference at any point in their history).
 
-**Why #3:** Small scope, high signal, immediately improves the developer experience. When a `file()` reference breaks, the error goes from "File not found" (dead end) to "File renamed to X in commit Y" (actionable). This is the kind of polish that makes a tool feel intelligent.
+## Build vs Adopt
 
-It also solves the most common staleness scenario: a file is renamed during a refactor, the spec is forgotten, and compilation breaks. Instead of manual investigation, vigiles tells you exactly what happened.
+### Build (vigiles has structural advantage)
 
-### Honorable mention: Temporal coupling (Option 7)
+**Temporal coupling analysis (Option 7)** — Build. vigiles already knows the spec → file dependency graph via `file()` references. Running `git log` against those specific files and computing co-change ratios is ~50 lines. No external tool knows which files a given spec cares about. code-forensics and CodeScene compute coupling between arbitrary file pairs — vigiles can compute coupling between a spec and its declared references, which is a much more targeted signal.
 
-The co-change ratio is the most algorithmically novel option — a well-established metric from software engineering research that has never been applied to AI instruction files. It catches "slow drift" that no hash-based approach can detect. Deferred because it's a diagnostic/reporting feature, not a correctness check. Best suited as a periodic audit (`vigiles audit --coupling`) rather than a per-commit gate.
+**Code element cross-referencing (Option 10)** — Build. vigiles already compiles specs to markdown. It knows which backtick-quoted identifiers came from `file()` refs (structured) vs. prose sections (unstructured). An external tool (DOCER) would re-extract what vigiles already has. The grep-the-codebase step is ~80 lines. DOCER is also a GH Action with academic maintenance cadence, not a production tool.
+
+**Spec age warning (Option 9)** — Build. Trivial (two `git log` calls). Not worth an external dependency.
+
+**Per-file sidecar manifest (Option 4)** — Build. Inherent to the compilation model. Already prototyped.
+
+**Affected-specs reporter (Option 5)** — Build. Inherent to the compilation model. Already prototyped.
+
+**Git rename auto-repair (Option 6)** — Build. ~20 lines in the error path. ctxlint does this but installing ctxlint for one feature is wrong.
+
+### Adopt / Recommend (external tool does it better)
+
+**Symbol-level AST anchoring** — Recommend **Drift**. Drift uses tree-sitter to parse source files and fingerprint individual functions/classes/types. Adding tree-sitter to vigiles would be a heavy dependency (native bindings, per-language grammar packages) for a feature that's orthogonal to vigiles's compilation model. Drift is open source, Rust-based, and purpose-built for this. vigiles should document interop: "Use `drift link` to anchor spec sections to specific symbols. Use `drift check` in CI alongside `vigiles audit`."
+
+The interop is natural because Drift anchors are markdown frontmatter — they can coexist with vigiles's hash comments. A compiled `.md` file can have both:
+
+```markdown
+## <!-- vigiles:sha256:a1b2c3d4 compiled from CLAUDE.md.spec.ts -->
+
+drift:
+files: - src/compile.ts#compileClaude@f21a4fd
+
+---
+```
+
+vigiles handles build freshness (did the spec change?). Drift handles code freshness (did the anchored code change?). Orthogonal concerns, composable tools.
+
+**Prose accuracy verification** — No tool solves this deterministically. Swimm's auto-sync comes closest but it's SaaS with patented algorithms. DocDrift uses LLMs (non-deterministic). The realistic answer: temporal coupling (Option 7) flags specs at risk of prose drift, then a human or agent reviews them. vigiles can emit the signal. It can't verify the prose.
+
+### Don't adopt
+
+**ctxlint / agents-lint / agnix** — These lint raw markdown. vigiles users don't have raw markdown — they have specs that compile to markdown. The compiler already validates paths, commands, and linter rules. These tools solve problem #2 for hand-written files, which vigiles eliminates by construction. Useful only for vigiles's inline-mode users who haven't migrated to full specs.
+
+## Revised Recommendation
+
+### Tier 1: Build now (problem 1 — build freshness optimization)
+
+1. **Per-file sidecar manifest** (Option 4) — foundation for everything. **Already prototyped.**
+2. **Affected-specs reporter** (Option 5) — Bazel-style target determination. **Already prototyped.**
+
+### Tier 2: Build next (problem 2 — doc freshness signals)
+
+3. **Temporal coupling analysis** (Option 7) — the strongest deterministic signal for prose drift. ~50 lines. Novel application of established research. `vigiles audit --coupling`.
+4. **Code element cross-referencing** (Option 10) — catches renamed/deleted identifiers in prose. ~80 lines. `vigiles audit --refs`.
+5. **Git rename auto-repair** (Option 6) — small scope, high signal error UX. ~20 lines.
+
+### Tier 3: Recommend (complementary tools)
+
+6. **Drift** — symbol-level AST anchoring. Recommend for teams that want per-function change tracking. Document interop.
+7. **Spec age warning** (Option 9) — trivial to build, low signal relative to temporal coupling. Build if temporal coupling ships, as a lighter alternative.
 
 ## Hook Integration Patterns
 
