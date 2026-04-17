@@ -60,6 +60,7 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "require-skill-spec": "warn",
   freshness: "warn",
   coverage: false,
+  drift: "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {
