@@ -4,7 +4,7 @@
  * This is the source of truth. CLAUDE.md is a compiled build artifact.
  * Run `npm run compile:spec` to regenerate CLAUDE.md from this spec.
  */
-import { claude, guidance } from "./src/spec.js";
+import { claude, enforce, guidance } from "./src/spec.js";
 
 export default claude({
   sections: {
@@ -48,9 +48,20 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/validate.test.ts": "Validation test suite (node:test)",
     "src/cli.test.ts": "CLI integration + E2E test suite (node:test)",
     "src/freshness.ts":
-      "Freshness detection: lock file detection, input discovery, hash computation, staleness checks",
+      "Freshness detection: lock file detection, input discovery, hash computation, sidecar manifests, affected-specs",
     "src/freshness.test.ts":
-      "Freshness test suite: lock files (15 ecosystems), input discovery, hash computation, staleness",
+      "Freshness test suite: lock files (15 ecosystems), input discovery, hash computation, sidecar manifests, affected-specs",
+    "src/coverage.ts":
+      "Spec coverage analysis: linter rule coverage + npm script coverage with configurable thresholds",
+    "src/coverage.test.ts": "Coverage test suite (node:test)",
+    "src/session.ts":
+      "Post-session audit: git diff analysis against spec surface area",
+    "src/session.test.ts": "Session audit test suite (node:test)",
+    "src/drift.ts":
+      "Drift integration: detect when code anchored by specs has changed (Fiberplane Drift)",
+    "src/drift.test.ts": "Drift test suite (node:test)",
+    "src/types.ts":
+      "Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds",
     "src/proofs.ts":
       "Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)",
     "src/evolve.ts":
@@ -71,7 +82,13 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
     "research/doc-freshness.md":
-      "Research: input fingerprinting, TOC manifests, and stale spec detection",
+      "Research: input fingerprinting, TOC manifests, stale spec detection, competitive landscape, build-vs-adopt analysis",
+    "research/runtime-enforcement.md":
+      "Research: spec-derived runtime enforcement via hooks, skill contracts, session audit",
+    "research/architecture-platform.md":
+      "Research: architecture-aware agent platform (FSD/DDD/hexagonal presets, meta-validation)",
+    "research/formal-proofs-for-agents.md":
+      "Research: formal verification via Lean 4 / Dafny, Cedar pattern, Leanstral integration",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":
@@ -107,6 +124,21 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
   },
 
   rules: {
+    "no-non-null-assertion": enforce(
+      "@typescript-eslint/no-non-null-assertion",
+      "Use proper narrowing instead of ! assertions.",
+    ),
+
+    "no-floating-promises": enforce(
+      "@typescript-eslint/no-floating-promises",
+      "Always await or return promises. Unhandled rejections crash the process.",
+    ),
+
+    "cognitive-complexity": enforce(
+      "sonarjs/cognitive-complexity",
+      "Keep functions under 15 cognitive complexity. Split complex logic into helpers.",
+    ),
+
     "never-skip-tests": guidance(
       "All tests must pass. If a test requires a CLI tool (pylint, rubocop, ruff, clippy), install the tool, don't skip the test.",
     ),

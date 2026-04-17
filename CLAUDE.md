@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:2a0c0efd642c787a compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:f4e63f43bb010ef2 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -39,6 +39,15 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/spec.test.ts` — Spec + compiler test suite (node:test)
 - `src/validate.test.ts` — Validation test suite (node:test)
 - `src/cli.test.ts` — CLI integration + E2E test suite (node:test)
+- `src/freshness.ts` — Freshness detection: lock file detection, input discovery, hash computation, sidecar manifests, affected-specs
+- `src/freshness.test.ts` — Freshness test suite: lock files (15 ecosystems), input discovery, hash computation, sidecar manifests, affected-specs
+- `src/coverage.ts` — Spec coverage analysis: linter rule coverage + npm script coverage with configurable thresholds
+- `src/coverage.test.ts` — Coverage test suite (node:test)
+- `src/session.ts` — Post-session audit: git diff analysis against spec surface area
+- `src/session.test.ts` — Session audit test suite (node:test)
+- `src/drift.ts` — Drift integration: detect when code anchored by specs has changed (Fiberplane Drift)
+- `src/drift.test.ts` — Drift test suite (node:test)
+- `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
 - `src/evolve.ts` — Evolution engine: mutation operators, fitness function, proof-gated selection
 - `src/proofs.test.ts` — Proof system + evolution engine tests (node:test)
@@ -51,11 +60,23 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/ai-code-quality.md` — Research: AI code quality patterns
 - `research/self-evolving-specs.md` — Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)
 - `research/code-search-for-agents.md` — Research: code search approaches (grep vs embeddings vs AST-grep)
+- `research/doc-freshness.md` — Research: input fingerprinting, TOC manifests, stale spec detection, competitive landscape, build-vs-adopt analysis
+- `research/runtime-enforcement.md` — Research: spec-derived runtime enforcement via hooks, skill contracts, session audit
+- `research/architecture-platform.md` — Research: architecture-aware agent platform (FSD/DDD/hexagonal presets, meta-validation)
+- `research/formal-proofs-for-agents.md` — Research: formal verification via Lean 4 / Dafny, Cedar pattern, Leanstral integration
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
 - `docs/linter-support.md` — Linter support details (6 linters + generate-types)
+- `docs/comparison.md` — Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram
+- `docs/freshness.md` — Freshness detection: strict/input-hash/output-hash modes, lock file detection, input fingerprinting
 - `docs/inline-mode.md` — Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts
+- `skills/linter-docs/eslint.md` — ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases
+- `skills/linter-docs/rubocop.md` — RuboCop reference: gem table, node pattern DSL, auto-correct, custom cops
+- `skills/linter-docs/pylint.md` — Pylint reference: plugin table, astroid AST, type inference, custom checkers
+- `skills/linter-docs/ruff.md` — Ruff reference: 800+ reimplemented rules, rule selection, auto-fix, pyproject.toml config
+- `skills/linter-docs/stylelint.md` — Stylelint reference: plugin table, PostCSS AST, custom rules, CSS-in-JS, SCSS
+- `skills/strengthen/SKILL.md` — Strengthen skill: upgrade guidance() → enforce() by finding existing linter rules
 
 ## Commands
 
@@ -65,6 +86,21 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `npm run fmt:check` — Check formatting
 
 ## Rules
+
+### No Non Null Assertion
+
+**Enforced by:** `@typescript-eslint/no-non-null-assertion`
+**Why:** Use proper narrowing instead of ! assertions.
+
+### No Floating Promises
+
+**Enforced by:** `@typescript-eslint/no-floating-promises`
+**Why:** Always await or return promises. Unhandled rejections crash the process.
+
+### Cognitive Complexity
+
+**Enforced by:** `sonarjs/cognitive-complexity`
+**Why:** Keep functions under 15 cognitive complexity. Split complex logic into helpers.
 
 ### Never Skip Tests
 
@@ -93,3 +129,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 ### No Session Links
 
 **Guidance only** — This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.
+
+### Readme Brevity
+
+**Guidance only** — README.md should be a concise pitch + quick start, not a reference manual. Extract detailed sections into docs/ and link with `[Details →](docs/X.md)`. Target ~300 lines max.

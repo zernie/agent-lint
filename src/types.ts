@@ -63,6 +63,8 @@ export interface RulesConfig {
   freshness?: RuleSeverity;
   /** Enforce minimum spec coverage thresholds. Default: false. */
   coverage?: RuleSeverity;
+  /** Check drift anchors for code changes. Default: "warn". */
+  drift?: RuleSeverity;
 }
 
 /** Full vigiles configuration. Loaded from .vigilesrc.json. */
