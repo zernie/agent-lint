@@ -13,7 +13,7 @@
 
 import { gzipSync } from "node:zlib";
 
-import { sha256short } from "./hash.js";
+import { sha256short, assertNever } from "./hash.js";
 import type { Rule, ClaudeSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -233,13 +233,8 @@ function ruleToText(rule: Rule): string {
       return `${rule.linterRule} ${rule.why}`;
     case "guidance":
       return rule.text;
-    default: {
-      // Runtime boundary: legacy specs or JS callers can bypass the Rule type
-      const unknown = (rule as { _kind?: unknown })._kind;
-      throw new Error(
-        `Unknown rule kind "${String(unknown)}" — expected "enforce" or "guidance".`,
-      );
-    }
+    default:
+      return assertNever(rule);
   }
 }
 
