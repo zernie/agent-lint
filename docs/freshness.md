@@ -48,7 +48,7 @@ In input-hash mode, vigiles tracks these files:
 | Lock files       | `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lockb`, `Gemfile.lock`, `poetry.lock`, `uv.lock`, `pdm.lock`, `Cargo.lock`, `go.sum`, `composer.lock`, `packages.lock.json`, `Package.resolved`, `mix.lock`, `requirements.txt` | Dependency version changes can add/remove linter rules |
 | Referenced files | Every `file()` path in `keyFiles`                                                                                                                                                                                                        | Deletion or rename makes the reference stale           |
 | Generated types  | `.vigiles/generated.d.ts`                                                                                                                                                                                                                | If types are stale, rule references may be invalid     |
-| Extra inputs     | Configured via `freshnessInputs`                                                                                                                                                                                                         | For non-standard files (e.g., monorepo root lock file) |
+| Extra inputs     | Configured via `extraInputs` option                                                                                                                                                                                                      | For non-standard files (e.g., monorepo root lock file) |
 
 All files are auto-detected by checking existence at `basePath`. Lock files and linter configs cover 6+ ecosystems (Node.js, Ruby, Python, Rust, Go, PHP, .NET, Swift, Elixir).
 
@@ -58,14 +58,18 @@ For monorepos or non-standard layouts, add extra files to track:
 
 ```json
 {
-  "freshnessMode": "input-hash",
-  "freshnessInputs": ["../../yarn.lock", "shared/eslint-config/index.js"]
+  "rules": {
+    "freshness": ["warn", {
+      "mode": "input-hash",
+      "extraInputs": ["../../yarn.lock", "shared/eslint-config/index.js"]
+    }]
+  }
 }
 ```
 
 ## How the Input Hash Works
 
-At compile time (`vigiles compile`), when `freshnessMode` is `"input-hash"`:
+At compile time (`vigiles compile`), when `freshness` mode is `"input-hash"`:
 
 1. Discover all input files (spec, configs, lock files, keyFiles, etc.)
 2. Compute SHA-256 of each file's contents (missing files hash to `MISSING:<path>`)
