@@ -97,6 +97,14 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
     "docs/freshness.md":
       "Freshness detection: strict/input-hash/output-hash modes, lock file detection, input fingerprinting",
+    "docs/rules/require-spec.md":
+      "Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md",
+    "docs/rules/require-skill-spec.md":
+      "Rule doc: require .spec.ts for SKILL.md files",
+    "docs/rules/freshness.md":
+      "Rule doc: freshness detection modes and configuration",
+    "docs/rules/coverage.md":
+      "Rule doc: spec coverage thresholds (scripts, linter rules)",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
     "skills/linter-docs/eslint.md":
@@ -163,6 +171,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
     "no-session-links": guidance(
       "This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.",
+    ),
+
+    "doc-per-rule": guidance(
+      "Every validation rule in .vigilesrc.json must have a corresponding doc in docs/rules/<rule-name>.md. The doc covers configuration, severity levels, options, what the rule checks, and why. README links to each rule doc from the rules table.",
     ),
 
     "readme-brevity": guidance(
