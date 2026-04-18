@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:0f7a26f89b725a5d compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:38083cef474e0cbd compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -45,8 +45,6 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/coverage.test.ts` — Coverage test suite (node:test)
 - `src/session.ts` — Post-session audit: git diff analysis against spec surface area
 - `src/session.test.ts` — Session audit test suite (node:test)
-- `src/drift.ts` — Drift integration: detect when code anchored by specs has changed (Fiberplane Drift)
-- `src/drift.test.ts` — Drift test suite (node:test)
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
 - `src/evolve.ts` — Evolution engine: mutation operators, fitness function, proof-gated selection

@@ -84,8 +84,6 @@ export interface RulesConfig {
   freshness?: RuleWithOptions<FreshnessOptions>;
   /** Enforce minimum spec coverage thresholds. Default: false. ESLint-style: ["warn", { scripts: 50 }]. */
   coverage?: RuleWithOptions<CoverageThresholds>;
-  /** Check drift anchors for code changes. Default: "warn". */
-  drift?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

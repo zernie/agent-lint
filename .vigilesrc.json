@@ -3,7 +3,6 @@
     "require-spec": "error",
     "require-skill-spec": "warn",
     "freshness": ["warn", { "mode": "strict" }],
-    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }],
-    "drift": "warn"
+    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }
