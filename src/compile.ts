@@ -215,12 +215,8 @@ function compileRule(id: string, rule: Rule): string {
         "\n",
       );
 
-    default: {
-      const unknown = (rule as { _kind?: unknown })._kind;
-      throw new Error(
-        `Unknown rule kind "${String(unknown)}" for rule "${id}".`,
-      );
-    }
+    default:
+      return assertNever(rule);
   }
 }
 
