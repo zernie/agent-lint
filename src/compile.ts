@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 
-import { sha256short } from "./hash.js";
+import { sha256short, assertNever } from "./hash.js";
 
 import type {
   ClaudeSpec,
@@ -180,14 +180,15 @@ function validateRefs(
 
 function renderFragment(fragment: InstructionFragment): string {
   if (typeof fragment === "string") return fragment;
-  const r = fragment;
-  switch (r._ref) {
+  switch (fragment._ref) {
     case "file":
-      return `\`${r.path}\``;
+      return `\`${fragment.path}\``;
     case "cmd":
-      return `\`${r.command}\``;
+      return `\`${fragment.command}\``;
     case "skill":
-      return `[${basename(dirname(r.path))}](${r.path})`;
+      return `[${basename(dirname(fragment.path))}](${fragment.path})`;
+    default:
+      return assertNever(fragment);
   }
 }
 
@@ -215,14 +216,9 @@ function compileRule(id: string, rule: Rule): string {
       );
 
     default: {
-      // Unknown rule kind — legacy compiled JS spec artifacts, JS caller,
-      // or cast bypass. Fail loudly rather than silently dropping the
-      // rule from output, which would remove constraints without any
-      // compile error.
       const unknown = (rule as { _kind?: unknown })._kind;
       throw new Error(
-        `Unknown rule kind "${String(unknown)}" for rule "${id}". ` +
-          `Expected "enforce" or "guidance". Runtime data is out of sync with the Rule type.`,
+        `Unknown rule kind "${String(unknown)}" for rule "${id}".`,
       );
     }
   }

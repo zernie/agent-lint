@@ -284,7 +284,10 @@ describe("analyzeSession", () => {
     const report = analyzeSession(tmpDir, baseCommit);
     const stale = report.findings.filter((f) => f.type === "stale-spec");
     assert.ok(stale.some((f) => f.file === "eslint.config.mjs"));
-    assert.ok(stale[0].specs?.includes("CLAUDE.md"));
+    assert.ok(
+      stale[0].type !== "untracked-file" &&
+        stale[0].specs.includes("CLAUDE.md"),
+    );
   });
 
   it("detects direct edits to compiled output", () => {

@@ -234,10 +234,10 @@ function ruleToText(rule: Rule): string {
     case "guidance":
       return rule.text;
     default: {
+      // Runtime boundary: legacy specs or JS callers can bypass the Rule type
       const unknown = (rule as { _kind?: unknown })._kind;
       throw new Error(
-        `Unknown rule kind "${String(unknown)}" — expected "enforce" or "guidance". ` +
-          `Runtime data is out of sync with the Rule type (legacy spec, JS caller, or cast bypass).`,
+        `Unknown rule kind "${String(unknown)}" — expected "enforce" or "guidance".`,
       );
     }
   }
