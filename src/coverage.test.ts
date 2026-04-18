@@ -12,8 +12,7 @@ import {
   checkCoverage,
   formatCoverageReport,
 } from "./coverage.js";
-import { writeSidecarManifest } from "./freshness.js";
-import type { SidecarManifest } from "./freshness.js";
+import type { ClaudeSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,49 +66,51 @@ describe("readNpmScripts", () => {
 // ---------------------------------------------------------------------------
 
 describe("collectDocumentedCommands", () => {
-  let tmpDir: string;
-
-  before(() => {
-    tmpDir = makeTmpDir();
-    const m: SidecarManifest = {
-      specFile: "CLAUDE.md.spec.ts",
-      target: "CLAUDE.md",
-      compiledAt: new Date().toISOString(),
-      files: {},
-    };
-    writeSidecarManifest(tmpDir, m);
-
-    writeFileSync(
-      join(tmpDir, "CLAUDE.md"),
-      [
-        "<!-- vigiles:sha256:abc compiled from CLAUDE.md.spec.ts -->",
-        "",
-        "# CLAUDE.md",
-        "",
-        "## Commands",
-        "",
-        "- `npm run build` — Compile TypeScript",
-        "- `npm test` — Run tests",
-        "- `npm run fmt` — Format code",
-        "",
-        "## Rules",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  after(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it("extracts commands from compiled markdown", () => {
-    const commands = collectDocumentedCommands(tmpDir);
+  it("extracts commands from spec objects", () => {
+    const specs: ClaudeSpec[] = [
+      {
+        _specType: "claude",
+        commands: {
+          "npm run build": "Compile",
+          "npm test": "Test",
+          "npm run fmt": "Format",
+        },
+        rules: {},
+      } as ClaudeSpec,
+    ];
+    const commands = collectDocumentedCommands(".", specs);
     assert.ok(commands.has("npm run build"));
     assert.ok(commands.has("npm test"));
     assert.ok(commands.has("npm run fmt"));
   });
 
-  it("returns empty set for missing .vigiles/", () => {
+  it("merges commands from multiple specs", () => {
+    const specs: ClaudeSpec[] = [
+      {
+        _specType: "claude",
+        commands: { "npm test": "Test" },
+        rules: {},
+      } as ClaudeSpec,
+      {
+        _specType: "claude",
+        commands: { "npm run build": "Build" },
+        rules: {},
+      } as ClaudeSpec,
+    ];
+    const commands = collectDocumentedCommands(".", specs);
+    assert.ok(commands.has("npm test"));
+    assert.ok(commands.has("npm run build"));
+  });
+
+  it("returns empty set for specs without commands", () => {
+    const specs: ClaudeSpec[] = [
+      { _specType: "claude", rules: {} } as ClaudeSpec,
+    ];
+    const commands = collectDocumentedCommands(".", specs);
+    assert.equal(commands.size, 0);
+  });
+
+  it("returns empty set when no specs provided and no compiled files", () => {
     const emptyDir = makeTmpDir();
     const commands = collectDocumentedCommands(emptyDir);
     assert.equal(commands.size, 0);
@@ -123,6 +124,17 @@ describe("collectDocumentedCommands", () => {
 
 describe("computeScriptCoverage", () => {
   let tmpDir: string;
+  const specs: ClaudeSpec[] = [
+    {
+      _specType: "claude",
+      commands: {
+        "npm run build": "Compile",
+        "npm test": "Test",
+        "npm run fmt": "Format",
+      },
+      rules: {},
+    } as ClaudeSpec,
+  ];
 
   before(() => {
     tmpDir = makeTmpDir();
@@ -139,30 +151,6 @@ describe("computeScriptCoverage", () => {
         },
       }),
     );
-
-    const m: SidecarManifest = {
-      specFile: "CLAUDE.md.spec.ts",
-      target: "CLAUDE.md",
-      compiledAt: new Date().toISOString(),
-      files: {},
-    };
-    writeSidecarManifest(tmpDir, m);
-
-    writeFileSync(
-      join(tmpDir, "CLAUDE.md"),
-      [
-        "<!-- vigiles:sha256:abc compiled from CLAUDE.md.spec.ts -->",
-        "",
-        "# CLAUDE.md",
-        "",
-        "## Commands",
-        "",
-        "- `npm run build` — Compile",
-        "- `npm test` — Test",
-        "- `npm run fmt` — Format",
-        "",
-      ].join("\n"),
-    );
   });
 
   after(() => {
@@ -170,30 +158,30 @@ describe("computeScriptCoverage", () => {
   });
 
   it("computes correct coverage", () => {
-    const metric = computeScriptCoverage(tmpDir);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs);
     assert.equal(metric.total, 5);
     assert.equal(metric.covered, 3); // build, test, fmt
     assert.equal(metric.percent, 60);
   });
 
   it("reports uncovered scripts", () => {
-    const metric = computeScriptCoverage(tmpDir);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs);
     assert.ok(metric.uncoveredItems.includes("lint"));
     assert.ok(metric.uncoveredItems.includes("deploy"));
   });
 
   it("passes when no threshold set", () => {
-    const metric = computeScriptCoverage(tmpDir);
+    const metric = computeScriptCoverage(tmpDir, undefined, specs);
     assert.equal(metric.passing, true);
   });
 
   it("passes when above threshold", () => {
-    const metric = computeScriptCoverage(tmpDir, 50);
+    const metric = computeScriptCoverage(tmpDir, 50, specs);
     assert.equal(metric.passing, true);
   });
 
   it("fails when below threshold", () => {
-    const metric = computeScriptCoverage(tmpDir, 80);
+    const metric = computeScriptCoverage(tmpDir, 80, specs);
     assert.equal(metric.passing, false);
   });
 });
@@ -235,32 +223,19 @@ describe("computeLinterRuleCoverage", () => {
 
 describe("checkCoverage", () => {
   let tmpDir: string;
+  const checkSpecs: ClaudeSpec[] = [
+    {
+      _specType: "claude",
+      commands: { "npm test": "Test" },
+      rules: {},
+    } as ClaudeSpec,
+  ];
 
   before(() => {
     tmpDir = makeTmpDir();
     writeFileSync(
       join(tmpDir, "package.json"),
       JSON.stringify({ scripts: { test: "jest", build: "tsc" } }),
-    );
-    const m: SidecarManifest = {
-      specFile: "CLAUDE.md.spec.ts",
-      target: "CLAUDE.md",
-      compiledAt: new Date().toISOString(),
-      files: {},
-    };
-    writeSidecarManifest(tmpDir, m);
-    writeFileSync(
-      join(tmpDir, "CLAUDE.md"),
-      [
-        "<!-- vigiles:sha256:abc compiled from CLAUDE.md.spec.ts -->",
-        "",
-        "# CLAUDE.md",
-        "",
-        "## Commands",
-        "",
-        "- `npm test` — Test",
-        "",
-      ].join("\n"),
     );
   });
 
@@ -274,6 +249,7 @@ describe("checkCoverage", () => {
       { scripts: 40, linterRules: 0 },
       10,
       5,
+      checkSpecs,
     );
     assert.equal(report.passing, true);
   });
@@ -284,12 +260,13 @@ describe("checkCoverage", () => {
       { scripts: 100, linterRules: 0 },
       10,
       5,
+      checkSpecs,
     );
     assert.equal(report.passing, false);
   });
 
   it("passes with no thresholds", () => {
-    const report = checkCoverage(tmpDir, {}, 10, 5);
+    const report = checkCoverage(tmpDir, {}, 10, 5, checkSpecs);
     assert.equal(report.passing, true);
   });
 });

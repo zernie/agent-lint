@@ -9,10 +9,12 @@
  * coverage drops below the minimum.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { globSync } from "glob";
 
 import type { CoverageThresholds } from "./types.js";
+import type { ClaudeSpec } from "./spec.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,39 +59,64 @@ export function readNpmScripts(basePath: string): string[] {
 }
 
 /**
- * Collect commands documented in compiled instruction files.
- * Extracts from "## Commands" sections in compiled markdown.
+ * Collect commands documented in specs by loading spec source files directly.
+ * Reads the structured `commands` field — no markdown parsing.
  */
-export function collectDocumentedCommands(basePath: string): Set<string> {
+export function collectDocumentedCommands(
+  basePath: string,
+  specs?: ClaudeSpec[],
+): Set<string> {
   const commands = new Set<string>();
 
-  const dir = resolve(basePath, ".vigiles");
-  if (!existsSync(dir)) return commands;
-
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
+  if (specs) {
+    for (const spec of specs) {
+      if (spec.commands) {
+        for (const cmd of Object.keys(spec.commands)) commands.add(cmd);
+      }
+    }
     return commands;
   }
 
-  for (const entry of entries) {
-    if (!entry.endsWith(".inputs.json")) continue;
-    const target = entry.replace(".inputs.json", "");
-    const targetPath = resolve(basePath, target);
-    if (!existsSync(targetPath)) continue;
+  // Fallback: scan compiled markdown for spec file references, then
+  // load the compiled JS spec from dist/. If that fails, try to
+  // extract commands from the compiled output (last resort).
+  const mdFiles = globSync("**/*.md", {
+    ignore: ["node_modules/**", "dist/**", ".vigiles/**"],
+    cwd: basePath,
+  });
 
+  for (const mdFile of mdFiles) {
+    const fullPath = resolve(basePath, mdFile);
     try {
-      const content = readFileSync(targetPath, "utf-8");
-      const cmdRe = /^- `([^`]+)` — /gm;
-      let match: RegExpExecArray | null;
-      // Only extract from Commands section
-      const cmdSection = content.match(
-        /## Commands\n\n((?:- `[^`]+` — .+\n?)+)/,
+      const content = readFileSync(fullPath, "utf-8");
+      const specMatch = content.match(
+        /^<!-- vigiles:sha256:[a-f0-9]+ compiled from (.+) -->/,
       );
-      if (cmdSection) {
-        while ((match = cmdRe.exec(cmdSection[1])) !== null) {
-          commands.add(match[1]);
+      if (!specMatch) continue;
+
+      // Try to load the spec's compiled JS from dist/
+      const specFile = specMatch[1];
+      const jsPath = resolve(
+        basePath,
+        "dist",
+        specFile.replace(/\.ts$/, ".js"),
+      );
+      if (existsSync(jsPath)) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const mod = require(jsPath) as {
+            default?: ClaudeSpec | { default?: ClaudeSpec };
+          };
+          const spec =
+            mod.default && "default" in mod.default
+              ? (mod.default.default as ClaudeSpec)
+              : (mod.default as ClaudeSpec | undefined);
+          if (spec?.commands) {
+            for (const cmd of Object.keys(spec.commands)) commands.add(cmd);
+          }
+          continue;
+        } catch {
+          // Fall through to next file
         }
       }
     } catch {
@@ -106,9 +133,10 @@ export function collectDocumentedCommands(basePath: string): Set<string> {
 export function computeScriptCoverage(
   basePath: string,
   threshold?: number,
+  specs?: ClaudeSpec[],
 ): CoverageMetric {
   const allScripts = readNpmScripts(basePath);
-  const documented = collectDocumentedCommands(basePath);
+  const documented = collectDocumentedCommands(basePath, specs);
 
   const covered: string[] = [];
   const uncovered: string[] = [];
@@ -176,6 +204,7 @@ export function checkCoverage(
   thresholds: CoverageThresholds,
   linterEnabled: number,
   linterDocumented: number,
+  specs?: ClaudeSpec[],
 ): CoverageReport {
   const metrics: CoverageMetric[] = [];
 
@@ -188,7 +217,11 @@ export function checkCoverage(
   metrics.push(linterMetric);
 
   // Script coverage
-  const scriptMetric = computeScriptCoverage(basePath, thresholds.scripts);
+  const scriptMetric = computeScriptCoverage(
+    basePath,
+    thresholds.scripts,
+    specs,
+  );
   metrics.push(scriptMetric);
 
   const passing = metrics.every((m) => m.passing);

@@ -57,9 +57,6 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/session.ts":
       "Post-session audit: git diff analysis against spec surface area",
     "src/session.test.ts": "Session audit test suite (node:test)",
-    "src/drift.ts":
-      "Drift integration: detect when code anchored by specs has changed (Fiberplane Drift)",
-    "src/drift.test.ts": "Drift test suite (node:test)",
     "src/types.ts":
       "Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds",
     "src/proofs.ts":
