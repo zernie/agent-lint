@@ -9,9 +9,8 @@ In `.vigilesrc.json`:
 ```json
 {
   "rules": {
-    "freshness": "error"
-  },
-  "freshnessMode": "strict"
+    "freshness": ["error", { "mode": "strict" }]
+  }
 }
 ```
 

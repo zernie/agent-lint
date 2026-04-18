@@ -282,11 +282,12 @@ The plugin provides two hooks:
 
 `vigiles audit` validates instruction files with three rules:
 
-| Rule                 | Default  | What it checks                                |
-| -------------------- | -------- | --------------------------------------------- |
-| `require-spec`       | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`    |
-| `require-skill-spec` | `"warn"` | Every SKILL.md has a `.spec.ts`               |
-| `freshness`          | `"warn"` | Compiled output matches current project state |
+| Rule                                                     | Default  | What it checks                                |
+| -------------------------------------------------------- | -------- | --------------------------------------------- |
+| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`    |
+| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`               |
+| [`freshness`](docs/rules/freshness.md)                   | `"warn"` | Compiled output matches current project state |
+| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface     |
 
 ```bash
 npx vigiles audit    # checks specs, hashes, freshness, coverage, duplicates
@@ -298,7 +299,8 @@ Configure in `.vigilesrc.json`:
 {
   "rules": {
     "require-spec": "error",
-    "freshness": "error"
+    "freshness": ["error", { "mode": "strict" }],
+    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }
 ```
@@ -327,8 +329,12 @@ Strict mode has zero false positives and zero false negatives. Input-hash mode i
 
 ```json
 {
-  "freshnessMode": "input-hash",
-  "freshnessInputs": ["../../yarn.lock"]
+  "rules": {
+    "freshness": [
+      "warn",
+      { "mode": "input-hash", "extraInputs": ["../../yarn.lock"] }
+    ]
+  }
 }
 ```
 
