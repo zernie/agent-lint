@@ -22,6 +22,7 @@ import {
   type ReadonlyMerkleHistory,
 } from "./proofs.js";
 import { computeHash } from "./compile.js";
+import { assertNever } from "./hash.js";
 
 // ---------------------------------------------------------------------------
 // Mutation types
@@ -315,6 +316,9 @@ export function applyMutation(
       }
       return { rules: next };
     }
+
+    default:
+      return assertNever(mutation);
   }
 }
 
@@ -777,5 +781,7 @@ function describeMutation(mutation: SpecMutation): string {
       return `Merge "${mutation.sourceIds[0]}" + "${mutation.sourceIds[1]}" → "${mutation.mergedId}"`;
     case "reword":
       return `Reword rule "${mutation.ruleId}"`;
+    default:
+      return assertNever(mutation);
   }
 }

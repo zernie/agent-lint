@@ -57,6 +57,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/session.ts":
       "Post-session audit: git diff analysis against spec surface area",
     "src/session.test.ts": "Session audit test suite (node:test)",
+    "src/hash.ts":
+      "Shared SHA256Hash branded type and assertNever exhaustive check helper",
+    "src/test-utils.ts":
+      "Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo",
     "src/types.ts":
       "Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds",
     "src/proofs.ts":
@@ -179,6 +183,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
     "readme-brevity": guidance(
       "README.md should be a concise pitch + quick start, not a reference manual. Extract detailed sections into docs/ and link with `[Details →](docs/X.md)`. Target ~300 lines max.",
+    ),
+
+    "ts-essentials": guidance(
+      "Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.",
     ),
   },
 });

@@ -197,14 +197,23 @@ export function loadKeyFilesFromSpecs(basePath: string): Set<string> {
 // Session analysis
 // ---------------------------------------------------------------------------
 
-/** A single finding from session analysis. */
-export interface SessionFinding {
-  type: "untracked-file" | "stale-spec" | "spec-modified" | "target-modified";
+/** A finding about a file not tracked by any spec. */
+interface UntrackedFinding {
+  type: "untracked-file";
   file: string;
   message: string;
-  /** Which spec targets are relevant (if any). */
-  specs?: string[];
 }
+
+/** A finding about a file tracked by one or more specs. */
+interface TrackedFinding {
+  type: "stale-spec" | "spec-modified" | "target-modified";
+  file: string;
+  message: string;
+  specs: string[];
+}
+
+/** A single finding from session analysis. */
+export type SessionFinding = UntrackedFinding | TrackedFinding;
 
 /** Full session analysis result. */
 export interface SessionReport {
@@ -242,30 +251,27 @@ export function analyzeSession(
     const affectedSpecs = surface.fileToSpecs.get(file);
 
     if (isTarget) {
-      // Agent modified a compiled output directly
       findings.push({
         type: "target-modified",
         file,
         message: `Compiled output modified directly — edit the .spec.ts source instead`,
-        specs: affectedSpecs,
+        specs: affectedSpecs ?? [],
       });
       trackedChanges.push(file);
     } else if (isSpec) {
-      // Agent modified a spec — normal, just note it
       findings.push({
         type: "spec-modified",
         file,
         message: "Spec modified — run `vigiles compile` to update output",
-        specs: affectedSpecs,
+        specs: affectedSpecs ?? [],
       });
       trackedChanges.push(file);
     } else if (isTracked) {
-      // Agent modified a tracked input — spec may need recompile
       findings.push({
         type: "stale-spec",
         file,
         message: `Tracked input changed — affected specs may need recompile`,
-        specs: affectedSpecs,
+        specs: affectedSpecs ?? [],
       });
       trackedChanges.push(file);
     } else if (
@@ -321,13 +327,18 @@ export function formatSessionReport(report: SessionReport): string {
   );
   lines.push("");
 
-  // Group findings by type
-  const stale = report.findings.filter((f) => f.type === "stale-spec");
-  const untracked = report.findings.filter((f) => f.type === "untracked-file");
-  const targetMods = report.findings.filter(
-    (f) => f.type === "target-modified",
+  const stale = report.findings.filter(
+    (f): f is TrackedFinding => f.type === "stale-spec",
   );
-  const specMods = report.findings.filter((f) => f.type === "spec-modified");
+  const untracked = report.findings.filter(
+    (f): f is UntrackedFinding => f.type === "untracked-file",
+  );
+  const targetMods = report.findings.filter(
+    (f): f is TrackedFinding => f.type === "target-modified",
+  );
+  const specMods = report.findings.filter(
+    (f): f is TrackedFinding => f.type === "spec-modified",
+  );
 
   if (targetMods.length > 0) {
     lines.push("  Compiled outputs modified directly:");
@@ -348,7 +359,7 @@ export function formatSessionReport(report: SessionReport): string {
   if (stale.length > 0) {
     lines.push("  Tracked inputs changed (specs may need recompile):");
     for (const f of stale) {
-      const specList = f.specs?.join(", ") ?? "unknown";
+      const specList = f.specs.join(", ") || "unknown";
       lines.push(`    ${f.file} (affects ${specList})`);
     }
     lines.push("");
