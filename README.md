@@ -189,7 +189,7 @@ Running `vigiles audit CLAUDE.md` verifies each inline rule against your real li
 
 Works the same for humans and agents — fully non-interactive. [Agent setup guide →](docs/agent-setup.md) | [Agent workflows →](docs/agent-workflows.md)
 
-## Two Rule Types
+## Three Rule Types
 
 **`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the catalog AND is enabled in your project config. A disabled rule is a compile error.
 
@@ -206,6 +206,21 @@ Supports ESLint, Stylelint, Ruff, Clippy, Pylint, and RuboCop. [Full linter supp
 ```typescript
 "research-first": guidance("Google unfamiliar APIs first."),
 ```
+
+**`guard()`** — reactive: runs a command when watched files change. One declaration emits hooks for every supported system (Claude Code PostToolUse, husky pre-commit, etc.). Eliminates copy-pasting the same trigger across `.claude/settings.json`, `.husky/`, and CI configs.
+
+```typescript
+"recompile-specs": guard(
+  { watch: "*.spec.ts", run: "npx vigiles compile" },
+  "Recompile instruction files when any spec changes.",
+),
+"regen-types": guard(
+  { watch: ["eslint.config.*", "package.json"], run: "npx vigiles generate-types" },
+  "Regenerate types when linter config or deps change.",
+),
+```
+
+Same monotonicity guarantees as `enforce()` — guards can't be silently removed.
 
 ## Verified References
 
