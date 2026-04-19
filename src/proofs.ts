@@ -23,12 +23,14 @@ import type { Rule, ClaudeSpec } from "./spec.js";
 /**
  * Ordinal strength of each rule kind.
  *
- *   guidance (0) < enforce (1)
+ *   guidance (0) < guard (1) = enforce (1)
  *
- * The lattice ensures specs only get stricter over time.
+ * Guard and enforce are both mechanically enforced (different mechanisms,
+ * same strength). The lattice ensures specs only get stricter over time.
  */
 const STRENGTH: Record<Rule["_kind"], number> = {
   guidance: 0,
+  guard: 1,
   enforce: 1,
 };
 
@@ -233,6 +235,12 @@ function ruleToText(rule: Rule): string {
       return `${rule.linterRule} ${rule.why}`;
     case "guidance":
       return rule.text;
+    case "guard": {
+      const patterns = Array.isArray(rule.watch)
+        ? rule.watch.join(" ")
+        : rule.watch;
+      return `${patterns} ${rule.run} ${rule.description}`;
+    }
     default:
       return assertNever(rule);
   }

@@ -215,6 +215,18 @@ function compileRule(id: string, rule: Rule): string {
         "\n",
       );
 
+    case "guard": {
+      const patterns = Array.isArray(rule.watch)
+        ? rule.watch.join("`, `")
+        : rule.watch;
+      return [
+        `### ${title}`,
+        "",
+        `**Guard:** \`${patterns}\` → \`${rule.run}\``,
+        `**Why:** ${rule.description}`,
+      ].join("\n");
+    }
+
     default:
       return assertNever(rule);
   }
