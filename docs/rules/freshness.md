@@ -1,6 +1,30 @@
 # freshness
 
-Detect when compiled instruction files are out of date. Catches drift between specs and the compiled markdown.
+## What is "freshness"?
+
+Your spec compiles to a markdown file (CLAUDE.md, AGENTS.md). The markdown is a **build artifact** — the spec is the source of truth. A markdown file is **fresh** if recompiling the spec right now would produce identical output. It's **stale** if anything has changed since it was last compiled.
+
+Things that make compiled markdown stale:
+
+- Someone edited the spec but forgot to run `vigiles compile`
+- Someone hand-edited the compiled markdown directly (the SHA-256 hash mismatch reveals this)
+- A linter config changed and disabled a rule the spec still claims is enforced
+- A file path in `keyFiles` was renamed or deleted on disk
+- An npm script the spec references was removed from package.json
+- Generated types went out of sync with installed linters
+
+When markdown is stale, **the agent reads lies**. It trusts a CLAUDE.md that references a disabled rule, a deleted file, or a removed script. The whole point of vigiles is preventing this — the `freshness` rule is what catches it.
+
+## What you'll see
+
+```
+Freshness check:
+
+  ✓ CLAUDE.md  — fresh
+  ✗ AGENTS.md  — Output would differ if recompiled — run `vigiles compile`
+```
+
+Run `vigiles compile` and the staleness is gone. In CI with `"error"` severity, the build fails until you do.
 
 ## Configuration
 
@@ -70,7 +94,3 @@ In input-hash mode, vigiles auto-detects and tracks:
 - Lock files (15 ecosystems: npm, Yarn, pnpm, Bun, Bundler, Poetry, uv, PDM, pip, Cargo, Go, Composer, NuGet, SPM, Mix)
 - Referenced files from `keyFiles`
 - Generated types (`.vigiles/generated.d.ts`)
-
-## Why
-
-The spec may be correct but the compiled markdown stale — someone changed the ESLint config, deleted a referenced file, or edited the spec without recompiling. This rule catches it.
