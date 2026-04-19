@@ -2,7 +2,7 @@
   "rules": {
     "require-spec": "error",
     "require-skill-spec": "warn",
-    "freshness": ["warn", { "mode": "strict" }],
+    "integrity": "warn",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }

@@ -75,7 +75,7 @@ The agent reads this, trusts it, and writes code based on stale claims nobody ve
 | **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                        |
 | **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
 | **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
-| **CI**                              | Nothing to verify            | `vigiles audit` catches hash drift, disabled rules, stale refs |
+| **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
 
 <details>
 <summary><b>Codex</b> (same compile-time checks, no hooks)</summary>
@@ -298,15 +298,15 @@ The plugin provides two hooks:
 
 `vigiles audit` validates instruction files with four rules:
 
-| Rule                                                     | Default  | What it checks                                |
-| -------------------------------------------------------- | -------- | --------------------------------------------- |
-| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`    |
-| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`               |
-| [`freshness`](docs/rules/freshness.md)                   | `"warn"` | Compiled output matches current project state |
-| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface     |
+| Rule                                                     | Default  | What it checks                                       |
+| -------------------------------------------------------- | -------- | ---------------------------------------------------- |
+| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`           |
+| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                      |
+| [`integrity`](docs/rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check) |
+| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface            |
 
 ```bash
-npx vigiles audit    # checks specs, hashes, freshness, coverage, duplicates
+npx vigiles audit    # checks specs, hashes, integrity, coverage, duplicates
 ```
 
 Configure in `.vigilesrc.json`:
@@ -315,7 +315,7 @@ Configure in `.vigilesrc.json`:
 {
   "rules": {
     "require-spec": "error",
-    "freshness": ["error", { "mode": "strict" }],
+    "integrity": "error",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }
@@ -331,30 +331,7 @@ Disable per-file with an HTML comment:
 ...
 ```
 
-### Freshness
-
-The `freshness` rule detects when compiled markdown has drifted from project state — disabled linter rules, deleted files, changed configs. Three detection modes:
-
-| Mode                 | What it does                                                            | Cost   |
-| -------------------- | ----------------------------------------------------------------------- | ------ |
-| `"strict"` (default) | Recompiles in memory, diffs output                                      | 2-5s   |
-| `"input-hash"`       | Checks fingerprint of tracked inputs (spec, linter configs, lock files) | <100ms |
-| `"output-hash"`      | Only detects hand-edits to compiled markdown                            | <1ms   |
-
-Strict mode has zero false positives and zero false negatives. Input-hash mode is faster but can false-positive on config whitespace changes. Set the mode in `.vigilesrc.json`:
-
-```json
-{
-  "rules": {
-    "freshness": [
-      "warn",
-      { "mode": "input-hash", "extraInputs": ["../../yarn.lock"] }
-    ]
-  }
-}
-```
-
-In input-hash mode, vigiles auto-detects lock files across 15 ecosystems (npm, Yarn, pnpm, Bun, Bundler, Poetry, uv, PDM, pip, Cargo, Go, Composer, NuGet, SPM, Mix) and tracks them alongside linter configs, package.json, keyFiles references, and generated types. [Full details →](docs/freshness.md)
+For "did the spec change but compile wasn't re-run?", use a `guard()` rule (auto-recompile on save/commit) plus `npx vigiles compile && git diff --exit-code` in CI.
 
 ## Skills
 

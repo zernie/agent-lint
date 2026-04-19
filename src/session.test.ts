@@ -11,8 +11,8 @@ import {
   analyzeSession,
   formatSessionReport,
 } from "./session.js";
-import { writeSidecarManifest } from "./freshness.js";
-import type { SidecarManifest } from "./freshness.js";
+import { writeSidecarManifest } from "./sidecar.js";
+import type { SidecarManifest } from "./sidecar.js";
 import { makeTmpDir, cleanupTmpDir, initGitRepo, git } from "./test-utils.js";
 
 // ---------------------------------------------------------------------------

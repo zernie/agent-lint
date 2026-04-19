@@ -21,8 +21,7 @@ import { resolve } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
 import { validate, loadConfig } from "./validate.js";
-import type { VigilesConfig, FreshnessOptions } from "./types.js";
-import { ruleSeverity, ruleOptions } from "./types.js";
+import type { VigilesConfig } from "./types.js";
 
 import {
   compileClaude,
@@ -35,23 +34,13 @@ import type { ClaudeSpec, SkillSpec } from "./spec.js";
 import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { checkLinterRule } from "./linters.js";
-import {
-  discoverInputs,
-  computeInputHash,
-  addInputHash,
-  checkOutputHashFreshness,
-  checkInputHashFreshness,
-} from "./freshness.js";
-import type { FreshnessResult } from "./freshness.js";
+import { checkIntegrity } from "./integrity.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const IGNORE_NODE_MODULES = ["node_modules/**"];
-
-// Config is loaded from .vigilesrc.json via validate.ts::loadConfig().
-// All settings (validation, compilation, freshness) are in one place.
 
 // ---------------------------------------------------------------------------
 // Spec loading
@@ -164,12 +153,7 @@ async function compile(
     const basePath = process.cwd();
 
     if (spec._specType === "claude") {
-      const {
-        markdown: rawMarkdown,
-        errors,
-        linterResults,
-        targets,
-      } = compileClaude(spec, {
+      const { markdown, errors, linterResults, targets } = compileClaude(spec, {
         basePath,
         specFile: specPath,
         maxRules: config.maxRules,
@@ -178,22 +162,6 @@ async function compile(
         catalogOnly: config.catalogOnly,
         linters: config.linters,
       });
-
-      // Embed input hash for freshness tracking
-      let markdown = rawMarkdown;
-      const freshnessOpts = ruleOptions<FreshnessOptions>(
-        config.rules.freshness,
-      );
-      if (freshnessOpts?.mode === "input-hash") {
-        const inputs = discoverInputs(
-          specPath,
-          spec,
-          basePath,
-          freshnessOpts.extraInputs,
-        );
-        const inputHash = computeInputHash(inputs.files, basePath);
-        markdown = addInputHash(rawMarkdown, inputHash);
-      }
 
       const linterCount = linterResults.filter((r) => r.exists).length;
       const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
@@ -510,7 +478,7 @@ interface AuditReport {
   coverageEnabled: number;
   coverageDocumented: number;
   strengthenSuggestions: number;
-  freshnessErrors: number;
+  integrityErrors: number;
   files: string[];
 }
 
@@ -520,7 +488,7 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.hashErrors > 0 ||
     report.validationErrors > 0 ||
     report.inlineErrors > 0 ||
-    report.freshnessErrors > 0
+    report.integrityErrors > 0
   )
     return 2;
   if (report.duplicatePairs > 0) return 1;
@@ -686,20 +654,12 @@ async function audit(
   // 4. Guidance rule count (strengthen suggestions moved to /strengthen skill)
   const guidanceCount = await countGuidanceRules(silent);
 
-  // 5. Freshness check
-  const freshnessSeverity = ruleSeverity(config?.rules.freshness);
-  let freshnessErrors = 0;
-  if (freshnessSeverity) {
-    if (!silent) console.log("\nFreshness check:\n");
-    const freshOpts = ruleOptions<FreshnessOptions>(config?.rules.freshness);
-    const mode = freshOpts?.mode ?? "strict";
-    freshnessErrors = await checkFreshness(
-      files,
-      mode,
-      config,
-      freshnessSeverity,
-      silent,
-    );
+  // 5. Integrity check (hand-edit detection via SHA-256 hash)
+  const integritySeverity = config?.rules.integrity ?? "warn";
+  let integrityErrors = 0;
+  if (integritySeverity) {
+    if (!silent) console.log("\nIntegrity check:\n");
+    integrityErrors = checkIntegrityForFiles(files, integritySeverity, silent);
   }
 
   const report: AuditReport = {
@@ -711,7 +671,7 @@ async function audit(
     coverageEnabled: coverage.enabled,
     coverageDocumented: coverage.documented,
     strengthenSuggestions: guidanceCount,
-    freshnessErrors,
+    integrityErrors,
     files,
   };
 
@@ -741,8 +701,10 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(
       `${String(report.strengthenSuggestions)} guidance (run /strengthen to upgrade)`,
     );
-  if (report.freshnessErrors > 0)
-    parts.push(`${String(report.freshnessErrors)} stale (run vigiles compile)`);
+  if (report.integrityErrors > 0)
+    parts.push(
+      `${String(report.integrityErrors)} tampered (edit the .spec.ts source)`,
+    );
   if (parts.length === 0) {
     console.log("vigiles: clean");
   } else {
@@ -1299,13 +1261,11 @@ async function setup(args: string[]): Promise<void> {
 // Strengthen: guidance() → enforce() suggestions
 // ---------------------------------------------------------------------------
 
-async function checkFreshness(
+function checkIntegrityForFiles(
   files: string[],
-  mode: "strict" | "input-hash" | "output-hash",
-  config: VigilesConfig | undefined,
   severity: "warn" | "error",
   silent: boolean,
-): Promise<number> {
+): number {
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
@@ -1316,84 +1276,19 @@ async function checkFreshness(
   for (const filePath of files) {
     const abs = resolve(basePath, filePath);
     if (!existsSync(abs)) continue;
-    const content = readFileSync(abs, "utf-8");
+    const result = checkIntegrity(readFileSync(abs, "utf-8"));
 
-    // Find the spec that compiled this file
-    const hashMatch = content.match(
-      /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from (.+?)\s*-->/,
-    );
-    if (!hashMatch) {
-      // No hash = hand-written file, skip freshness check
-      continue;
-    }
-
-    let result: FreshnessResult;
-    const specFile = hashMatch[1];
-
-    if (mode === "strict") {
-      // Recompile in memory and diff
-      const spec = await loadSpec(specFile);
-      if (!spec || spec._specType !== "claude") {
-        log(`  ? ${filePath} — can't load spec "${specFile}", skipping`);
-        continue;
-      }
-      const compiled = compileClaude(spec, {
-        basePath,
-        specFile,
-        maxRules: config?.maxRules,
-        maxTokens: config?.maxTokens,
-        maxSectionLines: config?.maxSectionLines,
-        catalogOnly: config?.catalogOnly,
-        linters: config?.linters,
-      });
-      // Compare markdown body (strip hash/input lines)
-      const metaRe = /^<!-- vigiles:(sha256|inputs):[^\n]+ -->\r?\n?/gm;
-      const existingBody = content.replace(metaRe, "").trim();
-      const compiledBody = compiled.markdown.replace(metaRe, "").trim();
-      if (existingBody === compiledBody) {
-        result = { fresh: true, mode: "strict" };
-      } else {
-        result = {
-          fresh: false,
-          mode: "strict",
-          reason: "Output would differ if recompiled — run `vigiles compile`",
-        };
-      }
-    } else if (mode === "input-hash") {
-      const specFile = hashMatch[1];
-      const spec = await loadSpec(specFile);
-      if (!spec || spec._specType !== "claude") {
-        log(`  ? ${filePath} — can't load spec "${specFile}", skipping`);
-        continue;
-      }
-      const inputs = discoverInputs(
-        specFile,
-        spec,
-        basePath,
-        ruleOptions<FreshnessOptions>(config?.rules.freshness)?.extraInputs,
-      );
-      result = checkInputHashFreshness(content, inputs.files, basePath);
-    } else {
-      // output-hash mode
-      result = checkOutputHashFreshness(content);
-    }
-
-    if (!result.fresh) {
+    if (!result.intact) {
       errorCount++;
       const marker = severity === "error" ? "✗" : "⚠";
-      log(`  ${marker} ${filePath} — ${result.reason ?? "stale"}`);
-      if (result.changedFiles && result.changedFiles.length > 0) {
-        for (const f of result.changedFiles) {
-          log(`    changed: ${f}`);
-        }
-      }
+      log(`  ${marker} ${filePath} — ${result.reason ?? "tampered"}`);
     } else if (!silent) {
-      log(`  ✓ ${filePath} — fresh (${mode})`);
+      log(`  ✓ ${filePath}`);
     }
   }
 
   if (errorCount === 0) {
-    log("  All files fresh.");
+    log("  All compiled files intact.");
   }
 
   return severity === "error" ? errorCount : 0;

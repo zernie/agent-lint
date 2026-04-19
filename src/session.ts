@@ -10,11 +10,11 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { readSidecarManifest } from "./freshness.js";
-import type { SidecarManifest } from "./freshness.js";
+import { iterateSidecars } from "./sidecar.js";
+import type { SidecarManifest } from "./sidecar.js";
 
 // ---------------------------------------------------------------------------
 // Git helpers
@@ -77,37 +77,6 @@ export function gitHead(basePath: string): string | null {
 export function resolveBaseRef(explicitBase?: string): string {
   if (explicitBase) return explicitBase;
   return "HEAD";
-}
-
-// ---------------------------------------------------------------------------
-// Sidecar manifest iteration
-// ---------------------------------------------------------------------------
-
-/**
- * Iterate all sidecar manifests in .vigiles/ and call `fn` for each.
- * Handles directory-not-found and read errors gracefully.
- */
-function iterateSidecars(
-  basePath: string,
-  fn: (target: string, manifest: SidecarManifest) => void,
-): void {
-  const dir = resolve(basePath, ".vigiles");
-  if (!existsSync(dir)) return;
-
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return;
-  }
-
-  for (const entry of entries) {
-    if (!entry.endsWith(".inputs.json")) continue;
-    const target = entry.replace(".inputs.json", "");
-    const manifest = readSidecarManifest(basePath, target);
-    if (!manifest) continue;
-    fn(target, manifest);
-  }
 }
 
 // ---------------------------------------------------------------------------

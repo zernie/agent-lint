@@ -56,17 +56,6 @@ export type RuleWithOptions<T> =
   | RuleSeverity
   | [Exclude<RuleSeverity, false>, T];
 
-/** Freshness detection mode for the `freshness` rule. */
-export type FreshnessMode = "strict" | "input-hash" | "output-hash";
-
-/** Options for the freshness rule. */
-export interface FreshnessOptions {
-  /** How to detect staleness. Default: "strict". */
-  mode?: FreshnessMode;
-  /** Extra files to track in input-hash mode. */
-  extraInputs?: string[];
-}
-
 /** Options for the coverage rule. */
 export interface CoverageThresholds {
   /** Min % of enabled linter rules with enforce() declarations. */
@@ -80,8 +69,8 @@ export interface RulesConfig {
   "require-spec"?: RuleSeverity;
   /** Require .spec.ts for SKILL.md files. Default: false. */
   "require-skill-spec"?: RuleSeverity;
-  /** Detect stale compiled output. Default: "warn". ESLint-style: ["warn", { mode: "strict" }]. */
-  freshness?: RuleWithOptions<FreshnessOptions>;
+  /** Detect hand-edits to compiled markdown via SHA-256 hash. Default: "warn". */
+  integrity?: RuleSeverity;
   /** Enforce minimum spec coverage thresholds. Default: false. ESLint-style: ["warn", { scripts: 50 }]. */
   coverage?: RuleWithOptions<CoverageThresholds>;
 }
