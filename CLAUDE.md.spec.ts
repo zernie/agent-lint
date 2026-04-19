@@ -4,7 +4,7 @@
  * This is the source of truth. CLAUDE.md is a compiled build artifact.
  * Run `npm run compile:spec` to regenerate CLAUDE.md from this spec.
  */
-import { claude, enforce, guidance } from "./src/spec.js";
+import { claude, enforce, guidance, guard } from "./src/spec.js";
 
 export default claude({
   sections: {
@@ -187,6 +187,24 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
     "ts-essentials": guidance(
       "Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.",
+    ),
+
+    "recompile-on-spec-change": guard(
+      { watch: "*.spec.ts", run: "npx vigiles compile" },
+      "Recompile instruction files when any spec changes.",
+    ),
+
+    "regen-types-on-config-change": guard(
+      {
+        watch: ["eslint.config.*", "package.json", "pyproject.toml"],
+        run: "npx vigiles generate-types",
+      },
+      "Regenerate type definitions when linter configs or package.json change.",
+    ),
+
+    "format-check": guard(
+      { watch: "**/*.ts", run: "npm run fmt:check" },
+      "Verify formatting on TypeScript file changes.",
     ),
   },
 });

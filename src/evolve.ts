@@ -196,7 +196,7 @@ export function applyMutation(
           rules,
           error: {
             mutation,
-            reason: `Rule "${mutation.ruleId}" is already at maximum strength (enforce)`,
+            reason: `Rule "${mutation.ruleId}" is already at maximum strength (${rule._kind})`,
           },
         };
       }
@@ -219,6 +219,11 @@ export function applyMutation(
         next[mutation.ruleId] = {
           _kind: "guidance",
           text: rule.why,
+        } as GuidanceRule;
+      } else if (rule._kind === "guard") {
+        next[mutation.ruleId] = {
+          _kind: "guidance",
+          text: rule.description,
         } as GuidanceRule;
       } else {
         return {
@@ -313,6 +318,8 @@ export function applyMutation(
         next[mutation.ruleId] = { ...rule, text: mutation.newText };
       } else if (rule._kind === "enforce") {
         next[mutation.ruleId] = { ...rule, why: mutation.newText };
+      } else if (rule._kind === "guard") {
+        next[mutation.ruleId] = { ...rule, description: mutation.newText };
       }
       return { rules: next };
     }

@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c92312d638af04cf compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:b9586334e877f83d compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -146,3 +146,18 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 ### Ts Essentials
 
 **Guidance only** — Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.
+
+### Recompile On Spec Change
+
+**Guard:** `*.spec.ts` → `npx vigiles compile`
+**Why:** Recompile instruction files when any spec changes.
+
+### Regen Types On Config Change
+
+**Guard:** `eslint.config.*`, `package.json`, `pyproject.toml` → `npx vigiles generate-types`
+**Why:** Regenerate type definitions when linter configs or package.json change.
+
+### Format Check
+
+**Guard:** `**/*.ts` → `npm run fmt:check`
+**Why:** Verify formatting on TypeScript file changes.
