@@ -47,10 +47,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/validate.test.ts": "Validation test suite (node:test)",
     "src/cli.test.ts": "CLI integration + E2E test suite (node:test)",
-    "src/freshness.ts":
-      "Freshness detection: lock file detection, input discovery, hash computation, sidecar manifests, affected-specs",
-    "src/freshness.test.ts":
-      "Freshness test suite: lock files (15 ecosystems), input discovery, hash computation, sidecar manifests, affected-specs",
+    "src/integrity.ts":
+      "Integrity check: SHA-256 hash verification for compiled markdown (detects hand-edits)",
+    "src/sidecar.ts":
+      "Per-spec sidecar manifests at .vigiles/<target>.inputs.json, used by session audit",
+    "src/sidecar.test.ts":
+      "Tests for sidecar manifests, per-file hashes, and integrity check",
     "src/coverage.ts":
       "Spec coverage analysis: linter rule coverage + npm script coverage with configurable thresholds",
     "src/coverage.test.ts": "Coverage test suite (node:test)",
@@ -82,8 +84,6 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)",
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
-    "research/doc-freshness.md":
-      "Research: input fingerprinting, TOC manifests, stale spec detection, competitive landscape, build-vs-adopt analysis",
     "research/runtime-enforcement.md":
       "Research: spec-derived runtime enforcement via hooks, skill contracts, session audit",
     "research/architecture-platform.md":
@@ -99,14 +99,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Linter support details (6 linters + generate-types)",
     "docs/comparison.md":
       "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
-    "docs/freshness.md":
-      "Freshness detection: strict/input-hash/output-hash modes, lock file detection, input fingerprinting",
     "docs/rules/require-spec.md":
       "Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md",
     "docs/rules/require-skill-spec.md":
       "Rule doc: require .spec.ts for SKILL.md files",
-    "docs/rules/freshness.md":
-      "Rule doc: freshness detection modes and configuration",
+    "docs/rules/integrity.md":
+      "Rule doc: integrity check (SHA-256 hash verification for compiled markdown)",
     "docs/rules/coverage.md":
       "Rule doc: spec coverage thresholds (scripts, linter rules)",
     "docs/inline-mode.md":
