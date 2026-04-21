@@ -83,7 +83,7 @@ declare module "vigiles/generated" {
     | "fmt"
     | "fmt:check";
 
-  /** 25 project files. */
+  /** 27 project files. */
   export type ProjectFile = 
     | "src/action.ts"
     | "src/cli.test.ts"
@@ -98,6 +98,8 @@ declare module "vigiles/generated" {
     | "src/inline.ts"
     | "src/integrity.ts"
     | "src/linters.ts"
+    | "src/orphans.test.ts"
+    | "src/orphans.ts"
     | "src/proofs.test.ts"
     | "src/proofs.ts"
     | "src/session.test.ts"
@@ -195,6 +197,8 @@ declare module "vigiles/spec" {
       | "src/inline.ts"
       | "src/integrity.ts"
       | "src/linters.ts"
+      | "src/orphans.test.ts"
+      | "src/orphans.ts"
       | "src/proofs.test.ts"
       | "src/proofs.ts"
       | "src/session.test.ts"

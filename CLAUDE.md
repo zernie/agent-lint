@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:36233841867c0b53 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:d2816c322e1414f6 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -47,6 +47,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/session.ts` — Post-session audit: git diff analysis against spec surface area
 - `src/session.test.ts` — Session audit test suite (node:test)
 - `src/hash.ts` — Shared SHA256Hash branded type and assertNever exhaustive check helper
+- `src/orphans.ts` — Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references
+- `src/orphans.test.ts` — Orphan-docs detector test suite (node:test)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -145,6 +147,10 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 ### Ts Essentials
 
 **Guidance only** — Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.
+
+### No Orphan Docs
+
+**Guidance only** — Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. See `src/orphans.ts`.
 
 ### Recompile On Spec Change
 
