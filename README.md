@@ -40,13 +40,45 @@ Reads fine. Four things are wrong:
 3. `npm run typecheck` — script removed from package.json
 4. Service/test pairing — no automated check, just a hope
 
-The agent reads this, trusts it, and writes code based on stale claims nobody verified. **Markdown can't be validated. TypeScript can.**
+The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real — and meets you at whatever commitment level you want.
 
-```bash
-npx vigiles init
+Three levels. Each is independently useful; adopt as far up as you like.
+
+### Level 0 — inline comments (30 seconds, no new files)
+
+Add a comment to your existing CLAUDE.md and audit it:
+
+```md
+<!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
 ```
 
-vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md). Every linter rule reference is verified against your real config. Every file path is checked against the filesystem. Every npm script against package.json. Stale references become compile errors — caught at edit time, not when the agent silently ignores you.
+```bash
+npx vigiles audit CLAUDE.md
+```
+
+Each rule is checked against your real linter config — typos get closest-match suggestions, disabled rules are flagged. Zero install commitment, zero new files.
+
+### Level 1 — YAML frontmatter (editor autocomplete, still no TypeScript)
+
+Promote your rules into a `vigiles:` block at the top of the file:
+
+```yaml
+---
+# yaml-language-server: $schema=./.vigiles/schema.json
+vigiles:
+  enforce:
+    - rule: "@typescript-eslint/no-explicit-any"
+      why: "Use unknown and narrow with type guards."
+    - rule: eslint/no-console
+      why: "Route output through logger.ts"
+---
+```
+
+`npx vigiles generate-schema` emits a JSON Schema from your project's _actual_ enabled rules, so your editor's built-in YAML language server (VS Code, JetBrains, neovim) autocompletes rule names and red-squiggles typos — at edit time, with no TypeScript in the project. `vigiles audit` enforces the same rules in CI. [Markdown mode →](docs/markdown-mode.md)
+
+### Level 2 — typed spec (compiler-grade guarantees)
+
+When you want the strongest guarantees, compile a typed spec. Every linter rule reference is verified against your real config, every file path against the filesystem, every npm script against package.json. Stale references become compile errors — caught at edit time, not when the agent silently ignores you.
 
 ```typescript
 // CLAUDE.md.spec.ts
@@ -84,7 +116,7 @@ $ npx vigiles compile
   ~180 tokens
 ```
 
-The spec is the source of truth. CLAUDE.md is a build artifact. After setup, the agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
+At this level the spec is the source of truth and CLAUDE.md is a build artifact. The agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
@@ -123,6 +155,8 @@ Everything vigiles compiles and audits is **deterministic** — same input, same
 
 ## Quick Start
 
+The fastest path is markdown mode — add a marker to your existing CLAUDE.md and audit it, no install or new files (see [Level 0 / Level 1](#level-0--inline-comments-30-seconds-no-new-files) above and [docs/markdown-mode.md](docs/markdown-mode.md)). When you want compiler-grade guarantees, scaffold a typed spec:
+
 ```bash
 npx vigiles init
 ```
@@ -130,16 +164,6 @@ npx vigiles init
 The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI.
 
 Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` to find rules that can be upgraded to compile-verified `enforce()`. Already have a hand-written CLAUDE.md? The wizard detects it and offers migration.
-
-### Hesitant about a new file type? Try inline mode
-
-If a `.spec.ts` feels like too much commitment, adopt vigiles one rule at a time by adding HTML comments to your existing CLAUDE.md:
-
-```md
-<!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
-```
-
-`vigiles audit CLAUDE.md` verifies each inline rule with the same closest-match suggestions and disabled-rule detection as spec mode. Zero build step, zero new files. See [docs/inline-mode.md](docs/inline-mode.md).
 
 | Flag                 | Effect                                                |
 | -------------------- | ----------------------------------------------------- |
@@ -218,14 +242,18 @@ $ npx vigiles generate-types
 
 Commit the file to git. CI can verify it's fresh: `npx vigiles generate-types --check`. [How it works →](docs/linter-support.md#generate-types)
 
+For markdown frontmatter (Level 1), `vigiles generate-schema` gives the same authoring-time feedback without TypeScript: it emits a JSON Schema from your enabled rules, and your editor's YAML language server autocompletes rule names and squiggles typos. CI freshness check: `npx vigiles generate-schema --check`.
+
 ## CLI
 
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles audit [files...]        # Verify hashes + linter rules + coverage + suggest upgrades
-npx vigiles generate-types          # Emit .d.ts from project state
+npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + coverage
+npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
+npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
+npx vigiles generate-schema --check # Verify schema.json is up to date
 ```
 
 ## GitHub Action
@@ -260,12 +288,12 @@ The plugin provides two hooks:
 
 `vigiles audit` validates instruction files with four rules:
 
-| Rule                                                     | Default  | What it checks                                       |
-| -------------------------------------------------------- | -------- | ---------------------------------------------------- |
-| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a `.spec.ts`           |
-| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                      |
-| [`integrity`](docs/rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check) |
-| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface            |
+| Rule                                                     | Default  | What it checks                                                               |
+| -------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter |
+| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                              |
+| [`integrity`](docs/rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                         |
+| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                    |
 
 Configure in `.vigilesrc.json`:
 

@@ -15,13 +15,14 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js",
+    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js",
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^20.19.39",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
@@ -37,6 +38,7 @@
     "@jackchuka/mdschema": "^0.12.8",
     "cosmiconfig": "^9.0.1",
     "glob": "^13.0.6",
+    "js-yaml": "^4.1.0",
     "minimatch": "^10.0.1"
   }
 }

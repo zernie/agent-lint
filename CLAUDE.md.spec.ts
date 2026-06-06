@@ -8,13 +8,13 @@ import { claude, enforce, guidance, guard } from "./src/spec.js";
 
 export default claude({
   sections: {
-    positioning: `vigiles compiles \`.spec.ts\` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source.
+    positioning: `vigiles verifies the rule references in agent instruction files — that each linter rule exists AND is enabled, that file paths and scripts are real. It is markdown-first: meet the user at three commitment levels — inline \`<!-- vigiles:enforce -->\` comments (Level 0), a \`vigiles:\` YAML frontmatter block (Level 1), or a typed \`.spec.ts\` compiled to markdown (Level 2). Markdown is the on-ramp; the typed spec is the source of truth when you want compiler-grade guarantees, and the markdown becomes a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source. See \`docs/markdown-mode.md\` for the level ladder.
 
 Positioned in the harness engineering frame coined early 2026: Agent = Model + Harness. The harness has two enforcement modes — probabilistic compliance (prompts, instructions) and deterministic constraints (linters, types, hooks). vigiles is the deterministic-constraints layer for instruction files. See \`research/landscape-mid-2026.md\` for the full positioning.
 
 The cross-referencing engine is the core moat: \`enforce("@typescript-eslint/no-floating-promises")\` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint, and Cedar policies (for AWS Bedrock AgentCore and other Cedar-using runtimes). No other tool resolves rules across 7 catalog APIs.
 
-\`generate-types\` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a \`.d.ts\` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+Authoring-time feedback comes two ways: \`generate-types\` emits a \`.d.ts\` so the TS compiler PROVES \`.spec.ts\` references at edit time, and \`generate-schema\` emits a JSON Schema so a YAML LSP autocompletes and squiggles \`vigiles:\` frontmatter rule names — same guarantee, no TypeScript required. Both scan all 7 catalog APIs, package.json, and project files.
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via \`enforce()\`.`,
 
@@ -43,10 +43,15 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/generate-types.ts":
       "Type generator: scans linters/package.json/filesystem → emits .d.ts",
+    "src/generate-schema.ts":
+      "JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names",
     "src/cli.ts":
       "CLI: init, compile, audit (3 primary commands + generate-types plumbing)",
     "src/inline.ts":
       "Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption",
+    "src/frontmatter.ts":
+      "Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)",
+    "src/frontmatter.test.ts": "Frontmatter parser test suite (node:test)",
     "src/action.ts": "GitHub Action wrapper",
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/validate.test.ts": "Validation test suite (node:test)",
@@ -120,7 +125,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Non-interactive agent setup guide (hooks via settings.json)",
     "docs/spec-format.md": "Spec format reference (target, sections, rules)",
     "docs/linter-support.md":
-      "Linter support details (6 linters + generate-types)",
+      "Linter support details (7 catalogs + generate-types/generate-schema)",
     "docs/comparison.md":
       "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
     "docs/rules/require-spec.md":
@@ -133,6 +138,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Rule doc: spec coverage thresholds (scripts, linter rules)",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
+    "docs/markdown-mode.md":
+      "Markdown mode: inline `<!-- vigiles:enforce -->` comments (Level 0) and `vigiles:` YAML frontmatter (Level 1) for adoption without a .spec.ts",
     "skills/linter-docs/eslint.md":
       "ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases",
     "skills/linter-docs/rubocop.md":

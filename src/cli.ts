@@ -34,6 +34,8 @@ import type { CompileError } from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
 import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
+import { parseFrontmatterRules } from "./frontmatter.js";
+import { generateSchema } from "./generate-schema.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
@@ -478,6 +480,8 @@ interface AuditReport {
   validationErrors: number;
   inlineErrors: number;
   inlineRules: number;
+  frontmatterErrors: number;
+  frontmatterRules: number;
   duplicatePairs: number;
   coverageEnabled: number;
   coverageDocumented: number;
@@ -495,11 +499,17 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.hashErrors > 0 ||
     report.validationErrors > 0 ||
     report.inlineErrors > 0 ||
+    report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
     report.coverageErrors > 0
   )
     return 2;
-  if (report.duplicatePairs > 0 || report.orphanCount > 0 || report.docRefErrors > 0) return 1;
+  if (
+    report.duplicatePairs > 0 ||
+    report.orphanCount > 0 ||
+    report.docRefErrors > 0
+  )
+    return 1;
   // Guidance counts are informational, not failures
   return 0;
 }
@@ -510,14 +520,54 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
  * spec-declared enforce rules (existence, enabled status, closest-match
  * suggestions on typo).
  */
+type LinterOptions = {
+  catalogOnly?: boolean;
+  linters?: Record<string, { rulesDir?: string | string[] }>;
+};
+
+interface RuleVerifyResult {
+  ok: boolean;
+  errorCount: number;
+  ruleCount: number;
+  /** Linter rule references that were verified (for cross-source dedup). */
+  ruleNames: string[];
+}
+
+/**
+ * Verify one parsed enforce rule against the linter catalog/config, logging
+ * and annotating on failure. Returns true when the rule is valid+enabled.
+ */
+function verifyOneRule(
+  rule: { linterRule: string; line: number },
+  filePath: string,
+  silent: boolean,
+  linterOptions?: LinterOptions,
+): boolean {
+  const log = (msg: string): void => {
+    if (!silent) console.log(msg);
+  };
+  const result = checkLinterRule(rule.linterRule, process.cwd(), linterOptions);
+  if (!result.exists) {
+    const message = result.error ?? `Rule "${rule.linterRule}" not found`;
+    log(`  ✗ line ${String(rule.line)}: ${message}`);
+    if (!silent) ghAnnotate("error", message, filePath, rule.line);
+    return false;
+  }
+  if (result.enabled === "disabled") {
+    const message = `Rule "${rule.linterRule}" exists but is disabled in ${result.linter} config`;
+    log(`  ✗ line ${String(rule.line)}: ${message}`);
+    if (!silent) ghAnnotate("error", message, filePath, rule.line);
+    return false;
+  }
+  log(`  ✓ line ${String(rule.line)}: ${rule.linterRule}`);
+  return true;
+}
+
 function verifyInlineRules(
   filePath: string,
   silent: boolean,
-  linterOptions?: {
-    catalogOnly?: boolean;
-    linters?: Record<string, { rulesDir?: string | string[] }>;
-  },
-): { ok: boolean; errorCount: number; ruleCount: number } {
+  linterOptions?: LinterOptions,
+): RuleVerifyResult {
   const log = (msg: string): void => {
     if (!silent) console.log(msg);
   };
@@ -526,12 +576,12 @@ function verifyInlineRules(
   try {
     content = readFileSync(resolve(process.cwd(), filePath), "utf-8");
   } catch {
-    return { ok: true, errorCount: 0, ruleCount: 0 };
+    return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
   const { rules, errors: parseErrors } = parseInlineRules(content);
   if (rules.length === 0 && parseErrors.length === 0) {
-    return { ok: true, errorCount: 0, ruleCount: 0 };
+    return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
   let errorCount = 0;
@@ -546,31 +596,142 @@ function verifyInlineRules(
   }
 
   for (const rule of rules) {
-    const result = checkLinterRule(
-      rule.linterRule,
-      process.cwd(),
-      linterOptions,
-    );
-    if (!result.exists) {
-      const message = result.error ?? `Rule "${rule.linterRule}" not found`;
-      log(`  ✗ line ${String(rule.line)}: ${message}`);
-      errorCount++;
-      if (!silent) {
-        ghAnnotate("error", message, filePath, rule.line);
-      }
-    } else if (result.enabled === "disabled") {
-      const message = `Rule "${rule.linterRule}" exists but is disabled in ${result.linter} config`;
-      log(`  ✗ line ${String(rule.line)}: ${message}`);
-      errorCount++;
-      if (!silent) {
-        ghAnnotate("error", message, filePath, rule.line);
-      }
-    } else {
-      log(`  ✓ line ${String(rule.line)}: ${rule.linterRule}`);
+    if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
+  }
+
+  return {
+    ok: errorCount === 0,
+    errorCount,
+    ruleCount: rules.length,
+    ruleNames: rules.map((r) => r.linterRule),
+  };
+}
+
+/**
+ * Verify `vigiles.enforce` rules declared in a file's YAML frontmatter.
+ * Same engine as inline/spec rules. Rules whose reference already appeared
+ * in `exclude` (e.g. declared inline in the same file) are skipped so a
+ * rule present in both sources is reported once, not twice.
+ */
+function verifyFrontmatterRules(
+  filePath: string,
+  silent: boolean,
+  exclude: ReadonlySet<string>,
+  linterOptions?: LinterOptions,
+): RuleVerifyResult {
+  const log = (msg: string): void => {
+    if (!silent) console.log(msg);
+  };
+
+  let content: string;
+  try {
+    content = readFileSync(resolve(process.cwd(), filePath), "utf-8");
+  } catch {
+    return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
+  }
+
+  const { rules: allRules, errors: parseErrors } =
+    parseFrontmatterRules(content);
+  const rules = allRules.filter((r) => !exclude.has(r.linterRule));
+  if (rules.length === 0 && parseErrors.length === 0) {
+    return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
+  }
+
+  let errorCount = 0;
+  log(`\n${filePath} (frontmatter mode):`);
+
+  for (const err of parseErrors) {
+    log(`  ✗ line ${String(err.line)}: ${err.message}`);
+    errorCount++;
+    if (!silent) {
+      ghAnnotate("error", err.message, filePath, err.line);
     }
   }
 
-  return { ok: errorCount === 0, errorCount, ruleCount: rules.length };
+  for (const rule of rules) {
+    if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
+  }
+
+  return {
+    ok: errorCount === 0,
+    errorCount,
+    ruleCount: rules.length,
+    ruleNames: rules.map((r) => r.linterRule),
+  };
+}
+
+interface MarkdownModeTotals {
+  inlineErrors: number;
+  inlineRules: number;
+  frontmatterErrors: number;
+  frontmatterRules: number;
+}
+
+/**
+ * Verify inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML
+ * frontmatter in instruction files that aren't managed by a spec.
+ *
+ * Spec mode is the source of truth when it exists, so a literal
+ * `<!-- vigiles:enforce ... -->` snippet that survived into compiled
+ * markdown (or an example in a spec-managed file) must not trip audit. A
+ * file is spec-managed iff it has a sibling `<file>.spec.ts` OR its own
+ * `<!-- vigiles:sha256:... compiled from <spec> -->` header. A rule
+ * declared both inline and in frontmatter is verified once (inline wins as
+ * the first source). See docs/markdown-mode.md.
+ */
+function verifyMarkdownModeRules(
+  files: string[],
+  silent: boolean,
+  config?: VigilesConfig,
+): MarkdownModeTotals {
+  const totals: MarkdownModeTotals = {
+    inlineErrors: 0,
+    inlineRules: 0,
+    frontmatterErrors: 0,
+    frontmatterRules: 0,
+  };
+  if (!silent && files.length > 0) {
+    console.log("\nInline + frontmatter rule verification:");
+  }
+  const linterOptions: LinterOptions = {
+    catalogOnly: config?.catalogOnly,
+    linters: config?.linters,
+  };
+  const compiledFromRe =
+    /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from .+?\s*-->/;
+  for (const filePath of files) {
+    const abs = resolve(process.cwd(), filePath);
+    if (existsSync(`${abs}.spec.ts`)) continue; // managed by sibling spec
+    let content: string;
+    try {
+      content = readFileSync(abs, "utf-8");
+    } catch {
+      continue;
+    }
+    if (compiledFromRe.test(content)) continue; // managed via hash header
+    const inline = verifyInlineRules(filePath, silent, linterOptions);
+    totals.inlineErrors += inline.errorCount;
+    totals.inlineRules += inline.ruleCount;
+    const fm = verifyFrontmatterRules(
+      filePath,
+      silent,
+      new Set(inline.ruleNames),
+      linterOptions,
+    );
+    totals.frontmatterErrors += fm.errorCount;
+    totals.frontmatterRules += fm.ruleCount;
+  }
+  if (
+    !silent &&
+    files.length > 0 &&
+    totals.inlineRules === 0 &&
+    totals.frontmatterRules === 0
+  ) {
+    console.log(
+      "  (no inline vigiles:enforce comments or vigiles: frontmatter found)",
+    );
+  }
+  return totals;
 }
 
 /**
@@ -605,45 +766,10 @@ async function audit(
       ? check(files, silent)
       : { valid: true, hashErrors: 0, validationErrors: 0 };
 
-  // 1b. Verify inline vigiles:enforce comments in any instruction file
-  // that isn't already managed by a .spec.ts. Spec mode is the source of
-  // truth when it exists, so a literal `<!-- vigiles:enforce ... -->`
-  // snippet that survived into the compiled markdown (or an
-  // explanatory example in a spec-managed file) must not trip audit.
-  // A file is spec-managed iff it has a sibling `<file>.spec.ts` OR its
-  // own `<!-- vigiles:sha256:... compiled from <spec> -->` header.
-  // See docs/inline-mode.md.
-  let inlineErrors = 0;
-  let inlineRules = 0;
-  if (!silent && files.length > 0) {
-    console.log("\nInline rule verification:");
-  }
-  const compiledFromRe =
-    /<!--\s*vigiles:sha256:[a-f0-9]+\s+compiled from .+?\s*-->/;
-  for (const filePath of files) {
-    const abs = resolve(process.cwd(), filePath);
-    if (existsSync(`${abs}.spec.ts`)) {
-      continue; // managed by sibling spec
-    }
-    let content: string;
-    try {
-      content = readFileSync(abs, "utf-8");
-    } catch {
-      continue;
-    }
-    if (compiledFromRe.test(content)) {
-      continue; // managed by the spec referenced in the hash header
-    }
-    const result = verifyInlineRules(filePath, silent, {
-      catalogOnly: config?.catalogOnly,
-      linters: config?.linters,
-    });
-    inlineErrors += result.errorCount;
-    inlineRules += result.ruleCount;
-  }
-  if (!silent && files.length > 0 && inlineRules === 0) {
-    console.log("  (no inline vigiles:enforce comments found)");
-  }
+  // 1b. Verify inline + frontmatter rules in instruction files not managed
+  // by a spec. See verifyMarkdownModeRules / docs/markdown-mode.md.
+  const md = verifyMarkdownModeRules(files, silent, config);
+  const { inlineErrors, inlineRules, frontmatterErrors, frontmatterRules } = md;
 
   // 2. Coverage gaps (discover)
   if (!silent) console.log("\nLinter rule coverage:\n");
@@ -711,6 +837,8 @@ async function audit(
     validationErrors: hashResult.validationErrors,
     inlineErrors,
     inlineRules,
+    frontmatterErrors,
+    frontmatterRules,
     duplicatePairs: dups.pairCount,
     coverageEnabled: coverage.enabled,
     coverageDocumented: coverage.documented,
@@ -739,6 +867,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.validationErrors)} validation errors`);
   if (report.inlineErrors > 0)
     parts.push(`${String(report.inlineErrors)} inline errors`);
+  if (report.frontmatterErrors > 0)
+    parts.push(`${String(report.frontmatterErrors)} frontmatter errors`);
   if (report.duplicatePairs > 0)
     parts.push(`${String(report.duplicatePairs)} duplicates`);
   if (report.orphanCount > 0)
@@ -1156,6 +1286,18 @@ async function setup(args: string[]): Promise<void> {
   }
   console.log(`✓ Generated ${outPath}`);
 
+  // Also emit a JSON Schema so `vigiles:` markdown frontmatter (Level 1)
+  // gets rule-name autocomplete + typo squiggles from the editor's YAML LSP.
+  const schemaResult = generateSchema({
+    basePath: process.cwd(),
+    linters: loadConfig().linters,
+  });
+  const schemaPath = ".vigiles/schema.json";
+  writeFileSync(resolve(process.cwd(), schemaPath), schemaResult.json);
+  console.log(
+    `✓ Generated ${schemaPath} (point frontmatter at it with \`# yaml-language-server: $schema=./${schemaPath}\`)`,
+  );
+
   // Step 5: Compile specs
   console.log("\nCompiling specs...");
   const specs = findSpecs();
@@ -1300,6 +1442,7 @@ async function setup(args: string[]): Promise<void> {
     ...targets,
     ...specPathsList,
     ".vigiles/generated.d.ts",
+    ".vigiles/schema.json",
     ...(shouldInstallPlugin ? [".claude/settings.json"] : []),
     ...(strict ? [".vigilesrc.json"] : []),
   ];
@@ -1505,6 +1648,54 @@ function handleGenerateTypes(args: string[], restArgs: string[]): void {
   console.log(`\n✓ Generated ${outPath}`);
 }
 
+function handleGenerateSchema(args: string[], restArgs: string[]): void {
+  const checkOnly = args.includes("--check");
+  const outPath = restArgs[0] ?? ".vigiles/schema.json";
+
+  console.log("Scanning linters...\n");
+  const result = generateSchema({
+    basePath: process.cwd(),
+    linters: loadConfig().linters,
+  });
+
+  for (const l of result.linters) {
+    console.log(`  ${l.linter}: ${String(l.count)} rules`);
+  }
+  console.log(`  schema enum: ${String(result.ruleNames.length)} rule names`);
+
+  const fullOut = resolve(process.cwd(), outPath);
+
+  if (checkOnly) {
+    if (!existsSync(fullOut)) {
+      console.log(
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate-schema\` to create it.`,
+      );
+      process.exit(1);
+    }
+    const existing = readFileSync(fullOut, "utf-8");
+    if (existing.trim() === result.json.trim()) {
+      console.log(`\n✓ ${outPath} is up to date`);
+    } else {
+      console.log(
+        `\n✗ ${outPath} is stale. Run \`vigiles generate-schema\` to update.`,
+      );
+      process.exit(1);
+    }
+    return;
+  }
+
+  const outDir = fullOut.substring(0, fullOut.lastIndexOf("/"));
+  if (outDir && !existsSync(outDir)) {
+    mkdirSync(outDir, { recursive: true });
+  }
+  writeFileSync(fullOut, result.json);
+  console.log(`\n✓ Generated ${outPath}`);
+  console.log(
+    "  Add to your markdown frontmatter:\n" +
+      `    # yaml-language-server: $schema=./${outPath}`,
+  );
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -1529,6 +1720,12 @@ function printUsage(command: string | undefined): void {
   console.log("Plumbing:");
   console.log("  vigiles generate-types [out]  Emit .d.ts from project state");
   console.log("  vigiles generate-types --check  Verify .d.ts is up to date");
+  console.log(
+    "  vigiles generate-schema [out] Emit JSON Schema for vigiles: frontmatter",
+  );
+  console.log(
+    "  vigiles generate-schema --check Verify schema.json is up to date",
+  );
   if (command && command !== "--help") {
     console.log(`\nUnknown command: "${command}"`);
     process.exit(1);
@@ -1621,6 +1818,10 @@ async function main(): Promise<void> {
 
     case "generate-types":
       handleGenerateTypes(args, restArgs);
+      break;
+
+    case "generate-schema":
+      handleGenerateSchema(args, restArgs);
       break;
 
     default:
