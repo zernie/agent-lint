@@ -43,10 +43,15 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/generate-types.ts":
       "Type generator: scans linters/package.json/filesystem → emits .d.ts",
+    "src/generate-schema.ts":
+      "JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names",
     "src/cli.ts":
       "CLI: init, compile, audit (3 primary commands + generate-types plumbing)",
     "src/inline.ts":
       "Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption",
+    "src/frontmatter.ts":
+      "Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)",
+    "src/frontmatter.test.ts": "Frontmatter parser test suite (node:test)",
     "src/action.ts": "GitHub Action wrapper",
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/validate.test.ts": "Validation test suite (node:test)",
@@ -133,6 +138,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Rule doc: spec coverage thresholds (scripts, linter rules)",
     "docs/inline-mode.md":
       "Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts",
+    "docs/markdown-mode.md":
+      "Markdown mode: inline `<!-- vigiles:enforce -->` comments (Level 0) and `vigiles:` YAML frontmatter (Level 1) for adoption without a .spec.ts",
     "skills/linter-docs/eslint.md":
       "ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases",
     "skills/linter-docs/rubocop.md":

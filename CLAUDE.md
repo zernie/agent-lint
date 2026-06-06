@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:7eae58d24fb198e1 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:1be1c324c4254176 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -36,8 +36,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/linters.ts` — Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)
 - `src/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
+- `src/generate-schema.ts` — JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names
 - `src/cli.ts` — CLI: init, compile, audit (3 primary commands + generate-types plumbing)
 - `src/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption
+- `src/frontmatter.ts` — Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)
+- `src/frontmatter.test.ts` — Frontmatter parser test suite (node:test)
 - `src/action.ts` — GitHub Action wrapper
 - `src/spec.test.ts` — Spec + compiler test suite (node:test)
 - `src/validate.test.ts` — Validation test suite (node:test)
@@ -88,6 +91,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `docs/rules/integrity.md` — Rule doc: integrity check (SHA-256 hash verification for compiled markdown)
 - `docs/rules/coverage.md` — Rule doc: spec coverage thresholds (scripts, linter rules)
 - `docs/inline-mode.md` — Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts
+- `docs/markdown-mode.md` — Markdown mode: inline `<!-- vigiles:enforce -->` comments (Level 0) and `vigiles:` YAML frontmatter (Level 1) for adoption without a .spec.ts
 - `skills/linter-docs/eslint.md` — ESLint reference: plugin table, AST selectors, type-aware rules, auto-fix, edge cases
 - `skills/linter-docs/rubocop.md` — RuboCop reference: gem table, node pattern DSL, auto-correct, custom cops
 - `skills/linter-docs/pylint.md` — Pylint reference: plugin table, astroid AST, type inference, custom checkers
