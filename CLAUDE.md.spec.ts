@@ -95,6 +95,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Research: formal verification via Lean 4 / Dafny, Cedar pattern, Leanstral integration",
     "research/enforce-over-guidance.md":
       "Design doc: deterministic upgrade gates — snapshot-gated downgrades + Merkle diff vs upstream catalog",
+    "research/landscape-mid-2026.md":
+      "Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":
