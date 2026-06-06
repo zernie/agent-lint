@@ -4,6 +4,7 @@ import { resolve, basename as pathBasename } from "node:path";
 import { cosmiconfigSync } from "cosmiconfig";
 
 import { hasInlineRules } from "./inline.js";
+import { hasFrontmatterRules } from "./frontmatter.js";
 
 import type {
   ParsedRule,
@@ -229,11 +230,11 @@ export function validate(
       // verified on `vigiles audit` even without a .spec.ts sibling.
       // Delegate to the real parser so a malformed marker can't
       // satisfy require-spec with a rule that audit can't verify.
-      const hasInline = hasInlineRules(content);
+      const hasInline = hasInlineRules(content) || hasFrontmatterRules(content);
       if (!existsSync(specPath) && !hasInline) {
         const msg: ValidationError = {
           rule: "require-spec",
-          message: `No spec file found for "${filePath}". Expected "${specPath}". Run \`npx vigiles init --target=${filePath}\` to create one, add inline \`<!-- vigiles:enforce ... -->\` comments, or disable with <!-- vigiles-disable require-spec -->.`,
+          message: `No spec file found for "${filePath}". Expected "${specPath}". Run \`npx vigiles init --target=${filePath}\` to create one, add inline \`<!-- vigiles:enforce ... -->\` comments or a \`vigiles:\` frontmatter block, or disable with <!-- vigiles-disable require-spec -->.`,
           line: 1,
         };
         if (specSeverity === "error") {
