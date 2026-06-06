@@ -63,7 +63,7 @@ describe("extractDocRefs()", () => {
 
   it("respects <!-- vigiles:ignore --> on the line before a block", () => {
     const md = [
-      '<!-- vigiles:ignore -->',
+      "<!-- vigiles:ignore -->",
       "```ts",
       'enforce("eslint/no-consolee", "demo typo")',
       "```",
@@ -81,7 +81,7 @@ describe("extractDocRefs()", () => {
 
   it("only ignores the next block (subsequent blocks still scanned)", () => {
     const md = [
-      '<!-- vigiles:ignore -->',
+      "<!-- vigiles:ignore -->",
       "```ts",
       'enforce("ignored/a", "x")',
       "```",

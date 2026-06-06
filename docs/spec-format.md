@@ -123,7 +123,7 @@ instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
 
 ## Rule Types
 
-Three builders cover three kinds of constraints. The split mirrors a useful mental model for what a rule actually *is*:
+Three builders cover three kinds of constraints. The split mirrors a useful mental model for what a rule actually _is_:
 
 - **Process rules** (build commands, env, package managers) — covered by `guard()` (reactive) and runtime hook policies elsewhere.
 - **Source rules** (code patterns, style, API conventions) — covered by `enforce()` delegating to ESLint / Ruff / Clippy / etc.

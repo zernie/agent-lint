@@ -84,7 +84,7 @@ The marketing target is the narrow slice, not all agent users.
 
 ## Ranked proposals
 
-### A. Zero-commitment scan demo  ⭐ recommended
+### A. Zero-commitment scan demo ⭐ recommended
 
 `npx vigiles scan` runs against a raw hand-written CLAUDE.md / AGENTS.md, no `.spec.ts` required, no install commitment. Parses backticked refs (inline code spans + fenced code blocks — structured content only, no natural language NLP) and validates them against actual linter configs / filesystem / package.json. Reports stale refs with concrete suggestions.
 
@@ -100,30 +100,30 @@ Why this works:
 
 Heuristics for inline code span classification:
 
-| Pattern | Detection | Action |
-|---|---|---|
-| Linter rule | matches `<prefix>/<rule>` where prefix ∈ {eslint, ruff, clippy, pylint, rubocop, stylelint, cedar, @scope} | `checkLinterRule` |
-| File path | has `/`, common extension OR starts with `src/`, `lib/`, `tests/`, `docs/` | `existsSync` |
-| NPM command | matches `^(npm\|npx\|yarn\|pnpm)\s+\S` | `readPackageScripts` |
-| Anything else | no match | skip silently (not even counted) |
+| Pattern       | Detection                                                                                                  | Action                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Linter rule   | matches `<prefix>/<rule>` where prefix ∈ {eslint, ruff, clippy, pylint, rubocop, stylelint, cedar, @scope} | `checkLinterRule`                |
+| File path     | has `/`, common extension OR starts with `src/`, `lib/`, `tests/`, `docs/`                                 | `existsSync`                     |
+| NPM command   | matches `^(npm\|npx\|yarn\|pnpm)\s+\S`                                                                     | `readPackageScripts`             |
+| Anything else | no match                                                                                                   | skip silently (not even counted) |
 
 Default policy: pattern-not-matched = skip. Random backticks like `if`, `null`, package names → ignored. Low false positive rate by construction.
 
-### B. Find and capture audience  (medium leverage)
+### B. Find and capture audience (medium leverage)
 
 - Twitter search "CLAUDE.md" / "AGENTS.md is broken/stale/lying" — reply with scan demo
 - HN comments on agent reliability threads — drop relevant link when genuinely useful (no spam)
 - Anthropic Discord / Claude Code communities — focused audience
 - Submit to "awesome-claude-code" and "awesome-ai-agents" lists
 
-### C. Distribution partnership  (high leverage but harder)
+### C. Distribution partnership (high leverage but harder)
 
 - Claude Code skill marketplace — `npx skills add zernie/vigiles` exists, but presence is invisible
 - Pitch to Anthropic devrel for inclusion in agent-tooling roundups
 - Vercel Skills marketplace
 - GitHub App: "Vigiles bot scans your CLAUDE.md on PR" — zero-install path
 
-### D. Reduce conceptual surface  (medium leverage)
+### D. Reduce conceptual surface (medium leverage)
 
 Recent README rewrite already cut jargon. Next steps:
 
@@ -131,14 +131,14 @@ Recent README rewrite already cut jargon. Next steps:
 - Position `.spec.ts` as level 2, not the entry point
 - Quickstart that takes ≤3 steps: scan → see findings → optionally add inline comments
 
-### E. Public proof of value  (medium leverage)
+### E. Public proof of value (medium leverage)
 
 - Run scan on popular OSS repos (React, Next.js, Anthropic SDK, etc.) → publish findings
 - "I scanned 1000 CLAUDE.md files. Here's what's broken across the ecosystem." — blog post
 - Self-running case: "vigiles found N bugs in its own docs this week"
 - Public dashboard of "stale references caught across N participating repos"
 
-### F. Content marketing  (slow burn)
+### F. Content marketing (slow burn)
 
 - Blog: concrete case studies, before/after numbers
 - Twitter threads with scan screenshots
@@ -203,4 +203,20 @@ Current direction (in progress):
 
 This swaps the funnel logic: instead of finding the user's pre-existing broken refs (low signal), we generate fresh markers from their real linter config (100% hit rate, all checkable). The shareable artifact becomes "vigiles added 8 verified rules to my CLAUDE.md in one command."
 
-Doc will be rewritten when the direction stabilizes.
+## Update: markdown-first shipped
+
+The direction stabilized into a broader move than `vigiles starter` alone: **markdown-first adoption**. The diagnosis underneath stages 2–3 was that the `.spec.ts` requirement is the adoption barrier — non-TS projects won't add TypeScript for an instruction-file linter, and brownfield migration from an existing CLAUDE.md is too much friction for the value. So the entry point is now plain markdown, with the typed spec demoted to the deepest of three commitment levels:
+
+- **Level 0 — inline comments.** `<!-- vigiles:enforce ... -->` in an existing CLAUDE.md. Already shipped.
+- **Level 1 — YAML frontmatter.** A `vigiles:` block verified by `vigiles audit`, plus `vigiles generate-schema` → a JSON Schema so the editor's built-in YAML LSP autocompletes rule names and squiggles typos. No TypeScript. **Shipped in this pass.**
+- **Level 2 — typed spec.** Unchanged; now positioned as "when you want compiler-grade guarantees," not the front door.
+
+What this resolves from the funnel analysis:
+
+- **Stage 3 (resolution friction):** value is visible by adding one marker and running `vigiles audit` — no init, no migration, no build step.
+- **Stage 2 (resonance):** the user's own broken/missing refs surface against their own config, with line numbers.
+- **The narrow-audience problem:** dropping the TS requirement widens the addressable slice to any project with a non-trivial instruction file, regardless of language.
+
+`vigiles starter` (auto-generate markers from config) is still a good idea and composes cleanly on top of Level 0/1 — it's the natural next funnel experiment now that the levels exist. The shareable-artifact framing from the starter proposal carries over: "vigiles added 8 verified rules to my CLAUDE.md in one command" works identically whether the markers land as inline comments or a frontmatter block.
+
+README and docs were inverted to lead with markdown mode (see `docs/markdown-mode.md` and `examples/frontmatter-CLAUDE.md`). Next: measure whether dropping the TS barrier moves the npm-download / star baseline before investing in `starter` automation or the distribution pushes (B/C/E) above.

@@ -1,6 +1,6 @@
 # Agent Workflows
 
-vigiles compiles typed specs to markdown instruction files. Different AI agents read different files, but the compilation and validation pipeline is the same.
+vigiles verifies the rule references in agent instruction files — declared as inline comments, `vigiles:` YAML frontmatter, or a typed spec compiled to markdown ([markdown mode](markdown-mode.md)). Different AI agents read different files, but the validation pipeline is the same. The workflows below use spec mode, the deepest level; the inline and frontmatter levels need no build step.
 
 ## Auto-Detection
 

@@ -257,9 +257,7 @@ function validateRefs(
  * spec.ts. Honors `<!-- vigiles:ignore-file -->` (skip the whole file)
  * and `<!-- vigiles:ignore -->` (skip the next code block).
  */
-export function findDocRefs(
-  options: FindDocRefsOptions = {},
-): DocRefReport {
+export function findDocRefs(options: FindDocRefsOptions = {}): DocRefReport {
   const basePath = options.basePath ?? process.cwd();
   const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
   const files = globSync("**/*.md", { cwd: basePath, ignore });

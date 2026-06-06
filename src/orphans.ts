@@ -49,10 +49,7 @@ export interface FindOrphansOptions {
 // Internals
 // ---------------------------------------------------------------------------
 
-const DEFAULT_INCLUDE = [
-  "docs/**/*.md",
-  "research/**/*.md",
-] as const;
+const DEFAULT_INCLUDE = ["docs/**/*.md", "research/**/*.md"] as const;
 
 const DEFAULT_IGNORE = [
   "node_modules/**",
@@ -94,9 +91,7 @@ function extractRefs(content: string): string[] {
  * is the vigiles-repo convention `["docs/**\/*.md", "research/**\/*.md"]`;
  * override per-project via `.vigilesrc.json` → `orphans.include`.
  */
-export function findOrphanDocs(
-  options: FindOrphansOptions = {},
-): OrphanReport {
+export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
   const basePath = options.basePath ?? process.cwd();
   const include = options.include ?? DEFAULT_INCLUDE;
   const userExclude = options.exclude ?? [];

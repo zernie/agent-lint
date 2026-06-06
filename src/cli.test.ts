@@ -467,6 +467,299 @@ Real rule:
 });
 
 // ---------------------------------------------------------------------------
+// Frontmatter mode E2E
+// ---------------------------------------------------------------------------
+
+describe("E2E: frontmatter enforcement", () => {
+  let fmDir: string;
+
+  before(() => {
+    fmDir = mkdtempSync(join(tmpdir(), "vigiles-fm-e2e-"));
+    writeFileSync(
+      join(fmDir, "package.json"),
+      JSON.stringify({ name: "test-fm", scripts: {} }),
+    );
+    symlinkSync(
+      resolve(process.cwd(), "node_modules"),
+      join(fmDir, "node_modules"),
+    );
+    const eslintConfig = resolve(process.cwd(), "eslint.config.ts");
+    if (existsSync(eslintConfig)) {
+      copyFileSync(eslintConfig, join(fmDir, "eslint.config.ts"));
+    }
+  });
+
+  after(() => {
+    rmSync(fmDir, { recursive: true, force: true });
+  });
+
+  it("verifies a valid frontmatter enforce rule and exits clean", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/no-console
+      why: Use the logger
+---
+
+# Project
+`,
+    );
+    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    assert.ok(
+      stdout.includes("eslint/no-console"),
+      `Expected rule in output, got: ${stdout.slice(0, 600)}`,
+    );
+    assert.equal(exitCode, 0, `Expected clean exit, got ${String(exitCode)}`);
+  });
+
+  it("flags a typo'd frontmatter rule with a closest-match suggestion", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/no-consol
+      why: Typo check
+---
+`,
+    );
+    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    assert.ok(
+      stdout.includes("no-consol"),
+      `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
+    );
+    assert.ok(
+      stdout.includes("Did you mean"),
+      `Expected closest-match suggestion, got: ${stdout.slice(0, 600)}`,
+    );
+    assert.equal(exitCode, 2, "Expected exit 2 on frontmatter error");
+  });
+
+  it("reports a stale ref in frontmatter (manual-verification case)", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/fake-rule-xyz
+      why: This rule does not exist
+---
+
+# Project
+`,
+    );
+    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const report = JSON.parse(stdout) as {
+      frontmatterErrors: number;
+      frontmatterRules: number;
+    };
+    assert.ok(report.frontmatterErrors > 0, "Expected frontmatterErrors > 0");
+    assert.ok(report.frontmatterRules > 0, "Expected frontmatterRules > 0");
+    assert.equal(exitCode, 2);
+  });
+
+  it("reports frontmatter rules in --summary output", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/fake-rule-xyz
+      why: bad
+---
+`,
+    );
+    const { stdout, exitCode } = run("audit --summary CLAUDE.md", fmDir);
+    assert.ok(
+      stdout.includes("frontmatter"),
+      `Expected 'frontmatter' in summary, got: ${stdout}`,
+    );
+    assert.equal(exitCode, 2);
+  });
+
+  it("reports malformed YAML frontmatter without crashing", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/no-console
+       why: bad indent :
+      : :
+---
+`,
+    );
+    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    assert.ok(
+      stdout.includes("Malformed YAML frontmatter"),
+      `Expected malformed-YAML report, got: ${stdout.slice(0, 600)}`,
+    );
+    assert.equal(exitCode, 2);
+  });
+
+  it("satisfies require-spec when frontmatter rules are present", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/no-console
+      why: valid
+---
+
+# Project
+`,
+    );
+    const { stdout } = run("audit CLAUDE.md", fmDir);
+    assert.ok(
+      !stdout.includes("require-spec"),
+      `require-spec should be satisfied by frontmatter, got: ${stdout.slice(0, 600)}`,
+    );
+  });
+
+  it("does not double-count a rule declared both inline and in frontmatter", () => {
+    writeFileSync(
+      join(fmDir, "CLAUDE.md"),
+      `---
+vigiles:
+  enforce:
+    - rule: eslint/no-console
+      why: from frontmatter
+---
+
+# Project
+
+<!-- vigiles:enforce eslint/no-console "from inline" -->
+`,
+    );
+    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const report = JSON.parse(stdout) as {
+      inlineRules: number;
+      frontmatterRules: number;
+    };
+    // Inline is the first source; the duplicate frontmatter rule is skipped.
+    assert.equal(report.inlineRules, 1);
+    assert.equal(report.frontmatterRules, 0);
+    assert.equal(exitCode, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// vigiles generate-schema
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles generate-schema", () => {
+  let schemaDir: string;
+
+  before(() => {
+    schemaDir = mkdtempSync(join(tmpdir(), "vigiles-schema-"));
+    writeFileSync(
+      join(schemaDir, "package.json"),
+      JSON.stringify({ name: "test-schema", scripts: {} }),
+    );
+    symlinkSync(
+      resolve(process.cwd(), "node_modules"),
+      join(schemaDir, "node_modules"),
+    );
+    // Plain JS flat config so rule discovery doesn't depend on a TS loader
+    // being resolvable from the temp dir.
+    writeFileSync(
+      join(schemaDir, "eslint.config.js"),
+      `module.exports = [{ rules: { "no-console": "error", "no-eval": "warn" } }];\n`,
+    );
+  });
+
+  after(() => {
+    rmSync(schemaDir, { recursive: true, force: true });
+  });
+
+  it("emits a valid JSON Schema with a populated rule enum", () => {
+    const { exitCode } = run("generate-schema", schemaDir);
+    assert.equal(exitCode, 0);
+    const schemaPath = join(schemaDir, ".vigiles", "schema.json");
+    assert.ok(existsSync(schemaPath), "expected .vigiles/schema.json");
+    const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+      properties: {
+        vigiles: {
+          properties: {
+            enforce: {
+              items: {
+                properties: { rule: { enum?: string[]; type?: string } };
+              };
+            };
+          };
+        };
+      };
+    };
+    const ruleSchema =
+      schema.properties.vigiles.properties.enforce.items.properties.rule;
+    assert.ok(
+      Array.isArray(ruleSchema.enum) && ruleSchema.enum.length > 0,
+      "expected a populated rule enum from eslint config",
+    );
+    assert.ok(
+      ruleSchema.enum.some((r) => r.startsWith("eslint/")),
+      "expected eslint-prefixed rule names in the enum",
+    );
+  });
+
+  it("--check passes after generation and is idempotent", () => {
+    run("generate-schema", schemaDir);
+    const { stdout, exitCode } = run("generate-schema --check", schemaDir);
+    assert.equal(exitCode, 0, stdout);
+    assert.ok(stdout.includes("up to date"));
+  });
+
+  it("includes configured custom-linter rules from rulesDir in the enum", () => {
+    // A custom linter declared in .vigilesrc.json resolves its rules from a
+    // rulesDir. `vigiles audit` accepts `my-tool/no-foo`, so the schema enum
+    // must include it too (otherwise the YAML LSP false-flags a valid rule).
+    const customDir = mkdtempSync(join(tmpdir(), "vigiles-schema-custom-"));
+    symlinkSync(
+      resolve(process.cwd(), "node_modules"),
+      join(customDir, "node_modules"),
+    );
+    writeFileSync(
+      join(customDir, "package.json"),
+      JSON.stringify({ name: "test-custom", scripts: {} }),
+    );
+    writeFileSync(
+      join(customDir, ".vigilesrc.json"),
+      JSON.stringify({ linters: { "my-tool": { rulesDir: "rules" } } }),
+    );
+    mkdirSync(join(customDir, "rules"));
+    writeFileSync(
+      join(customDir, "rules", "no-foo.js"),
+      "module.exports = {};",
+    );
+
+    const { exitCode } = run("generate-schema", customDir);
+    assert.equal(exitCode, 0);
+    const schema = JSON.parse(
+      readFileSync(join(customDir, ".vigiles", "schema.json"), "utf-8"),
+    ) as {
+      properties: {
+        vigiles: {
+          properties: {
+            enforce: { items: { properties: { rule: { enum?: string[] } } } };
+          };
+        };
+      };
+    };
+    const ruleEnum =
+      schema.properties.vigiles.properties.enforce.items.properties.rule.enum ??
+      [];
+    assert.ok(
+      ruleEnum.includes("my-tool/no-foo"),
+      `expected my-tool/no-foo in enum, got: ${JSON.stringify(ruleEnum)}`,
+    );
+    rmSync(customDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // vigiles generate-types
 // ---------------------------------------------------------------------------
 

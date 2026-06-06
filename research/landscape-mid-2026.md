@@ -129,29 +129,29 @@ The paper isn't about instruction files specifically — it's about the broader 
 
 Combining the existing tables in `competitive-landscape.md` with mid-2026 entrants. Rows are projects; columns are the dimensions that matter for positioning vigiles.
 
-| Project | Type | Stage | Determinism | Scope | Overlap with vigiles |
-|---|---|---|---|---|---|
-| **vigiles** | Compiler | Compile-time | Deterministic | Instruction files | (this project) |
-| ContextCov | Extractor | Compile-time | Hybrid (NLP→checks) | Instruction files | Same problem, post-hoc; vigiles solves it from the source |
-| agents-lint | Validator | Compile-time | Deterministic | Instruction files | Subset of vigiles `file()`/`cmd()` validation |
-| ctxlint | Validator | Compile-time | Deterministic | Instruction files | Stale refs + token bloat, post-hoc on markdown |
-| AgentLinter | Scorer | Compile-time | Hybrid (rules + heuristics) | Instruction files | Grading angle; complementary |
-| cursor-doctor | Validator | Compile-time | Deterministic | Cursor `.mdc` | Format-specific; sync tools bridge |
-| claudelint | Validator | Compile-time | Deterministic | Full Claude ecosystem | Broader scope (hooks/MCP/plugins); same level |
-| Ruler, rulesync, rule-porter, vibe-cli | Sync | Build-time | Deterministic | Cross-agent distribution | Orthogonal — vigiles is source, they distribute |
-| ai-rulez | Hybrid | Build/runtime | **Probabilistic** ("AI-powered") | Cross-agent | Weaker guarantee; positioning contrast |
-| ai-rules-sync, anywhere-agents | Sync | Build-time | Deterministic | Cross-agent | Orthogonal |
-| block/ai-rules | Sync + policy | Build-time | Deterministic | Enterprise multi-agent | Orthogonal; potential integration |
-| Microsoft AGT | Runtime governance | Runtime | Deterministic | Tool-call enforcement | Adjacent layer; complementary |
-| AWS Bedrock + Cedar | Runtime policy | Runtime | Deterministic | Tool-call enforcement | **Cross-reference target** — see proposal above |
-| Vectimus | Runtime policy | Runtime | Deterministic | Tool-call enforcement | Cedar-based; same as Bedrock case |
-| Agent RuleZ | Runtime policy | Runtime | Deterministic | Claude Code hooks | Adjacent; could be `enforce()` target |
-| AgentProof | Static verifier | Compile-time | Deterministic | Workflow graphs | **Technique transfers** — see proposal above |
-| AgentVerify | Static verifier | Compile-time | Deterministic | Memory + tool calls | Complementary layer |
-| AgentGuard | Runtime verifier | Runtime | Probabilistic (MDP) | Agent I/O | Runtime, framework-agnostic |
-| GitHub Spec Kit | Workflow tool | Authoring | Deterministic | Feature specs | Different level (what to build, not how agent behaves) |
-| gh-aw | Workflow runtime | Runtime | Deterministic | CI automation | Different domain |
-| ContextCov, Compiled AI, Blueprint First | Academic | — | — | Paradigm validation | Citation sources |
+| Project                                  | Type               | Stage         | Determinism                      | Scope                    | Overlap with vigiles                                      |
+| ---------------------------------------- | ------------------ | ------------- | -------------------------------- | ------------------------ | --------------------------------------------------------- |
+| **vigiles**                              | Compiler           | Compile-time  | Deterministic                    | Instruction files        | (this project)                                            |
+| ContextCov                               | Extractor          | Compile-time  | Hybrid (NLP→checks)              | Instruction files        | Same problem, post-hoc; vigiles solves it from the source |
+| agents-lint                              | Validator          | Compile-time  | Deterministic                    | Instruction files        | Subset of vigiles `file()`/`cmd()` validation             |
+| ctxlint                                  | Validator          | Compile-time  | Deterministic                    | Instruction files        | Stale refs + token bloat, post-hoc on markdown            |
+| AgentLinter                              | Scorer             | Compile-time  | Hybrid (rules + heuristics)      | Instruction files        | Grading angle; complementary                              |
+| cursor-doctor                            | Validator          | Compile-time  | Deterministic                    | Cursor `.mdc`            | Format-specific; sync tools bridge                        |
+| claudelint                               | Validator          | Compile-time  | Deterministic                    | Full Claude ecosystem    | Broader scope (hooks/MCP/plugins); same level             |
+| Ruler, rulesync, rule-porter, vibe-cli   | Sync               | Build-time    | Deterministic                    | Cross-agent distribution | Orthogonal — vigiles is source, they distribute           |
+| ai-rulez                                 | Hybrid             | Build/runtime | **Probabilistic** ("AI-powered") | Cross-agent              | Weaker guarantee; positioning contrast                    |
+| ai-rules-sync, anywhere-agents           | Sync               | Build-time    | Deterministic                    | Cross-agent              | Orthogonal                                                |
+| block/ai-rules                           | Sync + policy      | Build-time    | Deterministic                    | Enterprise multi-agent   | Orthogonal; potential integration                         |
+| Microsoft AGT                            | Runtime governance | Runtime       | Deterministic                    | Tool-call enforcement    | Adjacent layer; complementary                             |
+| AWS Bedrock + Cedar                      | Runtime policy     | Runtime       | Deterministic                    | Tool-call enforcement    | **Cross-reference target** — see proposal above           |
+| Vectimus                                 | Runtime policy     | Runtime       | Deterministic                    | Tool-call enforcement    | Cedar-based; same as Bedrock case                         |
+| Agent RuleZ                              | Runtime policy     | Runtime       | Deterministic                    | Claude Code hooks        | Adjacent; could be `enforce()` target                     |
+| AgentProof                               | Static verifier    | Compile-time  | Deterministic                    | Workflow graphs          | **Technique transfers** — see proposal above              |
+| AgentVerify                              | Static verifier    | Compile-time  | Deterministic                    | Memory + tool calls      | Complementary layer                                       |
+| AgentGuard                               | Runtime verifier   | Runtime       | Probabilistic (MDP)              | Agent I/O                | Runtime, framework-agnostic                               |
+| GitHub Spec Kit                          | Workflow tool      | Authoring     | Deterministic                    | Feature specs            | Different level (what to build, not how agent behaves)    |
+| gh-aw                                    | Workflow runtime   | Runtime       | Deterministic                    | CI automation            | Different domain                                          |
+| ContextCov, Compiled AI, Blueprint First | Academic           | —             | —                                | Paradigm validation      | Citation sources                                          |
 
 Five clear non-overlapping categories emerge:
 
@@ -222,7 +222,7 @@ Start with **A + B together**: rebrand under harness engineering language and sh
 - **F** — shipped. Counter-positioning vs "AI-Powered Rule Enforcement" in README and `competitive-landscape.md`.
 - **C** (`vigiles audit --structural`) — **parked.** Useful idea, AgentProof-style structural checks over spec evolution. Honest verdict: regression-of-rules detection is not vigiles's core mission. Save as a known-good direction; revisit if a user pulls for it.
 - **Idea 1** from `enforce-over-guidance.md` (snapshot-gated downgrades) — **parked.** Same reasoning as C. Documents the silent `enforce → guidance` regression class clearly, but isn't core to "compile typed specs to instruction files." Keep design ready; don't build until demand surfaces.
-- **Domain preset library** (from `sync-landscape-analysis.md`) — **dropped.** Duplicates what linter shared-configs already do (`@typescript-eslint/strict`, `eslint-config-airbnb`, ruff selects, clippy::pedantic). Bundling them as vigiles presets creates a maintenance treadmill across N upstreams. Maybe one or two `examples/*.spec.ts` showing the *shape* of a spec, treated as documentation not as a feature.
+- **Domain preset library** (from `sync-landscape-analysis.md`) — **dropped.** Duplicates what linter shared-configs already do (`@typescript-eslint/strict`, `eslint-config-airbnb`, ruff selects, clippy::pedantic). Bundling them as vigiles presets creates a maintenance treadmill across N upstreams. Maybe one or two `examples/*.spec.ts` showing the _shape_ of a spec, treated as documentation not as a feature.
 - **`block()` rule type** (from `sync-landscape-analysis.md`) — **dropped.** Settings.json is already structured config, not markdown. JSON Schema in VSCode covers what `block()` would add for the single-agent case. Reconsider only if real multi-agent setups appear or AGENTS.md proposal #105 (structured tool permissions) ships.
 - **Fact-drift detector for markdown** (regex sweep of `**/*.md` for "N linter" / "N catalog" patterns vs computed `BuiltinLinter.length`) — **dropped.** Tempted to ship it after hitting one stale-copy sweep in this session, but the mechanism is fuzzy regex over English prose — the same pattern we rejected for keyword-overlap upgrade detection and for `block()`. Hit drift once: not a pattern, a one-off. Manual `grep`+`sed` took 5 minutes. Project rule: "Three similar lines is better than a premature abstraction." Revisit only if fact-drift recurs 2–3 more times. The real takeaway is dogfooding as practice: run `vigiles audit` (and the new orphan check) on the repo before each release, fix what it flags. No new code, use what's there.
 - **Atomicity rules** (#5 `one-claim-per-rule` and #9 `sections-over-free-prose` from the original 10-proposal pass) — **parked.** Both express the same atomicity principle applied to different fields (rule `why` strings vs. section prose). #9 is already half-mechanical via `maxSectionLines` config; #5 has no equivalent knob yet. Useful idea, low priority — revisit alongside any major spec.ts type-system pass.
@@ -230,11 +230,11 @@ Start with **A + B together**: rebrand under harness engineering language and sh
 
   Mapping each category to candidate vigiles builders:
 
-  | Category | Candidate builder | Verdict |
-  |---|---|---|
-  | Process | `intercept()` / `shim()` for command perception | **Skip.** Re-skin of the `block()` we just dropped. Settings.json PreToolUse hooks already cover it for Claude Code; AGENTS.md proposal #105 will cover it for the standard. Not our job. |
-  | Source | `astQuery(language, pattern)` | **Skip.** ast-grep already does this. We already say "use ast-grep" in `dont-reimplement-linters`. Wrapper only adds type-safety. |
-  | Architectural-det. | `boundary(from, to, allowed)` | **Skip.** Dependency Cruiser and Steiger already do this. Same "not our job" rule that killed the domain preset library. |
-  | Architectural-sem. | LLM-as-judge | **Skip categorically.** Breaks the determinism moat. Exactly the pattern vigiles counter-positions against. |
+  | Category           | Candidate builder                               | Verdict                                                                                                                                                                                   |
+  | ------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Process            | `intercept()` / `shim()` for command perception | **Skip.** Re-skin of the `block()` we just dropped. Settings.json PreToolUse hooks already cover it for Claude Code; AGENTS.md proposal #105 will cover it for the standard. Not our job. |
+  | Source             | `astQuery(language, pattern)`                   | **Skip.** ast-grep already does this. We already say "use ast-grep" in `dont-reimplement-linters`. Wrapper only adds type-safety.                                                         |
+  | Architectural-det. | `boundary(from, to, allowed)`                   | **Skip.** Dependency Cruiser and Steiger already do this. Same "not our job" rule that killed the domain preset library.                                                                  |
+  | Architectural-sem. | LLM-as-judge                                    | **Skip categorically.** Breaks the determinism moat. Exactly the pattern vigiles counter-positions against.                                                                               |
 
   Net: zero actionable builders for vigiles. Useful side-finding: their Process / Source / Architectural-deterministic / Architectural-semantic split is a clean mental model agents could use when authoring specs. Worth one paragraph in `docs/spec-format.md` as a "thinking about your rules" guide — that's documentation, not code.

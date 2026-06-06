@@ -664,9 +664,7 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
 // fixed catalog; the actual check runs at audit time.
 // ---------------------------------------------------------------------------
 
-const VIGILES_INTERNAL_RULES = new Set<string>([
-  "orphan-docs",
-]);
+const VIGILES_INTERNAL_RULES = new Set<string>(["orphan-docs"]);
 
 /** @internal */ function tryVigilesInternal(
   ctx: RuleContext,

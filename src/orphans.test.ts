@@ -21,10 +21,10 @@ describe("findOrphanDocs()", () => {
       );
 
       const report = findOrphanDocs({ basePath: dir });
-      assert.deepEqual(
-        [...report.orphans].sort(),
-        ["docs/orphan.md", "research/stale.md"],
-      );
+      assert.deepEqual([...report.orphans].sort(), [
+        "docs/orphan.md",
+        "research/stale.md",
+      ]);
       assert.deepEqual([...report.referencedDocs], ["docs/referenced.md"]);
       assert.equal(report.totalDocs, 3);
     } finally {
@@ -132,10 +132,10 @@ describe("findOrphanDocs()", () => {
         include: ["wiki/**/*.md", "handbook/**/*.md"],
       });
       assert.equal(report.totalDocs, 2);
-      assert.deepEqual(
-        [...report.orphans].sort(),
-        ["handbook/b.md", "wiki/a.md"],
-      );
+      assert.deepEqual([...report.orphans].sort(), [
+        "handbook/b.md",
+        "wiki/a.md",
+      ]);
     } finally {
       cleanupTmpDir(dir);
     }
