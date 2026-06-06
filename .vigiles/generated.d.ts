@@ -83,9 +83,10 @@ declare module "vigiles/generated" {
     | "fmt"
     | "fmt:check";
 
-  /** 27 project files. */
+  /** 28 project files. */
   export type ProjectFile = 
     | "src/action.ts"
+    | "src/cedar.test.ts"
     | "src/cli.test.ts"
     | "src/cli.ts"
     | "src/compile.ts"
@@ -185,6 +186,7 @@ declare module "vigiles/spec" {
   interface KnownProjectFiles {
     files: 
       | "src/action.ts"
+      | "src/cedar.test.ts"
       | "src/cli.test.ts"
       | "src/cli.ts"
       | "src/compile.ts"

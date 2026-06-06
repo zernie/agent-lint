@@ -26,7 +26,9 @@ Your CLAUDE.md is a plain text file. Anyone can edit it. Nobody verifies it. The
 npx vigiles init
 ```
 
-vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md). Every linter reference is verified against your actual config — not just that it exists, but that it's enabled. Every file path is checked against the filesystem. Every command is validated against package.json. If something is stale, broken, or disabled — you find out at compile time, not when the agent silently ignores your instructions.
+vigiles is the **deterministic-constraints layer for agent harnesses**. Harness engineering separates probabilistic compliance (prompts agents *might* follow) from deterministic constraints (linters, types, and hooks they *cannot* bypass). vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md) and cross-references every rule against an actual catalog — 6 linter APIs plus Cedar policies for AWS Bedrock AgentCore. Every file path is checked against the filesystem. Every command is validated against package.json. If something is stale, broken, or disabled — you find out at compile time, not when the agent silently ignores your instructions.
+
+The paradigm has a name now: *compiled AI*. Compile the rules once; agents execute against deterministic artifacts forever after. No runtime LLM re-interpretation, no probabilistic compliance, no tokens burned re-deciding what your rules mean ([arxiv 2604.05150](https://arxiv.org/abs/2604.05150)).
 
 After setup, the agent edits the spec instead of the markdown. Hooks auto-compile. Types catch typos in the editor. CI catches drift. It's self-maintaining.
 
