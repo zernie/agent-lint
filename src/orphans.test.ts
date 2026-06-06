@@ -63,8 +63,8 @@ describe("findOrphanDocs()", () => {
     }
   });
 
-  it("honors custom docRoots", () => {
-    const dir = makeTmpDir("orphans-roots");
+  it("honors custom include globs", () => {
+    const dir = makeTmpDir("orphans-include");
     try {
       mkdirSync(join(dir, "guides"), { recursive: true });
       mkdirSync(join(dir, "docs"), { recursive: true });
@@ -72,9 +72,70 @@ describe("findOrphanDocs()", () => {
       writeFileSync(join(dir, "docs/ignored.md"), "# not scanned");
       writeFileSync(join(dir, "README.md"), "hello");
 
-      const report = findOrphanDocs({ basePath: dir, docRoots: ["guides"] });
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["guides/**/*.md"],
+      });
       assert.deepEqual([...report.orphans], ["guides/lost.md"]);
       assert.equal(report.totalDocs, 1);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("supports tsconfig-style exclude within include scope", () => {
+    const dir = makeTmpDir("orphans-exclude");
+    try {
+      mkdirSync(join(dir, "docs/legacy"), { recursive: true });
+      writeFileSync(join(dir, "docs/active.md"), "# active");
+      writeFileSync(join(dir, "docs/legacy/old1.md"), "# legacy");
+      writeFileSync(join(dir, "docs/legacy/old2.md"), "# legacy");
+      writeFileSync(join(dir, "README.md"), "hello");
+
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["docs/**/*.md"],
+        exclude: ["docs/legacy/**"],
+      });
+      // Only docs/active.md scanned; legacy files excluded entirely.
+      assert.equal(report.totalDocs, 1);
+      assert.deepEqual([...report.orphans], ["docs/active.md"]);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("empty include disables scanning (no orphans reported)", () => {
+    const dir = makeTmpDir("orphans-empty-include");
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(join(dir, "docs/foo.md"), "# foo");
+
+      const report = findOrphanDocs({ basePath: dir, include: [] });
+      assert.equal(report.totalDocs, 0);
+      assert.deepEqual([...report.orphans], []);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("multiple include globs combine without duplicates", () => {
+    const dir = makeTmpDir("orphans-multi-include");
+    try {
+      mkdirSync(join(dir, "wiki"), { recursive: true });
+      mkdirSync(join(dir, "handbook"), { recursive: true });
+      writeFileSync(join(dir, "wiki/a.md"), "# a");
+      writeFileSync(join(dir, "handbook/b.md"), "# b");
+
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["wiki/**/*.md", "handbook/**/*.md"],
+      });
+      assert.equal(report.totalDocs, 2);
+      assert.deepEqual(
+        [...report.orphans].sort(),
+        ["handbook/b.md", "wiki/a.md"],
+      );
     } finally {
       cleanupTmpDir(dir);
     }
@@ -105,7 +166,7 @@ describe("findOrphanDocs()", () => {
 describe("formatOrphanReport()", () => {
   it("reports a clean state succinctly", () => {
     const out = formatOrphanReport({
-      docRoots: ["docs"],
+      include: ["docs/**/*.md"],
       totalDocs: 3,
       referencedDocs: ["docs/a.md", "docs/b.md", "docs/c.md"],
       orphans: [],
@@ -115,7 +176,7 @@ describe("formatOrphanReport()", () => {
 
   it("lists orphans when present", () => {
     const out = formatOrphanReport({
-      docRoots: ["docs"],
+      include: ["docs/**/*.md"],
       totalDocs: 2,
       referencedDocs: ["docs/a.md"],
       orphans: ["docs/b.md"],

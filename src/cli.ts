@@ -677,11 +677,17 @@ async function audit(
     silent,
   );
 
-  // 7. Orphan docs check — find .md files under docs/ and research/ that
-  // no other markdown file references. Enforces the `vigiles/orphan-docs`
-  // built-in rule when declared in a spec.
+  // 7. Orphan docs check — find .md files no other markdown references.
+  // Enforces the `vigiles/orphan-docs` built-in rule when declared in a
+  // spec. Include/exclude come from .vigilesrc.json#orphans (tsconfig-
+  // style globs); default include is docs/ + research/ for the
+  // vigiles-repo convention.
   if (!silent) console.log("\nOrphan docs check:\n");
-  const orphanReport = findOrphanDocs({ basePath: process.cwd() });
+  const orphanReport = findOrphanDocs({
+    basePath: process.cwd(),
+    include: config?.orphans?.include,
+    exclude: config?.orphans?.exclude,
+  });
   if (!silent) {
     for (const line of formatOrphanReport(orphanReport).split("\n")) {
       console.log(`  ${line}`);

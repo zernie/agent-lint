@@ -64,6 +64,22 @@ export interface CoverageThresholds {
   scripts?: number;
 }
 
+/** Options for the orphan-docs check. */
+export interface OrphansConfig {
+  /**
+   * Glob patterns of `.md` files to scan for orphans. A doc is "orphaned"
+   * when no other markdown file references it. Defaults to vigiles-repo
+   * convention: `["docs/**\/*.md", "research/**\/*.md"]`. Set to `[]` to
+   * disable orphan detection entirely.
+   */
+  include?: readonly string[];
+  /**
+   * Glob patterns to exclude within the include scope. Same shape as
+   * `tsconfig.json#exclude`.
+   */
+  exclude?: readonly string[];
+}
+
 export interface RulesConfig {
   /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
   "require-spec"?: RuleSeverity;
@@ -114,6 +130,8 @@ export interface VigilesConfig {
   catalogOnly?: boolean;
   /** Custom linter configs (rulesDir). */
   linters?: Record<string, { rulesDir?: string | string[] }>;
+  /** Orphan-docs check configuration. Include/exclude globs, tsconfig-style. */
+  orphans?: OrphansConfig;
 }
 
 /** Valid marker types for rule detection. */

@@ -216,6 +216,25 @@ export default defineConfig({
 | `discover`  | `boolean` | Auto-discover linter rules for coverage reporting       |
 | `maxRules`  | `number`  | Compilation fails if a spec exceeds this rule count     |
 | `maxTokens` | `number`  | Compilation fails if estimated tokens exceed this limit |
+| `orphans`   | `object`  | Orphan-docs scan globs (see below)                      |
+
+### Orphan-docs configuration
+
+The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files looking for ones that no other markdown references. By default it follows the vigiles-repo convention (`docs/` + `research/`), but each project sets its own scope via tsconfig-style globs in `.vigilesrc.json`:
+
+```json
+{
+  "orphans": {
+    "include": ["docs/**/*.md", "wiki/**/*.md", "handbook/**/*.md"],
+    "exclude": ["docs/legacy/**", "**/draft-*.md"]
+  }
+}
+```
+
+- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md", "research/**/*.md"]`. Set to `[]` to disable scanning.
+- `exclude` — glob patterns to skip within the include scope. Same shape as `tsconfig.json#exclude`.
+
+`node_modules/**`, `dist/**`, `.vigiles/**`, and `.git/**` are always excluded.
 
 ## Hash Verification
 
