@@ -101,6 +101,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Design doc: deterministic upgrade gates — snapshot-gated downgrades + Merkle diff vs upstream catalog",
     "research/landscape-mid-2026.md":
       "Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals",
+    "research/sync-landscape-analysis.md":
+      "Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":

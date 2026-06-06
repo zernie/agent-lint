@@ -105,6 +105,8 @@ New category — work that verifies agent behavior with proofs rather than tests
 
 **Mid-2026 positioning frame.** "Harness engineering" became the named discipline early 2026. Agent = Model + Harness; swapping the harness changes SWE-bench scores by up to 22 points. Probabilistic compliance (prompts) vs. deterministic constraints (linters/hooks/types). vigiles sits unambiguously in the deterministic constraints category — adopt that language. See `landscape-mid-2026.md` for details.
 
+**Counter-positioning vs "AI-Powered Rule Enforcement"** (ai-rulez and similar). Runtime LLM checks branded as enforcement are the same probabilistic compliance vigiles exists to replace — just hidden one layer deeper. They cost tokens per check, give non-reproducible results, and offer no formal guarantee that identical inputs produce identical verdicts. vigiles compiles rules into deterministic artifacts once, then checks forever with `eslint`/`ruff`/`tsc`/Cedar evaluation — tools exactly as deterministic as their inputs. README opener now states this contrast explicitly. See `sync-landscape-analysis.md` for the full breakdown of the rule-sync landscape and which ideas are worth absorbing vs. composing around.
+
 ---
 
 ## Real-World Pain Points
