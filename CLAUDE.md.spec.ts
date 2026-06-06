@@ -112,6 +112,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals",
     "research/sync-landscape-analysis.md":
       "Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals",
+    "research/distribution-strategy.md":
+      "Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention",
     "docs/agent-workflows.md":
       "Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)",
     "docs/agent-setup.md":

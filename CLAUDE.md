@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c0f9abcf3262dec1 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:7eae58d24fb198e1 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -77,6 +77,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/enforce-over-guidance.md` — Design doc: deterministic upgrade gates — snapshot-gated downgrades + Merkle diff vs upstream catalog
 - `research/landscape-mid-2026.md` — Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals
 - `research/sync-landscape-analysis.md` — Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals
+- `research/distribution-strategy.md` — Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
