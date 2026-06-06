@@ -21,9 +21,9 @@ import { globSync } from "glob";
 // ---------------------------------------------------------------------------
 
 export interface OrphanReport {
-  /** Doc roots that were scanned. */
-  readonly docRoots: readonly string[];
-  /** Total docs discovered under those roots. */
+  /** Include globs that were scanned. */
+  readonly include: readonly string[];
+  /** Total docs discovered under those globs. */
   readonly totalDocs: number;
   /** Docs referenced from at least one other `.md` file. */
   readonly referencedDocs: readonly string[];
@@ -34,17 +34,25 @@ export interface OrphanReport {
 export interface FindOrphansOptions {
   /** Repository root. Defaults to `process.cwd()`. */
   readonly basePath?: string;
-  /** Directories to enumerate docs from. Defaults to `["docs", "research"]`. */
-  readonly docRoots?: readonly string[];
-  /** Extra glob excludes appended to the built-in ignore list. */
-  readonly ignore?: readonly string[];
+  /**
+   * Glob patterns of `.md` files to scan. Defaults to
+   * `["docs/**\/*.md", "research/**\/*.md"]` — vigiles-repo convention.
+   * Set to `[]` to disable scanning entirely. Set to your project's
+   * doc directory globs (e.g. `["wiki/**\/*.md"]`) to override.
+   */
+  readonly include?: readonly string[];
+  /** Glob patterns to exclude within the include scope. */
+  readonly exclude?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 
-const DEFAULT_DOC_ROOTS = ["docs", "research"] as const;
+const DEFAULT_INCLUDE = [
+  "docs/**/*.md",
+  "research/**/*.md",
+] as const;
 
 const DEFAULT_IGNORE = [
   "node_modules/**",
@@ -75,27 +83,35 @@ function extractRefs(content: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Find docs under `docRoots` that no other markdown file references.
+ * Find docs under `include` globs that no other markdown file references.
  *
  * A doc is considered referenced when some OTHER `.md` file in the repo
  * links to it via `[text](path.md)` or mentions it in a backtick span like
  * `` `docs/foo.md` ``. Self-references don't count — an orphan that only
  * links to itself is still an orphan.
+ *
+ * `include` and `exclude` are tsconfig-style glob arrays. Default include
+ * is the vigiles-repo convention `["docs/**\/*.md", "research/**\/*.md"]`;
+ * override per-project via `.vigilesrc.json` → `orphans.include`.
  */
 export function findOrphanDocs(
   options: FindOrphansOptions = {},
 ): OrphanReport {
   const basePath = options.basePath ?? process.cwd();
-  const docRoots = options.docRoots ?? DEFAULT_DOC_ROOTS;
-  const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
+  const include = options.include ?? DEFAULT_INCLUDE;
+  const userExclude = options.exclude ?? [];
+  const ignore = [...DEFAULT_IGNORE, ...userExclude];
 
   const allDocs = new Set<string>();
-  for (const root of docRoots) {
-    const found = globSync(`${root}/**/*.md`, { cwd: basePath, ignore });
+  for (const pattern of include) {
+    const found = globSync(pattern, { cwd: basePath, ignore });
     for (const p of found) allDocs.add(normalizePath(p));
   }
 
-  const allMarkdown = globSync("**/*.md", { cwd: basePath, ignore });
+  const allMarkdown = globSync("**/*.md", {
+    cwd: basePath,
+    ignore: [...DEFAULT_IGNORE],
+  });
   const referencedBy = new Map<string, Set<string>>();
 
   for (const mdPath of allMarkdown) {
@@ -125,7 +141,7 @@ export function findOrphanDocs(
   }
 
   return {
-    docRoots: [...docRoots],
+    include: [...include],
     totalDocs: allDocs.size,
     referencedDocs,
     orphans,
@@ -135,7 +151,7 @@ export function findOrphanDocs(
 /** Format an orphan report as human-readable text. */
 export function formatOrphanReport(report: OrphanReport): string {
   if (report.orphans.length === 0) {
-    return `✓ no orphan docs (${String(report.totalDocs)} scanned across ${report.docRoots.join(", ")})`;
+    return `✓ no orphan docs (${String(report.totalDocs)} scanned across ${report.include.join(", ") || "no include patterns"})`;
   }
   const lines = [
     `✗ ${String(report.orphans.length)} orphan doc(s) — referenced by no other .md:`,
