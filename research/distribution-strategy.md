@@ -203,4 +203,20 @@ Current direction (in progress):
 
 This swaps the funnel logic: instead of finding the user's pre-existing broken refs (low signal), we generate fresh markers from their real linter config (100% hit rate, all checkable). The shareable artifact becomes "vigiles added 8 verified rules to my CLAUDE.md in one command."
 
-Doc will be rewritten when the direction stabilizes.
+## Update: markdown-first shipped
+
+The direction stabilized into a broader move than `vigiles starter` alone: **markdown-first adoption**. The diagnosis underneath stages 2–3 was that the `.spec.ts` requirement is the adoption barrier — non-TS projects won't add TypeScript for an instruction-file linter, and brownfield migration from an existing CLAUDE.md is too much friction for the value. So the entry point is now plain markdown, with the typed spec demoted to the deepest of three commitment levels:
+
+- **Level 0 — inline comments.** `<!-- vigiles:enforce ... -->` in an existing CLAUDE.md. Already shipped.
+- **Level 1 — YAML frontmatter.** A `vigiles:` block verified by `vigiles audit`, plus `vigiles generate-schema` → a JSON Schema so the editor's built-in YAML LSP autocompletes rule names and squiggles typos. No TypeScript. **Shipped in this pass.**
+- **Level 2 — typed spec.** Unchanged; now positioned as "when you want compiler-grade guarantees," not the front door.
+
+What this resolves from the funnel analysis:
+
+- **Stage 3 (resolution friction):** value is visible by adding one marker and running `vigiles audit` — no init, no migration, no build step.
+- **Stage 2 (resonance):** the user's own broken/missing refs surface against their own config, with line numbers.
+- **The narrow-audience problem:** dropping the TS requirement widens the addressable slice to any project with a non-trivial instruction file, regardless of language.
+
+`vigiles starter` (auto-generate markers from config) is still a good idea and composes cleanly on top of Level 0/1 — it's the natural next funnel experiment now that the levels exist. The shareable-artifact framing from the starter proposal carries over: "vigiles added 8 verified rules to my CLAUDE.md in one command" works identically whether the markers land as inline comments or a frontmatter block.
+
+README and docs were inverted to lead with markdown mode (see `docs/markdown-mode.md` and `examples/frontmatter-CLAUDE.md`). Next: measure whether dropping the TS barrier moves the npm-download / star baseline before investing in `starter` automation or the distribution pushes (B/C/E) above.

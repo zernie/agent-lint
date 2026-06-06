@@ -125,6 +125,9 @@ block will:
 Frontmatter findings appear in `--summary` and `--json` output too, under
 `frontmatterErrors` / `frontmatterRules`.
 
+A complete, runnable file lives at
+[`examples/frontmatter-CLAUDE.md`](../examples/frontmatter-CLAUDE.md).
+
 ---
 
 ## Combining levels in one file
