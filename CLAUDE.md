@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:b54db2c6013f99ad compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:58391348a7d41f5d compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -6,9 +6,11 @@
 
 vigiles compiles `.spec.ts` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source.
 
-The linter cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, and Stylelint. No other tool resolves rules against 6 linter APIs.
+Positioned in the harness engineering frame coined early 2026: Agent = Model + Harness. The harness has two enforcement modes — probabilistic compliance (prompts, instructions) and deterministic constraints (linters, types, hooks). vigiles is the deterministic-constraints layer for instruction files. See `research/landscape-mid-2026.md` for the full positioning.
 
-`generate-types` is the second moat: scans all 6 linter APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+The cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint, and Cedar policies (for AWS Bedrock AgentCore and other Cedar-using runtimes). No other tool resolves rules across 7 catalog APIs.
+
+`generate-types` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via `enforce()`.
 
@@ -25,13 +27,14 @@ Template literal types ensure linter names (`eslint/`, `ruff/`, etc.) are type-s
 
 Compilation: spec.ts → compiler reads spec, validates references (file paths via existsSync, npm scripts via package.json, linter rules via linter APIs), generates markdown with SHA-256 integrity hash.
 
-Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (6-linter cross-referencing engine), `src/generate-types.ts` (type generator), `src/proofs.ts` (proof algorithms for self-evolving specs), `src/evolve.ts` (evolution engine).
+Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (7-catalog cross-referencing engine), `src/generate-types.ts` (type generator), `src/proofs.ts` (proof algorithms for self-evolving specs), `src/evolve.ts` (evolution engine).
 
 ## Key Files
 
 - `src/spec.ts` — Type system and builder functions (enforce, guidance, claude, skill, file, cmd, ref)
 - `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation
-- `src/linters.ts` — Linter cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop)
+- `src/linters.ts` — Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)
+- `src/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
 - `src/cli.ts` — CLI: init, compile, audit (3 primary commands + generate-types plumbing)
 - `src/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption

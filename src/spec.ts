@@ -13,14 +13,15 @@
 // Template literal types for type-safe linter references
 // ---------------------------------------------------------------------------
 
-/** Linters vigiles can cross-reference. */
+/** Linters and policy catalogs vigiles can cross-reference. */
 type BuiltinLinter =
   | "eslint"
   | "stylelint"
   | "ruff"
   | "clippy"
   | "pylint"
-  | "rubocop";
+  | "rubocop"
+  | "cedar";
 
 /** Scoped ESLint plugin prefix (e.g., @typescript-eslint). */
 type ScopedPlugin = `@${string}/${string}`;
