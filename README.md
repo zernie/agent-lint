@@ -34,6 +34,12 @@ After setup, the agent edits the spec instead of the markdown. Hooks auto-compil
 
 Not using vigiles with AI agents is like not using ESLint with JavaScript. You can do it. You can't afford to.
 
+### vs "AI-Powered Rule Enforcement"
+
+Some rule-sync tools (e.g. ai-rulez) ship runtime LLM checks branded as "AI-Powered Rule Enforcement." They send your code and your rules to a model on every check, ask "does this comply?", and trust the answer. That's the same probabilistic compliance vigiles exists to replace — just hidden one layer deeper. It costs tokens per check, gives non-reproducible results across runs, and offers no formal guarantee that two identical inputs produce two identical verdicts.
+
+vigiles is the inverse: compile the rules into deterministic artifacts once, then check forever after with `eslint`, `ruff`, `tsc`, Cedar policy evaluation — tools that are exactly as deterministic as their inputs. Same problem, opposite paradigm. The difference between `typeof x === "string"` and asking a model whether `x` is a string.
+
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## The Problem
