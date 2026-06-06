@@ -8,13 +8,13 @@ import { claude, enforce, guidance, guard } from "./src/spec.js";
 
 export default claude({
   sections: {
-    positioning: `vigiles compiles \`.spec.ts\` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source.
+    positioning: `vigiles verifies the rule references in agent instruction files — that each linter rule exists AND is enabled, that file paths and scripts are real. It is markdown-first: meet the user at three commitment levels — inline \`<!-- vigiles:enforce -->\` comments (Level 0), a \`vigiles:\` YAML frontmatter block (Level 1), or a typed \`.spec.ts\` compiled to markdown (Level 2). Markdown is the on-ramp; the typed spec is the source of truth when you want compiler-grade guarantees, and the markdown becomes a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source. See \`docs/markdown-mode.md\` for the level ladder.
 
 Positioned in the harness engineering frame coined early 2026: Agent = Model + Harness. The harness has two enforcement modes — probabilistic compliance (prompts, instructions) and deterministic constraints (linters, types, hooks). vigiles is the deterministic-constraints layer for instruction files. See \`research/landscape-mid-2026.md\` for the full positioning.
 
 The cross-referencing engine is the core moat: \`enforce("@typescript-eslint/no-floating-promises")\` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint, and Cedar policies (for AWS Bedrock AgentCore and other Cedar-using runtimes). No other tool resolves rules across 7 catalog APIs.
 
-\`generate-types\` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a \`.d.ts\` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+Authoring-time feedback comes two ways: \`generate-types\` emits a \`.d.ts\` so the TS compiler PROVES \`.spec.ts\` references at edit time, and \`generate-schema\` emits a JSON Schema so a YAML LSP autocompletes and squiggles \`vigiles:\` frontmatter rule names — same guarantee, no TypeScript required. Both scan all 7 catalog APIs, package.json, and project files.
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via \`enforce()\`.`,
 
