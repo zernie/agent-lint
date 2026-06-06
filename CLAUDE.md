@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:36233841867c0b53 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:7eae58d24fb198e1 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -6,9 +6,11 @@
 
 vigiles compiles `.spec.ts` files to instruction files (CLAUDE.md, AGENTS.md, or any markdown target). The spec is the source of truth. The markdown is a build artifact. Nobody else does this — other tools lint markdown after the fact. vigiles eliminates the problem at the source.
 
-The linter cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, and Stylelint. No other tool resolves rules against 6 linter APIs.
+Positioned in the harness engineering frame coined early 2026: Agent = Model + Harness. The harness has two enforcement modes — probabilistic compliance (prompts, instructions) and deterministic constraints (linters, types, hooks). vigiles is the deterministic-constraints layer for instruction files. See `research/landscape-mid-2026.md` for the full positioning.
 
-`generate-types` is the second moat: scans all 6 linter APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+The cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint, and Cedar policies (for AWS Bedrock AgentCore and other Cedar-using runtimes). No other tool resolves rules across 7 catalog APIs.
+
+`generate-types` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via `enforce()`.
 
@@ -25,13 +27,14 @@ Template literal types ensure linter names (`eslint/`, `ruff/`, etc.) are type-s
 
 Compilation: spec.ts → compiler reads spec, validates references (file paths via existsSync, npm scripts via package.json, linter rules via linter APIs), generates markdown with SHA-256 integrity hash.
 
-Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (6-linter cross-referencing engine), `src/generate-types.ts` (type generator), `src/proofs.ts` (proof algorithms for self-evolving specs), `src/evolve.ts` (evolution engine).
+Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (7-catalog cross-referencing engine), `src/generate-types.ts` (type generator), `src/proofs.ts` (proof algorithms for self-evolving specs), `src/evolve.ts` (evolution engine).
 
 ## Key Files
 
 - `src/spec.ts` — Type system and builder functions (enforce, guidance, claude, skill, file, cmd, ref)
 - `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation
-- `src/linters.ts` — Linter cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop)
+- `src/linters.ts` — Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)
+- `src/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
 - `src/cli.ts` — CLI: init, compile, audit (3 primary commands + generate-types plumbing)
 - `src/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption
@@ -47,6 +50,10 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/session.ts` — Post-session audit: git diff analysis against spec surface area
 - `src/session.test.ts` — Session audit test suite (node:test)
 - `src/hash.ts` — Shared SHA256Hash branded type and assertNever exhaustive check helper
+- `src/orphans.ts` — Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references
+- `src/orphans.test.ts` — Orphan-docs detector test suite (node:test)
+- `src/doc-refs.ts` — Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out
+- `src/doc-refs.test.ts` — Doc-refs validator test suite (node:test)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -62,8 +69,15 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/self-evolving-specs.md` — Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)
 - `research/code-search-for-agents.md` — Research: code search approaches (grep vs embeddings vs AST-grep)
 - `research/runtime-enforcement.md` — Research: spec-derived runtime enforcement via hooks, skill contracts, session audit
+- `research/agent-integration.md` — Research: deterministic backstop for AI agents — hooks, proofs, static checks anchored at the spec
+- `research/fp-for-deterministic-ai.md` — Research: FP techniques (pure functions, exhaustive matches, Result types) for AI-written code
+- `research/fp-for-agent-harness.md` — Research: Railway/algebraic-effect structure for Claude Code skills, hooks, and tool-use loop
 - `research/architecture-platform.md` — Research: architecture-aware agent platform (FSD/DDD/hexagonal presets, meta-validation)
 - `research/formal-proofs-for-agents.md` — Research: formal verification via Lean 4 / Dafny, Cedar pattern, Leanstral integration
+- `research/enforce-over-guidance.md` — Design doc: deterministic upgrade gates — snapshot-gated downgrades + Merkle diff vs upstream catalog
+- `research/landscape-mid-2026.md` — Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals
+- `research/sync-landscape-analysis.md` — Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals
+- `research/distribution-strategy.md` — Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
@@ -145,6 +159,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 ### Ts Essentials
 
 **Guidance only** — Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.
+
+### No Orphan Docs
+
+**Enforced by:** `vigiles/orphan-docs`
+**Why:** Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/orphans.ts`, surfaced by `vigiles audit`.
 
 ### Recompile On Spec Change
 

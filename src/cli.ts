@@ -37,6 +37,8 @@ import { parseInlineRules } from "./inline.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
+import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
+import { findDocRefs, formatDocRefReport } from "./doc-refs.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -482,6 +484,8 @@ interface AuditReport {
   strengthenSuggestions: number;
   integrityErrors: number;
   coverageErrors: number;
+  orphanCount: number;
+  docRefErrors: number;
   files: string[];
 }
 
@@ -495,7 +499,7 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.coverageErrors > 0
   )
     return 2;
-  if (report.duplicatePairs > 0) return 1;
+  if (report.duplicatePairs > 0 || report.orphanCount > 0 || report.docRefErrors > 0) return 1;
   // Guidance counts are informational, not failures
   return 0;
 }
@@ -673,6 +677,35 @@ async function audit(
     silent,
   );
 
+  // 7. Orphan docs check — find .md files no other markdown references.
+  // Enforces the `vigiles/orphan-docs` built-in rule when declared in a
+  // spec. Include/exclude come from .vigilesrc.json#orphans (tsconfig-
+  // style globs); default include is docs/ + research/ for the
+  // vigiles-repo convention.
+  if (!silent) console.log("\nOrphan docs check:\n");
+  const orphanReport = findOrphanDocs({
+    basePath: process.cwd(),
+    include: config?.orphans?.include,
+    exclude: config?.orphans?.exclude,
+  });
+  if (!silent) {
+    for (const line of formatOrphanReport(orphanReport).split("\n")) {
+      console.log(`  ${line}`);
+    }
+  }
+
+  // 8. Validate vigiles builder calls inside markdown code blocks. Default
+  // is to validate every ref; illustrative blocks opt out via
+  // `<!-- vigiles:ignore -->` (single block) or
+  // `<!-- vigiles:ignore-file -->` (whole file). Same engine as spec.ts.
+  if (!silent) console.log("\nMarkdown code block refs:\n");
+  const docRefReport = findDocRefs({ basePath: process.cwd() });
+  if (!silent) {
+    for (const line of formatDocRefReport(docRefReport).split("\n")) {
+      console.log(`  ${line}`);
+    }
+  }
+
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
@@ -684,6 +717,8 @@ async function audit(
     strengthenSuggestions: guidanceCount,
     integrityErrors,
     coverageErrors,
+    orphanCount: orphanReport.orphans.length,
+    docRefErrors: docRefReport.errors.length,
     files,
   };
 
@@ -706,6 +741,10 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.inlineErrors)} inline errors`);
   if (report.duplicatePairs > 0)
     parts.push(`${String(report.duplicatePairs)} duplicates`);
+  if (report.orphanCount > 0)
+    parts.push(`${String(report.orphanCount)} orphan docs`);
+  if (report.docRefErrors > 0)
+    parts.push(`${String(report.docRefErrors)} broken doc refs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
