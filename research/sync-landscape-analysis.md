@@ -10,7 +10,7 @@ The mid-2026 sync landscape (Ruler, ai-rulez, block/ai-rules, ai-rules-sync, any
 
 **Useful idea:** single source of truth distributed to every agent format (Cursor `.mdc`, Cline `.clinerules`, CLAUDE.md, AGENTS.md, Gemini CLI configs, etc.). Recently added skills and subagents.
 
-**What we have:** multi-target output already exists in `spec.ts` via `target: ["CLAUDE.md", "AGENTS.md"]`. Skill compilation exists via `skill()`. So the *source-of-truth* dimension is solved — what's missing is *format coverage*.
+**What we have:** multi-target output already exists in `spec.ts` via `target: ["CLAUDE.md", "AGENTS.md"]`. Skill compilation exists via `skill()`. So the _source-of-truth_ dimension is solved — what's missing is _format coverage_.
 
 **What we don't have:** format-specific emitters for Cursor `.mdc`, Cline `.clinerules`, etc. Today vigiles emits markdown only.
 
@@ -83,11 +83,11 @@ Risk: symlink approach assumes all agents accept the same format. They mostly do
 
 ### anywhere-agents (yzhao062) — PreToolUse guards blocking destructive commands
 
-**Useful idea:** declarative *block* rules that compile to runtime hook configs. "Don't allow `git push --force`", "block `rm -rf /`", etc. Single config → generated hook scripts the agent's harness enforces at tool-call time.
+**Useful idea:** declarative _block_ rules that compile to runtime hook configs. "Don't allow `git push --force`", "block `rm -rf /`", etc. Single config → generated hook scripts the agent's harness enforces at tool-call time.
 
 **What we have:** `guard()` rule type — reactive (on file change, run command, e.g., PostToolUse hook). Not preventive.
 
-**What we don't have:** a *preventive* rule type — pattern-match a tool call before it runs, deny if it matches. PreToolUse hook semantics.
+**What we don't have:** a _preventive_ rule type — pattern-match a tool call before it runs, deny if it matches. PreToolUse hook semantics.
 
 **Worth building?** Yes — probably the most interesting idea from the sync landscape, and it's not really a sync feature, it's a deterministic-constraint feature. See proposal below.
 
@@ -136,7 +136,7 @@ New rule builder, parallel to `enforce()`, `guidance()`, `guard()`:
 **Why this fits vigiles's positioning, not sync's:**
 
 - It's a deterministic constraint declared in the typed spec — same shape as `enforce()`, just executed at runtime by the agent's hook engine instead of by the linter.
-- vigiles owns the *declaration*; the agent's existing hook mechanism owns the *execution*. No new runtime engine, no competition with Microsoft AGT or Agent RuleZ.
+- vigiles owns the _declaration_; the agent's existing hook mechanism owns the _execution_. No new runtime engine, no competition with Microsoft AGT or Agent RuleZ.
 - Compiles cleanly: the regex and tool name are pure data, verifiable at spec time (regex parses, tool is one of the known `ClaudeTool` literals).
 - Closes a real gap. anywhere-agents exists because nothing else covers this; users are already doing it ad-hoc in `settings.json`. Pulling it into the spec means one source of truth instead of two.
 

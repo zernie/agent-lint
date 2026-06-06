@@ -50,14 +50,8 @@ describe("checkLinterRule() — cedar", () => {
       );
       clearCedarCache();
 
-      assert.equal(
-        checkLinterRule("cedar/shell-allowlist", dir).exists,
-        true,
-      );
-      assert.equal(
-        checkLinterRule("cedar/file-read-deny", dir).exists,
-        true,
-      );
+      assert.equal(checkLinterRule("cedar/shell-allowlist", dir).exists, true);
+      assert.equal(checkLinterRule("cedar/file-read-deny", dir).exists, true);
     } finally {
       cleanupTmpDir(dir);
     }
@@ -88,10 +82,7 @@ describe("checkLinterRule() — cedar", () => {
       writeFileSync(join(dir, "cedar/policies.cedar"), SHELL_POLICY);
       clearCedarCache();
 
-      assert.equal(
-        checkLinterRule("cedar/shell-allowlist", dir).exists,
-        true,
-      );
+      assert.equal(checkLinterRule("cedar/shell-allowlist", dir).exists, true);
     } finally {
       cleanupTmpDir(dir);
     }
@@ -128,10 +119,7 @@ describe("checkLinterRule() — cedar", () => {
     const dir = makeTmpDir("cedar-custom");
     try {
       mkdirSync(join(dir, "policies/agent-core"), { recursive: true });
-      writeFileSync(
-        join(dir, "policies/agent-core/shell.cedar"),
-        SHELL_POLICY,
-      );
+      writeFileSync(join(dir, "policies/agent-core/shell.cedar"), SHELL_POLICY);
       clearCedarCache();
 
       const result = checkLinterRule("cedar/shell-allowlist", dir, {
