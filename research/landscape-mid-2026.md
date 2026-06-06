@@ -211,3 +211,17 @@ Ranked by leverage (impact / effort). Pick from the top.
 ## Recommendation
 
 Start with **A + B together**: rebrand under harness engineering language and ship Cedar as the 7th linter in the same release. A is free positioning work; B is concrete capability that opens a real deployment surface (Bedrock). C and D are the next quarter's work.
+
+---
+
+## Decisions log (mid-2026, post-review)
+
+- **A** — shipped. Harness engineering positioning in README and spec.
+- **B** — shipped. Cedar as 7th cross-referenced catalog, with tests.
+- **E** — shipped. ESLint v9+/v10 via-string update; no functional changes needed.
+- **F** — shipped. Counter-positioning vs "AI-Powered Rule Enforcement" in README and `competitive-landscape.md`.
+- **C** (`vigiles audit --structural`) — **parked.** Useful idea, AgentProof-style structural checks over spec evolution. Honest verdict: regression-of-rules detection is not vigiles's core mission. Save as a known-good direction; revisit if a user pulls for it.
+- **Idea 1** from `enforce-over-guidance.md` (snapshot-gated downgrades) — **parked.** Same reasoning as C. Documents the silent `enforce → guidance` regression class clearly, but isn't core to "compile typed specs to instruction files." Keep design ready; don't build until demand surfaces.
+- **Domain preset library** (from `sync-landscape-analysis.md`) — **dropped.** Duplicates what linter shared-configs already do (`@typescript-eslint/strict`, `eslint-config-airbnb`, ruff selects, clippy::pedantic). Bundling them as vigiles presets creates a maintenance treadmill across N upstreams. Maybe one or two `examples/*.spec.ts` showing the *shape* of a spec, treated as documentation not as a feature.
+- **`block()` rule type** (from `sync-landscape-analysis.md`) — **dropped.** Settings.json is already structured config, not markdown. JSON Schema in VSCode covers what `block()` would add for the single-agent case. Reconsider only if real multi-agent setups appear or AGENTS.md proposal #105 (structured tool permissions) ships.
+- **D** (mine ContextCov paper for constraint taxonomy) — **in progress.** Reading paper to extract their categorization of natural-language constraints; will report whether the taxonomy yields concrete new builder functions or remains theoretical.
