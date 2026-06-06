@@ -16,35 +16,9 @@
 
 ---
 
-You wouldn't ship code without a linter. Why ship agent instructions without one?
+Your CLAUDE.md lies to your agent. Here's the fix.
 
-Your CLAUDE.md is a plain text file. Anyone can edit it. Nobody verifies it. The lint rule it references was disabled three months ago. The file path it mentions was renamed. The npm script it suggests was deleted. Your agent reads this, trusts it, and produces code based on lies.
-
-**Markdown can't be validated. TypeScript can.**
-
-```bash
-npx vigiles init
-```
-
-vigiles is the **deterministic-constraints layer for agent harnesses**. Harness engineering separates probabilistic compliance (prompts agents *might* follow) from deterministic constraints (linters, types, and hooks they *cannot* bypass). vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md) and cross-references every rule against an actual catalog — 7 catalog APIs (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, plus Cedar policies for AWS Bedrock AgentCore / Vectimus). Every file path is checked against the filesystem. Every command is validated against package.json. If something is stale, broken, or disabled — you find out at compile time, not when the agent silently ignores your instructions.
-
-The paradigm has a name now: *compiled AI*. Compile the rules once; agents execute against deterministic artifacts forever after. No runtime LLM re-interpretation, no probabilistic compliance, no tokens burned re-deciding what your rules mean ([arxiv 2604.05150](https://arxiv.org/abs/2604.05150)).
-
-After setup, the agent edits the spec instead of the markdown. Hooks auto-compile. Types catch typos in the editor. CI catches drift. It's self-maintaining.
-
-Not using vigiles with AI agents is like not using ESLint with JavaScript. You can do it. You can't afford to.
-
-### vs "AI-Powered Rule Enforcement"
-
-Some rule-sync tools (e.g. ai-rulez) ship runtime LLM checks branded as "AI-Powered Rule Enforcement." They send your code and your rules to a model on every check, ask "does this comply?", and trust the answer. That's the same probabilistic compliance vigiles exists to replace — just hidden one layer deeper. It costs tokens per check, gives non-reproducible results across runs, and offers no formal guarantee that two identical inputs produce two identical verdicts.
-
-vigiles is the inverse: compile the rules into deterministic artifacts once, then check forever after with `eslint`, `ruff`, `tsc`, Cedar policy evaluation — tools that are exactly as deterministic as their inputs. Same problem, opposite paradigm. The difference between `typeof x === "string"` and asking a model whether `x` is a string.
-
-Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
-
-## The Problem
-
-Hand-written CLAUDE.md files rot silently. Here's what they actually look like:
+Hand-written CLAUDE.md files rot silently. Here's what a typical one looks like:
 
 ```markdown
 ## Code Style
@@ -66,44 +40,13 @@ Reads fine. Four things are wrong:
 3. `npm run typecheck` — script removed from package.json
 4. Service/test pairing — no automated check, just a hope
 
-The agent reads this, trusts it, and writes code based on stale claims nobody verified.
+The agent reads this, trusts it, and writes code based on stale claims nobody verified. **Markdown can't be validated. TypeScript can.**
 
-## What Changes With vigiles
+```bash
+npx vigiles init
+```
 
-### Claude Code
-
-|                                     | Without vigiles              | With vigiles                                                   |
-| ----------------------------------- | ---------------------------- | -------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                      |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                   |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
-| **Spec edits**                      | N/A                          | PostToolUse hook auto-compiles to markdown                     |
-| **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                        |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
-| **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
-
-<details>
-<summary><b>Codex</b> (same compile-time checks, no hooks)</summary>
-
-|                               | Without vigiles                  | With vigiles                                            |
-| ----------------------------- | -------------------------------- | ------------------------------------------------------- |
-| **Instructions**              | Hand-written AGENTS.md           | Compiled from `.spec.ts`                                |
-| **Linter rule references**    | Trust-based                      | Verified at compile time                                |
-| **File paths / commands**     | Rot silently                     | Checked at compile time                                 |
-| **Direct edits to AGENTS.md** | Undetected                       | CI catches hash mismatch                                |
-| **Hooks / auto-compile**      | Not available (no plugin system) | Not available — run `vigiles compile` manually or in CI |
-| **CI**                        | Nothing to verify                | Same `vigiles audit` pipeline as Claude                 |
-
-</details>
-
-Everything vigiles compiles and audits is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](docs/comparison.md)
-
-## The Fix
-
-Write your conventions as TypeScript. The compiler catches the lies.
+vigiles compiles typed TypeScript specs to instruction files (CLAUDE.md, AGENTS.md). Every linter rule reference is verified against your real config. Every file path is checked against the filesystem. Every npm script against package.json. Stale references become compile errors — caught at edit time, not when the agent silently ignores you.
 
 ```typescript
 // CLAUDE.md.spec.ts
@@ -141,7 +84,42 @@ $ npx vigiles compile
   ~180 tokens
 ```
 
-The spec is the source of truth. CLAUDE.md is a build artifact.
+The spec is the source of truth. CLAUDE.md is a build artifact. After setup, the agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
+
+Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+
+## What Changes With vigiles
+
+### Claude Code
+
+|                                     | Without vigiles              | With vigiles                                                   |
+| ----------------------------------- | ---------------------------- | -------------------------------------------------------------- |
+| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                      |
+| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                   |
+| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
+| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
+| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
+| **Spec edits**                      | N/A                          | PostToolUse hook auto-compiles to markdown                     |
+| **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                        |
+| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
+| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
+| **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
+
+<details>
+<summary><b>Codex</b> (same compile-time checks, no hooks)</summary>
+
+|                               | Without vigiles                  | With vigiles                                            |
+| ----------------------------- | -------------------------------- | ------------------------------------------------------- |
+| **Instructions**              | Hand-written AGENTS.md           | Compiled from `.spec.ts`                                |
+| **Linter rule references**    | Trust-based                      | Verified at compile time                                |
+| **File paths / commands**     | Rot silently                     | Checked at compile time                                 |
+| **Direct edits to AGENTS.md** | Undetected                       | CI catches hash mismatch                                |
+| **Hooks / auto-compile**      | Not available (no plugin system) | Not available — run `vigiles compile` manually or in CI |
+| **CI**                        | Nothing to verify                | Same `vigiles audit` pipeline as Claude                 |
+
+</details>
+
+Everything vigiles compiles and audits is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](docs/comparison.md)
 
 ## Quick Start
 
@@ -149,45 +127,19 @@ The spec is the source of truth. CLAUDE.md is a build artifact.
 npx vigiles init
 ```
 
-That's it. One command. The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks — all automatically.
+The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI.
 
-```
-  npx vigiles init               guidance() rules, zero config
-          │
-          ▼
-  agent edits spec ◄────────── hooks auto-compile (self-maintaining)
-          │
-          ▼
-  npx vigiles audit              full verification: hashes + linters + coverage
-          │
-          ▼
-  CI catches drift               stale refs, disabled rules, typos, duplicates
-```
-
-**After install, it just works:**
-
-- Agent says "update CLAUDE.md" → plugin blocks the edit, redirects to `.spec.ts`
-- Agent edits the spec → plugin auto-compiles → CLAUDE.md regenerated
-- Agent edits `eslint.config.ts` → plugin auto-regenerates types
-- CI runs `vigiles audit` → catches stale specs, disabled rules, missing files
+Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` to find rules that can be upgraded to compile-verified `enforce()`. Already have a hand-written CLAUDE.md? The wizard detects it and offers migration.
 
 ### Hesitant about a new file type? Try inline mode
 
-If a `.spec.ts` feels like too much commitment, you can adopt vigiles one rule at a time by adding HTML comments directly to your existing `CLAUDE.md`:
+If a `.spec.ts` feels like too much commitment, adopt vigiles one rule at a time by adding HTML comments to your existing CLAUDE.md:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
 ```
 
-Running `vigiles audit CLAUDE.md` verifies each inline rule against your real linter config with the same closest-match suggestions and disabled-rule detection as spec mode. Zero build step, zero new files, works with any project. See [docs/inline-mode.md](docs/inline-mode.md) for the format and how to graduate to spec mode later.
-
-**It's self-maintaining.** Add a new ESLint rule? The hook regenerates types — your spec gets autocomplete for the new rule immediately. Rename a file? The compiler catches the stale reference. The setup doesn't rot because the hooks keep everything in sync.
-
-**It evolves automatically.** Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` — it reads your linter configs and per-linter reference docs to find `enforce()` upgrades. Each upgrade adds compiler-verified enforcement.
-
-**Already have a hand-written CLAUDE.md?** The wizard detects it and suggests migration.
-
-**Ready to enforce?** Run `npx vigiles init --strict` to set rules to `"error"` — CI fails if any instruction file lacks a spec.
+`vigiles audit CLAUDE.md` verifies each inline rule with the same closest-match suggestions and disabled-rule detection as spec mode. Zero build step, zero new files. See [docs/inline-mode.md](docs/inline-mode.md).
 
 | Flag                 | Effect                                                |
 | -------------------- | ----------------------------------------------------- |
@@ -201,13 +153,15 @@ Works the same for humans and agents — fully non-interactive. [Agent setup gui
 
 **`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the catalog AND is enabled in your project config. A disabled rule is a compile error.
 
+<!-- vigiles:ignore -->
+
 ```typescript
 "no-any":    enforce("@typescript-eslint/no-explicit-any", "Use unknown and narrow."),
 "no-print":  enforce("ruff/T201", "Use logging module."),
 "no-unwrap": enforce("clippy/unwrap_used", "Use expect() with context."),
 ```
 
-Supports ESLint, Stylelint, Ruff, Clippy, Pylint, and RuboCop. [Full linter support details →](docs/linter-support.md)
+Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [Full linter support details →](docs/linter-support.md)
 
 **`guidance()`** — prose advice. No mechanical enforcement, but not untracked: guidance rules participate in the monotonicity proof system. Once a rule exists, it can be strengthened ( `guidance` → `enforce` ) but never weakened or removed without an explicit allowlist. This prevents silent erosion of conventions over time.
 
@@ -313,10 +267,6 @@ The plugin provides two hooks:
 | [`integrity`](docs/rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check) |
 | [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface            |
 
-```bash
-npx vigiles audit    # checks specs, hashes, integrity, coverage, duplicates
-```
-
 Configure in `.vigilesrc.json`:
 
 ```json
@@ -329,17 +279,7 @@ Configure in `.vigilesrc.json`:
 }
 ```
 
-Disable per-file with an HTML comment:
-
-```markdown
-<!-- vigiles-disable require-spec -->
-
-# CLAUDE.md
-
-...
-```
-
-For "did the spec change but compile wasn't re-run?", use a `guard()` rule (auto-recompile on save/commit) plus `npx vigiles compile && git diff --exit-code` in CI.
+Disable per-file with `<!-- vigiles-disable require-spec -->` at the top of the markdown.
 
 ## Skills
 
@@ -372,12 +312,14 @@ Specs compile to `CLAUDE.md` by default. Set `target: "AGENTS.md"` or `target: [
 
 ## Related Tools
 
-vigiles doesn't try to do everything:
+vigiles doesn't try to do everything. It owns one thing: compile-time verification of typed specs against real linter configs, filesystems, and package.json. Everything else, compose:
 
 - **Architectural linting** — [ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser), [Steiger](https://github.com/feature-sliced/steiger). Reference their rules via `enforce()`.
-- **File sync** — [Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync), [block/ai-rules](https://github.com/block/ai-rules). vigiles compiles the source; sync tools distribute.
-- **Markdown linting** — [markdownlint](https://github.com/DavidAnson/markdownlint). vigiles generates the markdown; structure is correct by construction.
+- **File sync** across agents — [Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync), [block/ai-rules](https://github.com/block/ai-rules). vigiles compiles the source; sync tools distribute.
+- **Markdown linting** — [markdownlint](https://github.com/DavidAnson/markdownlint). vigiles generates markdown; structure is correct by construction.
+- **Code-block linting in docs** — [eslint-plugin-markdown](https://github.com/eslint/eslint-plugin-markdown) for syntax, [twoslash](https://shikijs.github.io/twoslash/) for TS type-checking.
 - **Prose quality** — [Vale](https://vale.sh). Different concern.
+- **Runtime LLM rule checking** (e.g. ai-rulez `"AI-Powered Rule Enforcement"`) — opposite paradigm. Those tools send your code to a model on every check, costing tokens and giving non-reproducible verdicts. vigiles compiles once and checks deterministically forever after with `eslint`, `ruff`, `tsc`, Cedar evaluation — tools as deterministic as their inputs.
 
 ## License
 

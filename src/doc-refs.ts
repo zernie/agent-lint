@@ -73,8 +73,12 @@ const DEFAULT_IGNORE = [
 const FENCE_RE = /^(\s{0,3})(`{3,}|~{3,})(.*)$/;
 const TS_LANGS = new Set(["ts", "typescript", "js", "javascript"]);
 
-const IGNORE_BLOCK_RE = /<!--\s*vigiles:ignore\s*-->/;
-const IGNORE_FILE_RE = /<!--\s*vigiles:ignore-file\s*-->/;
+// Ignore markers must appear as standalone lines (whole line is the
+// comment, modulo whitespace) so an inline-code mention like
+// `` `<!-- vigiles:ignore-file -->` `` in prose documenting the syntax
+// doesn't accidentally disable validation.
+const IGNORE_BLOCK_RE = /^\s{0,3}<!--\s*vigiles:ignore\s*-->\s*$/;
+const IGNORE_FILE_RE = /^\s{0,3}<!--\s*vigiles:ignore-file\s*-->\s*$/m;
 
 const CALL_RE = /\b(enforce|file|cmd|ref)\(\s*["']([^"'\n]+)["']/g;
 
