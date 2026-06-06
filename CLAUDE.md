@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:677c96bce31aa47e compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:7eb870e2fffd06cb compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -67,6 +67,9 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/self-evolving-specs.md` — Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)
 - `research/code-search-for-agents.md` — Research: code search approaches (grep vs embeddings vs AST-grep)
 - `research/runtime-enforcement.md` — Research: spec-derived runtime enforcement via hooks, skill contracts, session audit
+- `research/agent-integration.md` — Research: deterministic backstop for AI agents — hooks, proofs, static checks anchored at the spec
+- `research/fp-for-deterministic-ai.md` — Research: FP techniques (pure functions, exhaustive matches, Result types) for AI-written code
+- `research/fp-for-agent-harness.md` — Research: Railway/algebraic-effect structure for Claude Code skills, hooks, and tool-use loop
 - `research/architecture-platform.md` — Research: architecture-aware agent platform (FSD/DDD/hexagonal presets, meta-validation)
 - `research/formal-proofs-for-agents.md` — Research: formal verification via Lean 4 / Dafny, Cedar pattern, Leanstral integration
 - `research/enforce-over-guidance.md` — Design doc: deterministic upgrade gates — snapshot-gated downgrades + Merkle diff vs upstream catalog

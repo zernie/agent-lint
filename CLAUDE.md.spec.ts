@@ -93,6 +93,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
     "research/runtime-enforcement.md":
       "Research: spec-derived runtime enforcement via hooks, skill contracts, session audit",
+    "research/agent-integration.md":
+      "Research: deterministic backstop for AI agents — hooks, proofs, static checks anchored at the spec",
+    "research/fp-for-deterministic-ai.md":
+      "Research: FP techniques (pure functions, exhaustive matches, Result types) for AI-written code",
+    "research/fp-for-agent-harness.md":
+      "Research: Railway/algebraic-effect structure for Claude Code skills, hooks, and tool-use loop",
     "research/architecture-platform.md":
       "Research: architecture-aware agent platform (FSD/DDD/hexagonal presets, meta-validation)",
     "research/formal-proofs-for-agents.md":
