@@ -189,6 +189,28 @@ Discovery methods per catalog:
 
 Project files default to `src/**/*` but can be configured via `fileGlobs`.
 
+## generate-schema
+
+`vigiles generate-types` gives authoring-time feedback to `.spec.ts` authors via the TypeScript compiler. For projects using markdown frontmatter (Level 1) instead of a typed spec, `vigiles generate-schema` provides the same feedback without TypeScript:
+
+```sh
+npx vigiles generate-schema
+```
+
+It runs the same catalog discovery and emits `.vigiles/schema.json` — a JSON Schema whose `rule` field is an `enum` of every enabled rule. Point your markdown frontmatter at it with a modeline and your editor's built-in YAML language server autocompletes rule names and red-squiggles typos:
+
+```yaml
+---
+# yaml-language-server: $schema=./.vigiles/schema.json
+vigiles:
+  enforce:
+    - rule: eslint/no-consolee # red squiggle: not in the enum
+      why: "..."
+---
+```
+
+When no linter rules are discoverable, the `rule` field falls back to a freeform string so the schema never false-flags a valid reference. CI freshness check: `npx vigiles generate-schema --check`. See [markdown mode](markdown-mode.md).
+
 ## Catalog-Only Mode
 
 Set `catalogOnly: true` to skip config-enabled checks and only verify that rules exist in the linter's catalog:

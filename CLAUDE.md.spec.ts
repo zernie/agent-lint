@@ -125,7 +125,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Non-interactive agent setup guide (hooks via settings.json)",
     "docs/spec-format.md": "Spec format reference (target, sections, rules)",
     "docs/linter-support.md":
-      "Linter support details (6 linters + generate-types)",
+      "Linter support details (7 catalogs + generate-types/generate-schema)",
     "docs/comparison.md":
       "Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram",
     "docs/rules/require-spec.md":

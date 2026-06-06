@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:704e640b4d335669 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:8c1d37c1d5c57ad2 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -84,7 +84,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
-- `docs/linter-support.md` — Linter support details (6 linters + generate-types)
+- `docs/linter-support.md` — Linter support details (7 catalogs + generate-types/generate-schema)
 - `docs/comparison.md` — Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram
 - `docs/rules/require-spec.md` — Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md
 - `docs/rules/require-skill-spec.md` — Rule doc: require .spec.ts for SKILL.md files
