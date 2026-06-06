@@ -1286,6 +1286,15 @@ async function setup(args: string[]): Promise<void> {
   }
   console.log(`✓ Generated ${outPath}`);
 
+  // Also emit a JSON Schema so `vigiles:` markdown frontmatter (Level 1)
+  // gets rule-name autocomplete + typo squiggles from the editor's YAML LSP.
+  const schemaResult = generateSchema({ basePath: process.cwd() });
+  const schemaPath = ".vigiles/schema.json";
+  writeFileSync(resolve(process.cwd(), schemaPath), schemaResult.json);
+  console.log(
+    `✓ Generated ${schemaPath} (point frontmatter at it with \`# yaml-language-server: $schema=./${schemaPath}\`)`,
+  );
+
   // Step 5: Compile specs
   console.log("\nCompiling specs...");
   const specs = findSpecs();
@@ -1430,6 +1439,7 @@ async function setup(args: string[]): Promise<void> {
     ...targets,
     ...specPathsList,
     ".vigiles/generated.d.ts",
+    ".vigiles/schema.json",
     ...(shouldInstallPlugin ? [".claude/settings.json"] : []),
     ...(strict ? [".vigilesrc.json"] : []),
   ];
