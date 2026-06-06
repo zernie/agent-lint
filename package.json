@@ -13,6 +13,16 @@
     "./compile": "./dist/compile.js",
     "./linters": "./dist/linters.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "action.yml",
+    ".claude-plugin",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js",
