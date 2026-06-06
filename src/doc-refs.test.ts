@@ -100,6 +100,23 @@ describe("extractDocRefs()", () => {
     assert.equal(result.refs.length, 2);
   });
 
+  it("ignores marker mentions inside inline code spans on prose lines", () => {
+    // Critical: docs that DOCUMENT the syntax use `<!-- vigiles:ignore -->`
+    // and `<!-- vigiles:ignore-file -->` inside backtick spans for
+    // illustration. The detector must not be fooled by these.
+    const md = [
+      "Opt out via `<!-- vigiles:ignore -->` before the block:",
+      "",
+      "```ts",
+      'enforce("eslint/no-console", "real ref")',
+      "```",
+    ].join("\n");
+
+    const result = extractDocRefs(md, "doc.md");
+    assert.equal(result.blocksIgnored, 0);
+    assert.equal(result.refs.length, 1);
+  });
+
   it("does not ignore blocks for unrelated comments", () => {
     const md = [
       "<!-- some unrelated comment -->",
