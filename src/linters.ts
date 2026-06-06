@@ -3,10 +3,11 @@
  *
  * Verifies that linter rule references (e.g., "eslint/no-console") point to
  * real rules that exist and are enabled in project config. Supports:
- *   ESLint, Stylelint (Node API), Ruff, Clippy, Pylint, RuboCop (CLI).
+ *   ESLint, Stylelint (Node API), Ruff, Clippy, Pylint, RuboCop (CLI),
+ *   Cedar (filesystem policies for AWS Bedrock AgentCore / Vectimus).
  *
- * This is the core moat — no other tool resolves rules against 6 linter APIs
- * and checks config-enabled status.
+ * This is the core moat — no other tool resolves rules across 7 catalog APIs
+ * (6 linters + Cedar policy language) and checks config-enabled status.
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -654,6 +655,151 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Vigiles-internal assertion catalog
+//
+// The `vigiles/<id>` namespace lets specs declare mechanical checks that
+// vigiles itself runs (orphan docs, integrity, etc.) without delegating to
+// an external linter. Existence is verified at compile time against this
+// fixed catalog; the actual check runs at audit time.
+// ---------------------------------------------------------------------------
+
+const VIGILES_INTERNAL_RULES = new Set<string>([
+  "orphan-docs",
+]);
+
+/** @internal */ function tryVigilesInternal(
+  ctx: RuleContext,
+): LinterCheckResult | null {
+  if (ctx.linterName !== "vigiles") return null;
+  if (!VIGILES_INTERNAL_RULES.has(ctx.ruleName)) {
+    const suggestions = closestRuleNames(ctx.ruleName, VIGILES_INTERNAL_RULES);
+    const hint =
+      suggestions.length > 0
+        ? ` Did you mean: ${suggestions.map((s) => `"vigiles/${s}"`).join(", ")}?`
+        : "";
+    return makeResult(
+      ctx,
+      false,
+      "unknown",
+      `Vigiles-internal rule "${ctx.ruleName}" not in known catalog (${[...VIGILES_INTERNAL_RULES].join(", ")}).${hint}`,
+    );
+  }
+  return makeResult(ctx, true, "enabled");
+}
+
+// ---------------------------------------------------------------------------
+// Cedar policy resolution (filesystem-based — no Node API, no CLI required)
+//
+// Cedar policies live in .cedar files. A policy is identified by its
+// `@id("name")` annotation when present; otherwise by filename. Presence
+// of a policy in the project counts as "enabled" — Cedar has no separate
+// config layer the way ESLint does, the policy bundle IS the config.
+//
+// Default search dirs: .cedar/ and cedar/ (project root). Override via
+// `options.linters.cedar.rulesDir`.
+// ---------------------------------------------------------------------------
+
+const CEDAR_DEFAULT_DIRS = [".cedar", "cedar"] as const;
+const CEDAR_ID_RE = /@id\("([^"]+)"\)/g;
+const CEDAR_STATEMENT_RE = /\b(?:permit|forbid)\s*\(/;
+
+const CEDAR_POLICY_CACHE = new Map<string, Set<string>>();
+
+function cedarCacheKey(
+  basePath: string,
+  customDirs?: string | readonly string[],
+): string {
+  const dirs = customDirs
+    ? Array.isArray(customDirs)
+      ? customDirs.join("|")
+      : (customDirs as string)
+    : "";
+  return `${basePath}::${dirs}`;
+}
+
+function loadCedarPolicies(
+  basePath: string,
+  customDirs?: string | readonly string[],
+): Set<string> {
+  const policies = new Set<string>();
+  const dirs: readonly string[] = customDirs
+    ? Array.isArray(customDirs)
+      ? (customDirs as readonly string[])
+      : [customDirs as string]
+    : CEDAR_DEFAULT_DIRS;
+
+  for (const dir of dirs) {
+    const fullDir = resolve(basePath, dir);
+    if (!existsSync(fullDir)) continue;
+    const files = globSync("**/*.cedar", { cwd: fullDir, nodir: true });
+    for (const file of files) {
+      let content: string;
+      try {
+        content = readFileSync(resolve(fullDir, file), "utf-8");
+      } catch {
+        continue;
+      }
+      const annotated = [...content.matchAll(CEDAR_ID_RE)].map((m) => m[1]);
+      if (annotated.length > 0) {
+        for (const id of annotated) policies.add(id);
+      } else if (CEDAR_STATEMENT_RE.test(content)) {
+        const name = file.replace(/\.cedar$/, "").replace(/\\/g, "/");
+        policies.add(name);
+      }
+    }
+  }
+  return policies;
+}
+
+function getCedarPolicies(
+  basePath: string,
+  customDirs?: string | readonly string[],
+): Set<string> {
+  const key = cedarCacheKey(basePath, customDirs);
+  const cached = CEDAR_POLICY_CACHE.get(key);
+  if (cached) return cached;
+  const policies = loadCedarPolicies(basePath, customDirs);
+  CEDAR_POLICY_CACHE.set(key, policies);
+  return policies;
+}
+
+/** @internal */ export function clearCedarCache(): void {
+  CEDAR_POLICY_CACHE.clear();
+}
+
+/** @internal */ function tryCedarPolicy(
+  ctx: RuleContext,
+): LinterCheckResult | null {
+  if (ctx.linterName !== "cedar") return null;
+  const customDirs = ctx.linters?.cedar?.rulesDir;
+  const policies = getCedarPolicies(ctx.basePath, customDirs);
+  if (policies.size === 0) {
+    return makeResult(
+      ctx,
+      false,
+      "unknown",
+      customDirs
+        ? `No Cedar policies found in configured rulesDir.`
+        : `No Cedar policies found. Add .cedar files under .cedar/ or cedar/, or set linters.cedar.rulesDir.`,
+    );
+  }
+  if (!policies.has(ctx.ruleName)) {
+    const suggestions = closestRuleNames(ctx.ruleName, policies);
+    const hint =
+      suggestions.length > 0
+        ? ` Did you mean: ${suggestions.map((s) => `"cedar/${s}"`).join(", ")}?`
+        : "";
+    return makeResult(
+      ctx,
+      false,
+      "unknown",
+      `Cedar policy "${ctx.ruleName}" not found.${hint}`,
+    );
+  }
+  return makeResult(ctx, true, "enabled");
+}
+
 /** @internal */ function tryCustomRulesDir(
   ctx: RuleContext,
 ): LinterCheckResult | null {
@@ -714,9 +860,11 @@ export function checkLinterRule(
   };
 
   return (
+    tryVigilesInternal(ctx) ??
     tryNodeResolver(ctx) ??
     tryScopedPlugin(ctx) ??
     tryCliCheck(ctx) ??
+    tryCedarPolicy(ctx) ??
     tryCustomRulesDir(ctx) ??
     makeResult(ctx, false, "unknown", `Unknown linter: "${linterName}"`)
   );

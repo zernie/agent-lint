@@ -88,7 +88,7 @@ function discoverEslintRules(basePath: string): DiscoveredRules | null {
     });
     const rules = JSON.parse(output.trim() || "[]") as string[];
     if (rules.length === 0) return null;
-    return { linter: "eslint", rules, via: "flat config" };
+    return { linter: "eslint", rules, via: "flat config (v9+/v10)" };
   } catch {
     return null;
   }
@@ -211,6 +211,37 @@ function discoverRubocopRules(basePath: string): DiscoveredRules | null {
   } catch {
     return null;
   }
+}
+
+function discoverCedarPolicies(basePath: string): DiscoveredRules | null {
+  const ID_RE = /@id\("([^"]+)"\)/g;
+  const STATEMENT_RE = /\b(?:permit|forbid)\s*\(/;
+  const policies = new Set<string>();
+  for (const dir of [".cedar", "cedar"]) {
+    const fullDir = resolve(basePath, dir);
+    if (!existsSync(fullDir)) continue;
+    const files = globSync("**/*.cedar", { cwd: fullDir, nodir: true });
+    for (const file of files) {
+      let content: string;
+      try {
+        content = readFileSync(resolve(fullDir, file), "utf-8");
+      } catch {
+        continue;
+      }
+      const annotated = [...content.matchAll(ID_RE)].map((m) => m[1]);
+      if (annotated.length > 0) {
+        for (const id of annotated) policies.add(id);
+      } else if (STATEMENT_RE.test(content)) {
+        policies.add(file.replace(/\.cedar$/, "").replace(/\\/g, "/"));
+      }
+    }
+  }
+  if (policies.size === 0) return null;
+  return {
+    linter: "cedar",
+    rules: [...policies].sort(),
+    via: ".cedar files",
+  };
 }
 
 function discoverClippyRules(basePath: string): DiscoveredRules | null {
@@ -338,6 +369,9 @@ export function generateTypes(
 
   const clippy = discoverClippyRules(basePath);
   if (clippy) linters.push(clippy);
+
+  const cedar = discoverCedarPolicies(basePath);
+  if (cedar) linters.push(cedar);
 
   const scripts = discoverNpmScripts(basePath);
   const files = discoverProjectFiles(basePath, fileGlobs);

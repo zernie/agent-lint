@@ -5,7 +5,7 @@
 
 declare module "vigiles/generated" {
 
-  /** 64 enabled eslint rules (via flat config). */
+  /** 64 enabled eslint rules (via flat config (v9+/v10)). */
   export type EslintRule = 
     | "constructor-super"
     | "for-direction"
@@ -83,14 +83,17 @@ declare module "vigiles/generated" {
     | "fmt"
     | "fmt:check";
 
-  /** 25 project files. */
+  /** 30 project files. */
   export type ProjectFile = 
     | "src/action.ts"
+    | "src/cedar.test.ts"
     | "src/cli.test.ts"
     | "src/cli.ts"
     | "src/compile.ts"
     | "src/coverage.test.ts"
     | "src/coverage.ts"
+    | "src/doc-refs.test.ts"
+    | "src/doc-refs.ts"
     | "src/evolve.ts"
     | "src/generate-types.ts"
     | "src/hash.ts"
@@ -98,6 +101,8 @@ declare module "vigiles/generated" {
     | "src/inline.ts"
     | "src/integrity.ts"
     | "src/linters.ts"
+    | "src/orphans.test.ts"
+    | "src/orphans.ts"
     | "src/proofs.test.ts"
     | "src/proofs.ts"
     | "src/session.test.ts"
@@ -183,11 +188,14 @@ declare module "vigiles/spec" {
   interface KnownProjectFiles {
     files: 
       | "src/action.ts"
+      | "src/cedar.test.ts"
       | "src/cli.test.ts"
       | "src/cli.ts"
       | "src/compile.ts"
       | "src/coverage.test.ts"
       | "src/coverage.ts"
+      | "src/doc-refs.test.ts"
+      | "src/doc-refs.ts"
       | "src/evolve.ts"
       | "src/generate-types.ts"
       | "src/hash.ts"
@@ -195,6 +203,8 @@ declare module "vigiles/spec" {
       | "src/inline.ts"
       | "src/integrity.ts"
       | "src/linters.ts"
+      | "src/orphans.test.ts"
+      | "src/orphans.ts"
       | "src/proofs.test.ts"
       | "src/proofs.ts"
       | "src/session.test.ts"

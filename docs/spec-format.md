@@ -31,6 +31,8 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 `Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `instructions` with embedded `file()`, `cmd()`, and `ref()` references.
 
+<!-- vigiles:ignore -->
+
 ```ts
 sections: {
   architecture: `Two rule types: enforce() and guidance().`,
@@ -67,6 +69,8 @@ commands: {
 ## SKILL.md Specs
 
 Use `skill()` to define a SKILL.md spec. Compiles to markdown with YAML frontmatter.
+
+<!-- vigiles:ignore -->
 
 ```ts
 import { skill, file, cmd, ref, instructions } from "vigiles";
@@ -119,19 +123,31 @@ instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
 
 ## Rule Types
 
-### `enforce(linterRule, why)`
+Three builders cover three kinds of constraints. The split mirrors a useful mental model for what a rule actually *is*:
 
-Declares a rule delegated to an external linter. The `linterRule` accepts template literal types:
+- **Process rules** (build commands, env, package managers) — covered by `guard()` (reactive) and runtime hook policies elsewhere.
+- **Source rules** (code patterns, style, API conventions) — covered by `enforce()` delegating to ESLint / Ruff / Clippy / etc.
+- **Architectural rules** (boundaries, layering, file pairing) — covered by `enforce()` delegating to ast-grep / Dependency Cruiser / Steiger via the same `enforce()` API.
+- **Prose-only intent** (anything semantic that can't be checked mechanically) — covered by `guidance()`. Lives in the spec for humans and agents to read; no compile-time verdict.
 
-- `${BuiltinLinter}/${string}` where BuiltinLinter is `eslint`, `stylelint`, `ruff`, `clippy`, `pylint`, or `rubocop`
+When you're writing a new rule, ask first which category it falls into. If the answer is "I'm not sure how to mechanically check it," that's a `guidance()` rule. If the answer is "some external tool already does this," that's an `enforce()` rule. If it's "vigiles itself should check this at compile or audit time," that's `enforce("vigiles/<name>", ...)` against the built-in catalog (currently `vigiles/orphan-docs`).
+
+### `enforce(ref, why)`
+
+Declares a rule delegated to an external linter or to a vigiles-internal check. The `ref` accepts template literal types:
+
+- `${BuiltinLinter}/${string}` where BuiltinLinter is `eslint`, `stylelint`, `ruff`, `clippy`, `pylint`, `rubocop`, or `cedar`
 - `@${scope}/${rule}` for scoped ESLint plugins (e.g., `@typescript-eslint/no-explicit-any`)
+- `vigiles/${string}` for vigiles-internal assertions (e.g., `vigiles/orphan-docs`)
 
-At compile time, vigiles verifies the rule exists in the linter's catalog and is enabled in the project's config. Compiles to `**Enforced by:** ` followed by the linter rule in backticks.
+At compile time, vigiles verifies the rule exists in the catalog and — for external linters — is enabled in the project's config. For Cedar, presence in a `.cedar` file counts as enabled. For `vigiles/<id>`, existence is checked against a built-in catalog and the actual check runs at audit time. Compiles to `**Enforced by:** ` followed by the rule reference in backticks.
 
 ```ts
 rules: {
   "no-console-log": enforce("eslint/no-console", "Use structured logger."),
   "no-print": enforce("ruff/T201", "Use logging module."),
+  "shell-allowlist": enforce("cedar/shell-allowlist", "Only npm test / npm build via shell."),
+  "no-orphan-docs": enforce("vigiles/orphan-docs", "Every doc must be referenced."),
 }
 ```
 
@@ -146,6 +162,28 @@ rules: {
 ```
 
 Compiles to: `**Guidance only** -- <text>`.
+
+### `guard(options, description)`
+
+Declares a reactive rule that runs a command when watched files change. Used to wire spec-driven automation into agent hook engines (Claude Code PostToolUse, etc.) — the spec is the single source of truth for "what file changes trigger which command."
+
+```ts
+rules: {
+  "recompile-on-spec-change": guard(
+    { watch: "*.spec.ts", run: "npx vigiles compile" },
+    "Recompile instruction files when any spec changes.",
+  ),
+  "regen-types-on-config-change": guard(
+    {
+      watch: ["eslint.config.*", "package.json", "pyproject.toml"],
+      run: "npx vigiles generate-types",
+    },
+    "Regenerate types when linter configs or package.json change.",
+  ),
+}
+```
+
+`watch` is a single glob pattern or an array. `run` is a shell command. Compiles to `**Guard:** ` followed by the watch pattern(s) and the command, plus the rationale on the next line.
 
 ## Branded Types
 
@@ -178,6 +216,25 @@ export default defineConfig({
 | `discover`  | `boolean` | Auto-discover linter rules for coverage reporting       |
 | `maxRules`  | `number`  | Compilation fails if a spec exceeds this rule count     |
 | `maxTokens` | `number`  | Compilation fails if estimated tokens exceed this limit |
+| `orphans`   | `object`  | Orphan-docs scan globs (see below)                      |
+
+### Orphan-docs configuration
+
+The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files looking for ones that no other markdown references. By default it follows the vigiles-repo convention (`docs/` + `research/`), but each project sets its own scope via tsconfig-style globs in `.vigilesrc.json`:
+
+```json
+{
+  "orphans": {
+    "include": ["docs/**/*.md", "wiki/**/*.md", "handbook/**/*.md"],
+    "exclude": ["docs/legacy/**", "**/draft-*.md"]
+  }
+}
+```
+
+- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md", "research/**/*.md"]`. Set to `[]` to disable scanning.
+- `exclude` — glob patterns to skip within the include scope. Same shape as `tsconfig.json#exclude`.
+
+`node_modules/**`, `dist/**`, `.vigiles/**`, and `.git/**` are always excluded.
 
 ## Hash Verification
 

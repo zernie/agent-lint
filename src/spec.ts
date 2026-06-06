@@ -13,14 +13,15 @@
 // Template literal types for type-safe linter references
 // ---------------------------------------------------------------------------
 
-/** Linters vigiles can cross-reference. */
+/** Linters and policy catalogs vigiles can cross-reference. */
 type BuiltinLinter =
   | "eslint"
   | "stylelint"
   | "ruff"
   | "clippy"
   | "pylint"
-  | "rubocop";
+  | "rubocop"
+  | "cedar";
 
 /** Scoped ESLint plugin prefix (e.g., @typescript-eslint). */
 type ScopedPlugin = `@${string}/${string}`;
@@ -124,12 +125,12 @@ export type HookEvent =
 // Rule types
 // ---------------------------------------------------------------------------
 
-/** A rule delegated to an external tool (linter, ast-grep, dependency-cruiser, etc.). */
+/** A rule delegated to an external tool (linter, ast-grep, dependency-cruiser, etc.) or to a vigiles-internal check. */
 export interface EnforceRule {
   readonly _kind: "enforce";
-  readonly linterRule: LinterRule;
+  readonly linterRule: LinterRule | VigilesRef;
   readonly why: string;
-  /** Skip linter verification for this rule. Default: true (verify). */
+  /** Skip verification for this rule. Default: true (verify). */
   readonly verify: boolean;
 }
 
@@ -154,24 +155,27 @@ export type Rule = EnforceRule | GuidanceRule | GuardRule;
 // ---------------------------------------------------------------------------
 
 /**
- * Declare a rule enforced by an external tool.
+ * Declare a rule enforced by an external tool or vigiles itself.
  *
  * When generated types are present, the `linterRule` argument is narrowed
- * to only accept rules that exist in your linter configs.
+ * to only accept rules that exist in your linter configs. Vigiles-internal
+ * checks use the `vigiles/<assertion-id>` namespace and are dispatched to
+ * built-in mechanical validators (e.g. `vigiles/orphan-docs`).
  *
  *   enforce("eslint/no-console", "Use structured logger.")
  *   enforce("@typescript-eslint/no-floating-promises", "Always await.")
  *   enforce("ruff/T201", "Use logging module.")
+ *   enforce("vigiles/orphan-docs", "No docs without spec references.")
  */
 export function enforce(
-  linterRule: NoInfer<StrictLinterRule>,
+  ref: NoInfer<StrictLinterRule> | VigilesRef,
   why: string,
   options?: { verify?: boolean },
 ): EnforceRule {
   return {
     _kind: "enforce",
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    linterRule: linterRule as LinterRule,
+    linterRule: ref as LinterRule | VigilesRef,
     why,
     verify: options?.verify ?? true,
   };
