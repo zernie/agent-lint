@@ -17,10 +17,21 @@
  * what is really enforceable, not a static catalog.
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { globSync } from "glob";
+
 import { generateTypes } from "./generate-types.js";
 
 export interface GenerateSchemaOptions {
   basePath?: string;
+  /**
+   * Custom linters from `.vigilesrc.json` (`rulesDir`-backed). These aren't
+   * auto-discovered by `generate-types`, but `vigiles audit` resolves their
+   * rules via `checkLinterRule`, so the schema enum must include them too —
+   * otherwise the YAML LSP false-flags a rule that CI accepts.
+   */
+  linters?: Record<string, { rulesDir?: string | string[] }>;
 }
 
 export interface GenerateSchemaResult {
@@ -32,6 +43,30 @@ export interface GenerateSchemaResult {
   ruleNames: string[];
   /** Linters discovered, with rule counts. */
   linters: { linter: string; count: number }[];
+}
+
+/**
+ * Rule references for config-declared custom linters. Mirrors
+ * `checkLinterRule`'s rulesDir lookup (any file `<rule>.*` is a rule) so the
+ * enum matches what `vigiles audit` accepts for these linters.
+ */
+function customRuleRefs(
+  basePath: string,
+  linters: GenerateSchemaOptions["linters"],
+): string[] {
+  const refs: string[] = [];
+  for (const [name, cfg] of Object.entries(linters ?? {})) {
+    const dirs = Array.isArray(cfg.rulesDir) ? cfg.rulesDir : [cfg.rulesDir];
+    for (const dir of dirs) {
+      if (!dir) continue;
+      const full = resolve(basePath, dir);
+      if (!existsSync(full)) continue;
+      for (const f of globSync("*.*", { cwd: full, nodir: true })) {
+        refs.push(`${name}/${f.replace(/\.[^.]+$/, "")}`);
+      }
+    }
+  }
+  return refs;
 }
 
 /**
@@ -58,6 +93,10 @@ export function generateSchema(
       }
     }
   }
+  for (const ref of customRuleRefs(basePath, options.linters)) {
+    ruleNames.add(ref);
+  }
+
   const sorted = [...ruleNames].sort();
 
   const ruleSchema: Record<string, unknown> =

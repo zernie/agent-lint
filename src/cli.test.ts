@@ -711,6 +711,52 @@ describe("CLI: vigiles generate-schema", () => {
     assert.equal(exitCode, 0, stdout);
     assert.ok(stdout.includes("up to date"));
   });
+
+  it("includes configured custom-linter rules from rulesDir in the enum", () => {
+    // A custom linter declared in .vigilesrc.json resolves its rules from a
+    // rulesDir. `vigiles audit` accepts `my-tool/no-foo`, so the schema enum
+    // must include it too (otherwise the YAML LSP false-flags a valid rule).
+    const customDir = mkdtempSync(join(tmpdir(), "vigiles-schema-custom-"));
+    symlinkSync(
+      resolve(process.cwd(), "node_modules"),
+      join(customDir, "node_modules"),
+    );
+    writeFileSync(
+      join(customDir, "package.json"),
+      JSON.stringify({ name: "test-custom", scripts: {} }),
+    );
+    writeFileSync(
+      join(customDir, ".vigilesrc.json"),
+      JSON.stringify({ linters: { "my-tool": { rulesDir: "rules" } } }),
+    );
+    mkdirSync(join(customDir, "rules"));
+    writeFileSync(
+      join(customDir, "rules", "no-foo.js"),
+      "module.exports = {};",
+    );
+
+    const { exitCode } = run("generate-schema", customDir);
+    assert.equal(exitCode, 0);
+    const schema = JSON.parse(
+      readFileSync(join(customDir, ".vigiles", "schema.json"), "utf-8"),
+    ) as {
+      properties: {
+        vigiles: {
+          properties: {
+            enforce: { items: { properties: { rule: { enum?: string[] } } } };
+          };
+        };
+      };
+    };
+    const ruleEnum =
+      schema.properties.vigiles.properties.enforce.items.properties.rule.enum ??
+      [];
+    assert.ok(
+      ruleEnum.includes("my-tool/no-foo"),
+      `expected my-tool/no-foo in enum, got: ${JSON.stringify(ruleEnum)}`,
+    );
+    rmSync(customDir, { recursive: true, force: true });
+  });
 });
 
 // ---------------------------------------------------------------------------

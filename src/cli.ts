@@ -1288,7 +1288,10 @@ async function setup(args: string[]): Promise<void> {
 
   // Also emit a JSON Schema so `vigiles:` markdown frontmatter (Level 1)
   // gets rule-name autocomplete + typo squiggles from the editor's YAML LSP.
-  const schemaResult = generateSchema({ basePath: process.cwd() });
+  const schemaResult = generateSchema({
+    basePath: process.cwd(),
+    linters: loadConfig().linters,
+  });
   const schemaPath = ".vigiles/schema.json";
   writeFileSync(resolve(process.cwd(), schemaPath), schemaResult.json);
   console.log(
@@ -1650,7 +1653,10 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
   const outPath = restArgs[0] ?? ".vigiles/schema.json";
 
   console.log("Scanning linters...\n");
-  const result = generateSchema({ basePath: process.cwd() });
+  const result = generateSchema({
+    basePath: process.cwd(),
+    linters: loadConfig().linters,
+  });
 
   for (const l of result.linters) {
     console.log(`  ${l.linter}: ${String(l.count)} rules`);
