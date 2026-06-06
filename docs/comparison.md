@@ -46,6 +46,22 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 
 Everything vigiles compiles and audits is deterministic — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline.
 
+## What vigiles Does and Doesn't Validate in Markdown
+
+vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments in inline mode, and `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks. Same engines used for `.spec.ts` references.
+
+Out of scope (use other tools):
+
+| Concern                              | Use instead                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| Markdown formatting / structure      | [markdownlint](https://github.com/DavidAnson/markdownlint)                        |
+| TS / JS syntax in code blocks        | [eslint-plugin-markdown](https://github.com/eslint/eslint-plugin-markdown)        |
+| TS type-checking of code blocks      | [twoslash](https://shikijs.github.io/twoslash/) (TS official docs, Astro, etc.)   |
+| Markdown link validity (URLs, paths) | [markdown-link-check](https://github.com/tcort/markdown-link-check)               |
+| Spell / prose / grammar              | [Vale](https://vale.sh/), [alex](https://github.com/get-alex/alex)                |
+
+Illustrative code blocks (typo demos, template placeholders, speculative refs in design docs) opt out via `<!-- vigiles:ignore -->` immediately before the fence, or `<!-- vigiles:ignore-file -->` anywhere in a file that's entirely illustrative. Placeholders containing `<` or `>` are auto-skipped. Refs that can't be verified because the underlying tool isn't installed (e.g. `pylint/X` on a machine without pylint) are reported separately from real errors.
+
 ## Flow
 
 ```

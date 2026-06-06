@@ -31,6 +31,8 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 `Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `instructions` with embedded `file()`, `cmd()`, and `ref()` references.
 
+<!-- vigiles:ignore -->
+
 ```ts
 sections: {
   architecture: `Two rule types: enforce() and guidance().`,
@@ -67,6 +69,8 @@ commands: {
 ## SKILL.md Specs
 
 Use `skill()` to define a SKILL.md spec. Compiles to markdown with YAML frontmatter.
+
+<!-- vigiles:ignore -->
 
 ```ts
 import { skill, file, cmd, ref, instructions } from "vigiles";

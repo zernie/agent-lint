@@ -1,6 +1,8 @@
+<!-- vigiles:ignore-file -->
+
 # Executable Specification Files
 
-Design document for vigiles v2's spec-driven compilation model. The spec is the source of truth. The markdown is a build artifact.
+Design document for vigiles v2's spec-driven compilation model. The spec is the source of truth. The markdown is a build artifact. Code blocks here illustrate hypothetical APIs; refs are speculative.
 
 ---
 

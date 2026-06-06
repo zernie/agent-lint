@@ -68,6 +68,9 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/orphans.ts":
       "Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references",
     "src/orphans.test.ts": "Orphan-docs detector test suite (node:test)",
+    "src/doc-refs.ts":
+      "Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
+    "src/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",
     "src/test-utils.ts":
       "Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo",
     "src/types.ts":

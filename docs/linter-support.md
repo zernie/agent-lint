@@ -80,13 +80,13 @@ Cedar has no separate config layer the way ESLint does — a policy that exists 
 
 ## ESLint Plugin Support
 
-Plugin rules use the format `eslint/<plugin>/<rule>`. vigiles resolves the plugin package and checks its exported `rules` object.
+Plugin rules are referenced directly by `<plugin>/<rule>` (no `eslint/` prefix). vigiles resolves the plugin package and checks its exported `rules` object.
 
 **Scoped plugins** (`@scope/plugin`):
 
 ```ts
 // Resolves @typescript-eslint/eslint-plugin, checks its "no-explicit-any" rule
-enforce("eslint/@typescript-eslint/no-explicit-any", "Use `unknown` instead.");
+enforce("@typescript-eslint/no-explicit-any", "Use `unknown` instead.");
 ```
 
 Resolution order for `@scope/name`:
@@ -99,11 +99,11 @@ For bare scopes like `@typescript-eslint`, it resolves `@typescript-eslint/eslin
 **Unscoped plugins**:
 
 ```ts
-// Resolves eslint-plugin-import, checks its "no-unresolved" rule
-enforce("eslint/import/no-unresolved", "Fix the import path.");
+// Resolves eslint-plugin-sonarjs, checks its "cognitive-complexity" rule
+enforce("sonarjs/cognitive-complexity", "Keep functions simple.");
 ```
 
-Resolution: `import` becomes `eslint-plugin-import`.
+Resolution: `sonarjs` becomes `eslint-plugin-sonarjs`.
 
 Config-enabled checks for plugin rules go through ESLint's `calculateConfigForFile` with the full qualified name (e.g., `@typescript-eslint/no-explicit-any`), so they respect your flat config.
 

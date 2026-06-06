@@ -242,7 +242,7 @@ export default claude({
     architecture: instructions`
       Core engine in ${file("src/compile.ts")}.
       Run ${cmd("npm test")} to verify.
-      See ${ref("skills/deploy/SKILL.md")} for deployment.
+      See ${ref("skills/strengthen/SKILL.md")} for the strengthen skill.
     `,
     // If any path is stale → compile error
   },
