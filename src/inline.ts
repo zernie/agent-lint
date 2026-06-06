@@ -27,8 +27,26 @@ export interface InlineRule {
   line: number;
 }
 
+/** A `<!-- vigiles:file <path> -->` reference (verified to exist). */
+export interface InlineFileRef {
+  /** Project-relative path to verify exists. */
+  path: string;
+  /** 1-based line number of the comment in the source file. */
+  line: number;
+}
+
+/** A `<!-- vigiles:cmd "<command>" -->` reference (npm scripts verified). */
+export interface InlineCmdRef {
+  /** Command to verify (npm scripts checked against package.json). */
+  command: string;
+  /** 1-based line number of the comment in the source file. */
+  line: number;
+}
+
 export interface InlineParseResult {
   rules: InlineRule[];
+  files: InlineFileRef[];
+  commands: InlineCmdRef[];
   /** Lines that look like vigiles: markers but failed to parse. */
   errors: { line: number; message: string; raw: string }[];
 }
@@ -42,6 +60,19 @@ export interface InlineParseResult {
  */
 const ENFORCE_RE =
   /<!--\s*vigiles:enforce\s+([@A-Za-z0-9_/:.-]+)\s+"([^"\n]*)"\s*-->/;
+
+/**
+ * Match `<!-- vigiles:file <path> -->`. The path is a single whitespace-free
+ * token (project-relative); spaces in paths are vanishingly rare and would be
+ * ambiguous against the closing `-->`.
+ */
+const FILE_RE = /<!--\s*vigiles:file\s+(\S+)\s*-->/;
+
+/**
+ * Match `<!-- vigiles:cmd "<command>" -->`. The command is quoted because
+ * commands contain spaces (e.g. `npm run build`).
+ */
+const CMD_RE = /<!--\s*vigiles:cmd\s+"([^"\n]*)"\s*-->/;
 
 /**
  * Detects any `<!-- vigiles:<kind> -->` comment (valid or not) so we can
@@ -63,6 +94,8 @@ const MARKER_RE = /<!--\s*vigiles:([A-Za-z_-]+)[^]*?-->/;
  */
 export function parseInlineRules(content: string): InlineParseResult {
   const rules: InlineRule[] = [];
+  const files: InlineFileRef[] = [];
+  const commands: InlineCmdRef[] = [];
   const errors: InlineParseResult["errors"] = [];
 
   const lines = content.split("\n");
@@ -118,15 +151,26 @@ export function parseInlineRules(content: string): InlineParseResult {
       });
       continue;
     }
+
+    const fileMatch = FILE_RE.exec(scannable);
+    if (fileMatch) {
+      files.push({ path: fileMatch[1], line: i + 1 });
+      continue;
+    }
+
+    const cmdMatch = CMD_RE.exec(scannable);
+    if (cmdMatch) {
+      commands.push({ command: cmdMatch[1], line: i + 1 });
+      continue;
+    }
     // Skip the compiled-file hash header (`<!-- vigiles:sha256:... -->`)
     // entirely — it's not a rule marker and should not be reported.
     if (/<!--\s*vigiles:sha\d+:/.test(scannable)) continue;
 
     const markerMatch = MARKER_RE.exec(scannable);
     if (markerMatch) {
-      // Looks like a vigiles marker but didn't parse as enforce —
-      // surface it so users catch typos like "vigile:enforce" or
-      // unquoted why.
+      // Looks like a vigiles marker but didn't parse — surface it so users
+      // catch typos like "vigile:enforce" or an unquoted why/command.
       const kind = markerMatch[1];
       if (kind === "enforce") {
         errors.push({
@@ -135,30 +179,47 @@ export function parseInlineRules(content: string): InlineParseResult {
             'Malformed vigiles:enforce — expected `<!-- vigiles:enforce <linter>/<rule> "<why>" -->`',
           raw: line.trim(),
         });
+      } else if (kind === "file") {
+        errors.push({
+          line: i + 1,
+          message:
+            "Malformed vigiles:file — expected `<!-- vigiles:file <path> -->`",
+          raw: line.trim(),
+        });
+      } else if (kind === "cmd") {
+        errors.push({
+          line: i + 1,
+          message:
+            'Malformed vigiles:cmd — expected `<!-- vigiles:cmd "<command>" -->`',
+          raw: line.trim(),
+        });
       } else if (kind !== "disable" && kind !== "ignore") {
         // `vigiles:disable ...` / `vigiles:ignore ...` are reserved for
         // future disable-comment support; don't complain about them.
         errors.push({
           line: i + 1,
-          message: `Unknown vigiles marker "${kind}". Only \`vigiles:enforce\` is supported.`,
+          message: `Unknown vigiles marker "${kind}". Only \`vigiles:enforce\`, \`vigiles:file\`, and \`vigiles:cmd\` are supported.`,
           raw: line.trim(),
         });
       }
     }
   }
 
-  return { rules, errors };
+  return { rules, files, commands, errors };
 }
 
 /**
- * True if the content contains at least one parseable vigiles:enforce
- * rule (ignoring fenced code blocks and malformed markers). Used by
- * `require-spec` validation to treat inline mode as spec-equivalent.
+ * True if the content contains at least one parseable vigiles inline marker —
+ * an `enforce` rule, a `file` reference, or a `cmd` reference (ignoring fenced
+ * code blocks and malformed markers). Used by `require-spec` validation to
+ * treat inline mode as spec-equivalent: a file that pins even a single path is
+ * meaningfully managed.
  *
  * Deliberately delegates to `parseInlineRules` so a loose prefix regex
  * can't satisfy require-spec with a malformed marker that produces no
- * real enforceable rule.
+ * real reference.
  */
 export function hasInlineRules(content: string): boolean {
-  return parseInlineRules(content).rules.length > 0;
+  const r = parseInlineRules(content);
+  return r.rules.length + r.files.length + r.commands.length > 0;
 }
