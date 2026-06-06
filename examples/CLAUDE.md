@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:f683550dbdfab721 compiled from examples/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:e26192d4141f5dfb compiled from examples/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -8,19 +8,19 @@ vigiles compiles `.spec.ts` files to instruction files (CLAUDE.md, AGENTS.md, or
 
 The linter cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-floating-promises")` verifies the rule exists AND is enabled in your linter config. Same for ESLint, Ruff, Clippy, Pylint, RuboCop, and Stylelint.
 
-`generate-types` is the second moat: scans all 6 linter APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
+`generate-types` is the second moat: scans all 7 catalog APIs, package.json, and project files to emit a `.d.ts` with type unions. The TS compiler then PROVES references are valid at authoring time — typos become type errors, not runtime surprises.
 
 ## Architecture
 
 Three rule types in specs: `enforce()` (delegated to external tool), `check()` (vigiles-owned filesystem assertion), `guidance()` (prose only).
 
-Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (6-linter cross-referencing engine), `src/generate-types.ts` (type generator).
+Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `src/linters.ts` (7-catalog cross-referencing engine: 6 linters + Cedar), `src/generate-types.ts` (type generator).
 
 ## Key Files
 
 - `src/spec.ts` — Type system and builder functions
 - `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash
-- `src/linters.ts` — Linter cross-referencing engine (6 linters)
+- `src/linters.ts` — Cross-referencing engine (6 linters + Cedar)
 - `src/generate-types.ts` — Type generator: project state → .d.ts
 - `src/cli.ts` — CLI: compile, check, init, generate-types, discover, adopt
 

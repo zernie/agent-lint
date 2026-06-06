@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:7eb870e2fffd06cb compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c93c95d0ed477ce9 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -159,7 +159,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 
 ### No Orphan Docs
 
-**Guidance only** — Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. See `src/orphans.ts`.
+**Enforced by:** `vigiles/orphan-docs`
+**Why:** Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/orphans.ts`, surfaced by `vigiles audit`.
 
 ### Recompile On Spec Change
 
