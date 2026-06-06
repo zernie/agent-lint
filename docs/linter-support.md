@@ -1,6 +1,6 @@
 # Linter Cross-Referencing
 
-vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against 6 linter APIs and checks config-enabled status.
+vigiles verifies that every `enforce()` rule in your spec actually exists and is enabled in your project. This is the core differentiator -- no other tool resolves rules against 7 catalog APIs and checks config-enabled status.
 
 ## How It Works
 
@@ -34,8 +34,49 @@ The reference format is `<linter>/<rule>` -- e.g., `eslint/no-console`, `ruff/F4
 | Clippy    | `PATH`         | CLI (`cargo clippy --explain <name>`)         | Parses `Cargo.toml` `[lints.clippy]` section          |
 | Pylint    | `PATH`         | CLI (`pylint --help-msg=<name>`)              | Runs `pylint --list-msgs-enabled`                     |
 | RuboCop   | `PATH`         | CLI (`rubocop --show-cops <name>`)            | Parses `Enabled: true/false` from output              |
+| Cedar     | Filesystem     | Scan `.cedar/` and `cedar/` for `@id("...")`  | Presence == enabled (no separate config layer)        |
 
-Node-based linters (ESLint, Stylelint) are resolved via `createRequire` from the project's `node_modules`. CLI-based linters (Ruff, Clippy, Pylint, RuboCop) must be available on `PATH`.
+Node-based linters (ESLint, Stylelint) are resolved via `createRequire` from the project's `node_modules`. CLI-based linters (Ruff, Clippy, Pylint, RuboCop) must be available on `PATH`. Cedar policies are read directly from `.cedar` files — no external tool required.
+
+## Cedar Policies
+
+Cedar is the policy language used by AWS Bedrock AgentCore (GA March 2026) and Vectimus to enforce deterministic constraints on agent tool calls at runtime. vigiles treats Cedar as a catalog of named rules the same way it treats ESLint — reference a policy by ID, vigiles verifies it exists in your project.
+
+```ts
+"shell-command-allowlist": enforce(
+  "cedar/shell-allowlist",
+  "Agents may only run npm test or npm build via shell.",
+),
+```
+
+Default search directories: `.cedar/` and `cedar/` at the project root. Each `.cedar` file may contain one or more policies. Resolution rules:
+
+1. **Annotated policies** (preferred). A policy ID is its `@id("...")` annotation:
+
+   ```
+   @id("shell-allowlist")
+   permit (
+     principal,
+     action == Action::"shell_execute",
+     resource
+   ) when {
+     resource.command in ["npm test", "npm run build"]
+   };
+   ```
+
+2. **Filename fallback.** If a `.cedar` file has no `@id` annotations but contains at least one `permit`/`forbid` statement, the filename (minus `.cedar`) becomes the policy ID. So `.cedar/legacy-rule.cedar` resolves as `cedar/legacy-rule`.
+
+Multiple policies per file are supported via annotations. Override the search path via `linters.cedar.rulesDir` in `vigiles.json`:
+
+```json
+{
+  "linters": {
+    "cedar": { "rulesDir": "policies/agent-core" }
+  }
+}
+```
+
+Cedar has no separate config layer the way ESLint does — a policy that exists in your bundle is, by definition, enabled. `checkLinterRule` returns `enabled: "enabled"` for any policy it finds, and surfaces edit-distance suggestions when you misspell a policy name.
 
 ## ESLint Plugin Support
 
@@ -98,7 +139,7 @@ Custom linters only support existence checks. Config-enabled status is always `"
 
 ## generate-types
 
-`vigiles generate-types` scans all 6 linter APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
+`vigiles generate-types` scans all 7 catalog APIs, `package.json`, and project files, then emits `.vigiles/generated.d.ts` with type unions derived from your actual project state.
 
 ```sh
 npx vigiles generate-types
@@ -136,14 +177,15 @@ declare module "vigiles/generated" {
 
 The TypeScript compiler then proves references are valid at authoring time. A typo like `enforce("eslint/no-consloe")` becomes a type error in your editor before you ever run `vigiles compile`. This shifts rule-reference validation from runtime to authoring time.
 
-Discovery methods per linter:
+Discovery methods per catalog:
 
-- **ESLint** -- loads flat config via `calculateConfigForFile`, collects rules with severity > 0
+- **ESLint** -- loads flat config via `calculateConfigForFile`, collects rules with severity > 0 (v9 and v10)
 - **Stylelint** -- loads config via `createLinter` + `getConfigForFile`, collects non-null rules
 - **Ruff** -- parses `ruff check --show-settings` for `linter.rules.enabled`
 - **Pylint** -- parses `pylint --list-msgs-enabled`, extracts both IDs (`C0114`) and symbolic names
 - **RuboCop** -- parses `rubocop --show-cops` output for cop names
 - **Clippy** -- reads `Cargo.toml` `[lints.clippy]` section, excludes rules set to `"allow"`
+- **Cedar** -- scans `.cedar/` and `cedar/` for files containing `@id("...")` annotations, with filename fallback for unannotated policies
 
 Project files default to `src/**/*` but can be configured via `fileGlobs`.
 

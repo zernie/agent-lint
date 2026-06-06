@@ -38,8 +38,10 @@ Three required pieces:
    are just paragraphs in the surrounding prose, so a `guidance` comment
    would be a tautology.
 2. `<linter>/<rule>` — the same reference format as `enforce()` in spec
-   mode. Supports all six linters (ESLint, Stylelint, Ruff, Clippy, Pylint,
-   RuboCop) and scoped plugin names (`eslint/@typescript-eslint/...`).
+   mode. Supports all seven catalogs (ESLint, Stylelint, Ruff, Clippy,
+   Pylint, RuboCop, Cedar), scoped plugin names
+   (`eslint/@typescript-eslint/...`), and the vigiles-internal namespace
+   (`vigiles/<rule>` for built-in checks like `vigiles/orphan-docs`).
 3. `"<why>"` — a simple double-quoted string. No newlines, no embedded
    quotes. If you need either, move to spec mode.
 

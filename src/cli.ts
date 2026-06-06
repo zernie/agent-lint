@@ -37,6 +37,7 @@ import { parseInlineRules } from "./inline.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
+import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -482,6 +483,7 @@ interface AuditReport {
   strengthenSuggestions: number;
   integrityErrors: number;
   coverageErrors: number;
+  orphanCount: number;
   files: string[];
 }
 
@@ -495,7 +497,7 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.coverageErrors > 0
   )
     return 2;
-  if (report.duplicatePairs > 0) return 1;
+  if (report.duplicatePairs > 0 || report.orphanCount > 0) return 1;
   // Guidance counts are informational, not failures
   return 0;
 }
@@ -673,6 +675,17 @@ async function audit(
     silent,
   );
 
+  // 7. Orphan docs check — find .md files under docs/ and research/ that
+  // no other markdown file references. Enforces the `vigiles/orphan-docs`
+  // built-in rule when declared in a spec.
+  if (!silent) console.log("\nOrphan docs check:\n");
+  const orphanReport = findOrphanDocs({ basePath: process.cwd() });
+  if (!silent) {
+    for (const line of formatOrphanReport(orphanReport).split("\n")) {
+      console.log(`  ${line}`);
+    }
+  }
+
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
@@ -684,6 +697,7 @@ async function audit(
     strengthenSuggestions: guidanceCount,
     integrityErrors,
     coverageErrors,
+    orphanCount: orphanReport.orphans.length,
     files,
   };
 
@@ -706,6 +720,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.inlineErrors)} inline errors`);
   if (report.duplicatePairs > 0)
     parts.push(`${String(report.duplicatePairs)} duplicates`);
+  if (report.orphanCount > 0)
+    parts.push(`${String(report.orphanCount)} orphan docs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);

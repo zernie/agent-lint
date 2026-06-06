@@ -656,6 +656,39 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Vigiles-internal assertion catalog
+//
+// The `vigiles/<id>` namespace lets specs declare mechanical checks that
+// vigiles itself runs (orphan docs, integrity, etc.) without delegating to
+// an external linter. Existence is verified at compile time against this
+// fixed catalog; the actual check runs at audit time.
+// ---------------------------------------------------------------------------
+
+const VIGILES_INTERNAL_RULES = new Set<string>([
+  "orphan-docs",
+]);
+
+/** @internal */ function tryVigilesInternal(
+  ctx: RuleContext,
+): LinterCheckResult | null {
+  if (ctx.linterName !== "vigiles") return null;
+  if (!VIGILES_INTERNAL_RULES.has(ctx.ruleName)) {
+    const suggestions = closestRuleNames(ctx.ruleName, VIGILES_INTERNAL_RULES);
+    const hint =
+      suggestions.length > 0
+        ? ` Did you mean: ${suggestions.map((s) => `"vigiles/${s}"`).join(", ")}?`
+        : "";
+    return makeResult(
+      ctx,
+      false,
+      "unknown",
+      `Vigiles-internal rule "${ctx.ruleName}" not in known catalog (${[...VIGILES_INTERNAL_RULES].join(", ")}).${hint}`,
+    );
+  }
+  return makeResult(ctx, true, "enabled");
+}
+
+// ---------------------------------------------------------------------------
 // Cedar policy resolution (filesystem-based — no Node API, no CLI required)
 //
 // Cedar policies live in .cedar files. A policy is identified by its
@@ -827,6 +860,7 @@ export function checkLinterRule(
   };
 
   return (
+    tryVigilesInternal(ctx) ??
     tryNodeResolver(ctx) ??
     tryScopedPlugin(ctx) ??
     tryCliCheck(ctx) ??
