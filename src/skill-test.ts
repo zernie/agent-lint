@@ -25,16 +25,15 @@ export type ModelFn = (prose: string) => string;
  * (the answer for the first key that is a case-insensitive substring of the
  * act's prose). Unmatched prose yields "".
  */
-export function scriptModel(answers: readonly string[]): ModelFn;
-export function scriptModel(map: Readonly<Record<string, string>>): ModelFn;
 export function scriptModel(
   spec: readonly string[] | Readonly<Record<string, string>>,
 ): ModelFn {
   if (Array.isArray(spec)) {
+    const answers: readonly string[] = spec;
     let i = 0;
-    return () => spec[Math.min(i++, spec.length - 1)] ?? "";
+    return () => answers[Math.min(i++, answers.length - 1)] ?? "";
   }
-  const entries = Object.entries(spec as Record<string, string>);
+  const entries = Object.entries(spec);
   return (prose) => {
     const p = prose.toLowerCase();
     for (const [k, v] of entries) if (p.includes(k.toLowerCase())) return v;
