@@ -280,3 +280,12 @@ A phased order that occupies the empty quadrant with the least risk by reusing w
 3. How much of the interpreter (`vigiles run-skill`) is worth building vs leaning on hooks?
 4. Does the headline become "verify (and drive) your skills"?
 5. Policy: `require-skill-spec` graduates a skill to structured form once it branches?
+
+## Implementation
+
+The user-facing reference for the built skill system — authoring (markdown / declarative /
+generator), gates & verification, the runtime + Stop-hook enforcement, and deterministic
+`vigiles/skill-test` — lives in `docs/skills.md`. Modules: `src/skill-runtime.ts` (gate
+ladder + Stop hook), `src/skill-driver.ts` (generator driver), `src/compile-generator.ts`
+(generator → SKILL.md), `src/skill-test.ts` (deterministic tests), `src/community-skills.ts`
+(ported real skills as a coverage proof), and the live `test/e2e` harness.
