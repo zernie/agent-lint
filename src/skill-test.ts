@@ -1,0 +1,83 @@
+/**
+ * vigiles — Skill testing: deterministic tests for a skill's action sequence.
+ *
+ * A thin wrapper over the generator driver (`driveSkill`) for use inside an
+ * ordinary `node:test` / Vitest `test()` — no custom runner, no DSL. You script
+ * the *model* (the non-deterministic part) and assert the deterministic spine:
+ * which gates ran, in what order, which branch was taken, whether the result
+ * gate blocked. The model's prose quality is never asserted — that's the
+ * probabilistic boundary; everything else is deterministic and checkable.
+ */
+
+import { driveSkill, type SkillProgram } from "./skill-driver.js";
+import type { Gate } from "./spec.js";
+
+function gateLabel(g: Gate): string {
+  if (g._ref === "cmd") return g.command;
+  if (g._ref === "role") return `project:${g.role}`;
+  return g.path;
+}
+
+export type ModelFn = (prose: string) => string;
+
+/**
+ * Script the mocked model. Pass an array (answers consumed in order) or a map
+ * (the answer for the first key that is a case-insensitive substring of the
+ * act's prose). Unmatched prose yields "".
+ */
+export function scriptModel(answers: readonly string[]): ModelFn;
+export function scriptModel(map: Readonly<Record<string, string>>): ModelFn;
+export function scriptModel(
+  spec: readonly string[] | Readonly<Record<string, string>>,
+): ModelFn {
+  if (Array.isArray(spec)) {
+    let i = 0;
+    return () => spec[Math.min(i++, spec.length - 1)] ?? "";
+  }
+  const entries = Object.entries(spec as Record<string, string>);
+  return (prose) => {
+    const p = prose.toLowerCase();
+    for (const [k, v] of entries) if (p.includes(k.toLowerCase())) return v;
+    return "";
+  };
+}
+
+export interface SkillRunResult {
+  /** Every gate passed and the skill reached its end. */
+  readonly ok: boolean;
+  /** Trace index of the gate that blocked, or null when all passed. */
+  readonly blockedAt: number | null;
+  /** Prose steps the model executed, with the scripted answer fed back in. */
+  readonly acts: readonly { prose: string; answer: string }[];
+  /** Gates that ran, in order, with their label and outcome. */
+  readonly gates: readonly { label: string; terminal: boolean; ok: boolean }[];
+}
+
+/**
+ * Drive a skill to completion (or first failed gate) with a scripted model and
+ * return a friendly summary to assert on with plain `assert`.
+ */
+export function runSkill(
+  program: SkillProgram,
+  opts: { cwd?: string; model?: ModelFn } = {},
+): SkillRunResult {
+  const report = driveSkill(
+    program,
+    opts.cwd ?? process.cwd(),
+    opts.model ?? (() => ""),
+  );
+  const acts: { prose: string; answer: string }[] = [];
+  const gates: { label: string; terminal: boolean; ok: boolean }[] = [];
+  for (const t of report.trace) {
+    if (t.effect.kind === "act") {
+      acts.push({ prose: t.effect.prose, answer: t.answer ?? "" });
+    } else {
+      gates.push({
+        label: gateLabel(t.effect.gate),
+        terminal: t.effect.kind === "result",
+        ok: t.outcome?.ok ?? false,
+      });
+    }
+  }
+  return { ok: report.ok, blockedAt: report.blockedAt, acts, gates };
+}
