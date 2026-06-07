@@ -1,90 +1,64 @@
+<!-- vigiles:sha256:851f5894148f63a3 compiled from skills/generate-rule/SKILL.md.spec.ts -->
+
 ---
+
 name: generate-rule
 description: Add a new enforce(), check(), or guidance() rule to an existing spec file
 disable-model-invocation: true
-argument-hint: <description of the rule to add>
----
+argument-hint: <rule>
 
-Add a new rule to an existing `CLAUDE.md.spec.ts` (or create one if it doesn't exist).
+---
 
 ## Arguments
 
-$ARGUMENTS — A natural language description of what the rule should enforce. Examples:
+- `$1` **rule** — natural-language description of what the rule should enforce, e.g. "no console.log in production code"
 
-- "no console.log in production code"
-- "every controller needs a test file"
-- "always use the custom logger instead of console"
-- "imports should go through barrel files"
-- "don't use moment.js, we're migrating to dayjs"
+## Steps
 
-## Instructions
+### Step 1
 
-### Step 1: Find the Spec File
+**Find the spec file.** Look for `CLAUDE.md.spec.ts` in the repo root. If it doesn't exist:
 
-Look for `CLAUDE.md.spec.ts` in the repo root. If it doesn't exist:
+- If there's a hand-written `CLAUDE.md`, suggest running the `migrate-to-spec` skill first.
+- If there's no `CLAUDE.md` either, suggest `npx vigiles init` to scaffold one.
 
-1. Check if there's a hand-written `CLAUDE.md` — if so, suggest running the `migrate-to-spec` skill first
-2. If no CLAUDE.md either, suggest running `npx vigiles init` to scaffold one
+### Step 2
 
-### Step 2: Classify the Rule
+**Classify the rule** from the description ($1):
 
-Based on the user's description, determine the rule type:
+- **enforce()** — if a linter rule can back it. Check the project's linter configs (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint) for a matching rule; also consider an architectural tool (ast-grep, Dependency Cruiser, Steiger). If uncertain whether a rule exists, **ask the user** rather than guessing.
+- **check()** — if it's a filesystem structural convention ("every X needs a Y"). Only for file-pairing; never for code content.
+- **guidance()** — if it can't be mechanically enforced (subjective conventions, process rules, migration context).
 
-**enforce()** — if a linter rule can back it:
+### Step 3
 
-1. Check the project's linter configs (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint)
-2. Search for an existing rule that matches the convention
-3. Verify the rule is enabled: `npx vigiles check` will confirm during compilation
-4. Also check if an architectural tool (ast-grep, Dependency Cruiser, Steiger) has a relevant rule
+**Generate the rule.** Create an entry with a kebab-case ID derived from the description. Examples:
 
-**check()** — if it's a filesystem structural convention:
+    "no-console": enforce("eslint/no-console", "Use structured logger for observability."),
 
-- "every X needs a Y" → `check(every("glob").has("pattern"), "why")`
-- Only use for file pairing patterns. Don't try to check code content — that's a linter's job.
+    "controller-tests": check(
+      every("src/**/*.controller.ts").has("{name}.controller.test.ts"),
+      "Every controller must have a co-located test file.",
+    ),
 
-**guidance()** — if it can't be mechanically enforced:
+    "research-before-implementing": guidance(
+      "Google unfamiliar APIs before implementing.",
+    ),
 
-- Subjective conventions ("prefer composition over inheritance")
-- Process rules ("ask before deleting files")
-- Context ("we're migrating from X to Y")
+### Step 4
 
-If uncertain whether a linter rule exists, **ask the user** rather than guessing.
+**Add it to the spec.** Read the existing spec file and add the new rule to the `rules` object, preserving alphabetical ordering if the existing rules are alphabetical. Import any new builders needed (e.g. `check` and `every` for the first `check()` rule).
 
-### Step 3: Generate the Rule
+### Step 5
 
-Create a rule entry in the spec. Use kebab-case for the rule ID derived from the description.
+**Compile and verify.** Build and recompile; if compilation fails (e.g. the linter rule doesn't exist), report the error and suggest alternatives. Show the user the updated spec and the compiled `CLAUDE.md` diff.
 
-Example outputs:
+**Gate** — run `npm run build` (retry up to 2×); do not proceed until it passes.
 
-```typescript
-// enforce — backed by ESLint
-"no-console": enforce("eslint/no-console", "Use structured logger for observability."),
+<!-- vigiles:gate "npm run build" retry:2 -->
 
-// check — filesystem assertion
-"controller-tests": check(
-  every("src/**/*.controller.ts").has("{name}.controller.test.ts"),
-  "Every controller must have a co-located test file.",
-),
+## Result
 
-// guidance — cannot be mechanically enforced
-"research-before-implementing": guidance(
-  "Google unfamiliar APIs before implementing. Check if a well-maintained library exists.",
-),
-```
+This skill is complete when `npm run build` passes.
 
-### Step 4: Add to Spec
-
-Read the existing spec file and add the new rule to the `rules` object. Maintain alphabetical ordering if the existing rules are alphabetical, otherwise append at the end.
-
-Import any new builders needed (e.g., `check` and `every` if this is the first `check()` rule).
-
-### Step 5: Compile and Verify
-
-```bash
-npm run build
-npx vigiles compile
-```
-
-If compilation fails (e.g., linter rule doesn't exist), report the error and suggest alternatives.
-
-Show the user the updated spec and the compiled CLAUDE.md diff.
+<!-- vigiles:result "npm run build" -->
