@@ -454,6 +454,13 @@ export interface SkillSpec {
   readonly result?: Gate;
   /** Freeform instruction body (linear/unstructured skills). Use this OR `steps`. */
   readonly body?: string | InstructionFragment[];
+  /**
+   * Max lines for an inline fenced code block before compilation errors,
+   * forcing the script into a file referenced via `file()` (default 20).
+   * Keeps big scripts out of the skill body (token budget + progressive
+   * disclosure). Set 0 to disable.
+   */
+  readonly maxInlineCodeLines?: number;
 }
 
 /**
