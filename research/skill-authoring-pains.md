@@ -8,9 +8,9 @@
 ## Why this exists
 
 Working hypothesis from the team: for **CLAUDE.md / AGENTS.md** a typed spec is hard
-to justify — these files are essentially *documentation* (passive context). For
+to justify — these files are essentially _documentation_ (passive context). For
 **SKILL.md** a verifiable contract may genuinely earn its place, because a skill is a
-*procedure*: it wraps real scripts, commands, and tools and produces a result. To test
+_procedure_: it wraps real scripts, commands, and tools and produces a result. To test
 that, we ran three parallel research sweeps on the real pains of authoring agent skills
 (Claude Code Skills / Anthropic Agent Skills and the now-open `agentskills.io` standard,
 adopted by Codex, Cursor, Copilot, Gemini CLI).
@@ -23,6 +23,7 @@ blogs and self-reported audits, not controlled studies — treat as directional.
 ## Findings
 
 ### Structure & volume
+
 - **Triggering is non-deterministic.** A skill activates only if Claude semantically
   matches the free-text `description`; practitioners report wildly phrasing-dependent
   activation (passive descriptions 37–87%, directive "ALWAYS invoke when…" 94–100%).
@@ -38,21 +39,23 @@ blogs and self-reported audits, not controlled studies — treat as directional.
   details in one-level-deep reference files loaded on demand. Authors err both ways —
   bloated (wastes context) or too terse. (anthropic.com/engineering; best-practices)
 
-### Testing, reliability & drift  ← vigiles's wheelhouse
+### Testing, reliability & drift ← vigiles's wheelhouse
+
 - **Bundled-resource / path breakage fails silently.** Relative script paths fail on first
   run; metadata gets injected while SKILL.md isn't mounted, so "Claude is instructed to use
   skills that literally don't exist." (#11011, #26254)
-- **Referenced refs rot silently.** One practitioner found *59 broken references in a
-  192-file setup*: "Claude reads the instruction, gets nothing, and continues silently."
+- **Referenced refs rot silently.** One practitioner found _59 broken references in a
+  192-file setup_: "Claude reads the instruction, gets nothing, and continues silently."
   (buildtolaunch substack)
-- **Quality rot at scale.** Community audit: *73% of 214 skills scored < 60/100, most
-  failed silently, no error message.* Snyk: 1,467 of 3,984 public skills flawed, 76 with
+- **Quality rot at scale.** Community audit: _73% of 214 skills scored < 60/100, most
+  failed silently, no error message._ Snyk: 1,467 of 3,984 public skills flawed, 76 with
   malicious payloads — nobody verifies skill internals. (dev.to audit; Anthropic eng blog)
 - **Official evals don't cover existence.** Anthropic's `skill-creator` eval system tests
   **triggering and output quality**, plus regression detection across model updates — but
   **not** whether bundled scripts/commands/paths actually resolve. (claude.com blog)
 
 ### Distribution & maintenance
+
 - **No auto-update anywhere.** Skills/plugins update only by reinstall / `git pull` / hand
   edit, then session restart. (agensi; code.claude.com plugin-marketplaces)
 - **Skill drift / sprawl.** "Silent divergence when you create and edit skills across
@@ -64,7 +67,7 @@ blogs and self-reported audits, not controlled studies — treat as directional.
 ## The documentation-vs-procedure distinction is real — and Anthropic draws it
 
 - Claude Code docs: create a skill **"when a section of CLAUDE.md has grown into a
-  *procedure rather than a fact*."** (code.claude.com/skills)
+  _procedure rather than a fact_."** (code.claude.com/skills)
 - Anthropic engineering: skills are **"capabilities, not documentation… procedural
   knowledge."**
 - Skills can run executable scripts and restrict tools (`allowed-tools`); **"neither
@@ -80,9 +83,9 @@ documentation; SKILL.md = procedure with a runnable, verifiable surface.
 skill silently lies to the agent — is vigiles's core competency (cross-referencing
 engine), and it is unclaimed.** Existing skill linters (`agent-skill-linter`,
 `skill-validator`, SkillCheck, `agent-skills-lint`) are **schema/regex-only**: frontmatter
-shape, required fields, body length. Research conclusion, verbatim: *"none cross-references
+shape, required fields, body length. Research conclusion, verbatim: _"none cross-references
 the wrapped scripts/linter-rules to prove they're real and enabled. That cross-referencing
-gap is unclaimed."*
+gap is unclaimed."_
 
 This suggests shifting the center of gravity:
 
@@ -90,22 +93,22 @@ This suggests shifting the center of gravity:
   prose), markdown-first, spec optional. (Matches the markdown-mode + file/cmd direction
   already in flight.)
 - **SKILL.md = procedure.** Here a stricter verified contract is justified. vigiles's
-  cleanest, least-contested value: *"verify the commands / scripts / tools / rules your
-  skill references actually exist and are enabled."* Beyond file/cmd this means
+  cleanest, least-contested value: _"verify the commands / scripts / tools / rules your
+  skill references actually exist and are enabled."_ Beyond file/cmd this means
   skill-specific checks: bundled `scripts/` resolution, `allowed-tools` validity, the
   frontmatter contract (name/description constraints), reference-file resolution.
 
 **Refinement to "skills need a spec":** consistent with the rest of our thinking
-(edit-time TS proof is irrelevant when an agent authors), *"spec for skills"* should mean a
+(edit-time TS proof is irrelevant when an agent authors), _"spec for skills"_ should mean a
 **verified contract**, not necessarily a `.spec.ts`. The value is deterministic
-verification — which works in markdown-mode on the SKILL.md itself *and* in the typed
+verification — which works in markdown-mode on the SKILL.md itself _and_ in the typed
 `skill()` spec. Same level ladder; the asymmetry is in policy: **`require-spec` mild for
 CLAUDE.md, strict for SKILL.md.**
 
 ## Open questions (for continued discussion before changing scope)
 
 1. Does the headline become "verify your skills" rather than "compile your CLAUDE.md"?
-2. What exactly does a skill *contract* verify beyond file/cmd — `allowed-tools`, bundled
+2. What exactly does a skill _contract_ verify beyond file/cmd — `allowed-tools`, bundled
    `scripts/` paths, the name/description frontmatter rules, reference-file resolution?
 3. Triggering quality (the biggest activation pain) is largely prompt-quality, not
    deterministic verification — is that in scope, out of scope, or a `guidance()`-style

@@ -13,6 +13,9 @@ import { sha256short, assertNever } from "./hash.js";
 import type {
   ClaudeSpec,
   SkillSpec,
+  SkillInput,
+  SkillStep,
+  Gate,
   Rule,
   InstructionFragment,
 } from "./spec.js";
@@ -544,6 +547,75 @@ function renderBody(body: string | InstructionFragment[]): string {
   return body.map(renderFragment).join("");
 }
 
+/** Derive the `argument-hint` frontmatter value from typed inputs. */
+function renderArgumentHint(inputs: readonly SkillInput[]): string {
+  return inputs
+    .map((i) => (i.required === false ? `[<${i.name}>]` : `<${i.name}>`))
+    .join(" ");
+}
+
+/** Render the `## Arguments` section from typed inputs. */
+function renderArguments(inputs: readonly SkillInput[]): string {
+  const lines = ["## Arguments", ""];
+  inputs.forEach((i, idx) => {
+    const opt = i.required === false ? " _(optional)_" : "";
+    lines.push(`- \`$${String(idx + 1)}\` **${i.name}**${opt} — ${i.hint}`);
+  });
+  return lines.join("\n");
+}
+
+/** The human prose + machine-readable marker for a gate. */
+function renderGate(
+  gate: Gate,
+  retry?: number,
+): { prose: string; marker: string } {
+  if (gate._ref === "cmd") {
+    const r = retry && retry > 1 ? ` retry:${String(retry)}` : "";
+    const proseR = retry && retry > 1 ? ` (retry up to ${String(retry)}×)` : "";
+    return {
+      prose: `**Gate** — run \`${gate.command}\`${proseR}; do not proceed until it passes.`,
+      marker: `<!-- vigiles:gate "${gate.command}"${r} -->`,
+    };
+  }
+  return {
+    prose: `**Gate** — \`${gate.path}\` must exist before proceeding.`,
+    marker: `<!-- vigiles:gate file:${gate.path} -->`,
+  };
+}
+
+/** Render the `## Steps` checklist with a gate per step. */
+function renderSteps(steps: readonly SkillStep[]): string {
+  const out = ["## Steps", ""];
+  steps.forEach((s, idx) => {
+    out.push(`### Step ${String(idx + 1)}`, "");
+    out.push(renderBody(s.do).trim(), "");
+    if (s.gate) {
+      const g = renderGate(s.gate, s.retry);
+      out.push(g.prose, "", g.marker, "");
+    }
+  });
+  return out.join("\n").trimEnd();
+}
+
+/** Render the `## Result` postcondition gate. */
+function renderResult(result: Gate): string {
+  const target =
+    result._ref === "cmd"
+      ? `\`${result.command}\` passes`
+      : `\`${result.path}\` exists`;
+  const marker =
+    result._ref === "cmd"
+      ? `<!-- vigiles:result "${result.command}" -->`
+      : `<!-- vigiles:result file:${result.path} -->`;
+  return [
+    "## Result",
+    "",
+    `This skill is complete when ${target}.`,
+    "",
+    marker,
+  ].join("\n");
+}
+
 export interface CompileSkillResult {
   markdown: string;
   errors: CompileError[];
@@ -576,10 +648,16 @@ export function compileSkill(
     }
   }
 
-  // Validate refs in body
-  if (Array.isArray(spec.body)) {
-    errors.push(...validateRefs(spec.body, basePath));
+  // Validate every reference the skill carries: body prose, step prose,
+  // each step's gate, and the result gate.
+  const refs: InstructionFragment[] = [];
+  if (Array.isArray(spec.body)) refs.push(...spec.body);
+  for (const s of spec.steps ?? []) {
+    if (Array.isArray(s.do)) refs.push(...s.do);
+    if (s.gate) refs.push(s.gate);
   }
+  if (spec.result) refs.push(spec.result);
+  errors.push(...validateRefs(refs, basePath));
 
   // Build frontmatter (blank lines after opening/before closing --- for prettier)
   const fm: string[] = ["---", ""];
@@ -588,12 +666,30 @@ export function compileSkill(
   if (spec.disableModelInvocation !== undefined) {
     fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
   }
-  if (spec.argumentHint) {
-    fm.push(`argument-hint: ${spec.argumentHint}`);
+  const argHint =
+    spec.inputs && spec.inputs.length > 0
+      ? renderArgumentHint(spec.inputs)
+      : spec.argumentHint;
+  if (argHint) {
+    fm.push(`argument-hint: ${argHint}`);
   }
   fm.push("", "---");
 
-  const body = renderBody(spec.body);
+  // Body: a structured Arguments/Steps/Result layout when steps are declared,
+  // otherwise the freeform body. Arguments render in both modes.
+  const sections: string[] = [];
+  if (spec.inputs && spec.inputs.length > 0) {
+    sections.push(renderArguments(spec.inputs));
+  }
+  if (spec.steps && spec.steps.length > 0) {
+    sections.push(renderSteps(spec.steps));
+  } else if (spec.body !== undefined) {
+    sections.push(renderBody(spec.body).trim());
+  }
+  if (spec.result) {
+    sections.push(renderResult(spec.result));
+  }
+  const body = sections.join("\n\n");
   const content = fm.join("\n") + "\n\n" + body.trim() + "\n";
   const markdown = addHash(content, specFile);
 
