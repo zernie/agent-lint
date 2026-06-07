@@ -16,7 +16,7 @@ export default skill({
   inputs: [
     input(
       "rule",
-      "natural-language description of what the rule should enforce, e.g. \"no console.log in production code\"",
+      'natural-language description of what the rule should enforce, e.g. "no console.log in production code"',
     ),
   ],
 
@@ -45,7 +45,9 @@ export default skill({
       "Google unfamiliar APIs before implementing.",
     ),`),
 
-    step(`**Add it to the spec.** Read the existing spec file and add the new rule to the \`rules\` object, preserving alphabetical ordering if the existing rules are alphabetical. Import any new builders needed (e.g. \`check\` and \`every\` for the first \`check()\` rule).`),
+    step(
+      `**Add it to the spec.** Read the existing spec file and add the new rule to the \`rules\` object, preserving alphabetical ordering if the existing rules are alphabetical. Import any new builders needed (e.g. \`check\` and \`every\` for the first \`check()\` rule).`,
+    ),
 
     step(
       `**Compile and verify.** Build and recompile; if compilation fails (e.g. the linter rule doesn't exist), report the error and suggest alternatives. Show the user the updated spec and the compiled \`CLAUDE.md\` diff.`,
