@@ -111,3 +111,9 @@ CLAUDE.md, strict for SKILL.md.**
    deterministic verification — is that in scope, out of scope, or a `guidance()`-style
    advisory check?
 4. Does `require-skill-spec` get strengthened while `require-spec` (CLAUDE.md) relaxes?
+
+## See also
+
+- `research/skill-as-pipeline.md` — the concrete model that came out of these pains: a skill as
+  a harness-driven control-flow graph with deterministic gates (Railway out, monads in), and
+  the resulting markdown↔spec boundary (linear → markdown, branching → spec).
