@@ -5,8 +5,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { cmd } from "./spec.js";
+import { cmd, file, project } from "./spec.js";
 import {
   driveSkill,
   act,
@@ -77,4 +80,61 @@ test("driveSkill reaches the result gate when all gates pass", () => {
   const report = driveSkill(prog, process.cwd(), () => "");
   assert.equal(report.ok, true);
   assert.equal(report.trace.at(-1)?.effect.kind, "result");
+});
+
+test("driveSkill records the model answer and gate outcome in the trace", () => {
+  const prog: SkillProgram = function* () {
+    const kind = yield act("Classify the rule");
+    if (kind === "enforce") yield checkpoint(cmd("true"));
+    yield finish(cmd("true"));
+  };
+  const report = driveSkill(prog, process.cwd(), () => "enforce");
+  // the act's answer is threaded in AND recorded
+  assert.equal(report.trace[0].effect.kind, "act");
+  assert.equal(report.trace[0].answer, "enforce");
+  // the enforce-branch gate ran and its outcome is attached
+  assert.equal(report.trace[1].effect.kind, "gate");
+  assert.equal(report.trace[1].outcome?.ok, true);
+});
+
+test("driveSkill blocks at a failing result gate (not just step gates)", () => {
+  const prog: SkillProgram = function* () {
+    yield act("do");
+    yield finish(cmd("false"));
+  };
+  const report = driveSkill(prog, process.cwd(), () => "");
+  assert.equal(report.ok, false);
+  assert.equal(report.blockedAt, 1);
+  assert.equal(report.trace.at(-1)?.effect.kind, "result");
+  assert.equal(report.trace.at(-1)?.outcome?.ok, false);
+});
+
+test("driveSkill runs non-cmd gates (file, role) through the converter", () => {
+  // file gate: package.json exists at the repo root → passes.
+  const fileProg: SkillProgram = function* () {
+    yield checkpoint(file("package.json"));
+    yield finish(file("package.json"));
+  };
+  const fileReport = driveSkill(fileProg, process.cwd(), () => "");
+  assert.equal(fileReport.ok, true);
+  assert.equal(fileReport.trace[0].outcome?.ok, true);
+
+  // role gate in a project with no detectable command → fails (not silent pass).
+  const tmp = mkdtempSync(join(tmpdir(), "vigiles-drv-"));
+  const roleProg: SkillProgram = function* () {
+    yield finish(project("test"));
+  };
+  const roleReport = driveSkill(roleProg, tmp, () => "");
+  assert.equal(roleReport.ok, false);
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+test("driveSkill handles a degenerate program (result only)", () => {
+  const prog: SkillProgram = function* () {
+    yield finish(cmd("true"));
+  };
+  const report = driveSkill(prog, process.cwd(), () => "");
+  assert.equal(report.ok, true);
+  assert.equal(report.trace.length, 1);
+  assert.equal(report.trace[0].effect.kind, "result");
 });
