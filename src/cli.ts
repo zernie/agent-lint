@@ -36,6 +36,7 @@ import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
+import { parseSkillGates, runSkillGates } from "./skill-runtime.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
@@ -1736,6 +1737,85 @@ function printUsage(command: string | undefined): void {
 // Main
 // ---------------------------------------------------------------------------
 
+/**
+ * Emit GitHub Actions annotations for an audit report. Skipped when --json or
+ * --summary is active — those modes promise clean machine-readable stdout, and
+ * ::error/::warning lines would contaminate output parsed as JSON.
+ */
+function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
+  const structuredOutput =
+    flags.includes("--json") || flags.includes("--summary");
+  if (!isGitHubActions() || structuredOutput) return;
+  if (report.hashErrors > 0) {
+    ghAnnotate(
+      "error",
+      `${String(report.hashErrors)} compiled file(s) with stale hash — run vigiles compile`,
+    );
+  }
+  if (report.validationErrors > 0) {
+    ghAnnotate(
+      "error",
+      `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
+    );
+  }
+  if (report.duplicatePairs > 0) {
+    ghAnnotate(
+      "warning",
+      `${String(report.duplicatePairs)} near-duplicate rule pair(s) detected — consider merging`,
+    );
+  }
+}
+
+/**
+ * Run a compiled skill's deterministic gate ladder: execute each step gate in
+ * order (short-circuiting on the first failure), then the result gate. This is
+ * the v0 runtime — it enforces the `vigiles:gate`/`vigiles:result` markers a
+ * compiled SKILL.md carries. It does not yet drive the model through the prose
+ * steps (that needs a live harness).
+ */
+function runSkillCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles run-skill <SKILL.md>");
+    process.exit(2);
+  }
+  const path = resolve(process.cwd(), target);
+  if (!existsSync(path)) {
+    console.error(`Not found: ${target}`);
+    process.exit(2);
+  }
+  const gates = parseSkillGates(readFileSync(path, "utf-8"));
+  if (gates.steps.length === 0 && !gates.result) {
+    console.log(`No vigiles:gate / vigiles:result markers in ${target}.`);
+    return;
+  }
+  console.log(`Running gate ladder for ${target}:\n`);
+  const report = runSkillGates(gates, process.cwd());
+  for (const r of report.results) {
+    const label = r.at === "result" ? "result" : `step ${String(r.at)}`;
+    const g =
+      r.gate.kind === "cmd" ? `\`${r.gate.command}\`` : `${r.gate.path} exists`;
+    console.log(`  ${r.ok ? "✓" : "✗"} ${label} — ${g}`);
+    if (!r.ok && r.output) {
+      console.log(
+        r.output
+          .split("\n")
+          .map((l) => `      ${l}`)
+          .join("\n"),
+      );
+    }
+  }
+  if (report.ok) {
+    console.log("\n✓ All gates passed.");
+  } else {
+    const where =
+      report.blockedAt === "result"
+        ? "the result gate"
+        : `step ${String(report.blockedAt)}`;
+    console.log(`\n✗ Blocked at ${where} — fix it before the skill is done.`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -1781,33 +1861,8 @@ async function main(): Promise<void> {
       // audit = verify + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
+      annotateAuditForGitHub(report, flags);
       const exitCode = auditExitCode(report);
-      // Skip GH annotations when --json or --summary is active —
-      // those modes promise clean machine-readable stdout, and
-      // ::error/::warning lines would contaminate the output for
-      // callers parsing it as JSON.
-      const structuredOutput =
-        flags.includes("--json") || flags.includes("--summary");
-      if (isGitHubActions() && !structuredOutput) {
-        if (report.hashErrors > 0) {
-          ghAnnotate(
-            "error",
-            `${String(report.hashErrors)} compiled file(s) with stale hash — run vigiles compile`,
-          );
-        }
-        if (report.validationErrors > 0) {
-          ghAnnotate(
-            "error",
-            `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
-          );
-        }
-        if (report.duplicatePairs > 0) {
-          ghAnnotate(
-            "warning",
-            `${String(report.duplicatePairs)} near-duplicate rule pair(s) detected — consider merging`,
-          );
-        }
-      }
       if (exitCode !== 0) {
         process.exit(exitCode);
       }
@@ -1822,6 +1877,10 @@ async function main(): Promise<void> {
 
     case "generate-schema":
       handleGenerateSchema(args, restArgs);
+      break;
+
+    case "run-skill":
+      runSkillCommand(restArgs[0]);
       break;
 
     default:
