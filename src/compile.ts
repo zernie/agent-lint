@@ -639,6 +639,57 @@ function renderResult(result: Gate): string {
   ].join("\n");
 }
 
+/** Gather every reference a skill carries that needs author-time verification. */
+function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
+  const refs: InstructionFragment[] = [];
+  if (Array.isArray(spec.body)) refs.push(...spec.body);
+  for (const s of spec.steps ?? []) {
+    if (Array.isArray(s.do)) refs.push(...s.do);
+    // Role gates resolve per host project at run time — nothing to verify here.
+    if (s.gate && s.gate._ref !== "role") refs.push(s.gate);
+  }
+  if (spec.result && spec.result._ref !== "role") refs.push(spec.result);
+  return refs;
+}
+
+/** Build the SKILL.md YAML frontmatter block. */
+function renderSkillFrontmatter(spec: SkillSpec): string {
+  const fm = [
+    "---",
+    "",
+    `name: ${spec.name}`,
+    `description: ${spec.description}`,
+  ];
+  if (spec.disableModelInvocation !== undefined) {
+    fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
+  }
+  const argHint =
+    spec.inputs && spec.inputs.length > 0
+      ? renderArgumentHint(spec.inputs)
+      : spec.argumentHint;
+  if (argHint) fm.push(`argument-hint: ${argHint}`);
+  fm.push("", "---");
+  return fm.join("\n");
+}
+
+/**
+ * Compose the body: Arguments, then the knowledge body (reference prose), then
+ * the gated Steps, then the Result. body + steps compose — a skill can carry
+ * both a rich reference body and a verified procedure.
+ */
+function renderSkillSections(spec: SkillSpec): string {
+  const sections: string[] = [];
+  if (spec.inputs && spec.inputs.length > 0) {
+    sections.push(renderArguments(spec.inputs));
+  }
+  if (spec.body !== undefined) sections.push(renderBody(spec.body).trim());
+  if (spec.steps && spec.steps.length > 0) {
+    sections.push(renderSteps(spec.steps));
+  }
+  if (spec.result) sections.push(renderResult(spec.result));
+  return sections.join("\n\n");
+}
+
 export interface CompileSkillResult {
   markdown: string;
   errors: CompileError[];
@@ -671,58 +722,14 @@ export function compileSkill(
     }
   }
 
-  // Validate every reference the skill carries: body prose, step prose,
-  // each step's gate, and the result gate.
-  const refs: InstructionFragment[] = [];
-  if (Array.isArray(spec.body)) refs.push(...spec.body);
-  for (const s of spec.steps ?? []) {
-    if (Array.isArray(s.do)) refs.push(...s.do);
-    // Role gates resolve per host project at run time, so they carry no repo
-    // reference to verify here; only cmd/file gates are checked.
-    if (s.gate && s.gate._ref !== "role") refs.push(s.gate);
-  }
-  if (spec.result && spec.result._ref !== "role") refs.push(spec.result);
-  errors.push(...validateRefs(refs, basePath));
+  errors.push(...validateRefs(collectSkillRefs(spec), basePath));
 
-  // Build frontmatter (blank lines after opening/before closing --- for prettier)
-  const fm: string[] = ["---", ""];
-  fm.push(`name: ${spec.name}`);
-  fm.push(`description: ${spec.description}`);
-  if (spec.disableModelInvocation !== undefined) {
-    fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
-  }
-  const argHint =
-    spec.inputs && spec.inputs.length > 0
-      ? renderArgumentHint(spec.inputs)
-      : spec.argumentHint;
-  if (argHint) {
-    fm.push(`argument-hint: ${argHint}`);
-  }
-  fm.push("", "---");
-
-  // Body: a structured Arguments/Steps/Result layout when steps are declared,
-  // otherwise the freeform body. Arguments render in both modes.
-  // Arguments, then the knowledge body (reference prose), then the gated
-  // Steps, then the Result. body + steps now compose: a skill can carry both a
-  // rich reference body and a verified procedure.
-  const sections: string[] = [];
-  if (spec.inputs && spec.inputs.length > 0) {
-    sections.push(renderArguments(spec.inputs));
-  }
-  if (spec.body !== undefined) {
-    sections.push(renderBody(spec.body).trim());
-  }
-  if (spec.steps && spec.steps.length > 0) {
-    sections.push(renderSteps(spec.steps));
-  }
-  if (spec.result) {
-    sections.push(renderResult(spec.result));
-  }
-  const body = sections.join("\n\n");
-  const content = fm.join("\n") + "\n\n" + body.trim() + "\n";
-  const markdown = addHash(content, specFile);
-
-  return { markdown, errors };
+  const content =
+    renderSkillFrontmatter(spec) +
+    "\n\n" +
+    renderSkillSections(spec).trim() +
+    "\n";
+  return { markdown: addHash(content, specFile), errors };
 }
 
 // ---------------------------------------------------------------------------
