@@ -5,7 +5,7 @@
  * and the result are closed by a deterministic gate the harness can run.
  * `vigiles compile` verifies the gate references at author time.
  */
-import { skill, step, input, cmd } from "../../src/spec.js";
+import { skill, step, input, project } from "../../src/spec.js";
 
 export default skill({
   name: "generate-rule",
@@ -51,10 +51,12 @@ export default skill({
 
     step(
       `**Compile and verify.** Build and recompile; if compilation fails (e.g. the linter rule doesn't exist), report the error and suggest alternatives. Show the user the updated spec and the compiled \`CLAUDE.md\` diff.`,
-      { gate: cmd("npm run build"), retry: 2 },
+      { gate: project("build"), retry: 2 },
     ),
   ],
 
   // Done only when the project builds (the new rule compiles cleanly).
-  result: cmd("npm run build"),
+  // `project("build")` resolves to the *host* project's build command, so the
+  // skill stays portable across repos (npm / cargo / go / …).
+  result: project("build"),
 });

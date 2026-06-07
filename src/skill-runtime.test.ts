@@ -12,6 +12,7 @@ import {
   parseSkillGates,
   runGate,
   runSkillGates,
+  detectProjectCommand,
   setActiveSkill,
   clearActiveSkill,
   readActiveSkill,
@@ -102,6 +103,50 @@ test("runSkillGates runs the result gate when all steps pass", () => {
   assert.equal(report.blockedAt, null);
   assert.equal(report.results.length, 2);
   assert.equal(report.results[1].at, "result");
+});
+
+// --- Project-role gates (cross-repo portability) ---
+
+test("parseSkillGates parses role gates", () => {
+  const g = parseSkillGates(
+    `### Step 1\n<!-- vigiles:gate role:test retry:2 -->\n\n## Result\n<!-- vigiles:result role:build -->\n`,
+  );
+  assert.deepEqual(g.steps[0].gate, { kind: "role", role: "test", retry: 2 });
+  assert.deepEqual(g.result, { kind: "role", role: "build", retry: 1 });
+});
+
+test("detectProjectCommand resolves a role to the host ecosystem's command", () => {
+  const js = mkdtempSync(join(tmpdir(), "vigiles-js-"));
+  writeFileSync(
+    join(js, "package.json"),
+    JSON.stringify({ scripts: { test: "vitest", build: "tsc" } }),
+  );
+  assert.equal(detectProjectCommand("test", js), "npm test");
+  assert.equal(detectProjectCommand("build", js), "npm run build");
+  assert.equal(detectProjectCommand("lint", js), null); // no lint script
+  rmSync(js, { recursive: true, force: true });
+
+  const py = mkdtempSync(join(tmpdir(), "vigiles-py-"));
+  writeFileSync(join(py, "pyproject.toml"), "[tool.pytest.ini_options]\n");
+  assert.equal(detectProjectCommand("test", py), "pytest");
+  rmSync(py, { recursive: true, force: true });
+
+  const rs = mkdtempSync(join(tmpdir(), "vigiles-rs-"));
+  writeFileSync(join(rs, "Cargo.toml"), "[package]\n");
+  assert.equal(detectProjectCommand("test", rs), "cargo test");
+  rmSync(rs, { recursive: true, force: true });
+
+  const empty = mkdtempSync(join(tmpdir(), "vigiles-empty-"));
+  assert.equal(detectProjectCommand("test", empty), null);
+  rmSync(empty, { recursive: true, force: true });
+});
+
+test("runGate role fails (not silently passes) when no command is detected", () => {
+  const empty = mkdtempSync(join(tmpdir(), "vigiles-norole-"));
+  const r = runGate({ kind: "role", role: "test", retry: 1 }, empty);
+  assert.equal(r.ok, false);
+  assert.match(r.output, /No test command detected/);
+  rmSync(empty, { recursive: true, force: true });
 });
 
 // --- Stop-hook enforcement ---

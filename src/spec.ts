@@ -361,12 +361,31 @@ export function claude(spec: ClaudeSpecInput): ClaudeSpec {
 // ---------------------------------------------------------------------------
 
 /**
- * A deterministic gate on a skill step or its final result. A gate is a
- * verified reference — a command (exit 0) or a file (must exist) — that the
- * harness can run to decide whether the step succeeded. The compiler verifies
- * the reference resolves at author time; the runtime (future) executes it.
+ * A deterministic gate on a skill step or its final result. A gate is one of:
+ * a command (exit 0), a file (must exist), or a *project role* that resolves to
+ * the host project's real command at run time. cmd/file gates are verified
+ * against the repo at author time; role gates are portable — a skill that runs
+ * in other repos should prefer `project("test")` over a hard-coded `npm test`.
  */
-export type Gate = CmdRef | FileRef;
+export type Gate = CmdRef | FileRef | RoleGate;
+
+/** Project command roles, resolved per host project at run time. */
+export type ProjectRole = "test" | "build" | "lint";
+
+/** A portable gate that resolves to the host project's command for a role. */
+export interface RoleGate {
+  readonly _ref: "role";
+  readonly role: ProjectRole;
+}
+
+/**
+ * A portable gate that resolves to the host project's command for a role
+ * (e.g. `project("test")` → `npm test` / `pytest` / `cargo test`). Use this
+ * in skills meant to run across projects, instead of hard-coding a command.
+ */
+export function project(role: ProjectRole): RoleGate {
+  return { _ref: "role", role };
+}
 
 /**
  * A declared skill input. Compiles to the `argument-hint` frontmatter and a

@@ -42,6 +42,7 @@ import {
   setActiveSkill,
   clearActiveSkill,
   evaluateStopHook,
+  gateLabel,
 } from "./skill-runtime.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
@@ -1798,9 +1799,7 @@ function runSkillCommand(target: string | undefined): void {
   const report = runSkillGates(gates, process.cwd());
   for (const r of report.results) {
     const label = r.at === "result" ? "result" : `step ${String(r.at)}`;
-    const g =
-      r.gate.kind === "cmd" ? `\`${r.gate.command}\`` : `${r.gate.path} exists`;
-    console.log(`  ${r.ok ? "✓" : "✗"} ${label} — ${g}`);
+    console.log(`  ${r.ok ? "✓" : "✗"} ${label} — ${gateLabel(r.gate)}`);
     if (!r.ok && r.output) {
       console.log(
         r.output

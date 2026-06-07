@@ -33,7 +33,8 @@ import { resolve, dirname } from "node:path";
 
 export type RuntimeGate =
   | { readonly kind: "cmd"; readonly command: string; readonly retry: number }
-  | { readonly kind: "file"; readonly path: string; readonly retry: number };
+  | { readonly kind: "file"; readonly path: string; readonly retry: number }
+  | { readonly kind: "role"; readonly role: string; readonly retry: number };
 
 export interface SkillGates {
   /** Per-step gates, in document order. */
@@ -48,14 +49,25 @@ export interface SkillGates {
 const STEP_RE = /^###\s+Step\s+(\d+)/;
 const GATE_CMD_RE = /<!--\s*vigiles:gate\s+"([^"]*)"(?:\s+retry:(\d+))?\s*-->/;
 const GATE_FILE_RE = /<!--\s*vigiles:gate\s+file:(\S+)\s*-->/;
+const GATE_ROLE_RE =
+  /<!--\s*vigiles:gate\s+role:(\w+)(?:\s+retry:(\d+))?\s*-->/;
 const RESULT_CMD_RE = /<!--\s*vigiles:result\s+"([^"]*)"\s*-->/;
 const RESULT_FILE_RE = /<!--\s*vigiles:result\s+file:(\S+)\s*-->/;
+const RESULT_ROLE_RE = /<!--\s*vigiles:result\s+role:(\w+)\s*-->/;
 
 /** Parse a single line into a gate, or null if it carries none. */
 function parseGateLine(line: string): RuntimeGate | null {
   const cmd = GATE_CMD_RE.exec(line);
   if (cmd) {
     return { kind: "cmd", command: cmd[1], retry: cmd[2] ? Number(cmd[2]) : 1 };
+  }
+  const role = GATE_ROLE_RE.exec(line);
+  if (role) {
+    return {
+      kind: "role",
+      role: role[1],
+      retry: role[2] ? Number(role[2]) : 1,
+    };
   }
   const fileM = GATE_FILE_RE.exec(line);
   if (fileM) return { kind: "file", path: fileM[1], retry: 1 };
@@ -66,6 +78,8 @@ function parseGateLine(line: string): RuntimeGate | null {
 function parseResultLine(line: string): RuntimeGate | null {
   const cmd = RESULT_CMD_RE.exec(line);
   if (cmd) return { kind: "cmd", command: cmd[1], retry: 1 };
+  const role = RESULT_ROLE_RE.exec(line);
+  if (role) return { kind: "role", role: role[1], retry: 1 };
   const fileM = RESULT_FILE_RE.exec(line);
   if (fileM) return { kind: "file", path: fileM[1], retry: 1 };
   return null;
@@ -104,14 +118,10 @@ export interface GateOutcome {
   readonly output: string;
 }
 
-/** Run one gate against `cwd`: a command (exit 0 = pass) or a file existence. */
-export function runGate(gate: RuntimeGate, cwd: string): GateOutcome {
-  if (gate.kind === "file") {
-    const there = existsSync(resolve(cwd, gate.path));
-    return { ok: there, output: there ? "" : `${gate.path} not found` };
-  }
+/** Execute a shell command in `cwd`; exit 0 = pass, capturing output. */
+function execCommand(command: string, cwd: string): GateOutcome {
   try {
-    const out = execSync(gate.command, {
+    const out = execSync(command, {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
@@ -122,6 +132,80 @@ export function runGate(gate: RuntimeGate, cwd: string): GateOutcome {
     const output = [err.stdout, err.stderr].filter(Boolean).join("\n").trim();
     return { ok: false, output };
   }
+}
+
+const NPM_FOR_ROLE: Record<string, string> = {
+  test: "npm test",
+  build: "npm run build",
+  lint: "npm run lint",
+};
+
+/**
+ * Resolve a project role (test/build/lint) to the host project's real command,
+ * detected from its ecosystem. Returns null when no command can be found —
+ * which the caller surfaces as a failed gate rather than a silent pass.
+ */
+export function detectProjectCommand(role: string, cwd: string): string | null {
+  const pkg = resolve(cwd, "package.json");
+  if (existsSync(pkg)) {
+    try {
+      const scripts =
+        (
+          JSON.parse(readFileSync(pkg, "utf-8")) as {
+            scripts?: Record<string, string>;
+          }
+        ).scripts ?? {};
+      if (scripts[role]) return NPM_FOR_ROLE[role] ?? null;
+    } catch {
+      /* fall through to other ecosystems */
+    }
+  }
+  if (
+    existsSync(resolve(cwd, "pyproject.toml")) ||
+    existsSync(resolve(cwd, "setup.cfg"))
+  ) {
+    if (role === "test") return "pytest";
+    if (role === "lint") return "ruff check .";
+  }
+  if (existsSync(resolve(cwd, "Cargo.toml"))) {
+    if (role === "test") return "cargo test";
+    if (role === "build") return "cargo build";
+    if (role === "lint") return "cargo clippy";
+  }
+  if (existsSync(resolve(cwd, "go.mod"))) {
+    if (role === "test") return "go test ./...";
+    if (role === "build") return "go build ./...";
+  }
+  return null;
+}
+
+/**
+ * Run one gate against `cwd`: a command (exit 0 = pass), a file existence, or
+ * a project role resolved to the host project's command.
+ */
+export function runGate(gate: RuntimeGate, cwd: string): GateOutcome {
+  if (gate.kind === "file") {
+    const there = existsSync(resolve(cwd, gate.path));
+    return { ok: there, output: there ? "" : `${gate.path} not found` };
+  }
+  if (gate.kind === "role") {
+    const command = detectProjectCommand(gate.role, cwd);
+    if (!command) {
+      return {
+        ok: false,
+        output: `No ${gate.role} command detected for this project`,
+      };
+    }
+    return execCommand(command, cwd);
+  }
+  return execCommand(gate.command, cwd);
+}
+
+/** Human-readable label for a gate (for reports and hook messages). */
+export function gateLabel(gate: RuntimeGate): string {
+  if (gate.kind === "cmd") return `\`${gate.command}\``;
+  if (gate.kind === "role") return `the project's ${gate.role} command`;
+  return `${gate.path} exists`;
 }
 
 export interface GateRunResult {
@@ -229,10 +313,7 @@ export function evaluateStopHook(cwd: string): StopDecision {
   if (!gates.result) return { allow: true, message: "" };
 
   const outcome = runGate(gates.result, cwd);
-  const desc =
-    gates.result.kind === "cmd"
-      ? `\`${gates.result.command}\``
-      : `${gates.result.path} exists`;
+  const desc = gateLabel(gates.result);
 
   if (outcome.ok) {
     return {
