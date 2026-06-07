@@ -360,18 +360,81 @@ export function claude(spec: ClaudeSpecInput): ClaudeSpec {
 // SKILL.md spec
 // ---------------------------------------------------------------------------
 
+/**
+ * A deterministic gate on a skill step or its final result. A gate is a
+ * verified reference — a command (exit 0) or a file (must exist) — that the
+ * harness can run to decide whether the step succeeded. The compiler verifies
+ * the reference resolves at author time; the runtime (future) executes it.
+ */
+export type Gate = CmdRef | FileRef;
+
+/**
+ * A declared skill input. Compiles to the `argument-hint` frontmatter and a
+ * `## Arguments` section; referenced as `$1`/`$2`/`$ARGUMENTS` in the body.
+ */
+export interface SkillInput {
+  /** Argument name, e.g. "pattern". */
+  readonly name: string;
+  /** Human-readable hint shown in argument-hint and the Arguments section. */
+  readonly hint: string;
+  /** Required by default; set false to render as optional (`[<name>]`). */
+  readonly required?: boolean;
+}
+
+/** One step of a gated skill pipeline. */
+export interface SkillStep {
+  /** What the model should do — prose, optionally with typed refs. */
+  readonly do: string | InstructionFragment[];
+  /** Deterministic check that must pass before advancing to the next step. */
+  readonly gate?: Gate;
+  /** Max attempts to satisfy the gate before the step fails (default 1). */
+  readonly retry?: number;
+}
+
+/** Declare a skill input (compiles to argument-hint + an Arguments entry). */
+export function input(
+  name: string,
+  hint: string,
+  opts: { required?: boolean } = {},
+): SkillInput {
+  return { name, hint, required: opts.required };
+}
+
+/** Declare a gated pipeline step. */
+export function step(
+  instr: string | InstructionFragment[],
+  opts: { gate?: Gate; retry?: number } = {},
+): SkillStep {
+  return { do: instr, gate: opts.gate, retry: opts.retry };
+}
+
 export interface SkillSpec {
   readonly _specType: "skill";
   /** Skill name (used in frontmatter). */
   readonly name: string;
   /** Short description (used in frontmatter). */
   readonly description: string;
-  /** Hint for the argument (used in frontmatter). */
+  /**
+   * Hint for the argument (frontmatter). Ignored when `inputs` is set —
+   * `inputs` derive the argument-hint instead.
+   */
   readonly argumentHint?: string;
+  /** Typed inputs — compile to argument-hint + a `## Arguments` section. */
+  readonly inputs?: readonly SkillInput[];
   /** Whether to disable model invocation (frontmatter flag). */
   readonly disableModelInvocation?: boolean;
-  /** Instruction body — string or tagged template with typed refs. */
-  readonly body: string | InstructionFragment[];
+  /**
+   * Gated pipeline steps. When set, the skill compiles to a `## Steps`
+   * checklist with a deterministic gate per step. Use this OR `body`.
+   */
+  readonly steps?: readonly SkillStep[];
+  /**
+   * Terminal postcondition — the skill is "done" only when this gate passes.
+   * Compiles to a `## Result` section + a `vigiles:result` marker.
+   */
+  readonly result?: Gate;
+  /** Freeform instruction body (linear/unstructured skills). Use this OR `steps`. */
+  readonly body?: string | InstructionFragment[];
 }
 
 /**
