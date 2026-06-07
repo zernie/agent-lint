@@ -36,7 +36,13 @@ import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
-import { parseSkillGates, runSkillGates } from "./skill-runtime.js";
+import {
+  parseSkillGates,
+  runSkillGates,
+  setActiveSkill,
+  clearActiveSkill,
+  evaluateStopHook,
+} from "./skill-runtime.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
@@ -1816,6 +1822,52 @@ function runSkillCommand(target: string | undefined): void {
   }
 }
 
+/**
+ * Stop-hook entrypoint: run the active skill's result gate and decide whether
+ * the agent may stop. Exit 2 (with the reason on stderr) blocks the stop and
+ * feeds the message back to the model; exit 0 allows it and clears the marker.
+ */
+function skillHookCommand(): void {
+  const decision = evaluateStopHook(process.cwd());
+  if (decision.allow) {
+    if (decision.message) console.log(decision.message);
+    clearActiveSkill(process.cwd());
+    return;
+  }
+  console.error(decision.message);
+  process.exit(2);
+}
+
+/** Mark a skill active so the Stop hook enforces its result gate. */
+function skillStartCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles skill-start <SKILL.md>");
+    process.exit(2);
+  }
+  setActiveSkill(process.cwd(), target);
+  console.log(`Active skill: ${target}`);
+}
+
+/** Dispatch the skill-runtime subcommands. Returns false if unrecognized. */
+function handleSkillCommand(command: string, restArgs: string[]): boolean {
+  switch (command) {
+    case "run-skill":
+      runSkillCommand(restArgs[0]);
+      return true;
+    case "skill-start":
+      skillStartCommand(restArgs[0]);
+      return true;
+    case "skill-done":
+      clearActiveSkill(process.cwd());
+      return true;
+    case "skill-hook":
+      skillHookCommand();
+      return true;
+    default:
+      return false;
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -1879,12 +1931,8 @@ async function main(): Promise<void> {
       handleGenerateSchema(args, restArgs);
       break;
 
-    case "run-skill":
-      runSkillCommand(restArgs[0]);
-      break;
-
     default:
-      printUsage(command);
+      if (!handleSkillCommand(command, restArgs)) printUsage(command);
       break;
   }
 }

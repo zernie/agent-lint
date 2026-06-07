@@ -22,8 +22,14 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+} from "node:fs";
+import { resolve, dirname } from "node:path";
 
 export type RuntimeGate =
   | { readonly kind: "cmd"; readonly command: string; readonly retry: number }
@@ -159,4 +165,84 @@ export function runSkillGates(gates: SkillGates, cwd: string): SkillRunReport {
   }
 
   return { results, blockedAt: null, ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Stop-hook enforcement
+// ---------------------------------------------------------------------------
+//
+// A skill is "active" while the agent is executing it. The Stop hook then runs
+// the active skill's result gate and blocks completion until it passes — so the
+// agent cannot declare a skill done until its result is deterministically
+// proven. Which skill is active is tracked in `.vigiles/active-skill.json`
+// (Claude Code hooks don't surface the active skill, so we record it). Wiring
+// `skill-start` to fire automatically is the integration step; the decision
+// logic below is harness-agnostic and fully testable.
+
+const ACTIVE_PATH = ".vigiles/active-skill.json";
+
+/** Record the skill the agent is currently executing. */
+export function setActiveSkill(cwd: string, skillPath: string): void {
+  const p = resolve(cwd, ACTIVE_PATH);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify({ skill: skillPath }) + "\n");
+}
+
+/** Clear the active-skill marker (the skill finished). */
+export function clearActiveSkill(cwd: string): void {
+  const p = resolve(cwd, ACTIVE_PATH);
+  if (existsSync(p)) rmSync(p);
+}
+
+/** The path of the active skill, or null when none is in progress. */
+export function readActiveSkill(cwd: string): string | null {
+  const p = resolve(cwd, ACTIVE_PATH);
+  if (!existsSync(p)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(p, "utf-8")) as { skill?: unknown };
+    return typeof parsed.skill === "string" ? parsed.skill : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface StopDecision {
+  /** Whether the agent may stop (true) or must keep working (false). */
+  readonly allow: boolean;
+  /** Message for the user (allow) or fed back to the model (block). */
+  readonly message: string;
+}
+
+/**
+ * Stop-hook decision. If a skill is active and declares a result gate, run it:
+ * allow the stop only when the gate passes; otherwise block and tell the model
+ * what to fix. With no active skill (or no result gate), always allow.
+ */
+export function evaluateStopHook(cwd: string): StopDecision {
+  const skillPath = readActiveSkill(cwd);
+  if (!skillPath) return { allow: true, message: "" };
+
+  const full = resolve(cwd, skillPath);
+  if (!existsSync(full)) return { allow: true, message: "" };
+
+  const gates = parseSkillGates(readFileSync(full, "utf-8"));
+  if (!gates.result) return { allow: true, message: "" };
+
+  const outcome = runGate(gates.result, cwd);
+  const desc =
+    gates.result.kind === "cmd"
+      ? `\`${gates.result.command}\``
+      : `${gates.result.path} exists`;
+
+  if (outcome.ok) {
+    return {
+      allow: true,
+      message: `✓ ${skillPath}: result gate ${desc} passed.`,
+    };
+  }
+  const tail = outcome.output ? `\n${outcome.output}` : "";
+  return {
+    allow: false,
+    message: `Skill "${skillPath}" is not done: result gate ${desc} failed. Fix it, then finish.${tail}`,
+  };
 }
