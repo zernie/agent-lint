@@ -21,22 +21,35 @@ function gateLabel(g: Gate): string {
 export type ModelFn = (prose: string) => string;
 
 /**
- * Script the mocked model. Pass an array (answers consumed in order) or a map
- * (the answer for the first key that is a case-insensitive substring of the
- * act's prose). Unmatched prose yields "".
+ * Script the mocked model. Pass:
+ *  - an array — answers consumed in order across all acts; or
+ *  - a map keyed by a case-insensitive substring of the act's prose, where each
+ *    value is a single answer, or an array consumed in order *per key* (so a
+ *    loop's prompt can return different answers on successive iterations).
+ * Unmatched prose yields "".
  */
 export function scriptModel(
-  spec: readonly string[] | Readonly<Record<string, string>>,
+  spec:
+    | readonly string[]
+    | Readonly<Record<string, string | readonly string[]>>,
 ): ModelFn {
   if (Array.isArray(spec)) {
     const answers: readonly string[] = spec;
     let i = 0;
     return () => answers[Math.min(i++, answers.length - 1)] ?? "";
   }
-  const entries = Object.entries(spec);
+  const map = spec as Record<string, string | readonly string[]>;
+  const idx: Record<string, number> = {};
   return (prose) => {
     const p = prose.toLowerCase();
-    for (const [k, v] of entries) if (p.includes(k.toLowerCase())) return v;
+    for (const k of Object.keys(map)) {
+      if (!p.includes(k.toLowerCase())) continue;
+      const v = map[k];
+      if (typeof v === "string") return v;
+      const i = idx[k] ?? 0;
+      idx[k] = i + 1;
+      return v[Math.min(i, v.length - 1)] ?? "";
+    }
     return "";
   };
 }

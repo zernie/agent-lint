@@ -58,10 +58,18 @@ function findGenerator(
   return found;
 }
 
+/** The called function's name, handling both `act(...)` and `ns.act(...)`. */
+function calleeName(call: ts.CallExpression): string {
+  const e = call.expression;
+  if (ts.isIdentifier(e)) return e.text;
+  if (ts.isPropertyAccessExpression(e)) return e.name.text;
+  return "";
+}
+
 /** A `cmd("…")` / `file("…")` / `project("…")` call → a gate reference. */
 function extractGateRef(node: ts.Expression | undefined): GateRef | null {
   if (!node || !ts.isCallExpression(node)) return null;
-  const name = ts.isIdentifier(node.expression) ? node.expression.text : "";
+  const name = calleeName(node);
   const a = node.arguments[0] as ts.Expression | undefined;
   if (!a || !ts.isStringLiteralLike(a)) return null;
   if (name === "cmd") return { kind: "cmd", value: a.text };
@@ -106,7 +114,7 @@ function renderYield(
 ): void {
   const call = y.expression;
   if (!call || !ts.isCallExpression(call)) return;
-  const name = ts.isIdentifier(call.expression) ? call.expression.text : "";
+  const name = calleeName(call);
   if (name === "act") {
     const a = call.arguments[0] as ts.Expression | undefined;
     if (a && ts.isStringLiteralLike(a)) lines.push(a.text.trim(), "");
