@@ -201,6 +201,73 @@ Orthogonal axis: the **effect contract** (`reads`/`writes`/`may` from `runtime-e
 and `fp-for-agent-harness.md`) — "what the skill is allowed to touch" — is separate from "what
 it does" (steps) and "what proves it done" (result gate).
 
+## Prior art: occupied vs free (three sweeps, 2026-06-07)
+
+Three landscape sweeps — agent harnesses, LLM forcing/verification, and adjacent non-LLM
+domains — converge on the same conclusion: **the union we describe is unoccupied.** Each
+neighbor owns one axis and leaves the others empty.
+
+| Neighbor | Owns | Misses |
+| --- | --- | --- |
+| **LangGraph / Semantic Kernel / LlamaIndex / durable engines (Temporal, Inngest)** | harness-owned control-flow graph, deterministic edges, durable replay | "steps" are *code functions*, not prose the LLM executes; no author-time reference check |
+| **CrewAI task guardrails / DSPy assertions / Guardrails AI** | per-step gate + retry/backtrack/short-circuit | gates *run-time output content* only; nothing verified at author-time |
+| **Microsoft Guidance / Outlines / SGLang / LMQL** | drive the model step-by-step, deterministically | token/grammar level, not prose-step level; gate = grammar, not arbitrary command |
+| **Coding agents (SWE-agent, OpenHands, Aider) + RLVR** | deterministic gate = step success signal (tests/exit code; OpenHands `exit 2` blocks progression) | steps are *emergent/agent-chosen*, not an authored prose ladder |
+| **SKILL.md / agentskills.io / Cursor rules** | authored prose steps (our ergonomics) | entirely probabilistic — checks advisory, model picks order, nothing enforced or pre-verified |
+| **Executable runbooks (Runme, Runbook.md)** | markdown steps that really execute with checks | human/script-driven, no LLM, no gating of model output |
+| **Haystack** | the *only* author-time verification found | type-compatibility of component sockets, not "does this gate's rule/file/command resolve" |
+
+**The empty quadrant:** a markdown/skill-native harness that (1) treats prose steps as a
+control-flow graph, (2) closes each step with a deterministic must-pass gate (Railway
+short-circuit), (3) optionally drives the model one step at a time, and (4) **verifies the
+gates' references at author-time.** Point (4) is occupied by essentially no one — and it is
+vigiles's existing core competency. This maps exactly onto our own CLAUDE.md frame:
+probabilistic compliance (prompts) vs deterministic constraints (linters/types/hooks). SKILL.md
+today is pure probabilistic compliance; the gap is a SKILL.md whose *steps* are each closed by a
+deterministic constraint — the same move vigiles already makes for *rule references*.
+
+## Borrowable concepts (mature patterns to steal)
+
+- **Behavior trees = the execution skeleton.** The closest analog by far. Steal: the
+  `SUCCESS / FAILURE / RUNNING` tri-state contract (RUNNING = "not done, re-tick me" ≈ an LLM
+  step that needs another turn before its gate can pass); **Sequence** (ordered AND,
+  short-circuit on fail) and **Selector** (OR, short-circuit on success = fallback); the
+  **Condition node as a pure deterministic gate separated from the probabilistic Action** —
+  literally vigiles's `enforce`/`guidance` split projected onto execution control; tick-based
+  re-evaluation (re-check gates each turn → recovery, not blind forward progress); decorators
+  (`Retry(n)`, `Timeout`, `Inverter`); the **blackboard** as shared inspectable state.
+- **Workflow-net soundness (van der Aalst).** A *static pre-flight check* that a procedure graph
+  is reachable, deadlock-free, and properly terminating — **decidable** for workflow nets. This
+  is a vigiles-style verification move applied to control structure, not references; it's what
+  makes the "branching → spec, because the graph must be verifiable" boundary concrete.
+- **Build-system content-hash memoization (Bazel/Ninja).** Skip a step whose verified inputs are
+  unchanged — i.e. vigiles's existing SHA-256 integrity hashing applied to *execution*.
+- **Dagster blocking asset-checks.** A deterministic gate on a step's *output* that halts
+  downstream — the template for the result/postcondition gate.
+- **CI `needs:` + required-status-check merge gate.** Prereq gating + a terminal acceptance gate
+  distinct from per-step gates ("the work isn't done until the named check passes").
+
+Three vigiles assets already map onto the gap: the **cross-referencing engine** → author-time
+gate-reference verification (the empty quadrant); **SHA-256 integrity** → step memoization;
+the **enforce/guidance split** → gated Condition vs advisory step.
+
+## What to build first
+
+A phased order that occupies the empty quadrant with the least risk by reusing what exists:
+
+1. **Author-time skill-gate verification (build first).** Extend the in-flight
+   inline/frontmatter parser so a SKILL.md declares per-step `vigiles:gate "<cmd>"` (gate kinds:
+   cmd/file/rule) and a frontmatter `result:` gate; `vigiles audit` verifies every gate's
+   reference resolves. Pure verification, zero runtime risk, **directly unpauses the file/cmd
+   parser work and points it at skills**, and occupies the quadrant nobody else does. Delivers
+   value with no driver.
+2. **Runtime gate-progression driver.** Generate a Stop/PostToolUse hook (per
+   `runtime-enforcement.md`) that runs the gates and blocks "done" until the result gate passes —
+   medium enforcement on existing Claude Code hooks; borrow OpenHands' `exit 2` semantics.
+3. **Structured graph + hard driving.** Branching/loops as structured data + a soundness
+   pre-flight check; the `vigiles run-skill` interpreter for one-step-at-a-time driving; typed
+   `skill()` with Kleisli composition and graph verification. The strict optional tier.
+
 ## Open questions
 
 1. `result`-gate-first MVP vs steps+gates first — which ships first?
