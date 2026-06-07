@@ -75,13 +75,14 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 5 npm scripts from package.json. */
+  /** 6 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
     | "lint"
     | "fmt"
-    | "fmt:check";
+    | "fmt:check"
+    | "test:e2e";
 
   /** 38 project files. */
   export type ProjectFile = 
@@ -240,6 +241,7 @@ declare module "vigiles/spec" {
       | "test"
       | "lint"
       | "fmt"
-      | "fmt:check";
+      | "fmt:check"
+      | "test:e2e";
   }
 }
