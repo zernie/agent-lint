@@ -127,19 +127,30 @@ function validateCommandRef(
   command: string,
   basePath: string,
 ): CompileError | null {
-  // Check "npm run <script>" or "npm <script>" against package.json
   const npmRunMatch = command.match(/^npm\s+run\s+(\S+)/);
   const npmMatch = command.match(/^npm\s+(test|start|build|pretest)\b/);
   const scriptName = npmRunMatch?.[1] ?? npmMatch?.[1];
-  if (!scriptName) return null;
+  if (scriptName) {
+    const scripts = readPackageScripts(basePath);
+    if (scripts && !scripts[scriptName]) {
+      return {
+        type: "stale-command",
+        message: `Script "${scriptName}" not found in package.json`,
+        path: command,
+      };
+    }
+    return null;
+  }
 
-  const scripts = readPackageScripts(basePath);
-  if (!scripts) return null;
-
-  if (!scripts[scriptName]) {
+  // Script-runner commands (python/node/bash/ruby/…): verify the referenced
+  // script file exists. Module forms (`python -m pkg`) are skipped — no path.
+  const scriptFile = command.match(
+    /^(?:python3?|node|bash|sh|ruby|deno run)\s+([^\s-]\S*\.[A-Za-z0-9]+)/,
+  )?.[1];
+  if (scriptFile && !existsSync(resolve(basePath, scriptFile))) {
     return {
       type: "stale-command",
-      message: `Script "${scriptName}" not found in package.json`,
+      message: `Script "${scriptFile}" not found`,
       path: command,
     };
   }
@@ -691,14 +702,18 @@ export function compileSkill(
 
   // Body: a structured Arguments/Steps/Result layout when steps are declared,
   // otherwise the freeform body. Arguments render in both modes.
+  // Arguments, then the knowledge body (reference prose), then the gated
+  // Steps, then the Result. body + steps now compose: a skill can carry both a
+  // rich reference body and a verified procedure.
   const sections: string[] = [];
   if (spec.inputs && spec.inputs.length > 0) {
     sections.push(renderArguments(spec.inputs));
   }
+  if (spec.body !== undefined) {
+    sections.push(renderBody(spec.body).trim());
+  }
   if (spec.steps && spec.steps.length > 0) {
     sections.push(renderSteps(spec.steps));
-  } else if (spec.body !== undefined) {
-    sections.push(renderBody(spec.body).trim());
   }
   if (spec.result) {
     sections.push(renderResult(spec.result));

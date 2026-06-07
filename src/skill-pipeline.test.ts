@@ -81,3 +81,47 @@ test("a file gate referencing a missing path is a compile error", () => {
     "expected a stale-file error for the missing result file",
   );
 });
+
+test("a knowledge body composes with gated steps (both render, body first)", () => {
+  const spec = skill({
+    name: "docx",
+    description: "...",
+    body: "## Reference\n\nImportant domain knowledge here.",
+    steps: [step("do it", { gate: cmd("npm test") })],
+    result: cmd("npm test"),
+  });
+  const { markdown, errors } = compileSkill(spec, opts);
+  assert.equal(errors.length, 0, JSON.stringify(errors));
+  assert.match(markdown, /## Reference/);
+  assert.match(markdown, /Important domain knowledge/);
+  assert.match(markdown, /## Steps/);
+  assert.ok(markdown.indexOf("## Reference") < markdown.indexOf("## Steps"));
+});
+
+test("a script-runner gate verifies the referenced script file exists", () => {
+  const okRes = compileSkill(
+    skill({
+      name: "x",
+      description: "...",
+      steps: [step("run it", { gate: cmd("python src/compile.ts") })],
+    }),
+    opts,
+  );
+  assert.equal(okRes.errors.length, 0, JSON.stringify(okRes.errors));
+
+  const badRes = compileSkill(
+    skill({
+      name: "x",
+      description: "...",
+      steps: [step("run it", { gate: cmd("python scripts/nope.py out.x") })],
+    }),
+    opts,
+  );
+  assert.ok(
+    badRes.errors.some(
+      (e) =>
+        e.type === "stale-command" && e.message.includes("scripts/nope.py"),
+    ),
+    "expected a stale-command error for the missing script",
+  );
+});
