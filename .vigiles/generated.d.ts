@@ -83,7 +83,7 @@ declare module "vigiles/generated" {
     | "fmt"
     | "fmt:check";
 
-  /** 36 project files. */
+  /** 38 project files. */
   export type ProjectFile = 
     | "src/action.ts"
     | "src/cedar.test.ts"
@@ -112,6 +112,8 @@ declare module "vigiles/generated" {
     | "src/session.ts"
     | "src/sidecar.test.ts"
     | "src/sidecar.ts"
+    | "src/skill-driver.test.ts"
+    | "src/skill-driver.ts"
     | "src/skill-pipeline.test.ts"
     | "src/skill-runtime.test.ts"
     | "src/skill-runtime.ts"
@@ -220,6 +222,8 @@ declare module "vigiles/spec" {
       | "src/session.ts"
       | "src/sidecar.test.ts"
       | "src/sidecar.ts"
+      | "src/skill-driver.test.ts"
+      | "src/skill-driver.ts"
       | "src/skill-pipeline.test.ts"
       | "src/skill-runtime.test.ts"
       | "src/skill-runtime.ts"
