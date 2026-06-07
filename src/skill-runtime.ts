@@ -140,41 +140,58 @@ const NPM_FOR_ROLE: Record<string, string> = {
   lint: "npm run lint",
 };
 
+/** Detect the npm command for a role from package.json scripts, or null. */
+function detectNpmCommand(role: string, cwd: string): string | null {
+  const pkg = resolve(cwd, "package.json");
+  if (!existsSync(pkg)) return null;
+  try {
+    const scripts =
+      (
+        JSON.parse(readFileSync(pkg, "utf-8")) as {
+          scripts?: Record<string, string>;
+        }
+      ).scripts ?? {};
+    return scripts[role] ? (NPM_FOR_ROLE[role] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Non-npm ecosystems: marker files + the command for each role. */
+const ECOSYSTEMS: readonly {
+  readonly markers: readonly string[];
+  readonly commands: Readonly<Record<string, string>>;
+}[] = [
+  {
+    markers: ["pyproject.toml", "setup.cfg"],
+    commands: { test: "pytest", lint: "ruff check ." },
+  },
+  {
+    markers: ["Cargo.toml"],
+    commands: {
+      test: "cargo test",
+      build: "cargo build",
+      lint: "cargo clippy",
+    },
+  },
+  {
+    markers: ["go.mod"],
+    commands: { test: "go test ./...", build: "go build ./..." },
+  },
+];
+
 /**
  * Resolve a project role (test/build/lint) to the host project's real command,
  * detected from its ecosystem. Returns null when no command can be found —
  * which the caller surfaces as a failed gate rather than a silent pass.
  */
 export function detectProjectCommand(role: string, cwd: string): string | null {
-  const pkg = resolve(cwd, "package.json");
-  if (existsSync(pkg)) {
-    try {
-      const scripts =
-        (
-          JSON.parse(readFileSync(pkg, "utf-8")) as {
-            scripts?: Record<string, string>;
-          }
-        ).scripts ?? {};
-      if (scripts[role]) return NPM_FOR_ROLE[role] ?? null;
-    } catch {
-      /* fall through to other ecosystems */
-    }
-  }
-  if (
-    existsSync(resolve(cwd, "pyproject.toml")) ||
-    existsSync(resolve(cwd, "setup.cfg"))
-  ) {
-    if (role === "test") return "pytest";
-    if (role === "lint") return "ruff check .";
-  }
-  if (existsSync(resolve(cwd, "Cargo.toml"))) {
-    if (role === "test") return "cargo test";
-    if (role === "build") return "cargo build";
-    if (role === "lint") return "cargo clippy";
-  }
-  if (existsSync(resolve(cwd, "go.mod"))) {
-    if (role === "test") return "go test ./...";
-    if (role === "build") return "go build ./...";
+  const npm = detectNpmCommand(role, cwd);
+  if (npm) return npm;
+  for (const eco of ECOSYSTEMS) {
+    const present = eco.markers.some((m) => existsSync(resolve(cwd, m)));
+    const command = eco.commands[role];
+    if (present && command) return command;
   }
   return null;
 }
