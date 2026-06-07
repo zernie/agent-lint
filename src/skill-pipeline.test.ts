@@ -98,6 +98,43 @@ test("a knowledge body composes with gated steps (both render, body first)", () 
   assert.ok(markdown.indexOf("## Reference") < markdown.indexOf("## Steps"));
 });
 
+test("a large inline code block errors, forcing extraction to a file", () => {
+  const big = "```bash\n" + Array(25).fill("echo line").join("\n") + "\n```";
+  const { errors } = compileSkill(
+    skill({ name: "x", description: "...", body: big }),
+    opts,
+  );
+  assert.ok(
+    errors.some(
+      (e) =>
+        e.type === "section-too-long" && /extract it to a file/.test(e.message),
+    ),
+    "expected a too-long inline code block error",
+  );
+});
+
+test("small code blocks pass; maxInlineCodeLines:0 disables the check", () => {
+  const small = "```bash\necho a\necho b\n```";
+  assert.equal(
+    compileSkill(skill({ name: "x", description: "...", body: small }), opts)
+      .errors.length,
+    0,
+  );
+  const big = "```bash\n" + Array(50).fill("echo x").join("\n") + "\n```";
+  assert.equal(
+    compileSkill(
+      skill({
+        name: "x",
+        description: "...",
+        body: big,
+        maxInlineCodeLines: 0,
+      }),
+      opts,
+    ).errors.length,
+    0,
+  );
+});
+
 test("a script-runner gate verifies the referenced script file exists", () => {
   const okRes = compileSkill(
     skill({

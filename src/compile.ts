@@ -690,6 +690,36 @@ function renderSkillSections(spec: SkillSpec): string {
   return sections.join("\n\n");
 }
 
+const DEFAULT_MAX_INLINE_CODE_LINES = 20;
+
+/** Flag inline fenced code blocks longer than `max` lines (0 = disabled). */
+function checkInlineCode(markdown: string, max: number): CompileError[] {
+  if (max <= 0) return [];
+  const errs: CompileError[] = [];
+  const lines = markdown.split("\n");
+  let start = -1;
+  let lang = "";
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^```(\w*)/.exec(lines[i].trim());
+    if (!m) continue;
+    if (start === -1) {
+      start = i;
+      lang = m[1];
+    } else {
+      const len = i - start - 1;
+      if (len > max) {
+        errs.push({
+          type: "section-too-long",
+          message: `Inline ${lang || "code"} block is ${String(len)} lines (max ${String(max)}); extract it to a file and reference it with file().`,
+        });
+      }
+      start = -1;
+      lang = "";
+    }
+  }
+  return errs;
+}
+
 export interface CompileSkillResult {
   markdown: string;
   errors: CompileError[];
@@ -724,11 +754,16 @@ export function compileSkill(
 
   errors.push(...validateRefs(collectSkillRefs(spec), basePath));
 
+  const sections = renderSkillSections(spec);
+  errors.push(
+    ...checkInlineCode(
+      sections,
+      spec.maxInlineCodeLines ?? DEFAULT_MAX_INLINE_CODE_LINES,
+    ),
+  );
+
   const content =
-    renderSkillFrontmatter(spec) +
-    "\n\n" +
-    renderSkillSections(spec).trim() +
-    "\n";
+    renderSkillFrontmatter(spec) + "\n\n" + sections.trim() + "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 
