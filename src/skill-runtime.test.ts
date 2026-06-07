@@ -4,8 +4,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { parseSkillGates, runGate, runSkillGates } from "./skill-runtime.js";
+import {
+  parseSkillGates,
+  runGate,
+  runSkillGates,
+  setActiveSkill,
+  clearActiveSkill,
+  readActiveSkill,
+  evaluateStopHook,
+} from "./skill-runtime.js";
 
 const SAMPLE = `# skill
 
@@ -91,4 +102,51 @@ test("runSkillGates runs the result gate when all steps pass", () => {
   assert.equal(report.blockedAt, null);
   assert.equal(report.results.length, 2);
   assert.equal(report.results[1].at, "result");
+});
+
+// --- Stop-hook enforcement ---
+
+function tmpSkill(resultGate: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-skill-"));
+  writeFileSync(
+    join(dir, "SKILL.md"),
+    `### Step 1\n<!-- vigiles:gate "true" -->\n\n## Result\n<!-- vigiles:result "${resultGate}" -->\n`,
+  );
+  return dir;
+}
+
+test("active-skill marker roundtrips and clears", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-active-"));
+  assert.equal(readActiveSkill(dir), null);
+  setActiveSkill(dir, "SKILL.md");
+  assert.equal(readActiveSkill(dir), "SKILL.md");
+  clearActiveSkill(dir);
+  assert.equal(readActiveSkill(dir), null);
+  assert.equal(existsSync(join(dir, ".vigiles/active-skill.json")), false);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("evaluateStopHook allows when no skill is active", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-hook-"));
+  const d = evaluateStopHook(dir);
+  assert.equal(d.allow, true);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("evaluateStopHook allows when the result gate passes", () => {
+  const dir = tmpSkill("true");
+  setActiveSkill(dir, "SKILL.md");
+  const d = evaluateStopHook(dir);
+  assert.equal(d.allow, true);
+  assert.match(d.message, /result gate .* passed/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("evaluateStopHook blocks when the result gate fails", () => {
+  const dir = tmpSkill("false");
+  setActiveSkill(dir, "SKILL.md");
+  const d = evaluateStopHook(dir);
+  assert.equal(d.allow, false);
+  assert.match(d.message, /is not done: result gate `false` failed/);
+  rmSync(dir, { recursive: true, force: true });
 });
