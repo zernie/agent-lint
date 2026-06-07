@@ -577,6 +577,14 @@ function renderGate(
       marker: `<!-- vigiles:gate "${gate.command}"${r} -->`,
     };
   }
+  if (gate._ref === "role") {
+    const proseR = retry && retry > 1 ? ` (retry up to ${String(retry)}×)` : "";
+    const r = retry && retry > 1 ? ` retry:${String(retry)}` : "";
+    return {
+      prose: `**Gate** — run the project's ${gate.role} command${proseR}; do not proceed until it passes.`,
+      marker: `<!-- vigiles:gate role:${gate.role}${r} -->`,
+    };
+  }
   return {
     prose: `**Gate** — \`${gate.path}\` must exist before proceeding.`,
     marker: `<!-- vigiles:gate file:${gate.path} -->`,
@@ -599,14 +607,18 @@ function renderSteps(steps: readonly SkillStep[]): string {
 
 /** Render the `## Result` postcondition gate. */
 function renderResult(result: Gate): string {
-  const target =
-    result._ref === "cmd"
-      ? `\`${result.command}\` passes`
-      : `\`${result.path}\` exists`;
-  const marker =
-    result._ref === "cmd"
-      ? `<!-- vigiles:result "${result.command}" -->`
-      : `<!-- vigiles:result file:${result.path} -->`;
+  let target: string;
+  let marker: string;
+  if (result._ref === "cmd") {
+    target = `\`${result.command}\` passes`;
+    marker = `<!-- vigiles:result "${result.command}" -->`;
+  } else if (result._ref === "role") {
+    target = `the project's ${result.role} command passes`;
+    marker = `<!-- vigiles:result role:${result.role} -->`;
+  } else {
+    target = `\`${result.path}\` exists`;
+    marker = `<!-- vigiles:result file:${result.path} -->`;
+  }
   return [
     "## Result",
     "",
@@ -654,9 +666,11 @@ export function compileSkill(
   if (Array.isArray(spec.body)) refs.push(...spec.body);
   for (const s of spec.steps ?? []) {
     if (Array.isArray(s.do)) refs.push(...s.do);
-    if (s.gate) refs.push(s.gate);
+    // Role gates resolve per host project at run time, so they carry no repo
+    // reference to verify here; only cmd/file gates are checked.
+    if (s.gate && s.gate._ref !== "role") refs.push(s.gate);
   }
-  if (spec.result) refs.push(spec.result);
+  if (spec.result && spec.result._ref !== "role") refs.push(spec.result);
   errors.push(...validateRefs(refs, basePath));
 
   // Build frontmatter (blank lines after opening/before closing --- for prettier)

@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:851f5894148f63a3 compiled from skills/generate-rule/SKILL.md.spec.ts -->
+<!-- vigiles:sha256:a9df2c1748576753 compiled from skills/generate-rule/SKILL.md.spec.ts -->
 
 ---
 
@@ -53,12 +53,12 @@ argument-hint: <rule>
 
 **Compile and verify.** Build and recompile; if compilation fails (e.g. the linter rule doesn't exist), report the error and suggest alternatives. Show the user the updated spec and the compiled `CLAUDE.md` diff.
 
-**Gate** — run `npm run build` (retry up to 2×); do not proceed until it passes.
+**Gate** — run the project's build command (retry up to 2×); do not proceed until it passes.
 
-<!-- vigiles:gate "npm run build" retry:2 -->
+<!-- vigiles:gate role:build retry:2 -->
 
 ## Result
 
-This skill is complete when `npm run build` passes.
+This skill is complete when the project's build command passes.
 
-<!-- vigiles:result "npm run build" -->
+<!-- vigiles:result role:build -->
