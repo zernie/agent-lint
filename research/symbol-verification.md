@@ -7,37 +7,47 @@
 > catches a failure an agent cannot self-check (a reference the doc claims that
 > no longer exists).
 
-## Decision (as built)
+## Decision (as built) — variant A, harness-enforced
 
-The early "approach A" markers (`` `src/config.ts#parseConfig` ``) and a later
-sidecar of resolved pins were both dropped after working through reliability:
-**any stored artifact — an in-text marker or a sidecar pin — is a third thing
-that can drift** from the two real sources of truth (the instruction file's
-references and the code's symbols). The shipped design stores nothing.
+A bare reference cannot be verified without resolving it, and resolving it needs
+either a project-wide index (which then has its own drift/ambiguity problems) or
+per-language autoloaders we don't do. So the author **names the file** inline,
+and the harness **forces** them to:
 
-- **Live join, project-wide index.** `audit` builds a project symbol index from
-  the live code and re-extracts the code-shaped inline references from the
-  _current_ markdown, resolving each on the spot. A renamed/removed symbol
-  surfaces immediately; nothing to keep in sync. (`src/refs.ts`, `src/symbols.ts`.)
-- **No file required (the Rails win).** A bare `` `parseConfig` `` /
-  `` `User#full_name` `` resolves against the index — the author does not name
-  the file. Ambiguity (a name defined in several files) is _reported_, and the
-  author disambiguates with a scoped form (`` `User#full_name` ``) — an in-text
-  signal that travels with the reference, used only where it is genuinely needed.
+- **The mark is the file-qualified inline span.** A code reference is written
+  `` `src/config.ts#parseConfig` `` / `` `app/models/user.rb#full_name` `` (path,
+  then `#` or `::`, then the symbol). vigiles parses **that one named file** and
+  checks it defines the symbol — no project index, no cross-file resolution, no
+  ambiguity (the file disambiguates). (`src/refs.ts`, `src/symbols.ts`.)
+- **The hook makes the agent mark.** `refs-hook` (PostToolUse on
+  SKILL/CLAUDE/AGENTS.md) blocks (exit 2) any code-shaped inline span that is
+  **not** file-qualified, telling the agent to write `path.ext#symbol` or opt out
+  with `<!-- vigiles:ignore -->`. The agent supplies the file (it knows its own
+  code); vigiles verifies the claim. This is the harness enforcing the verifiable
+  form at write time, with full context — not a project index guessing.
+- **Declared ⇒ error.** Because the mark is deliberately authored (like
+  `vigiles:file` / `vigiles:cmd`), a broken file-qualified ref is an **error**
+  (exit 2) in `audit`, not a warning. No false positives: only the unambiguous
+  `path.ext#symbol` shape is verified.
 - **Engine.** `@ast-grep/napi` + bundled `@ast-grep/lang-*` grammars. Symbol
   extraction is a generic tree-sitter traversal: definitions put their identifier
   in a `name` field, so collecting `name`-field nodes (plus assignment `left`
   for bare constants) yields the defined names — one code path across languages.
-- **Boundary: existence, NOT resolution.** We check "a definition with this name
-  (in this scope) exists"; we do not prove a bare reference _resolves_ through
-  imports / Zeitwerk / tsconfig. Resolution is per-language, needs the project
-  built, and is architectural analysis vigiles delegates (LSP / Sourcegraph
-  SCIP) — deferred.
-- **Inferred ⇒ warning.** A bare backtick is an _inferred_ reference (the author
-  did not declare "verify this"), so an unresolved one is a warning (exit 1),
-  not a hard error — unlike a declared `vigiles:file` / `vigiles:cmd` ref. The
-  `refs-hook` PostToolUse hook runs the same check at write time as pure
-  feedback (catches typos with context); it writes nothing.
+- **Boundary: existence, NOT resolution.** We check "the named file defines this
+  symbol"; we do not chase imports / Zeitwerk / tsconfig (that is per-language,
+  needs the project built, and is architectural analysis vigiles delegates —
+  LSP / Sourcegraph SCIP, deferred).
+
+### Why not the alternatives (recorded so we don't re-litigate)
+
+- **Bare-symbol project index** (resolve `` `parseConfig` `` across the repo):
+  reintroduces ambiguity (name collisions) and the cost/heuristics of a
+  whole-repo index; rejected in favour of the author naming the file.
+- **Sidecar of resolved pins**: a snapshot that drifts from the markdown (line
+  shifts, out-of-band edits) — a new failure mode. The mark lives in the text and
+  travels with the reference instead.
+- **In-text marker = warning**: an explicitly authored mark is a declaration, so
+  a broken one is an error, same as file/cmd.
 
 ## Language coverage
 
@@ -56,30 +66,28 @@ degrades gracefully (skip + note), never crashes.
 
 ## Authoring & enforcement — how the AI ends up using it
 
-**Principle: do not force a behavior change. Auto-verify the inline references
-the agent already writes**, restricted to unambiguous shapes. Meet the agent
-where it writes — this dissolves the probabilistic-compliance problem instead of
-fighting it with a gate (gates get gamed — see `benchmarks-runtime-gates.md`).
+**Principle: the harness forces the verifiable form at write time, then verifies
+it.** The agent does not need to learn a new habit on its own — the `refs-hook`
+blocks an edit until every code reference is either file-qualified or marked as
+prose. The agent supplies the file (it is writing about code it knows); vigiles
+proves the claim against that file.
 
-Auto-verified **inline code spans** (no helper/annotation/marker needed — the
-plain backtick the agent already writes is the whole input):
+| Span the agent writes                  | Outcome                                                           |
+| -------------------------------------- | ----------------------------------------------------------------- |
+| `` `src/config.ts#parseConfig` ``      | parse `src/config.ts`, check it defines `parseConfig` (✓ / error) |
+| `` `app/user.rb#full_name` `` (`::`)   | parse `app/user.rb`, check `full_name` (cross-language)           |
+| bare `` `parseConfig` `` (code-shaped) | **hook blocks** → "mark as `path.ext#symbol` or `vigiles:ignore`" |
+| `` `name` `` / `` `high` `` (prose)    | ignored — not code-shaped                                         |
+| `` `npm run x` `` / `` `src/x.ts` ``   | command / file engines (unchanged)                                |
 
-| Span shape                                | Resolved against                                |
-| ----------------------------------------- | ----------------------------------------------- |
-| `` `parseConfig` `` / `` `MAX_RETRIES` `` | the project symbol index (bare, no file)        |
-| `` `User#full_name` `` (`#` / `::`)       | the index, narrowed to the enclosing scope      |
-| `` `path/with.ext` ``                     | file exists (existing `file` engine)            |
-| `` `npm run x` `` and script-runner forms | command / script exists (existing `cmd` engine) |
-
-- **Not checked:** bare lowercase prose words (`` `true` ``, `` `name` ``,
-  `` `high` ``). Only _code-shaped_ spans (snake_case / camelCase / SCREAMING /
-  PascalCase / scoped) are resolved — never a guess about which prose tokens are
-  references (the `scan` false-positive trap).
-- **Escape hatch:** `<!-- vigiles:ignore -->` to silence a false positive or a
-  metaprogrammed symbol.
-- **Severity:** an unresolved code-shaped reference is a **warning** (inferred,
-  not declared). The same check runs at write time via the `refs-hook` so typos
-  surface with context; it writes nothing.
+- **Not flagged:** bare lowercase prose words. Only _code-shaped_ spans
+  (snake_case / camelCase / SCREAMING / PascalCase / scoped) are required to be
+  marked — never a guess about prose.
+- **Escape hatch:** `<!-- vigiles:ignore -->` on the line (or
+  `<!-- vigiles:ignore-file -->`) opts a span/file out.
+- **Severity:** a broken file-qualified ref is an **error** (exit 2) in `audit` —
+  it is a declaration, like `vigiles:file` / `vigiles:cmd`. The hook enforces the
+  mark and verifies it at write time (exit 2 blocks), with context.
 
 ## Metaprogramming & dynamic definitions
 
@@ -104,13 +112,12 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
   inside ` ```ts ` blocks stays separate and opt-in.)
 - **R2 — Cross-language.** Support the languages we already cover (JS/TS, CSS,
   Python, Rust, Ruby) via bundled grammars; graceful skip+note for the rest.
-- **R3 — No file required, no stored state.** Bare references resolve against a
-  live project index (Rails/Zeitwerk-friendly); the check is a live join of the
-  current markdown and current code, so nothing drifts. No per-language
-  resolvers or autoloaders; ambiguity is reported, not guessed.
-- **R4 — No guessing.** Only explicitly written, reference-shaped spans are
-  verified — never infer which prose tokens are references (no `scan`-style
-  false positives). Preserves "verify the declared, reliably."
+- **R3 — Author names the file; no stored state, no index.** A reference is
+  file-qualified (`path.ext#symbol`); vigiles parses that one file each time.
+  No project-wide index, no autoloaders, no sidecar — nothing to drift.
+- **R4 — Harness-enforced, no guessing.** The `refs-hook` forces code-shaped
+  spans to be file-qualified or `vigiles:ignore`d; verification only runs on the
+  unambiguous `path.ext#symbol` shape (no `scan`-style false positives).
 - **R5 — Graceful on dynamic code.** Metaprogrammed / re-exported symbols →
   error with `vigiles:ignore` opt-out; optional `.rbi` / `.d.ts` indexing; never
   crash on a parse failure.
@@ -122,14 +129,14 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
 
 ## Build status
 
-1. ✅ **Per-file ast-grep extractor + project index** — `src/symbols.ts`
-   (`definedSymbols`, `SymbolIndex`, `resolveSymbol`).
-2. ✅ **Live ref verification + write-time hook** — `src/refs.ts` (`verifyRefs`),
-   wired into `audit` (warning tier) and the `refs` / `refs-hook` commands.
-   No sidecar, no markers.
-3. ⬜ Optional `.rbi` / `.d.ts` indexing to absorb typed dynamic symbols.
-4. ⬜ Optional `symbol()` spec builder (compile-verified, hard guarantee) for
-   teams that want spec-mode enforcement.
+1. ✅ **Per-file ast-grep extractor** — `src/symbols.ts` (`definedSymbols`,
+   `definedSymbolsInFile`, `fileDefinesSymbol`). No project index.
+2. ✅ **File-qualified verification + enforcement hook** — `src/refs.ts`
+   (`verifySymbolRefs`, `unmarkedCodeRefs`), wired into `audit` (error tier) and
+   the `refs` / `refs-hook` commands. `refs-hook` blocks unmarked code refs.
+3. ⬜ Optional `.rbi` / `.d.ts` parsing to absorb typed dynamic symbols.
+4. ⬜ Optional `symbol("file", "name")` spec builder (compile-verified) for
+   spec-mode authors.
 
 ## See also
 
