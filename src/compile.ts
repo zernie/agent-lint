@@ -238,7 +238,7 @@ function renderFragment(fragment: InstructionFragment): string {
     case "skill":
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
     case "symbol":
-      return `\`${fragment.file}#${fragment.symbol}\``;
+      return `\`vigiles:symbol ${fragment.file}#${fragment.symbol}\``;
     default:
       return assertNever(fragment);
   }
