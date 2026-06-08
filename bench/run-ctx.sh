@@ -64,13 +64,15 @@ EOF
     settings_flag=(--settings ./settings.json)
   fi
 
+  # Prompt is fed on STDIN, not as an argv string: a single CLI argument is
+  # capped at 128KB (MAX_ARG_STRLEN), far below the 80k/160k-token loads.
   local out status
-  out=$(timeout 360 claude -p "$(cat "$promptfile")" \
+  out=$(timeout 360 claude -p \
         --model "$MODEL" \
         --permission-mode acceptEdits \
         --allowedTools Read Edit Write Bash \
         --output-format json \
-        "${settings_flag[@]}" </dev/null 2>/dev/null)
+        "${settings_flag[@]}" < "$promptfile" 2>/dev/null)
   status=$?
   local turns; turns=$(printf '%s' "$out" | jq -r '.num_turns // empty' 2>/dev/null)
   npm test --silent >/dev/null 2>&1; local end=$?
