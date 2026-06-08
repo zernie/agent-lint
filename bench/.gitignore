@@ -2,3 +2,7 @@
 .work/
 results.csv
 run.log
+
+# Stray generate-types output inside task fixtures
+tasks/**/.vigiles/
+tasks/.vigiles/
