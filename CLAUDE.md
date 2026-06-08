@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:00932c01c4bc4ff9 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:978225ca471a444e compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -12,7 +12,7 @@ The cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-f
 
 Authoring-time feedback comes two ways: `generate-types` emits a `.d.ts` so the TS compiler PROVES `.spec.ts` references at edit time, and `generate-schema` emits a JSON Schema so a YAML LSP autocompletes and squiggles `vigiles:` frontmatter rule names — same guarantee, no TypeScript required. Both scan all 7 catalog APIs, package.json, and project files.
 
-Second pillar — testing the harness. Beyond verifying instruction files, vigiles tests the harness itself (hooks, settings, skills). Two tiers: `runHarnessTest` runs the real `claude` CLI against a scripted mock model for deterministic, key-free checks of hook logic (`src/harness-test.ts`, `src/mock-model.ts`), and `runEval` drives the real model across A/B arms × trials to measure whether a change actually moves agent behaviour (`src/eval.ts`). Run them as CLI commands — `vigiles test` (`*.harness.mjs`) and `vigiles eval` (`*.eval.mjs`) — with canonical examples under `examples/harness/`. Unlike reference verification (bounded by undecidability), this pillar has no ceiling: a test measures reality, so there is nothing to game. See `research/harness-testing.md`.
+Second pillar — testing the harness. Beyond verifying instruction files, vigiles tests the harness itself (hooks, settings, skills) as an assembled machine, not one hook at a time: `runHarnessTest`/`runEval` take a `plugin` path that loads the real harness (hooks with `${CLAUDE_PLUGIN_ROOT}` resolved, CLAUDE.md, skills) from `.claude-plugin/plugin.json` or `.claude/settings.json` (`src/plugin-loader.ts`), so you test what ships. Two tiers: `runHarnessTest` runs the real `claude` CLI against a scripted mock model for deterministic, key-free checks of hook logic (`src/harness-test.ts`, `src/mock-model.ts`), and `runEval` drives the real model across A/B arms × trials, aggregating mean ± se so a gap can be read for significance (`src/eval.ts`). The API is runner-agnostic (node:test, vitest, jest) via plain async functions plus helpers/matchers in `src/harness-assert.ts` and an optional LLM-as-judge in `src/judge.ts`; a zero-dep CLI fallback runs them as `vigiles test` (`*.harness.mjs`) and `vigiles eval` (`*.eval.mjs`), with canonical examples under `examples/harness/`. Unlike reference verification (bounded by undecidability), this pillar has no ceiling: a test measures reality, so there is nothing to game. See `docs/harness-testing.md` and `research/harness-testing.md`.
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via `enforce()`.
 
@@ -68,8 +68,13 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/mock-model.ts` — Scriptable, dependency-free Anthropic Messages SSE mock (startMock/scriptModel) — point real claude at it via ANTHROPIC_BASE_URL for deterministic harness tests
 - `src/harness-test.ts` — Deterministic Claude Code harness testing: runHarnessTest runs real claude + real hooks/settings against a scripted mock model (Stop-hooks reliable; tool-event hooks via the eval tier)
 - `src/harness-test.test.ts` — Harness-test suite (node:test, skips without claude)
-- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates a metric — the empirical half of testing your harness (generalizes bench/)
-- `src/eval.test.ts` — Eval aggregation/formatting test suite (node:test)
+- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) — the empirical half of testing your harness (generalizes bench/)
+- `src/eval.test.ts` — Eval aggregation/formatting + variance test suite (node:test)
+- `src/plugin-loader.ts` — Plugin/repo harness loader: loadPlugin reads the real .claude-plugin/plugin.json (or .claude/settings.json) hooks with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine
+- `src/plugin-loader.test.ts` — Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills materialization, settings merge, in-repo dogfood
+- `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing assert\* helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend
+- `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
+- `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -79,6 +84,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `examples/SKILL.md.spec.ts` — Example SKILL.md spec
 - `examples/harness/policy-gate.harness.mjs` — Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)
 - `examples/harness/skill-outcome.eval.mjs` — Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md
+- `examples/harness/plugin-cohesion.harness.mjs` — Canonical cohesion test (runHarnessTest with plugin:): load a whole plugin (.claude-plugin/plugin.json + CLAUDE.md) and assert multiple hooks fire together
 - `bench/evals/refs-hook.eval.mjs` — Worked eval reproducing benchmark #4 (forcing symbol marks → verifiable references?) as a runEval library call
 - `research/adoption-strategy.md` — Adoption strategy: zero-config setup, progressive enforcement, agent workflows
 - `research/competitive-landscape.md` — Competitive landscape: rule-porter, rulesync, vibe-cli, Ruler
@@ -100,6 +106,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/reference-verification-limits.md` — Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)
 - `research/harness-testing.md` — Testing the Claude Code harness — the two-tier design (deterministic runHarnessTest + real-model runEval) and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, 156 wshobson skills)
 - `research/skill-authoring-pains.md` — Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references
+- `docs/harness-testing.md` — Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
