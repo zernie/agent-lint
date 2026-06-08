@@ -51,6 +51,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Cross-runner matcher tests (vitest + jest)
+        run: npx vitest run && npx jest
+
       - name: Type check
         run: npx tsc --noEmit
 

@@ -108,6 +108,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
     "src/judge.ts":
       "Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)",
+    "test/runners/matchers.vitest.mjs":
+      "Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; src/*.test.ts excluded via vitest.config.mjs)",
+    "test/runners/matchers.jest.cjs":
+      "Cross-runner constraint: the same vigilesMatchers register and pass under jest (CommonJS dist required natively; scoped via jest.config.cjs)",
     "src/test-utils.ts":
       "Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo",
     "src/types.ts":
@@ -212,6 +216,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Build + run the deterministic harness tests (*.harness.mjs) on the in-repo CLI — needs the claude CLI, no API key",
     "npm run test:eval":
       "Build + run the real-model harness evals (*.eval.mjs) on the in-repo CLI — needs claude + model auth",
+    "npm run test:vitest":
+      "Build + run the cross-runner matcher constraints under vitest (test/runners/*.vitest.mjs)",
+    "npm run test:jest":
+      "Build + run the cross-runner matcher constraints under jest (test/runners/*.jest.cjs)",
   },
 
   rules: {

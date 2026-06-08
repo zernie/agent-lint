@@ -37,7 +37,9 @@
     "fmt:check": "prettier --check .",
     "test:e2e": "bash test/e2e/run.sh",
     "test:harness": "npm run build && node dist/cli.js test",
-    "test:eval": "npm run build && node dist/cli.js eval"
+    "test:eval": "npm run build && node dist/cli.js eval",
+    "test:vitest": "npm run build && vitest run",
+    "test:jest": "npm run build && jest"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -49,9 +51,11 @@
     "eslint": "^10.1.0",
     "eslint-plugin-sonarjs": "^4.0.2",
     "globals": "^17.4.0",
+    "jest": "^30.4.2",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@ast-grep/lang-python": "^0.0.6",
