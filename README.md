@@ -342,7 +342,7 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 
 vigiles also ships a library for **testing the harness itself** — your hooks,
 settings, skills, and instruction files. `Agent = Model + Harness`; this tests
-the harness, at two levels.
+the harness, at three levels.
 
 **Evals — does my change actually move agent behaviour?** Define a fixture, a set
 of **arms** (a hook on vs off, with/without a CLAUDE.md rule), a task, and a
@@ -399,8 +399,24 @@ assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
 
 The deterministic tier is reliable for **SessionStart, Stop, UserPromptSubmit,
 and Bash PreToolUse/PostToolUse** hooks — the governance/policy shapes most real
-plugins use; Edit/Write tool-event hooks are headless-gated, so test those via
-the eval tier.
+plugins use; Edit/Write tool-event hooks are headless-gated, so test those at the
+unit tier or via the eval tier.
+
+**Unit-test a hook — no `claude` at all.** A hook is just a process: `runHook`
+pipes an event JSON to its stdin and reports the block/allow decision —
+milliseconds, and the only tier that reaches **every** event (incl. Edit/Write,
+PreCompact, SessionEnd, which the deterministic mock can't trigger).
+
+```typescript
+import { runHook } from "vigiles/run-hook";
+
+const r = runHook(guardCommand, {
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "git commit --no-verify" },
+});
+assert(r.blocked); // exit 2, decision:"block", or permissionDecision:"deny"
+```
 
 **Run them as a CI command.** `vigiles test` discovers `*.harness.mjs` files
 (deterministic, no API key) and `vigiles eval` discovers `*.eval.mjs` files
@@ -416,12 +432,15 @@ npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 
 **Test the whole machine.** Point `plugin` at a plugin (or `"./"` for your repo)
 and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md,
-and skills — is loaded into the sandbox, so you test what ships, not a retyped
-subset. The library is plain async functions, so it runs in **node:test,
-vitest, or jest** unchanged (shared `expect.extend` matchers for the latter two).
+skills, subagents and commands — is loaded into the sandbox, so you test what
+ships, not a retyped subset. `loadPlugin(...).warnings` flags surfaces only a
+real model can drive (subagents, slash commands, MCP), so loading a whole plugin
+never silently tests an empty machine. The library is plain async functions, so
+it runs in **node:test, vitest, or jest** unchanged (shared `expect.extend`
+matchers for the latter two).
 
-[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). The two-tier
-design and a coverage assessment against real plugins (protect-mcp,
+[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). The design
+rationale and a coverage assessment against real plugins (protect-mcp,
 obra/superpowers, block-no-verify, 156 wshobson skills) are in
 [`research/harness-testing.md`](research/harness-testing.md); findings from
 running this harness in anger live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).

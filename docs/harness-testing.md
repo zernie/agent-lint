@@ -146,7 +146,7 @@ and type-check in a `.test.ts`):
 
 ```ts
 // vitest.config.ts →  test: { setupFiles: ["vigiles/vitest"] }
-// jest.config.js   →  setupFilesAfterEach: ["vigiles/jest"]
+// jest.config.js   →  setupFilesAfterEnv: ["vigiles/jest"]
 // …or import once at the top of a test file:
 import "vigiles/vitest"; // or "vigiles/jest"
 
@@ -243,5 +243,5 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 ## See also
 
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier + file (and why the CLI examples are `.mjs`).
-- [`research/harness-testing.md`](../research/harness-testing.md) — the two-tier design + real-plugin coverage.
+- [`research/harness-testing.md`](../research/harness-testing.md) — the deterministic + eval design rationale + real-plugin coverage.
 - [`research/benchmarks-runtime-gates.md`](../research/benchmarks-runtime-gates.md) — findings from running this harness in anger.

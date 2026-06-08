@@ -6,7 +6,7 @@
  * Importing this entry registers the vigiles matchers AND augments jest's types
  * so `toHaveCreated` / `toBeatBaseline` type-check.
  *
- *   // jest.config.js →  setupFilesAfterEach: ["vigiles/jest"]
+ *   // jest.config.js →  setupFilesAfterEnv: ["vigiles/jest"]
  *   // …or at the top of a test file:
  *   import "vigiles/jest";
  *
