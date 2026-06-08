@@ -11,3 +11,9 @@ tasks/.vigiles/
 .work-tdd/
 results-tdd.csv
 run-tdd.log
+
+# Context-load benchmark artifacts
+.work-ctx/
+results-ctx.csv
+run-ctx.log
+.corpus.txt
