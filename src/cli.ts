@@ -17,7 +17,7 @@ import {
   readFileSync,
   lstatSync,
 } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
 import { validate, loadConfig } from "./validate.js";
@@ -40,6 +40,13 @@ import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
+import {
+  buildProjectIndex,
+  pinReferences,
+  writePins,
+  readPins,
+  recheckPins,
+} from "./pin.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -524,7 +531,42 @@ interface AuditReport {
   coverageErrors: number;
   orphanCount: number;
   docRefErrors: number;
+  pinErrors: number;
   files: string[];
+}
+
+/**
+ * Re-check the pinned references of instruction files: a pin breaks when its
+ * symbol no longer resolves uniquely to the pinned file (renamed / removed /
+ * moved / now ambiguous). Builds the project index once, and only when some
+ * file actually has pins. Returns the count of broken pins.
+ */
+function verifyPins(files: string[], silent: boolean): number {
+  const cwd = process.cwd();
+  const targets = files.map((f) => relative(cwd, resolve(cwd, f)) || f);
+  const withPins = targets.filter((t) => readPins(cwd, t).length > 0);
+  if (withPins.length === 0) return 0;
+
+  if (!silent) console.log("\nPinned reference check:\n");
+  const index = buildProjectIndex(cwd);
+  let errors = 0;
+  for (const target of targets) {
+    const pins = readPins(cwd, target);
+    if (pins.length === 0) continue;
+    const broken = recheckPins(pins, index);
+    if (!silent) {
+      if (broken.length === 0) {
+        console.log(`  ✓ ${target}: ${String(pins.length)} pinned ref(s) hold`);
+      } else {
+        for (const b of broken) {
+          console.log(`  ✗ ${target}:${String(b.line)} ${b.reason}`);
+          ghAnnotate("error", b.reason, target, b.line);
+        }
+      }
+    }
+    errors += broken.length;
+  }
+  return errors;
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
@@ -535,7 +577,8 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.inlineErrors > 0 ||
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
-    report.coverageErrors > 0
+    report.coverageErrors > 0 ||
+    report.pinErrors > 0
   )
     return 2;
   if (
@@ -920,6 +963,9 @@ async function audit(
     }
   }
 
+  // 9. Re-check harness-pinned symbol references (see src/pin.ts).
+  const pinErrors = verifyPins(files, silent);
+
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
@@ -935,6 +981,7 @@ async function audit(
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
     docRefErrors: docRefReport.errors.length,
+    pinErrors,
     files,
   };
 
@@ -1945,6 +1992,12 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
     case "action-hook":
       actionHookCommand();
       return true;
+    case "pin":
+      pinCommand(restArgs[0]);
+      return true;
+    case "pin-hook":
+      pinHookCommand();
+      return true;
     default:
       return false;
   }
@@ -1982,6 +2035,82 @@ function actionHookCommand(): void {
     console.error(decision.message);
     process.exit(2);
   }
+}
+
+const INSTRUCTION_FILE = /^(SKILL|CLAUDE|AGENTS)\.md$/;
+
+function isInstructionFile(file: string): boolean {
+  return INSTRUCTION_FILE.test(basename(file));
+}
+
+/**
+ * Resolve the code-shaped references in an instruction file against the project
+ * symbol index, pin the unique ones to a `.vigiles` sidecar, and report the
+ * code-shaped references that did not resolve (typos / ambiguity). `log` lets
+ * the hook send its summary to stderr (agent feedback) vs stdout (CLI).
+ */
+function pinFile(target: string, cwd: string, log: (m: string) => void): void {
+  let markdown: string;
+  try {
+    markdown = readFileSync(resolve(cwd, target), "utf-8");
+  } catch {
+    return;
+  }
+  const index = buildProjectIndex(cwd);
+  const { pinned, unresolved } = pinReferences(markdown, index);
+  writePins(cwd, target, pinned);
+  log(`vigiles: pinned ${String(pinned.length)} reference(s) in ${target}.`);
+  if (unresolved.length > 0) {
+    log(
+      "vigiles: these look like code references but did not resolve — fix a typo, scope it, or it is prose:",
+    );
+    for (const u of unresolved) {
+      const detail =
+        u.status === "ambiguous"
+          ? `ambiguous (${u.candidates.join(", ")})`
+          : "not found";
+      log(`  - line ${String(u.line)}: \`${u.ref}\` (${detail})`);
+    }
+  }
+}
+
+/** `vigiles pin <file>` — resolve and pin references manually. */
+function pinCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles pin <instruction-file.md>");
+    process.exit(2);
+  }
+  pinFile(target, process.cwd(), (m) => {
+    console.log(m);
+  });
+}
+
+/**
+ * PostToolUse-hook entrypoint: when the agent edits an instruction file, resolve
+ * and pin its references against the live code, surfacing unresolved code-shaped
+ * references back to the agent (non-blocking — pinning is opportunistic, never a
+ * gate). The pins become the durable references `audit` re-checks.
+ */
+function pinHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let file = "";
+  try {
+    const j = JSON.parse(raw) as { tool_input?: { file_path?: string } };
+    file = j.tool_input?.file_path ?? "";
+  } catch {
+    /* malformed → nothing to do */
+  }
+  if (!file || !isInstructionFile(file)) return;
+  const cwd = process.cwd();
+  const target = relative(cwd, resolve(cwd, file)) || file;
+  pinFile(target, cwd, (m) => {
+    console.error(m);
+  });
 }
 
 async function main(): Promise<void> {
