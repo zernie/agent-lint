@@ -1,7 +1,7 @@
 /**
- * Tests for harness-pinned reference resolution: inline-span extraction (fenced
- * blocks skipped), code-shape gating, and opportunistic pinning against a
- * project index built from real files.
+ * Tests for live symbol-reference verification: inline-span extraction (fenced
+ * blocks skipped), code-shape gating, and live resolution against a project
+ * index — no stored state.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,15 +13,17 @@ import {
   inlineSpans,
   isCodeShaped,
   buildProjectIndex,
-  pinReferences,
-} from "./pin.js";
+  verifyRefs,
+} from "./refs.js";
 
 test("inlineSpans skips fenced code blocks (R1)", () => {
   const spans = inlineSpans(
     "Use `parseConfig` here.\n```ts\n`insideFence`\n```\nAnd `MAX_RETRIES`.\n",
   );
-  const texts = spans.map((s) => s.text);
-  assert.deepEqual(texts, ["parseConfig", "MAX_RETRIES"]);
+  assert.deepEqual(
+    spans.map((s) => s.text),
+    ["parseConfig", "MAX_RETRIES"],
+  );
   assert.equal(spans[0].line, 1);
   assert.equal(spans[1].line, 5);
 });
@@ -41,8 +43,8 @@ test("isCodeShaped gates prose from code references", () => {
   }
 });
 
-test("pins unique code-shaped refs, flags typos, ignores prose", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vigiles-pin-"));
+test("verifyRefs resolves live: unique → resolved, typo → missing, prose ignored", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-"));
   try {
     mkdirSync(join(dir, "src"));
     writeFileSync(
@@ -52,16 +54,16 @@ test("pins unique code-shaped refs, flags typos, ignores prose", () => {
     const index = buildProjectIndex(dir);
     const md =
       "Call `parseConfig` with `MAX_RETRIES`. Prose `high`. Typo `parseConfgi`.\n";
-    const { pinned, unresolved } = pinReferences(md, index);
+    const { resolved, unresolved } = verifyRefs(md, index);
 
-    const pinnedRefs = pinned.map((p) => p.ref).sort();
-    assert.deepEqual(pinnedRefs, ["MAX_RETRIES", "parseConfig"]);
+    assert.deepEqual(resolved.map((r) => r.ref).sort(), [
+      "MAX_RETRIES",
+      "parseConfig",
+    ]);
     assert.equal(
-      pinned.find((p) => p.ref === "parseConfig")?.file,
+      resolved.find((r) => r.ref === "parseConfig")?.file,
       "src/config.ts",
     );
-
-    // The typo is surfaced; prose `high` is not (not code-shaped).
     assert.deepEqual(
       unresolved.map((u) => u.ref),
       ["parseConfgi"],
@@ -72,15 +74,38 @@ test("pins unique code-shaped refs, flags typos, ignores prose", () => {
   }
 });
 
-test("ambiguous references are reported with candidates, not pinned", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vigiles-pin-amb-"));
+test("a rename surfaces live with no stored state", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-rename-"));
+  try {
+    mkdirSync(join(dir, "src"));
+    const src = join(dir, "src", "config.ts");
+    writeFileSync(src, "export function parseConfig(){}\n");
+    const md = "Call `parseConfig`.\n";
+
+    assert.equal(verifyRefs(md, buildProjectIndex(dir)).unresolved.length, 0);
+
+    // Rename in the code — a fresh index (no sidecar) reflects it immediately.
+    writeFileSync(src, "export function loadConfig(){}\n");
+    const after = verifyRefs(md, buildProjectIndex(dir));
+    assert.equal(after.resolved.length, 0);
+    assert.equal(after.unresolved[0].ref, "parseConfig");
+    assert.equal(after.unresolved[0].status, "missing");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ambiguous references are reported with candidates", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-amb-"));
   try {
     mkdirSync(join(dir, "src"));
     writeFileSync(join(dir, "src", "a.ts"), "export function helperFn(){}\n");
     writeFileSync(join(dir, "src", "b.ts"), "export function helperFn(){}\n");
-    const index = buildProjectIndex(dir);
-    const { pinned, unresolved } = pinReferences("See `helperFn`.\n", index);
-    assert.equal(pinned.length, 0);
+    const { resolved, unresolved } = verifyRefs(
+      "See `helperFn`.\n",
+      buildProjectIndex(dir),
+    );
+    assert.equal(resolved.length, 0);
     assert.equal(unresolved[0].status, "ambiguous");
     assert.equal(unresolved[0].candidates.length, 2);
   } finally {
