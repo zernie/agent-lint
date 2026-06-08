@@ -1,1 +1,6 @@
-{ "name": "shop", "private": true, "type": "module", "scripts": {} }
+{
+  "name": "shop",
+  "private": true,
+  "type": "module",
+  "scripts": {}
+}
