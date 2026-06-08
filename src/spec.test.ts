@@ -216,7 +216,10 @@ describe("compileClaude()", () => {
     });
     const okRes = compileClaude(ok, { basePath: process.cwd() });
     assert.equal(okRes.errors.length, 0);
-    assert.match(okRes.markdown, /`src\/symbols\.ts#definedSymbols`/);
+    assert.match(
+      okRes.markdown,
+      /`vigiles:symbol src\/symbols\.ts#definedSymbols`/,
+    );
 
     const bad = claude({
       sections: {

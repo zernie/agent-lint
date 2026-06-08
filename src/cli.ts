@@ -2060,7 +2060,7 @@ function reportRefIssues(
   for (const u of unmarked) {
     log(
       `  ✗ line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
-        `mark it as \`path/to/file.ext#symbol\` or add <!-- vigiles:ignore --> if it is prose`,
+        `mark it as \`vigiles:symbol path/to/file.ext#${u.text}\` or add <!-- vigiles:ignore --> if it is prose`,
     );
   }
   return broken.length > 0 || unmarked.length > 0;

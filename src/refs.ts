@@ -53,8 +53,13 @@ export function inlineSpans(markdown: string): Span[] {
 
 // A file-qualified symbol reference: `<path>.<ext>` then `#`/`::` then a symbol.
 // Requires a real file extension before the separator, so a bare scoped symbol
-// (`Foo::bar`, `User#full_name` — no path) is NOT matched and stays prose.
-const FILE_SYMBOL = /^([\w@./-]+\.[A-Za-z0-9]+)(?:#|::)([A-Za-z_]\w*[?!]?)$/;
+// An explicit `vigiles:symbol <path>.<ext>#<symbol>` directive inside a code
+// span. The literal `vigiles:symbol` prefix means zero detection heuristic — a
+// span either carries it or it does not — consistent with the rest of vigiles'
+// markers. The mark is self-contained (file + symbol in one inline token), so
+// it binds unambiguously even in a long line with several references.
+const SYMBOL_MARK =
+  /^vigiles:symbol\s+([\w@./-]+\.[A-Za-z0-9]+)(?:#|::)([A-Za-z_]\w*[?!]?)$/;
 
 /** A parsed file-qualified reference. */
 export interface SymbolRef {
@@ -68,11 +73,11 @@ export interface SymbolRefError extends SymbolRef {
   readonly reason: string;
 }
 
-/** Extract the file-qualified symbol references from a markdown file. */
+/** Extract the `vigiles:symbol` references from a markdown file. */
 export function symbolRefs(markdown: string): SymbolRef[] {
   const refs: SymbolRef[] = [];
   for (const span of inlineSpans(markdown)) {
-    const m = FILE_SYMBOL.exec(span.text);
+    const m = SYMBOL_MARK.exec(span.text);
     if (m) refs.push({ file: m[1], symbol: m[2], line: span.line });
   }
   return refs;
@@ -133,18 +138,18 @@ export function isCodeShaped(text: string): boolean {
 }
 
 /**
- * Code-shaped inline references that are NOT file-qualified — the spans the
- * enforcement hook makes the agent mark (as `path.ext#symbol`) or opt out of
- * (`<!-- vigiles:ignore -->`). A whole file opts out with
- * `<!-- vigiles:ignore-file -->`.
+ * Code-shaped inline references that are NOT yet marked — the spans the
+ * enforcement hook makes the agent mark as `` `vigiles:symbol path.ext#symbol` ``
+ * or opt out of with `<!-- vigiles:ignore -->` (or `<!-- vigiles:ignore-file -->`
+ * for the whole file).
  */
 export function unmarkedCodeRefs(markdown: string): Span[] {
   if (IGNORE_FILE.test(markdown)) return [];
   const lines = markdown.split("\n");
   return inlineSpans(markdown).filter((span) => {
     if (IGNORE_LINE.test(lines[span.line - 1] ?? "")) return false;
-    if (FILE_SYMBOL.test(span.text)) return false; // already marked
-    if (PATH_LIKE.test(span.text) && !span.text.includes("#")) return false;
+    if (SYMBOL_MARK.test(span.text)) return false; // already a vigiles:symbol mark
+    if (PATH_LIKE.test(span.text)) return false; // a path/filename → file ref
     return isCodeShaped(span.text);
   });
 }
