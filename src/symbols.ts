@@ -1,0 +1,162 @@
+/**
+ * vigiles — cross-language symbol index (ast-grep / tree-sitter).
+ *
+ * The kernel of harness-pinned reference verification. Instruction files
+ * reference project symbols in prose (`parseConfig`, `User`, `create_docx.py`);
+ * authors never write a verifiable `file#symbol` form (corpus: ~0%). So instead
+ * of asking authors to annotate, the *harness* resolves a bare reference against
+ * the live code at write time and pins it. This module is the resolver: extract
+ * the symbols a file defines, and build a project-wide name → locations index.
+ *
+ * Boundary (see research/symbol-verification.md): we answer "does a definition
+ * with this name (in this scope) exist", NOT "does this reference resolve through
+ * imports / Zeitwerk / tsconfig". Resolution is per-language and architectural —
+ * delegated. Ambiguity (a name defined in several files) is reported, not guessed.
+ */
+import { readFileSync, existsSync } from "node:fs";
+import { extname } from "node:path";
+
+import { parse, Lang, registerDynamicLanguage } from "@ast-grep/napi";
+import python from "@ast-grep/lang-python";
+import rust from "@ast-grep/lang-rust";
+import ruby from "@ast-grep/lang-ruby";
+
+let registered = false;
+function ensureRegistered(): void {
+  if (registered) return;
+  // Non-web grammars ship as separate packages registered at runtime.
+  registerDynamicLanguage({ python, rust, ruby });
+  registered = true;
+}
+
+/** A language key accepted by ast-grep's `parse` (core enum or registered id). */
+type LangKey = Lang | string;
+
+const EXT_LANG: Record<string, LangKey> = {
+  ".ts": Lang.TypeScript,
+  ".tsx": Lang.Tsx,
+  ".mts": Lang.TypeScript,
+  ".cts": Lang.TypeScript,
+  ".d.ts": Lang.TypeScript,
+  ".js": Lang.JavaScript,
+  ".jsx": Lang.JavaScript,
+  ".mjs": Lang.JavaScript,
+  ".cjs": Lang.JavaScript,
+  ".css": Lang.Css,
+  ".py": "python",
+  ".pyi": "python",
+  ".rs": "rust",
+  ".rb": "ruby",
+  ".rbi": "ruby",
+};
+
+/** The ast-grep language for a file, or null if unsupported (graceful skip). */
+export function langForFile(file: string): LangKey | null {
+  if (file.endsWith(".d.ts")) return Lang.TypeScript;
+  return EXT_LANG[extname(file).toLowerCase()] ?? null;
+}
+
+/** A symbol definition found in a file. */
+export interface SymbolDef {
+  /** The defined identifier, e.g. "parseConfig". */
+  readonly name: string;
+  /** The tree-sitter node kind, e.g. "function_declaration" (raw, per-grammar). */
+  readonly kind: string;
+  /** Enclosing class/module name, or "" at top level. */
+  readonly scope: string;
+  /** 1-based line of the definition. */
+  readonly line: number;
+}
+
+const ID_KINDS = new Set(["identifier", "constant", "type_identifier"]);
+const SCOPE_KINDS = new Set([
+  "class_declaration",
+  "class_definition",
+  "class",
+  "module",
+  "interface_declaration",
+  "enum_declaration",
+]);
+
+interface RawNode {
+  kind(): string;
+  text(): string;
+  field(name: string): RawNode | null;
+  children(): RawNode[];
+  range(): { start: { line: number } };
+}
+
+function recordNode(node: RawNode, scope: string, out: SymbolDef[]): void {
+  const line = node.range().start.line + 1;
+  const nameNode = node.field("name");
+  if (nameNode) {
+    out.push({ name: nameNode.text(), kind: node.kind(), scope, line });
+  }
+  // Assignment-style constants (Python/Ruby `X = ...`): the identifier is the
+  // `left` field, not `name`.
+  const left = node.field("left");
+  if (left && ID_KINDS.has(left.kind())) {
+    out.push({ name: left.text(), kind: node.kind(), scope, line });
+  }
+}
+
+/** Extract the symbols defined in a single file's source. */
+export function definedSymbols(code: string, lang: LangKey): SymbolDef[] {
+  ensureRegistered();
+  const out: SymbolDef[] = [];
+  const walk = (node: RawNode, scope: string): void => {
+    recordNode(node, scope, out);
+    const nameNode = node.field("name");
+    const nextScope =
+      SCOPE_KINDS.has(node.kind()) && nameNode ? nameNode.text() : scope;
+    for (const child of node.children()) walk(child, nextScope);
+  };
+  walk(parse(lang, code).root() as unknown as RawNode, "");
+  return out;
+}
+
+/** Defined symbols for a file on disk, or [] if unreadable/unsupported. */
+export function definedSymbolsInFile(file: string): SymbolDef[] {
+  const lang = langForFile(file);
+  if (!lang) return [];
+  try {
+    return definedSymbols(readFileSync(file, "utf-8"), lang);
+  } catch {
+    return [];
+  }
+}
+
+// A co-located declaration file that may declare symbols the source defines
+// dynamically (Sorbet `.rbi`, TypeScript `.d.ts`) — checked as a fallback so a
+// metaprogrammed `define_method` / ambient declaration still resolves.
+const DECL_SIBLING: Record<string, string> = {
+  ".ts": ".d.ts",
+  ".tsx": ".d.ts",
+  ".js": ".d.ts",
+  ".jsx": ".d.ts",
+  ".mjs": ".d.ts",
+  ".rb": ".rbi",
+};
+
+/**
+ * Whether `file` defines a top-level (or scoped) symbol named `name`. This is
+ * the whole check for a file-qualified reference (`path#symbol`): we parse the
+ * one named file — no project-wide index, no resolution across files. As a
+ * fallback we also consult a co-located declaration file (`.rbi` / `.d.ts`), so
+ * typed dynamic symbols resolve without running Sorbet / the TS compiler.
+ */
+export function fileDefinesSymbol(file: string, name: string): boolean {
+  if (definedSymbolsInFile(file).some((d) => d.name === name)) return true;
+  const ext = extname(file);
+  const decl = DECL_SIBLING[ext];
+  if (decl && !file.endsWith(decl)) {
+    const sibling = file.slice(0, -ext.length) + decl;
+    if (
+      existsSync(sibling) &&
+      definedSymbolsInFile(sibling).some((d) => d.name === name)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

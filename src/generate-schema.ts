@@ -136,6 +136,18 @@ export function generateSchema(
               },
             },
           },
+          files: {
+            type: "array",
+            description:
+              "File paths referenced by this instruction file, verified to exist by `vigiles audit`.",
+            items: { type: "string" },
+          },
+          commands: {
+            type: "array",
+            description:
+              "Commands (npm scripts / script-runner invocations) referenced here, verified by `vigiles audit`.",
+            items: { type: "string" },
+          },
         },
       },
     },

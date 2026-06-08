@@ -40,7 +40,7 @@ Reads fine. Four things are wrong:
 3. `npm run typecheck` — script removed from package.json
 4. Service/test pairing — no automated check, just a hope
 
-The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real — and meets you at whatever commitment level you want.
+The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
 
 Three levels. Each is independently useful; adopt as far up as you like.
 
@@ -210,25 +210,32 @@ Same monotonicity guarantees as `enforce()` — guards can't be silently removed
 
 ## Verified References
 
-`file()`, `cmd()`, and `ref()` catch stale references at compile time:
+`file()`, `cmd()`, `symbol()`, and `ref()` catch stale references at compile time:
 
 ```typescript
-import { claude, file, cmd, ref, instructions } from "vigiles/spec";
+import { claude, file, cmd, symbol, ref, instructions } from "vigiles/spec";
 
 export default claude({
   sections: {
     architecture: instructions`
       Core engine in ${file("src/compile.ts")}.
+      Compile specs with ${symbol("src/compile.ts", "compileClaude")}.
       Run ${cmd("npm test")} to verify.
       See ${ref("skills/strengthen/SKILL.md")} for the strengthen skill.
     `,
-    // If any path is stale → compile error
+    // If any path / script / symbol is stale → compile error
   },
   // ...
 });
 ```
 
 Skill specs use the same helpers for verified references inside instructions. [Full spec format →](docs/spec-format.md)
+
+### Symbol references (cross-language)
+
+`symbol("file", "name")` (and the markdown mark `` `vigiles:symbol file#name` ``) verify that the named file actually **defines** the symbol — a function, class, method, or constant — parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename the function and `audit` fails; no project-wide index, no autoloader guessing — it parses the one named file.
+
+In markdown mode the `refs-hook` (PostToolUse) **forces the mark**: it blocks an edit that leaves a code reference bare, telling the agent to write `` `vigiles:symbol path#name` `` or opt out with `<!-- vigiles:ignore -->`. The harness makes the agent mark its references at write time, with full context; `audit` re-verifies them. [Symbol verification →](research/symbol-verification.md)
 
 ## Type-Safe Rule References
 
@@ -249,7 +256,8 @@ For markdown frontmatter (Level 1), `vigiles generate-schema` gives the same aut
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + coverage
+npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
+npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -322,6 +330,69 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 | `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
 | `enforce-rules-format` | Validate all rules have enforcement classification                      |
 | `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
+
+## Test your Claude Code harness
+
+vigiles also ships a library for **testing the harness itself** — your hooks,
+settings, skills, and instruction files. `Agent = Model + Harness`; this tests
+the harness, at two levels.
+
+**Evals — does my change actually move agent behaviour?** Define a fixture, a set
+of **arms** (a hook on vs off, with/without a CLAUDE.md rule), a task, and a
+metric; `runEval` drives the real `claude` CLI N trials per arm and aggregates.
+
+```typescript
+import { runEval, formatEvalReport } from "vigiles/eval";
+
+const report = await runEval({
+  fixture: { "src/billing.ts": "export function chargeCard() {}" },
+  arms: {
+    vanilla: {},
+    gated: { settings: { hooks: { PostToolUse: [refsHook] } } },
+  },
+  task: "Document chargeCard in SKILL.md, referencing it by name.",
+  measure: (ctx) => ({
+    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
+  }),
+  trials: 6,
+});
+console.log(formatEvalReport(report)); //  vanilla marked=0.00   gated marked=0.50
+```
+
+**Deterministic tests — does my hook fire correctly?** No API key, no cost.
+`runHarnessTest` runs real `claude` against a **scripted mock model**
+(`vigiles/mock-model`), so your real hooks fire but the agent's turns are fixed.
+
+```typescript
+import { runHarnessTest, scriptModel } from "vigiles/harness-test";
+
+const r = await runHarnessTest({
+  settings: {
+    hooks: {
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "test -f DONE || { echo 'not done' >&2; exit 2; }",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  model: scriptModel([
+    { text: "I'm done" }, // tries to stop → blocked
+    { tool: "Bash", input: { command: "touch DONE" } },
+    { text: "now done" },
+  ]),
+});
+assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
+```
+
+The deterministic tier is reliable for **Stop hooks**; tool-event hooks
+(Edit/Write) are headless-gated, so test those via the eval tier. Our own
+findings from this harness live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
 
 ## Maturity Levels
 

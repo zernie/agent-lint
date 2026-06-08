@@ -34,8 +34,26 @@ export interface FrontmatterRule {
   line: number;
 }
 
+/** A `vigiles.files` entry (verified to exist). */
+export interface FrontmatterFileRef {
+  /** Project-relative path to verify exists. */
+  path: string;
+  /** 1-based line number of the entry in the source file (best-effort). */
+  line: number;
+}
+
+/** A `vigiles.commands` entry (npm scripts verified against package.json). */
+export interface FrontmatterCmdRef {
+  /** Command to verify. */
+  command: string;
+  /** 1-based line number of the entry in the source file (best-effort). */
+  line: number;
+}
+
 export interface FrontmatterParseResult {
   rules: FrontmatterRule[];
+  files: FrontmatterFileRef[];
+  commands: FrontmatterCmdRef[];
   /** Frontmatter that looks like a vigiles block but failed to parse. */
   errors: { line: number; message: string }[];
 }
@@ -76,22 +94,22 @@ function findLine(lines: string[], needle: string, fromIndex: number): number {
 
 type FrontmatterError = { line: number; message: string };
 
-/** Result of locating the `vigiles.enforce` list within a parsed document. */
-type EnforceLookup =
+/** Result of locating the `vigiles` mapping within a parsed document. */
+type VigilesLookup =
   | { kind: "none" }
   | { kind: "error"; error: FrontmatterError }
-  | { kind: "list"; enforce: unknown[]; enforceLine: number };
+  | { kind: "map"; vigiles: Record<string, unknown> };
 
 /**
- * Navigate a parsed frontmatter document to its `vigiles.enforce` list.
- * Returns "none" when there's nothing for vigiles to check, "error" when a
- * `vigiles`/`enforce` key is present but the wrong shape, or the list.
+ * Navigate a parsed frontmatter document to its `vigiles` mapping. Returns
+ * "none" when there's nothing for vigiles to check, "error" when the
+ * `vigiles` key is present but not a mapping, or the mapping itself.
  */
-function lookupEnforce(
+function getVigiles(
   doc: unknown,
   lines: string[],
   startLine: number,
-): EnforceLookup {
+): VigilesLookup {
   if (doc === null || typeof doc !== "object" || Array.isArray(doc)) {
     return { kind: "none" };
   }
@@ -110,7 +128,25 @@ function lookupEnforce(
       },
     };
   }
-  const enforce = (vigiles as Record<string, unknown>).enforce;
+  return { kind: "map", vigiles: vigiles as Record<string, unknown> };
+}
+
+/** Result of locating the `vigiles.enforce` list within the mapping. */
+type EnforceLookup =
+  | { kind: "none" }
+  | { kind: "error"; error: FrontmatterError }
+  | { kind: "list"; enforce: unknown[]; enforceLine: number };
+
+/**
+ * Locate the `vigiles.enforce` list. Returns "none" when absent, "error" when
+ * present but not a list, or the list with its source line.
+ */
+function lookupEnforce(
+  vigiles: Record<string, unknown>,
+  lines: string[],
+  startLine: number,
+): EnforceLookup {
+  const enforce = vigiles.enforce;
   if (enforce === undefined) return { kind: "none" };
   const enforceLine = findLine(lines, "enforce:", startLine - 1);
   if (!Array.isArray(enforce)) {
@@ -123,6 +159,50 @@ function lookupEnforce(
     };
   }
   return { kind: "list", enforce, enforceLine };
+}
+
+/**
+ * Parse a `vigiles.<key>` list of plain strings (used for `files` and
+ * `commands`). Returns located items plus error findings for the wrong shape
+ * or non-string entries; an absent key yields empty results.
+ */
+function parseStringList(
+  vigiles: Record<string, unknown>,
+  key: "files" | "commands",
+  lines: string[],
+  startLine: number,
+): { items: { value: string; line: number }[]; errors: FrontmatterError[] } {
+  const raw = vigiles[key];
+  if (raw === undefined) return { items: [], errors: [] };
+  const keyLine = findLine(lines, `${key}:`, startLine - 1);
+  if (!Array.isArray(raw)) {
+    return {
+      items: [],
+      errors: [
+        {
+          line: keyLine,
+          message: `\`vigiles.${key}\` must be a list of strings.`,
+        },
+      ],
+    };
+  }
+  const items: { value: string; line: number }[] = [];
+  const errors: FrontmatterError[] = [];
+  let cursor = keyLine;
+  for (let i = 0; i < raw.length; i++) {
+    const v: unknown = raw[i];
+    if (typeof v !== "string" || v.trim() === "") {
+      errors.push({
+        line: keyLine,
+        message: `vigiles.${key}[${String(i)}] must be a non-empty string.`,
+      });
+      continue;
+    }
+    const line = findLine(lines, v, cursor);
+    cursor = line;
+    items.push({ value: v, line });
+  }
+  return { items, errors };
 }
 
 interface EntryContext {
@@ -170,10 +250,16 @@ function parseEntry(
   return { rule: { linterRule: rule, why, line }, nextCursor: line };
 }
 
+/** Fresh empty result — callers may push into the arrays, so never shared. */
+function emptyResult(): FrontmatterParseResult {
+  return { rules: [], files: [], commands: [], errors: [] };
+}
+
 /**
- * Parse `vigiles.enforce` rules out of a markdown file's YAML frontmatter.
- * Does not touch the filesystem and does not verify rules against any
- * linter — callers feed the returned rules into `checkLinterRule`.
+ * Parse `vigiles.enforce` rules, `vigiles.files`, and `vigiles.commands` out
+ * of a markdown file's YAML frontmatter. Does not touch the filesystem and
+ * does not verify references — callers feed rules into `checkLinterRule` and
+ * file/command refs into `validateFileRef` / `validateCommandRef`.
  *
  * A file with no frontmatter, or frontmatter with no `vigiles` key, yields
  * empty results with no errors. Malformed YAML or a malformed `vigiles`
@@ -181,7 +267,7 @@ function parseEntry(
  */
 export function parseFrontmatterRules(content: string): FrontmatterParseResult {
   const fm = extractFrontmatter(content);
-  if (!fm) return { rules: [], errors: [] };
+  if (!fm) return emptyResult();
 
   const lines = content.split("\n");
 
@@ -193,6 +279,8 @@ export function parseFrontmatterRules(content: string): FrontmatterParseResult {
     const line = (err.mark?.line ?? 0) + fm.startLine;
     return {
       rules: [],
+      files: [],
+      commands: [],
       errors: [
         {
           line,
@@ -202,32 +290,55 @@ export function parseFrontmatterRules(content: string): FrontmatterParseResult {
     };
   }
 
-  const lookup = lookupEnforce(doc, lines, fm.startLine);
-  if (lookup.kind === "none") return { rules: [], errors: [] };
-  if (lookup.kind === "error") return { rules: [], errors: [lookup.error] };
+  const vig = getVigiles(doc, lines, fm.startLine);
+  if (vig.kind === "none") return emptyResult();
+  if (vig.kind === "error")
+    return { rules: [], files: [], commands: [], errors: [vig.error] };
 
   const rules: FrontmatterRule[] = [];
   const errors: FrontmatterError[] = [];
-  let cursor = lookup.enforceLine; // search start: line after `enforce:`
-  for (let i = 0; i < lookup.enforce.length; i++) {
-    const r = parseEntry(lookup.enforce[i], i, {
-      lines,
-      enforceLine: lookup.enforceLine,
-      cursor,
-    });
-    cursor = r.nextCursor;
-    if (r.rule) rules.push(r.rule);
-    if (r.error) errors.push(r.error);
+
+  const enforceLookup = lookupEnforce(vig.vigiles, lines, fm.startLine);
+  if (enforceLookup.kind === "error") {
+    errors.push(enforceLookup.error);
+  } else if (enforceLookup.kind === "list") {
+    let cursor = enforceLookup.enforceLine; // search start: line after `enforce:`
+    for (let i = 0; i < enforceLookup.enforce.length; i++) {
+      const r = parseEntry(enforceLookup.enforce[i], i, {
+        lines,
+        enforceLine: enforceLookup.enforceLine,
+        cursor,
+      });
+      cursor = r.nextCursor;
+      if (r.rule) rules.push(r.rule);
+      if (r.error) errors.push(r.error);
+    }
   }
 
-  return { rules, errors };
+  const fileList = parseStringList(vig.vigiles, "files", lines, fm.startLine);
+  errors.push(...fileList.errors);
+  const files: FrontmatterFileRef[] = fileList.items.map((it) => ({
+    path: it.value,
+    line: it.line,
+  }));
+
+  const cmdList = parseStringList(vig.vigiles, "commands", lines, fm.startLine);
+  errors.push(...cmdList.errors);
+  const commands: FrontmatterCmdRef[] = cmdList.items.map((it) => ({
+    command: it.value,
+    line: it.line,
+  }));
+
+  return { rules, files, commands, errors };
 }
 
 /**
- * True if the content has at least one parseable `vigiles.enforce` rule in
- * its frontmatter. Used by `require-spec` validation to treat frontmatter
- * mode as spec-equivalent, mirroring `hasInlineRules`.
+ * True if the content has at least one parseable `vigiles` reference in its
+ * frontmatter — an `enforce` rule, a `files` entry, or a `commands` entry.
+ * Used by `require-spec` validation to treat frontmatter mode as
+ * spec-equivalent, mirroring `hasInlineRules`.
  */
 export function hasFrontmatterRules(content: string): boolean {
-  return parseFrontmatterRules(content).rules.length > 0;
+  const r = parseFrontmatterRules(content);
+  return r.rules.length + r.files.length + r.commands.length > 0;
 }

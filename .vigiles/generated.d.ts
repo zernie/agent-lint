@@ -75,20 +75,27 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 5 npm scripts from package.json. */
+  /** 6 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
     | "lint"
     | "fmt"
-    | "fmt:check";
+    | "fmt:check"
+    | "test:e2e";
 
-  /** 33 project files. */
+  /** 46 project files. */
   export type ProjectFile = 
+    | "src/action-gate.test.ts"
+    | "src/action-gate.ts"
     | "src/action.ts"
     | "src/cedar.test.ts"
     | "src/cli.test.ts"
     | "src/cli.ts"
+    | "src/community-skills.test.ts"
+    | "src/community-skills.ts"
+    | "src/compile-generator.test.ts"
+    | "src/compile-generator.ts"
     | "src/compile.ts"
     | "src/coverage.test.ts"
     | "src/coverage.ts"
@@ -112,6 +119,13 @@ declare module "vigiles/generated" {
     | "src/session.ts"
     | "src/sidecar.test.ts"
     | "src/sidecar.ts"
+    | "src/skill-driver.test.ts"
+    | "src/skill-driver.ts"
+    | "src/skill-pipeline.test.ts"
+    | "src/skill-runtime.test.ts"
+    | "src/skill-runtime.ts"
+    | "src/skill-test.test.ts"
+    | "src/skill-test.ts"
     | "src/spec.test.ts"
     | "src/spec.ts"
     | "src/test-utils.ts"
@@ -190,10 +204,16 @@ declare module "vigiles/spec" {
   }
   interface KnownProjectFiles {
     files: 
+      | "src/action-gate.test.ts"
+      | "src/action-gate.ts"
       | "src/action.ts"
       | "src/cedar.test.ts"
       | "src/cli.test.ts"
       | "src/cli.ts"
+      | "src/community-skills.test.ts"
+      | "src/community-skills.ts"
+      | "src/compile-generator.test.ts"
+      | "src/compile-generator.ts"
       | "src/compile.ts"
       | "src/coverage.test.ts"
       | "src/coverage.ts"
@@ -217,6 +237,13 @@ declare module "vigiles/spec" {
       | "src/session.ts"
       | "src/sidecar.test.ts"
       | "src/sidecar.ts"
+      | "src/skill-driver.test.ts"
+      | "src/skill-driver.ts"
+      | "src/skill-pipeline.test.ts"
+      | "src/skill-runtime.test.ts"
+      | "src/skill-runtime.ts"
+      | "src/skill-test.test.ts"
+      | "src/skill-test.ts"
       | "src/spec.test.ts"
       | "src/spec.ts"
       | "src/test-utils.ts"
@@ -230,6 +257,7 @@ declare module "vigiles/spec" {
       | "test"
       | "lint"
       | "fmt"
-      | "fmt:check";
+      | "fmt:check"
+      | "test:e2e";
   }
 }
