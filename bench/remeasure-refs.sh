@@ -16,13 +16,17 @@ for d in "$WORK"/*/; do
   ignores=$(grep -c "vigiles:ignore" "$d/SKILL.md")
   names=$(grep -c "chargeCard" "$d/SKILL.md")
   broken=$( (cd "$d" && node "$CLI" refs SKILL.md 2>/dev/null | grep -c "^  - line") )
-  # rename the documented function in this run's own source, see if audit flags it
+  # rename the documented function in this run's own source, see if audit flags
+  # it. Restore any leftover rename first so re-runs are idempotent.
   catch="no"
+  sed -i 's/captureCard/chargeCard/g' "$d/src/billing.ts"
   if grep -q "chargeCard" "$d/src/billing.ts"; then
-    cp "$d/src/billing.ts" /tmp/bk.ts
     sed -i 's/chargeCard/captureCard/g' "$d/src/billing.ts"
-    if (cd "$d" && node "$CLI" audit SKILL.md 2>/dev/null | grep -q "chargeCard.*not defined"); then catch="yes"; fi
-    cp /tmp/bk.ts "$d/src/billing.ts"
+    # Capture first: `audit` exits 2 on any error, which under pipefail would
+    # mask grep's result if piped directly.
+    a=$(cd "$d" && node "$CLI" audit SKILL.md 2>/dev/null)
+    if printf '%s' "$a" | grep -q '"chargeCard" is not defined'; then catch="yes"; fi
+    sed -i 's/captureCard/chargeCard/g' "$d/src/billing.ts"
   fi
   echo "$arm,$trial,$marks,$ignores,$broken,$names,$catch" >> "$OUT"
 done
