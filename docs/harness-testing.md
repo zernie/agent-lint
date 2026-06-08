@@ -1,20 +1,57 @@
 # Testing your Claude Code harness
 
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md —
-is code, and code should be tested. vigiles gives you three layers, lowest cost
+is code, and code should be tested. vigiles gives you four layers, lowest cost
 first:
 
 1. **Verify the references** (static, free) — `vigiles audit` checks that the
    linter rules, files, scripts, and symbols your instruction files cite are
    real. See the [main README](../README.md).
-2. **Deterministic harness tests** (`runHarnessTest`, no API key) — does my hook
-   _fire / block_ correctly?
-3. **Evals** (`runEval`, real model) — does this harness change actually _move
+2. **Unit-test a hook** (`runHook`, no `claude`) — given this event JSON, does my
+   hook block or allow? Milliseconds, no CLI, reaches **every** event.
+3. **Deterministic harness tests** (`runHarnessTest`, no API key) — is the hook
+   _wired into the assembled machine_ and does it fire there?
+4. **Evals** (`runEval`, real model) — does this harness change actually _move
    what the agent does_?
 
-This doc covers layers 2–3. The library is plain async functions returning
+This doc covers layers 2–4. The library is plain async functions returning
 data, so it runs in **any** test runner — node:test, vitest, jest, mocha — and
 ships a zero-dependency CLI fallback (`vigiles test` / `vigiles eval`).
+
+## Unit-test a hook (no `claude`, every event)
+
+A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
+back an exit code (`2` = block) and an optional JSON decision on stdout.
+`runHook` exercises exactly that contract — no `claude` binary, no model, no
+sandbox — so a hook's logic is testable in milliseconds, in any runner:
+
+```ts
+import { runHook } from "vigiles/run-hook";
+import { assertHookBlocked } from "vigiles/harness-assert";
+
+const r = runHook(
+  '"$GUARD"',
+  {
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "git commit --no-verify" },
+  },
+  { env: { GUARD: guardPath } },
+);
+
+assertHookBlocked(r); // exit 2, decision:"block", or permissionDecision:"deny"
+// expect(r).toBlock();   // …or the matcher, under vitest/jest
+```
+
+This is the **base of the pyramid** and the only tier that reaches every event.
+The deterministic mock (next section) drives SessionStart / Stop /
+UserPromptSubmit / Bash PreToolUse|PostToolUse — but **not** Edit/Write tool
+events (headless-gated), PreCompact, Notification, SessionEnd, or SubagentStop.
+At this tier _you_ hand the hook the event JSON, so all of them are testable.
+
+What it does **not** prove: that the hook is _wired in_ (settings point at it,
+`${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
+both: unit-test the logic here, then assert it fires in the assembled machine.
 
 ## Test the whole machine, not one hook
 
@@ -39,6 +76,20 @@ const r = await runHarnessTest({
 Inline `settings` / `files` layer on top (per-event hook arrays are
 concatenated), so you can add one extra hook over the real plugin. Worked
 example: [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs).
+
+**Surface coverage.** The loader materializes hooks, CLAUDE.md, skills,
+`agents/` (subagents) and `commands/` (slash commands) into the sandbox.
+Subagents, slash commands and MCP servers only run under a **real model**, so
+they belong to the eval tier — `loadPlugin(...).warnings` lists any such surface
+a plugin ships, so "load the whole plugin" never silently tests an empty machine
+(e.g. a subagents-only plugin with no hooks):
+
+```ts
+import { loadPlugin } from "vigiles/plugin-loader";
+const { warnings } = loadPlugin("./some-plugin");
+if (warnings.length) console.warn(warnings.join("\n"));
+// ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
+```
 
 ## Deterministic tests in your runner
 
@@ -183,6 +234,7 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 
 ## Canonical examples
 
+- [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
