@@ -28,9 +28,12 @@ LEVELS=("${@:-0 30 90}")
 LEVELS=(${LEVELS[*]})
 
 CORPUS="$ROOT/bench/.corpus.txt"
-# Reproducible filler: the project's own docs/research (dense technical prose).
+# Reproducible filler: the project's own docs/research (dense technical prose),
+# concatenated twice so the corpus is large enough (~180k tokens) for
+# near-context-cap load levels.
 cat "$ROOT"/docs/*.md "$ROOT"/docs/rules/*.md "$ROOT"/research/*.md \
-    "$ROOT"/skills/linter-docs/*.md > "$CORPUS" 2>/dev/null
+    "$ROOT"/skills/linter-docs/*.md > "$CORPUS".1 2>/dev/null
+cat "$CORPUS".1 "$CORPUS".1 > "$CORPUS"; rm -f "$CORPUS".1
 WORK="$ROOT/bench/.work-ctx"
 RESULTS="$ROOT/bench/results-ctx.csv"
 rm -rf "$WORK"; mkdir -p "$WORK"
