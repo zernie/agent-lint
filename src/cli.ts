@@ -40,13 +40,7 @@ import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
-import {
-  buildProjectIndex,
-  pinReferences,
-  writePins,
-  readPins,
-  recheckPins,
-} from "./pin.js";
+import { buildProjectIndex, verifyRefs } from "./refs.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -531,42 +525,55 @@ interface AuditReport {
   coverageErrors: number;
   orphanCount: number;
   docRefErrors: number;
-  pinErrors: number;
+  symbolRefWarnings: number;
   files: string[];
 }
 
 /**
- * Re-check the pinned references of instruction files: a pin breaks when its
- * symbol no longer resolves uniquely to the pinned file (renamed / removed /
- * moved / now ambiguous). Builds the project index once, and only when some
- * file actually has pins. Returns the count of broken pins.
+ * Verify the code-shaped symbol references in instruction files, live: extract
+ * them from the current markdown and resolve against the current project index
+ * — no stored pins, so nothing can drift. A reference that no longer resolves
+ * (renamed / removed) or resolves ambiguously is a *warning* (it is inferred,
+ * not declared). Builds the index once, only when there are instruction files.
+ * Returns the count of unresolved references.
  */
-function verifyPins(files: string[], silent: boolean): number {
+function verifyMarkdownSymbols(files: string[], silent: boolean): number {
+  if (files.length === 0) return 0;
   const cwd = process.cwd();
-  const targets = files.map((f) => relative(cwd, resolve(cwd, f)) || f);
-  const withPins = targets.filter((t) => readPins(cwd, t).length > 0);
-  if (withPins.length === 0) return 0;
-
-  if (!silent) console.log("\nPinned reference check:\n");
   const index = buildProjectIndex(cwd);
-  let errors = 0;
-  for (const target of targets) {
-    const pins = readPins(cwd, target);
-    if (pins.length === 0) continue;
-    const broken = recheckPins(pins, index);
+  if (index.size === 0) return 0;
+
+  if (!silent) console.log("\nSymbol reference check:\n");
+  let warnings = 0;
+  for (const f of files) {
+    let markdown: string;
+    try {
+      markdown = readFileSync(resolve(cwd, f), "utf-8");
+    } catch {
+      continue;
+    }
+    const { resolved, unresolved } = verifyRefs(markdown, index);
     if (!silent) {
-      if (broken.length === 0) {
-        console.log(`  ✓ ${target}: ${String(pins.length)} pinned ref(s) hold`);
+      if (unresolved.length === 0) {
+        if (resolved.length > 0) {
+          console.log(
+            `  ✓ ${f}: ${String(resolved.length)} reference(s) resolve`,
+          );
+        }
       } else {
-        for (const b of broken) {
-          console.log(`  ✗ ${target}:${String(b.line)} ${b.reason}`);
-          ghAnnotate("error", b.reason, target, b.line);
+        for (const u of unresolved) {
+          const detail =
+            u.status === "ambiguous"
+              ? `ambiguous (${u.candidates.join(", ")})`
+              : "no longer defined";
+          console.log(`  ⚠ ${f}:${String(u.line)} \`${u.ref}\` ${detail}`);
+          ghAnnotate("warning", `\`${u.ref}\` ${detail}`, f, u.line);
         }
       }
     }
-    errors += broken.length;
+    warnings += unresolved.length;
   }
-  return errors;
+  return warnings;
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
@@ -577,14 +584,14 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.inlineErrors > 0 ||
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
-    report.coverageErrors > 0 ||
-    report.pinErrors > 0
+    report.coverageErrors > 0
   )
     return 2;
   if (
     report.duplicatePairs > 0 ||
     report.orphanCount > 0 ||
-    report.docRefErrors > 0
+    report.docRefErrors > 0 ||
+    report.symbolRefWarnings > 0
   )
     return 1;
   // Guidance counts are informational, not failures
@@ -963,8 +970,8 @@ async function audit(
     }
   }
 
-  // 9. Re-check harness-pinned symbol references (see src/pin.ts).
-  const pinErrors = verifyPins(files, silent);
+  // 9. Verify code-shaped symbol references live (see src/refs.ts).
+  const symbolRefWarnings = verifyMarkdownSymbols(files, silent);
 
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
@@ -981,7 +988,7 @@ async function audit(
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
     docRefErrors: docRefReport.errors.length,
-    pinErrors,
+    symbolRefWarnings,
     files,
   };
 
@@ -1010,6 +1017,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.orphanCount)} orphan docs`);
   if (report.docRefErrors > 0)
     parts.push(`${String(report.docRefErrors)} broken doc refs`);
+  if (report.symbolRefWarnings > 0)
+    parts.push(`${String(report.symbolRefWarnings)} unresolved symbol refs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
@@ -1992,11 +2001,11 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
     case "action-hook":
       actionHookCommand();
       return true;
-    case "pin":
-      pinCommand(restArgs[0]);
+    case "refs":
+      refsCommand(restArgs[0]);
       return true;
-    case "pin-hook":
-      pinHookCommand();
+    case "refs-hook":
+      refsHookCommand();
       return true;
     default:
       return false;
@@ -2044,54 +2053,56 @@ function isInstructionFile(file: string): boolean {
 }
 
 /**
- * Resolve the code-shaped references in an instruction file against the project
- * symbol index, pin the unique ones to a `.vigiles` sidecar, and report the
- * code-shaped references that did not resolve (typos / ambiguity). `log` lets
- * the hook send its summary to stderr (agent feedback) vs stdout (CLI).
+ * Resolve the code-shaped references in an instruction file against the live
+ * project symbol index and report which did not resolve (typo / ambiguity).
+ * Writes nothing — the check is a live join of the current markdown and the
+ * current code. `log` routes the summary to stdout (CLI) or stderr (hook).
  */
-function pinFile(target: string, cwd: string, log: (m: string) => void): void {
+function checkRefsInFile(
+  target: string,
+  cwd: string,
+  log: (m: string) => void,
+): void {
   let markdown: string;
   try {
     markdown = readFileSync(resolve(cwd, target), "utf-8");
   } catch {
     return;
   }
-  const index = buildProjectIndex(cwd);
-  const { pinned, unresolved } = pinReferences(markdown, index);
-  writePins(cwd, target, pinned);
-  log(`vigiles: pinned ${String(pinned.length)} reference(s) in ${target}.`);
-  if (unresolved.length > 0) {
+  const { resolved, unresolved } = verifyRefs(markdown, buildProjectIndex(cwd));
+  log(
+    `vigiles: ${String(resolved.length)} reference(s) resolve in ${target}` +
+      (unresolved.length > 0 ? `, ${String(unresolved.length)} do not:` : "."),
+  );
+  for (const u of unresolved) {
+    const detail =
+      u.status === "ambiguous"
+        ? `ambiguous (${u.candidates.join(", ")})`
+        : "not found";
     log(
-      "vigiles: these look like code references but did not resolve — fix a typo, scope it, or it is prose:",
+      `  - line ${String(u.line)}: \`${u.ref}\` (${detail}) — fix a typo, scope it, or it is prose`,
     );
-    for (const u of unresolved) {
-      const detail =
-        u.status === "ambiguous"
-          ? `ambiguous (${u.candidates.join(", ")})`
-          : "not found";
-      log(`  - line ${String(u.line)}: \`${u.ref}\` (${detail})`);
-    }
   }
 }
 
-/** `vigiles pin <file>` — resolve and pin references manually. */
-function pinCommand(target: string | undefined): void {
+/** `vigiles refs <file>` — check a file's symbol references live. */
+function refsCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles pin <instruction-file.md>");
+    console.error("Usage: vigiles refs <instruction-file.md>");
     process.exit(2);
   }
-  pinFile(target, process.cwd(), (m) => {
+  checkRefsInFile(target, process.cwd(), (m) => {
     console.log(m);
   });
 }
 
 /**
- * PostToolUse-hook entrypoint: when the agent edits an instruction file, resolve
- * and pin its references against the live code, surfacing unresolved code-shaped
- * references back to the agent (non-blocking — pinning is opportunistic, never a
- * gate). The pins become the durable references `audit` re-checks.
+ * PostToolUse-hook entrypoint: when the agent edits an instruction file, check
+ * its symbol references against the live code and surface unresolved ones back
+ * to the agent at write time (non-blocking — pure feedback, writes nothing).
+ * `audit` performs the same live check later.
  */
-function pinHookCommand(): void {
+function refsHookCommand(): void {
   let raw = "";
   try {
     raw = readFileSync(0, "utf-8");
@@ -2108,7 +2119,7 @@ function pinHookCommand(): void {
   if (!file || !isInstructionFile(file)) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
-  pinFile(target, cwd, (m) => {
+  checkRefsInFile(target, cwd, (m) => {
     console.error(m);
   });
 }
