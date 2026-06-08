@@ -1,0 +1,5 @@
+Write a file SKILL.md in this directory documenting how to charge a customer's
+cart. Reference the relevant functions and constants from src/billing.ts and
+src/cart.ts BY NAME (e.g. validateCart, cartTotalCents, chargeCard,
+MAX_CHARGE_CENTS) so a developer knows exactly what to call. Keep it short.
+Then stop.
