@@ -134,9 +134,12 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
 2. ✅ **File-qualified verification + enforcement hook** — `src/refs.ts`
    (`verifySymbolRefs`, `unmarkedCodeRefs`), wired into `audit` (error tier) and
    the `refs` / `refs-hook` commands. `refs-hook` blocks unmarked code refs.
-3. ⬜ Optional `.rbi` / `.d.ts` parsing to absorb typed dynamic symbols.
-4. ⬜ Optional `symbol("file", "name")` spec builder (compile-verified) for
-   spec-mode authors.
+3. ✅ Co-located `.rbi` / `.d.ts` fallback in `fileDefinesSymbol` — absorbs
+   typed dynamic / ambient symbols without running Sorbet or the TS compiler.
+   (Sorbet `sorbet/rbi/`-dir resolution remains a deferred heavy tier.)
+4. ✅ `symbol("file", "name")` spec builder — compile-verified, renders to the
+   same `` `file#symbol` `` form markdown mode verifies (`src/spec.ts`,
+   `src/compile.ts`).
 
 ## See also
 
