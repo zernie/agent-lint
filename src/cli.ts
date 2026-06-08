@@ -2058,9 +2058,10 @@ function reportRefIssues(
     log(`  ✗ line ${String(b.line)}: ${b.reason}`);
   }
   for (const u of unmarked) {
+    const callee = u.text.replace(/\s*\([^)]*\)\s*$/, "");
     log(
       `  ✗ line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
-        `mark it as \`vigiles:symbol path/to/file.ext#${u.text}\` or add <!-- vigiles:ignore --> if it is prose`,
+        `mark it as \`vigiles:symbol path/to/file.ext#${callee}\` or add <!-- vigiles:ignore --> if it is prose`,
     );
   }
   return broken.length > 0 || unmarked.length > 0;

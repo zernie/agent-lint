@@ -105,16 +105,21 @@ test("cross-language: resolves a Ruby vigiles:symbol mark", () => {
   }
 });
 
-test("unmarkedCodeRefs flags bare code refs, not marks/prose/paths", () => {
+test("unmarkedCodeRefs flags bare code refs incl. foo(args), not marks/prose/paths", () => {
   const md =
     "Use `parseConfig` and `MAX_RETRIES`.\n" + // code-shaped, unmarked → flagged
+    "Call `chargeCard(token, amount)`.\n" + // function-call form → flagged (callee)
     "Marked `vigiles:symbol src/config.ts#chargeCard`.\n" + // a mark → ok
     "Prose `name` and `high`. A path `src/config.ts`.\n" + // not flagged
     "Ignored `legacyThing`. <!-- vigiles:ignore -->\n"; // opted out
   const flagged = unmarkedCodeRefs(md)
     .map((s) => s.text)
     .sort();
-  assert.deepEqual(flagged, ["MAX_RETRIES", "parseConfig"]);
+  assert.deepEqual(flagged, [
+    "MAX_RETRIES",
+    "chargeCard(token, amount)",
+    "parseConfig",
+  ]);
 });
 
 test("vigiles:ignore-file opts the whole file out", () => {

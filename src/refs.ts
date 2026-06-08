@@ -125,15 +125,18 @@ const IGNORE_LINE = /<!--\s*vigiles:ignore\s*-->/;
 /**
  * Whether a span looks like a *code reference* that ought to carry a
  * file-qualified mark — a scoped name, or an identifier that isn't a bare
- * lowercase prose word. Paths/filenames are excluded (they are `file` refs).
+ * lowercase prose word. A function-call form `` `foo(args)` `` is treated as a
+ * reference to its callee `foo`. Paths/filenames are excluded (they are `file`
+ * refs).
  */
 export function isCodeShaped(text: string): boolean {
-  if (SCOPED.test(text)) return true;
-  if (!PLAIN_ID.test(text)) return false;
-  const hasUnderscore = text.includes("_");
-  const hasCamel = /[a-z][A-Z]/.test(text);
-  const isPascal = /^[A-Z][a-z]/.test(text);
-  const isScreaming = /^[A-Z][A-Z0-9_]+$/.test(text);
+  const callee = text.replace(/\s*\([^)]*\)\s*$/, ""); // `foo(args)` → `foo`
+  if (SCOPED.test(callee)) return true;
+  if (!PLAIN_ID.test(callee)) return false;
+  const hasUnderscore = callee.includes("_");
+  const hasCamel = /[a-z][A-Z]/.test(callee);
+  const isPascal = /^[A-Z][a-z]/.test(callee);
+  const isScreaming = /^[A-Z][A-Z0-9_]+$/.test(callee);
   return hasUnderscore || hasCamel || isPascal || isScreaming;
 }
 
