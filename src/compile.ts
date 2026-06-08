@@ -9,10 +9,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
+import { fileDefinesSymbol, langForFile } from "./symbols.js";
 
 import type {
   ClaudeSpec,
   SkillSpec,
+  SkillInput,
+  SkillStep,
+  Gate,
   Rule,
   InstructionFragment,
 } from "./spec.js";
@@ -90,7 +94,7 @@ export interface CompileError {
 // Reference validation
 // ---------------------------------------------------------------------------
 
-function validateFileRef(
+export function validateFileRef(
   filePath: string,
   basePath: string,
 ): CompileError | null {
@@ -120,24 +124,65 @@ export function readPackageScripts(
   }
 }
 
-function validateCommandRef(
+export function validateCommandRef(
   command: string,
   basePath: string,
 ): CompileError | null {
-  // Check "npm run <script>" or "npm <script>" against package.json
   const npmRunMatch = command.match(/^npm\s+run\s+(\S+)/);
   const npmMatch = command.match(/^npm\s+(test|start|build|pretest)\b/);
   const scriptName = npmRunMatch?.[1] ?? npmMatch?.[1];
-  if (!scriptName) return null;
+  if (scriptName) {
+    const scripts = readPackageScripts(basePath);
+    if (scripts && !scripts[scriptName]) {
+      return {
+        type: "stale-command",
+        message: `Script "${scriptName}" not found in package.json`,
+        path: command,
+      };
+    }
+    return null;
+  }
 
-  const scripts = readPackageScripts(basePath);
-  if (!scripts) return null;
-
-  if (!scripts[scriptName]) {
+  // Script-runner commands (python/node/bash/ruby/…): verify the referenced
+  // script file exists. Module forms (`python -m pkg`) are skipped — no path.
+  const scriptFile = command.match(
+    /^(?:python3?|node|bash|sh|ruby|deno run)\s+([^\s-]\S*\.[A-Za-z0-9]+)/,
+  )?.[1];
+  if (scriptFile && !existsSync(resolve(basePath, scriptFile))) {
     return {
       type: "stale-command",
-      message: `Script "${scriptName}" not found in package.json`,
+      message: `Script "${scriptFile}" not found`,
       path: command,
+    };
+  }
+  return null;
+}
+
+export function validateSymbolRef(
+  file: string,
+  name: string,
+  basePath: string,
+): CompileError | null {
+  const full = resolve(basePath, file);
+  if (!existsSync(full)) {
+    return {
+      type: "stale-file",
+      message: `File not found: "${file}"`,
+      path: file,
+    };
+  }
+  if (langForFile(file) === null) {
+    return {
+      type: "stale-ref",
+      message: `Unsupported language for symbol check: "${file}"`,
+      path: file,
+    };
+  }
+  if (!fileDefinesSymbol(full, name)) {
+    return {
+      type: "stale-ref",
+      message: `"${name}" is not defined in ${file}`,
+      path: `${file}#${name}`,
     };
   }
   return null;
@@ -173,6 +218,11 @@ function validateRefs(
         }
         break;
       }
+      case "symbol": {
+        const err = validateSymbolRef(r.file, r.symbol, basePath);
+        if (err) errors.push(err);
+        break;
+      }
     }
   }
   return errors;
@@ -187,6 +237,8 @@ function renderFragment(fragment: InstructionFragment): string {
       return `\`${fragment.command}\``;
     case "skill":
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
+    case "symbol":
+      return `\`vigiles:symbol ${fragment.file}#${fragment.symbol}\``;
     default:
       return assertNever(fragment);
   }
@@ -544,6 +596,168 @@ function renderBody(body: string | InstructionFragment[]): string {
   return body.map(renderFragment).join("");
 }
 
+/** Derive the `argument-hint` frontmatter value from typed inputs. */
+function renderArgumentHint(inputs: readonly SkillInput[]): string {
+  return inputs
+    .map((i) => (i.required === false ? `[<${i.name}>]` : `<${i.name}>`))
+    .join(" ");
+}
+
+/** Render the `## Arguments` section from typed inputs. */
+function renderArguments(inputs: readonly SkillInput[]): string {
+  const lines = ["## Arguments", ""];
+  inputs.forEach((i, idx) => {
+    const opt = i.required === false ? " _(optional)_" : "";
+    lines.push(`- \`$${String(idx + 1)}\` **${i.name}**${opt} — ${i.hint}`);
+  });
+  return lines.join("\n");
+}
+
+/** The human prose + machine-readable marker for a gate. */
+function renderGate(
+  gate: Gate,
+  retry?: number,
+): { prose: string; marker: string } {
+  if (gate._ref === "cmd") {
+    const r = retry && retry > 1 ? ` retry:${String(retry)}` : "";
+    const proseR = retry && retry > 1 ? ` (retry up to ${String(retry)}×)` : "";
+    return {
+      prose: `**Gate** — run \`${gate.command}\`${proseR}; do not proceed until it passes.`,
+      marker: `<!-- vigiles:gate "${gate.command}"${r} -->`,
+    };
+  }
+  if (gate._ref === "role") {
+    const proseR = retry && retry > 1 ? ` (retry up to ${String(retry)}×)` : "";
+    const r = retry && retry > 1 ? ` retry:${String(retry)}` : "";
+    return {
+      prose: `**Gate** — run the project's ${gate.role} command${proseR}; do not proceed until it passes.`,
+      marker: `<!-- vigiles:gate role:${gate.role}${r} -->`,
+    };
+  }
+  return {
+    prose: `**Gate** — \`${gate.path}\` must exist before proceeding.`,
+    marker: `<!-- vigiles:gate file:${gate.path} -->`,
+  };
+}
+
+/** Render the `## Steps` checklist with a gate per step. */
+function renderSteps(steps: readonly SkillStep[]): string {
+  const out = ["## Steps", ""];
+  steps.forEach((s, idx) => {
+    out.push(`### Step ${String(idx + 1)}`, "");
+    out.push(renderBody(s.do).trim(), "");
+    if (s.gate) {
+      const g = renderGate(s.gate, s.retry);
+      out.push(g.prose, "", g.marker, "");
+    }
+  });
+  return out.join("\n").trimEnd();
+}
+
+/** Render the `## Result` postcondition gate. */
+function renderResult(result: Gate): string {
+  let target: string;
+  let marker: string;
+  if (result._ref === "cmd") {
+    target = `\`${result.command}\` passes`;
+    marker = `<!-- vigiles:result "${result.command}" -->`;
+  } else if (result._ref === "role") {
+    target = `the project's ${result.role} command passes`;
+    marker = `<!-- vigiles:result role:${result.role} -->`;
+  } else {
+    target = `\`${result.path}\` exists`;
+    marker = `<!-- vigiles:result file:${result.path} -->`;
+  }
+  return [
+    "## Result",
+    "",
+    `This skill is complete when ${target}.`,
+    "",
+    marker,
+  ].join("\n");
+}
+
+/** Gather every reference a skill carries that needs author-time verification. */
+function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
+  const refs: InstructionFragment[] = [];
+  if (Array.isArray(spec.body)) refs.push(...spec.body);
+  for (const s of spec.steps ?? []) {
+    if (Array.isArray(s.do)) refs.push(...s.do);
+    // Role gates resolve per host project at run time — nothing to verify here.
+    if (s.gate && s.gate._ref !== "role") refs.push(s.gate);
+  }
+  if (spec.result && spec.result._ref !== "role") refs.push(spec.result);
+  return refs;
+}
+
+/** Build the SKILL.md YAML frontmatter block. */
+function renderSkillFrontmatter(spec: SkillSpec): string {
+  const fm = [
+    "---",
+    "",
+    `name: ${spec.name}`,
+    `description: ${spec.description}`,
+  ];
+  if (spec.disableModelInvocation !== undefined) {
+    fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
+  }
+  const argHint =
+    spec.inputs && spec.inputs.length > 0
+      ? renderArgumentHint(spec.inputs)
+      : spec.argumentHint;
+  if (argHint) fm.push(`argument-hint: ${argHint}`);
+  fm.push("", "---");
+  return fm.join("\n");
+}
+
+/**
+ * Compose the body: Arguments, then the knowledge body (reference prose), then
+ * the gated Steps, then the Result. body + steps compose — a skill can carry
+ * both a rich reference body and a verified procedure.
+ */
+function renderSkillSections(spec: SkillSpec): string {
+  const sections: string[] = [];
+  if (spec.inputs && spec.inputs.length > 0) {
+    sections.push(renderArguments(spec.inputs));
+  }
+  if (spec.body !== undefined) sections.push(renderBody(spec.body).trim());
+  if (spec.steps && spec.steps.length > 0) {
+    sections.push(renderSteps(spec.steps));
+  }
+  if (spec.result) sections.push(renderResult(spec.result));
+  return sections.join("\n\n");
+}
+
+const DEFAULT_MAX_INLINE_CODE_LINES = 20;
+
+/** Flag inline fenced code blocks longer than `max` lines (0 = disabled). */
+function checkInlineCode(markdown: string, max: number): CompileError[] {
+  if (max <= 0) return [];
+  const errs: CompileError[] = [];
+  const lines = markdown.split("\n");
+  let start = -1;
+  let lang = "";
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^```(\w*)/.exec(lines[i].trim());
+    if (!m) continue;
+    if (start === -1) {
+      start = i;
+      lang = m[1];
+    } else {
+      const len = i - start - 1;
+      if (len > max) {
+        errs.push({
+          type: "section-too-long",
+          message: `Inline ${lang || "code"} block is ${String(len)} lines (max ${String(max)}); extract it to a file and reference it with file().`,
+        });
+      }
+      start = -1;
+      lang = "";
+    }
+  }
+  return errs;
+}
+
 export interface CompileSkillResult {
   markdown: string;
   errors: CompileError[];
@@ -576,28 +790,19 @@ export function compileSkill(
     }
   }
 
-  // Validate refs in body
-  if (Array.isArray(spec.body)) {
-    errors.push(...validateRefs(spec.body, basePath));
-  }
+  errors.push(...validateRefs(collectSkillRefs(spec), basePath));
 
-  // Build frontmatter (blank lines after opening/before closing --- for prettier)
-  const fm: string[] = ["---", ""];
-  fm.push(`name: ${spec.name}`);
-  fm.push(`description: ${spec.description}`);
-  if (spec.disableModelInvocation !== undefined) {
-    fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
-  }
-  if (spec.argumentHint) {
-    fm.push(`argument-hint: ${spec.argumentHint}`);
-  }
-  fm.push("", "---");
+  const sections = renderSkillSections(spec);
+  errors.push(
+    ...checkInlineCode(
+      sections,
+      spec.maxInlineCodeLines ?? DEFAULT_MAX_INLINE_CODE_LINES,
+    ),
+  );
 
-  const body = renderBody(spec.body);
-  const content = fm.join("\n") + "\n\n" + body.trim() + "\n";
-  const markdown = addHash(content, specFile);
-
-  return { markdown, errors };
+  const content =
+    renderSkillFrontmatter(spec) + "\n\n" + sections.trim() + "\n";
+  return { markdown: addHash(content, specFile), errors };
 }
 
 // ---------------------------------------------------------------------------

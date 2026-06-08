@@ -240,7 +240,14 @@ export interface SkillRef {
   readonly path: VerifiedRef;
 }
 
-export type Ref = FileRef | CmdRef | SkillRef;
+/** A typed symbol reference — the named file must define the named symbol. */
+export interface SymbolRef {
+  readonly _ref: "symbol";
+  readonly file: VerifiedPath;
+  readonly symbol: string;
+}
+
+export type Ref = FileRef | CmdRef | SkillRef | SymbolRef;
 
 /**
  * Reference a file path — verified to exist at compile time.
@@ -256,6 +263,16 @@ export function file(path: NoInfer<StrictFile>): FileRef {
  */
 export function cmd(command: NoInfer<StrictCmd>): CmdRef {
   return { _ref: "cmd", command: command as VerifiedCmd };
+}
+
+/**
+ * Reference a symbol defined in a file — verified at compile time that the
+ * named file exists AND defines the named symbol (via ast-grep, cross-language).
+ * Compiles to the file-qualified inline form `` `file#symbol` `` so the markdown
+ * `audit` / `refs-hook` re-verify the same reference.
+ */
+export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef {
+  return { _ref: "symbol", file: file as VerifiedPath, symbol: name };
 }
 
 /**
@@ -360,18 +377,107 @@ export function claude(spec: ClaudeSpecInput): ClaudeSpec {
 // SKILL.md spec
 // ---------------------------------------------------------------------------
 
+/**
+ * A deterministic gate on a skill step or its final result. A gate is one of:
+ * a command (exit 0), a file (must exist), or a *project role* that resolves to
+ * the host project's real command at run time. cmd/file gates are verified
+ * against the repo at author time; role gates are portable — a skill that runs
+ * in other repos should prefer `project("test")` over a hard-coded `npm test`.
+ */
+export type Gate = CmdRef | FileRef | RoleGate;
+
+/** Project command roles, resolved per host project at run time. */
+export type ProjectRole = "test" | "build" | "lint";
+
+/** A portable gate that resolves to the host project's command for a role. */
+export interface RoleGate {
+  readonly _ref: "role";
+  readonly role: ProjectRole;
+}
+
+/**
+ * A portable gate that resolves to the host project's command for a role
+ * (e.g. `project("test")` → `npm test` / `pytest` / `cargo test`). Use this
+ * in skills meant to run across projects, instead of hard-coding a command.
+ */
+export function project(role: ProjectRole): RoleGate {
+  return { _ref: "role", role };
+}
+
+/**
+ * A declared skill input. Compiles to the `argument-hint` frontmatter and a
+ * `## Arguments` section; referenced as `$1`/`$2`/`$ARGUMENTS` in the body.
+ */
+export interface SkillInput {
+  /** Argument name, e.g. "pattern". */
+  readonly name: string;
+  /** Human-readable hint shown in argument-hint and the Arguments section. */
+  readonly hint: string;
+  /** Required by default; set false to render as optional (`[<name>]`). */
+  readonly required?: boolean;
+}
+
+/** One step of a gated skill pipeline. */
+export interface SkillStep {
+  /** What the model should do — prose, optionally with typed refs. */
+  readonly do: string | InstructionFragment[];
+  /** Deterministic check that must pass before advancing to the next step. */
+  readonly gate?: Gate;
+  /** Max attempts to satisfy the gate before the step fails (default 1). */
+  readonly retry?: number;
+}
+
+/** Declare a skill input (compiles to argument-hint + an Arguments entry). */
+export function input(
+  name: string,
+  hint: string,
+  opts: { required?: boolean } = {},
+): SkillInput {
+  return { name, hint, required: opts.required };
+}
+
+/** Declare a gated pipeline step. */
+export function step(
+  instr: string | InstructionFragment[],
+  opts: { gate?: Gate; retry?: number } = {},
+): SkillStep {
+  return { do: instr, gate: opts.gate, retry: opts.retry };
+}
+
 export interface SkillSpec {
   readonly _specType: "skill";
   /** Skill name (used in frontmatter). */
   readonly name: string;
   /** Short description (used in frontmatter). */
   readonly description: string;
-  /** Hint for the argument (used in frontmatter). */
+  /**
+   * Hint for the argument (frontmatter). Ignored when `inputs` is set —
+   * `inputs` derive the argument-hint instead.
+   */
   readonly argumentHint?: string;
+  /** Typed inputs — compile to argument-hint + a `## Arguments` section. */
+  readonly inputs?: readonly SkillInput[];
   /** Whether to disable model invocation (frontmatter flag). */
   readonly disableModelInvocation?: boolean;
-  /** Instruction body — string or tagged template with typed refs. */
-  readonly body: string | InstructionFragment[];
+  /**
+   * Gated pipeline steps. When set, the skill compiles to a `## Steps`
+   * checklist with a deterministic gate per step. Use this OR `body`.
+   */
+  readonly steps?: readonly SkillStep[];
+  /**
+   * Terminal postcondition — the skill is "done" only when this gate passes.
+   * Compiles to a `## Result` section + a `vigiles:result` marker.
+   */
+  readonly result?: Gate;
+  /** Freeform instruction body (linear/unstructured skills). Use this OR `steps`. */
+  readonly body?: string | InstructionFragment[];
+  /**
+   * Max lines for an inline fenced code block before compilation errors,
+   * forcing the script into a file referenced via `file()` (default 20).
+   * Keeps big scripts out of the skill body (token budget + progressive
+   * disclosure). Set 0 to disable.
+   */
+  readonly maxInlineCodeLines?: number;
 }
 
 /**

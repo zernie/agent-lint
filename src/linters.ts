@@ -16,6 +16,37 @@ import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { globSync } from "glob";
 
+/**
+ * Prepend version-manager shim directories (rbenv / asdf / rvm) to PATH so
+ * gem/pip-installed linters are found in non-login shells and CI, where the
+ * shims dir is often missing from PATH even though the tool is installed.
+ * Runs once; only adds directories that exist and aren't already present.
+ */
+function augmentToolPath(): void {
+  const home = process.env.HOME ?? "";
+  // rbenv/asdf shims don't resolve without a selected version, so add the
+  // concrete per-version `bin` dirs (where the gem executables actually live).
+  const candidates = [
+    ...globSync("/opt/rbenv/versions/*/bin", { nodir: false }),
+    ...(home
+      ? globSync(`${home}/.rbenv/versions/*/bin`, { nodir: false })
+      : []),
+    ...(home
+      ? globSync(`${home}/.asdf/installs/*/*/bin`, { nodir: false })
+      : []),
+    `${home}/.rvm/bin`,
+    `${home}/.local/bin`,
+  ];
+  const current = (process.env.PATH ?? "").split(":");
+  const additions = candidates.filter(
+    (d) => d && existsSync(d) && !current.includes(d),
+  );
+  if (additions.length > 0) {
+    process.env.PATH = [...current, ...additions].join(":");
+  }
+}
+augmentToolPath();
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

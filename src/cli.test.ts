@@ -1205,3 +1205,70 @@ export default claude({
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Markdown-mode file/cmd verification (the pivot: markdown verifies paths and
+// scripts, not just linter rules)
+// ---------------------------------------------------------------------------
+
+describe("CLI: markdown-mode file/cmd verification", () => {
+  function scaffold(claudeMd: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-mdref-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "t", scripts: { build: "tsc" } }),
+    );
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "real.ts"), "export const x = 1;\n");
+    writeFileSync(join(dir, "CLAUDE.md"), claudeMd);
+    return dir;
+  }
+
+  it("passes when inline file/cmd references resolve", () => {
+    const dir = scaffold(
+      `# P\n\nSee <!-- vigiles:file src/real.ts --> and run <!-- vigiles:cmd "npm run build" -->.\n`,
+    );
+    try {
+      const { exitCode } = run("audit CLAUDE.md", dir);
+      assert.equal(exitCode, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails (exit 2) on a stale inline file reference", () => {
+    const dir = scaffold(`# P\n\n<!-- vigiles:file src/GONE.ts -->\n`);
+    try {
+      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      assert.equal(exitCode, 2);
+      assert.match(stdout, /File not found: "src\/GONE\.ts"/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails (exit 2) on a stale inline command reference", () => {
+    const dir = scaffold(`# P\n\n<!-- vigiles:cmd "npm run ghost" -->\n`);
+    try {
+      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      assert.equal(exitCode, 2);
+      assert.match(stdout, /Script "ghost" not found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("verifies file/cmd lists declared in frontmatter", () => {
+    const dir = scaffold(
+      `---\nvigiles:\n  files:\n    - src/real.ts\n    - src/MISSING.ts\n  commands:\n    - npm run build\n    - npm run ghost\n---\n\n# P\n`,
+    );
+    try {
+      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      assert.equal(exitCode, 2);
+      assert.match(stdout, /File not found: "src\/MISSING\.ts"/);
+      assert.match(stdout, /Script "ghost" not found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

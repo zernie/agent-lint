@@ -17,7 +17,7 @@ import {
   readFileSync,
   lstatSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
 import { validate, loadConfig } from "./validate.js";
@@ -29,6 +29,8 @@ import {
   compileSkill,
   checkFileHash,
   addHash,
+  validateFileRef,
+  validateCommandRef,
 } from "./compile.js";
 import type { CompileError } from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
@@ -36,6 +38,17 @@ import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
+import { compileGeneratorSkill } from "./compile-generator.js";
+import { evaluateAction, loadActionGates } from "./action-gate.js";
+import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
+import {
+  parseSkillGates,
+  runSkillGates,
+  setActiveSkill,
+  clearActiveSkill,
+  evaluateStopHook,
+  gateLabel,
+} from "./skill-runtime.js";
 import { checkLinterRule } from "./linters.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
@@ -139,13 +152,97 @@ function printErrors(specFile: string, errors: CompileError[]): void {
 // Commands
 // ---------------------------------------------------------------------------
 
+/** Compile a generator-skill spec from source → SKILL.md. Returns validity. */
+function compileGeneratorSkillToFile(
+  specPath: string,
+  source: string,
+): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileGeneratorSkill(source, {
+    basePath: process.cwd(),
+    specFile: specPath,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath} (generator skill)`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  for (const e of errors) console.log(`  ${e.type}: ${e.message}`);
+  return false;
+}
+
+/** Compile a ClaudeSpec → its primary + any additional targets. */
+function compileClaudeToFile(
+  spec: ClaudeSpec,
+  specPath: string,
+  config: VigilesConfig,
+): boolean {
+  const basePath = process.cwd();
+  const { markdown, errors, linterResults, targets } = compileClaude(spec, {
+    basePath,
+    specFile: specPath,
+    maxRules: config.maxRules,
+    maxTokens: config.maxTokens,
+    maxSectionLines: config.maxSectionLines,
+    catalogOnly: config.catalogOnly,
+    linters: config.linters,
+  });
+  const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
+  if (errors.length > 0) {
+    console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+    printErrors(specPath, errors);
+    writeFileSync(resolve(basePath, primaryOutput), markdown);
+    return false;
+  }
+  writeFileSync(resolve(basePath, primaryOutput), markdown);
+  const outputNames = [primaryOutput];
+  for (const t of targets.slice(1)) {
+    const body = markdown
+      .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
+      .replace(/^# [^\n]+/, `# ${t}`);
+    const dir = primaryOutput.substring(0, primaryOutput.lastIndexOf("/") + 1);
+    const targetPath = dir + t;
+    writeFileSync(resolve(basePath, targetPath), addHash(body, specPath));
+    outputNames.push(targetPath);
+  }
+  const linterCount = linterResults.filter((r) => r.exists).length;
+  console.log(`\n✓ ${specPath} → ${outputNames.join(", ")}`);
+  console.log(
+    `  ${String(Object.keys(spec.rules).length)} rules (${String(linterCount)} linter-verified)`,
+  );
+  return true;
+}
+
+/** Compile a declarative SkillSpec → SKILL.md. */
+function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileSkill(spec, {
+    basePath: process.cwd(),
+    specFile: specPath,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath}`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  printErrors(specPath, errors);
+  return false;
+}
+
 async function compile(
   specPaths: string[],
   config: VigilesConfig,
 ): Promise<boolean> {
   let allValid = true;
-
   for (const specPath of specPaths) {
+    // Generator skills can't be executed to markdown — compile from source.
+    const source = readFileSync(resolve(process.cwd(), specPath), "utf-8");
+    if (/\bgenSkill\s*\(/.test(source)) {
+      if (!compileGeneratorSkillToFile(specPath, source)) allValid = false;
+      continue;
+    }
     const spec = await loadSpec(specPath);
     if (!spec) {
       console.log(`\n✗ ${specPath} — failed to load`);
@@ -155,74 +252,12 @@ async function compile(
       allValid = false;
       continue;
     }
-
-    const basePath = process.cwd();
-
     if (spec._specType === "claude") {
-      const { markdown, errors, linterResults, targets } = compileClaude(spec, {
-        basePath,
-        specFile: specPath,
-        maxRules: config.maxRules,
-        maxTokens: config.maxTokens,
-        maxSectionLines: config.maxSectionLines,
-        catalogOnly: config.catalogOnly,
-        linters: config.linters,
-      });
-
-      const linterCount = linterResults.filter((r) => r.exists).length;
-      const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
-
-      if (errors.length === 0) {
-        // Write primary target
-        writeFileSync(resolve(basePath, primaryOutput), markdown);
-        const outputNames = [primaryOutput];
-
-        // Write additional targets with swapped heading + recomputed hash
-        for (const t of targets.slice(1)) {
-          // Strip hash, replace heading, recompute hash
-          const body = markdown
-            .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
-            .replace(/^# [^\n]+/, `# ${t}`);
-          const additional = addHash(body, specPath);
-          const dir = primaryOutput.substring(
-            0,
-            primaryOutput.lastIndexOf("/") + 1,
-          );
-          const targetPath = dir + t;
-          writeFileSync(resolve(basePath, targetPath), additional);
-          outputNames.push(targetPath);
-        }
-
-        console.log(`\n✓ ${specPath} → ${outputNames.join(", ")}`);
-        console.log(
-          `  ${String(Object.keys(spec.rules).length)} rules (${String(linterCount)} linter-verified)`,
-        );
-      } else {
-        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
-        printErrors(specPath, errors);
-        allValid = false;
-        // Still write the file so the user can see partial output
-        writeFileSync(resolve(basePath, primaryOutput), markdown);
-      }
+      if (!compileClaudeToFile(spec, specPath, config)) allValid = false;
     } else if (spec._specType === "skill") {
-      const outputPath = specPath.replace(/\.spec\.ts$/, "");
-      const { markdown, errors } = compileSkill(spec, {
-        basePath,
-        specFile: specPath,
-      });
-
-      if (errors.length === 0) {
-        writeFileSync(resolve(basePath, outputPath), markdown);
-        console.log(`\n✓ ${specPath} → ${outputPath}`);
-      } else {
-        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
-        printErrors(specPath, errors);
-        allValid = false;
-        writeFileSync(resolve(basePath, outputPath), markdown);
-      }
+      if (!compileSkillToFile(spec, specPath)) allValid = false;
     }
   }
-
   return allValid;
 }
 
@@ -490,7 +525,44 @@ interface AuditReport {
   coverageErrors: number;
   orphanCount: number;
   docRefErrors: number;
+  symbolRefErrors: number;
   files: string[];
+}
+
+/**
+ * Verify the file-qualified symbol references (`path.ext#symbol`) in instruction
+ * files: the named file must exist and define the named symbol. The author
+ * names the file, so this is a *declared* reference — a broken one is an error.
+ * Each named file is parsed on demand; there is no project-wide index. Returns
+ * the count of broken references.
+ */
+function verifyMarkdownSymbols(files: string[], silent: boolean): number {
+  if (files.length === 0) return 0;
+  const cwd = process.cwd();
+  let printedHeader = false;
+  let errors = 0;
+  for (const f of files) {
+    let markdown: string;
+    try {
+      markdown = readFileSync(resolve(cwd, f), "utf-8");
+    } catch {
+      continue;
+    }
+    const broken = verifySymbolRefs(markdown, dirname(resolve(cwd, f)));
+    if (broken.length === 0) continue;
+    if (!silent) {
+      if (!printedHeader) {
+        console.log("\nSymbol reference check:\n");
+        printedHeader = true;
+      }
+      for (const b of broken) {
+        console.log(`  ✗ ${f}:${String(b.line)} ${b.reason}`);
+        ghAnnotate("error", b.reason, f, b.line);
+      }
+    }
+    errors += broken.length;
+  }
+  return errors;
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
@@ -501,7 +573,8 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.inlineErrors > 0 ||
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
-    report.coverageErrors > 0
+    report.coverageErrors > 0 ||
+    report.symbolRefErrors > 0
   )
     return 2;
   if (
@@ -563,6 +636,39 @@ function verifyOneRule(
   return true;
 }
 
+/**
+ * Verify the `vigiles:file` / `vigiles:cmd` references a markdown file declares
+ * (inline comments or frontmatter lists), using the same engine spec mode uses:
+ * file paths via existsSync, npm scripts and script-runner commands via
+ * package.json / the filesystem. References resolve relative to the markdown
+ * file's own directory. Returns the number of stale references found.
+ */
+function verifyMarkdownRefs(
+  files: readonly { path: string; line: number }[],
+  commands: readonly { command: string; line: number }[],
+  filePath: string,
+  silent: boolean,
+): number {
+  const basePath = dirname(resolve(process.cwd(), filePath));
+  let errorCount = 0;
+  const report = (err: CompileError, line: number): void => {
+    if (!silent) {
+      console.log(`  ✗ line ${String(line)}: ${err.message}`);
+      ghAnnotate("error", err.message, filePath, line);
+    }
+    errorCount++;
+  };
+  for (const f of files) {
+    const err = validateFileRef(f.path, basePath);
+    if (err) report(err, f.line);
+  }
+  for (const c of commands) {
+    const err = validateCommandRef(c.command, basePath);
+    if (err) report(err, c.line);
+  }
+  return errorCount;
+}
+
 function verifyInlineRules(
   filePath: string,
   silent: boolean,
@@ -579,8 +685,18 @@ function verifyInlineRules(
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
-  const { rules, errors: parseErrors } = parseInlineRules(content);
-  if (rules.length === 0 && parseErrors.length === 0) {
+  const {
+    rules,
+    files,
+    commands,
+    errors: parseErrors,
+  } = parseInlineRules(content);
+  if (
+    rules.length === 0 &&
+    files.length === 0 &&
+    commands.length === 0 &&
+    parseErrors.length === 0
+  ) {
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
@@ -598,11 +714,12 @@ function verifyInlineRules(
   for (const rule of rules) {
     if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
   }
+  errorCount += verifyMarkdownRefs(files, commands, filePath, silent);
 
   return {
     ok: errorCount === 0,
     errorCount,
-    ruleCount: rules.length,
+    ruleCount: rules.length + files.length + commands.length,
     ruleNames: rules.map((r) => r.linterRule),
   };
 }
@@ -630,10 +747,19 @@ function verifyFrontmatterRules(
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
-  const { rules: allRules, errors: parseErrors } =
-    parseFrontmatterRules(content);
+  const {
+    rules: allRules,
+    files,
+    commands,
+    errors: parseErrors,
+  } = parseFrontmatterRules(content);
   const rules = allRules.filter((r) => !exclude.has(r.linterRule));
-  if (rules.length === 0 && parseErrors.length === 0) {
+  if (
+    rules.length === 0 &&
+    files.length === 0 &&
+    commands.length === 0 &&
+    parseErrors.length === 0
+  ) {
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
@@ -651,11 +777,12 @@ function verifyFrontmatterRules(
   for (const rule of rules) {
     if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
   }
+  errorCount += verifyMarkdownRefs(files, commands, filePath, silent);
 
   return {
     ok: errorCount === 0,
     errorCount,
-    ruleCount: rules.length,
+    ruleCount: rules.length + files.length + commands.length,
     ruleNames: rules.map((r) => r.linterRule),
   };
 }
@@ -832,6 +959,9 @@ async function audit(
     }
   }
 
+  // 9. Verify code-shaped symbol references live (see src/refs.ts).
+  const symbolRefErrors = verifyMarkdownSymbols(files, silent);
+
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
@@ -847,6 +977,7 @@ async function audit(
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
     docRefErrors: docRefReport.errors.length,
+    symbolRefErrors,
     files,
   };
 
@@ -875,6 +1006,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.orphanCount)} orphan docs`);
   if (report.docRefErrors > 0)
     parts.push(`${String(report.docRefErrors)} broken doc refs`);
+  if (report.symbolRefErrors > 0)
+    parts.push(`${String(report.symbolRefErrors)} broken symbol refs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
@@ -1736,6 +1869,267 @@ function printUsage(command: string | undefined): void {
 // Main
 // ---------------------------------------------------------------------------
 
+/**
+ * Emit GitHub Actions annotations for an audit report. Skipped when --json or
+ * --summary is active — those modes promise clean machine-readable stdout, and
+ * ::error/::warning lines would contaminate output parsed as JSON.
+ */
+function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
+  const structuredOutput =
+    flags.includes("--json") || flags.includes("--summary");
+  if (!isGitHubActions() || structuredOutput) return;
+  if (report.hashErrors > 0) {
+    ghAnnotate(
+      "error",
+      `${String(report.hashErrors)} compiled file(s) with stale hash — run vigiles compile`,
+    );
+  }
+  if (report.validationErrors > 0) {
+    ghAnnotate(
+      "error",
+      `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
+    );
+  }
+  if (report.duplicatePairs > 0) {
+    ghAnnotate(
+      "warning",
+      `${String(report.duplicatePairs)} near-duplicate rule pair(s) detected — consider merging`,
+    );
+  }
+}
+
+/**
+ * Run a compiled skill's deterministic gate ladder: execute each step gate in
+ * order (short-circuiting on the first failure), then the result gate. This is
+ * the v0 runtime — it enforces the `vigiles:gate`/`vigiles:result` markers a
+ * compiled SKILL.md carries. It does not yet drive the model through the prose
+ * steps (that needs a live harness).
+ */
+function runSkillCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles run-skill <SKILL.md>");
+    process.exit(2);
+  }
+  const path = resolve(process.cwd(), target);
+  if (!existsSync(path)) {
+    console.error(`Not found: ${target}`);
+    process.exit(2);
+  }
+  const gates = parseSkillGates(readFileSync(path, "utf-8"));
+  if (gates.steps.length === 0 && !gates.result) {
+    console.log(`No vigiles:gate / vigiles:result markers in ${target}.`);
+    return;
+  }
+  console.log(`Running gate ladder for ${target}:\n`);
+  const report = runSkillGates(gates, process.cwd());
+  for (const r of report.results) {
+    const label = r.at === "result" ? "result" : `step ${String(r.at)}`;
+    console.log(`  ${r.ok ? "✓" : "✗"} ${label} — ${gateLabel(r.gate)}`);
+    if (!r.ok && r.output) {
+      console.log(
+        r.output
+          .split("\n")
+          .map((l) => `      ${l}`)
+          .join("\n"),
+      );
+    }
+  }
+  if (report.ok) {
+    console.log("\n✓ All gates passed.");
+  } else {
+    const where =
+      report.blockedAt === "result"
+        ? "the result gate"
+        : `step ${String(report.blockedAt)}`;
+    console.log(`\n✗ Blocked at ${where} — fix it before the skill is done.`);
+    process.exit(2);
+  }
+}
+
+/**
+ * Stop-hook entrypoint: run the active skill's result gate and decide whether
+ * the agent may stop. Exit 2 (with the reason on stderr) blocks the stop and
+ * feeds the message back to the model; exit 0 allows it and clears the marker.
+ */
+function skillHookCommand(): void {
+  const decision = evaluateStopHook(process.cwd());
+  if (decision.allow) {
+    if (decision.message) console.log(decision.message);
+    clearActiveSkill(process.cwd());
+    return;
+  }
+  console.error(decision.message);
+  process.exit(2);
+}
+
+/** Mark a skill active so the Stop hook enforces its result gate. */
+function skillStartCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles skill-start <SKILL.md>");
+    process.exit(2);
+  }
+  setActiveSkill(process.cwd(), target);
+  console.log(`Active skill: ${target}`);
+}
+
+/** Dispatch the skill-runtime subcommands. Returns false if unrecognized. */
+function handleSkillCommand(command: string, restArgs: string[]): boolean {
+  switch (command) {
+    case "run-skill":
+      runSkillCommand(restArgs[0]);
+      return true;
+    case "skill-start":
+      skillStartCommand(restArgs[0]);
+      return true;
+    case "skill-done":
+      clearActiveSkill(process.cwd());
+      return true;
+    case "skill-hook":
+      skillHookCommand();
+      return true;
+    case "action-hook":
+      actionHookCommand();
+      return true;
+    case "refs":
+      refsCommand(restArgs[0]);
+      return true;
+    case "refs-hook":
+      refsHookCommand();
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * PostToolUse-hook entrypoint for action gates. Reads the tool event on stdin,
+ * runs the matching action gates from `.vigiles/action-gates.json`, and blocks
+ * (exit 2 + reason on stderr) if any fails — plan-agnostic, so it works inside
+ * dynamic workflows where there is no static step to attach a gate to.
+ */
+function actionHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let event: { tool: string; input?: Record<string, unknown> } = { tool: "" };
+  try {
+    const j = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: Record<string, unknown>;
+    };
+    event = { tool: j.tool_name ?? "", input: j.tool_input };
+  } catch {
+    /* malformed input → no event, allow */
+  }
+  const decision = evaluateAction(
+    event,
+    loadActionGates(process.cwd()),
+    process.cwd(),
+  );
+  if (!decision.allow) {
+    console.error(decision.message);
+    process.exit(2);
+  }
+}
+
+const INSTRUCTION_FILE = /^(SKILL|CLAUDE|AGENTS)\.md$/;
+
+function isInstructionFile(file: string): boolean {
+  return INSTRUCTION_FILE.test(basename(file));
+}
+
+/**
+ * Inspect an instruction file's symbol references: broken file-qualified refs
+ * (`path.ext#symbol` whose file/symbol is wrong) and code-shaped references not
+ * yet marked. Emits one line per finding via `log`; returns whether any issue
+ * was found. `basePath` is the file's own directory (where paths resolve).
+ */
+function reportRefIssues(
+  markdown: string,
+  basePath: string,
+  log: (m: string) => void,
+): boolean {
+  const broken = verifySymbolRefs(markdown, basePath);
+  const unmarked = unmarkedCodeRefs(markdown);
+  for (const b of broken) {
+    log(`  ✗ line ${String(b.line)}: ${b.reason}`);
+  }
+  for (const u of unmarked) {
+    const callee = u.text.replace(/\s*\([^)]*\)\s*$/, "");
+    log(
+      `  ✗ line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
+        `mark it as \`vigiles:symbol path/to/file.ext#${callee}\` or add <!-- vigiles:ignore --> if it is prose`,
+    );
+  }
+  return broken.length > 0 || unmarked.length > 0;
+}
+
+/** `vigiles refs <file>` — check a file's symbol references (exit 2 on issues). */
+function refsCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles refs <instruction-file.md>");
+    process.exit(2);
+  }
+  const cwd = process.cwd();
+  let markdown: string;
+  try {
+    markdown = readFileSync(resolve(cwd, target), "utf-8");
+  } catch {
+    console.error(`Cannot read ${target}`);
+    process.exit(2);
+  }
+  const bad = reportRefIssues(markdown, dirname(resolve(cwd, target)), (m) => {
+    console.log(m);
+  });
+  if (bad) process.exit(2);
+  console.log(`✓ ${target}: all code references are marked and resolve.`);
+}
+
+/**
+ * PostToolUse-hook entrypoint: when the agent edits an instruction file, force
+ * every code reference to carry a file-qualified mark (`path.ext#symbol`) and
+ * verify the marked ones against the named file. Exit 2 (reason on stderr)
+ * blocks the edit and feeds the fix back to the agent — the harness makes the
+ * agent mark its references, at write time, with full context. `vigiles:ignore`
+ * opts a prose span out.
+ */
+function refsHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let file = "";
+  try {
+    const j = JSON.parse(raw) as { tool_input?: { file_path?: string } };
+    file = j.tool_input?.file_path ?? "";
+  } catch {
+    /* malformed → nothing to do */
+  }
+  if (!file || !isInstructionFile(file)) return;
+  const cwd = process.cwd();
+  const target = relative(cwd, resolve(cwd, file)) || file;
+  let markdown: string;
+  try {
+    markdown = readFileSync(resolve(cwd, file), "utf-8");
+  } catch {
+    return;
+  }
+  const lines: string[] = [];
+  const bad = reportRefIssues(markdown, dirname(resolve(cwd, file)), (m) => {
+    lines.push(m);
+  });
+  if (bad) {
+    console.error(`vigiles: fix the code references in ${target}:`);
+    for (const l of lines) console.error(l);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -1781,33 +2175,8 @@ async function main(): Promise<void> {
       // audit = verify + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
+      annotateAuditForGitHub(report, flags);
       const exitCode = auditExitCode(report);
-      // Skip GH annotations when --json or --summary is active —
-      // those modes promise clean machine-readable stdout, and
-      // ::error/::warning lines would contaminate the output for
-      // callers parsing it as JSON.
-      const structuredOutput =
-        flags.includes("--json") || flags.includes("--summary");
-      if (isGitHubActions() && !structuredOutput) {
-        if (report.hashErrors > 0) {
-          ghAnnotate(
-            "error",
-            `${String(report.hashErrors)} compiled file(s) with stale hash — run vigiles compile`,
-          );
-        }
-        if (report.validationErrors > 0) {
-          ghAnnotate(
-            "error",
-            `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
-          );
-        }
-        if (report.duplicatePairs > 0) {
-          ghAnnotate(
-            "warning",
-            `${String(report.duplicatePairs)} near-duplicate rule pair(s) detected — consider merging`,
-          );
-        }
-      }
       if (exitCode !== 0) {
         process.exit(exitCode);
       }
@@ -1825,7 +2194,7 @@ async function main(): Promise<void> {
       break;
 
     default:
-      printUsage(command);
+      if (!handleSkillCommand(command, restArgs)) printUsage(command);
       break;
   }
 }

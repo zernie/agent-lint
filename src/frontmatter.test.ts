@@ -251,3 +251,43 @@ vigiles:
     );
   });
 });
+
+describe("parseFrontmatterRules: file/cmd lists", () => {
+  it("parses vigiles.files and vigiles.commands string lists", () => {
+    const { files, commands } = parseFrontmatterRules(
+      `---
+vigiles:
+  files:
+    - src/a.ts
+    - src/b.ts
+  commands:
+    - npm run build
+---
+
+# P
+`,
+    );
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ["src/a.ts", "src/b.ts"],
+    );
+    assert.deepEqual(
+      commands.map((c) => c.command),
+      ["npm run build"],
+    );
+  });
+
+  it("hasFrontmatterRules is true for a files-only block", () => {
+    assert.equal(
+      hasFrontmatterRules(
+        `---
+vigiles:
+  files:
+    - src/only.ts
+---
+`,
+      ),
+      true,
+    );
+  });
+});

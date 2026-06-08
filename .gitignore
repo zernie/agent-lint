@@ -3,3 +3,6 @@ dist/
 .DS_Store
 logo-v*.png
 .idea
+
+# vigiles transient skill-runtime state
+.vigiles/active-skill.json

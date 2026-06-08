@@ -7,6 +7,7 @@ import {
   file,
   cmd,
   ref,
+  symbol,
   instructions,
   claude,
   skill,
@@ -204,6 +205,30 @@ describe("compileClaude()", () => {
     const { errors } = compileClaude(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
     assert.equal(errors[0].type, "stale-command");
+  });
+
+  it("symbol() renders `file#symbol` and verifies the named file defines it", () => {
+    const ok = claude({
+      sections: {
+        u: instructions`Use ${symbol("src/symbols.ts", "definedSymbols")}.`,
+      },
+      rules: {},
+    });
+    const okRes = compileClaude(ok, { basePath: process.cwd() });
+    assert.equal(okRes.errors.length, 0);
+    assert.match(
+      okRes.markdown,
+      /`vigiles:symbol src\/symbols\.ts#definedSymbols`/,
+    );
+
+    const bad = claude({
+      sections: {
+        u: instructions`Use ${symbol("src/symbols.ts", "noSuchSymbol")}.`,
+      },
+      rules: {},
+    });
+    const badRes = compileClaude(bad, { basePath: process.cwd() });
+    assert.ok(badRes.errors.some((e) => e.type === "stale-ref"));
   });
 
   it("includes sections in output", () => {

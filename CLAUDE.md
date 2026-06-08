@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:8c1d37c1d5c57ad2 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:b6eeb58f8ebc9586 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -57,6 +57,15 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/orphans.test.ts` — Orphan-docs detector test suite (node:test)
 - `src/doc-refs.ts` — Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out
 - `src/doc-refs.test.ts` — Doc-refs validator test suite (node:test)
+- `src/symbols.ts` — Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback
+- `src/symbols.test.ts` — Symbol extractor test suite (node:test)
+- `src/refs.ts` — Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs enforcement for the refs-hook
+- `src/refs.test.ts` — Symbol reference verification test suite (node:test)
+- `src/mock-model.ts` — Scriptable, dependency-free Anthropic Messages SSE mock (startMock/scriptModel) — point real claude at it via ANTHROPIC_BASE_URL for deterministic harness tests
+- `src/harness-test.ts` — Deterministic Claude Code harness testing: runHarnessTest runs real claude + real hooks/settings against a scripted mock model (Stop-hooks reliable; tool-event hooks via the eval tier)
+- `src/harness-test.test.ts` — Harness-test suite (node:test, skips without claude)
+- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates a metric — the empirical half of testing your harness (generalizes bench/)
+- `src/eval.test.ts` — Eval aggregation/formatting test suite (node:test)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -81,6 +90,9 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/landscape-mid-2026.md` — Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals
 - `research/sync-landscape-analysis.md` — Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals
 - `research/distribution-strategy.md` — Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention
+- `research/reference-verification-limits.md` — Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)
+- `research/harness-testing.md` — Testing the Claude Code harness — the two-tier design (deterministic runHarnessTest + real-model runEval) and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, 156 wshobson skills)
+- `research/skill-authoring-pains.md` — Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
