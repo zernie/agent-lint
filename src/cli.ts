@@ -37,6 +37,7 @@ import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
+import { evaluateAction, loadActionGates } from "./action-gate.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -1885,8 +1886,45 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
     case "skill-hook":
       skillHookCommand();
       return true;
+    case "action-hook":
+      actionHookCommand();
+      return true;
     default:
       return false;
+  }
+}
+
+/**
+ * PostToolUse-hook entrypoint for action gates. Reads the tool event on stdin,
+ * runs the matching action gates from `.vigiles/action-gates.json`, and blocks
+ * (exit 2 + reason on stderr) if any fails — plan-agnostic, so it works inside
+ * dynamic workflows where there is no static step to attach a gate to.
+ */
+function actionHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let event: { tool: string; input?: Record<string, unknown> } = { tool: "" };
+  try {
+    const j = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: Record<string, unknown>;
+    };
+    event = { tool: j.tool_name ?? "", input: j.tool_input };
+  } catch {
+    /* malformed input → no event, allow */
+  }
+  const decision = evaluateAction(
+    event,
+    loadActionGates(process.cwd()),
+    process.cwd(),
+  );
+  if (!decision.allow) {
+    console.error(decision.message);
+    process.exit(2);
   }
 }
 
