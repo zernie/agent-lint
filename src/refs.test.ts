@@ -1,7 +1,7 @@
 /**
- * Tests for live symbol-reference verification: inline-span extraction (fenced
- * blocks skipped), code-shape gating, and live resolution against a project
- * index — no stored state.
+ * Tests for file-qualified symbol reference verification (variant A):
+ * inline-span extraction (fenced blocks skipped), `path#symbol` parsing, and
+ * verifying the named file defines the named symbol.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,105 +9,88 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  inlineSpans,
-  isCodeShaped,
-  buildProjectIndex,
-  verifyRefs,
-} from "./refs.js";
+import { inlineSpans, symbolRefs, verifySymbolRefs } from "./refs.js";
 
 test("inlineSpans skips fenced code blocks (R1)", () => {
   const spans = inlineSpans(
-    "Use `parseConfig` here.\n```ts\n`insideFence`\n```\nAnd `MAX_RETRIES`.\n",
+    "Use `src/a.ts#foo` here.\n```ts\n`src/x.ts#inside`\n```\nAnd `src/b.ts#bar`.\n",
   );
   assert.deepEqual(
     spans.map((s) => s.text),
-    ["parseConfig", "MAX_RETRIES"],
+    ["src/a.ts#foo", "src/b.ts#bar"],
   );
   assert.equal(spans[0].line, 1);
   assert.equal(spans[1].line, 5);
 });
 
-test("isCodeShaped gates prose from code references", () => {
-  for (const ok of [
-    "parseConfig",
-    "MAX_RETRIES",
-    "parse_config",
-    "User#full_name",
-    "Widget",
-  ]) {
-    assert.equal(isCodeShaped(ok), true, ok);
-  }
-  for (const no of ["name", "high", "text", "the", "a path/file.ts"]) {
-    assert.equal(isCodeShaped(no), false, no);
-  }
+test("symbolRefs matches path#symbol / path::symbol, ignores bare refs", () => {
+  const refs = symbolRefs(
+    "See `src/config.ts#parseConfig` and `app/user.rb::full_name`.\n" +
+      "Prose `parseConfig`, scoped-no-path `Foo::bar`, file `src/x.ts`.\n",
+  );
+  assert.deepEqual(
+    refs.map((r) => `${r.file}#${r.symbol}`),
+    ["src/config.ts#parseConfig", "app/user.rb#full_name"],
+  );
 });
 
-test("verifyRefs resolves live: unique → resolved, typo → missing, prose ignored", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-"));
+test("verifies the named file defines the symbol (error otherwise)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-symref-"));
   try {
     mkdirSync(join(dir, "src"));
     writeFileSync(
       join(dir, "src", "config.ts"),
-      "export function parseConfig(x){return x}\nexport const MAX_RETRIES = 3;\n",
+      "export function parseConfig(x){return x}\n",
     );
-    const index = buildProjectIndex(dir);
-    const md =
-      "Call `parseConfig` with `MAX_RETRIES`. Prose `high`. Typo `parseConfgi`.\n";
-    const { resolved, unresolved } = verifyRefs(md, index);
-
-    assert.deepEqual(resolved.map((r) => r.ref).sort(), [
-      "MAX_RETRIES",
-      "parseConfig",
-    ]);
+    // valid → no error
     assert.equal(
-      resolved.find((r) => r.ref === "parseConfig")?.file,
-      "src/config.ts",
+      verifySymbolRefs("Use `src/config.ts#parseConfig`.\n", dir).length,
+      0,
     );
-    assert.deepEqual(
-      unresolved.map((u) => u.ref),
-      ["parseConfgi"],
-    );
-    assert.equal(unresolved[0].status, "missing");
+    // symbol missing → error
+    const missing = verifySymbolRefs("Use `src/config.ts#loadConfig`.\n", dir);
+    assert.equal(missing.length, 1);
+    assert.match(missing[0].reason, /"loadConfig" is not defined/);
+    // file missing → error
+    const noFile = verifySymbolRefs("Use `src/gone.ts#parseConfig`.\n", dir);
+    assert.equal(noFile.length, 1);
+    assert.match(noFile[0].reason, /File not found/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("a rename surfaces live with no stored state", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-rename-"));
+test("a rename surfaces live (re-parses the named file each time)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-symref-rename-"));
   try {
     mkdirSync(join(dir, "src"));
     const src = join(dir, "src", "config.ts");
+    const md = "Call `src/config.ts#parseConfig`.\n";
     writeFileSync(src, "export function parseConfig(){}\n");
-    const md = "Call `parseConfig`.\n";
-
-    assert.equal(verifyRefs(md, buildProjectIndex(dir)).unresolved.length, 0);
-
-    // Rename in the code — a fresh index (no sidecar) reflects it immediately.
+    assert.equal(verifySymbolRefs(md, dir).length, 0);
     writeFileSync(src, "export function loadConfig(){}\n");
-    const after = verifyRefs(md, buildProjectIndex(dir));
-    assert.equal(after.resolved.length, 0);
-    assert.equal(after.unresolved[0].ref, "parseConfig");
-    assert.equal(after.unresolved[0].status, "missing");
+    assert.equal(verifySymbolRefs(md, dir).length, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("ambiguous references are reported with candidates", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vigiles-refs-amb-"));
+test("cross-language: resolves a Ruby file-qualified reference", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-symref-rb-"));
   try {
-    mkdirSync(join(dir, "src"));
-    writeFileSync(join(dir, "src", "a.ts"), "export function helperFn(){}\n");
-    writeFileSync(join(dir, "src", "b.ts"), "export function helperFn(){}\n");
-    const { resolved, unresolved } = verifyRefs(
-      "See `helperFn`.\n",
-      buildProjectIndex(dir),
+    mkdirSync(join(dir, "app"));
+    writeFileSync(
+      join(dir, "app", "user.rb"),
+      "class User\n  def full_name\n  end\nend\n",
     );
-    assert.equal(resolved.length, 0);
-    assert.equal(unresolved[0].status, "ambiguous");
-    assert.equal(unresolved[0].candidates.length, 2);
+    assert.equal(
+      verifySymbolRefs("See `app/user.rb#full_name`.\n", dir).length,
+      0,
+    );
+    assert.equal(
+      verifySymbolRefs("See `app/user.rb#display_name`.\n", dir).length,
+      1,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

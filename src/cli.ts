@@ -40,7 +40,7 @@ import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
-import { buildProjectIndex, verifyRefs } from "./refs.js";
+import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -525,26 +525,22 @@ interface AuditReport {
   coverageErrors: number;
   orphanCount: number;
   docRefErrors: number;
-  symbolRefWarnings: number;
+  symbolRefErrors: number;
   files: string[];
 }
 
 /**
- * Verify the code-shaped symbol references in instruction files, live: extract
- * them from the current markdown and resolve against the current project index
- * — no stored pins, so nothing can drift. A reference that no longer resolves
- * (renamed / removed) or resolves ambiguously is a *warning* (it is inferred,
- * not declared). Builds the index once, only when there are instruction files.
- * Returns the count of unresolved references.
+ * Verify the file-qualified symbol references (`path.ext#symbol`) in instruction
+ * files: the named file must exist and define the named symbol. The author
+ * names the file, so this is a *declared* reference — a broken one is an error.
+ * Each named file is parsed on demand; there is no project-wide index. Returns
+ * the count of broken references.
  */
 function verifyMarkdownSymbols(files: string[], silent: boolean): number {
   if (files.length === 0) return 0;
   const cwd = process.cwd();
-  const index = buildProjectIndex(cwd);
-  if (index.size === 0) return 0;
-
-  if (!silent) console.log("\nSymbol reference check:\n");
-  let warnings = 0;
+  let printedHeader = false;
+  let errors = 0;
   for (const f of files) {
     let markdown: string;
     try {
@@ -552,28 +548,21 @@ function verifyMarkdownSymbols(files: string[], silent: boolean): number {
     } catch {
       continue;
     }
-    const { resolved, unresolved } = verifyRefs(markdown, index);
+    const broken = verifySymbolRefs(markdown, dirname(resolve(cwd, f)));
+    if (broken.length === 0) continue;
     if (!silent) {
-      if (unresolved.length === 0) {
-        if (resolved.length > 0) {
-          console.log(
-            `  ✓ ${f}: ${String(resolved.length)} reference(s) resolve`,
-          );
-        }
-      } else {
-        for (const u of unresolved) {
-          const detail =
-            u.status === "ambiguous"
-              ? `ambiguous (${u.candidates.join(", ")})`
-              : "no longer defined";
-          console.log(`  ⚠ ${f}:${String(u.line)} \`${u.ref}\` ${detail}`);
-          ghAnnotate("warning", `\`${u.ref}\` ${detail}`, f, u.line);
-        }
+      if (!printedHeader) {
+        console.log("\nSymbol reference check:\n");
+        printedHeader = true;
+      }
+      for (const b of broken) {
+        console.log(`  ✗ ${f}:${String(b.line)} ${b.reason}`);
+        ghAnnotate("error", b.reason, f, b.line);
       }
     }
-    warnings += unresolved.length;
+    errors += broken.length;
   }
-  return warnings;
+  return errors;
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
@@ -584,14 +573,14 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.inlineErrors > 0 ||
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
-    report.coverageErrors > 0
+    report.coverageErrors > 0 ||
+    report.symbolRefErrors > 0
   )
     return 2;
   if (
     report.duplicatePairs > 0 ||
     report.orphanCount > 0 ||
-    report.docRefErrors > 0 ||
-    report.symbolRefWarnings > 0
+    report.docRefErrors > 0
   )
     return 1;
   // Guidance counts are informational, not failures
@@ -971,7 +960,7 @@ async function audit(
   }
 
   // 9. Verify code-shaped symbol references live (see src/refs.ts).
-  const symbolRefWarnings = verifyMarkdownSymbols(files, silent);
+  const symbolRefErrors = verifyMarkdownSymbols(files, silent);
 
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
@@ -988,7 +977,7 @@ async function audit(
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
     docRefErrors: docRefReport.errors.length,
-    symbolRefWarnings,
+    symbolRefErrors,
     files,
   };
 
@@ -1017,8 +1006,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.orphanCount)} orphan docs`);
   if (report.docRefErrors > 0)
     parts.push(`${String(report.docRefErrors)} broken doc refs`);
-  if (report.symbolRefWarnings > 0)
-    parts.push(`${String(report.symbolRefWarnings)} unresolved symbol refs`);
+  if (report.symbolRefErrors > 0)
+    parts.push(`${String(report.symbolRefErrors)} broken symbol refs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
@@ -2053,54 +2042,58 @@ function isInstructionFile(file: string): boolean {
 }
 
 /**
- * Resolve the code-shaped references in an instruction file against the live
- * project symbol index and report which did not resolve (typo / ambiguity).
- * Writes nothing — the check is a live join of the current markdown and the
- * current code. `log` routes the summary to stdout (CLI) or stderr (hook).
+ * Inspect an instruction file's symbol references: broken file-qualified refs
+ * (`path.ext#symbol` whose file/symbol is wrong) and code-shaped references not
+ * yet marked. Emits one line per finding via `log`; returns whether any issue
+ * was found. `basePath` is the file's own directory (where paths resolve).
  */
-function checkRefsInFile(
-  target: string,
-  cwd: string,
+function reportRefIssues(
+  markdown: string,
+  basePath: string,
   log: (m: string) => void,
-): void {
-  let markdown: string;
-  try {
-    markdown = readFileSync(resolve(cwd, target), "utf-8");
-  } catch {
-    return;
+): boolean {
+  const broken = verifySymbolRefs(markdown, basePath);
+  const unmarked = unmarkedCodeRefs(markdown);
+  for (const b of broken) {
+    log(`  ✗ line ${String(b.line)}: ${b.reason}`);
   }
-  const { resolved, unresolved } = verifyRefs(markdown, buildProjectIndex(cwd));
-  log(
-    `vigiles: ${String(resolved.length)} reference(s) resolve in ${target}` +
-      (unresolved.length > 0 ? `, ${String(unresolved.length)} do not:` : "."),
-  );
-  for (const u of unresolved) {
-    const detail =
-      u.status === "ambiguous"
-        ? `ambiguous (${u.candidates.join(", ")})`
-        : "not found";
+  for (const u of unmarked) {
     log(
-      `  - line ${String(u.line)}: \`${u.ref}\` (${detail}) — fix a typo, scope it, or it is prose`,
+      `  ✗ line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
+        `mark it as \`path/to/file.ext#symbol\` or add <!-- vigiles:ignore --> if it is prose`,
     );
   }
+  return broken.length > 0 || unmarked.length > 0;
 }
 
-/** `vigiles refs <file>` — check a file's symbol references live. */
+/** `vigiles refs <file>` — check a file's symbol references (exit 2 on issues). */
 function refsCommand(target: string | undefined): void {
   if (!target) {
     console.error("Usage: vigiles refs <instruction-file.md>");
     process.exit(2);
   }
-  checkRefsInFile(target, process.cwd(), (m) => {
+  const cwd = process.cwd();
+  let markdown: string;
+  try {
+    markdown = readFileSync(resolve(cwd, target), "utf-8");
+  } catch {
+    console.error(`Cannot read ${target}`);
+    process.exit(2);
+  }
+  const bad = reportRefIssues(markdown, dirname(resolve(cwd, target)), (m) => {
     console.log(m);
   });
+  if (bad) process.exit(2);
+  console.log(`✓ ${target}: all code references are marked and resolve.`);
 }
 
 /**
- * PostToolUse-hook entrypoint: when the agent edits an instruction file, check
- * its symbol references against the live code and surface unresolved ones back
- * to the agent at write time (non-blocking — pure feedback, writes nothing).
- * `audit` performs the same live check later.
+ * PostToolUse-hook entrypoint: when the agent edits an instruction file, force
+ * every code reference to carry a file-qualified mark (`path.ext#symbol`) and
+ * verify the marked ones against the named file. Exit 2 (reason on stderr)
+ * blocks the edit and feeds the fix back to the agent — the harness makes the
+ * agent mark its references, at write time, with full context. `vigiles:ignore`
+ * opts a prose span out.
  */
 function refsHookCommand(): void {
   let raw = "";
@@ -2119,9 +2112,21 @@ function refsHookCommand(): void {
   if (!file || !isInstructionFile(file)) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
-  checkRefsInFile(target, cwd, (m) => {
-    console.error(m);
+  let markdown: string;
+  try {
+    markdown = readFileSync(resolve(cwd, file), "utf-8");
+  } catch {
+    return;
+  }
+  const lines: string[] = [];
+  const bad = reportRefIssues(markdown, dirname(resolve(cwd, file)), (m) => {
+    lines.push(m);
   });
+  if (bad) {
+    console.error(`vigiles: fix the code references in ${target}:`);
+    for (const l of lines) console.error(l);
+    process.exit(2);
+  }
 }
 
 async function main(): Promise<void> {
