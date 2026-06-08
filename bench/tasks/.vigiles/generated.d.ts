@@ -74,64 +74,6 @@ declare module "vigiles/generated" {
 
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
-
-  /** 6 npm scripts from package.json. */
-  export type NpmScript = 
-    | "build"
-    | "test"
-    | "lint"
-    | "fmt"
-    | "fmt:check"
-    | "test:e2e";
-
-  /** 46 project files. */
-  export type ProjectFile = 
-    | "src/action-gate.test.ts"
-    | "src/action-gate.ts"
-    | "src/action.ts"
-    | "src/cedar.test.ts"
-    | "src/cli.test.ts"
-    | "src/cli.ts"
-    | "src/community-skills.test.ts"
-    | "src/community-skills.ts"
-    | "src/compile-generator.test.ts"
-    | "src/compile-generator.ts"
-    | "src/compile.ts"
-    | "src/coverage.test.ts"
-    | "src/coverage.ts"
-    | "src/doc-refs.test.ts"
-    | "src/doc-refs.ts"
-    | "src/evolve.ts"
-    | "src/frontmatter.test.ts"
-    | "src/frontmatter.ts"
-    | "src/generate-schema.ts"
-    | "src/generate-types.ts"
-    | "src/hash.ts"
-    | "src/inline.test.ts"
-    | "src/inline.ts"
-    | "src/integrity.ts"
-    | "src/linters.ts"
-    | "src/orphans.test.ts"
-    | "src/orphans.ts"
-    | "src/proofs.test.ts"
-    | "src/proofs.ts"
-    | "src/session.test.ts"
-    | "src/session.ts"
-    | "src/sidecar.test.ts"
-    | "src/sidecar.ts"
-    | "src/skill-driver.test.ts"
-    | "src/skill-driver.ts"
-    | "src/skill-pipeline.test.ts"
-    | "src/skill-runtime.test.ts"
-    | "src/skill-runtime.ts"
-    | "src/skill-test.test.ts"
-    | "src/skill-test.ts"
-    | "src/spec.test.ts"
-    | "src/spec.ts"
-    | "src/test-utils.ts"
-    | "src/types.ts"
-    | "src/validate.test.ts"
-    | "src/validate.ts";
 }
 
 declare module "vigiles/spec" {
@@ -201,63 +143,5 @@ declare module "vigiles/spec" {
       | "require-yield"
       | "use-isnan"
       | "valid-typeof";
-  }
-  interface KnownProjectFiles {
-    files: 
-      | "src/action-gate.test.ts"
-      | "src/action-gate.ts"
-      | "src/action.ts"
-      | "src/cedar.test.ts"
-      | "src/cli.test.ts"
-      | "src/cli.ts"
-      | "src/community-skills.test.ts"
-      | "src/community-skills.ts"
-      | "src/compile-generator.test.ts"
-      | "src/compile-generator.ts"
-      | "src/compile.ts"
-      | "src/coverage.test.ts"
-      | "src/coverage.ts"
-      | "src/doc-refs.test.ts"
-      | "src/doc-refs.ts"
-      | "src/evolve.ts"
-      | "src/frontmatter.test.ts"
-      | "src/frontmatter.ts"
-      | "src/generate-schema.ts"
-      | "src/generate-types.ts"
-      | "src/hash.ts"
-      | "src/inline.test.ts"
-      | "src/inline.ts"
-      | "src/integrity.ts"
-      | "src/linters.ts"
-      | "src/orphans.test.ts"
-      | "src/orphans.ts"
-      | "src/proofs.test.ts"
-      | "src/proofs.ts"
-      | "src/session.test.ts"
-      | "src/session.ts"
-      | "src/sidecar.test.ts"
-      | "src/sidecar.ts"
-      | "src/skill-driver.test.ts"
-      | "src/skill-driver.ts"
-      | "src/skill-pipeline.test.ts"
-      | "src/skill-runtime.test.ts"
-      | "src/skill-runtime.ts"
-      | "src/skill-test.test.ts"
-      | "src/skill-test.ts"
-      | "src/spec.test.ts"
-      | "src/spec.ts"
-      | "src/test-utils.ts"
-      | "src/types.ts"
-      | "src/validate.test.ts"
-      | "src/validate.ts";
-  }
-  interface KnownNpmScripts {
-    scripts: 
-      | "build"
-      | "test"
-      | "lint"
-      | "fmt"
-      | "fmt:check"
-      | "test:e2e";
   }
 }
