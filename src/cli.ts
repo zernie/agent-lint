@@ -148,32 +148,97 @@ function printErrors(specFile: string, errors: CompileError[]): void {
 // Commands
 // ---------------------------------------------------------------------------
 
+/** Compile a generator-skill spec from source → SKILL.md. Returns validity. */
+function compileGeneratorSkillToFile(
+  specPath: string,
+  source: string,
+): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileGeneratorSkill(source, {
+    basePath: process.cwd(),
+    specFile: specPath,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath} (generator skill)`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  for (const e of errors) console.log(`  ${e.type}: ${e.message}`);
+  return false;
+}
+
+/** Compile a ClaudeSpec → its primary + any additional targets. */
+function compileClaudeToFile(
+  spec: ClaudeSpec,
+  specPath: string,
+  config: VigilesConfig,
+): boolean {
+  const basePath = process.cwd();
+  const { markdown, errors, linterResults, targets } = compileClaude(spec, {
+    basePath,
+    specFile: specPath,
+    maxRules: config.maxRules,
+    maxTokens: config.maxTokens,
+    maxSectionLines: config.maxSectionLines,
+    catalogOnly: config.catalogOnly,
+    linters: config.linters,
+  });
+  const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
+  if (errors.length > 0) {
+    console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+    printErrors(specPath, errors);
+    writeFileSync(resolve(basePath, primaryOutput), markdown);
+    return false;
+  }
+  writeFileSync(resolve(basePath, primaryOutput), markdown);
+  const outputNames = [primaryOutput];
+  for (const t of targets.slice(1)) {
+    const body = markdown
+      .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
+      .replace(/^# [^\n]+/, `# ${t}`);
+    const dir = primaryOutput.substring(0, primaryOutput.lastIndexOf("/") + 1);
+    const targetPath = dir + t;
+    writeFileSync(resolve(basePath, targetPath), addHash(body, specPath));
+    outputNames.push(targetPath);
+  }
+  const linterCount = linterResults.filter((r) => r.exists).length;
+  console.log(`\n✓ ${specPath} → ${outputNames.join(", ")}`);
+  console.log(
+    `  ${String(Object.keys(spec.rules).length)} rules (${String(linterCount)} linter-verified)`,
+  );
+  return true;
+}
+
+/** Compile a declarative SkillSpec → SKILL.md. */
+function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileSkill(spec, {
+    basePath: process.cwd(),
+    specFile: specPath,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath}`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  printErrors(specPath, errors);
+  return false;
+}
+
 async function compile(
   specPaths: string[],
   config: VigilesConfig,
 ): Promise<boolean> {
   let allValid = true;
-
   for (const specPath of specPaths) {
     // Generator skills can't be executed to markdown — compile from source.
     const source = readFileSync(resolve(process.cwd(), specPath), "utf-8");
     if (/\bgenSkill\s*\(/.test(source)) {
-      const outputPath = specPath.replace(/\.spec\.ts$/, "");
-      const { markdown, errors } = compileGeneratorSkill(source, {
-        basePath: process.cwd(),
-        specFile: specPath,
-      });
-      writeFileSync(resolve(process.cwd(), outputPath), markdown);
-      if (errors.length === 0) {
-        console.log(`\n✓ ${specPath} → ${outputPath} (generator skill)`);
-      } else {
-        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
-        for (const e of errors) console.log(`  ${e.type}: ${e.message}`);
-        allValid = false;
-      }
+      if (!compileGeneratorSkillToFile(specPath, source)) allValid = false;
       continue;
     }
-
     const spec = await loadSpec(specPath);
     if (!spec) {
       console.log(`\n✗ ${specPath} — failed to load`);
@@ -183,74 +248,12 @@ async function compile(
       allValid = false;
       continue;
     }
-
-    const basePath = process.cwd();
-
     if (spec._specType === "claude") {
-      const { markdown, errors, linterResults, targets } = compileClaude(spec, {
-        basePath,
-        specFile: specPath,
-        maxRules: config.maxRules,
-        maxTokens: config.maxTokens,
-        maxSectionLines: config.maxSectionLines,
-        catalogOnly: config.catalogOnly,
-        linters: config.linters,
-      });
-
-      const linterCount = linterResults.filter((r) => r.exists).length;
-      const primaryOutput = specPath.replace(/\.spec\.ts$/, "");
-
-      if (errors.length === 0) {
-        // Write primary target
-        writeFileSync(resolve(basePath, primaryOutput), markdown);
-        const outputNames = [primaryOutput];
-
-        // Write additional targets with swapped heading + recomputed hash
-        for (const t of targets.slice(1)) {
-          // Strip hash, replace heading, recompute hash
-          const body = markdown
-            .replace(/^<!-- vigiles:[^\n]+\n\n?/, "")
-            .replace(/^# [^\n]+/, `# ${t}`);
-          const additional = addHash(body, specPath);
-          const dir = primaryOutput.substring(
-            0,
-            primaryOutput.lastIndexOf("/") + 1,
-          );
-          const targetPath = dir + t;
-          writeFileSync(resolve(basePath, targetPath), additional);
-          outputNames.push(targetPath);
-        }
-
-        console.log(`\n✓ ${specPath} → ${outputNames.join(", ")}`);
-        console.log(
-          `  ${String(Object.keys(spec.rules).length)} rules (${String(linterCount)} linter-verified)`,
-        );
-      } else {
-        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
-        printErrors(specPath, errors);
-        allValid = false;
-        // Still write the file so the user can see partial output
-        writeFileSync(resolve(basePath, primaryOutput), markdown);
-      }
+      if (!compileClaudeToFile(spec, specPath, config)) allValid = false;
     } else if (spec._specType === "skill") {
-      const outputPath = specPath.replace(/\.spec\.ts$/, "");
-      const { markdown, errors } = compileSkill(spec, {
-        basePath,
-        specFile: specPath,
-      });
-
-      if (errors.length === 0) {
-        writeFileSync(resolve(basePath, outputPath), markdown);
-        console.log(`\n✓ ${specPath} → ${outputPath}`);
-      } else {
-        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
-        printErrors(specPath, errors);
-        allValid = false;
-        writeFileSync(resolve(basePath, outputPath), markdown);
-      }
+      if (!compileSkillToFile(spec, specPath)) allValid = false;
     }
   }
-
   return allValid;
 }
 
