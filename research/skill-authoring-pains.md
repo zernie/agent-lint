@@ -120,3 +120,6 @@ CLAUDE.md, strict for SKILL.md.**
 - `research/skill-as-pipeline.md` — the concrete model that came out of these pains: a skill as
   a harness-driven control-flow graph with deterministic gates (Railway out, monads in), and
   the resulting markdown↔spec boundary (linear → markdown, branching → spec).
+- `research/benchmarks-runtime-gates.md` — the empirical test of that pipeline/gate branch:
+  runtime gates are a no-op or net-negative for capable agents, which redirects the center of
+  gravity back to the cross-referencing core this doc identifies.
