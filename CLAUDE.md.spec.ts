@@ -50,7 +50,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/cli.ts":
       "CLI: init, compile, audit, test, eval (primary commands + generate-types plumbing)",
     "src/run-scripts.ts":
-      "Script runner for `vigiles test` / `vigiles eval`: discover *.harness.mjs / *.eval.mjs, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)",
+      "Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.mjs` / `*.eval.mjs`, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)",
     "src/run-scripts.test.ts":
       "Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting",
     "src/inline.ts":
@@ -99,11 +99,11 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/eval.test.ts":
       "Eval aggregation/formatting + variance test suite (node:test)",
     "src/plugin-loader.ts":
-      "Plugin/repo harness loader: loadPlugin reads the real .claude-plugin/plugin.json (or .claude/settings.json) hooks with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine",
+      "Plugin/repo harness loader: loadPlugin reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine",
     "src/plugin-loader.test.ts":
       "Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills materialization, settings merge, in-repo dogfood",
     "src/harness-assert.ts":
-      "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing assert* helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend",
+      "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend",
     "src/harness-assert.test.ts":
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
     "src/judge.ts":
@@ -117,7 +117,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "test/types/smoke.jest.ts":
       "Type-level constraint: `vigiles/jest` makes the matchers type-check on jest's expect",
     "test/runners/matchers.vitest.mjs":
-      "Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; src/*.test.ts excluded via vitest.config.mjs)",
+      "Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; `src/*.test.ts` excluded via vitest.config.mjs)",
     "test/runners/matchers.jest.cjs":
       "Cross-runner constraint: the same vigilesMatchers register and pass under jest (CommonJS dist required natively; scoped via jest.config.cjs)",
     "src/test-utils.ts":
@@ -221,13 +221,13 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "npm run fmt:check": "Check formatting",
     "npm run lint": "Run ESLint on src/",
     "npm run test:harness":
-      "Build + run the deterministic harness tests (*.harness.mjs) on the in-repo CLI — needs the claude CLI, no API key",
+      "Build + run the deterministic harness tests (`*.harness.mjs`) on the in-repo CLI — needs the claude CLI, no API key",
     "npm run test:eval":
-      "Build + run the real-model harness evals (*.eval.mjs) on the in-repo CLI — needs claude + model auth",
+      "Build + run the real-model harness evals (`*.eval.mjs`) on the in-repo CLI — needs claude + model auth",
     "npm run test:vitest":
-      "Build + run the cross-runner matcher constraints under vitest (test/runners/*.vitest.mjs)",
+      "Build + run the cross-runner matcher constraints under vitest (`test/runners/*.vitest.mjs`)",
     "npm run test:jest":
-      "Build + run the cross-runner matcher constraints under jest (test/runners/*.jest.cjs)",
+      "Build + run the cross-runner matcher constraints under jest (`test/runners/*.jest.cjs`)",
     "npm run test:types":
       "Build + type-check the vitest/jest matcher augmentation (tsc --noEmit on test/types/)",
   },

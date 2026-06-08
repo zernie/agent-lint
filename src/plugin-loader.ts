@@ -8,8 +8,9 @@
  *
  *   runHarnessTest({ plugin: "./", model: scriptModel([...]) });
  *
- * Resolution order for hooks: `<plugin>/.claude-plugin/plugin.json` (the plugin
- * manifest), else `<plugin>/.claude/settings.json` (a plain repo). `${CLAUDE_
+ * Resolution order for hooks: inline `hooks` in `.claude-plugin/plugin.json`, a
+ * `hooks` string path in plugin.json, the `hooks/hooks.json` convention (e.g.
+ * obra/superpowers), then a plain repo's `.claude/settings.json`. `${CLAUDE_
  * PLUGIN_ROOT}` in any hook command is expanded to the plugin's absolute path,
  * so the real hook scripts run from where they live (no copying needed). The
  * plugin's CLAUDE.md and skills/ are materialized into the sandbox so the
@@ -32,20 +33,36 @@ interface PluginManifest {
 
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
 
-/** Read the hooks block from a plugin manifest or a repo's settings.json. */
+/** Read and return the `.hooks` field of a JSON file, or undefined on any error. */
+function readHooksFile(path: string): unknown {
+  try {
+    return (JSON.parse(readFileSync(path, "utf-8")) as { hooks?: unknown })
+      .hooks;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read the hooks block, handling the real-world plugin layouts:
+ *   1. inline `hooks` object in .claude-plugin/plugin.json,
+ *   2. a `hooks` *string* in plugin.json pointing at a hooks JSON file,
+ *   3. the `hooks/hooks.json` convention (e.g. obra/superpowers) — auto-discovered,
+ *   4. a plain repo's `.claude/settings.json`.
+ */
 function readHooks(root: string): unknown {
   const manifestPath = join(root, ".claude-plugin", "plugin.json");
   if (existsSync(manifestPath)) {
     const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
-    return m.hooks;
+    if (typeof m.hooks === "string") return readHooksFile(join(root, m.hooks));
+    if (m.hooks !== undefined) return m.hooks;
   }
+  const conventionPath = join(root, "hooks", "hooks.json");
+  if (existsSync(conventionPath)) return readHooksFile(conventionPath);
+
   const settingsPath = join(root, ".claude", "settings.json");
-  if (existsSync(settingsPath)) {
-    const s = JSON.parse(readFileSync(settingsPath, "utf-8")) as {
-      hooks?: unknown;
-    };
-    return s.hooks;
-  }
+  if (existsSync(settingsPath)) return readHooksFile(settingsPath);
+
   return undefined;
 }
 

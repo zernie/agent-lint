@@ -162,6 +162,65 @@ test("the plugin manifest wins when both it and .claude/settings.json exist", ()
   }
 });
 
+test("loadPlugin reads the hooks/hooks.json convention (e.g. obra/superpowers)", () => {
+  const root = makeTmpDir("conv");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    // plugin.json with NO inline hooks — hooks live in hooks/hooks.json
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "conv" }),
+    );
+    writeFileSync(
+      join(root, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: "bash ${CLAUDE_PLUGIN_ROOT}/hooks/run.sh",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const loaded = loadPlugin(root);
+    const s = loaded.settings as { hooks?: Record<string, unknown[]> };
+    assert.equal(s.hooks?.SessionStart?.length, 1);
+    assert.ok(JSON.stringify(s).includes(`${root}/hooks/run.sh`));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin follows a `hooks` string path in plugin.json", () => {
+  const root = makeTmpDir("hookspath");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "p", hooks: "./hooks/custom.json" }),
+    );
+    writeFileSync(
+      join(root, "hooks", "custom.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }] },
+      }),
+    );
+    const loaded = loadPlugin(root);
+    const s = loaded.settings as { hooks?: Record<string, unknown[]> };
+    assert.equal(s.hooks?.Stop?.length, 1);
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin on a bare dir (CLAUDE.md only, no hooks) yields empty settings", () => {
   const root = makeTmpDir("bare");
   try {
