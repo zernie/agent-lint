@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:a4cbcbd22e20c978 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:00932c01c4bc4ff9 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -125,6 +125,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `npm run fmt` — Format with prettier
 - `npm run fmt:check` — Check formatting
 - `npm run lint` — Run ESLint on src/
+- `npm run test:harness` — Build + run the deterministic harness tests (\*.harness.mjs) on the in-repo CLI — needs the claude CLI, no API key
+- `npm run test:eval` — Build + run the real-model harness evals (\*.eval.mjs) on the in-repo CLI — needs claude + model auth
 
 ## Rules
 
