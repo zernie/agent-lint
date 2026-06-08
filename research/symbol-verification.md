@@ -151,3 +151,5 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
 - `research/skill-authoring-pains.md` — the drift pain this addresses.
 - `research/benchmarks-runtime-gates.md` — why "verify the map" (this) beats
   "police the route" (runtime gates).
+- `research/reference-verification-limits.md` — the limits of this approach
+  (prose is undecidable; the active mark is gameable; what to delegate vs own).

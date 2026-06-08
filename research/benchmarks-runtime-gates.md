@@ -188,3 +188,6 @@ bash bench/run-refs.sh haiku 6 240             # #4 symbol-ref enforcement hook
   gap this redirects toward.
 - `research/skill-as-pipeline.md` — the runtime-gate / harness-driven branch these
   benchmarks test and largely deflate.
+- `research/reference-verification-limits.md` — the conceptual boundary these
+  benchmarks reveal (verify the declared; forcing is gamed).
+- `research/harness-testing.md` — the testing/eval pillar these benchmarks became.
