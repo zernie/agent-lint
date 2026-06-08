@@ -123,3 +123,5 @@ CLAUDE.md, strict for SKILL.md.**
 - `research/benchmarks-runtime-gates.md` — the empirical test of that pipeline/gate branch:
   runtime gates are a no-op or net-negative for capable agents, which redirects the center of
   gravity back to the cross-referencing core this doc identifies.
+- `research/symbol-verification.md` — design & requirements for extending the cross-reference
+  engine from file/cmd to cross-language symbol references (the core competency this doc names).
