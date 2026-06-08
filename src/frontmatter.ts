@@ -190,7 +190,7 @@ function parseStringList(
   const errors: FrontmatterError[] = [];
   let cursor = keyLine;
   for (let i = 0; i < raw.length; i++) {
-    const v = raw[i];
+    const v: unknown = raw[i];
     if (typeof v !== "string" || v.trim() === "") {
       errors.push({
         line: keyLine,
