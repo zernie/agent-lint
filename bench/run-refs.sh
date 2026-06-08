@@ -67,7 +67,10 @@ EOF
   local catch="no"
   if [ -f SKILL.md ]; then
     sed -i 's/chargeCard/captureCard/g' src/billing.ts
-    if node "$CLI" audit SKILL.md 2>/dev/null | grep -q "chargeCard.*not defined"; then
+    # Capture first: audit exits 2 on any error, which under pipefail would mask
+    # grep's result if the pipeline were used directly.
+    local aud; aud=$(node "$CLI" audit SKILL.md 2>/dev/null)
+    if printf '%s' "$aud" | grep -q '"chargeCard" is not defined'; then
       catch="yes"
     fi
     sed -i 's/captureCard/chargeCard/g' src/billing.ts # restore

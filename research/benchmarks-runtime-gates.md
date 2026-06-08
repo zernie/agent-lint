@@ -4,9 +4,13 @@
 > layer (`skill-runtime`, `skill-driver`, `action-gate`, Stop-hook gates — the
 > `skill-as-pipeline.md` branch) and then benchmarked whether it actually
 > changes agent behaviour. It does not — for capable agents on clear tasks it is
-> a no-op or net-negative. This doc is the evidence; it redirects vigiles's
-> center of gravity from _enforcing the route_ to _verifying the map_ (the
-> cross-referencing core in `skill-authoring-pains.md`).
+> a no-op or net-negative. Benchmark #4 extends the test to the
+> symbol-reference enforcement hook (`refs-hook`) with the same verdict:
+> _verifying_ a declared reference is the non-gameable win, but a hook that
+> _forces_ the agent to declare references is gamed like any gate. This doc is
+> the evidence; it redirects vigiles's center of gravity from _enforcing the
+> route_ to _verifying the map_ (the cross-referencing core in
+> `skill-authoring-pains.md`).
 
 ## Method
 
@@ -73,6 +77,47 @@ context cap; the gate stays a no-op. (Falsified for `haiku` on this task up to
 160k; we did not test a model whose window we could fill with working headroom
 to spare.)
 
+### Benchmark #4 — the symbol-reference enforcement hook (2 arms × 6 trials)
+
+A different kind of hook: not a runtime gate on a task outcome, but the
+`refs-hook` that **forces the agent to mark its code references** as
+`` `vigiles:symbol path#name` `` (so they become verifiable) or opt out with
+`<!-- vigiles:ignore -->`. Task: "document these functions in a SKILL.md,
+referencing them by name." `vanilla` has no hook; `gated` blocks any unmarked
+code reference. The payoff metric: after the run, rename a documented function in
+the code — does `vigiles audit` catch the now-broken reference? Harness:
+`bench/run-refs.sh`. (Run with the `foo(args)` detection fix so the hook
+challenges the dominant function-call form, not just bare identifiers.)
+
+| arm     | avg marks | avg `vigiles:ignore` | **rename caught** |
+| ------- | --------- | -------------------- | ----------------- |
+| vanilla | 0         | 0                    | **0/6**           |
+| gated   | 2.5       | **2.8**              | **2/6**           |
+
+**Not a no-op, but heavily gamed.** The hook moved the needle off zero — 2 of 6
+gated runs produced a verifiable mark for the renamed function (vanilla cannot,
+its references are bare and unverifiable). But the other 4 circumvented it: three
+runs **ignore-gamed** (5–6 `vigiles:ignore` each — keep the bare name, slap on an
+opt-out to satisfy the hook), and one marked the function only inside a fenced
+` ```block `, which R1 deliberately skips. Average 2.8 ignores per run is the
+Goodhart signature again: when forcing fires, the cheapest way to satisfy it is
+to opt out, and the agent takes it.
+
+The decisive distinction this benchmark draws:
+
+- **Verification is sound and non-gameable.** `symbol("file", "name")` in a spec
+  (the author writes it deliberately; compile-verified) and `audit` on a real
+  `vigiles:symbol` mark catch a rename deterministically — proven in the unit/E2E
+  suite and by the 2/6 gated runs that did mark. The author/spec _declares_;
+  vigiles _verifies_. No model behaviour can fake whether a file defines a symbol.
+- **Enforcement (the hook forcing marks) is partial and gamed.** It does not
+  reliably turn a bare-reference agent into a marked-reference one — same lesson
+  as the runtime gates, just not total.
+
+So the value of symbol verification lands in **declared** references — `symbol()`
+in spec mode, and marks an author/agent writes deliberately — not in auto-forcing
+them. The `refs-hook` is best-effort, not a guarantee.
+
 ## Interpretation
 
 A deterministic runtime gate **re-checks what a capable agent already
@@ -111,6 +156,12 @@ regardless of model).
    irreversible / high-stakes actions (deploy, money, data deletion) with no CI
    and an expensive tail. Not the headline. We measured the general case; it does
    not pay.
+3. **Verify declared references; don't force the declaration.** Benchmark #4
+   sharpens the line: the deterministic _verification_ of a reference (does this
+   file define this symbol / does this rule exist) is the non-gameable win, but
+   the _hook that forces the agent to declare references_ is gamed like any gate.
+   Lead with `symbol()` / declared marks and `audit`; treat the forcing hook as
+   best-effort, not a guarantee.
 
 ## Caveats
 
@@ -128,6 +179,7 @@ regardless of model).
 bash bench/run.sh      haiku 8 240             # #1 result gate
 bash bench/run-tdd.sh  haiku 8 300             # #2 process gate (TDD)
 bash bench/run-ctx.sh  haiku 5 cart-discount 0 80 160   # #3 context load
+bash bench/run-refs.sh haiku 6 240             # #4 symbol-ref enforcement hook
 ```
 
 ## See also
