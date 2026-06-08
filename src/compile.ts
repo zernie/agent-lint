@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
+import { fileDefinesSymbol, langForFile } from "./symbols.js";
 
 import type {
   ClaudeSpec,
@@ -157,6 +158,36 @@ export function validateCommandRef(
   return null;
 }
 
+export function validateSymbolRef(
+  file: string,
+  name: string,
+  basePath: string,
+): CompileError | null {
+  const full = resolve(basePath, file);
+  if (!existsSync(full)) {
+    return {
+      type: "stale-file",
+      message: `File not found: "${file}"`,
+      path: file,
+    };
+  }
+  if (langForFile(file) === null) {
+    return {
+      type: "stale-ref",
+      message: `Unsupported language for symbol check: "${file}"`,
+      path: file,
+    };
+  }
+  if (!fileDefinesSymbol(full, name)) {
+    return {
+      type: "stale-ref",
+      message: `"${name}" is not defined in ${file}`,
+      path: `${file}#${name}`,
+    };
+  }
+  return null;
+}
+
 function validateRefs(
   fragments: InstructionFragment[],
   basePath: string,
@@ -187,6 +218,11 @@ function validateRefs(
         }
         break;
       }
+      case "symbol": {
+        const err = validateSymbolRef(r.file, r.symbol, basePath);
+        if (err) errors.push(err);
+        break;
+      }
     }
   }
   return errors;
@@ -201,6 +237,8 @@ function renderFragment(fragment: InstructionFragment): string {
       return `\`${fragment.command}\``;
     case "skill":
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
+    case "symbol":
+      return `\`${fragment.file}#${fragment.symbol}\``;
     default:
       return assertNever(fragment);
   }

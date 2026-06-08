@@ -71,3 +71,24 @@ test("fileDefinesSymbol checks one named file (no project index)", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("fileDefinesSymbol falls back to a co-located .d.ts / .rbi", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-sym-decl-"));
+  try {
+    mkdirSync(join(dir, "lib"));
+    // The source defines it dynamically (not statically visible)...
+    writeFileSync(join(dir, "lib", "dyn.js"), "module.exports = build();\n");
+    // ...but a co-located .d.ts declares it.
+    writeFileSync(
+      join(dir, "lib", "dyn.d.ts"),
+      "export function dynamicFn(): void;\n",
+    );
+    assert.equal(
+      fileDefinesSymbol(join(dir, "lib", "dyn.js"), "dynamicFn"),
+      true,
+    );
+    assert.equal(fileDefinesSymbol(join(dir, "lib", "dyn.js"), "nope"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

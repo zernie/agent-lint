@@ -13,7 +13,7 @@
  * imports / Zeitwerk / tsconfig". Resolution is per-language and architectural —
  * delegated. Ambiguity (a name defined in several files) is reported, not guessed.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { extname } from "node:path";
 
 import { parse, Lang, registerDynamicLanguage } from "@ast-grep/napi";
@@ -126,11 +126,37 @@ export function definedSymbolsInFile(file: string): SymbolDef[] {
   }
 }
 
+// A co-located declaration file that may declare symbols the source defines
+// dynamically (Sorbet `.rbi`, TypeScript `.d.ts`) — checked as a fallback so a
+// metaprogrammed `define_method` / ambient declaration still resolves.
+const DECL_SIBLING: Record<string, string> = {
+  ".ts": ".d.ts",
+  ".tsx": ".d.ts",
+  ".js": ".d.ts",
+  ".jsx": ".d.ts",
+  ".mjs": ".d.ts",
+  ".rb": ".rbi",
+};
+
 /**
  * Whether `file` defines a top-level (or scoped) symbol named `name`. This is
  * the whole check for a file-qualified reference (`path#symbol`): we parse the
- * one named file — no project-wide index, no resolution across files.
+ * one named file — no project-wide index, no resolution across files. As a
+ * fallback we also consult a co-located declaration file (`.rbi` / `.d.ts`), so
+ * typed dynamic symbols resolve without running Sorbet / the TS compiler.
  */
 export function fileDefinesSymbol(file: string, name: string): boolean {
-  return definedSymbolsInFile(file).some((d) => d.name === name);
+  if (definedSymbolsInFile(file).some((d) => d.name === name)) return true;
+  const ext = extname(file);
+  const decl = DECL_SIBLING[ext];
+  if (decl && !file.endsWith(decl)) {
+    const sibling = file.slice(0, -ext.length) + decl;
+    if (
+      existsSync(sibling) &&
+      definedSymbolsInFile(sibling).some((d) => d.name === name)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
