@@ -76,6 +76,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/doc-refs.ts":
       "Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
     "src/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",
+    "src/symbols.ts":
+      "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
+    "src/symbols.test.ts": "Symbol extractor test suite (node:test)",
+    "src/refs.ts":
+      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs enforcement for the refs-hook",
+    "src/refs.test.ts": "Symbol reference verification test suite (node:test)",
     "src/test-utils.ts":
       "Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo",
     "src/types.ts":

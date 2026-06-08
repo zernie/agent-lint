@@ -14,17 +14,22 @@ either a project-wide index (which then has its own drift/ambiguity problems) or
 per-language autoloaders we don't do. So the author **names the file** inline,
 and the harness **forces** them to:
 
-- **The mark is the file-qualified inline span.** A code reference is written
-  `` `src/config.ts#parseConfig` `` / `` `app/models/user.rb#full_name` `` (path,
-  then `#` or `::`, then the symbol). vigiles parses **that one named file** and
-  checks it defines the symbol — no project index, no cross-file resolution, no
-  ambiguity (the file disambiguates). (`src/refs.ts`, `src/symbols.ts`.)
+- **The mark is an explicit, self-contained inline directive.** A code reference
+  is written `` `vigiles:symbol src/config.ts#parseConfig` `` (literal
+  `vigiles:symbol` prefix, then `path.ext`, then `#`/`::`, then the symbol).
+  vigiles parses **that one named file** and checks it defines the symbol — no
+  project index, no cross-file resolution, no ambiguity (the file disambiguates).
+  The literal prefix means zero detection heuristic, and the mark is
+  self-contained, so it binds even with several references on one line — unlike a
+  detached `<!-- comment -->`, which is ambiguous in a long line.
+  (`src/refs.ts`, `src/symbols.ts`.)
 - **The hook makes the agent mark.** `refs-hook` (PostToolUse on
   SKILL/CLAUDE/AGENTS.md) blocks (exit 2) any code-shaped inline span that is
-  **not** file-qualified, telling the agent to write `path.ext#symbol` or opt out
-  with `<!-- vigiles:ignore -->`. The agent supplies the file (it knows its own
-  code); vigiles verifies the claim. This is the harness enforcing the verifiable
-  form at write time, with full context — not a project index guessing.
+  **not** a `vigiles:symbol` mark, telling the agent to write
+  `` `vigiles:symbol path.ext#name` `` or opt out with `<!-- vigiles:ignore -->`.
+  The agent supplies the file (it knows its own code); vigiles verifies the
+  claim. This is the harness enforcing the verifiable form at write time, with
+  full context — not a project index guessing.
 - **Declared ⇒ error.** Because the mark is deliberately authored (like
   `vigiles:file` / `vigiles:cmd`), a broken file-qualified ref is an **error**
   (exit 2) in `audit`, not a warning. No false positives: only the unambiguous
@@ -72,13 +77,13 @@ blocks an edit until every code reference is either file-qualified or marked as
 prose. The agent supplies the file (it is writing about code it knows); vigiles
 proves the claim against that file.
 
-| Span the agent writes                  | Outcome                                                           |
-| -------------------------------------- | ----------------------------------------------------------------- |
-| `` `src/config.ts#parseConfig` ``      | parse `src/config.ts`, check it defines `parseConfig` (✓ / error) |
-| `` `app/user.rb#full_name` `` (`::`)   | parse `app/user.rb`, check `full_name` (cross-language)           |
-| bare `` `parseConfig` `` (code-shaped) | **hook blocks** → "mark as `path.ext#symbol` or `vigiles:ignore`" |
-| `` `name` `` / `` `high` `` (prose)    | ignored — not code-shaped                                         |
-| `` `npm run x` `` / `` `src/x.ts` ``   | command / file engines (unchanged)                                |
+| Span the agent writes                               | Outcome                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------- |
+| `` `vigiles:symbol src/config.ts#parseConfig` ``    | parse `src/config.ts`, check it defines `parseConfig` (✓ / error) |
+| `` `vigiles:symbol app/user.rb#full_name` `` (`::`) | parse `app/user.rb`, check `full_name` (cross-language)           |
+| bare `` `parseConfig` `` (code-shaped)              | **hook blocks** → "mark as `vigiles:symbol path#name` or ignore"  |
+| `` `name` `` / `` `high` `` (prose)                 | ignored — not code-shaped                                         |
+| `` `npm run x` `` / `` `src/x.ts` ``                | command / file engines (unchanged)                                |
 
 - **Not flagged:** bare lowercase prose words. Only _code-shaped_ spans
   (snake_case / camelCase / SCREAMING / PascalCase / scoped) are required to be
@@ -112,9 +117,9 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
   inside ` ```ts ` blocks stays separate and opt-in.)
 - **R2 — Cross-language.** Support the languages we already cover (JS/TS, CSS,
   Python, Rust, Ruby) via bundled grammars; graceful skip+note for the rest.
-- **R3 — Author names the file; no stored state, no index.** A reference is
-  file-qualified (`path.ext#symbol`); vigiles parses that one file each time.
-  No project-wide index, no autoloaders, no sidecar — nothing to drift.
+- **R3 — Author names the file; no stored state, no index.** A reference is an
+  explicit `` `vigiles:symbol path.ext#name` `` mark; vigiles parses that one file
+  each time. No project-wide index, no autoloaders, no sidecar — nothing to drift.
 - **R4 — Harness-enforced, no guessing.** The `refs-hook` forces code-shaped
   spans to be file-qualified or `vigiles:ignore`d; verification only runs on the
   unambiguous `path.ext#symbol` shape (no `scan`-style false positives).

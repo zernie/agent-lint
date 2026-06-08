@@ -1,7 +1,31 @@
 {
   "gates": [
-    { "on": "Write", "when": "src/", "gate": { "kind": "cmd", "command": "! npm test --silent >/dev/null 2>&1", "retry": 1 } },
-    { "on": "Edit",  "when": "src/", "gate": { "kind": "cmd", "command": "! npm test --silent >/dev/null 2>&1", "retry": 1 } },
-    { "on": "Bash",  "when": "src/", "gate": { "kind": "cmd", "command": "! npm test --silent >/dev/null 2>&1", "retry": 1 } }
+    {
+      "on": "Write",
+      "when": "src/",
+      "gate": {
+        "kind": "cmd",
+        "command": "! npm test --silent >/dev/null 2>&1",
+        "retry": 1
+      }
+    },
+    {
+      "on": "Edit",
+      "when": "src/",
+      "gate": {
+        "kind": "cmd",
+        "command": "! npm test --silent >/dev/null 2>&1",
+        "retry": 1
+      }
+    },
+    {
+      "on": "Bash",
+      "when": "src/",
+      "gate": {
+        "kind": "cmd",
+        "command": "! npm test --silent >/dev/null 2>&1",
+        "retry": 1
+      }
+    }
   ]
 }
