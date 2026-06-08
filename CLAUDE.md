@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:782430e96cfbd38a compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:bf81f0af5b0396f9 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -74,7 +74,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/plugin-loader.test.ts` — Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills materialization, settings merge, in-repo dogfood
 - `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend
 - `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
-- `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)
+- `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure); parseJudgeOutput is the pure, testable verdict parser
+- `src/judge.test.ts` — Judge verdict-parsing test suite (node:test): result-field unwrap, prose-wrapped JSON, threshold, clamping, unparseable fallback
 - `src/vitest.mts` — Opt-in vitest integration entry (ESM, since vitest is ESM-only): registers vigilesMatchers + augments @vitest/expect Matchers so toHaveCreated/toBeatBaseline type-check; vitest is an optional peer dep
 - `src/jest.ts` — Opt-in jest integration entry (CJS): registers vigilesMatchers + augments @jest/expect Matchers; jest is an optional peer dep
 - `test/types/smoke.vitest.ts` — Type-level constraint: `vigiles/vitest` makes the matchers type-check on vitest's expect (tsc --noEmit via npm run test:types)

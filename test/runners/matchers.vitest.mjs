@@ -9,14 +9,13 @@
  */
 import { test, expect } from "vitest";
 import {
-  vigilesMatchers,
   improvement,
   assertImproves,
   assertCreated,
   assertNotCreated,
 } from "../../dist/harness-assert.js";
-
-expect.extend(vigilesMatchers);
+// Matchers are registered by the `vigiles/vitest` entry via setupFiles
+// (vitest.config.mjs) — this file asserts that wiring works end-to-end.
 
 const report = {
   name: "demo",

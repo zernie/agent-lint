@@ -4,4 +4,7 @@ module.exports = {
   testEnvironment: "node",
   testMatch: ["<rootDir>/test/runners/**/*.jest.cjs"],
   transform: {},
+  // Load the opt-in entry the way a user would — this also tests that
+  // `vigiles/jest` registers the matchers (auto-register).
+  setupFilesAfterEnv: ["<rootDir>/dist/jest.js"],
 };
