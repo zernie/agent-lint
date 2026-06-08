@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js dist/skill-pipeline.test.js dist/skill-runtime.test.js dist/skill-driver.test.js dist/skill-test.test.js dist/compile-generator.test.js dist/community-skills.test.js dist/action-gate.test.js dist/symbols.test.js",
+    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js dist/skill-pipeline.test.js dist/skill-runtime.test.js dist/skill-driver.test.js dist/skill-test.test.js dist/compile-generator.test.js dist/community-skills.test.js dist/action-gate.test.js dist/symbols.test.js dist/pin.test.js",
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
