@@ -1,0 +1,6 @@
+{
+  "name": "bench-tdd-isodd",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.js 2>/dev/null" }
+}

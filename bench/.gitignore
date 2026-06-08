@@ -6,3 +6,8 @@ run.log
 # Stray generate-types output inside task fixtures
 tasks/**/.vigiles/
 tasks/.vigiles/
+
+# TDD / process benchmark artifacts
+.work-tdd/
+results-tdd.csv
+run-tdd.log
