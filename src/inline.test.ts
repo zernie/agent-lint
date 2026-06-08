@@ -204,3 +204,39 @@ describe("hasInlineRules", () => {
     );
   });
 });
+
+describe("parseInlineRules: file/cmd references", () => {
+  it("extracts vigiles:file and vigiles:cmd markers with line numbers", () => {
+    const { files, commands } = parseInlineRules(
+      `# P\n\nSee <!-- vigiles:file src/util.ts --> here.\nRun <!-- vigiles:cmd "npm run build" --> to compile.\n`,
+    );
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ["src/util.ts"],
+    );
+    assert.equal(files[0].line, 3);
+    assert.deepEqual(
+      commands.map((c) => c.command),
+      ["npm run build"],
+    );
+    assert.equal(commands[0].line, 4);
+  });
+
+  it("ignores file/cmd markers inside fenced code blocks", () => {
+    const { files, commands } = parseInlineRules(
+      '```md\n<!-- vigiles:file src/inside.ts -->\n<!-- vigiles:cmd "npm run x" -->\n```\n<!-- vigiles:file src/outside.ts -->\n',
+    );
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ["src/outside.ts"],
+    );
+    assert.equal(commands.length, 0);
+  });
+
+  it("hasInlineRules is true for a file with only a file marker", () => {
+    assert.equal(
+      hasInlineRules(`# P\n<!-- vigiles:file src/only.ts -->\n`),
+      true,
+    );
+  });
+});
