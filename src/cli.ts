@@ -50,6 +50,12 @@ import {
   gateLabel,
 } from "./skill-runtime.js";
 import { checkLinterRule } from "./linters.js";
+import { claudeAvailable } from "./harness-test.js";
+import {
+  discoverScripts,
+  runScripts,
+  formatScriptSummary,
+} from "./run-scripts.js";
 import { checkIntegrity } from "./integrity.js";
 import { computeScriptCoverage } from "./coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
@@ -1829,6 +1835,47 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
   );
 }
 
+/**
+ * `vigiles test` / `vigiles eval` — discover and run the two-tier harness
+ * scripts (deterministic `*.harness.mjs` / real-model `*.eval.mjs`) as child
+ * `node` processes, aggregating exit codes so they work as a CI command. See
+ * src/run-scripts.ts.
+ *
+ * `vigiles test` skips clean when the `claude` CLI is absent (the deterministic
+ * tier needs it, just like the node:test suite). `--trials=N` is forwarded to
+ * eval scripts via the `VIGILES_TRIALS` env var.
+ */
+function handleRunScripts(
+  kind: "test" | "eval",
+  args: string[],
+  restArgs: string[],
+): void {
+  const cwd = process.cwd();
+  const defaultGlob = kind === "test" ? "**/*.harness.mjs" : "**/*.eval.mjs";
+
+  if (kind === "test" && !claudeAvailable()) {
+    console.log(
+      "vigiles test: `claude` CLI not found — skipping harness tests.",
+    );
+    return;
+  }
+
+  const files = discoverScripts(restArgs, defaultGlob, cwd);
+  if (files.length === 0) {
+    console.log(`No ${defaultGlob} files found.`);
+    return;
+  }
+
+  const trialsFlag = args.find((a) => a.startsWith("--trials="));
+  const env: NodeJS.ProcessEnv = {};
+  if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
+
+  console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
+  const results = runScripts(files, cwd, env);
+  console.log("\n" + formatScriptSummary(results));
+  if (results.some((r) => r.code !== 0)) process.exit(1);
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -1839,6 +1886,12 @@ function printUsage(command: string | undefined): void {
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
     "  vigiles audit [files...]       Verify, find gaps, suggest improvements",
+  );
+  console.log(
+    "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
+  );
+  console.log(
+    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N)",
   );
   console.log("");
   console.log("Examples:");
@@ -2182,6 +2235,14 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "test":
+      handleRunScripts("test", args, restArgs);
+      break;
+
+    case "eval":
+      handleRunScripts("eval", args, restArgs);
+      break;
 
     // --- Plumbing ---
 

@@ -9,6 +9,11 @@
 </p>
 
 <p align="center">
+  <strong>Test &amp; verify your Claude Code harness.</strong><br />
+  vigiles <strong>verifies the references</strong> your instruction files make — linter rules, file paths, scripts, code symbols — and <strong>evals</strong> whether your hooks, skills, and CLAUDE.md actually change what the agent does.
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/vigiles"><img src="https://img.shields.io/npm/v/vigiles?color=orange" alt="npm version" /></a>
   <a href="https://github.com/zernie/vigiles/actions"><img src="https://img.shields.io/github/actions/workflow/status/zernie/vigiles/ci.yml?branch=main" alt="CI" /></a>
   <a href="https://github.com/zernie/vigiles/blob/main/LICENSE"><img src="https://img.shields.io/github/license/zernie/vigiles" alt="License" /></a>
@@ -258,6 +263,8 @@ npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by
 npx vigiles compile [files...]      # Compile .spec.ts → .md
 npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
+npx vigiles test [files...]         # Run *.harness.mjs deterministic harness tests (no API key)
+npx vigiles eval [files...]         # Run *.eval.mjs real-model harness evals (--trials=N)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -390,9 +397,27 @@ const r = await runHarnessTest({
 assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
 ```
 
-The deterministic tier is reliable for **Stop hooks**; tool-event hooks
-(Edit/Write) are headless-gated, so test those via the eval tier. Our own
-findings from this harness live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+The deterministic tier is reliable for **SessionStart, Stop, UserPromptSubmit,
+and Bash PreToolUse/PostToolUse** hooks — the governance/policy shapes most real
+plugins use; Edit/Write tool-event hooks are headless-gated, so test those via
+the eval tier.
+
+**Run them as a CI command.** `vigiles test` discovers `*.harness.mjs` files
+(deterministic, no API key) and `vigiles eval` discovers `*.eval.mjs` files
+(real model). Canonical, real-plugin-shaped examples to copy:
+
+- [`examples/harness/policy-gate.harness.mjs`](examples/harness/policy-gate.harness.mjs) — a `PreToolUse` Bash policy gate (block `git commit --no-verify`) and a `SessionStart` setup hook, deterministic.
+- [`examples/harness/skill-outcome.eval.mjs`](examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output? (the question you ask of any `SKILL.md`).
+
+```bash
+npx vigiles test examples/harness/policy-gate.harness.mjs
+npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
+```
+
+The two-tier design and a coverage assessment against real plugins (protect-mcp,
+obra/superpowers, block-no-verify, 156 wshobson skills) are in
+[`research/harness-testing.md`](research/harness-testing.md); our own findings
+from this harness live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
 
 ## Maturity Levels
 
