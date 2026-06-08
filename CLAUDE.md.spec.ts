@@ -107,7 +107,9 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/harness-assert.test.ts":
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
     "src/judge.ts":
-      "Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)",
+      "Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure); parseJudgeOutput is the pure, testable verdict parser",
+    "src/judge.test.ts":
+      "Judge verdict-parsing test suite (node:test): result-field unwrap, prose-wrapped JSON, threshold, clamping, unparseable fallback",
     "src/vitest.mts":
       "Opt-in vitest integration entry (ESM, since vitest is ESM-only): registers vigilesMatchers + augments @vitest/expect Matchers so toHaveCreated/toBeatBaseline type-check; vitest is an optional peer dep",
     "src/jest.ts":

@@ -11,6 +11,7 @@ import {
   assertImproves,
   assertCreated,
   assertNotCreated,
+  assertServedTurns,
   vigilesMatchers,
 } from "./harness-assert.js";
 import type { EvalReport } from "./eval.js";
@@ -74,6 +75,16 @@ test("assertCreated / assertNotCreated check the sandbox", () => {
   });
   assert.throws(() => {
     assertNotCreated(r, "RESULT");
+  });
+});
+
+test("assertServedTurns checks the mock turn count", () => {
+  const r = fakeResult([]); // fakeResult sets turns: 2
+  assert.doesNotThrow(() => {
+    assertServedTurns(r, 2);
+  });
+  assert.throws(() => {
+    assertServedTurns(r, 3);
   });
 });
 

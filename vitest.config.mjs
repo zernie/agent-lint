@@ -5,5 +5,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/runners/**/*.vitest.mjs"],
+    // Load the opt-in entry the way a user would — this also tests that
+    // `vigiles/vitest` registers the matchers (auto-register).
+    setupFiles: ["./dist/vitest.mjs"],
   },
 });

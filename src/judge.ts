@@ -84,13 +84,24 @@ export function judge(opts: JudgeOptions): JudgeResult {
       reason: `judge spawn failed: ${String(e)}`,
     };
   }
-  if (res.status !== 0 || !res.stdout) {
+  if (res.status !== 0) {
     return { score: 0, pass: false, reason: "judge: no model output" };
   }
+  return parseJudgeOutput(res.stdout ?? "", threshold);
+}
+
+/**
+ * Parse a verdict out of the grader's stdout — pure, so the parsing is testable
+ * without a model. Handles `claude --output-format json` (text wrapped in a
+ * `result` field), bare/prose-wrapped JSON, clamping, and the pass threshold.
+ */
+export function parseJudgeOutput(stdout: string, threshold = 0.5): JudgeResult {
+  if (!stdout)
+    return { score: 0, pass: false, reason: "judge: no model output" };
 
   // claude --output-format json wraps the model text in a `result` field.
-  let text = res.stdout;
-  const wrapper = firstJsonObject(res.stdout) as { result?: string } | null;
+  let text = stdout;
+  const wrapper = firstJsonObject(stdout) as { result?: string } | null;
   if (wrapper && typeof wrapper.result === "string") text = wrapper.result;
 
   const verdict = firstJsonObject(text) as {

@@ -9,14 +9,13 @@
  *   npm run test:jest
  */
 const {
-  vigilesMatchers,
   improvement,
   assertImproves,
   assertCreated,
   assertNotCreated,
 } = require("../../dist/harness-assert.js");
-
-expect.extend(vigilesMatchers);
+// Matchers are registered by the `vigiles/jest` entry via setupFilesAfterEnv
+// (jest.config.cjs) — this file asserts that wiring works end-to-end.
 
 const report = {
   name: "demo",
