@@ -47,6 +47,32 @@ export function finish(gate: Gate): SkillEffect {
  */
 export type SkillProgram = () => Generator<SkillEffect, void, string>;
 
+/** Frontmatter metadata for a generator skill. */
+export interface GeneratorSkillMeta {
+  readonly name: string;
+  readonly description: string;
+  readonly disableModelInvocation?: boolean;
+}
+
+/**
+ * A generator skill = metadata + a generator program. Authored as
+ * `export default genSkill({ name, description }, function* () { … })`.
+ * The CLI compiles it to SKILL.md by parsing the source (it can't execute a
+ * generator to markdown); `runSkill`/`driveSkill` execute `program` directly.
+ */
+export interface GeneratorSkill extends GeneratorSkillMeta {
+  readonly _specType: "skill-generator";
+  readonly program: SkillProgram;
+}
+
+/** Define a generator skill (metadata + program). */
+export function genSkill(
+  meta: GeneratorSkillMeta,
+  program: SkillProgram,
+): GeneratorSkill {
+  return { _specType: "skill-generator", ...meta, program };
+}
+
 /** Convert a spec-level Gate to the runtime gate the executor understands. */
 function toRuntimeGate(gate: Gate, retry: number): RuntimeGate {
   if (gate._ref === "cmd") return { kind: "cmd", command: gate.command, retry };

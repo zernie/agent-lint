@@ -36,6 +36,7 @@ import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
+import { compileGeneratorSkill } from "./compile-generator.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -154,6 +155,25 @@ async function compile(
   let allValid = true;
 
   for (const specPath of specPaths) {
+    // Generator skills can't be executed to markdown — compile from source.
+    const source = readFileSync(resolve(process.cwd(), specPath), "utf-8");
+    if (/\bgenSkill\s*\(/.test(source)) {
+      const outputPath = specPath.replace(/\.spec\.ts$/, "");
+      const { markdown, errors } = compileGeneratorSkill(source, {
+        basePath: process.cwd(),
+        specFile: specPath,
+      });
+      writeFileSync(resolve(process.cwd(), outputPath), markdown);
+      if (errors.length === 0) {
+        console.log(`\n✓ ${specPath} → ${outputPath} (generator skill)`);
+      } else {
+        console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+        for (const e of errors) console.log(`  ${e.type}: ${e.message}`);
+        allValid = false;
+      }
+      continue;
+    }
+
     const spec = await loadSpec(specPath);
     if (!spec) {
       console.log(`\n✗ ${specPath} — failed to load`);

@@ -21,7 +21,7 @@ import ts from "typescript";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { readPackageScripts } from "./compile.js";
+import { readPackageScripts, addHash } from "./compile.js";
 
 export interface GeneratorError {
   type: "stale-file" | "stale-command";
@@ -240,8 +240,102 @@ function verifyRef(ref: GateRef, basePath: string): GeneratorError | null {
   return null;
 }
 
+/** Find the `genSkill({…}, function* () {…})` call in a source file. */
+function findGenSkillCall(sf: ts.SourceFile): ts.CallExpression | null {
+  let found: ts.CallExpression | null = null;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(n) && calleeName(n) === "genSkill") {
+      found = n;
+      return;
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return found;
+}
+
+interface SkillMeta {
+  name?: string;
+  description?: string;
+  disableModelInvocation?: boolean;
+}
+
+/** Extract name/description/disable-model-invocation from a meta object literal. */
+function extractMeta(obj: ts.ObjectLiteralExpression): SkillMeta {
+  const meta: SkillMeta = {};
+  for (const p of obj.properties) {
+    if (!ts.isPropertyAssignment(p) || !ts.isIdentifier(p.name)) continue;
+    const key = p.name.text;
+    const v = p.initializer;
+    if (ts.isStringLiteralLike(v)) {
+      if (key === "name") meta.name = v.text;
+      else if (key === "description") meta.description = v.text;
+    } else if (key === "disableModelInvocation") {
+      meta.disableModelInvocation = v.kind === ts.SyntaxKind.TrueKeyword;
+    }
+  }
+  return meta;
+}
+
+export interface CompileGeneratorSkillResult {
+  markdown: string;
+  errors: GeneratorError[];
+}
+
 /**
- * Compile a generator skill's SOURCE text to SKILL.md markdown + verified-ref
+ * Compile a generator-skill spec source — `genSkill({ name, description },
+ * function* () { … })` — to a full SKILL.md (frontmatter + body + integrity
+ * hash), verifying gate references. This is the CLI entry for generator skills.
+ */
+export function compileGeneratorSkill(
+  source: string,
+  options: { basePath?: string; specFile?: string } = {},
+): CompileGeneratorSkillResult {
+  const basePath = options.basePath ?? process.cwd();
+  const specFile = options.specFile ?? "SKILL.md.spec.ts";
+  const sf = ts.createSourceFile("s.ts", source, ts.ScriptTarget.Latest, true);
+  const call = findGenSkillCall(sf);
+  const metaArg = call?.arguments[0];
+  const genArg = call?.arguments[1];
+  if (
+    !metaArg ||
+    !ts.isObjectLiteralExpression(metaArg) ||
+    !genArg ||
+    !ts.isFunctionExpression(genArg) ||
+    !genArg.asteriskToken ||
+    !genArg.body
+  ) {
+    return {
+      markdown: "",
+      errors: [
+        {
+          type: "stale-command",
+          message:
+            "Expected `genSkill({ name, description }, function* () { … })`.",
+        },
+      ],
+    };
+  }
+  const meta = extractMeta(metaArg);
+  const refs: GateRef[] = [];
+  const body = makeRenderer(sf, refs).run(genArg.body);
+  const errors = refs
+    .map((r) => verifyRef(r, basePath))
+    .filter((e): e is GeneratorError => e !== null);
+
+  const fm = ["---", "", `name: ${meta.name ?? ""}`];
+  if (meta.description) fm.push(`description: ${meta.description}`);
+  if (meta.disableModelInvocation !== undefined) {
+    fm.push(`disable-model-invocation: ${String(meta.disableModelInvocation)}`);
+  }
+  fm.push("", "---");
+  const content = `${fm.join("\n")}\n\n${body.trim()}\n`;
+  return { markdown: addHash(content, specFile), errors };
+}
+
+/**
+ * Compile a generator's SOURCE text to SKILL.md markdown + verified-ref
  * errors. `frontmatter` (name/description/…) is prepended verbatim if given.
  */
 export function compileGenerator(
