@@ -16,6 +16,8 @@ The cross-referencing engine is the core moat: \`enforce("@typescript-eslint/no-
 
 Authoring-time feedback comes two ways: \`generate-types\` emits a \`.d.ts\` so the TS compiler PROVES \`.spec.ts\` references at edit time, and \`generate-schema\` emits a JSON Schema so a YAML LSP autocompletes and squiggles \`vigiles:\` frontmatter rule names — same guarantee, no TypeScript required. Both scan all 7 catalog APIs, package.json, and project files.
 
+Second pillar — testing the harness. Beyond verifying instruction files, vigiles tests the harness itself (hooks, settings, skills). Two tiers: \`runHarnessTest\` runs the real \`claude\` CLI against a scripted mock model for deterministic, key-free checks of hook logic (\`src/harness-test.ts\`, \`src/mock-model.ts\`), and \`runEval\` drives the real model across A/B arms × trials to measure whether a change actually moves agent behaviour (\`src/eval.ts\`). Run them as CLI commands — \`vigiles test\` (\`*.harness.mjs\`) and \`vigiles eval\` (\`*.eval.mjs\`) — with canonical examples under \`examples/harness/\`. Unlike reference verification (bounded by undecidability), this pillar has no ceiling: a test measures reality, so there is nothing to game. See \`research/harness-testing.md\`.
+
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via \`enforce()\`.`,
 
     architecture: `Two rule types in specs:
@@ -46,7 +48,11 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/generate-schema.ts":
       "JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names",
     "src/cli.ts":
-      "CLI: init, compile, audit (3 primary commands + generate-types plumbing)",
+      "CLI: init, compile, audit, test, eval (primary commands + generate-types plumbing)",
+    "src/run-scripts.ts":
+      "Script runner for `vigiles test` / `vigiles eval`: discover *.harness.mjs / *.eval.mjs, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)",
+    "src/run-scripts.test.ts":
+      "Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting",
     "src/inline.ts":
       "Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption",
     "src/frontmatter.ts":
@@ -102,6 +108,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/proofs.test.ts": "Proof system + evolution engine tests (node:test)",
     "CLAUDE.md.spec.ts": "This file — the source of truth for CLAUDE.md",
     "examples/SKILL.md.spec.ts": "Example SKILL.md spec",
+    "examples/harness/policy-gate.harness.mjs":
+      "Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)",
+    "examples/harness/skill-outcome.eval.mjs":
+      "Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md",
+    "bench/evals/refs-hook.eval.mjs":
+      "Worked eval reproducing benchmark #4 (forcing symbol marks → verifiable references?) as a runEval library call",
     "research/adoption-strategy.md":
       "Adoption strategy: zero-config setup, progressive enforcement, agent workflows",
     "research/competitive-landscape.md":
