@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:782d0a17975d8d60 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:b6eeb58f8ebc9586 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -90,6 +90,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/landscape-mid-2026.md` — Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals
 - `research/sync-landscape-analysis.md` — Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals
 - `research/distribution-strategy.md` — Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention
+- `research/reference-verification-limits.md` — Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)
+- `research/harness-testing.md` — Testing the Claude Code harness — the two-tier design (deterministic runHarnessTest + real-model runEval) and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, 156 wshobson skills)
 - `research/skill-authoring-pains.md` — Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
