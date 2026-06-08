@@ -24,6 +24,7 @@ expect.extend(vigilesMatchers);
 declare module "@vitest/expect" {
   interface Matchers<T = any> {
     toHaveCreated(path: string): T;
+    toBlock(): T;
     toBeatBaseline(
       baseline: string,
       arm: string,

@@ -19,6 +19,7 @@ import {
   type HarnessTestResult,
 } from "./harness-test.js";
 import type { EvalReport } from "./eval.js";
+import type { HookRunResult } from "./run-hook.js";
 
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.
@@ -57,6 +58,24 @@ export function assertNotCreated(r: HarnessTestResult, path: string): void {
 export function assertServedTurns(r: HarnessTestResult, n: number): void {
   if (r.turns < n) {
     fail(`expected ≥ ${String(n)} model turns, got ${String(r.turns)}`);
+  }
+}
+
+/** Assert a `runHook` result blocked (exit 2 / decision:block / permission:deny). */
+export function assertHookBlocked(r: HookRunResult): void {
+  if (!r.blocked) {
+    fail(
+      `expected the hook to block, but it allowed (exit ${String(r.exitCode)})`,
+    );
+  }
+}
+
+/** Assert a `runHook` result allowed (did not block). */
+export function assertHookAllowed(r: HookRunResult): void {
+  if (r.blocked) {
+    fail(
+      `expected the hook to allow, but it blocked (exit ${String(r.exitCode)}, decision ${String(r.decision)})`,
+    );
   }
 }
 
@@ -113,6 +132,14 @@ export const vigilesMatchers = {
     return {
       pass,
       message: () => `expected the run ${pass ? "not " : ""}to create ${path}`,
+    };
+  },
+  toBlock(received: HookRunResult): MatcherOutput {
+    const pass = received.blocked;
+    return {
+      pass,
+      message: () =>
+        `expected the hook ${pass ? "not " : ""}to block (exit ${String(received.exitCode)}, decision ${String(received.decision)})`,
     };
   },
   // eslint-disable-next-line max-params -- jest/vitest matchers take positional args

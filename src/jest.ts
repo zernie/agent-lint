@@ -23,6 +23,7 @@ expect.extend(vigilesMatchers);
 declare module "@jest/expect" {
   interface Matchers<R> {
     toHaveCreated(path: string): R;
+    toBlock(): R;
     toBeatBaseline(
       baseline: string,
       arm: string,

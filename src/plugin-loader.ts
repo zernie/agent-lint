@@ -2,9 +2,12 @@
  * vigiles — load a real plugin/repo harness for testing.
  *
  * The unit that matters is not a single hook but the *assembled machine*: the
- * hooks, settings, CLAUDE.md, and skills a plugin/repo actually ships, working
- * together. `loadPlugin` reads that real harness so a `runHarnessTest` /
- * `runEval` runs against what ships — not a hand-retyped subset that can drift.
+ * hooks, settings, CLAUDE.md, skills, subagents, and commands a plugin/repo
+ * actually ships, working together. `loadPlugin` reads that real harness so a
+ * `runHarnessTest` / `runEval` runs against what ships — not a hand-retyped
+ * subset that can drift. Hooks, CLAUDE.md and skills are exercisable at the
+ * deterministic tier; subagents/commands/MCP are materialized but only run under
+ * a real model, so `LoadedPlugin.warnings` flags them (no silent empty machine).
  *
  *   runHarnessTest({ plugin: "./", model: scriptModel([...]) });
  *
@@ -22,13 +25,22 @@ import { resolve, join, relative } from "node:path";
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
   readonly settings: { hooks?: unknown };
-  /** Files to materialize in the sandbox (CLAUDE.md, skills). */
+  /** Files to materialize in the sandbox (CLAUDE.md, skills, agents, commands). */
   readonly files: Record<string, string>;
+  /**
+   * Surfaces that are present in the plugin but cannot be exercised at the
+   * deterministic tier (subagents and slash commands need a real model; MCP
+   * servers aren't wired by the loader). Empty when the plugin is fully
+   * covered. Surfaced so "load the whole plugin" never silently tests nothing —
+   * read it in a test, or just to know what the deterministic run won't reach.
+   */
+  readonly warnings: readonly string[];
 }
 
 interface PluginManifest {
   hooks?: unknown;
   skills?: string;
+  mcpServers?: unknown;
 }
 
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
@@ -82,8 +94,9 @@ function readTree(dir: string, base: string): Record<string, string> {
 }
 
 /**
- * Load the real harness at `pluginPath`. Returns the resolved settings (hooks)
- * and the files (CLAUDE.md + skills) to write into the test sandbox. Merge
+ * Load the real harness at `pluginPath`. Returns the resolved settings (hooks),
+ * the files (CLAUDE.md + skills + agents + commands) to write into the test
+ * sandbox, and `warnings` for surfaces the deterministic tier can't drive. Merge
  * `settings` with any inline settings and spread `files` into the fixture.
  */
 export function loadPlugin(pluginPath: string): LoadedPlugin {
@@ -102,20 +115,77 @@ export function loadPlugin(pluginPath: string): LoadedPlugin {
   if (existsSync(claudeMd)) {
     files["CLAUDE.md"] = readFileSync(claudeMd, "utf-8");
   }
-  // Skills are materialized under the project-level skills dir (best-effort —
-  // headless plugin-skill activation is not guaranteed; the body is present for
-  // the agent to read either way).
-  const skillsDir = join(root, "skills");
-  if (existsSync(skillsDir) && statSync(skillsDir).isDirectory()) {
-    for (const [rel, content] of Object.entries(readTree(skillsDir, root))) {
+  // Materialize each project-level surface under .claude/<surface>/ so the
+  // assembled context is present in the sandbox (best-effort — headless
+  // activation of plugin skills/subagents/commands is not guaranteed; the body
+  // is present for the agent to read either way). Counting what we materialize
+  // also lets us warn about surfaces the deterministic tier can't drive.
+  const counts: Record<string, number> = {};
+  for (const surface of ["skills", "agents", "commands"]) {
+    const dir = join(root, surface);
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    const tree = readTree(dir, root);
+    for (const [rel, content] of Object.entries(tree)) {
       files[join(".claude", rel)] = content;
     }
+    counts[surface] = Object.keys(tree).length;
   }
 
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
     files,
+    warnings: pluginWarnings(root, counts, resolvedHooks, files),
   };
+}
+
+/**
+ * Flag surfaces present-but-not-deterministically-exercisable. Subagents
+ * (`agents/`) and slash commands (`commands/`) are materialized into the sandbox
+ * but only run under a real model (Task / slash invocation), so they belong to
+ * the eval tier. MCP servers aren't wired by the loader at all. And a plugin
+ * that yields neither hooks nor files would otherwise be a silent empty machine.
+ */
+function pluginWarnings(
+  root: string,
+  counts: Record<string, number>,
+  hooks: unknown,
+  files: Record<string, string>,
+): string[] {
+  const warnings: string[] = [];
+  if (counts.agents) {
+    warnings.push(
+      `plugin defines ${String(counts.agents)} subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.`,
+    );
+  }
+  if (counts.commands) {
+    warnings.push(
+      `plugin defines ${String(counts.commands)} slash-command file(s) under commands/ — slash-command invocation needs a real model; test at the eval tier.`,
+    );
+  }
+  if (hasMcp(root)) {
+    warnings.push(
+      `plugin declares MCP server(s) (mcpServers / .mcp.json) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
+    );
+  }
+  if (!hooks && Object.keys(files).length === 0) {
+    warnings.push(
+      `nothing was loaded (no hooks, CLAUDE.md, skills, agents, or commands) — the deterministic harness would run an effectively empty machine.`,
+    );
+  }
+  return warnings;
+}
+
+/** Whether the plugin declares any MCP servers (manifest field or .mcp.json). */
+function hasMcp(root: string): boolean {
+  if (existsSync(join(root, ".mcp.json"))) return true;
+  const manifestPath = join(root, ".claude-plugin", "plugin.json");
+  if (!existsSync(manifestPath)) return false;
+  try {
+    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
+    return m.mcpServers !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 type HooksObj = { hooks?: Record<string, unknown[]> };

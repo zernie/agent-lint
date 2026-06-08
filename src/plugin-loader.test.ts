@@ -233,6 +233,74 @@ test("loadPlugin on a bare dir (CLAUDE.md only, no hooks) yields empty settings"
   }
 });
 
+test("loadPlugin materializes agents/ and commands/ and warns they need a model", () => {
+  // The wshobson/agents shape: a plugin built from subagents + slash commands,
+  // no hooks. Before this, the loader dropped both and could return an empty
+  // machine; now they're materialized and flagged for the eval tier.
+  const root = makeTmpDir("agentplugin");
+  try {
+    mkdirSync(join(root, "agents"), { recursive: true });
+    mkdirSync(join(root, "commands"), { recursive: true });
+    writeFileSync(join(root, "agents", "reviewer.md"), "# reviewer agent\n");
+    writeFileSync(join(root, "commands", "tdd.md"), "# /tdd command\n");
+    const loaded = loadPlugin(root);
+    assert.equal(
+      loaded.files[join(".claude", "agents", "reviewer.md")],
+      "# reviewer agent\n",
+    );
+    assert.equal(
+      loaded.files[join(".claude", "commands", "tdd.md")],
+      "# /tdd command\n",
+    );
+    const w = loaded.warnings.join("\n");
+    assert.ok(w.includes("subagent"), "warns about subagents");
+    assert.ok(w.includes("slash-command"), "warns about commands");
+    // not the empty-machine warning — files were loaded
+    assert.ok(!w.includes("nothing was loaded"));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin warns on an effectively empty plugin (no hooks, no files)", () => {
+  const root = makeTmpDir("emptyplugin");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "empty" }),
+    );
+    const loaded = loadPlugin(root);
+    assert.ok(loaded.warnings.some((w) => w.includes("nothing was loaded")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin warns when a plugin declares MCP servers", () => {
+  const root = makeTmpDir("mcpplugin");
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), "# x\n");
+    writeFileSync(
+      join(root, ".mcp.json"),
+      JSON.stringify({ mcpServers: { demo: { command: "x" } } }),
+    );
+    const loaded = loadPlugin(root);
+    assert.ok(loaded.warnings.some((w) => w.includes("MCP")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("a fully-covered plugin (hooks + CLAUDE.md + skills) has no warnings", () => {
+  const root = makePlugin();
+  try {
+    assert.deepEqual(loadPlugin(root).warnings, []);
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
   // The repo's own .claude-plugin/plugin.json — proves the loader parses the
   // real shipped manifest, not just a fixture.
