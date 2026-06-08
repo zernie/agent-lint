@@ -9,7 +9,11 @@
  * probabilistic boundary; everything else is deterministic and checkable.
  */
 
-import { driveSkill, type SkillProgram } from "./skill-driver.js";
+import {
+  driveSkill,
+  type SkillProgram,
+  type GeneratorSkill,
+} from "./skill-driver.js";
 import type { Gate } from "./spec.js";
 
 function gateLabel(g: Gate): string {
@@ -70,9 +74,10 @@ export interface SkillRunResult {
  * return a friendly summary to assert on with plain `assert`.
  */
 export function runSkill(
-  program: SkillProgram,
+  skill: SkillProgram | GeneratorSkill,
   opts: { cwd?: string; model?: ModelFn } = {},
 ): SkillRunResult {
+  const program = typeof skill === "function" ? skill : skill.program;
   const report = driveSkill(
     program,
     opts.cwd ?? process.cwd(),
