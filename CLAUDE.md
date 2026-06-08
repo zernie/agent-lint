@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:2bbe360e9b79ab40 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:782d0a17975d8d60 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -61,6 +61,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/symbols.test.ts` — Symbol extractor test suite (node:test)
 - `src/refs.ts` — Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs enforcement for the refs-hook
 - `src/refs.test.ts` — Symbol reference verification test suite (node:test)
+- `src/mock-model.ts` — Scriptable, dependency-free Anthropic Messages SSE mock (startMock/scriptModel) — point real claude at it via ANTHROPIC_BASE_URL for deterministic harness tests
+- `src/harness-test.ts` — Deterministic Claude Code harness testing: runHarnessTest runs real claude + real hooks/settings against a scripted mock model (Stop-hooks reliable; tool-event hooks via the eval tier)
+- `src/harness-test.test.ts` — Harness-test suite (node:test, skips without claude)
+- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates a metric — the empirical half of testing your harness (generalizes bench/)
+- `src/eval.test.ts` — Eval aggregation/formatting test suite (node:test)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)

@@ -9,18 +9,23 @@
  * cost, CI-friendly.
  *
  *   const r = await runHarnessTest({
- *     files: { "src/x.ts": "export function foo(){}", "SKILL.md": "# s\n" },
- *     settings: { hooks: { PostToolUse: [{ matcher: "Edit|Write",
- *       hooks: [{ type: "command", command: "node dist/cli.js refs-hook" }] }] } },
+ *     settings: { hooks: { Stop: [{ hooks: [{ type: "command",
+ *       command: "test -f DONE || { echo 'not done' >&2; exit 2; }" }] }] } },
  *     model: scriptModel([
- *       { tool: "Write", input: { file_path: "SKILL.md", content: "use `foo`" } },
- *       { text: "done" },
+ *       { text: "I'm done" },                              // tries to stop → blocked
+ *       { tool: "Bash", input: { command: "touch DONE" } },
+ *       { text: "now done" },
  *     ]),
  *   });
- *   assert.match(r.stderr, /unmarked code reference/); // the hook fired
+ *   assert(JSON.parse(r.stdout).num_turns > 1);            // the Stop hook fired
  *
  * The "steps" are the scripted model turns — their real home is deterministic
  * harness testing, not production enforcement.
+ *
+ * Note: the simple mock drives the Bash tool and Stop hooks reliably; the
+ * Edit/Write tools are gated in headless mode and don't fire via the mock —
+ * drive file actions through Bash, or use the real-model eval tier (`eval.ts`)
+ * for Edit/Write hooks.
  */
 import { spawn, spawnSync } from "node:child_process";
 import {

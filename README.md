@@ -331,6 +331,69 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 | `enforce-rules-format` | Validate all rules have enforcement classification                      |
 | `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
 
+## Test your Claude Code harness
+
+vigiles also ships a library for **testing the harness itself** — your hooks,
+settings, skills, and instruction files. `Agent = Model + Harness`; this tests
+the harness, at two levels.
+
+**Evals — does my change actually move agent behaviour?** Define a fixture, a set
+of **arms** (a hook on vs off, with/without a CLAUDE.md rule), a task, and a
+metric; `runEval` drives the real `claude` CLI N trials per arm and aggregates.
+
+```typescript
+import { runEval, formatEvalReport } from "vigiles/eval";
+
+const report = await runEval({
+  fixture: { "src/billing.ts": "export function chargeCard() {}" },
+  arms: {
+    vanilla: {},
+    gated: { settings: { hooks: { PostToolUse: [refsHook] } } },
+  },
+  task: "Document chargeCard in SKILL.md, referencing it by name.",
+  measure: (ctx) => ({
+    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
+  }),
+  trials: 6,
+});
+console.log(formatEvalReport(report)); //  vanilla marked=0.00   gated marked=0.50
+```
+
+**Deterministic tests — does my hook fire correctly?** No API key, no cost.
+`runHarnessTest` runs real `claude` against a **scripted mock model**
+(`vigiles/mock-model`), so your real hooks fire but the agent's turns are fixed.
+
+```typescript
+import { runHarnessTest, scriptModel } from "vigiles/harness-test";
+
+const r = await runHarnessTest({
+  settings: {
+    hooks: {
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "test -f DONE || { echo 'not done' >&2; exit 2; }",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  model: scriptModel([
+    { text: "I'm done" }, // tries to stop → blocked
+    { tool: "Bash", input: { command: "touch DONE" } },
+    { text: "now done" },
+  ]),
+});
+assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
+```
+
+The deterministic tier is reliable for **Stop hooks**; tool-event hooks
+(Edit/Write) are headless-gated, so test those via the eval tier. Our own
+findings from this harness live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+
 ## Maturity Levels
 
 From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need):
