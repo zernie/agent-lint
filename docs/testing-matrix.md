@@ -97,5 +97,6 @@ types applied.
 
 ## See also
 
-- [`docs/harness-testing.md`](harness-testing.md) — the full guide (three layers,
-  runner-agnostic usage, plugin loader, variance, judge, CLI fallback).
+- [`docs/harness-testing.md`](harness-testing.md) — the full guide (four layers:
+  verify-refs / hook unit / deterministic / eval, runner-agnostic usage, plugin
+  loader, variance, judge, CLI fallback).
