@@ -283,6 +283,8 @@ A phased order that occupies the empty quadrant with the least risk by reusing w
 
 ## Implementation
 
+Scope vs Anthropic’s dynamic-workflows feature (what is ours vs the adjacent frontier): see `research/dynamic-workflows-and-scope.md`.
+
 The user-facing reference for the built skill system — authoring (markdown / declarative /
 generator), gates & verification, the runtime + Stop-hook enforcement, and deterministic
 `vigiles/skill-test` — lives in `docs/skills.md`. Modules: `src/skill-runtime.ts` (gate
