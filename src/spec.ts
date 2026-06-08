@@ -240,7 +240,14 @@ export interface SkillRef {
   readonly path: VerifiedRef;
 }
 
-export type Ref = FileRef | CmdRef | SkillRef;
+/** A typed symbol reference — the named file must define the named symbol. */
+export interface SymbolRef {
+  readonly _ref: "symbol";
+  readonly file: VerifiedPath;
+  readonly symbol: string;
+}
+
+export type Ref = FileRef | CmdRef | SkillRef | SymbolRef;
 
 /**
  * Reference a file path — verified to exist at compile time.
@@ -256,6 +263,16 @@ export function file(path: NoInfer<StrictFile>): FileRef {
  */
 export function cmd(command: NoInfer<StrictCmd>): CmdRef {
   return { _ref: "cmd", command: command as VerifiedCmd };
+}
+
+/**
+ * Reference a symbol defined in a file — verified at compile time that the
+ * named file exists AND defines the named symbol (via ast-grep, cross-language).
+ * Compiles to the file-qualified inline form `` `file#symbol` `` so the markdown
+ * `audit` / `refs-hook` re-verify the same reference.
+ */
+export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef {
+  return { _ref: "symbol", file: file as VerifiedPath, symbol: name };
 }
 
 /**
