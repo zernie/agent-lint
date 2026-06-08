@@ -239,4 +239,18 @@ describe("parseInlineRules: file/cmd references", () => {
       true,
     );
   });
+
+  it("does not flag skill-runtime / opt-out markers as unknown", () => {
+    const md = `# Skill
+<!-- vigiles:result "npm test" -->
+<!-- vigiles:gate "pytest" -->
+<!-- vigiles:ignore-file -->`;
+    const { errors } = parseInlineRules(md);
+    assert.equal(errors.length, 0);
+    // ...but a genuinely unknown marker is still surfaced.
+    const bogus = parseInlineRules(`<!-- vigiles:bogus thing -->`);
+    assert.ok(
+      bogus.errors.some((e) => /Unknown vigiles marker/.test(e.message)),
+    );
+  });
 });

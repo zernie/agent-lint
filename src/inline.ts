@@ -82,6 +82,17 @@ const CMD_RE = /<!--\s*vigiles:cmd\s+"([^"\n]*)"\s*-->/;
  */
 const MARKER_RE = /<!--\s*vigiles:([A-Za-z_-]+)[^]*?-->/;
 
+// vigiles markers handled by other subsystems (skill runtime gates, opt-outs).
+// The inline *rule* parser skips them rather than flagging them as unknown.
+const KNOWN_NON_RULE_MARKERS = new Set([
+  "disable",
+  "ignore",
+  "ignore-file",
+  "gate", // skill step gate (src/skill-runtime.ts)
+  "result", // skill result gate
+  "symbol", // symbol reference mark (src/refs.ts)
+]);
+
 /**
  * Parse inline vigiles rules out of a markdown file's contents.
  * Does not touch the filesystem and does not verify the rules against
@@ -193,9 +204,7 @@ export function parseInlineRules(content: string): InlineParseResult {
             'Malformed vigiles:cmd — expected `<!-- vigiles:cmd "<command>" -->`',
           raw: line.trim(),
         });
-      } else if (kind !== "disable" && kind !== "ignore") {
-        // `vigiles:disable ...` / `vigiles:ignore ...` are reserved for
-        // future disable-comment support; don't complain about them.
+      } else if (!KNOWN_NON_RULE_MARKERS.has(kind)) {
         errors.push({
           line: i + 1,
           message: `Unknown vigiles marker "${kind}". Only \`vigiles:enforce\`, \`vigiles:file\`, and \`vigiles:cmd\` are supported.`,
