@@ -93,7 +93,7 @@ export interface CompileError {
 // Reference validation
 // ---------------------------------------------------------------------------
 
-function validateFileRef(
+export function validateFileRef(
   filePath: string,
   basePath: string,
 ): CompileError | null {
@@ -123,7 +123,7 @@ export function readPackageScripts(
   }
 }
 
-function validateCommandRef(
+export function validateCommandRef(
   command: string,
   basePath: string,
 ): CompileError | null {

@@ -17,7 +17,7 @@ import {
   readFileSync,
   lstatSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
 import { validate, loadConfig } from "./validate.js";
@@ -29,6 +29,8 @@ import {
   compileSkill,
   checkFileHash,
   addHash,
+  validateFileRef,
+  validateCommandRef,
 } from "./compile.js";
 import type { CompileError } from "./compile.js";
 import type { ClaudeSpec, SkillSpec } from "./spec.js";
@@ -595,6 +597,39 @@ function verifyOneRule(
   return true;
 }
 
+/**
+ * Verify the `vigiles:file` / `vigiles:cmd` references a markdown file declares
+ * (inline comments or frontmatter lists), using the same engine spec mode uses:
+ * file paths via existsSync, npm scripts and script-runner commands via
+ * package.json / the filesystem. References resolve relative to the markdown
+ * file's own directory. Returns the number of stale references found.
+ */
+function verifyMarkdownRefs(
+  files: readonly { path: string; line: number }[],
+  commands: readonly { command: string; line: number }[],
+  filePath: string,
+  silent: boolean,
+): number {
+  const basePath = dirname(resolve(process.cwd(), filePath));
+  let errorCount = 0;
+  const report = (err: CompileError, line: number): void => {
+    if (!silent) {
+      console.log(`  ✗ line ${String(line)}: ${err.message}`);
+      ghAnnotate("error", err.message, filePath, line);
+    }
+    errorCount++;
+  };
+  for (const f of files) {
+    const err = validateFileRef(f.path, basePath);
+    if (err) report(err, f.line);
+  }
+  for (const c of commands) {
+    const err = validateCommandRef(c.command, basePath);
+    if (err) report(err, c.line);
+  }
+  return errorCount;
+}
+
 function verifyInlineRules(
   filePath: string,
   silent: boolean,
@@ -611,8 +646,18 @@ function verifyInlineRules(
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
-  const { rules, errors: parseErrors } = parseInlineRules(content);
-  if (rules.length === 0 && parseErrors.length === 0) {
+  const {
+    rules,
+    files,
+    commands,
+    errors: parseErrors,
+  } = parseInlineRules(content);
+  if (
+    rules.length === 0 &&
+    files.length === 0 &&
+    commands.length === 0 &&
+    parseErrors.length === 0
+  ) {
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
@@ -630,11 +675,12 @@ function verifyInlineRules(
   for (const rule of rules) {
     if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
   }
+  errorCount += verifyMarkdownRefs(files, commands, filePath, silent);
 
   return {
     ok: errorCount === 0,
     errorCount,
-    ruleCount: rules.length,
+    ruleCount: rules.length + files.length + commands.length,
     ruleNames: rules.map((r) => r.linterRule),
   };
 }
@@ -662,10 +708,19 @@ function verifyFrontmatterRules(
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
-  const { rules: allRules, errors: parseErrors } =
-    parseFrontmatterRules(content);
+  const {
+    rules: allRules,
+    files,
+    commands,
+    errors: parseErrors,
+  } = parseFrontmatterRules(content);
   const rules = allRules.filter((r) => !exclude.has(r.linterRule));
-  if (rules.length === 0 && parseErrors.length === 0) {
+  if (
+    rules.length === 0 &&
+    files.length === 0 &&
+    commands.length === 0 &&
+    parseErrors.length === 0
+  ) {
     return { ok: true, errorCount: 0, ruleCount: 0, ruleNames: [] };
   }
 
@@ -683,11 +738,12 @@ function verifyFrontmatterRules(
   for (const rule of rules) {
     if (!verifyOneRule(rule, filePath, silent, linterOptions)) errorCount++;
   }
+  errorCount += verifyMarkdownRefs(files, commands, filePath, silent);
 
   return {
     ok: errorCount === 0,
     errorCount,
-    ruleCount: rules.length,
+    ruleCount: rules.length + files.length + commands.length,
     ruleNames: rules.map((r) => r.linterRule),
   };
 }
