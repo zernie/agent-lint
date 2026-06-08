@@ -15,14 +15,11 @@
  *   node examples/harness/plugin-cohesion.harness.mjs        # standalone
  *
  * Needs the `claude` CLI and a built dist/. External users import from the
- * package: `from "vigiles/harness-test"`.
+ * package: `from "vigiles/harness-test"` and `from "vigiles/harness-assert"`.
  */
 import { fileURLToPath } from "node:url";
-import {
-  runHarnessTest,
-  scriptModel,
-  claudeAvailable,
-} from "../../dist/harness-test.js";
+import { scriptModel, claudeAvailable } from "../../dist/harness-test.js";
+import { withHarness, assertCreated } from "../../dist/harness-assert.js";
 
 if (!claudeAvailable()) {
   console.log("skip: `claude` CLI not found");
@@ -31,29 +28,31 @@ if (!claudeAvailable()) {
 
 const plugin = fileURLToPath(new URL("./fixture-plugin", import.meta.url));
 
-const r = await runHarnessTest({
-  plugin,
-  model: scriptModel([
-    { tool: "Bash", input: { command: "rm -rf /tmp/should-be-blocked" } },
-    { tool: "Bash", input: { command: "echo ok > RESULT" } },
-    { text: "done" },
-  ]),
-});
-
-const checks = [
-  ["SessionStart setup hook ran", () => r.file("SETUP_DONE") !== null],
-  ["PreToolUse gate blocked `rm -rf`", () => r.file("BLOCKED") !== null],
-  ["clean command still ran", () => (r.file("RESULT") ?? "").includes("ok")],
-];
-
-let failed = 0;
-for (const [name, check] of checks) {
-  const ok = check();
-  if (!ok) failed++;
-  console.log(`  ${ok ? "✓" : "✗"} ${name}`);
-}
-r.cleanup();
-console.log(
-  failed === 0 ? `\n${checks.length} passed.` : `\n${failed} failed.`,
+// We use `withHarness` here instead of raw `runHarnessTest` + `r.cleanup()`.
+// Trade-off, stated plainly so you can choose per test:
+//   • withHarness removes the temp sandbox in a `finally`, so it is cleaned up
+//     even when an assertion throws — no leaked temp dirs in CI. That is the win.
+//   • The cost: assertions live inside a callback, and a thrown `assert*` aborts
+//     the rest, so you see the FIRST failure, not all of them. If you want
+//     per-check ✓/✗ output, or to inspect the result after the run, use raw
+//     `runHarnessTest` + manual `r.cleanup()` instead — see policy-gate.harness.mjs.
+await withHarness(
+  {
+    plugin, // fixture-plugin's real hooks (SessionStart + PreToolUse) + CLAUDE.md
+    model: scriptModel([
+      { tool: "Bash", input: { command: "rm -rf /tmp/should-be-blocked" } },
+      { tool: "Bash", input: { command: "echo ok > RESULT" } },
+      { text: "done" },
+    ]),
+  },
+  (r) => {
+    assertCreated(r, "SETUP_DONE"); // SessionStart setup hook ran
+    assertCreated(r, "BLOCKED"); // PreToolUse gate blocked `rm -rf`
+    if (!(r.file("RESULT") ?? "").includes("ok")) {
+      throw new Error("clean command did not run (RESULT missing 'ok')");
+    }
+    console.log("  ✓ SessionStart + PreToolUse gate + clean command all fired");
+  },
 );
-process.exit(failed === 0 ? 0 : 1);
+
+console.log("\n1 passed.");
