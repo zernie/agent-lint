@@ -108,6 +108,72 @@ test("resolveHarness passes inline settings through when no plugin", () => {
   assert.deepEqual(r.settings, inline);
 });
 
+test("loadPlugin reads a plain repo's .claude/settings.json (no plugin manifest)", () => {
+  const root = makeTmpDir("repo");
+  try {
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [{ type: "command", command: "exit 0" }],
+            },
+          ],
+        },
+      }),
+    );
+    const loaded = loadPlugin(root);
+    const s = loaded.settings as { hooks?: Record<string, unknown[]> };
+    assert.equal(s.hooks?.PreToolUse?.length, 1);
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("the plugin manifest wins when both it and .claude/settings.json exist", () => {
+  const root = makeTmpDir("both");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [{ hooks: [{ type: "command", command: "echo manifest" }] }],
+        },
+      }),
+    );
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [{ hooks: [{ type: "command", command: "echo settings" }] }],
+        },
+      }),
+    );
+    const loaded = loadPlugin(root);
+    assert.ok(JSON.stringify(loaded.settings).includes("manifest"));
+    assert.ok(!JSON.stringify(loaded.settings).includes("settings"));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin on a bare dir (CLAUDE.md only, no hooks) yields empty settings", () => {
+  const root = makeTmpDir("bare");
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), "# bare\n");
+    const loaded = loadPlugin(root);
+    assert.deepEqual(loaded.settings, {});
+    assert.equal(loaded.files["CLAUDE.md"], "# bare\n");
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
   // The repo's own .claude-plugin/plugin.json — proves the loader parses the
   // real shipped manifest, not just a fixture.

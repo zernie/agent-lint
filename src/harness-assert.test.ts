@@ -44,29 +44,37 @@ test("improvement returns the arm − baseline gap", () => {
 });
 
 test("assertImproves passes on a positive gap and throws otherwise", () => {
-  assert.doesNotThrow(() =>
+  assert.doesNotThrow(() => {
     assertImproves(report, {
       baseline: "vanilla",
       arm: "gated",
       metric: "caught",
-    }),
-  );
-  assert.throws(() =>
+    });
+  });
+  assert.throws(() => {
     assertImproves(report, {
       baseline: "vanilla",
       arm: "gated",
       metric: "caught",
       by: 0.9,
-    }),
-  );
+    });
+  });
 });
 
 test("assertCreated / assertNotCreated check the sandbox", () => {
   const r = fakeResult(["RESULT"]);
-  assert.doesNotThrow(() => assertCreated(r, "RESULT"));
-  assert.throws(() => assertCreated(r, "MISSING"));
-  assert.doesNotThrow(() => assertNotCreated(r, "MISSING"));
-  assert.throws(() => assertNotCreated(r, "RESULT"));
+  assert.doesNotThrow(() => {
+    assertCreated(r, "RESULT");
+  });
+  assert.throws(() => {
+    assertCreated(r, "MISSING");
+  });
+  assert.doesNotThrow(() => {
+    assertNotCreated(r, "MISSING");
+  });
+  assert.throws(() => {
+    assertNotCreated(r, "RESULT");
+  });
 });
 
 test("vigilesMatchers.toHaveCreated reports pass/fail", () => {

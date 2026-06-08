@@ -115,6 +115,7 @@ export const vigilesMatchers = {
       message: () => `expected the run ${pass ? "not " : ""}to create ${path}`,
     };
   },
+  // eslint-disable-next-line max-params -- jest/vitest matchers take positional args
   toBeatBaseline(
     received: EvalReport,
     baseline: string,

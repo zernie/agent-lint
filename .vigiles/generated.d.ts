@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 8 npm scripts from package.json. */
+  /** 10 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -84,9 +84,11 @@ declare module "vigiles/generated" {
     | "fmt:check"
     | "test:e2e"
     | "test:harness"
-    | "test:eval";
+    | "test:eval"
+    | "test:vitest"
+    | "test:jest";
 
-  /** 60 project files. */
+  /** 62 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -110,6 +112,7 @@ declare module "vigiles/generated" {
     | "src/frontmatter.ts"
     | "src/generate-schema.ts"
     | "src/generate-types.ts"
+    | "src/harness-assert.test.ts"
     | "src/harness-assert.ts"
     | "src/harness-test.test.ts"
     | "src/harness-test.ts"
@@ -122,6 +125,7 @@ declare module "vigiles/generated" {
     | "src/mock-model.ts"
     | "src/orphans.test.ts"
     | "src/orphans.ts"
+    | "src/plugin-loader.test.ts"
     | "src/plugin-loader.ts"
     | "src/proofs.test.ts"
     | "src/proofs.ts"
@@ -242,6 +246,7 @@ declare module "vigiles/spec" {
       | "src/frontmatter.ts"
       | "src/generate-schema.ts"
       | "src/generate-types.ts"
+      | "src/harness-assert.test.ts"
       | "src/harness-assert.ts"
       | "src/harness-test.test.ts"
       | "src/harness-test.ts"
@@ -254,6 +259,7 @@ declare module "vigiles/spec" {
       | "src/mock-model.ts"
       | "src/orphans.test.ts"
       | "src/orphans.ts"
+      | "src/plugin-loader.test.ts"
       | "src/plugin-loader.ts"
       | "src/proofs.test.ts"
       | "src/proofs.ts"
@@ -290,6 +296,8 @@ declare module "vigiles/spec" {
       | "fmt:check"
       | "test:e2e"
       | "test:harness"
-      | "test:eval";
+      | "test:eval"
+      | "test:vitest"
+      | "test:jest";
   }
 }

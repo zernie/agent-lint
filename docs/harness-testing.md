@@ -92,6 +92,11 @@ expect(r).toHaveCreated("DONE");
 expect(report).toBeatBaseline("vanilla", "gated", "caught");
 ```
 
+The same `vigilesMatchers` object is exercised under both runners in
+[`test/runners/`](../test/runners/) (`npm run test:vitest` / `npm run test:jest`)
+— jest requires the CommonJS dist natively (no ESM flags), vitest imports it
+directly. Both are run in CI.
+
 **Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash
 PreToolUse/PostToolUse — the governance/policy shapes most real plugins use.
 **Not** for Edit/Write tool-event hooks (headless-gated — drive file actions via

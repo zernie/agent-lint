@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:978225ca471a444e compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:a692c7f153becee3 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -75,6 +75,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing assert\* helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend
 - `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
 - `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)
+- `test/runners/matchers.vitest.mjs` — Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; src/\*.test.ts excluded via vitest.config.mjs)
+- `test/runners/matchers.jest.cjs` — Cross-runner constraint: the same vigilesMatchers register and pass under jest (CommonJS dist required natively; scoped via jest.config.cjs)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -134,6 +136,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `npm run lint` — Run ESLint on src/
 - `npm run test:harness` — Build + run the deterministic harness tests (\*.harness.mjs) on the in-repo CLI — needs the claude CLI, no API key
 - `npm run test:eval` — Build + run the real-model harness evals (\*.eval.mjs) on the in-repo CLI — needs claude + model auth
+- `npm run test:vitest` — Build + run the cross-runner matcher constraints under vitest (test/runners/\*.vitest.mjs)
+- `npm run test:jest` — Build + run the cross-runner matcher constraints under jest (test/runners/\*.jest.cjs)
 
 ## Rules
 
