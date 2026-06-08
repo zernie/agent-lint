@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:a692c7f153becee3 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:8bb598efa0670167 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -75,6 +75,10 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing assert\* helpers (node:test/any runner), and vigilesMatchers for vitest/jest expect.extend
 - `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
 - `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)
+- `src/vitest.mts` — Opt-in vitest integration entry (ESM, since vitest is ESM-only): registers vigilesMatchers + augments @vitest/expect Matchers so toHaveCreated/toBeatBaseline type-check; vitest is an optional peer dep
+- `src/jest.ts` — Opt-in jest integration entry (CJS): registers vigilesMatchers + augments @jest/expect Matchers; jest is an optional peer dep
+- `test/types/smoke.vitest.ts` — Type-level constraint: `vigiles/vitest` makes the matchers type-check on vitest's expect (tsc --noEmit via npm run test:types)
+- `test/types/smoke.jest.ts` — Type-level constraint: `vigiles/jest` makes the matchers type-check on jest's expect
 - `test/runners/matchers.vitest.mjs` — Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; src/\*.test.ts excluded via vitest.config.mjs)
 - `test/runners/matchers.jest.cjs` — Cross-runner constraint: the same vigilesMatchers register and pass under jest (CommonJS dist required natively; scoped via jest.config.cjs)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
@@ -138,6 +142,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `npm run test:eval` — Build + run the real-model harness evals (\*.eval.mjs) on the in-repo CLI — needs claude + model auth
 - `npm run test:vitest` — Build + run the cross-runner matcher constraints under vitest (test/runners/\*.vitest.mjs)
 - `npm run test:jest` — Build + run the cross-runner matcher constraints under jest (test/runners/\*.jest.cjs)
+- `npm run test:types` — Build + type-check the vitest/jest matcher augmentation (tsc --noEmit on test/types/)
 
 ## Rules
 

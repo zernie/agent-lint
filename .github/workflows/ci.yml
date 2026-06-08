@@ -54,6 +54,9 @@ jobs:
       - name: Cross-runner matcher tests (vitest + jest)
         run: npx vitest run && npx jest
 
+      - name: Matcher type augmentation compiles (vitest + jest)
+        run: npx tsc --noEmit -p test/types/tsconfig.json
+
       - name: Type check
         run: npx tsc --noEmit
 
