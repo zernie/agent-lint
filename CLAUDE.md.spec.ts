@@ -108,6 +108,14 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
     "src/judge.ts":
       "Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure)",
+    "src/vitest.mts":
+      "Opt-in vitest integration entry (ESM, since vitest is ESM-only): registers vigilesMatchers + augments @vitest/expect Matchers so toHaveCreated/toBeatBaseline type-check; vitest is an optional peer dep",
+    "src/jest.ts":
+      "Opt-in jest integration entry (CJS): registers vigilesMatchers + augments @jest/expect Matchers; jest is an optional peer dep",
+    "test/types/smoke.vitest.ts":
+      "Type-level constraint: `vigiles/vitest` makes the matchers type-check on vitest's expect (tsc --noEmit via npm run test:types)",
+    "test/types/smoke.jest.ts":
+      "Type-level constraint: `vigiles/jest` makes the matchers type-check on jest's expect",
     "test/runners/matchers.vitest.mjs":
       "Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; src/*.test.ts excluded via vitest.config.mjs)",
     "test/runners/matchers.jest.cjs":
@@ -220,6 +228,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Build + run the cross-runner matcher constraints under vitest (test/runners/*.vitest.mjs)",
     "npm run test:jest":
       "Build + run the cross-runner matcher constraints under jest (test/runners/*.jest.cjs)",
+    "npm run test:types":
+      "Build + type-check the vitest/jest matcher augmentation (tsc --noEmit on test/types/)",
   },
 
   rules: {

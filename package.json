@@ -17,11 +17,18 @@
     "./harness-assert": "./dist/harness-assert.js",
     "./plugin-loader": "./dist/plugin-loader.js",
     "./judge": "./dist/judge.js",
-    "./mock-model": "./dist/mock-model.js"
+    "./mock-model": "./dist/mock-model.js",
+    "./vitest": {
+      "types": "./dist/vitest.d.mts",
+      "default": "./dist/vitest.mjs"
+    },
+    "./jest": "./dist/jest.js"
   },
   "files": [
     "dist/**/*.js",
+    "dist/**/*.mjs",
     "dist/**/*.d.ts",
+    "dist/**/*.d.mts",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
     "action.yml",
@@ -39,7 +46,8 @@
     "test:harness": "npm run build && node dist/cli.js test",
     "test:eval": "npm run build && node dist/cli.js eval",
     "test:vitest": "npm run build && vitest run",
-    "test:jest": "npm run build && jest"
+    "test:jest": "npm run build && jest",
+    "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -56,6 +64,18 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "jest": ">=28",
+    "vitest": ">=1"
+  },
+  "peerDependenciesMeta": {
+    "jest": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@ast-grep/lang-python": "^0.0.6",

@@ -88,7 +88,7 @@ declare module "vigiles/generated" {
     | "test:vitest"
     | "test:jest";
 
-  /** 62 project files. */
+  /** 64 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -120,6 +120,7 @@ declare module "vigiles/generated" {
     | "src/inline.test.ts"
     | "src/inline.ts"
     | "src/integrity.ts"
+    | "src/jest.ts"
     | "src/judge.ts"
     | "src/linters.ts"
     | "src/mock-model.ts"
@@ -151,7 +152,8 @@ declare module "vigiles/generated" {
     | "src/test-utils.ts"
     | "src/types.ts"
     | "src/validate.test.ts"
-    | "src/validate.ts";
+    | "src/validate.ts"
+    | "src/vitest.mts";
 }
 
 declare module "vigiles/spec" {
@@ -254,6 +256,7 @@ declare module "vigiles/spec" {
       | "src/inline.test.ts"
       | "src/inline.ts"
       | "src/integrity.ts"
+      | "src/jest.ts"
       | "src/judge.ts"
       | "src/linters.ts"
       | "src/mock-model.ts"
@@ -285,7 +288,8 @@ declare module "vigiles/spec" {
       | "src/test-utils.ts"
       | "src/types.ts"
       | "src/validate.test.ts"
-      | "src/validate.ts";
+      | "src/validate.ts"
+      | "src/vitest.mts";
   }
   interface KnownNpmScripts {
     scripts: 

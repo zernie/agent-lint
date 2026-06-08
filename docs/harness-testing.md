@@ -80,22 +80,36 @@ test("Stop hook forces more work", async () => {
 
 `withHarness` auto-cleans the sandbox (try/finally) so you don't leak temp dirs.
 
-**vitest / jest** use the exact same code. For matcher sugar, register the
-shared matchers (identical contract in both):
+**vitest / jest** use the exact same code. The `vigilesMatchers` object has an
+identical contract in both, so you can register it by hand:
 
 ```ts
 import { expect } from "vitest"; // or "@jest/globals"
 import { vigilesMatchers } from "vigiles/harness-assert";
 expect.extend(vigilesMatchers);
+```
+
+…or use the **opt-in integration entries**, which register the matchers _and_
+add their TypeScript types (so `toHaveCreated` / `toBeatBaseline` autocomplete
+and type-check in a `.test.ts`):
+
+```ts
+// vitest.config.ts →  test: { setupFiles: ["vigiles/vitest"] }
+// jest.config.js   →  setupFilesAfterEach: ["vigiles/jest"]
+// …or import once at the top of a test file:
+import "vigiles/vitest"; // or "vigiles/jest"
 
 expect(r).toHaveCreated("DONE");
 expect(report).toBeatBaseline("vanilla", "gated", "caught");
 ```
 
-The same `vigilesMatchers` object is exercised under both runners in
-[`test/runners/`](../test/runners/) (`npm run test:vitest` / `npm run test:jest`)
-— jest requires the CommonJS dist natively (no ESM flags), vitest imports it
-directly. Both are run in CI.
+vitest and jest are **optional peer dependencies** — only the entry you import
+pulls one in. The same `vigilesMatchers` is exercised under both runners in
+[`test/runners/`](../test/runners/) (`npm run test:vitest` / `npm run test:jest`),
+and the type augmentation is compile-checked in
+[`test/types/`](../test/types/) (`npm run test:types`) — all three run in CI.
+jest uses the CommonJS dist natively (no ESM flags); the `vigiles/vitest` entry
+is ESM because vitest is ESM-only.
 
 **Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash
 PreToolUse/PostToolUse — the governance/policy shapes most real plugins use.
