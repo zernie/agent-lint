@@ -17,3 +17,8 @@ run-tdd.log
 results-ctx.csv
 run-ctx.log
 .corpus.txt
+
+# refs benchmark artifacts
+.work-refs/
+results-refs.csv
+run-refs.log
