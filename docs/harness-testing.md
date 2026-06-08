@@ -190,5 +190,6 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 
 ## See also
 
+- [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier + file (and why the CLI examples are `.mjs`).
 - [`research/harness-testing.md`](../research/harness-testing.md) — the two-tier design + real-plugin coverage.
 - [`research/benchmarks-runtime-gates.md`](../research/benchmarks-runtime-gates.md) — findings from running this harness in anger.
