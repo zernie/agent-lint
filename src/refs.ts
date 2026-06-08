@@ -1,59 +1,34 @@
 /**
- * vigiles — live symbol-reference verification.
+ * vigiles — file-qualified symbol reference verification (variant A).
  *
- * The reliable design stores nothing. There are two sources of truth — the
- * instruction file (what is referenced) and the code (what exists) — and a
- * reference check is a *join between them at audit time*. Any stored artifact
- * (a sidecar pin, an in-text marker) is a third thing that can drift from
- * either, so we don't keep one: `audit` re-extracts the code-shaped references
- * from the *current* markdown and re-resolves them against the *current*
- * project symbol index. No drift, no snapshot to maintain.
+ * A reference names both the file and the symbol, as an inline code span:
  *
- * Opportunistic and inference-based: a bare backtick reference is only checked
- * when it has a *code shape* (snake_case / camelCase / SCREAMING_CASE /
- * PascalCase / scoped `Class#method`) — a lowercase prose word like `name` is
- * left alone, avoiding the scan false-positive trap. Because the reference is
- * inferred (the author didn't declare "verify this"), an unresolved one is a
- * *warning*, not a hard error — unlike an explicitly declared `vigiles:file` /
- * `vigiles:cmd` ref, which errors.
+ *     See `src/config.ts#parseConfig` for the loader.
+ *     Render with `app/models/user.rb#full_name`.
+ *
+ * We parse *that one named file* and check it defines the symbol. No
+ * project-wide index, no cross-file resolution, no autoloader chasing, no
+ * ambiguity (the file disambiguates). Because the `path.ext#symbol` shape is
+ * unmistakable and deliberately written, it is a *declared* reference — like
+ * `vigiles:file` / `vigiles:cmd` — so a broken one is an **error**, not an
+ * inferred-prose warning. The author names the file; vigiles proves the symbol.
  *
  * R1 (cross-compat): only inline code spans are read. Fenced code blocks are
  * never touched, so rustdoc doctests / typescript-docs-verifier keep working.
  */
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { globSync } from "glob";
+import { langForFile, fileDefinesSymbol } from "./symbols.js";
 
-import { SymbolIndex, resolveSymbol, definedSymbolsInFile } from "./symbols.js";
-
-const SOURCE_GLOB = "**/*.{ts,tsx,js,jsx,mjs,cjs,py,pyi,rs,rb,rbi,css}";
-const IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.git/**",
-  "**/.vigiles/**",
-  "**/vendor/**",
-];
-
-/** Build a project-wide symbol index from the source files under `cwd`. */
-export function buildProjectIndex(cwd: string): SymbolIndex {
-  const index = new SymbolIndex();
-  const files = globSync(SOURCE_GLOB, { cwd, ignore: IGNORE, nodir: true });
-  for (const rel of files) {
-    index.add(rel, definedSymbolsInFile(resolve(cwd, rel)));
-  }
-  return index;
-}
+const FENCE = /^\s*```/;
+const SPAN = /`([^`\n]+)`/g;
 
 /** An inline code span with its 1-based source line. */
 export interface Span {
   readonly text: string;
   readonly line: number;
 }
-
-const FENCE = /^\s*```/;
-const SPAN = /`([^`\n]+)`/g;
 
 /**
  * Extract inline code spans, skipping fenced code blocks (R1). Returns each
@@ -76,12 +51,76 @@ export function inlineSpans(markdown: string): Span[] {
   return spans;
 }
 
-const SCOPED = /^[A-Za-z_]\w*(?:#|::)[\w?!]+$/;
-const PLAIN_ID = /^[A-Za-z_]\w*$/;
+// A file-qualified symbol reference: `<path>.<ext>` then `#`/`::` then a symbol.
+// Requires a real file extension before the separator, so a bare scoped symbol
+// (`Foo::bar`, `User#full_name` — no path) is NOT matched and stays prose.
+const FILE_SYMBOL = /^([\w@./-]+\.[A-Za-z0-9]+)(?:#|::)([A-Za-z_]\w*[?!]?)$/;
+
+/** A parsed file-qualified reference. */
+export interface SymbolRef {
+  readonly file: string;
+  readonly symbol: string;
+  readonly line: number;
+}
+
+/** A reference that failed verification. */
+export interface SymbolRefError extends SymbolRef {
+  readonly reason: string;
+}
+
+/** Extract the file-qualified symbol references from a markdown file. */
+export function symbolRefs(markdown: string): SymbolRef[] {
+  const refs: SymbolRef[] = [];
+  for (const span of inlineSpans(markdown)) {
+    const m = FILE_SYMBOL.exec(span.text);
+    if (m) refs.push({ file: m[1], symbol: m[2], line: span.line });
+  }
+  return refs;
+}
 
 /**
- * Whether a span has a *code shape* worth resolving — scoped, or a plain
- * identifier that isn't a bare lowercase word (those are almost always prose).
+ * Verify the file-qualified symbol references in a markdown file: the named
+ * file must exist and define the named symbol. `basePath` is the directory the
+ * paths resolve against (the instruction file's own directory).
+ */
+export function verifySymbolRefs(
+  markdown: string,
+  basePath: string,
+): SymbolRefError[] {
+  const errors: SymbolRefError[] = [];
+  for (const ref of symbolRefs(markdown)) {
+    const full = resolve(basePath, ref.file);
+    if (!existsSync(full)) {
+      errors.push({ ...ref, reason: `File not found: "${ref.file}"` });
+    } else if (langForFile(ref.file) === null) {
+      errors.push({
+        ...ref,
+        reason: `Unsupported language for symbol check: "${ref.file}"`,
+      });
+    } else if (!fileDefinesSymbol(full, ref.symbol)) {
+      errors.push({
+        ...ref,
+        reason: `"${ref.symbol}" is not defined in ${ref.file}`,
+      });
+    }
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Enforcement: force code references to carry the file-qualified mark
+// ---------------------------------------------------------------------------
+
+const PATH_LIKE = /[/\\]|\.[A-Za-z0-9]+$/; // a path or a bare filename
+const PLAIN_ID = /^[A-Za-z_]\w*$/;
+const SCOPED = /^[A-Za-z_]\w*(?:#|::)[\w?!]+$/;
+const IGNORE_FILE = /<!--\s*vigiles:ignore-file\s*-->/;
+const IGNORE_LINE = /<!--\s*vigiles:ignore\s*-->/;
+
+/**
+ * Whether a span looks like a *code reference* that ought to carry a
+ * file-qualified mark — a scoped name, or an identifier that isn't a bare
+ * lowercase prose word. Paths/filenames are excluded (they are `file` refs).
  */
 export function isCodeShaped(text: string): boolean {
   if (SCOPED.test(text)) return true;
@@ -93,56 +132,19 @@ export function isCodeShaped(text: string): boolean {
   return hasUnderscore || hasCamel || isPascal || isScreaming;
 }
 
-/** A reference that resolved to a single definition. */
-export interface ResolvedRef {
-  readonly ref: string;
-  readonly line: number;
-  readonly file: string;
-}
-
-/** A code-shaped reference that did not resolve, or resolved ambiguously. */
-export interface UnresolvedRef {
-  readonly ref: string;
-  readonly line: number;
-  readonly status: "missing" | "ambiguous";
-  /** Candidate files when ambiguous. */
-  readonly candidates: readonly string[];
-}
-
-export interface RefReport {
-  readonly resolved: readonly ResolvedRef[];
-  readonly unresolved: readonly UnresolvedRef[];
-}
-
 /**
- * Resolve the code-shaped inline references in a markdown instruction file
- * against the project index, live. No state is written: the report reflects the
- * current markdown joined with the current code.
+ * Code-shaped inline references that are NOT file-qualified — the spans the
+ * enforcement hook makes the agent mark (as `path.ext#symbol`) or opt out of
+ * (`<!-- vigiles:ignore -->`). A whole file opts out with
+ * `<!-- vigiles:ignore-file -->`.
  */
-export function verifyRefs(markdown: string, index: SymbolIndex): RefReport {
-  const resolved: ResolvedRef[] = [];
-  const unresolved: UnresolvedRef[] = [];
-  const seen = new Set<string>();
-  for (const span of inlineSpans(markdown)) {
-    if (!isCodeShaped(span.text)) continue;
-    const key = `${span.text}@${String(span.line)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const r = resolveSymbol(index, span.text);
-    if (r.status === "unique") {
-      resolved.push({
-        ref: span.text,
-        line: span.line,
-        file: r.locations[0].file,
-      });
-    } else {
-      unresolved.push({
-        ref: span.text,
-        line: span.line,
-        status: r.status,
-        candidates: r.locations.map((l) => l.file),
-      });
-    }
-  }
-  return { resolved, unresolved };
+export function unmarkedCodeRefs(markdown: string): Span[] {
+  if (IGNORE_FILE.test(markdown)) return [];
+  const lines = markdown.split("\n");
+  return inlineSpans(markdown).filter((span) => {
+    if (IGNORE_LINE.test(lines[span.line - 1] ?? "")) return false;
+    if (FILE_SYMBOL.test(span.text)) return false; // already marked
+    if (PATH_LIKE.test(span.text) && !span.text.includes("#")) return false;
+    return isCodeShaped(span.text);
+  });
 }

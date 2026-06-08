@@ -4,14 +4,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Lang } from "@ast-grep/napi";
 
-import {
-  definedSymbols,
-  langForFile,
-  SymbolIndex,
-  resolveSymbol,
-} from "./symbols.js";
+import { definedSymbols, langForFile, fileDefinesSymbol } from "./symbols.js";
 
 test("extracts functions, constants, classes and methods (TypeScript)", () => {
   const defs = definedSymbols(
@@ -57,43 +55,19 @@ test("langForFile maps extensions and skips unsupported", () => {
   assert.notEqual(langForFile("a.ts"), null);
 });
 
-test("resolves a unique symbol, reports ambiguity and misses", () => {
-  const index = new SymbolIndex();
-  index.add(
-    "src/config.ts",
-    definedSymbols("export function parseConfig(){}", Lang.TypeScript),
-  );
-  index.add(
-    "src/a.ts",
-    definedSymbols("export function dup(){}", Lang.TypeScript),
-  );
-  index.add(
-    "src/b.ts",
-    definedSymbols("export function dup(){}", Lang.TypeScript),
-  );
-
-  const ok = resolveSymbol(index, "parseConfig");
-  assert.equal(ok.status, "unique");
-  assert.equal(ok.locations[0].file, "src/config.ts");
-
-  assert.equal(resolveSymbol(index, "dup").status, "ambiguous");
-  assert.equal(resolveSymbol(index, "GHOST").status, "missing");
-});
-
-test("a scoped reference narrows to the enclosing class", () => {
-  const index = new SymbolIndex();
-  index.add(
-    "app/user.rb",
-    definedSymbols("class User\n  def full_name\n  end\nend", "ruby"),
-  );
-  index.add(
-    "app/post.rb",
-    definedSymbols("class Post\n  def full_name\n  end\nend", "ruby"),
-  );
-  // bare `full_name` is ambiguous across two classes...
-  assert.equal(resolveSymbol(index, "full_name").status, "ambiguous");
-  // ...but `User#full_name` resolves uniquely.
-  const scoped = resolveSymbol(index, "User#full_name");
-  assert.equal(scoped.status, "unique");
-  assert.equal(scoped.locations[0].file, "app/user.rb");
+test("fileDefinesSymbol checks one named file (no project index)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vigiles-sym-file-"));
+  try {
+    mkdirSync(join(dir, "src"));
+    const f = join(dir, "src", "config.ts");
+    writeFileSync(
+      f,
+      "export function parseConfig(){}\nexport const MAX = 1;\n",
+    );
+    assert.equal(fileDefinesSymbol(f, "parseConfig"), true);
+    assert.equal(fileDefinesSymbol(f, "MAX"), true);
+    assert.equal(fileDefinesSymbol(f, "missingSymbol"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

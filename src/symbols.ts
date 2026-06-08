@@ -126,56 +126,11 @@ export function definedSymbolsInFile(file: string): SymbolDef[] {
   }
 }
 
-/** A located definition: a symbol plus the file it lives in. */
-export interface SymbolLocation extends SymbolDef {
-  readonly file: string;
-}
-
-/** A project-wide index: symbol name → every place it is defined. */
-export class SymbolIndex {
-  private readonly byName = new Map<string, SymbolLocation[]>();
-
-  add(file: string, defs: readonly SymbolDef[]): void {
-    for (const d of defs) {
-      const list = this.byName.get(d.name) ?? [];
-      list.push({ ...d, file });
-      this.byName.set(d.name, list);
-    }
-  }
-
-  addFile(file: string): void {
-    this.add(file, definedSymbolsInFile(file));
-  }
-
-  /** All definitions of `name` across the project. */
-  lookup(name: string): readonly SymbolLocation[] {
-    return this.byName.get(name) ?? [];
-  }
-
-  get size(): number {
-    return this.byName.size;
-  }
-}
-
-export type ResolveStatus = "unique" | "ambiguous" | "missing";
-
-export interface ResolveResult {
-  readonly status: ResolveStatus;
-  /** Candidate locations (one when unique, several when ambiguous, none when missing). */
-  readonly locations: readonly SymbolLocation[];
-}
-
 /**
- * Resolve a bare symbol reference against the index. A scoped reference
- * (`Class#method` or `Class::method`) narrows to definitions whose enclosing
- * scope matches. Returns unique / ambiguous / missing — never a guess.
+ * Whether `file` defines a top-level (or scoped) symbol named `name`. This is
+ * the whole check for a file-qualified reference (`path#symbol`): we parse the
+ * one named file — no project-wide index, no resolution across files.
  */
-export function resolveSymbol(index: SymbolIndex, ref: string): ResolveResult {
-  const scoped = /^([A-Za-z_]\w*)(?:#|::)([\w?!]+)$/.exec(ref);
-  const [scope, name] = scoped ? [scoped[1], scoped[2]] : ["", ref];
-  let hits = index.lookup(name);
-  if (scope) hits = hits.filter((h) => h.scope === scope);
-  if (hits.length === 0) return { status: "missing", locations: [] };
-  if (hits.length === 1) return { status: "unique", locations: hits };
-  return { status: "ambiguous", locations: hits };
+export function fileDefinesSymbol(file: string, name: string): boolean {
+  return definedSymbolsInFile(file).some((d) => d.name === name);
 }
