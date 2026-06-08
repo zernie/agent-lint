@@ -1,0 +1,122 @@
+/**
+ * Tests for the plugin/repo harness loader (src/plugin-loader.ts) — loads the
+ * real assembled machine (hooks + CLAUDE.md + skills) so a test/eval runs
+ * against what ships, not a retyped subset. Model-free.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+import { loadPlugin, resolveHarness } from "./plugin-loader.js";
+import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+
+function makePlugin(): string {
+  const root = makeTmpDir("plugin");
+  mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(root, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "demo",
+      skills: "./skills/",
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  writeFileSync(join(root, "CLAUDE.md"), "# demo project\n");
+  mkdirSync(join(root, "skills", "foo"), { recursive: true });
+  writeFileSync(join(root, "skills", "foo", "SKILL.md"), "# foo skill\n");
+  return root;
+}
+
+test("loadPlugin resolves CLAUDE_PLUGIN_ROOT to the absolute plugin path", () => {
+  const root = makePlugin();
+  try {
+    const loaded = loadPlugin(root);
+    const json = JSON.stringify(loaded.settings);
+    assert.ok(!json.includes("${CLAUDE_PLUGIN_ROOT}"), "token not expanded");
+    assert.ok(
+      json.includes(`${root}/hooks/session-start.sh`),
+      "abs path present",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin materializes CLAUDE.md and skills into the sandbox", () => {
+  const root = makePlugin();
+  try {
+    const { files } = loadPlugin(root);
+    assert.equal(files["CLAUDE.md"], "# demo project\n");
+    assert.equal(
+      files[join(".claude", "skills", "foo", "SKILL.md")],
+      "# foo skill\n",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("resolveHarness layers inline settings/files over the plugin", () => {
+  const root = makePlugin();
+  try {
+    const { settings, files } = resolveHarness({
+      plugin: root,
+      settings: {
+        hooks: {
+          SessionStart: [
+            { hooks: [{ type: "command", command: "echo extra" }] },
+          ],
+          Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }],
+        },
+      },
+      files: { "extra.txt": "x" },
+    });
+    const s = settings as { hooks: Record<string, unknown[]> };
+    // plugin SessionStart + inline SessionStart are concatenated
+    assert.equal(s.hooks.SessionStart.length, 2);
+    // inline-only event is present
+    assert.equal(s.hooks.Stop.length, 1);
+    // plugin files + inline files both present
+    assert.equal(files["CLAUDE.md"], "# demo project\n");
+    assert.equal(files["extra.txt"], "x");
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("resolveHarness with no plugin and no settings yields undefined settings", () => {
+  const r = resolveHarness({});
+  assert.equal(r.settings, undefined);
+  assert.deepEqual(r.files, {});
+});
+
+test("resolveHarness passes inline settings through when no plugin", () => {
+  const inline = { hooks: { Stop: [{ hooks: [] }] } };
+  const r = resolveHarness({ settings: inline });
+  assert.deepEqual(r.settings, inline);
+});
+
+test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
+  // The repo's own .claude-plugin/plugin.json — proves the loader parses the
+  // real shipped manifest, not just a fixture.
+  const loaded = loadPlugin(process.cwd());
+  const s = loaded.settings as { hooks?: Record<string, unknown[]> };
+  assert.ok(s.hooks, "vigiles plugin has hooks");
+  assert.ok(
+    !JSON.stringify(s).includes("${CLAUDE_PLUGIN_ROOT}"),
+    "token expanded",
+  );
+  assert.ok(typeof loaded.files["CLAUDE.md"] === "string", "CLAUDE.md loaded");
+});

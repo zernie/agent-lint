@@ -414,10 +414,17 @@ npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
-The two-tier design and a coverage assessment against real plugins (protect-mcp,
+**Test the whole machine.** Point `plugin` at a plugin (or `"./"` for your repo)
+and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md,
+and skills — is loaded into the sandbox, so you test what ships, not a retyped
+subset. The library is plain async functions, so it runs in **node:test,
+vitest, or jest** unchanged (shared `expect.extend` matchers for the latter two).
+
+[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). The two-tier
+design and a coverage assessment against real plugins (protect-mcp,
 obra/superpowers, block-no-verify, 156 wshobson skills) are in
-[`research/harness-testing.md`](research/harness-testing.md); our own findings
-from this harness live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+[`research/harness-testing.md`](research/harness-testing.md); findings from
+running this harness in anger live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
 
 ## Maturity Levels
 
