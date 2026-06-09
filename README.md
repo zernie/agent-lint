@@ -21,6 +21,31 @@
 
 ---
 
+<details>
+<summary><b>Contents</b></summary>
+
+**Pillar 1 — verify your instruction files** · references your CLAUDE.md makes that a linter, the filesystem, and package.json can prove
+
+- Three adoption levels: [inline comments](#level-0--inline-comments-30-seconds-no-new-files) → [YAML frontmatter](#level-1--yaml-frontmatter-editor-autocomplete-still-no-typescript) → [typed spec](#level-2--typed-spec-compiler-grade-guarantees)
+- [What changes with vigiles](#what-changes-with-vigiles)
+- [Quick start](#quick-start)
+- [Three rule types](#three-rule-types) — `enforce` / `guidance` / `guard`
+- [Verified references](#verified-references) — `file` / `cmd` / `symbol` / `ref`
+- [Type-safe rule references](#type-safe-rule-references)
+- Reference: [CLI](#cli) · [GitHub Action](#github-action) · [Plugin](#claude-code-plugin) · [Validation](#validation) · [Skills](#skills)
+
+**Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · eval whether your hooks, skills, and CLAUDE.md actually change what the agent does
+
+- [Evals — does my change move agent behaviour?](#evals--does-my-change-move-agent-behaviour)
+- [Deterministic tests — does my hook fire?](#deterministic-tests--does-my-hook-fire)
+- [Unit-test a hook — no `claude` at all](#unit-test-a-hook--no-claude-at-all)
+- [Run them as a CI command](#run-them-as-a-ci-command)
+- [Test the whole machine](#test-the-whole-machine)
+
+**More** — [Maturity levels](#maturity-levels) · [Output targets](#output-targets) · [Related tools](#related-tools)
+
+</details>
+
 Your CLAUDE.md lies to your agent. Here's the fix.
 
 Hand-written CLAUDE.md files rot silently. Here's what a typical one looks like:
@@ -344,7 +369,9 @@ vigiles also ships a library for **testing the harness itself** — your hooks,
 settings, skills, and instruction files. `Agent = Model + Harness`; this tests
 the harness, at three levels.
 
-**Evals — does my change actually move agent behaviour?** Define a fixture, a set
+### Evals — does my change move agent behaviour?
+
+Define a fixture, a set
 of **arms** (a hook on vs off, with/without a CLAUDE.md rule), a task, and a
 metric; `runEval` drives the real `claude` CLI N trials per arm and aggregates.
 
@@ -366,7 +393,9 @@ const report = await runEval({
 console.log(formatEvalReport(report)); //  vanilla marked=0.00   gated marked=0.50
 ```
 
-**Deterministic tests — does my hook fire correctly?** No API key, no cost.
+### Deterministic tests — does my hook fire?
+
+No API key, no cost.
 `runHarnessTest` runs real `claude` against a **scripted mock model**
 (`vigiles/mock-model`), so your real hooks fire but the agent's turns are fixed.
 
@@ -402,7 +431,9 @@ and Bash PreToolUse/PostToolUse** hooks — the governance/policy shapes most re
 plugins use; Edit/Write tool-event hooks are headless-gated, so test those at the
 unit tier or via the eval tier.
 
-**Unit-test a hook — no `claude` at all.** A hook is just a process: `runHook`
+### Unit-test a hook — no `claude` at all
+
+A hook is just a process: `runHook`
 pipes an event JSON to its stdin and reports the block/allow decision —
 milliseconds, and the only tier that reaches **every** event (incl. Edit/Write,
 PreCompact, SessionEnd, which the deterministic mock can't trigger).
@@ -418,7 +449,9 @@ const r = runHook(guardCommand, {
 assert(r.blocked); // exit 2, decision:"block", or permissionDecision:"deny"
 ```
 
-**Run them as a CI command.** `vigiles test` discovers `*.harness.mjs` files
+### Run them as a CI command
+
+`vigiles test` discovers `*.harness.mjs` files
 (deterministic, no API key) and `vigiles eval` discovers `*.eval.mjs` files
 (real model). Canonical, real-plugin-shaped examples to copy:
 
@@ -430,7 +463,9 @@ npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
-**Test the whole machine.** Point `plugin` at a plugin (or `"./"` for your repo)
+### Test the whole machine
+
+Point `plugin` at a plugin (or `"./"` for your repo)
 and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md,
 skills, subagents and commands — is loaded into the sandbox, so you test what
 ships, not a retyped subset. `loadPlugin(...).warnings` flags surfaces only a
