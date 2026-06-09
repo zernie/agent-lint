@@ -12,6 +12,9 @@ import {
   assertCreated,
   assertNotCreated,
   assertServedTurns,
+  assertToolUsed,
+  assertToolNotUsed,
+  assertSkillResolved,
   vigilesMatchers,
 } from "./harness-assert.js";
 import type { EvalReport } from "./eval.js";
@@ -27,13 +30,17 @@ const report: EvalReport = {
 };
 
 /** Minimal HarnessTestResult stand-in for file()-based assertions. */
-function fakeResult(present: string[]): HarnessTestResult {
+function fakeResult(
+  present: string[],
+  toolCalls: HarnessTestResult["toolCalls"] = [],
+): HarnessTestResult {
   return {
     exitCode: 0,
     stdout: "",
     stderr: "",
     cwd: "/tmp/x",
     turns: 2,
+    toolCalls,
     file: (p: string) => (present.includes(p) ? "content" : null),
     cleanup: () => undefined,
   };
@@ -104,4 +111,50 @@ test("vigilesMatchers.toBeatBaseline respects the `by` threshold", () => {
       .pass,
     false,
   );
+});
+
+// --- tool-call assertions (action invariants) ------------------------------
+
+const skillCall = {
+  name: "Skill",
+  input: { skill: "demo:greet" },
+  resultText: "Launching skill: demo:greet",
+  isError: false,
+};
+const bashCall = {
+  name: "Bash",
+  input: { command: "ls" },
+  resultText: "",
+  isError: false,
+};
+
+test("assertToolUsed: matches by exact name and by regex", () => {
+  const r = fakeResult([], [skillCall, bashCall]);
+  assertToolUsed(r, "Skill"); // exact
+  assertToolUsed(r, /^Bash$/); // regex
+  assert.throws(() => {
+    assertToolUsed(r, "Task");
+  });
+  assert.throws(() => {
+    assertToolUsed(r, /^mcp__/);
+  });
+});
+
+test("assertToolNotUsed: the safety negative", () => {
+  const r = fakeResult([], [skillCall, bashCall]);
+  assertToolNotUsed(r, /^mcp__github__merge/); // never invoked → ok
+  assert.throws(() => {
+    assertToolNotUsed(r, "Bash"); // was invoked → throws
+  });
+});
+
+test("assertSkillResolved: needs a non-error Skill tool_use with that name", () => {
+  assertSkillResolved(fakeResult([], [skillCall]), "demo:greet");
+  assert.throws(() => {
+    assertSkillResolved(fakeResult([], [skillCall]), "demo:other"); // wrong name
+  });
+  const errored = { ...skillCall, isError: true, resultText: "No such skill" };
+  assert.throws(() => {
+    assertSkillResolved(fakeResult([], [errored]), "demo:greet"); // errored
+  });
 });

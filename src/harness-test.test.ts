@@ -16,7 +16,13 @@ import {
   runHarnessTest,
   scriptModel,
   claudeAvailable,
+  parseToolCalls,
 } from "./harness-test.js";
+import {
+  assertToolUsed,
+  assertToolNotUsed,
+  assertSkillResolved,
+} from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
 
@@ -171,7 +177,7 @@ maybe(
     const r = await runHarnessTest({
       pluginDir,
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
-      transcript: true, // capture the Skill tool_result so we can assert on it
+      transcript: true, // populate r.toolCalls
       model: scriptModel([
         { tool: "Skill", input: { skill: "demo:greet" } },
         { text: "ok" },
@@ -179,13 +185,76 @@ maybe(
       timeoutMs: 90000,
     });
     try {
-      assert.match(
-        r.stdout,
-        /GREET_SKILL_MARKER_42/,
-        "the demo:greet skill resolved (its body was injected into the transcript)",
-      );
+      // The action invariant — vs the brittle `r.stdout.includes(MARKER)` this
+      // replaces. assertSkillResolved checks a non-error Skill tool_use by name.
+      assertToolUsed(r, "Skill");
+      assertSkillResolved(r, "demo:greet");
+      assertToolNotUsed(r, /^mcp__/); // safety negative: no MCP tool was used
     } finally {
       r.cleanup();
     }
   },
 );
+
+// Grounded in REAL vendored plugins — the payoff of toolCalls: you can assert a
+// real plugin's skill activates with NO marker injected into it (marker-grep only
+// works on fixtures you control). Both skills resolve via --plugin-dir.
+for (const [label, dir, skill] of [
+  [
+    "obra/superpowers",
+    "../examples/harness/vendor/superpowers@6fd4507",
+    "superpowers:test-driven-development",
+  ],
+  [
+    "wshobson/agents",
+    "../examples/harness/vendor/wshobson-accessibility@cf6059d",
+    "accessibility-compliance:wcag-audit-patterns",
+  ],
+] as const) {
+  maybe(`a real ${label} skill resolves via --plugin-dir`, async () => {
+    const r = await runHarnessTest({
+      pluginDir: join(__dirname, dir),
+      allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+      transcript: true,
+      model: scriptModel([{ tool: "Skill", input: { skill } }, { text: "ok" }]),
+      timeoutMs: 120000,
+    });
+    try {
+      assertSkillResolved(r, skill); // no marker needed — it's a real plugin
+    } finally {
+      r.cleanup();
+    }
+  });
+}
+
+test("parseToolCalls: pairs tool_use with tool_result from a stream-json transcript", () => {
+  const stream = [
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Skill",
+            input: { skill: "x:y" },
+          },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "user",
+      message: {
+        content: [{ type: "tool_result", tool_use_id: "t1", content: "ran" }],
+      },
+    }),
+    "not json — ignored",
+    JSON.stringify({ type: "result", result: "done" }),
+  ].join("\n");
+  const calls = parseToolCalls(stream);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.name, "Skill");
+  assert.equal(calls[0]?.resultText, "ran");
+  assert.equal(calls[0]?.isError, false);
+  assert.equal(parseToolCalls("{not stream json}").length, 0);
+});
