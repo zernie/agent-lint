@@ -37,22 +37,20 @@ export interface LoadedPlugin {
   readonly warnings: readonly string[];
 }
 
-interface PluginManifest {
-  hooks?: unknown;
-  skills?: string;
-  mcpServers?: unknown;
-}
-
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
+
+/** Parse a JSON file, or null on any error (missing / malformed). */
+function safeReadJson(path: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 /** Read and return the `.hooks` field of a JSON file, or undefined on any error. */
 function readHooksFile(path: string): unknown {
-  try {
-    return (JSON.parse(readFileSync(path, "utf-8")) as { hooks?: unknown })
-      .hooks;
-  } catch {
-    return undefined;
-  }
+  return safeReadJson(path)?.hooks;
 }
 
 /**
@@ -63,9 +61,10 @@ function readHooksFile(path: string): unknown {
  *   4. a plain repo's `.claude/settings.json`.
  */
 function readHooks(root: string): unknown {
-  const manifestPath = join(root, ".claude-plugin", "plugin.json");
-  if (existsSync(manifestPath)) {
-    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
+  // A malformed plugin.json must not crash the loader — fall through to the
+  // other layouts (safeReadJson returns null on a parse error).
+  const m = safeReadJson(join(root, ".claude-plugin", "plugin.json"));
+  if (m) {
     if (typeof m.hooks === "string") return readHooksFile(join(root, m.hooks));
     if (m.hooks !== undefined) return m.hooks;
   }
@@ -178,14 +177,10 @@ function pluginWarnings(
 /** Whether the plugin declares any MCP servers (manifest field or .mcp.json). */
 function hasMcp(root: string): boolean {
   if (existsSync(join(root, ".mcp.json"))) return true;
-  const manifestPath = join(root, ".claude-plugin", "plugin.json");
-  if (!existsSync(manifestPath)) return false;
-  try {
-    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
-    return m.mcpServers !== undefined;
-  } catch {
-    return false;
-  }
+  return (
+    safeReadJson(join(root, ".claude-plugin", "plugin.json"))?.mcpServers !==
+    undefined
+  );
 }
 
 type HooksObj = { hooks?: Record<string, unknown[]> };

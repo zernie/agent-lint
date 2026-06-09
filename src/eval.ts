@@ -147,24 +147,37 @@ function writeFiles(cwd: string, files: Record<string, string>): void {
   }
 }
 
-interface RunOut {
+/** The raw output of one trial: the agent's exit code + captured stdout stream. */
+export interface RunOut {
   code: number;
   stdout: string;
 }
 
-function spawnAgent(
-  task: string,
-  cwd: string,
-  model: string,
-  tools: readonly string[],
-  hasSettings: boolean,
-  pluginDir: string | undefined,
-  timeoutMs: number,
-): Promise<RunOut> {
+/** The per-trial arguments handed to an {@link AgentRunner}. */
+export interface AgentRunArgs {
+  readonly task: string;
+  readonly cwd: string;
+  readonly model: string;
+  readonly tools: readonly string[];
+  readonly hasSettings: boolean;
+  readonly pluginDir: string | undefined;
+  readonly timeoutMs: number;
+}
+
+/**
+ * Runs one trial and returns its raw output. The default ({@link spawnAgent})
+ * drives the real `claude` CLI; `runEvalWith` takes one explicitly, so the eval
+ * orchestration is testable without a model (pass a fake returning canned
+ * stream-json) and a custom runtime can be plugged in.
+ */
+export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
+
+/* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
+function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
   return new Promise((resolvePromise) => {
     const args = [
       "-p",
-      task,
+      a.task,
       // stream-json (+ --verbose, required with -p) so the per-turn tool_use
       // events survive into `ctx.toolCalls` — the unified Trace, same as the
       // harness tier. The terminal `result` event still carries num_turns/output.
@@ -172,28 +185,43 @@ function spawnAgent(
       "stream-json",
       "--verbose",
       "--model",
-      model,
+      a.model,
       "--permission-mode",
       "acceptEdits",
-      ...(pluginDir !== undefined ? ["--plugin-dir", resolve(pluginDir)] : []),
-      ...(hasSettings ? ["--settings", "settings.json"] : []),
+      ...(a.pluginDir !== undefined
+        ? ["--plugin-dir", resolve(a.pluginDir)]
+        : []),
+      ...(a.hasSettings ? ["--settings", "settings.json"] : []),
       "--allowedTools",
-      ...tools,
+      ...a.tools,
     ];
     const child = spawn("claude", args, {
-      cwd,
+      cwd: a.cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    const timer = setTimeout(() => child.kill("SIGKILL"), a.timeoutMs);
     child.on("close", (code) => {
       clearTimeout(timer);
       resolvePromise({ code: code ?? 0, stdout });
     });
   });
 }
+
+/**
+ * Run the eval: every arm × every trial against the real `claude` CLI, with the
+ * metric computed per run and aggregated per arm. Requires `claude` on PATH and
+ * working model auth (e.g. `ANTHROPIC_API_KEY`). Thin wrapper over
+ * {@link runEvalWith} with the real agent runner.
+ */
+export async function runEval<M extends Metrics>(
+  spec: EvalSpec<M>,
+): Promise<EvalReport> {
+  return runEvalWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
@@ -276,12 +304,15 @@ export function aggregateStats(
 }
 
 /**
- * Run the eval: every arm × every trial against the real `claude` CLI, with the
- * metric computed per run and aggregated per arm. Requires `claude` on PATH and
- * working model auth (e.g. `ANTHROPIC_API_KEY`).
+ * The eval orchestration — every arm × trial via `runner`, metric computed per
+ * run and aggregated per arm. Exported with an injectable `runner` so the loop,
+ * `measure` context, and aggregation are unit-testable without spawning a model
+ * (pass a fake returning canned stream-json). `runEval` is this with the real
+ * agent runner.
  */
-export async function runEval<M extends Metrics>(
+export async function runEvalWith<M extends Metrics>(
   spec: EvalSpec<M>,
+  runner: AgentRunner,
 ): Promise<EvalReport> {
   const trials = spec.trials ?? 5;
   const model = spec.model ?? "haiku";
@@ -308,15 +339,15 @@ export async function runEval<M extends Metrics>(
             JSON.stringify(settings, null, 2).replaceAll("{cwd}", cwd),
           );
         }
-        const out = await spawnAgent(
-          spec.task,
+        const out = await runner({
+          task: spec.task,
           cwd,
           model,
           tools,
           hasSettings,
-          arm.pluginDir,
+          pluginDir: arm.pluginDir,
           timeoutMs,
-        );
+        });
         rows.push(spec.measure(makeContext(cwd, out)));
       } finally {
         rmSync(cwd, { recursive: true, force: true });

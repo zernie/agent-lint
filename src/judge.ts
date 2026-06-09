@@ -55,6 +55,7 @@ function firstJsonObject(s: string): unknown {
   }
 }
 
+/* v8 ignore start -- spawns the real claude CLI; parseJudgeOutput holds the logic */
 /** Grade `output` against `rubric` with a model. Synchronous (for `measure`). */
 export function judge(opts: JudgeOptions): JudgeResult {
   const threshold = opts.threshold ?? 0.5;
@@ -89,6 +90,7 @@ export function judge(opts: JudgeOptions): JudgeResult {
   }
   return parseJudgeOutput(res.stdout ?? "", threshold);
 }
+/* v8 ignore stop */
 
 /**
  * Parse a verdict out of the grader's stdout — pure, so the parsing is testable
