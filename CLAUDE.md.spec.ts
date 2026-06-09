@@ -182,7 +182,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "research/reference-verification-limits.md":
       "Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)",
     "research/harness-testing.md":
-      "Testing the Claude Code harness — the two-tier design (deterministic runHarnessTest + real-model runEval) and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, 156 wshobson skills)",
+      "Testing the Claude Code harness — the three-tier design (unit runHook + deterministic runHarnessTest + real-model runEval), the assembled-machine plugin loader, and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, wshobson agents/skills)",
     "research/skill-authoring-pains.md":
       "Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references",
     "docs/harness-testing.md":
