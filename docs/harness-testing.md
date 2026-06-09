@@ -118,7 +118,9 @@ To actually _execute_ untrusted third-party hooks, put a real boundary around it
 the cheapest correct one is the **ephemeral CI container** (the runner is the
 sandbox) — run that job only there, never in a plain local `npm test`. A
 heavier-weight local sandbox (bubblewrap/`bwrap`, `sandbox-exec`, or Docker) is a
-reasonable opt-in if you need it, but it is not built into the library today.
+reasonable opt-in if you need it, but it is not built into the library today —
+it's tracked as a potential improvement (an opt-in `sandbox:` option on the
+execution tiers) in [`research/feature-ideas.md`](../research/feature-ideas.md) §13.
 
 ## Deterministic tests in your runner
 
