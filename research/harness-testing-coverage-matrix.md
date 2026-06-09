@@ -46,21 +46,21 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 
 ## Surface × test type
 
-| Surface                                       | Unit / static                       | Integration (assembled, mock model)          | E2E / eval (real model, **non-deterministic**)                             |
-| --------------------------------------------- | ----------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
-| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                          | ✅ behaviour                                                               |
-| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                           | ✅                                                                         |
-| Hook — SessionStart                           | ✅ logic                            | ✅                                           | ✅                                                                         |
-| Hook — Stop                                   | ✅ logic                            | ✅                                           | ✅                                                                         |
-| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | ✅ fires (claude 2.1.169 — see spike)        | ✅                                                                         |
-| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                        | 🟡 partial                                                                 |
-| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                        | 🟡 partial                                                                 |
-| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour         | ✅ moves behaviour                                                         |
-| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | ✅ scripted `Skill` resolves via `pluginDir` | 🟡 outcome only; real activation pending (wire `pluginDir` into `runEval`) |
-| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked                 | ✅ via Task                                                                |
-| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked                 | ✅ via invocation                                                          |
-| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                                 | 🔴 bring-your-own                                                          |
-| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                        | ✅                                                                         |
+| Surface                                       | Unit / static                       | Integration (assembled, mock model)          | E2E / eval (real model, **non-deterministic**)                         |
+| --------------------------------------------- | ----------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                          | ✅ behaviour                                                           |
+| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                           | ✅                                                                     |
+| Hook — SessionStart                           | ✅ logic                            | ✅                                           | ✅                                                                     |
+| Hook — Stop                                   | ✅ logic                            | ✅                                           | ✅                                                                     |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | ✅ fires (claude 2.1.169 — see spike)        | ✅                                                                     |
+| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                        | 🟡 partial                                                             |
+| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                        | 🟡 partial                                                             |
+| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour         | ✅ moves behaviour                                                     |
+| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | ✅ scripted `Skill` resolves via `pluginDir` | ✅ real activation via `pluginDir` arm (off: no skill → on: activates) |
+| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked                 | ✅ via Task                                                            |
+| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked                 | ✅ via invocation                                                      |
+| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                                 | 🔴 bring-your-own                                                      |
+| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                        | ✅                                                                     |
 
 **The honest read of this table:** every surface has a **unit / static** check —
 for hooks it's logic, for prose it's reference verification (vigiles' first
@@ -68,8 +68,8 @@ pillar). The **integration (wiring) tier** now covers hooks, settings, **and
 skills** (via `pluginDir` native install — a scripted `Skill` resolves). The
 remaining gap is **subagents and slash commands**: still no deterministic middle
 (the loader materializes + warns, but materialization is not a test), so they drop
-to the costly, statistical **e2e** tier. Closing that — and wiring `pluginDir`
-into `runEval` for real skill activation — is the rest of build #1.
+to the costly, statistical **e2e** tier. Verifying they register via `--plugin-dir`
+too — as skills now do at both tiers — is the rest of build #1.
 
 ## Fidelity caveats (why some ✅/🟡 are softer than they look)
 
@@ -79,11 +79,14 @@ into `runEval` for real skill activation — is the rest of build #1.
    (`examples/harness/skill-outcome.eval.mjs`). We measure "if the agent reads
    this prose, does output change" — **not** "does Claude trigger this skill by
    its description." The activation mechanism, the thing that makes a skill a
-   skill, is untested. _(Update: shipped the **deterministic** half — a plugin
-   installed via `runHarnessTest({ pluginDir })` registers its skills, so a
-   scripted `Skill` tool_use resolves (Skills integration → ✅). The **eval** half
-   (real model choosing a skill, no faked read) still needs `pluginDir` wired into
-   `runEval`.)_
+   skill, is untested. _(**Closed.** `pluginDir` now installs a plugin natively at
+   both tiers: a scripted `Skill` resolves deterministically
+   (`runHarnessTest({ pluginDir })`), and the **real model genuinely activates** a
+   skill at the eval tier (`runEval` arm with `pluginDir` — verified: `off` has no
+   skill, `on` activates it). The faked working-dir read in
+   `skill-outcome.eval.mjs` is superseded by native install. Note: whether the
+   model **spontaneously** activates a skill for a matching task is the eval
+   measurement itself — often 0 for trivial skills — not a wiring gap.)_
 2. ~~**Edit/Write hooks are headless-gated.**~~ _Disproven by the 2026-06-09
    spike on claude 2.1.169 — Edit/Write hooks **do** fire in the deterministic
    tier (PostToolUse 3/3; a PreToolUse `Edit` block held). The gating was
@@ -98,28 +101,28 @@ into `runEval` for real skill activation — is the rest of build #1.
 
 ## Cross-cutting capabilities (provided vs. should)
 
-| Capability                                                                            | Status | Notes                                                                                                              |
-| ------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
-| Plugin loader — real layouts, materialize, surface warnings                           | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                                      |
-| Real-plugin dogfood — pinned, vendored snapshots                                      | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                                      |
-| Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                                                                      |
-| LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                                        |
-| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🟡     | `runHarnessTest({ pluginDir })` ships (skills resolve, deterministic test); `runEval` + subagents/commands pending |
-| ~~Deterministic Edit/Write driver~~ → regression test                                 | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)                         |
-| **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically                                                        |
-| **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                                                                   |
-| **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                                          |
-| Line-coverage tooling (c8/nyc) on the suite                                           | 🔴     | no coverage % exists today                                                                                         |
-| CI guard: fail (not skip) when `claude` is absent                                     | 🔴     | the deterministic tier silently skips off-box                                                                      |
+| Capability                                                                            | Status | Notes                                                                                                                      |
+| ------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Plugin loader — real layouts, materialize, surface warnings                           | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                                              |
+| Real-plugin dogfood — pinned, vendored snapshots                                      | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                                              |
+| Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                                                                              |
+| LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                                                |
+| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🟡     | **skills done both tiers** via `pluginDir` (`runHarnessTest` + `runEval`); subagents/commands not yet verified to register |
+| ~~Deterministic Edit/Write driver~~ → regression test                                 | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)                                 |
+| **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically                                                                |
+| **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                                                                           |
+| **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                                                  |
+| Line-coverage tooling (c8/nyc) on the suite                                           | 🔴     | no coverage % exists today                                                                                                 |
+| CI guard: fail (not skip) when `claude` is absent                                     | 🔴     | the deterministic tier silently skips off-box                                                                              |
 
 ## What we should build, prioritized (value × cost)
 
-1. **Native plugin-install fidelity for skills** — _in progress._ Shipped the
-   deterministic half: `runHarnessTest({ pluginDir })` passes `--plugin-dir`, so a
-   plugin's skills register and a scripted `Skill` resolves (test +
-   `examples/harness/fixture-skill-plugin`). **Remaining:** wire `pluginDir` into
-   `runEval` (real activation, closes caveat #1's eval half) and verify
-   subagents/commands register the same way.
+1. **Native plugin-install fidelity for skills** — _skills done._ `pluginDir`
+   ships at both tiers: `runHarnessTest({ pluginDir })` (deterministic resolve,
+   tested) and `runEval` arm `{ pluginDir }` (real activation, verified off-vs-on).
+   Closes caveat #1 for skills. **Remaining:** verify subagents (`agents/`) and
+   slash commands (`commands/`) register via `--plugin-dir` too (their integration
+   cells are still 🔴).
 2. **Sandboxed exec tier (bwrap, then docker)** — unlocks safely _running_
    untrusted third-party hooks/skills, the prerequisite for execute-and-verify
    dogfood. Medium cost; feature-ideas §13.

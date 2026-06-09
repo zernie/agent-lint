@@ -19,9 +19,12 @@
  * Real model → real cost. Needs the `claude` CLI + model auth and a built
  * dist/. External users import from the package: `from "vigiles/eval"`.
  *
- * Note: a SKILL.md in the working dir is not auto-loaded the way an installed
- * plugin skill is — so the arm difference is delivered by telling the agent to
- * read it. In a production setup the arm would toggle plugin installation.
+ * Note: this example delivers the arm difference by telling the agent to read a
+ * working-dir SKILL.md — the simplest illustration for a prose-only skill. To
+ * test a *real installed plugin* (so the model activates the skill by its
+ * description, not because we told it to read a file), give the arm
+ * `pluginDir: "/path/to/a/whole/plugin"` instead — that installs it natively via
+ * `claude --plugin-dir`. See `src/harness-test.test.ts` and the coverage matrix.
  */
 import { runEval, formatEvalReport } from "../../dist/eval.js";
 

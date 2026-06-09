@@ -45,9 +45,10 @@ assertHookBlocked(r); // exit 2, decision:"block", or permissionDecision:"deny"
 
 This is the **base of the pyramid** and the only tier that reaches every event.
 The deterministic mock (next section) drives SessionStart / Stop /
-UserPromptSubmit / Bash PreToolUse|PostToolUse — but **not** Edit/Write tool
-events (headless-gated), PreCompact, Notification, SessionEnd, or SubagentStop.
-At this tier _you_ hand the hook the event JSON, so all of them are testable.
+UserPromptSubmit / Bash **and Edit/Write** PreToolUse|PostToolUse — but **not**
+PreCompact, Notification, SessionEnd, or SubagentStop (the mock can't trigger
+them). At this tier _you_ hand the hook the event JSON, so all of them are
+testable.
 
 What it does **not** prove: that the hook is _wired in_ (settings point at it,
 `${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
@@ -118,6 +119,21 @@ This is the deterministic **wiring** tier for skills (does the skill resolve);
 whether the real model _chooses_ a skill by its description is the eval tier. See
 the worked test in `src/harness-test.test.ts` and the fixture at
 `examples/harness/fixture-skill-plugin/`.
+
+`runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
+and measure **real** activation (the model triggering the skill by its
+description), superseding the older "tell the agent to read a SKILL.md" trick:
+
+```ts
+await runEval({
+  arms: { off: {}, on: { pluginDir: "/path/to/a/whole/plugin" } },
+  task: "…a task the skill should handle…",
+  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+  measure: (ctx) => ({
+    usedSkill: (ctx.file("out.txt") ?? "").includes("MARKER"),
+  }),
+});
+```
 
 ### Dogfooding real third-party plugins (and the sandbox boundary)
 
