@@ -236,7 +236,10 @@ export default claude({
 });
 ```
 
-**Symbol references are cross-language.** `symbol("file", "name")` (and the markdown mark `` `vigiles:symbol file#name` ``) verify the named file actually **defines** the symbol — function, class, method, or constant — parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename it and `audit` fails. In markdown mode the `refs-hook` (PostToolUse) **forces the mark**, blocking edits that leave a code reference bare. [Symbol verification →](research/symbol-verification.md)
+There's a small family of inline **marks** that `audit` checks, each binding a reference to its real source:
+
+- `` `vigiles:symbol file#name` `` — the named file actually **defines** that symbol (function, class, method, constant), parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename it and `audit` fails; in markdown mode the `refs-hook` **forces the mark**, blocking edits that leave a code reference bare. [Details →](research/symbol-verification.md)
+- `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its server. `audit` reads `.mcp.json`, starts the server, lists its tools, and flags a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
 **Typo-safe at authoring time, too.** `vigiles generate-types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor; `generate-schema` gives Level 1 frontmatter the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](docs/linter-support.md#generate-types)
 
@@ -365,7 +368,26 @@ npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
-[Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [what's covered (matrix)](research/harness-testing-coverage-matrix.md) · [benchmarks](research/benchmarks-runtime-gates.md).
+<details>
+<summary><b>What's covered today — surface × tier</b></summary>
+
+| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
+| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
+| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
+| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
+| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
+| Subagents (`agents/`)                                         | 🟡 refs                      | 🔴 hard                     | ✅ via Task       |
+| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
+| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
+| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
+
+✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
+
+</details>
+
+[Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [benchmarks](research/benchmarks-runtime-gates.md).
 
 ## CLI & CI
 
