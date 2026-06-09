@@ -24,15 +24,26 @@ surface has _some_ unit-level check.
   hooks/settings against a **scripted mock model** (`runHarnessTest`), plus
   structural assembly (`loadPlugin`). No API key, no cost. Proves **wiring** — the
   surface fires / loads inside the real machine.
-- **E2E** — the whole machine under the **real model**, N trials per arm
-  (`runEval`). Proves **behaviour** — does the surface change what the agent does.
-  Statistical, real cost, non-deterministic.
+- **E2E / eval** — the whole machine under the **real model**, N trials per arm
+  (`runEval`). _Measures_ **behaviour** — does the surface change what the agent
+  does, and by how much. Statistical, real cost, non-deterministic.
 
 Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜ n/a.
 
+> **A note on the third column.** Unit and integration are _verification_ —
+> deterministic, pass/fail, run on every commit. Eval is a different axis:
+> _measurement_ — an A/B delta (mean ± se) you read, not a green/red you assert,
+> run occasionally on a keyed job. It's kept in the table for **surface-coverage
+> completeness** (for skills/subagents/commands it's the _only_ handle, so the row
+> would otherwise look like a dead end), but it isn't a "test" in the same sense.
+> Its own machinery — trials, variance, significance, LLM-judge — lives in
+> [`docs/harness-testing.md`](../docs/harness-testing.md) and
+> [`research/benchmarks-runtime-gates.md`](benchmarks-runtime-gates.md), not in
+> the cells below.
+
 ## Surface × test type
 
-| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E (real model)                      |
+| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E / eval (real model)               |
 | --------------------------------------------- | ----------------------------------- | ------------------------------------ | ------------------------------------- |
 | Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                  | ✅ behaviour                          |
 | Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                   | ✅                                    |
