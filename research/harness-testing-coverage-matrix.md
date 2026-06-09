@@ -70,8 +70,9 @@ installs a plugin, so skills, subagents, and slash commands all register and run
 scripted `Skill` resolves). The only remaining deterministic gaps are the
 non-Edit/Write events the mock can't trigger (PreCompact/Notification/etc.),
 **slash commands** (expansion is pre-model — needs capturing the mock-received
-prompt), and **subagents** (hard — nested mock sessions). MCP is unwired at every
-tier.
+prompt), and **subagents** (hard — nested mock sessions). For **MCP**, tool
+_references_ are now verifiable against a live server (`mcp.ts`), but the harness
+tiers (running a server inside a test) are still unwired.
 
 ## Fidelity caveats (why some ✅/🟡 are softer than they look)
 
