@@ -439,6 +439,11 @@ From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-al
 
 vigiles owns one thing: compile-time verification of typed specs against real linter configs, filesystems, and package.json, plus testing the harness those specs describe. Everything else it composes with rather than replaces — architectural linters ([ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)) referenced via `enforce()`, file-sync tools ([Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync)) that distribute the compiled output, and markdown/prose linters that check a different layer. [How vigiles composes with each, and why runtime-LLM rule checkers are the opposite paradigm →](docs/related-tools.md)
 
+## Documentation
+
+- **[docs/](docs/README.md)** — how-to & reference: the adoption ladder, CLI, linter support, the harness-testing guide, skills/agents.
+- **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
+
 ## License
 
 [MIT](LICENSE)

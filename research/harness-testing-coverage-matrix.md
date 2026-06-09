@@ -8,6 +8,8 @@
 > [`research/harness-testing.md`](harness-testing.md); the sandbox capability is
 > [`research/feature-ideas.md`](feature-ideas.md) §13.
 
+**Contents:** [test types](#the-three-test-types-columns) · [surface × tier](#surface--test-type) · [fidelity caveats](#fidelity-caveats-why-some--are-softer-than-they-look) · [cross-cutting capabilities](#cross-cutting-capabilities-provided-vs-should) · [what to build next](#what-we-should-build-prioritized-value--cost) · [the spikes](#spike--is-skill-activation-testable-for-real-2026-06-09-claude-21169)
+
 ## The three test types (columns)
 
 The standard pyramid, lowest cost first. Each maps to a vigiles entry point — and
