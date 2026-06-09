@@ -85,15 +85,31 @@ export interface HarnessTestSpec {
 }
 
 /**
+ * A hook invocation observed during the run, recorded (not inferred) from the
+ * `hook_response` system events the CLI emits in the stream — so a test can
+ * assert which hook fired and whether it blocked, instead of inferring it from a
+ * marker file the hook had to write.
+ */
+export interface HookFire {
+  /** The hook label, e.g. `"PreToolUse:Edit"` (`Event:Matcher`). */
+  readonly name: string;
+  /** The hook event, e.g. `"PreToolUse"`, `"PostToolUse"`, `"Stop"`. */
+  readonly event: string;
+  /** The hook process exit code (2 = block), or undefined if not reported. */
+  readonly exitCode: number | undefined;
+  /** Whether the hook blocked / errored (exit ≠ 0 or outcome "error"). */
+  readonly blocked: boolean;
+  /** What the hook printed (its block reason / diagnostic), or "". */
+  readonly output: string;
+}
+
+/**
  * The observable record of ONE run — the unified shape produced by BOTH testing
  * tiers: `runHarnessTest`'s result and `runEval`'s `measure` ctx (`eval.ts`)
  * both satisfy it. That's what lets the bare predicates in `harness-assert.ts`
- * (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith`) run over either,
- * with the testing helpers asserting and eval measuring over the same vocabulary.
- *
- * Deferred: `trace.hooks` (which hook fired + its decision). It needs new mock
- * instrumentation to *record* hook invocations rather than infer them from
- * marker files — punted until something needs it.
+ * (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith` / `hookFired` /
+ * `outputContains`) run over either, with the testing helpers asserting and eval
+ * measuring over the same vocabulary.
  */
 export interface Trace {
   /**
@@ -103,6 +119,13 @@ export interface Trace {
    * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
    */
   readonly toolCalls: readonly ToolCall[];
+  /**
+   * The hooks that fired during the run, each with its decision — parsed from
+   * the CLI's `hook_response` stream events. Same capture requirement as
+   * `toolCalls` (empty without the stream). Lets a test assert hook firing
+   * honestly instead of via a marker file.
+   */
+  readonly hooks: readonly HookFire[];
   /** The agent's final answer text (the terminal `result` event), or "". */
   readonly output: string;
   /** Number of model turns. */
@@ -213,6 +236,42 @@ export function parseOutput(stdout: string): string {
   return typeof result === "string" ? result : "";
 }
 
+/**
+ * The hooks that fired, recorded from the CLI's `hook_response` stream events
+ * (`--output-format stream-json`). Each carries the hook name/event, its exit
+ * code, and whether it blocked — the honest record vs. inferring from marker
+ * files. Returns [] for the non-stream `json` output (no per-hook events).
+ */
+function toHookFire(evt: Record<string, unknown>): HookFire {
+  const exitCode =
+    typeof evt.exit_code === "number" ? evt.exit_code : undefined;
+  return {
+    name: typeof evt.hook_name === "string" ? evt.hook_name : "",
+    event: typeof evt.hook_event === "string" ? evt.hook_event : "",
+    exitCode,
+    blocked:
+      evt.outcome === "error" || (exitCode !== undefined && exitCode !== 0),
+    output: typeof evt.output === "string" ? evt.output : "",
+  };
+}
+
+export function parseHooks(stdout: string): HookFire[] {
+  const hooks: HookFire[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (evt.type === "system" && evt.subtype === "hook_response") {
+      hooks.push(toHookFire(evt));
+    }
+  }
+  return hooks;
+}
+
 /** Whether the `claude` CLI is available — harness tests need it. */
 export function claudeAvailable(): boolean {
   try {
@@ -317,6 +376,7 @@ export async function runHarnessTest(
       cwd,
       turns: mock.count,
       toolCalls: parseToolCalls(out.stdout),
+      hooks: parseHooks(out.stdout),
       output: parseOutput(out.stdout),
       file: (p: string): string | null => {
         const f = resolve(cwd, p);
