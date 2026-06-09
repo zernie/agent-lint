@@ -97,6 +97,7 @@ types applied.
 
 ## See also
 
+- [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md) — the **whole potential surface** of harness testing (unit / integration / e2e + sandboxing), marking what's shipped vs. what we should build.
 - [`docs/harness-testing.md`](harness-testing.md) — the full guide (four layers:
   verify-refs / hook unit / deterministic / eval, runner-agnostic usage, plugin
   loader, variance, judge, CLI fallback).

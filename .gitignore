@@ -6,3 +6,4 @@ logo-v*.png
 
 # vigiles transient skill-runtime state
 .vigiles/active-skill.json
+examples/demo/.vigiles/

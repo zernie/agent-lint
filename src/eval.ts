@@ -47,6 +47,14 @@ export interface EvalArm {
    * src/plugin-loader.ts.
    */
   readonly plugin?: string;
+  /**
+   * Path to a plugin dir to install NATIVELY (`claude --plugin-dir`) for this
+   * arm, so its skills/commands/agents activate the real way — the real model
+   * can trigger a skill by its description (vs. `plugin`, which materializes a
+   * file subset that does not register skills). Point at a COMPLETE plugin. Lets
+   * an arm be "skill installed" vs "off" to measure real activation.
+   */
+  readonly pluginDir?: string;
 }
 
 /** Context handed to `measure` after a run, to compute that run's metrics. */
@@ -131,6 +139,7 @@ function spawnAgent(
   model: string,
   tools: readonly string[],
   hasSettings: boolean,
+  pluginDir: string | undefined,
   timeoutMs: number,
 ): Promise<RunOut> {
   return new Promise((resolvePromise) => {
@@ -143,6 +152,7 @@ function spawnAgent(
       model,
       "--permission-mode",
       "acceptEdits",
+      ...(pluginDir !== undefined ? ["--plugin-dir", resolve(pluginDir)] : []),
       ...(hasSettings ? ["--settings", "settings.json"] : []),
       "--allowedTools",
       ...tools,
@@ -280,6 +290,7 @@ export async function runEval<M extends Metrics>(
           model,
           tools,
           hasSettings,
+          arm.pluginDir,
           timeoutMs,
         );
         rows.push(spec.measure(makeContext(cwd, out)));

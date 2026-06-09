@@ -1,0 +1,5 @@
+{
+  "name": "demo",
+  "description": "Minimal self-contained plugin for the deterministic skill-wiring test.",
+  "version": "0.0.0"
+}

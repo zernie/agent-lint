@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 10 npm scripts from package.json. */
+  /** 11 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -86,9 +86,10 @@ declare module "vigiles/generated" {
     | "test:harness"
     | "test:eval"
     | "test:vitest"
-    | "test:jest";
+    | "test:jest"
+    | "test:types";
 
-  /** 64 project files. */
+  /** 69 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -121,8 +122,11 @@ declare module "vigiles/generated" {
     | "src/inline.ts"
     | "src/integrity.ts"
     | "src/jest.ts"
+    | "src/judge.test.ts"
     | "src/judge.ts"
     | "src/linters.ts"
+    | "src/mcp.test.ts"
+    | "src/mcp.ts"
     | "src/mock-model.ts"
     | "src/orphans.test.ts"
     | "src/orphans.ts"
@@ -132,6 +136,8 @@ declare module "vigiles/generated" {
     | "src/proofs.ts"
     | "src/refs.test.ts"
     | "src/refs.ts"
+    | "src/run-hook.test.ts"
+    | "src/run-hook.ts"
     | "src/run-scripts.test.ts"
     | "src/run-scripts.ts"
     | "src/session.test.ts"
@@ -257,8 +263,11 @@ declare module "vigiles/spec" {
       | "src/inline.ts"
       | "src/integrity.ts"
       | "src/jest.ts"
+      | "src/judge.test.ts"
       | "src/judge.ts"
       | "src/linters.ts"
+      | "src/mcp.test.ts"
+      | "src/mcp.ts"
       | "src/mock-model.ts"
       | "src/orphans.test.ts"
       | "src/orphans.ts"
@@ -268,6 +277,8 @@ declare module "vigiles/spec" {
       | "src/proofs.ts"
       | "src/refs.test.ts"
       | "src/refs.ts"
+      | "src/run-hook.test.ts"
+      | "src/run-hook.ts"
       | "src/run-scripts.test.ts"
       | "src/run-scripts.ts"
       | "src/session.test.ts"
@@ -302,6 +313,7 @@ declare module "vigiles/spec" {
       | "test:harness"
       | "test:eval"
       | "test:vitest"
-      | "test:jest";
+      | "test:jest"
+      | "test:types";
   }
 }

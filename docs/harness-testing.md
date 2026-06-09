@@ -45,9 +45,10 @@ assertHookBlocked(r); // exit 2, decision:"block", or permissionDecision:"deny"
 
 This is the **base of the pyramid** and the only tier that reaches every event.
 The deterministic mock (next section) drives SessionStart / Stop /
-UserPromptSubmit / Bash PreToolUse|PostToolUse — but **not** Edit/Write tool
-events (headless-gated), PreCompact, Notification, SessionEnd, or SubagentStop.
-At this tier _you_ hand the hook the event JSON, so all of them are testable.
+UserPromptSubmit / Bash **and Edit/Write** PreToolUse|PostToolUse — but **not**
+PreCompact, Notification, SessionEnd, or SubagentStop (the mock can't trigger
+them). At this tier _you_ hand the hook the event JSON, so all of them are
+testable.
 
 What it does **not** prove: that the hook is _wired in_ (settings point at it,
 `${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
@@ -90,6 +91,103 @@ const { warnings } = loadPlugin("./some-plugin");
 if (warnings.length) console.warn(warnings.join("\n"));
 // ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
 ```
+
+### Native install: testing skills (`pluginDir`)
+
+`plugin` materializes a plugin's files into the sandbox — good for hooks and
+CLAUDE.md, but those files do **not** register a plugin's _skills_ for the `Skill`
+tool. To test skills, install the plugin **natively** with `pluginDir` (passes
+`claude --plugin-dir`), so its skills register and a scripted `Skill` tool_use
+resolves. Point it at a **complete** plugin (native install resolves the plugin's
+internal references). Add `transcript: true` to capture the event stream so you
+can assert the skill's body was injected:
+
+```ts
+import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
+
+const r = await runHarnessTest({
+  pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
+  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+  transcript: true, // populate r.toolCalls
+  model: scriptModel([
+    { tool: "Skill", input: { skill: "demo:greet" } }, // resolves the skill
+    { text: "ok" },
+  ]),
+});
+assertSkillResolved(r, "demo:greet"); // a non-error Skill tool_use by that name
+assertToolNotUsed(r, /^mcp__/); // the safety negative: no MCP tool was used
+```
+
+**Assert on the agent's _actions_, not stdout.** With `transcript: true`,
+`r.toolCalls` is the parsed list of tools the agent invoked (each paired with its
+result). The helpers `assertToolUsed(r, name|/regex/)`, `assertToolNotUsed(...)`
+(the safety negative — _"the destructive tool was never called"_), and
+`assertSkillResolved(r, "plugin:skill")` are correct invariants — unlike
+`r.stdout.includes(marker)`, which false-positives on echoes and needs a marker
+injected (so it can't test a _real_ plugin). The worked tests in
+`src/harness-test.test.ts` assert real **obra/superpowers** and **wshobson/agents**
+skills this way — no marker needed. This is the deterministic **wiring** tier
+(does the skill resolve); whether the real model _chooses_ a skill is the eval
+tier.
+
+Beyond a single tool, you can assert on the **sequence and budget** of what the
+agent did:
+
+```ts
+assertToolSequence(r, ["Read", "Edit"]); // ordering — Read before Edit
+assertToolCount(r, "Write", { max: 1 }); // budget — no runaway writes
+assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
+```
+
+`assertToolSequence` matches an in-order subsequence (gaps allowed);
+`assertToolCount` takes `{ min, max, exactly }`; `assertToolCalls` is the escape
+hatch for a custom invariant like _"every Edit was preceded by a Read"_.
+
+`runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
+and measure **real** activation (the model triggering the skill by its
+description), superseding the older "tell the agent to read a SKILL.md" trick:
+
+```ts
+await runEval({
+  arms: { off: {}, on: { pluginDir: "/path/to/a/whole/plugin" } },
+  task: "…a task the skill should handle…",
+  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+  measure: (ctx) => ({
+    usedSkill: ctx.sh("grep -c MARKER out.txt") !== "0",
+  }),
+});
+```
+
+### Dogfooding real third-party plugins (and the sandbox boundary)
+
+The loader is exercised against **real, pinned** Claude Code plugins, not just
+synthetic look-alikes:
+[`real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs)
+loads obra/superpowers (the `hooks/hooks.json` convention + `${CLAUDE_PLUGIN_ROOT}`
+expansion) and
+[`real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs)
+loads a wshobson/agents sub-plugin (the no-hooks subagents+commands+skills shape,
+where the whole result is the warnings). Both are **pinned, vendored snapshots**
+under [`examples/harness/vendor/`](../examples/harness/vendor) — each carrying the
+upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
+clone at test time, so they run **offline and deterministically**. Refresh
+deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
+
+**The safety line: `loadPlugin` parses, it never executes.** A hook is a real
+child process with full `env` — `runHook`/`runHarnessTest` run the _actual_ hook,
+not a reimplementation, and there is **no sandbox** beyond a temp cwd and a
+timeout. That is fine for hooks _you_ wrote and for read-only governance hooks
+(inspect the event → decide), but a third-party **setup** hook (superpowers'
+`SessionStart`, say) can install, write, or call out. So the dogfood asserts such
+a hook is correctly **wired** and stops there; it does not run it.
+
+To actually _execute_ untrusted third-party hooks, put a real boundary around it:
+the cheapest correct one is the **ephemeral CI container** (the runner is the
+sandbox) — run that job only there, never in a plain local `npm test`. A
+heavier-weight local sandbox (bubblewrap/`bwrap`, `sandbox-exec`, or Docker) is a
+reasonable opt-in if you need it, but it is not built into the library today —
+it's tracked as a potential improvement (an opt-in `sandbox:` option on the
+execution tiers) in [`research/feature-ideas.md`](../research/feature-ideas.md) §13.
 
 ## Deterministic tests in your runner
 
@@ -237,6 +335,8 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 - [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
+- [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
+- [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
 - [`bench/evals/refs-hook.eval.mjs`](../bench/evals/refs-hook.eval.mjs) — the refs-hook A/B (benchmark #4).
 
