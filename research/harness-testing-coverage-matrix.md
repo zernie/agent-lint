@@ -194,6 +194,30 @@ here for later:
    `checkMonotonicity` proof (`src/proofs.ts`). Builds on the `se` `runEval` already
    computes. Small–medium cost.
 
+### Trace unification & shared vocabulary (from the prior-art survey)
+
+Prior art on testing non-deterministic AI tools
+([`testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md)) converges on
+one model — **a shared `Trace` + a deterministic predicate vocabulary, with judge
+a minority and eval a separate consumer**. The gaps it points at, in priority:
+
+10. **Unify the `Trace`.** Today `r.toolCalls` is on the mock-tier result while
+    `runEval`'s `measure` ctx is only `file`/`sh`. Make both tiers produce one
+    `Trace` shape (tools + `file`/`sh` + `output` + `hooks` + `turns`) so the same
+    predicates run everywhere. The keystone — everything below depends on it.
+11. **Capture `trace.output` (final answer) and `trace.hooks` (which fired +
+    decision).** Output is buried in stream-json; hook-firing is inferred via
+    marker files today. Needed for adherence/judge and for honest hook tests.
+12. **Split predicates from `assert*`.** Factor bare `usedTool` / `skillResolved`
+    / `toolCount` (return values) out of the throwing `assertTool*`, so eval
+    `measure` reuses the same vocabulary without the testing/eval conflation.
+13. **`pass^k` reliability metric** — report "succeeded every trial" (τ-bench's
+    pass^k), not just mean ± se. The reliability question for a non-deterministic
+    harness. Pairs with #9.
+14. **Tool-_argument_ assertions** — DeepEval-style: assert on a tool call's
+    `input`, not just its name (e.g. `Edit` targeted the right file). Cheap
+    extension of `toolCalls`.
+
 ## Spike — is skill activation testable for real? (2026-06-09, claude 2.1.169)
 
 Caveat #1 said skill activation is _faked_. A spike against the real CLI settles

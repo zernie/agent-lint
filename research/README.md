@@ -24,6 +24,7 @@ how-to docs live in [`../docs/`](../docs/README.md).)
 - [`harness-testing.md`](harness-testing.md) — the three-tier design (unit `runHook` / deterministic `runHarnessTest` / eval `runEval`) + the plugin loader. Start here.
 - [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md) — **the living roadmap**: every plugin surface × tier, what's shipped vs. what's next, the spikes, and the parked ideas. The session centerpiece.
 - [`benchmarks-runtime-gates.md`](benchmarks-runtime-gates.md) — the evals run in anger: runtime gates are a no-op/net-negative; verifying the map beats policing the route.
+- [`testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md) — prior art on testing non-deterministic AI/agent tools (DeepEval, Braintrust, τ-bench, pass^k, procedure-aware eval) and the `Trace` + predicate model it implies.
 
 ## Skills
 
