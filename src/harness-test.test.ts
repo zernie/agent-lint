@@ -22,6 +22,9 @@ import {
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolSequence,
+  assertToolCount,
+  assertToolCalls,
 } from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
@@ -226,6 +229,46 @@ for (const [label, dir, skill] of [
     }
   });
 }
+
+// Sequence / budget invariants over a REAL run: the agent reads then edits, and
+// we assert the workflow — ordering ("Read before Edit", the rule Claude enforces),
+// a budget ("≤ 1 Edit, 0 Writes"), and a custom invariant.
+maybe("tool-call sequence + budget invariants hold on a real run", async () => {
+  const r = await runHarnessTest({
+    files: { "note.txt": "old" },
+    allowedTools: ["Read", "Edit", "Write", "Bash"],
+    transcript: true,
+    model: scriptModel([
+      { tool: "Read", input: { file_path: "note.txt" } },
+      {
+        tool: "Edit",
+        input: { file_path: "note.txt", old_string: "old", new_string: "new" },
+      },
+      { text: "done" },
+    ]),
+    timeoutMs: 90000,
+  });
+  try {
+    assertToolSequence(r, ["Read", "Edit"]); // ordering
+    assertToolCount(r, "Edit", { max: 1 }); // budget
+    assertToolCount(r, "Write", { exactly: 0 });
+    assertToolCalls(
+      r,
+      (calls) => {
+        // every Edit was preceded by a Read
+        let read = false;
+        for (const c of calls) {
+          if (c.name === "Read") read = true;
+          if (c.name === "Edit" && !read) return false;
+        }
+        return true;
+      },
+      "an Edit happened before any Read",
+    );
+  } finally {
+    r.cleanup();
+  }
+});
 
 test("parseToolCalls: pairs tool_use with tool_result from a stream-json transcript", () => {
   const stream = [
