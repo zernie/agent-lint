@@ -31,8 +31,6 @@
 - [Quick start](#quick-start)
 - [Three rule types](#three-rule-types) — `enforce` / `guidance` / `guard`
 - [Verified references](#verified-references) — `file` / `cmd` / `symbol` / `ref`
-- [Type-safe rule references](#type-safe-rule-references)
-- Reference: [CLI](#cli) · [GitHub Action](#github-action) · [Plugin](#claude-code-plugin) · [Validation](#validation) · [Skills](#skills)
 
 **Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · eval whether your hooks, skills, and CLAUDE.md actually change what the agent does
 
@@ -42,7 +40,7 @@
 - [Run them as a CI command](#run-them-as-a-ci-command)
 - [Test the whole machine](#test-the-whole-machine)
 
-**More** — [Maturity levels](#maturity-levels) · [Output targets](#output-targets) · [Related tools](#related-tools)
+**More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Maturity levels](#maturity-levels) · [Related tools](#related-tools)
 
 </details>
 
@@ -193,15 +191,7 @@ npx vigiles init
 
 The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI.
 
-Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` to find rules that can be upgraded to compile-verified `enforce()`. Already have a hand-written CLAUDE.md? The wizard detects it and offers migration.
-
-| Flag                 | Effect                                                |
-| -------------------- | ----------------------------------------------------- |
-| `--strict`           | Sets require-spec and require-skill-spec to `"error"` |
-| `--target=AGENTS.md` | Creates AGENTS.md spec instead of CLAUDE.md           |
-| `--no-gha`           | Skip adding CI step to GHA workflow                   |
-
-Works the same for humans and agents — fully non-interactive. [Agent setup guide →](docs/agent-setup.md) | [Agent workflows →](docs/agent-workflows.md)
+Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` to find rules that can be upgraded to compile-verified `enforce()`. Already have a hand-written CLAUDE.md? The wizard detects it and offers migration. Flags (`--strict`, `--target=AGENTS.md`, `--no-gha`) and non-interactive agent usage are in the [CLI reference](docs/cli.md) and [agent setup guide](docs/agent-setup.md).
 
 ## Three Rule Types
 
@@ -223,20 +213,7 @@ Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [
 "research-first": guidance("Google unfamiliar APIs first."),
 ```
 
-**`guard()`** — reactive: runs a command when watched files change. One declaration emits hooks for every supported system (Claude Code PostToolUse, husky pre-commit, etc.). Eliminates copy-pasting the same trigger across `.claude/settings.json`, `.husky/`, and CI configs.
-
-```typescript
-"recompile-specs": guard(
-  { watch: "*.spec.ts", run: "npx vigiles compile" },
-  "Recompile instruction files when any spec changes.",
-),
-"regen-types": guard(
-  { watch: ["eslint.config.*", "package.json"], run: "npx vigiles generate-types" },
-  "Regenerate types when linter config or deps change.",
-),
-```
-
-Same monotonicity guarantees as `enforce()` — guards can't be silently removed.
+**`guard()`** — reactive: runs a command when watched files change (e.g. `*.spec.ts` → `npx vigiles compile`). One declaration emits hooks for every supported system (Claude Code PostToolUse, husky pre-commit, etc.) — no copy-pasting the same trigger across `.claude/settings.json`, `.husky/`, and CI. Same monotonicity guarantees as `enforce()`. [Full spec format →](docs/spec-format.md)
 
 ## Verified References
 
@@ -259,109 +236,9 @@ export default claude({
 });
 ```
 
-Skill specs use the same helpers for verified references inside instructions. [Full spec format →](docs/spec-format.md)
+**Symbol references are cross-language.** `symbol("file", "name")` (and the markdown mark `` `vigiles:symbol file#name` ``) verify the named file actually **defines** the symbol — function, class, method, or constant — parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename it and `audit` fails. In markdown mode the `refs-hook` (PostToolUse) **forces the mark**, blocking edits that leave a code reference bare. [Symbol verification →](research/symbol-verification.md)
 
-### Symbol references (cross-language)
-
-`symbol("file", "name")` (and the markdown mark `` `vigiles:symbol file#name` ``) verify that the named file actually **defines** the symbol — a function, class, method, or constant — parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename the function and `audit` fails; no project-wide index, no autoloader guessing — it parses the one named file.
-
-In markdown mode the `refs-hook` (PostToolUse) **forces the mark**: it blocks an edit that leaves a code reference bare, telling the agent to write `` `vigiles:symbol path#name` `` or opt out with `<!-- vigiles:ignore -->`. The harness makes the agent mark its references at write time, with full context; `audit` re-verifies them. [Symbol verification →](research/symbol-verification.md)
-
-## Type-Safe Rule References
-
-`vigiles generate-types` scans your linter configs and emits `.vigiles/generated.d.ts`. With this file, `enforce("eslint/no-consolee")` is a red squiggle in your editor — a typo caught at authoring time, not a runtime surprise. Without it, everything falls back to broad types and still works.
-
-```bash
-$ npx vigiles generate-types
-  eslint: 64 enabled rules  |  ruff: 12  |  npm scripts: 5  |  project files: 42
-✓ Generated .vigiles/generated.d.ts
-```
-
-Commit the file to git. CI can verify it's fresh: `npx vigiles generate-types --check`. [How it works →](docs/linter-support.md#generate-types)
-
-For markdown frontmatter (Level 1), `vigiles generate-schema` gives the same authoring-time feedback without TypeScript: it emits a JSON Schema from your enabled rules, and your editor's YAML language server autocompletes rule names and squiggles typos. CI freshness check: `npx vigiles generate-schema --check`.
-
-## CLI
-
-```bash
-npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
-npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
-npx vigiles refs <file.md>          # Check the symbol references in an instruction file
-npx vigiles test [files...]         # Run *.harness.mjs deterministic harness tests (no API key)
-npx vigiles eval [files...]         # Run *.eval.mjs real-model harness evals (--trials=N)
-npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
-npx vigiles generate-types --check  # Verify .d.ts is up to date
-npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
-npx vigiles generate-schema --check # Verify schema.json is up to date
-```
-
-## GitHub Action
-
-```yaml
-- uses: zernie/vigiles@main # runs `audit` by default
-- uses: zernie/vigiles@main
-  with:
-    command: compile # compile specs in CI
-```
-
-To verify generated types are fresh in CI:
-
-```yaml
-- run: npx vigiles generate-types --check
-```
-
-## Claude Code Plugin
-
-**Install the plugin.** Without it, you're responsible for manually running `compile` and `generate-types`. With it, the agent works with fresh instruction files automatically.
-
-```bash
-npx skills add zernie/vigiles
-```
-
-The plugin provides two hooks:
-
-- **PreToolUse** (Edit/Write) — blocks direct edits to compiled `.md` files and redirects the agent to the `.spec.ts` source
-- **PostToolUse** (Edit/Write) — auto-runs `generate-types` on linter config changes, `compile` on `.spec.ts` changes
-
-## Validation
-
-`vigiles audit` validates instruction files with four rules:
-
-| Rule                                                     | Default  | What it checks                                                               |
-| -------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| [`require-spec`](docs/rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter |
-| [`require-skill-spec`](docs/rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                              |
-| [`integrity`](docs/rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                         |
-| [`coverage`](docs/rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                    |
-
-Configure in `.vigilesrc.json`:
-
-```json
-{
-  "rules": {
-    "require-spec": "error",
-    "integrity": "error",
-    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
-  }
-}
-```
-
-Disable per-file with `<!-- vigiles-disable require-spec -->` at the top of the markdown.
-
-## Skills
-
-Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
-
-| Skill                  | What it does                                                            |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step                    |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                  |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                     |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
-| `enforce-rules-format` | Validate all rules have enforcement classification                      |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
+**Typo-safe at authoring time, too.** `vigiles generate-types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor; `generate-schema` gives Level 1 frontmatter the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](docs/linter-support.md#generate-types)
 
 ## Test your Claude Code harness
 
@@ -426,10 +303,7 @@ const r = await runHarnessTest({
 assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
 ```
 
-The deterministic tier is reliable for **SessionStart, Stop, UserPromptSubmit,
-and Bash PreToolUse/PostToolUse** hooks — the governance/policy shapes most real
-plugins use; Edit/Write tool-event hooks are headless-gated, so test those at the
-unit tier or via the eval tier.
+Reliable for **SessionStart, Stop, UserPromptSubmit, and Bash PreToolUse/PostToolUse** hooks — the governance shapes most plugins use. Edit/Write tool-event hooks are headless-gated, so test those at the unit tier below.
 
 ### Unit-test a hook — no `claude` at all
 
@@ -465,20 +339,35 @@ npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 
 ### Test the whole machine
 
-Point `plugin` at a plugin (or `"./"` for your repo)
-and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md,
-skills, subagents and commands — is loaded into the sandbox, so you test what
-ships, not a retyped subset. `loadPlugin(...).warnings` flags surfaces only a
-real model can drive (subagents, slash commands, MCP), so loading a whole plugin
-never silently tests an empty machine. The library is plain async functions, so
-it runs in **node:test, vitest, or jest** unchanged (shared `expect.extend`
-matchers for the latter two).
+Point `plugin` at a plugin (or `"./"` for your repo) and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md, skills, subagents and commands — is loaded into the sandbox, so you test what ships, not a retyped subset. `loadPlugin(...).warnings` flags surfaces only a real model can drive (subagents, slash commands, MCP), so a whole-plugin load never silently tests an empty machine. The library is plain async functions — it runs in **node:test, vitest, or jest** unchanged.
 
-[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). The design
-rationale and a coverage assessment against real plugins (protect-mcp,
-obra/superpowers, block-no-verify, 156 wshobson skills) are in
-[`research/harness-testing.md`](research/harness-testing.md); findings from
-running this harness in anger live in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). Design rationale and a coverage assessment against real plugins live in [`research/harness-testing.md`](research/harness-testing.md); benchmark findings in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+
+## CLI & CI
+
+```bash
+npx vigiles init        # Scaffold a spec (full setup wizard)
+npx vigiles compile     # Compile .spec.ts → .md
+npx vigiles audit       # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
+npx vigiles test        # Run *.harness.mjs deterministic harness tests (no API key)
+npx vigiles eval        # Run *.eval.mjs real-model harness evals (--trials=N)
+```
+
+`vigiles audit` enforces four rules — `require-spec`, `require-skill-spec`, `integrity`, `coverage` — configurable in `.vigilesrc.json`. The GitHub Action runs `audit` by default; the Claude Code plugin (`npx skills add zernie/vigiles`) adds the Pre/PostToolUse hooks that block direct `.md` edits and auto-compile specs. [Full CLI, Action, plugin & validation reference →](docs/cli.md)
+
+## Skills
+
+Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
+
+| Skill                  | What it does                                                            |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step                    |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                  |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                     |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
+| `enforce-rules-format` | Validate all rules have enforcement classification                      |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
 
 ## Maturity Levels
 
@@ -491,20 +380,9 @@ From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-al
 | 2     | Architecture as Code | Custom lint rules + enforced CLAUDE.md                              |
 | 3     | The Organism         | CI + custom rules + visual tests + observability + scheduled agents |
 
-## Output Targets
-
-Specs compile to `CLAUDE.md` by default. Set `target: "AGENTS.md"` or `target: ["CLAUDE.md", "AGENTS.md"]` for multiple outputs from one spec. For non-markdown formats (`.cursorrules`, Copilot), use [rule-porter](https://github.com/nichochar/rule-porter) or [rulesync](https://github.com/dyoshikawa/rulesync) to convert. [Spec format →](docs/spec-format.md)
-
 ## Related Tools
 
-vigiles doesn't try to do everything. It owns one thing: compile-time verification of typed specs against real linter configs, filesystems, and package.json. Everything else, compose:
-
-- **Architectural linting** — [ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser), [Steiger](https://github.com/feature-sliced/steiger). Reference their rules via `enforce()`.
-- **File sync** across agents — [Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync), [block/ai-rules](https://github.com/block/ai-rules). vigiles compiles the source; sync tools distribute.
-- **Markdown linting** — [markdownlint](https://github.com/DavidAnson/markdownlint). vigiles generates markdown; structure is correct by construction.
-- **Code-block linting in docs** — [eslint-plugin-markdown](https://github.com/eslint/eslint-plugin-markdown) for syntax, [twoslash](https://shikijs.github.io/twoslash/) for TS type-checking.
-- **Prose quality** — [Vale](https://vale.sh). Different concern.
-- **Runtime LLM rule checking** (e.g. ai-rulez `"AI-Powered Rule Enforcement"`) — opposite paradigm. Those tools send your code to a model on every check, costing tokens and giving non-reproducible verdicts. vigiles compiles once and checks deterministically forever after with `eslint`, `ruff`, `tsc`, Cedar evaluation — tools as deterministic as their inputs.
+vigiles owns one thing: compile-time verification of typed specs against real linter configs, filesystems, and package.json, plus testing the harness those specs describe. Everything else it composes with rather than replaces — architectural linters ([ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)) referenced via `enforce()`, file-sync tools ([Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync)) that distribute the compiled output, and markdown/prose linters that check a different layer. [How vigiles composes with each, and why runtime-LLM rule checkers are the opposite paradigm →](docs/related-tools.md)
 
 ## License
 
