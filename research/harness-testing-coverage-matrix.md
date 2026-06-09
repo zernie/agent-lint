@@ -218,6 +218,29 @@ a minority and eval a separate consumer**. The gaps it points at, in priority:
     `input`, not just its name (e.g. `Edit` targeted the right file). Cheap
     extension of `toolCalls`.
 
+**Execution plan (follow-up PR `feat: unified Trace + predicate vocabulary`).**
+Do this _after_ PR #26 merges, on a fresh branch off `main` — don't pile it onto
+#26. It is **mostly additive / non-breaking** (do the API shape right now while
+there are ~zero users, so breaking is free):
+
+- **Additive, no migration** (#10–14 except hooks): export bare predicates
+  (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith`) and make the
+  existing `assert*` thin wrappers over them; give `runEval`'s `measure` ctx the
+  same `tools` (+ `output`) the harness result has; add `r.output` (parse the
+  final answer from the stream we already capture); add `pass^k` to the eval
+  report alongside mean ± se; add a tool-argument predicate over `toolCalls[].input`.
+- **The one hard part — defer:** `trace.hooks` (which hook fired + its decision)
+  needs new mock/harness instrumentation to _record_ hook invocations rather than
+  infer them from marker files. Not required for the rest; punt until something
+  needs it.
+- **Keep the two consumers separate** (the corrected model in
+  [`research/testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md)):
+  predicates are bare; only the testing helpers carry `assert` and throw; eval
+  consumes the same bare predicates as metrics. Don't make one dual-purpose fn.
+- **Acceptance:** existing `src/harness-test.test.ts` / `src/harness-assert.test.ts`
+  still green; the skill-wiring and real-plugin tests re-pointed onto the unified
+  shape; `npm test` + `vigiles test` + `audit` all pass.
+
 ## Spike — is skill activation testable for real? (2026-06-09, claude 2.1.169)
 
 Caveat #1 said skill activation is _faked_. A spike against the real CLI settles
