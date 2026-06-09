@@ -17,6 +17,7 @@ import {
   runHarnessTest,
   type HarnessTestSpec,
   type HarnessTestResult,
+  type ToolCall,
 } from "./harness-test.js";
 import type { EvalReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
@@ -76,6 +77,134 @@ export function assertHookAllowed(r: HookRunResult): void {
     fail(
       `expected the hook to allow, but it blocked (exit ${String(r.exitCode)}, decision ${String(r.decision)})`,
     );
+  }
+}
+
+function nameMatches(name: string, pat: string | RegExp): boolean {
+  return typeof pat === "string" ? name === pat : pat.test(name);
+}
+
+function toolNames(r: HarnessTestResult): string {
+  return r.toolCalls.map((c) => c.name).join(", ") || "none";
+}
+
+/**
+ * Assert the agent invoked a tool whose name matches `name` (string = exact,
+ * RegExp = test) — e.g. a skill (`"Skill"`), an MCP tool (`/^mcp__github__/`), or
+ * a subagent (`"Task"`). Needs `transcript: true`. The action invariant the
+ * skill/MCP/command surfaces are really about.
+ */
+export function assertToolUsed(
+  r: HarnessTestResult,
+  name: string | RegExp,
+): void {
+  if (!r.toolCalls.some((c) => nameMatches(c.name, name))) {
+    fail(
+      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(r)}] (did you set transcript:true?)`,
+    );
+  }
+}
+
+/**
+ * Assert the agent did NOT invoke any tool matching `name` — the safety negative
+ * (e.g. a destructive MCP tool was never called). "File unchanged" can pass by
+ * accident; "the tool was never used" is the real invariant. Needs `transcript`.
+ */
+export function assertToolNotUsed(
+  r: HarnessTestResult,
+  name: string | RegExp,
+): void {
+  const hit = r.toolCalls.find((c) => nameMatches(c.name, name));
+  if (hit) {
+    fail(
+      `expected no tool matching ${String(name)} to be used, but ${hit.name} was`,
+    );
+  }
+}
+
+/**
+ * Assert the `Skill` tool resolved `skill` (e.g. `"superpowers:test-driven-development"`)
+ * without error — the correct skill-activation invariant, vs. grepping the body.
+ */
+export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
+  const call = r.toolCalls.find(
+    (c) =>
+      c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
+  );
+  if (!call) {
+    const seen = r.toolCalls
+      .filter((c) => c.name === "Skill")
+      .map((c) => (c.input as { skill?: string })?.skill ?? "?")
+      .join(", ");
+    fail(
+      `expected the Skill tool to resolve "${skill}"; Skill calls: [${seen || "none"}]`,
+    );
+  }
+  if (call.isError) {
+    fail(
+      `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+    );
+  }
+}
+
+// --- sequence / budget invariants over the agent's actions -----------------
+
+/**
+ * Assert how many tools matching `name` the agent invoked is within bounds — a
+ * budget invariant (e.g. `{ max: 1 }` = "at most one Write", `{ exactly: 0 }` =
+ * "never touched it"). Catches runaway loops and wasted work. Needs `transcript`.
+ */
+export function assertToolCount(
+  r: HarnessTestResult,
+  name: string | RegExp,
+  bounds: { min?: number; max?: number; exactly?: number },
+): void {
+  const n = r.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+  const ok =
+    (bounds.exactly === undefined || n === bounds.exactly) &&
+    (bounds.min === undefined || n >= bounds.min) &&
+    (bounds.max === undefined || n <= bounds.max);
+  if (!ok) {
+    fail(
+      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(r)}])`,
+    );
+  }
+}
+
+/**
+ * Assert the named tools occurred in this order (as a subsequence — gaps allowed)
+ * — an ordering invariant. e.g. `["Read", "Edit"]` checks a Read came before an
+ * Edit. For a stricter rule (every Edit preceded by a Read), use `assertToolCalls`.
+ * Needs `transcript`.
+ */
+export function assertToolSequence(
+  r: HarnessTestResult,
+  names: ReadonlyArray<string | RegExp>,
+): void {
+  let i = 0;
+  for (const c of r.toolCalls) {
+    const want = names[i];
+    if (want !== undefined && nameMatches(c.name, want)) i++;
+  }
+  if (i < names.length) {
+    fail(
+      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(r)}]`,
+    );
+  }
+}
+
+/**
+ * The escape hatch: assert any custom invariant over the full list of tool calls
+ * the agent made — for rules the helpers above don't express, e.g. "every Edit
+ * was preceded by a Read of that file". Needs `transcript`.
+ */
+export function assertToolCalls(
+  r: HarnessTestResult,
+  predicate: (calls: readonly ToolCall[]) => boolean,
+  message = "tool-call invariant failed",
+): void {
+  if (!predicate(r.toolCalls)) {
+    fail(`${message}; tools used: [${toolNames(r)}]`);
   }
 }
 

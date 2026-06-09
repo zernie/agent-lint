@@ -111,3 +111,28 @@ test("runHook: env is injected so command strings with $VARS resolve", () => {
   );
   assert.equal(r2.blocked, true);
 });
+
+test("runHook: governs MCP tools by name (no server needed)", () => {
+  // The dominant real MCP test: a PreToolUse hook that blocks a destructive MCP
+  // tool but allows read-only ones. The hook only sees the tool *name*
+  // (`mcp__<server>__<tool>`), so this needs no running MCP server, no model —
+  // the governance the unit tier already covers. Shape: a "deny merge" guard
+  // over the github MCP server.
+  const guard = `node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      const i=JSON.parse(s);
+      if(/^mcp__github__(merge_pull_request|delete_)/.test(i.tool_name||""))process.exit(2);
+    });'`;
+  const merge = runHook(guard, {
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__github__merge_pull_request",
+    tool_input: { pull_number: 42 },
+  });
+  assert.equal(merge.blocked, true, "destructive github-MCP tool is blocked");
+  const read = runHook(guard, {
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__github__get_issue",
+    tool_input: { issue_number: 1 },
+  });
+  assert.equal(read.blocked, false, "read-only github-MCP tool is allowed");
+});

@@ -56,12 +56,29 @@ export interface HarnessTestSpec {
    * subset. Inline `settings`/`files` layer on top. See src/plugin-loader.ts.
    */
   readonly plugin?: string;
+  /**
+   * Path to a plugin dir to install NATIVELY via `claude --plugin-dir`, so its
+   * skills / commands / agents / hooks register and ACTIVATE the real way — a
+   * scripted `Skill` tool_use resolves, and the real model can trigger them.
+   * Unlike `plugin` (which materializes a file subset that does NOT register
+   * skills for the `Skill` tool), this is the real install path, so point it at a
+   * COMPLETE plugin (internal references resolve). Inline `settings`/`files` and
+   * `plugin` still layer on top. Resolved to an absolute path.
+   */
+  readonly pluginDir?: string;
   /** The scripted model turns the agent will take. */
   readonly model: readonly ModelTurn[];
   /** The user prompt. Default: "go". */
   readonly prompt?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash. */
   readonly allowedTools?: readonly string[];
+  /**
+   * Capture the full event transcript (`--output-format stream-json`) into
+   * `stdout`, instead of just the final result object, so you can assert on what
+   * the agent's tools returned — e.g. the body a `Skill` tool_use resolved. With
+   * this on, `stdout` is newline-delimited JSON events, not a single object.
+   */
+  readonly transcript?: boolean;
   /** Per-run wall-clock timeout in ms. Default 60000. */
   readonly timeoutMs?: number;
 }
@@ -75,10 +92,78 @@ export interface HarnessTestResult {
   readonly cwd: string;
   /** Number of model turns the agent took (mock turns served). */
   readonly turns: number;
+  /**
+   * The tools the agent invoked, each paired with its result — parsed from the
+   * transcript. Empty unless `transcript: true`. Lets a test assert on the
+   * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
+   */
+  readonly toolCalls: readonly ToolCall[];
   /** Final contents of a file under the working dir, or null if absent. */
   file(path: string): string | null;
   /** Remove the temp working dir. */
   cleanup(): void;
+}
+
+/** A tool the agent invoked, paired with its result (transcript mode only). */
+export interface ToolCall {
+  readonly name: string;
+  readonly input: unknown;
+  /** The tool_result text ("" if none / not captured). */
+  readonly resultText: string;
+  /** Whether the tool_result came back flagged as an error. */
+  readonly isError: boolean;
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b) => {
+      if (typeof b === "string") return b;
+      const t = (b as { text?: unknown }).text;
+      return typeof t === "string" ? t : "";
+    })
+    .join("");
+}
+
+/**
+ * Parse `--output-format stream-json` (the `transcript: true` output) into the
+ * tools the agent invoked, each joined to its result by id. Returns [] for the
+ * non-stream `json` output. The seam that lets a test assert on the agent's
+ * actions, not a brittle stdout substring.
+ */
+export function parseToolCalls(streamJson: string): ToolCall[] {
+  const uses: { id: string; name: string; input: unknown }[] = [];
+  const results = new Map<string, { text: string; isError: boolean }>();
+  for (const line of streamJson.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: { message?: { content?: unknown } };
+    try {
+      evt = JSON.parse(line) as { message?: { content?: unknown } };
+    } catch {
+      continue;
+    }
+    const content = evt.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content as Array<Record<string, unknown>>) {
+      if (b.type === "tool_use" && typeof b.name === "string") {
+        const id = typeof b.id === "string" ? b.id : "";
+        uses.push({ id, name: b.name, input: b.input });
+      } else if (b.type === "tool_result") {
+        const id = typeof b.tool_use_id === "string" ? b.tool_use_id : "";
+        results.set(id, {
+          text: contentText(b.content),
+          isError: b.is_error === true,
+        });
+      }
+    }
+  }
+  return uses.map((u) => ({
+    name: u.name,
+    input: u.input,
+    resultText: results.get(u.id)?.text ?? "",
+    isError: results.get(u.id)?.isError ?? false,
+  }));
 }
 
 /** Whether the `claude` CLI is available — harness tests need it. */
@@ -165,10 +250,14 @@ export async function runHarnessTest(
     const args = [
       "-p",
       spec.prompt ?? "go",
-      "--output-format",
-      "json",
+      ...(spec.transcript
+        ? ["--output-format", "stream-json", "--verbose"]
+        : ["--output-format", "json"]),
       "--model",
       "claude-sonnet-4-5",
+      ...(spec.pluginDir !== undefined
+        ? ["--plugin-dir", resolve(spec.pluginDir)]
+        : []),
       ...(settings !== undefined ? ["--settings", "settings.json"] : []),
       "--allowedTools",
       ...tools,
@@ -180,6 +269,7 @@ export async function runHarnessTest(
       stderr: out.stderr,
       cwd,
       turns: mock.count,
+      toolCalls: parseToolCalls(out.stdout),
       file: (p: string): string | null => {
         const f = resolve(cwd, p);
         return existsSync(f) ? readFileSync(f, "utf-8") : null;

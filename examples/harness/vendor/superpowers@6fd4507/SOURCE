@@ -1,0 +1,20 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/obra/superpowers
+Commit:    6fd4507659784c351abbd2bc264c7162cfd386dc
+Fetched:   2026-06-09
+License:   MIT (see ./LICENSE) — © 2025 Jesse Vincent
+
+Why this is here:
+  A pinned, offline fixture for dogfooding vigiles' plugin loader against a
+  real Claude Code plugin. We vendor a SNAPSHOT (not a runtime clone) so the
+  dogfood test is deterministic and hermetic — no network at test time.
+
+Included (the harness-relevant slice only, NOT the whole repo):
+  .claude-plugin/plugin.json   — plugin manifest (no inline hooks)
+  hooks/hooks.json             — the SessionStart hook (hooks/hooks.json convention)
+  hooks/run-hook.cmd           — the hook entrypoint it shells out to
+  hooks/session-start          — the actual setup script (NOT executed by the dogfood)
+  skills/{test-driven-development,systematic-debugging}/  — two representative skills
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).
