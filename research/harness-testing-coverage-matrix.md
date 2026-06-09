@@ -110,7 +110,8 @@ mark), but the harness tiers (running a server inside a test) are still unwired.
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Plugin loader — real layouts, materialize, surface warnings                                                                                                                              | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                                                                                                                              |
 | Real-plugin dogfood — pinned, vendored snapshots                                                                                                                                         | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                                                                                                                              |
-| Eval aggregation — mean ± se, variance, report                                                                                                                                           | ✅     | `src/eval.ts`                                                                                                                                                                                              |
+| Eval aggregation — mean ± se, variance, **pass^k**, report                                                                                                                               | ✅     | `src/eval.ts` (`MetricStat.passK` = succeeded every trial, alongside mean ± se)                                                                                                                            |
+| **Unified `Trace` + bare predicates** (`usedTool`/`toolCount`/`skillResolved`/`toolUsedWith`)                                                                                            | ✅     | one `Trace` from `runHarnessTest` + `runEval`'s ctx; predicates are bare (eval reuses them as metrics), `assert*` are thin throw-wrappers; `trace.hooks` deferred                                          |
 | **Action-invariant assertions** (`r.toolCalls` + `assertToolUsed`/`assertToolNotUsed`/`assertSkillResolved` + sequence/budget: `assertToolSequence`/`assertToolCount`/`assertToolCalls`) | ✅     | parse the transcript so tests assert on the agent's _actions_ and _workflows_ (ordering, budgets, "every Edit after a Read"), not a brittle stdout match; grounded on real superpowers + wshobson skills   |
 | **MCP governance** (block a destructive `mcp__…` tool)                                                                                                                                   | ✅     | `runHook` covers it (no server) — `src/run-hook.test.ts` (`mcp__github__merge_pull_request`)                                                                                                               |
 | LLM-as-judge — verdict parsing                                                                                                                                                           | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                                                                                                                                |
@@ -199,29 +200,37 @@ here for later:
 Prior art on testing non-deterministic AI tools
 ([`research/testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md)) converges on
 one model — **a shared `Trace` + a deterministic predicate vocabulary, with judge
-a minority and eval a separate consumer**. The gaps it points at, in priority:
+a minority and eval a separate consumer**. The gaps it points at, in priority
+(✅ items shipped in `feat: unified Trace + predicate vocabulary`):
 
-10. **Unify the `Trace`.** Today `r.toolCalls` is on the mock-tier result while
-    `runEval`'s `measure` ctx is only `file`/`sh`. Make both tiers produce one
-    `Trace` shape (tools + `file`/`sh` + `output` + `hooks` + `turns`) so the same
-    predicates run everywhere. The keystone — everything below depends on it.
-11. **Capture `trace.output` (final answer) and `trace.hooks` (which fired +
-    decision).** Output is buried in stream-json; hook-firing is inferred via
-    marker files today. Needed for adherence/judge and for honest hook tests.
-12. **Split predicates from `assert*`.** Factor bare `usedTool` / `skillResolved`
-    / `toolCount` (return values) out of the throwing `assertTool*`, so eval
-    `measure` reuses the same vocabulary without the testing/eval conflation.
-13. **`pass^k` reliability metric** — report "succeeded every trial" (τ-bench's
-    pass^k), not just mean ± se. The reliability question for a non-deterministic
-    harness. Pairs with #9.
-14. **Tool-_argument_ assertions** — DeepEval-style: assert on a tool call's
-    `input`, not just its name (e.g. `Edit` targeted the right file). Cheap
-    extension of `toolCalls`.
+10. ✅ **Unify the `Trace`.** One `Trace` interface (`src/harness-test.ts`:
+    `toolCalls` + `output` + `turns` + `file`) is produced by **both** tiers — a
+    `runHarnessTest` result _is_ a `Trace`, and so is `runEval`'s `measure` ctx
+    (`RunContext extends Trace`, with the eval-only `sh` end-state probe on top).
+    The keystone — everything below rides on it. (`hooks` deferred, see below.)
+11. 🟡 **Capture `trace.output` (final answer) and `trace.hooks` (which fired +
+    decision).** **Output shipped** — `parseOutput` reads the terminal `result`
+    event from the stream both tiers already capture (eval switched to
+    `stream-json` so its `ctx.toolCalls` populate too). **`hooks` deferred:** it
+    needs new mock/harness instrumentation to _record_ hook invocations rather
+    than infer them from marker files — punted until something needs it.
+12. ✅ **Split predicates from `assert*`.** Bare `usedTool` / `toolCount` /
+    `skillResolved` / `toolUsedWith` (return values) are exported from
+    `src/harness-assert.ts`; each `assertTool*` is now a thin throw-wrapper over
+    one, and an eval `measure` reuses the same bare predicates as metrics — no
+    testing/eval conflation, never one dual-purpose function.
+13. ✅ **`pass^k` reliability metric** — `MetricStat.passK` (1 iff the metric
+    succeeded on every trial) sits alongside mean ± se in the eval report and
+    `formatEvalReport`. The reliability question for a non-deterministic harness.
+    Pairs with #9.
+14. ✅ **Tool-_argument_ assertions** — `toolUsedWith(trace, name, inputMatcher)`
+    - `assertToolUsedWith` assert on a tool call's `input`, not just its name
+      (e.g. `Edit` targeted the right file).
 
-**Execution plan (follow-up PR `feat: unified Trace + predicate vocabulary`).**
-Do this _after_ PR #26 merges, on a fresh branch off `main` — don't pile it onto
-#26. It is **mostly additive / non-breaking** (do the API shape right now while
-there are ~zero users, so breaking is free):
+**Execution plan (PR `feat: unified Trace + predicate vocabulary`) — SHIPPED**
+(#10, #12, #13, #14 and #11-output; #11-`hooks` deferred). Done on a fresh branch
+off `main` after #26 merged. It was **mostly additive / non-breaking** (the API
+shape was set right while there are ~zero users, so breaking was free):
 
 - **Additive, no migration** (#10–14 except hooks): export bare predicates
   (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith`) and make the

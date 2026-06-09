@@ -96,24 +96,27 @@ Two rules fall out of this (and correct an earlier sketch that blurred them):
 
 ## What we have vs. what this says to build
 
-| Need (from the field)                        | vigiles today                                           | gap                                                        |
-| -------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
-| A unified **Trace** from both tiers          | `r.toolCalls` on the mock tier; eval ctx is `file`/`sh` | **unify**: one Trace from `runHarnessTest` _and_ `runEval` |
-| `trace.output` (final answer) for judge      | buried in stdout / stream-json                          | extract it                                                 |
-| `trace.hooks` (which fired + decision)       | inferred via marker files                               | capture it                                                 |
-| **Predicates** separate from **`assert*`**   | we ship `assertTool*` (throwing) only                   | factor out bare predicates so eval `measure` reuses them   |
-| **pass^k** reliability (not just mean ± se)  | mean ± se only                                          | add                                                        |
-| Tool-**argument** assertions (not just name) | name / regex only                                       | extend (DeepEval-style)                                    |
-| State-over-self-report outcome               | ✅ `sh("npm test")` after the agent stops               | — (validated)                                              |
-| Procedure-aware / trajectory invariants      | ✅ `assertToolSequence`, "Edit after Read"              | — (validated; this is "corrupt success")                   |
+| Need (from the field)                        | vigiles today                                                                                    | gap                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| A unified **Trace** from both tiers          | ✅ one `Trace` (`toolCalls`+`output`+`turns`+`file`) from `runHarnessTest` _and_ `runEval`'s ctx | — (shipped)                               |
+| `trace.output` (final answer) for judge      | ✅ `parseOutput` reads the terminal `result` event                                               | — (shipped)                               |
+| `trace.hooks` (which fired + decision)       | inferred via marker files                                                                        | **deferred** — needs mock instrumentation |
+| **Predicates** separate from **`assert*`**   | ✅ bare `usedTool`/`toolCount`/`skillResolved`/`toolUsedWith`; `assert*` wrap them               | — (shipped)                               |
+| **pass^k** reliability (not just mean ± se)  | ✅ `MetricStat.passK` + `formatEvalReport`                                                       | — (shipped)                               |
+| Tool-**argument** assertions (not just name) | ✅ `toolUsedWith` / `assertToolUsedWith` over `input`                                            | — (shipped)                               |
+| State-over-self-report outcome               | ✅ `sh("npm test")` after the agent stops                                                        | — (validated)                             |
+| Procedure-aware / trajectory invariants      | ✅ `assertToolSequence`, "Edit after Read"                                                       | — (validated; this is "corrupt success")  |
 
 ## Bottom line
 
 The design holds up against prior art: **a shared `Trace` + a deterministic
 predicate vocabulary, with judge a minority and eval kept as a separate
-statistical consumer.** The sharpest next moves the field points at: **unify the
-`Trace`** (with `output` + `hooks`), **split predicates from `assert*`**, and add
-**pass^k** + tool-argument assertions.
+statistical consumer.** The sharpest moves the field pointed at are now shipped
+(PR `feat: unified Trace + predicate vocabulary`): the **`Trace`** is unified
+across both tiers (with `output`), predicates are **split from `assert*`**, and
+**pass^k** + tool-argument assertions are in. The one piece left is
+**`trace.hooks`** (which hook fired + its decision) — deferred until it's needed,
+since it requires recording hook invocations rather than inferring them.
 
 ## See also
 

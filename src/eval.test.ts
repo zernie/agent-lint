@@ -23,6 +23,18 @@ test("aggregateStats gives std 0 for a single observation", () => {
   assert.equal(s.x.se, 0);
 });
 
+test("aggregateStats reports pass^k: 1 only when every trial succeeds", () => {
+  // booleans: all true → passK 1; any false → 0
+  const all = aggregateStats([{ ok: true }, { ok: true }]);
+  assert.equal(all.ok.passK, 1);
+  const some = aggregateStats([{ ok: true }, { ok: false }]);
+  assert.equal(some.ok.passK, 0);
+  // counts: a trial succeeds when > 0
+  const counts = aggregateStats([{ marks: 2 }, { marks: 0 }]);
+  assert.equal(counts.marks.passK, 0);
+  assert.equal(aggregateStats([{ marks: 1 }, { marks: 3 }]).marks.passK, 1);
+});
+
 test("aggregate averages numbers and takes the true-fraction of booleans", () => {
   const agg = aggregate([
     { marks: 2, caught: true },
@@ -53,7 +65,7 @@ test("formatEvalReport renders one line per arm", () => {
   assert.match(out, /gated\s+caught=0\.50/);
 });
 
-test("formatEvalReport shows ± se when stats are present", () => {
+test("formatEvalReport shows ± se and pass^k when stats are present", () => {
   const out = formatEvalReport({
     name: "demo",
     trials: 3,
@@ -61,9 +73,10 @@ test("formatEvalReport shows ± se when stats are present", () => {
       gated: {
         runs: 3,
         metrics: { caught: 0.5 },
-        stats: { caught: { mean: 0.5, std: 0.5, se: 0.25, n: 3 } },
+        stats: { caught: { mean: 0.5, std: 0.5, se: 0.25, n: 3, passK: 0 } },
       },
     },
   });
   assert.match(out, /caught=0\.50±0\.25/);
+  assert.match(out, /pass\^k=0/);
 });

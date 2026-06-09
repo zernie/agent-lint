@@ -34,6 +34,12 @@ import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
 import { resolveHarness } from "./plugin-loader.js";
+import {
+  parseToolCalls,
+  parseResultEvent,
+  type ToolCall,
+  type Trace,
+} from "./harness-test.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -57,15 +63,20 @@ export interface EvalArm {
   readonly pluginDir?: string;
 }
 
-/** Context handed to `measure` after a run, to compute that run's metrics. */
-export interface RunContext {
+/**
+ * Context handed to `measure` after a run, to compute that run's metrics. It is
+ * a `Trace` (so the bare predicates `usedTool` / `skillResolved` / `toolCount` /
+ * `toolUsedWith` from `harness-assert.ts` run over it, the same as over a
+ * `runHarnessTest` result) plus the eval-only `sh` end-state probe.
+ */
+export interface RunContext extends Trace {
   readonly cwd: string;
   readonly exitCode: number;
   readonly stdout: string;
   /** `num_turns` reported by claude, or 0. */
   readonly turns: number;
-  /** Contents of a file under the working dir, or null if absent. */
-  file(path: string): string | null;
+  /** The tools the agent invoked, each paired with its result (parsed from the stream). */
+  readonly toolCalls: readonly ToolCall[];
   /** Run a shell command in the working dir; returns trimmed stdout ("" on error). */
   sh(command: string): string;
 }
@@ -104,6 +115,13 @@ export interface MetricStat {
   readonly se: number;
   /** Number of runs the metric was observed in. */
   readonly n: number;
+  /**
+   * pass^k (τ-bench): 1 if the metric succeeded on EVERY trial, else 0. The
+   * reliability question a non-deterministic harness needs — "worked every time"
+   * is not "worked on average". A trial counts as a success when its value is
+   * truthy (booleans true, counts > 0), so model your metric as success/fail.
+   */
+  readonly passK: number;
 }
 
 export interface ArmReport {
@@ -146,8 +164,12 @@ function spawnAgent(
     const args = [
       "-p",
       task,
+      // stream-json (+ --verbose, required with -p) so the per-turn tool_use
+      // events survive into `ctx.toolCalls` — the unified Trace, same as the
+      // harness tier. The terminal `result` event still carries num_turns/output.
       "--output-format",
-      "json",
+      "stream-json",
+      "--verbose",
       "--model",
       model,
       "--permission-mode",
@@ -176,17 +198,16 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
 function makeContext(cwd: string, out: RunOut): RunContext {
-  let turns = 0;
-  try {
-    turns = (JSON.parse(out.stdout) as { num_turns?: number }).num_turns ?? 0;
-  } catch {
-    /* non-JSON output */
-  }
+  const result = parseResultEvent(out.stdout);
+  const turns = typeof result?.num_turns === "number" ? result.num_turns : 0;
+  const output = typeof result?.result === "string" ? result.result : "";
   return {
     cwd,
     exitCode: out.code,
     stdout: out.stdout,
     turns,
+    toolCalls: parseToolCalls(out.stdout),
+    output,
     file: (p) => {
       const f = resolve(cwd, p);
       return existsSync(f) ? readFileSync(f, "utf-8") : null;
@@ -246,7 +267,8 @@ export function aggregateStats(
       n > 1
         ? Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1))
         : 0;
-    out[k] = { mean, std, se: n > 0 ? std / Math.sqrt(n) : 0, n };
+    const passK = n > 0 && values.every((v) => v > 0) ? 1 : 0;
+    out[k] = { mean, std, se: n > 0 ? std / Math.sqrt(n) : 0, n, passK };
   }
   return out;
 }
@@ -308,17 +330,25 @@ export async function runEval<M extends Metrics>(
   return { name: spec.name ?? "eval", trials, arms };
 }
 
-/** Format an eval report as a compact table for the console (mean ± se). */
+/** Render one metric: `name=mean±se pass^k=…` (se/pass^k shown when measured). */
+function formatMetric(
+  name: string,
+  mean: number,
+  stat: MetricStat | undefined,
+): string {
+  const base =
+    stat && stat.se > 0
+      ? `${name}=${mean.toFixed(2)}±${stat.se.toFixed(2)}`
+      : `${name}=${mean.toFixed(2)}`;
+  return stat && stat.n > 0 ? `${base} pass^k=${String(stat.passK)}` : base;
+}
+
+/** Format an eval report as a compact table for the console (mean ± se, pass^k). */
 export function formatEvalReport(report: EvalReport): string {
   const lines = [`${report.name} (${String(report.trials)} trials/arm)`];
   for (const [arm, r] of Object.entries(report.arms)) {
     const parts = Object.entries(r.metrics)
-      .map(([k, v]) => {
-        const se = r.stats[k]?.se ?? 0;
-        return se > 0
-          ? `${k}=${v.toFixed(2)}±${se.toFixed(2)}`
-          : `${k}=${v.toFixed(2)}`;
-      })
+      .map(([k, v]) => formatMetric(k, v, r.stats[k]))
       .join("  ");
     lines.push(`  ${arm.padEnd(10)} ${parts}`);
   }
