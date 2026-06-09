@@ -91,6 +91,35 @@ if (warnings.length) console.warn(warnings.join("\n"));
 // ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
 ```
 
+### Dogfooding real third-party plugins (and the sandbox boundary)
+
+The loader is exercised against **real, pinned** Claude Code plugins, not just
+synthetic look-alikes:
+[`real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs)
+loads obra/superpowers (the `hooks/hooks.json` convention + `${CLAUDE_PLUGIN_ROOT}`
+expansion) and
+[`real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs)
+loads a wshobson/agents sub-plugin (the no-hooks subagents+commands+skills shape,
+where the whole result is the warnings). Both are **pinned, vendored snapshots**
+under [`examples/harness/vendor/`](../examples/harness/vendor) — each carrying the
+upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
+clone at test time, so they run **offline and deterministically**. Refresh
+deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
+
+**The safety line: `loadPlugin` parses, it never executes.** A hook is a real
+child process with full `env` — `runHook`/`runHarnessTest` run the _actual_ hook,
+not a reimplementation, and there is **no sandbox** beyond a temp cwd and a
+timeout. That is fine for hooks _you_ wrote and for read-only governance hooks
+(inspect the event → decide), but a third-party **setup** hook (superpowers'
+`SessionStart`, say) can install, write, or call out. So the dogfood asserts such
+a hook is correctly **wired** and stops there; it does not run it.
+
+To actually _execute_ untrusted third-party hooks, put a real boundary around it:
+the cheapest correct one is the **ephemeral CI container** (the runner is the
+sandbox) — run that job only there, never in a plain local `npm test`. A
+heavier-weight local sandbox (bubblewrap/`bwrap`, `sandbox-exec`, or Docker) is a
+reasonable opt-in if you need it, but it is not built into the library today.
+
 ## Deterministic tests in your runner
 
 `runHarnessTest` spawns the real `claude` CLI against a **scripted mock model**
@@ -237,6 +266,8 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 - [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
+- [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
+- [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
 - [`bench/evals/refs-hook.eval.mjs`](../bench/evals/refs-hook.eval.mjs) — the refs-hook A/B (benchmark #4).
 

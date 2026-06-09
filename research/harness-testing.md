@@ -118,6 +118,18 @@ machine.
 | **wshobson/agents** — subagents      | `agents/` + `commands/` (often no hooks)                   | ⚠ materialized + flagged by `loadPlugin().warnings`; eval tier for behaviour  |
 | **wshobson/agents** — 156 `SKILL.md` | skills (no hooks)                                          | ✅ eval tier — "does the skill produce the right outcome"                     |
 
+This started as a manual corpus read; two rows are now **runnable, committed
+dogfood** against pinned snapshots of the real upstreams (offline, key-free):
+[`real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs)
+(obra/superpowers `hooks/hooks.json` + `${CLAUDE_PLUGIN_ROOT}` expansion) and
+[`real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) (a
+wshobson/agents sub-plugin, the no-hooks shape). Both verify the loader by
+**parsing** the real harness; the side-effectful `SessionStart` setup hook is
+asserted-wired, not executed — executing untrusted third-party hooks needs a real
+sandbox (the CI container, or an opt-in bwrap/Docker boundary), which `loadPlugin`
+deliberately does not provide. See `docs/harness-testing.md` § _Dogfooding real
+third-party plugins_.
+
 Findings from the pass:
 
 1. **Hooks that shell out to external binaries** (`npx protect-mcp`,

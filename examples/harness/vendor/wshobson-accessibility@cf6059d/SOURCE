@@ -1,0 +1,21 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/wshobson/agents
+Commit:    cf6059d030bf4fe96623ae2e596d2f31e35fedc0
+Fetched:   2026-06-09
+License:   MIT (see ./LICENSE) — © 2024 Seth Hobson
+Sub-path:  plugins/accessibility-compliance (one sub-plugin of the marketplace)
+
+Why this is here:
+  A pinned, offline fixture for dogfooding vigiles' plugin loader against the
+  dominant real-world marketplace shape: a plugin made of subagents + slash
+  commands + skills with NO hooks. The loader must materialize those surfaces
+  and warn (never silently test an empty machine), which this fixture exercises.
+
+Included (one sub-plugin verbatim):
+  .claude-plugin/plugin.json   — manifest (no hooks)
+  agents/ui-visual-validator.md
+  commands/accessibility-audit.md
+  skills/{wcag-audit-patterns,screen-reader-testing}/
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).
