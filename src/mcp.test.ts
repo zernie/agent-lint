@@ -3,7 +3,7 @@
  * REAL minimal MCP server (examples/harness/fixture-mcp-server.mjs) — it speaks
  * the actual stdio JSON-RPC protocol, so these are deterministic and offline.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 

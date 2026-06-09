@@ -2,7 +2,7 @@
  * Tests for the YAML frontmatter rule parser.
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 import { parseFrontmatterRules, hasFrontmatterRules } from "./frontmatter.js";

@@ -3,7 +3,7 @@
  * eval delta helpers and the jest/vitest matchers. The pure logic is exercised
  * here with fake result/report objects (no model, no claude).
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {

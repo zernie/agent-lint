@@ -4,7 +4,7 @@
  * decision logic and real (tiny shell) hooks across exit codes / JSON output /
  * stdin passthrough / env injection.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {

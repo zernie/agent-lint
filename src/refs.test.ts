@@ -3,7 +3,7 @@
  * (fenced blocks skipped), the `vigiles:symbol path#symbol` mark, verifying the
  * named file defines the symbol, and the unmarked-code enforcement.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

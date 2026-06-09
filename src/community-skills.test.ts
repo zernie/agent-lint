@@ -3,7 +3,7 @@
  * scripted model and assert their control flow. If these (esp. pr-review-loop)
  * run and assert cleanly, the generator form + skill-test cover the deep tail.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 

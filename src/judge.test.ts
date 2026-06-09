@@ -3,7 +3,7 @@
  * itself needs claude + auth, but the verdict parsing is pure — that's what we
  * pin here (the part most likely to silently break).
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { parseJudgeOutput } from "./judge.js";
