@@ -86,8 +86,8 @@ eval({
 Two rules fall out of this (and correct an earlier sketch that blurred them):
 
 - **Predicates are bare; only the throwing testing helpers carry `assert`.**
-  `usedTool` returns a bool you can reuse anywhere; `assertToolUsed` is `usedTool`
-  - throw. Don't merge them.
+  `usedTool` returns a bool you can reuse anywhere; `assertToolUsed` is just
+  `usedTool` wrapped in a throw. Don't merge them.
 - **Testing and eval are different tiers, not one API.** They _share predicates
   over the Trace_, but testing **asserts** (pass/fail, every commit, free) and
   eval **measures** (mean ± se / pass^k, occasional, paid). Same vocabulary,
