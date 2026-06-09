@@ -79,6 +79,73 @@ export function assertHookAllowed(r: HookRunResult): void {
   }
 }
 
+function nameMatches(name: string, pat: string | RegExp): boolean {
+  return typeof pat === "string" ? name === pat : pat.test(name);
+}
+
+function toolNames(r: HarnessTestResult): string {
+  return r.toolCalls.map((c) => c.name).join(", ") || "none";
+}
+
+/**
+ * Assert the agent invoked a tool whose name matches `name` (string = exact,
+ * RegExp = test) — e.g. a skill (`"Skill"`), an MCP tool (`/^mcp__github__/`), or
+ * a subagent (`"Task"`). Needs `transcript: true`. The action invariant the
+ * skill/MCP/command surfaces are really about.
+ */
+export function assertToolUsed(
+  r: HarnessTestResult,
+  name: string | RegExp,
+): void {
+  if (!r.toolCalls.some((c) => nameMatches(c.name, name))) {
+    fail(
+      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(r)}] (did you set transcript:true?)`,
+    );
+  }
+}
+
+/**
+ * Assert the agent did NOT invoke any tool matching `name` — the safety negative
+ * (e.g. a destructive MCP tool was never called). "File unchanged" can pass by
+ * accident; "the tool was never used" is the real invariant. Needs `transcript`.
+ */
+export function assertToolNotUsed(
+  r: HarnessTestResult,
+  name: string | RegExp,
+): void {
+  const hit = r.toolCalls.find((c) => nameMatches(c.name, name));
+  if (hit) {
+    fail(
+      `expected no tool matching ${String(name)} to be used, but ${hit.name} was`,
+    );
+  }
+}
+
+/**
+ * Assert the `Skill` tool resolved `skill` (e.g. `"superpowers:test-driven-development"`)
+ * without error — the correct skill-activation invariant, vs. grepping the body.
+ */
+export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
+  const call = r.toolCalls.find(
+    (c) =>
+      c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
+  );
+  if (!call) {
+    const seen = r.toolCalls
+      .filter((c) => c.name === "Skill")
+      .map((c) => (c.input as { skill?: string })?.skill ?? "?")
+      .join(", ");
+    fail(
+      `expected the Skill tool to resolve "${skill}"; Skill calls: [${seen || "none"}]`,
+    );
+  }
+  if (call.isError) {
+    fail(
+      `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+    );
+  }
+}
+
 /** The gap on `metric` between two arms (arm − baseline). */
 export function improvement(
   report: EvalReport,

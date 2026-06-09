@@ -103,22 +103,32 @@ internal references). Add `transcript: true` to capture the event stream so you
 can assert the skill's body was injected:
 
 ```ts
+import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
+
 const r = await runHarnessTest({
   pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
   allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
-  transcript: true,
+  transcript: true, // populate r.toolCalls
   model: scriptModel([
     { tool: "Skill", input: { skill: "demo:greet" } }, // resolves the skill
     { text: "ok" },
   ]),
 });
-assert.match(r.stdout, /GREET_SKILL_MARKER_42/); // the skill body was injected
+assertSkillResolved(r, "demo:greet"); // a non-error Skill tool_use by that name
+assertToolNotUsed(r, /^mcp__/); // the safety negative: no MCP tool was used
 ```
 
-This is the deterministic **wiring** tier for skills (does the skill resolve);
-whether the real model _chooses_ a skill by its description is the eval tier. See
-the worked test in `src/harness-test.test.ts` and the fixture at
-`examples/harness/fixture-skill-plugin/`.
+**Assert on the agent's _actions_, not stdout.** With `transcript: true`,
+`r.toolCalls` is the parsed list of tools the agent invoked (each paired with its
+result). The helpers `assertToolUsed(r, name|/regex/)`, `assertToolNotUsed(...)`
+(the safety negative — _"the destructive tool was never called"_), and
+`assertSkillResolved(r, "plugin:skill")` are correct invariants — unlike
+`r.stdout.includes(marker)`, which false-positives on echoes and needs a marker
+injected (so it can't test a _real_ plugin). The worked tests in
+`src/harness-test.test.ts` assert real **obra/superpowers** and **wshobson/agents**
+skills this way — no marker needed. This is the deterministic **wiring** tier
+(does the skill resolve); whether the real model _chooses_ a skill is the eval
+tier.
 
 `runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
 and measure **real** activation (the model triggering the skill by its
