@@ -1,0 +1,109 @@
+# Harness-testing coverage matrix — what we test, what we should
+
+> Status: roadmap / gap analysis (2026-06-09). The companion to
+> [`docs/testing-matrix.md`](../docs/testing-matrix.md) (which maps the _current_
+> API to its tests). This doc takes the **whole potential surface** of testing a
+> Claude Code harness and marks, cell by cell, what vigiles provides today and
+> what it _should_. Design rationale lives in
+> [`research/harness-testing.md`](harness-testing.md); the sandbox capability is
+> [`research/feature-ideas.md`](feature-ideas.md) §13.
+
+## The three tiers (columns)
+
+- **Unit** — model-free, the handler's _logic_ in isolation. `runHook` synthesizes
+  an event JSON and reads the decision. Cheap (ms), reaches every event, but
+  proves only logic, not wiring.
+- **Integration (deterministic)** — real `claude` CLI + a **scripted mock model**
+  (`runHarnessTest`). Real hooks fire, model turns are fixed. No API key, no cost.
+  Proves **wiring** — that the surface fires inside the assembled machine.
+- **E2E (eval)** — the **real model**, N trials per arm (`runEval`). Proves
+  **behaviour** — does the surface change what the agent does. Statistical, costs
+  real money, non-deterministic.
+
+Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜ n/a.
+
+## Surface × tier
+
+| Surface                                       | Unit (`runHook`)       | Integration (`runHarnessTest`)       | E2E (`runEval`)                       |
+| --------------------------------------------- | ---------------------- | ------------------------------------ | ------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic               | ✅ fires in machine                  | ✅ behaviour                          |
+| Hook — UserPromptSubmit                       | ✅                     | ✅                                   | ✅                                    |
+| Hook — SessionStart                           | ✅                     | ✅                                   | ✅                                    |
+| Hook — Stop                                   | ✅                     | ✅                                   | ✅                                    |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅                     | 🟡 headless-gated (drive via Bash)   | ✅                                    |
+| Hook — SubagentStop                           | ✅                     | 🔴 mock can't trigger                | 🟡 partial                            |
+| Hook — PreCompact / Notification / SessionEnd | ✅                     | 🔴 mock can't trigger                | 🟡 partial                            |
+| CLAUDE.md / instruction files                 | ⬜ (refs → audit tier) | 🟡 present in context, not behaviour | ✅ moves behaviour                    |
+| Skills — procedure / outcome                  | 🔴 prose, no unit seam | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked** |
+| Subagents (`agents/`)                         | ⬜                     | 🔴 materialized, not invoked         | ✅ via Task                           |
+| Slash commands (`commands/`)                  | ⬜                     | 🔴 materialized, not invoked         | ✅ via invocation                     |
+| MCP servers                                   | ⬜                     | 🔴 not wired (warned)                | 🔴 bring-your-own                     |
+| settings.json — permissions / env             | 🟡 assert merged       | ✅ applied to sandbox                | ✅                                    |
+
+**The honest read of this table:** the **deterministic reach is hooks + settings**
+(the governance shapes). Everything model-driven — skills, subagents, slash
+commands — has **no unit tier and no deterministic tier**; it can only be reached
+at the costly, statistical eval tier. The loader _materializes_ those surfaces and
+_warns_, but materialization is not testing.
+
+## Fidelity caveats (why some ✅/🟡 are softer than they look)
+
+1. **Skill activation is faked, even at the eval tier.** A `SKILL.md` in the
+   working dir is not auto-loaded the way an _installed plugin_ skill is, so the
+   canonical eval delivers the arm difference by **telling the agent to read it**
+   (`examples/harness/skill-outcome.eval.mjs`). We measure "if the agent reads
+   this prose, does output change" — **not** "does Claude trigger this skill by
+   its description." The activation mechanism, the thing that makes a skill a
+   skill, is untested.
+2. **Edit/Write hooks are headless-gated.** The Edit/Write tools don't fire via
+   the mock in headless mode, so the deterministic tier can't drive Edit/Write
+   tool-event hooks; you fall back to the unit tier (logic) or the eval tier.
+3. **Subagents / slash commands need a real model.** The deterministic tier never
+   invokes them — it only writes their files into the sandbox.
+4. **No safe execution of untrusted code.** Hooks run as real child processes with
+   full `env`; there is no sandbox (temp cwd + timeout only). So running a
+   _third-party_ plugin's side-effectful hook is unsafe — the dogfood tier only
+   _parses_ (`loadPlugin`), never executes.
+
+## Cross-cutting capabilities (provided vs. should)
+
+| Capability                                                                            | Status | Notes                                                                     |
+| ------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------- |
+| Plugin loader — real layouts, materialize, surface warnings                           | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine             |
+| Real-plugin dogfood — pinned, vendored snapshots                                      | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)             |
+| Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                             |
+| LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)               |
+| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🔴     | the fix for caveat #1 — install the plugin, don't fake-read its files     |
+| **Deterministic Edit/Write driver** (un-gate tool events)                             | 🔴     | the fix for caveat #2 — a headless path that fires Edit/Write             |
+| **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically               |
+| **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                          |
+| **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify |
+| Line-coverage tooling (c8/nyc) on the suite                                           | 🔴     | no coverage % exists today                                                |
+| CI guard: fail (not skip) when `claude` is absent                                     | 🔴     | the deterministic tier silently skips off-box                             |
+
+## What we should build, prioritized (value × cost)
+
+1. **Native plugin-install fidelity for skills** — _highest value._ Closes the
+   biggest real-world gap: makes skill/subagent/command **activation** real
+   instead of faked, which unlocks honest testing of the dominant popular plugin
+   shape (skill/agent marketplaces like wshobson/agents). Medium cost.
+2. **Sandboxed exec tier (bwrap, then docker)** — unlocks safely _running_
+   untrusted third-party hooks/skills, the prerequisite for execute-and-verify
+   dogfood. Medium cost; feature-ideas §13.
+3. **Deterministic Edit/Write driver** — closes the headless hole so the most
+   common _editing_ hooks get a no-key tier. Cost unknown (may be infeasible
+   headless; fall back to a documented unit+eval split).
+4. **Scripted subagent / command stubs** — cheap wiring assurance for the Task /
+   slash surfaces without paying for a model. Low–medium cost.
+5. **MCP server harness** — wire declared MCP servers into the sandbox. Medium.
+6. **Coverage tooling + fail-not-skip guard** — make "how much do we test"
+   answerable as a number, and stop the deterministic tier from silently
+   skipping. Low cost.
+
+## See also
+
+- [`docs/testing-matrix.md`](../docs/testing-matrix.md) — the current API → test map.
+- [`docs/harness-testing.md`](../docs/harness-testing.md) — the user-facing guide.
+- [`research/harness-testing.md`](harness-testing.md) — three-tier design rationale.
+- [`research/feature-ideas.md`](feature-ideas.md) §13 — sandboxed harness exec.
+- [`research/benchmarks-runtime-gates.md`](benchmarks-runtime-gates.md) — the evals run in anger.

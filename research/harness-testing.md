@@ -159,6 +159,8 @@ and the agents/commands surfaces.
 
 ## See also
 
+- `research/harness-testing-coverage-matrix.md` — the whole potential testing
+  surface (unit / integration / e2e + sandboxing), shipped vs. should-build.
 - `research/benchmarks-runtime-gates.md` — evals in anger (the four findings).
 - `research/reference-verification-limits.md` — the other pillar and its ceiling.
 - `docs/harness-testing.md` / `docs/testing-matrix.md` — the user-facing guide and
