@@ -352,22 +352,50 @@ Also optionally enforces `**Why:**` explanations: `{ "requireWhy": true }`
 
 ---
 
+## 13. Sandboxed Harness-Test Execution (Run Untrusted Hooks Safely)
+
+**Analog:** OS sandboxing / ephemeral CI containers / `bwrap` + seccomp. "Run untrusted code behind a boundary."
+
+**User problem:** Testing the harness means running real hooks — and a hook is a real child process with **full `env`**. That's fine for hooks _you_ wrote, but to dogfood or test a **third-party** plugin (the natural way to validate the loader, or to vet a plugin before installing it), its `SessionStart` setup hook can `npm install`, write outside the temp dir, or call the network. Today `runHook` / `runHarnessTest` contain side effects only to a temp cwd + a timeout — **not** a security boundary. So the dogfood tier can only _parse_ a third-party plugin (`loadPlugin`), never _execute_ its hooks. (See the sandbox-boundary note in [`docs/harness-testing.md`](../docs/harness-testing.md) and the dogfood tests in `examples/harness/real-*.harness.mjs`.)
+
+**What vigiles provides:** an opt-in sandbox on the execution tiers — `runHook(cmd, event, { sandbox })` and `runHarnessTest({ sandbox })` — that wraps the hook spawn in a real boundary: bubblewrap (`bwrap`) on Linux, `sandbox-exec` on macOS, or a Docker container. `sandbox: "none"` stays the default (your own hooks); `sandbox: "bwrap" | "docker"` unlocks safely running plugins you don't trust — turning the dogfood from parse-only into **execute-and-verify**.
+
+```ts
+// Today: loadPlugin parses; executing a third-party setup hook is unsafe.
+// With a sandbox tier:
+const r = await runHarnessTest({
+  plugin: "./vendor/some-third-party-plugin",
+  sandbox: "bwrap", // no network, writes confined to the sandbox dir, env scrubbed
+  model: scriptModel([{ text: "go" }]),
+});
+```
+
+**Implementation:**
+
+- A thin `Sandbox` strategy: `wrap(command, opts) → command` — selects `bwrap` / `sandbox-exec` / `docker`, a no-op for `"none"`. Keeps the library dependency-free (shells out to the host sandbox tool; no node deps).
+- Deny-by-default profile: `--unshare-net` (no network), bind-mount only the sandbox cwd read-write + the plugin dir read-only, scrub `env` to an allowlist.
+- Availability detection (`which bwrap` / platform check); if a sandbox is requested but unavailable, warn + skip rather than run unsandboxed — same shape as `claudeAvailable()`.
+- `loadPlugin().warnings` already flags the side-effectful surfaces; the sandbox is what lets a test safely _act_ on them instead of only parsing them.
+
+---
+
 ## Summary
 
-| #   | Feature                | Programming Analog                   | User Problem Solved                                       |
-| --- | ---------------------- | ------------------------------------ | --------------------------------------------------------- |
-| 1   | **Plugin API**         | Railway composition / ESLint plugins | Can't add custom checks without forking                   |
-| 2   | **Reverse Coverage**   | Code coverage (inverted)             | Agent follows 200 rules it doesn't understand             |
-| 3   | **Dead Enforcement**   | Dead code / skipped tests            | "Enforced by X" but X is disabled in config               |
-| 4   | **Snapshot Testing**   | Jest snapshots                       | Structural instruction changes slip through PRs           |
-| 5   | **Stale References**   | Broken link checker                  | Rules reference deleted files/packages                    |
-| 6   | **`init` Scaffolding** | `eslint --init` / generators         | Blank page problem — no one writes CLAUDE.md from scratch |
-| 7   | **Token Budgets**      | Bundle size budgets                  | No visibility into context window cost                    |
-| 8   | **Skill Coloring**     | Function coloring (pure/impure)      | Can't tell if a skill is safe to auto-run                 |
-| 9   | **Hook Validation**    | Contract testing                     | Hooks break silently at runtime                           |
-| 10  | **Instruction Diffs**  | Migration safety                     | Enforcement removed in PRs, nobody notices                |
-| 11  | **Dependency Graph**   | Build DAG / import graph             | Cross-references to deleted instruction files             |
-| 12  | **Typo Detection**     | Type checking / strict mode          | Near-miss annotations silently ignored                    |
+| #   | Feature                    | Programming Analog                   | User Problem Solved                                          |
+| --- | -------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| 1   | **Plugin API**             | Railway composition / ESLint plugins | Can't add custom checks without forking                      |
+| 2   | **Reverse Coverage**       | Code coverage (inverted)             | Agent follows 200 rules it doesn't understand                |
+| 3   | **Dead Enforcement**       | Dead code / skipped tests            | "Enforced by X" but X is disabled in config                  |
+| 4   | **Snapshot Testing**       | Jest snapshots                       | Structural instruction changes slip through PRs              |
+| 5   | **Stale References**       | Broken link checker                  | Rules reference deleted files/packages                       |
+| 6   | **`init` Scaffolding**     | `eslint --init` / generators         | Blank page problem — no one writes CLAUDE.md from scratch    |
+| 7   | **Token Budgets**          | Bundle size budgets                  | No visibility into context window cost                       |
+| 8   | **Skill Coloring**         | Function coloring (pure/impure)      | Can't tell if a skill is safe to auto-run                    |
+| 9   | **Hook Validation**        | Contract testing                     | Hooks break silently at runtime                              |
+| 10  | **Instruction Diffs**      | Migration safety                     | Enforcement removed in PRs, nobody notices                   |
+| 11  | **Dependency Graph**       | Build DAG / import graph             | Cross-references to deleted instruction files                |
+| 12  | **Typo Detection**         | Type checking / strict mode          | Near-miss annotations silently ignored                       |
+| 13  | **Sandboxed Harness Exec** | OS sandbox / ephemeral containers    | Can't safely run untrusted third-party plugin hooks in tests |
 
 ---
 
