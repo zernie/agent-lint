@@ -18,6 +18,7 @@ import {
   type HarnessTestSpec,
   type HarnessTestResult,
   type ToolCall,
+  type Trace,
 } from "./harness-test.js";
 import type { EvalReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
@@ -84,8 +85,55 @@ function nameMatches(name: string, pat: string | RegExp): boolean {
   return typeof pat === "string" ? name === pat : pat.test(name);
 }
 
-function toolNames(r: HarnessTestResult): string {
-  return r.toolCalls.map((c) => c.name).join(", ") || "none";
+function toolNames(trace: Trace): string {
+  return trace.toolCalls.map((c) => c.name).join(", ") || "none";
+}
+
+// --- bare predicates over a Trace (the shared vocabulary, no throw) ---------
+//
+// Pure fns returning a value, so the SAME vocabulary runs in both consumers:
+// the throwing `assert*` helpers below wrap them for the testing tier, and an
+// eval `measure` reuses them directly as metrics (`measure: (t) => ({ safe:
+// !usedTool(t, /merge|delete/) })`). Never one dual-purpose function.
+
+/**
+ * Did the agent invoke a tool whose name matches `name` (string = exact,
+ * RegExp = test)? The predicate behind `assertToolUsed` / `assertToolNotUsed`.
+ */
+export function usedTool(trace: Trace, name: string | RegExp): boolean {
+  return trace.toolCalls.some((c) => nameMatches(c.name, name));
+}
+
+/** How many tools matching `name` the agent invoked. Behind `assertToolCount`. */
+export function toolCount(trace: Trace, name: string | RegExp): number {
+  return trace.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+}
+
+/**
+ * Did the `Skill` tool resolve `skill` (e.g. `"superpowers:test-driven-development"`)
+ * without error? The skill-activation predicate behind `assertSkillResolved`.
+ */
+export function skillResolved(trace: Trace, skill: string): boolean {
+  const call = trace.toolCalls.find(
+    (c) =>
+      c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
+  );
+  return call !== undefined && !call.isError;
+}
+
+/**
+ * Did the agent invoke a tool matching `name` whose INPUT satisfies
+ * `inputMatcher` — a tool-ARGUMENT predicate (DeepEval-style), e.g. an `Edit`
+ * that targeted the right file. The predicate behind `assertToolUsedWith`.
+ */
+export function toolUsedWith(
+  trace: Trace,
+  name: string | RegExp,
+  inputMatcher: (input: unknown) => boolean,
+): boolean {
+  return trace.toolCalls.some(
+    (c) => nameMatches(c.name, name) && inputMatcher(c.input),
+  );
 }
 
 /**
@@ -94,13 +142,10 @@ function toolNames(r: HarnessTestResult): string {
  * a subagent (`"Task"`). Needs `transcript: true`. The action invariant the
  * skill/MCP/command surfaces are really about.
  */
-export function assertToolUsed(
-  r: HarnessTestResult,
-  name: string | RegExp,
-): void {
-  if (!r.toolCalls.some((c) => nameMatches(c.name, name))) {
+export function assertToolUsed(trace: Trace, name: string | RegExp): void {
+  if (!usedTool(trace, name)) {
     fail(
-      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(r)}] (did you set transcript:true?)`,
+      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(trace)}] (did you set transcript:true?)`,
     );
   }
 }
@@ -110,14 +155,11 @@ export function assertToolUsed(
  * (e.g. a destructive MCP tool was never called). "File unchanged" can pass by
  * accident; "the tool was never used" is the real invariant. Needs `transcript`.
  */
-export function assertToolNotUsed(
-  r: HarnessTestResult,
-  name: string | RegExp,
-): void {
-  const hit = r.toolCalls.find((c) => nameMatches(c.name, name));
-  if (hit) {
+export function assertToolNotUsed(trace: Trace, name: string | RegExp): void {
+  if (usedTool(trace, name)) {
+    const hit = trace.toolCalls.find((c) => nameMatches(c.name, name));
     fail(
-      `expected no tool matching ${String(name)} to be used, but ${hit.name} was`,
+      `expected no tool matching ${String(name)} to be used, but ${hit?.name ?? String(name)} was`,
     );
   }
 }
@@ -126,13 +168,16 @@ export function assertToolNotUsed(
  * Assert the `Skill` tool resolved `skill` (e.g. `"superpowers:test-driven-development"`)
  * without error — the correct skill-activation invariant, vs. grepping the body.
  */
-export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
-  const call = r.toolCalls.find(
+export function assertSkillResolved(trace: Trace, skill: string): void {
+  if (skillResolved(trace, skill)) return;
+  // skillResolved is false → either no matching Skill call, or it errored.
+  // Reconstruct which, for a useful message.
+  const call = trace.toolCalls.find(
     (c) =>
       c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
   );
   if (!call) {
-    const seen = r.toolCalls
+    const seen = trace.toolCalls
       .filter((c) => c.name === "Skill")
       .map((c) => (c.input as { skill?: string })?.skill ?? "?")
       .join(", ");
@@ -140,9 +185,32 @@ export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
       `expected the Skill tool to resolve "${skill}"; Skill calls: [${seen || "none"}]`,
     );
   }
-  if (call.isError) {
+  fail(
+    `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+  );
+}
+
+/**
+ * Assert the agent invoked a tool matching `name` whose INPUT satisfies
+ * `inputMatcher` — a tool-ARGUMENT invariant (DeepEval-style). Asserts not just
+ * *that* a tool ran but *with what args*, e.g. an `Edit` that targeted the right
+ * file: `assertToolUsedWith(r, "Edit", (i) => (i as { file_path?: string })
+ * .file_path === "src/x.ts")`. Needs `transcript`.
+ */
+export function assertToolUsedWith(
+  trace: Trace,
+  name: string | RegExp,
+  inputMatcher: (input: unknown) => boolean,
+  message?: string,
+): void {
+  if (!toolUsedWith(trace, name, inputMatcher)) {
+    const seen = trace.toolCalls
+      .filter((c) => nameMatches(c.name, name))
+      .map((c) => JSON.stringify(c.input))
+      .join(", ");
     fail(
-      `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+      message ??
+        `expected a ${String(name)} call whose input matches; ${String(name)} inputs: [${seen || "none"}]`,
     );
   }
 }
@@ -155,18 +223,18 @@ export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
  * "never touched it"). Catches runaway loops and wasted work. Needs `transcript`.
  */
 export function assertToolCount(
-  r: HarnessTestResult,
+  trace: Trace,
   name: string | RegExp,
   bounds: { min?: number; max?: number; exactly?: number },
 ): void {
-  const n = r.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+  const n = toolCount(trace, name);
   const ok =
     (bounds.exactly === undefined || n === bounds.exactly) &&
     (bounds.min === undefined || n >= bounds.min) &&
     (bounds.max === undefined || n <= bounds.max);
   if (!ok) {
     fail(
-      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(r)}])`,
+      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(trace)}])`,
     );
   }
 }
@@ -178,17 +246,17 @@ export function assertToolCount(
  * Needs `transcript`.
  */
 export function assertToolSequence(
-  r: HarnessTestResult,
+  trace: Trace,
   names: ReadonlyArray<string | RegExp>,
 ): void {
   let i = 0;
-  for (const c of r.toolCalls) {
+  for (const c of trace.toolCalls) {
     const want = names[i];
     if (want !== undefined && nameMatches(c.name, want)) i++;
   }
   if (i < names.length) {
     fail(
-      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(r)}]`,
+      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(trace)}]`,
     );
   }
 }
@@ -199,12 +267,12 @@ export function assertToolSequence(
  * was preceded by a Read of that file". Needs `transcript`.
  */
 export function assertToolCalls(
-  r: HarnessTestResult,
+  trace: Trace,
   predicate: (calls: readonly ToolCall[]) => boolean,
   message = "tool-call invariant failed",
 ): void {
-  if (!predicate(r.toolCalls)) {
-    fail(`${message}; tools used: [${toolNames(r)}]`);
+  if (!predicate(trace.toolCalls)) {
+    fail(`${message}; tools used: [${toolNames(trace)}]`);
   }
 }
 

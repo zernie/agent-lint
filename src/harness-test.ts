@@ -22,10 +22,11 @@
  * The "steps" are the scripted model turns — their real home is deterministic
  * harness testing, not production enforcement.
  *
- * Note: the simple mock drives the Bash tool and Stop hooks reliably; the
- * Edit/Write tools are gated in headless mode and don't fire via the mock —
- * drive file actions through Bash, or use the real-model eval tier (`eval.ts`)
- * for Edit/Write hooks.
+ * Note: the mock drives Bash and Stop hooks, and — verified on claude 2.1.169 —
+ * the Edit/Write tools too (allowlisted past the permission prompt), so their
+ * PreToolUse/PostToolUse hooks fire in this tier. The events the mock can't
+ * trigger (PreCompact / Notification / SessionEnd / SubagentStop) belong to the
+ * `runHook` unit tier.
  */
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -83,7 +84,34 @@ export interface HarnessTestSpec {
   readonly timeoutMs?: number;
 }
 
-export interface HarnessTestResult {
+/**
+ * The observable record of ONE run — the unified shape produced by BOTH testing
+ * tiers: `runHarnessTest`'s result and `runEval`'s `measure` ctx (`eval.ts`)
+ * both satisfy it. That's what lets the bare predicates in `harness-assert.ts`
+ * (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith`) run over either,
+ * with the testing helpers asserting and eval measuring over the same vocabulary.
+ *
+ * Deferred: `trace.hooks` (which hook fired + its decision). It needs new mock
+ * instrumentation to *record* hook invocations rather than infer them from
+ * marker files — punted until something needs it.
+ */
+export interface Trace {
+  /**
+   * The tools the agent invoked, each paired with its result — parsed from the
+   * transcript. Empty unless the run captured the stream (`transcript: true` on
+   * the harness tier; always on the eval tier). Lets a test assert on the
+   * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
+   */
+  readonly toolCalls: readonly ToolCall[];
+  /** The agent's final answer text (the terminal `result` event), or "". */
+  readonly output: string;
+  /** Number of model turns. */
+  readonly turns: number;
+  /** Final contents of a file under the working dir, or null if absent. */
+  file(path: string): string | null;
+}
+
+export interface HarnessTestResult extends Trace {
   readonly exitCode: number;
   readonly stdout: string;
   /** Hook block messages and diagnostics land here. */
@@ -92,14 +120,6 @@ export interface HarnessTestResult {
   readonly cwd: string;
   /** Number of model turns the agent took (mock turns served). */
   readonly turns: number;
-  /**
-   * The tools the agent invoked, each paired with its result — parsed from the
-   * transcript. Empty unless `transcript: true`. Lets a test assert on the
-   * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
-   */
-  readonly toolCalls: readonly ToolCall[];
-  /** Final contents of a file under the working dir, or null if absent. */
-  file(path: string): string | null;
   /** Remove the temp working dir. */
   cleanup(): void;
 }
@@ -164,6 +184,33 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
     resultText: results.get(u.id)?.text ?? "",
     isError: results.get(u.id)?.isError ?? false,
   }));
+}
+
+/**
+ * The terminal `result` event — present in BOTH `--output-format` shapes (a
+ * `{type:"result", …}` line in stream-json, the single object in `json`), or
+ * null. The seam for the final answer + turn count without parsing twice.
+ */
+export function parseResultEvent(
+  stdout: string,
+): Record<string, unknown> | null {
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (evt.type === "result") return evt;
+  }
+  return null;
+}
+
+/** The agent's final answer text from a transcript / result object, or "". */
+export function parseOutput(stdout: string): string {
+  const result = parseResultEvent(stdout)?.result;
+  return typeof result === "string" ? result : "";
 }
 
 /** Whether the `claude` CLI is available — harness tests need it. */
@@ -270,6 +317,7 @@ export async function runHarnessTest(
       cwd,
       turns: mock.count,
       toolCalls: parseToolCalls(out.stdout),
+      output: parseOutput(out.stdout),
       file: (p: string): string | null => {
         const f = resolve(cwd, p);
         return existsSync(f) ? readFileSync(f, "utf-8") : null;

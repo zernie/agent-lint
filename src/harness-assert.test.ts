@@ -12,9 +12,14 @@ import {
   assertCreated,
   assertNotCreated,
   assertServedTurns,
+  usedTool,
+  toolCount,
+  skillResolved,
+  toolUsedWith,
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolUsedWith,
   assertToolCount,
   assertToolSequence,
   assertToolCalls,
@@ -44,6 +49,7 @@ function fakeResult(
     cwd: "/tmp/x",
     turns: 2,
     toolCalls,
+    output: "",
     file: (p: string) => (present.includes(p) ? "content" : null),
     cleanup: () => undefined,
   };
@@ -159,6 +165,55 @@ test("assertSkillResolved: needs a non-error Skill tool_use with that name", () 
   const errored = { ...skillCall, isError: true, resultText: "No such skill" };
   assert.throws(() => {
     assertSkillResolved(fakeResult([], [errored]), "demo:greet"); // errored
+  });
+});
+
+// --- bare predicates (the shared vocabulary) -------------------------------
+
+test("usedTool / toolCount: bare predicates return values, don't throw", () => {
+  const r = fakeResult([], [skillCall, bashCall, bashCall]);
+  assert.equal(usedTool(r, "Skill"), true);
+  assert.equal(usedTool(r, /^Bash$/), true);
+  assert.equal(usedTool(r, "Task"), false);
+  assert.equal(toolCount(r, "Bash"), 2);
+  assert.equal(toolCount(r, /^mcp__/), 0);
+});
+
+test("skillResolved: true only for a non-error Skill call by that name", () => {
+  assert.equal(skillResolved(fakeResult([], [skillCall]), "demo:greet"), true);
+  assert.equal(skillResolved(fakeResult([], [skillCall]), "demo:other"), false);
+  const errored = { ...skillCall, isError: true, resultText: "No such skill" };
+  assert.equal(skillResolved(fakeResult([], [errored]), "demo:greet"), false);
+});
+
+test("toolUsedWith: matches a tool by name AND its input", () => {
+  const editCall = {
+    name: "Edit",
+    input: { file_path: "src/x.ts", old_string: "a", new_string: "b" },
+    resultText: "",
+    isError: false,
+  };
+  const r = fakeResult([], [editCall]);
+  const targets = (p: string) => (i: unknown) =>
+    (i as { file_path?: string }).file_path === p;
+  assert.equal(toolUsedWith(r, "Edit", targets("src/x.ts")), true);
+  assert.equal(toolUsedWith(r, "Edit", targets("src/other.ts")), false);
+  assert.equal(toolUsedWith(r, "Write", targets("src/x.ts")), false);
+});
+
+test("assertToolUsedWith: tool-argument assertion (asserts on input, not name)", () => {
+  const editCall = {
+    name: "Edit",
+    input: { file_path: "note.txt" },
+    resultText: "",
+    isError: false,
+  };
+  const r = fakeResult([], [editCall]);
+  const targets = (p: string) => (i: unknown) =>
+    (i as { file_path?: string }).file_path === p;
+  assertToolUsedWith(r, "Edit", targets("note.txt"));
+  assert.throws(() => {
+    assertToolUsedWith(r, "Edit", targets("WRONG.txt"));
   });
 });
 

@@ -17,11 +17,13 @@ import {
   scriptModel,
   claudeAvailable,
   parseToolCalls,
+  parseOutput,
 } from "./harness-test.js";
 import {
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolUsedWith,
   assertToolSequence,
   assertToolCount,
   assertToolCalls,
@@ -252,6 +254,13 @@ maybe("tool-call sequence + budget invariants hold on a real run", async () => {
     assertToolSequence(r, ["Read", "Edit"]); // ordering
     assertToolCount(r, "Edit", { max: 1 }); // budget
     assertToolCount(r, "Write", { exactly: 0 });
+    // tool-ARGUMENT invariant: the Edit targeted the right file (not just "an Edit ran")
+    assertToolUsedWith(
+      r,
+      "Edit",
+      (i) => (i as { file_path?: string }).file_path === "note.txt",
+    );
+    assert.equal(typeof r.output, "string"); // unified Trace: final answer captured
     assertToolCalls(
       r,
       (calls) => {
@@ -300,4 +309,23 @@ test("parseToolCalls: pairs tool_use with tool_result from a stream-json transcr
   assert.equal(calls[0]?.resultText, "ran");
   assert.equal(calls[0]?.isError, false);
   assert.equal(parseToolCalls("{not stream json}").length, 0);
+});
+
+test("parseOutput: returns the final answer from the terminal result event", () => {
+  const stream = [
+    JSON.stringify({ type: "assistant", message: { content: [] } }),
+    "not json — ignored",
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      result: "the answer",
+    }),
+  ].join("\n");
+  assert.equal(parseOutput(stream), "the answer");
+  // single-object `--output-format json` carries the same {type:"result"} shape
+  assert.equal(
+    parseOutput(JSON.stringify({ type: "result", result: "x" })),
+    "x",
+  );
+  assert.equal(parseOutput("no result event here"), "");
 });

@@ -143,6 +143,58 @@ assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
 `assertToolCount` takes `{ min, max, exactly }`; `assertToolCalls` is the escape
 hatch for a custom invariant like _"every Edit was preceded by a Read"_.
 
+You can also assert on a tool's **arguments**, not just its name (DeepEval-style)
+— e.g. the `Edit` targeted the right file, not just that _an_ Edit ran:
+
+```ts
+import { assertToolUsedWith } from "vigiles/harness-assert";
+
+assertToolUsedWith(
+  r,
+  "Edit",
+  (input) => (input as { file_path?: string }).file_path === "src/billing.ts",
+);
+```
+
+## One Trace, two consumers — predicates and assertions
+
+Both tiers produce one **`Trace`**: the observable record of a run —
+`toolCalls`, `output` (the final answer), `turns`, and `file(p)`. A
+`runHarnessTest` result _is_ a `Trace`, and so is the `ctx` handed to a
+`runEval` `measure`. Over that one shape there is one set of **bare predicates**
+— pure functions returning a value, with **no `assert` prefix and no throw**:
+
+```ts
+import {
+  usedTool,
+  toolCount,
+  skillResolved,
+  toolUsedWith,
+} from "vigiles/harness-assert";
+
+usedTool(trace, "Skill"); // boolean
+usedTool(trace, /^mcp__github__merge/); // boolean (regex)
+toolCount(trace, "Write"); // number
+skillResolved(trace, "demo:greet"); // boolean
+toolUsedWith(trace, "Edit", (i) => isRightFile(i)); // boolean
+```
+
+The two consumers stay **separate** — same vocabulary, never one dual-purpose
+function:
+
+- **Testing** asserts (pass/fail, every commit, free). Each `assert*` is just a
+  predicate wrapped in a throw: `assertToolUsed` is `usedTool` + throw,
+  `assertSkillResolved` is `skillResolved` + throw.
+- **Eval** measures (mean ± se / pass^k, occasional, paid). A `measure` reuses
+  the **bare** predicates directly as metrics:
+
+```ts
+measure: (trace) => ({
+  usedSkill: skillResolved(trace, "demo:greet"), // bool → fraction-true + pass^k
+  safe: !usedTool(trace, /merge|delete/), // bool → fraction-true + pass^k
+});
+```
+
 `runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
 and measure **real** activation (the model triggering the skill by its
 description), superseding the older "tell the agent to read a SKILL.md" trick:
@@ -260,17 +312,27 @@ and the type augmentation is compile-checked in
 jest uses the CommonJS dist natively (no ESM flags); the `vigiles/vitest` entry
 is ESM because vitest is ESM-only.
 
-**Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash
-PreToolUse/PostToolUse — the governance/policy shapes most real plugins use.
-**Not** for Edit/Write tool-event hooks (headless-gated — drive file actions via
-Bash, or test those at the eval tier).
+**Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash **and
+Edit/Write** PreToolUse/PostToolUse — the governance/policy shapes most real
+plugins use (`--allowedTools` allowlists the edit tools past the permission
+prompt; verified on claude 2.1.169). The events the mock can't trigger —
+PreCompact, Notification, SessionEnd, SubagentStop — belong to the `runHook`
+unit tier.
 
 ## Evals — does the change move behaviour?
 
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
 numbers, **fraction-true** for booleans, with **std / se** so you can tell a
-real gap from noise (`formatEvalReport` prints `metric=mean±se`). An arm is a
-fixture + settings, or a whole `plugin`.
+real gap from noise, plus **pass^k** (τ-bench) — _did the metric succeed on
+every trial?_ — the reliability question a non-deterministic harness needs
+("worked every time" ≠ "worked on average"). `formatEvalReport` prints
+`metric=mean±se pass^k=…`; each `stat` carries `passK`. An arm is a fixture +
+settings, or a whole `plugin`.
+
+The `measure` ctx is a full `Trace`, so a metric can read the agent's
+**actions** (`ctx.toolCalls`) and its **final answer** (`ctx.output`), not just
+end-state files — reuse the bare predicates above (`usedTool`, `skillResolved`,
+…) to compute them.
 
 ```ts
 import { runEval, formatEvalReport } from "vigiles/eval";
@@ -288,7 +350,7 @@ const report = await runEval({
   }),
   trials: 6,
 });
-console.log(formatEvalReport(report)); // vanilla marked=0.00  gated marked=0.50±0.20
+console.log(formatEvalReport(report)); // vanilla marked=0.00 pass^k=0  gated marked=0.50±0.20 pass^k=0
 ```
 
 A difference smaller than the combined `se` of the two arms is not yet
