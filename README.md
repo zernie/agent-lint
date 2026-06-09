@@ -70,6 +70,8 @@ Reads fine. Four things are wrong:
 
 The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
 
+> **See it in 60 seconds:** `npm run demo` runs `vigiles audit` against a deliberately-broken instruction file and catches a renamed symbol and a missing MCP tool (_"did you mean `purge`?"_), while the truthful references pass silently. [examples/demo →](examples/demo)
+
 Three levels. Each is independently useful; adopt as far up as you like.
 
 ### Level 0 — inline comments (30 seconds, no new files)
