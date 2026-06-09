@@ -7,7 +7,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { listMcpTools, verifyMcpTool, type McpServerConfig } from "./mcp.js";
+import {
+  listMcpTools,
+  verifyMcpTool,
+  parseMcpRefs,
+  verifyMcpRefs,
+  type McpServerConfig,
+} from "./mcp.js";
 
 // __dirname is dist/ at runtime; the fixture server lives at the repo root.
 const server: McpServerConfig = {
@@ -49,5 +55,32 @@ test("verifyMcpTool: reports the available tools for a renamed reference", async
 test("listMcpTools: throws cleanly when the server command does not exist", async () => {
   await assert.rejects(
     listMcpTools({ command: "definitely-not-a-real-binary-xyz" }, 3000),
+  );
+});
+
+test("parseMcpRefs: extracts vigiles:mcp marks, skipping fenced blocks", () => {
+  const md = [
+    "Use `vigiles:mcp fixture#echo` and `vigiles:mcp fixture#add`.",
+    "```",
+    "`vigiles:mcp fixture#ignored`",
+    "```",
+  ].join("\n");
+  assert.deepEqual(
+    parseMcpRefs(md).map((r) => r.tool),
+    ["echo", "add"],
+  );
+});
+
+test("verifyMcpRefs: ok passes, typo errors+suggests, undeclared server flagged", async () => {
+  const md =
+    "`vigiles:mcp fixture#echo` `vigiles:mcp fixture#ekho` `vigiles:mcp ghost#whatever`";
+  const errs = await verifyMcpRefs(md, { fixture: server });
+  assert.equal(errs.length, 2); // echo is fine
+  const ekho = errs.find((e) => e.tool === "ekho");
+  assert.equal(ekho?.reason, "tool-missing");
+  assert.ok(ekho?.suggestions.includes("echo"));
+  assert.equal(
+    errs.find((e) => e.server === "ghost")?.reason,
+    "server-undeclared",
   );
 });

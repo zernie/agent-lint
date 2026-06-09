@@ -9,6 +9,10 @@
  * MCP stdio transport = newline-delimited JSON-RPC 2.0.
  */
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { inlineSpans } from "./refs.js";
+import { assertNever } from "./hash.js";
 
 export interface McpServerConfig {
   readonly command: string;
@@ -182,4 +186,127 @@ function closest(target: string, candidates: string[], max = 4): string[] {
     .sort((a, b) => a.d - b.d)
     .slice(0, 3)
     .map((x) => x.c);
+}
+
+// --- MCP tool references in instruction files ------------------------------
+
+// `vigiles:mcp <server>#<tool>` inside an inline code span — the MCP analogue of
+// the `vigiles:symbol path#name` mark. Self-contained (server + tool in one
+// token) so it binds unambiguously.
+const MCP_MARK = /^vigiles:mcp\s+([\w-]+)#([\w.-]+)$/;
+
+export interface McpRef {
+  readonly server: string;
+  readonly tool: string;
+  readonly line: number;
+}
+
+export type McpRefReason =
+  | "server-undeclared"
+  | "server-unreachable"
+  | "tool-missing";
+
+export interface McpRefError extends McpRef {
+  readonly reason: McpRefReason;
+  readonly suggestions: string[];
+}
+
+/** Parse `vigiles:mcp server#tool` marks from a markdown file's inline spans. */
+export function parseMcpRefs(markdown: string): McpRef[] {
+  const refs: McpRef[] = [];
+  for (const span of inlineSpans(markdown)) {
+    const m = MCP_MARK.exec(span.text);
+    if (m) refs.push({ server: m[1], tool: m[2], line: span.line });
+  }
+  return refs;
+}
+
+/** Read `mcpServers` from `.mcp.json` (the stdio-server config map), or `{}`. */
+export function loadMcpServers(cwd: string): Record<string, McpServerConfig> {
+  const p = join(cwd, ".mcp.json");
+  if (!existsSync(p)) return {};
+  try {
+    const json = JSON.parse(readFileSync(p, "utf-8")) as {
+      mcpServers?: Record<string, McpServerConfig>;
+    };
+    return json.mcpServers ?? {};
+  } catch {
+    return {};
+  }
+}
+
+async function verifyOneServer(
+  group: McpRef[],
+  cfg: McpServerConfig | undefined,
+  timeoutMs: number,
+): Promise<McpRefError[]> {
+  if (!cfg) {
+    return group.map((r) => ({
+      ...r,
+      reason: "server-undeclared" as const,
+      suggestions: [],
+    }));
+  }
+  let available: string[];
+  try {
+    available = (await listMcpTools(cfg, timeoutMs)).map((t) => t.name);
+  } catch {
+    return group.map((r) => ({
+      ...r,
+      reason: "server-unreachable" as const,
+      suggestions: [],
+    }));
+  }
+  const errs: McpRefError[] = [];
+  for (const r of group) {
+    if (!available.includes(r.tool)) {
+      errs.push({
+        ...r,
+        reason: "tool-missing",
+        suggestions: closest(r.tool, available),
+      });
+    }
+  }
+  return errs;
+}
+
+/**
+ * Verify every `vigiles:mcp server#tool` mark in `markdown` against the live
+ * servers in `mcpServers` (each referenced server is started once). A reference
+ * to an undeclared server, an unreachable server, or a missing tool is an error.
+ */
+export async function verifyMcpRefs(
+  markdown: string,
+  mcpServers: Record<string, McpServerConfig>,
+  timeoutMs = 10000,
+): Promise<McpRefError[]> {
+  const byServer = new Map<string, McpRef[]>();
+  for (const r of parseMcpRefs(markdown)) {
+    const arr = byServer.get(r.server) ?? [];
+    arr.push(r);
+    byServer.set(r.server, arr);
+  }
+  const all: McpRefError[] = [];
+  for (const [server, group] of byServer) {
+    all.push(...(await verifyOneServer(group, mcpServers[server], timeoutMs)));
+  }
+  return all;
+}
+
+/** Human-readable message for an MCP reference error (with "did you mean"). */
+export function mcpRefMessage(e: McpRefError): string {
+  switch (e.reason) {
+    case "server-undeclared":
+      return `MCP server "${e.server}" is not declared in .mcp.json`;
+    case "server-unreachable":
+      return `MCP server "${e.server}" failed to start`;
+    case "tool-missing":
+      return `MCP tool "${e.server}#${e.tool}" not found${
+        e.suggestions.length > 0
+          ? ` — did you mean ${e.suggestions.map((s) => `"${s}"`).join(", ")}?`
+          : ""
+      }`;
+    default:
+      return assertNever(e.reason);
+  }
 }

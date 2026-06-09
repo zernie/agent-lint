@@ -41,6 +41,7 @@ import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
+import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./mcp.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -532,6 +533,7 @@ interface AuditReport {
   orphanCount: number;
   docRefErrors: number;
   symbolRefErrors: number;
+  mcpRefErrors: number;
   files: string[];
 }
 
@@ -571,6 +573,47 @@ function verifyMarkdownSymbols(files: string[], silent: boolean): number {
   return errors;
 }
 
+/**
+ * Verify `vigiles:mcp server#tool` marks in instruction files against the live
+ * MCP servers declared in `.mcp.json` — the referenced tool must exist on the
+ * server (it gets started for the check). No `.mcp.json` ⇒ skipped; a server is
+ * only started if a mark actually references it. Returns the count of broken
+ * references. Async because it speaks to real servers.
+ */
+async function verifyMarkdownMcpRefs(
+  files: string[],
+  silent: boolean,
+): Promise<number> {
+  const cwd = process.cwd();
+  const servers = loadMcpServers(cwd);
+  if (files.length === 0 || Object.keys(servers).length === 0) return 0;
+  let printedHeader = false;
+  let errors = 0;
+  for (const f of files) {
+    let markdown: string;
+    try {
+      markdown = readFileSync(resolve(cwd, f), "utf-8");
+    } catch {
+      continue;
+    }
+    const broken = await verifyMcpRefs(markdown, servers);
+    if (broken.length === 0) continue;
+    if (!silent) {
+      if (!printedHeader) {
+        console.log("\nMCP reference check:\n");
+        printedHeader = true;
+      }
+      for (const b of broken) {
+        const msg = mcpRefMessage(b);
+        console.log(`  ✗ ${f}:${String(b.line)} ${msg}`);
+        ghAnnotate("error", msg, f, b.line);
+      }
+    }
+    errors += broken.length;
+  }
+  return errors;
+}
+
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
 function auditExitCode(report: AuditReport): 0 | 1 | 2 {
   if (
@@ -580,7 +623,8 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
     report.coverageErrors > 0 ||
-    report.symbolRefErrors > 0
+    report.symbolRefErrors > 0 ||
+    report.mcpRefErrors > 0
   )
     return 2;
   if (
@@ -968,6 +1012,10 @@ async function audit(
   // 9. Verify code-shaped symbol references live (see src/refs.ts).
   const symbolRefErrors = verifyMarkdownSymbols(files, silent);
 
+  // 10. Verify `vigiles:mcp server#tool` marks against live MCP servers
+  // (only when a .mcp.json declares them). See src/mcp.ts.
+  const mcpRefErrors = await verifyMarkdownMcpRefs(files, silent);
+
   const report: AuditReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
@@ -984,6 +1032,7 @@ async function audit(
     orphanCount: orphanReport.orphans.length,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
+    mcpRefErrors,
     files,
   };
 
@@ -1014,6 +1063,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.docRefErrors)} broken doc refs`);
   if (report.symbolRefErrors > 0)
     parts.push(`${String(report.symbolRefErrors)} broken symbol refs`);
+  if (report.mcpRefErrors > 0)
+    parts.push(`${String(report.mcpRefErrors)} broken MCP refs`);
   const undocumented = report.coverageEnabled - report.coverageDocumented;
   if (undocumented > 0)
     parts.push(`${String(undocumented)} undocumented rules`);
