@@ -368,8 +368,7 @@ npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
-<details>
-<summary><b>What's covered today — surface × tier</b></summary>
+### What's covered today — surface × tier
 
 | Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
 | ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
@@ -384,8 +383,6 @@ npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 | settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
-
-</details>
 
 [Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [benchmarks](research/benchmarks-runtime-gates.md).
 
@@ -405,6 +402,9 @@ npx vigiles eval        # Run *.eval.mjs real-model harness evals (--trials=N)
 
 Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
 
+<details>
+<summary><b>The 7 skills</b></summary>
+
 | Skill                  | What it does                                                            |
 | ---------------------- | ----------------------------------------------------------------------- |
 | `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
@@ -415,9 +415,14 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 | `enforce-rules-format` | Validate all rules have enforcement classification                      |
 | `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
 
+</details>
+
 ## Maturity Levels
 
-From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need):
+From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need): **Vibes → Guardrails → Architecture as Code → The Organism**.
+
+<details>
+<summary>What each level means</summary>
 
 | Level | Name                 | What it means                                                       |
 | ----- | -------------------- | ------------------------------------------------------------------- |
@@ -425,6 +430,8 @@ From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-al
 | 1     | Guardrails           | CI + standard linters, no custom rules                              |
 | 2     | Architecture as Code | Custom lint rules + enforced CLAUDE.md                              |
 | 3     | The Organism         | CI + custom rules + visual tests + observability + scheduled agents |
+
+</details>
 
 ## Related Tools
 
