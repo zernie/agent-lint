@@ -102,7 +102,7 @@ test.
 | Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                                                      |
 | LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                        |
 | **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🔴     | fix for caveat #1 — **spike-confirmed via `--plugin-dir`** (whole-plugin vendoring); not yet wired |
-| ~~Deterministic Edit/Write driver~~ → regression test                                 | 🟡     | spike: **already fires** on claude 2.1.169; just lock it in with a test                            |
+| ~~Deterministic Edit/Write driver~~ → regression test                                 | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)         |
 | **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically                                        |
 | **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                                                   |
 | **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                          |
@@ -118,10 +118,12 @@ test.
 2. **Sandboxed exec tier (bwrap, then docker)** — unlocks safely _running_
    untrusted third-party hooks/skills, the prerequisite for execute-and-verify
    dogfood. Medium cost; feature-ideas §13.
-3. **Edit/Write regression test** (was "build a driver") — the spike shows the
-   deterministic tier _already_ fires Edit/Write on claude 2.1.169, so this
-   collapses to a lock-in test (Write→PostToolUse fires; Edit→PreToolUse blocks)
-   guarding against a future re-gate. Low cost.
+3. ✅ **Edit/Write regression test** (was "build a driver") — **done.** The
+   deterministic tier already fires Edit/Write on claude 2.1.169; shipped a
+   lock-in test (`src/harness-test.test.ts`) guarding against a future re-gate.
+   The deterministic **skill-wiring** test (the other planned lock-in) is coupled
+   to #1 and ships with it (materialization doesn't register skills; `--plugin-dir`
+   does).
 4. **Scripted subagent / command stubs** — cheap wiring assurance for the Task /
    slash surfaces without paying for a model. Low–medium cost.
 5. **MCP server harness** — wire declared MCP servers into the sandbox. Medium.
@@ -157,11 +159,15 @@ Consequences:
 - **#1 is feasible.** The mechanism is `--plugin-dir`; the build is to have
   `loadPlugin` / `runHarnessTest` / `runEval` install plugins that way (and
   vendor whole plugins). Closes caveat #1.
-- **Bonus deterministic win.** Because activation surfaces as a `Skill` tool call,
-  a _scripted mock model_ can emit that exact `tool_use`, so `runHarnessTest` can
-  assert a skill **resolves and runs** deterministically (wiring) — distinct from
-  the eval tier, which is whether the model _chooses_ it. That moves the Skills
-  **integration** cell from 🔴 toward ✅.
+- **Bonus deterministic win — but coupled to `--plugin-dir`.** Activation
+  surfaces as a `Skill` tool call, so a _scripted mock model_ can emit that
+  `tool_use` and `runHarnessTest` can assert a skill **resolves and runs**
+  (wiring), distinct from the eval question of whether the model _chooses_ it.
+  **Caveat found while building it:** the harness's current file-materialization
+  (`.claude/skills/…`) does **not** register a skill for the `Skill` tool — a
+  scripted `Skill{skill:"marker-skill"}` against a materialized skill did not
+  resolve. Only `--plugin-dir` registers skills. So the deterministic
+  **skill-wiring test ships _with_ build #1**, not before it.
 
 ### Edit/Write — is the deterministic tier really gated? (same spike)
 
@@ -171,19 +177,33 @@ mode. **Disproven on claude 2.1.169** (key-free, mock model):
 - Real model, headless `-p` + `--permission-mode acceptEdits`: the `Write` tool
   fired and a `Write|Edit` PostToolUse hook fired — so it's not a platform gate.
 - **Mock-model tier** (`runHarnessTest`, scripted `Write` tool_use, no key): the
-  Write executed and the PostToolUse hook fired **3/3** runs.
-- **Mock-model PreToolUse block**: a scripted `Edit` against a `PreToolUse: Edit →
-exit 2` hook was blocked — the edit did not apply.
+  Write executed and the `Write|Edit` PostToolUse hook fired **5/5** runs.
+- **Mock-model PreToolUse block**: a scripted `Read`→`Edit` against a
+  `PreToolUse: Edit → exit 2` hook fired the hook and left the file unchanged
+  **4/4**.
 
 Why it works now: `runHarnessTest` passes `--allowedTools Read Edit Write Bash`,
 which allowlists the edit tools past the permission prompt; no `--permission-mode`
 is needed (the eval tier additionally sets `acceptEdits`). The gating was real in
 an earlier CLI but is **not reproducible on 2.1.169**.
 
+Three gotchas found while writing the regression tests (each caused a
+false-pass or a no-op until fixed):
+
+1. **`Edit` requires a prior `Read`** of the file (Claude Code's rule) — without
+   it the Edit never attempts, so the PreToolUse hook never fires. The block test
+   must `Read` then `Edit`.
+2. **A "file unchanged" assertion passes trivially** if the tool no-ops. The
+   block test must also assert a **hook-fired marker**, or it proves nothing.
+3. **A custom `prompt` made the mocked Write no-op** (the mock ignores prompt
+   content, yet a non-default `prompt` suppressed the scripted turn). Letting
+   `prompt` default to `"go"` is reliable. _(Worth a follow-up — why does the
+   prompt affect a scripted mock?)_
+
 Consequence: **build #3 collapses.** There's no "Edit/Write driver" to write — the
-deterministic tier already drives them. The work is a **regression test** in the
-harness suite (Write→PostToolUse fires; Edit→PreToolUse blocks) so we catch it if a
-future CLI re-gates, plus removing the stale warning from the docs.
+deterministic tier already drives them. Shipped as a **regression test**
+(`src/harness-test.test.ts`: Write→PostToolUse fires; Read→Edit→PreToolUse blocks)
+to catch a future re-gate, with the stale "headless-gated" comments removed.
 
 ## See also
 
