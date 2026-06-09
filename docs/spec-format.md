@@ -35,7 +35,7 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 ```ts
 sections: {
-  architecture: `Two rule types: enforce() and guidance().`,
+  architecture: `Three rule types: enforce(), guard(), and guidance().`,
   setup: instructions`See ${file("docs/setup.md")} and run ${cmd("npm install")}.`,
 }
 ```
@@ -64,7 +64,7 @@ commands: {
 
 ### `rules`
 
-`Record<string, Rule>` -- Rule ID mapped to an `enforce()` or `guidance()` rule. The ID is kebab-cased by convention and is converted to a Title Case `### Heading` in compiled output. See [Rule Types](#rule-types) below.
+`Record<string, Rule>` -- Rule ID mapped to an `enforce()`, `guard()`, or `guidance()` rule. The ID is kebab-cased by convention and is converted to a Title Case `### Heading` in compiled output. See [Rule Types](#rule-types) below.
 
 ## SKILL.md Specs
 

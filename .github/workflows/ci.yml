@@ -51,6 +51,12 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Cross-runner matcher tests (vitest + jest)
+        run: npx vitest run && npx jest
+
+      - name: Matcher type augmentation compiles (vitest + jest)
+        run: npx tsc --noEmit -p test/types/tsconfig.json
+
       - name: Type check
         run: npx tsc --noEmit
 
@@ -79,3 +85,28 @@ jobs:
 
       - name: Audit compiled files
         run: node dist/cli.js audit
+
+  harness:
+    # Dogfood the harness-testing pillar on the in-repo build: the deterministic
+    # tier runs the real claude CLI against a scripted mock model, so it needs
+    # no API key and costs nothing. The eval tier (real model) is run manually
+    # via `npm run test:eval`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install claude CLI (no API key needed for the mock tier)
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Build
+        run: npm run build
+
+      - name: Run deterministic harness tests
+        run: node dist/cli.js test

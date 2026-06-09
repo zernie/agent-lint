@@ -10,6 +10,7 @@
  *
  *   node bench/evals/refs-hook.eval.mjs            # 3 trials/arm (default)
  *   node bench/evals/refs-hook.eval.mjs 6          # 6 trials/arm
+ *   npx vigiles eval --trials=6 bench/evals/refs-hook.eval.mjs
  *
  * Needs the `claude` CLI + model auth, and a built dist/ (`npm run build`).
  */
@@ -17,7 +18,7 @@ import { resolve } from "node:path";
 import { runEval, formatEvalReport } from "../../dist/eval.js";
 
 const CLI = resolve("dist/cli.js");
-const trials = Number(process.argv[2] || 3);
+const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 
 const report = await runEval({
   name: "refs-hook: forcing marks → verifiable references?",

@@ -40,14 +40,22 @@ import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
 import { startMock, type ModelTurn } from "./mock-model.js";
+import { resolveHarness } from "./plugin-loader.js";
 
 export { scriptModel, type ModelTurn } from "./mock-model.js";
+export { loadPlugin, resolveHarness } from "./plugin-loader.js";
 
 export interface HarnessTestSpec {
   /** Fixture files to write in a fresh temp working dir (path → contents). */
   readonly files?: Record<string, string>;
   /** `.claude/settings.json` contents — the hooks/permissions under test. */
   readonly settings?: unknown;
+  /**
+   * Path to a real plugin/repo whose harness (hooks + CLAUDE.md + skills) is
+   * loaded into the sandbox, so you test the assembled machine, not a retyped
+   * subset. Inline `settings`/`files` layer on top. See src/plugin-loader.ts.
+   */
+  readonly plugin?: string;
   /** The scripted model turns the agent will take. */
   readonly model: readonly ModelTurn[];
   /** The user prompt. Default: "go". */
@@ -82,20 +90,21 @@ export function claudeAvailable(): boolean {
   }
 }
 
-function writeFixture(cwd: string, spec: HarnessTestSpec): void {
-  for (const [p, content] of Object.entries(spec.files ?? {})) {
+function writeFixture(
+  cwd: string,
+  files: Record<string, string>,
+  settings: unknown,
+): void {
+  for (const [p, content] of Object.entries(files)) {
     const full = resolve(cwd, p);
     mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content);
   }
-  if (spec.settings !== undefined) {
+  if (settings !== undefined) {
     // `{cwd}` in any hook command is substituted with the working dir, so a
     // hook can reference an absolute path inside it (hooks don't run with the
     // project dir as cwd).
-    const json = JSON.stringify(spec.settings, null, 2).replaceAll(
-      "{cwd}",
-      cwd,
-    );
+    const json = JSON.stringify(settings, null, 2).replaceAll("{cwd}", cwd);
     writeFileSync(join(cwd, "settings.json"), json);
   }
 }
@@ -143,7 +152,12 @@ export async function runHarnessTest(
   spec: HarnessTestSpec,
 ): Promise<HarnessTestResult> {
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
-  writeFixture(cwd, spec);
+  const { files, settings } = resolveHarness({
+    plugin: spec.plugin,
+    settings: spec.settings,
+    files: spec.files,
+  });
+  writeFixture(cwd, files, settings);
 
   const mock = await startMock(spec.model);
   try {
@@ -155,7 +169,7 @@ export async function runHarnessTest(
       "json",
       "--model",
       "claude-sonnet-4-5",
-      ...(spec.settings !== undefined ? ["--settings", "settings.json"] : []),
+      ...(settings !== undefined ? ["--settings", "settings.json"] : []),
       "--allowedTools",
       ...tools,
     ];

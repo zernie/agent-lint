@@ -14,11 +14,22 @@
     "./linters": "./dist/linters.js",
     "./eval": "./dist/eval.js",
     "./harness-test": "./dist/harness-test.js",
-    "./mock-model": "./dist/mock-model.js"
+    "./harness-assert": "./dist/harness-assert.js",
+    "./run-hook": "./dist/run-hook.js",
+    "./plugin-loader": "./dist/plugin-loader.js",
+    "./judge": "./dist/judge.js",
+    "./mock-model": "./dist/mock-model.js",
+    "./vitest": {
+      "types": "./dist/vitest.d.mts",
+      "default": "./dist/vitest.mjs"
+    },
+    "./jest": "./dist/jest.js"
   },
   "files": [
     "dist/**/*.js",
+    "dist/**/*.mjs",
     "dist/**/*.d.ts",
+    "dist/**/*.d.mts",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
     "action.yml",
@@ -28,11 +39,16 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js dist/skill-pipeline.test.js dist/skill-runtime.test.js dist/skill-driver.test.js dist/skill-test.test.js dist/compile-generator.test.js dist/community-skills.test.js dist/action-gate.test.js dist/symbols.test.js dist/refs.test.js dist/harness-test.test.js dist/eval.test.js",
+    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js dist/skill-pipeline.test.js dist/skill-runtime.test.js dist/skill-driver.test.js dist/skill-test.test.js dist/compile-generator.test.js dist/community-skills.test.js dist/action-gate.test.js dist/symbols.test.js dist/refs.test.js dist/harness-test.test.js dist/eval.test.js dist/run-scripts.test.js dist/plugin-loader.test.js dist/harness-assert.test.js dist/judge.test.js dist/run-hook.test.js",
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
-    "test:e2e": "bash test/e2e/run.sh"
+    "test:e2e": "bash test/e2e/run.sh",
+    "test:harness": "npm run build && node dist/cli.js test",
+    "test:eval": "npm run build && node dist/cli.js eval",
+    "test:vitest": "npm run build && vitest run",
+    "test:jest": "npm run build && jest",
+    "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -44,9 +60,23 @@
     "eslint": "^10.1.0",
     "eslint-plugin-sonarjs": "^4.0.2",
     "globals": "^17.4.0",
+    "jest": "^30.4.2",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "jest": ">=28",
+    "vitest": ">=1"
+  },
+  "peerDependenciesMeta": {
+    "jest": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@ast-grep/lang-python": "^0.0.6",
