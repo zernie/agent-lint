@@ -33,7 +33,10 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 > **A note on the third column.** Unit and integration are _verification_ —
 > deterministic, pass/fail, run on every commit. Eval is a different axis:
 > _measurement_ — an A/B delta (mean ± se) you read, not a green/red you assert,
-> run occasionally on a keyed job. It's kept in the table for **surface-coverage
+> run occasionally on a keyed job. **It is non-deterministic by construction** —
+> the same eval run twice yields different numbers, so a single run never "passes"
+> or "fails"; you read the mean ± se across N trials and ask whether the arm gap is
+> significant. It's kept in the table for **surface-coverage
 > completeness** (for skills/subagents/commands it's the _only_ handle, so the row
 > would otherwise look like a dead end), but it isn't a "test" in the same sense.
 > Its own machinery — trials, variance, significance, LLM-judge — lives in
@@ -43,21 +46,21 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 
 ## Surface × test type
 
-| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E / eval (real model)               |
-| --------------------------------------------- | ----------------------------------- | ------------------------------------ | ------------------------------------- |
-| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                  | ✅ behaviour                          |
-| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                   | ✅                                    |
-| Hook — SessionStart                           | ✅ logic                            | ✅                                   | ✅                                    |
-| Hook — Stop                                   | ✅ logic                            | ✅                                   | ✅                                    |
-| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | 🟡 headless-gated (drive via Bash)   | ✅                                    |
-| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                            |
-| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                            |
-| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour | ✅ moves behaviour                    |
-| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked** |
-| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via Task                           |
-| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via invocation                     |
-| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                         | 🔴 bring-your-own                     |
-| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                | ✅                                    |
+| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E / eval (real model, **non-deterministic**) |
+| --------------------------------------------- | ----------------------------------- | ------------------------------------ | ---------------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                  | ✅ behaviour                                   |
+| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                   | ✅                                             |
+| Hook — SessionStart                           | ✅ logic                            | ✅                                   | ✅                                             |
+| Hook — Stop                                   | ✅ logic                            | ✅                                   | ✅                                             |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | 🟡 headless-gated (drive via Bash)   | ✅                                             |
+| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                                     |
+| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                                     |
+| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour | ✅ moves behaviour                             |
+| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked**          |
+| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via Task                                    |
+| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via invocation                              |
+| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                         | 🔴 bring-your-own                              |
+| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                | ✅                                             |
 
 **The honest read of this table:** every surface has a **unit / static** check —
 for hooks it's logic, for prose it's reference verification (vigiles' first
