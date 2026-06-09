@@ -18,6 +18,7 @@ import {
   claudeAvailable,
   parseToolCalls,
   parseOutput,
+  parseHooks,
 } from "./harness-test.js";
 import {
   assertToolUsed,
@@ -27,6 +28,7 @@ import {
   assertToolSequence,
   assertToolCount,
   assertToolCalls,
+  assertHookFired,
 } from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
@@ -53,6 +55,7 @@ maybe("a PostToolUse hook fires on an Edit/Write tool use", async () => {
         ],
       },
     },
+    transcript: true, // capture the stream so r.hooks records the firing
     model: scriptModel([
       { tool: "Write", input: { file_path: "hello.txt", content: "banana" } },
       { text: "done" },
@@ -68,6 +71,9 @@ maybe("a PostToolUse hook fires on an Edit/Write tool use", async () => {
       /FIRED/,
       "the Write|Edit PostToolUse hook fired",
     );
+    // Honest check: the hook firing is recorded in the stream, not just inferred
+    // from the marker file above.
+    assertHookFired(r, "PostToolUse");
   } finally {
     r.cleanup();
   }
@@ -96,6 +102,7 @@ maybe("a PreToolUse hook blocks an Edit tool use", async () => {
         ],
       },
     },
+    transcript: true, // capture the stream so r.hooks records the block decision
     model: scriptModel([
       { tool: "Read", input: { file_path: "note.txt" } },
       {
@@ -117,6 +124,9 @@ maybe("a PreToolUse hook blocks an Edit tool use", async () => {
       "old",
       "the PreToolUse hook blocked the edit (file unchanged)",
     );
+    // Honest check: the hook fired AND its decision was a block — recorded from
+    // the stream, not inferred from the marker file + "file unchanged" pair.
+    assertHookFired(r, "PreToolUse:Edit", { blocked: true });
   } finally {
     r.cleanup();
   }
@@ -328,4 +338,36 @@ test("parseOutput: returns the final answer from the terminal result event", () 
     "x",
   );
   assert.equal(parseOutput("no result event here"), "");
+});
+
+test("parseHooks: records hook firing + block decision from stream events", () => {
+  const stream = [
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "PostToolUse:Bash",
+      hook_event: "PostToolUse",
+      exit_code: 0,
+      outcome: "success",
+      output: "POST_OK\n",
+    }),
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "PreToolUse:Edit",
+      hook_event: "PreToolUse",
+      exit_code: 2,
+      outcome: "error",
+      output: "BLOCKED\n",
+    }),
+    JSON.stringify({ type: "assistant", message: { content: [] } }), // ignored
+  ].join("\n");
+  const hooks = parseHooks(stream);
+  assert.equal(hooks.length, 2);
+  assert.equal(hooks[0]?.name, "PostToolUse:Bash");
+  assert.equal(hooks[0]?.blocked, false);
+  assert.equal(hooks[1]?.event, "PreToolUse");
+  assert.equal(hooks[1]?.exitCode, 2);
+  assert.equal(hooks[1]?.blocked, true);
+  assert.equal(parseHooks("{not stream json}").length, 0);
 });

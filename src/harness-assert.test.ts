@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import {
   improvement,
   assertImproves,
+  reliable,
+  assertReliable,
   assertCreated,
   assertNotCreated,
   assertServedTurns,
@@ -16,17 +18,22 @@ import {
   toolCount,
   skillResolved,
   toolUsedWith,
+  outputContains,
+  hookFired,
+  hookBlocked,
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
   assertToolUsedWith,
+  assertOutputContains,
+  assertHookFired,
   assertToolCount,
   assertToolSequence,
   assertToolCalls,
   vigilesMatchers,
 } from "./harness-assert.js";
 import type { EvalReport } from "./eval.js";
-import type { HarnessTestResult } from "./harness-test.js";
+import type { HarnessTestResult, HookFire } from "./harness-test.js";
 
 const report: EvalReport = {
   name: "demo",
@@ -41,6 +48,7 @@ const report: EvalReport = {
 function fakeResult(
   present: string[],
   toolCalls: HarnessTestResult["toolCalls"] = [],
+  extra: { output?: string; hooks?: readonly HookFire[] } = {},
 ): HarnessTestResult {
   return {
     exitCode: 0,
@@ -49,7 +57,8 @@ function fakeResult(
     cwd: "/tmp/x",
     turns: 2,
     toolCalls,
-    output: "",
+    hooks: extra.hooks ?? [],
+    output: extra.output ?? "",
     file: (p: string) => (present.includes(p) ? "content" : null),
     cleanup: () => undefined,
   };
@@ -75,6 +84,33 @@ test("assertImproves passes on a positive gap and throws otherwise", () => {
       metric: "caught",
       by: 0.9,
     });
+  });
+});
+
+test("reliable / assertReliable gate on pass^k (succeeded every trial)", () => {
+  const rep: EvalReport = {
+    name: "rel",
+    trials: 4,
+    arms: {
+      flaky: {
+        runs: 4,
+        metrics: { safe: 0.75 },
+        stats: { safe: { mean: 0.75, std: 0.5, se: 0.25, n: 4, passK: 0 } },
+      },
+      solid: {
+        runs: 4,
+        metrics: { safe: 1 },
+        stats: { safe: { mean: 1, std: 0, se: 0, n: 4, passK: 1 } },
+      },
+    },
+  };
+  assert.equal(reliable(rep, "solid", "safe"), true);
+  assert.equal(reliable(rep, "flaky", "safe"), false);
+  assert.doesNotThrow(() => {
+    assertReliable(rep, { arm: "solid", metric: "safe" });
+  });
+  assert.throws(() => {
+    assertReliable(rep, { arm: "flaky", metric: "safe" });
   });
 });
 
@@ -214,6 +250,60 @@ test("assertToolUsedWith: tool-argument assertion (asserts on input, not name)",
   assertToolUsedWith(r, "Edit", targets("note.txt"));
   assert.throws(() => {
     assertToolUsedWith(r, "Edit", targets("WRONG.txt"));
+  });
+});
+
+// --- output predicate (DeepEval-style "what did the agent say") ------------
+
+test("outputContains / assertOutputContains check trace.output", () => {
+  const r = fakeResult([], [], { output: "All done: created RESULT.md" });
+  assert.equal(outputContains(r, "RESULT.md"), true);
+  assert.equal(outputContains(r, /created \w+/), true);
+  assert.equal(outputContains(r, "missing"), false);
+  assertOutputContains(r, "All done");
+  assert.throws(() => {
+    assertOutputContains(r, "nope");
+  });
+});
+
+// --- hook predicates (recorded from the stream, not marker files) ----------
+
+const hookFires: readonly HookFire[] = [
+  {
+    name: "PreToolUse:Edit",
+    event: "PreToolUse",
+    exitCode: 2,
+    blocked: true,
+    output: "BLOCKED",
+  },
+  {
+    name: "PostToolUse:Bash",
+    event: "PostToolUse",
+    exitCode: 0,
+    blocked: false,
+    output: "ok",
+  },
+];
+
+test("hookFired / hookBlocked: match by label and by bare event", () => {
+  const r = fakeResult([], [], { hooks: hookFires });
+  assert.equal(hookFired(r, "PreToolUse:Edit"), true); // full label
+  assert.equal(hookFired(r, "PostToolUse"), true); // bare event
+  assert.equal(hookFired(r, /^PreToolUse/), true); // regex
+  assert.equal(hookFired(r, "SessionStart"), false);
+  assert.equal(hookBlocked(r, "PreToolUse"), true); // the Edit hook blocked
+  assert.equal(hookBlocked(r, "PostToolUse"), false); // the Bash hook didn't
+});
+
+test("assertHookFired: fires, and { blocked: true } demands a block", () => {
+  const r = fakeResult([], [], { hooks: hookFires });
+  assertHookFired(r, "PreToolUse:Edit");
+  assertHookFired(r, "PreToolUse", { blocked: true });
+  assert.throws(() => {
+    assertHookFired(r, "SessionStart"); // never fired
+  });
+  assert.throws(() => {
+    assertHookFired(r, "PostToolUse", { blocked: true }); // fired but didn't block
   });
 });
 

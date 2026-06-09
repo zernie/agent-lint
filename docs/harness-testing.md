@@ -159,10 +159,11 @@ assertToolUsedWith(
 ## One Trace, two consumers — predicates and assertions
 
 Both tiers produce one **`Trace`**: the observable record of a run —
-`toolCalls`, `output` (the final answer), `turns`, and `file(p)`. A
-`runHarnessTest` result _is_ a `Trace`, and so is the `ctx` handed to a
-`runEval` `measure`. Over that one shape there is one set of **bare predicates**
-— pure functions returning a value, with **no `assert` prefix and no throw**:
+`toolCalls`, `hooks` (which fired + its decision), `output` (the final answer),
+`turns`, and `file(p)`. A `runHarnessTest` result _is_ a `Trace`, and so is the
+`ctx` handed to a `runEval` `measure`. Over that one shape there is one set of
+**bare predicates** — pure functions returning a value, with **no `assert`
+prefix and no throw**:
 
 ```ts
 import {
@@ -170,14 +171,28 @@ import {
   toolCount,
   skillResolved,
   toolUsedWith,
+  outputContains,
+  hookFired,
+  hookBlocked,
 } from "vigiles/harness-assert";
 
 usedTool(trace, "Skill"); // boolean
 usedTool(trace, /^mcp__github__merge/); // boolean (regex)
 toolCount(trace, "Write"); // number
 skillResolved(trace, "demo:greet"); // boolean
-toolUsedWith(trace, "Edit", (i) => isRightFile(i)); // boolean
+toolUsedWith(trace, "Edit", (i) => isRightFile(i)); // boolean (tool argument)
+outputContains(trace, /done/i); // boolean (the agent's final answer)
+hookFired(trace, "PreToolUse:Edit"); // boolean (recorded from the stream)
+hookBlocked(trace, "PreToolUse"); // boolean (fired AND exit ≠ 0)
 ```
+
+`trace.hooks` is **recorded**, not inferred: each `HookFire` (`name`, `event`,
+`exitCode`, `blocked`, `output`) comes from the CLI's `hook_response` stream
+events, so a test asserts a hook _actually_ fired and blocked — no marker file
+the hook had to write. Capture it the same way as `toolCalls` (`transcript:
+true` on the harness tier; always on at the eval tier). The throwing form is
+`assertHookFired(trace, name, { blocked: true })`; `assertOutputContains(trace,
+needle)` does the same for the final answer.
 
 The two consumers stay **separate** — same vocabulary, never one dual-purpose
 function:
@@ -194,6 +209,11 @@ measure: (trace) => ({
   safe: !usedTool(trace, /merge|delete/), // bool → fraction-true + pass^k
 });
 ```
+
+A test can then gate on the result two ways: `assertImproves` (the mean gap
+beats a threshold) or `assertReliable(report, { arm, metric })` — the metric
+succeeded on **every** trial (pass^k = 1), the reliability bar for a
+non-deterministic harness.
 
 `runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
 and measure **real** activation (the model triggering the skill by its
@@ -391,6 +411,22 @@ vigiles eval --trials=6      # discover & run *.eval.mjs (forwards VIGILES_TRIAL
 
 `vigiles test` needs only the `claude` CLI (no API key) — so it runs the
 deterministic tier in CI at zero cost. See the repo's `harness` CI job.
+
+## Coverage
+
+The suite runs under node's built-in test runner (`npm test` →
+`node --test "dist/**/*.test.js"`, glob-discovered so a new `*.test.js` can't be
+forgotten). `npm run coverage` adds node 22's native V8 coverage (no extra dep)
+and prints per-file line/branch/function %:
+
+```bash
+npm run coverage   # node --test --experimental-test-coverage
+```
+
+The deterministic tiers (`runHook`, `runHarnessTest`) and the predicate/parse
+helpers are fully exercised; the **eval** path (`runEval` driving a real model)
+is covered by `bench/` rather than the unit suite, so its line % reads lower
+when measured without `claude` + model auth present.
 
 ## Canonical examples
 

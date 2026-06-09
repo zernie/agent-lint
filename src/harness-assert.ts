@@ -137,6 +137,36 @@ export function toolUsedWith(
 }
 
 /**
+ * Does the agent's final answer (`trace.output`) contain `needle` (string =
+ * substring, RegExp = test)? The output predicate behind `assertOutputContains`
+ * — the DeepEval-style "what did the agent actually say" check.
+ */
+export function outputContains(trace: Trace, needle: string | RegExp): boolean {
+  return typeof needle === "string"
+    ? trace.output.includes(needle)
+    : needle.test(trace.output);
+}
+
+/**
+ * Did a hook matching `name` fire? Matches against both the hook label
+ * (`"PreToolUse:Edit"`) and the bare event (`"PreToolUse"`), so `/PreToolUse/`
+ * or `"PreToolUse:Edit"` both work. The predicate behind `assertHookFired`.
+ */
+export function hookFired(trace: Trace, name: string | RegExp): boolean {
+  return trace.hooks.some(
+    (h) => nameMatches(h.name, name) || nameMatches(h.event, name),
+  );
+}
+
+/** Did a hook matching `name` fire AND block (exit ≠ 0 / outcome "error")? */
+export function hookBlocked(trace: Trace, name: string | RegExp): boolean {
+  return trace.hooks.some(
+    (h) =>
+      (nameMatches(h.name, name) || nameMatches(h.event, name)) && h.blocked,
+  );
+}
+
+/**
  * Assert the agent invoked a tool whose name matches `name` (string = exact,
  * RegExp = test) — e.g. a skill (`"Skill"`), an MCP tool (`/^mcp__github__/`), or
  * a subagent (`"Task"`). Needs `transcript: true`. The action invariant the
@@ -215,6 +245,45 @@ export function assertToolUsedWith(
   }
 }
 
+/** Assert the agent's final answer contains `needle` (string substring / RegExp). */
+export function assertOutputContains(
+  trace: Trace,
+  needle: string | RegExp,
+): void {
+  if (!outputContains(trace, needle)) {
+    const shown = trace.output.slice(0, 200) || "(empty)";
+    fail(
+      `expected the agent's final answer to contain ${String(needle)}; got: ${shown}`,
+    );
+  }
+}
+
+function hookNames(trace: Trace): string {
+  return trace.hooks.map((h) => h.name).join(", ") || "none";
+}
+
+/**
+ * Assert a hook matching `name` fired (and, with `{ blocked: true }`, that it
+ * blocked) — the honest hook-firing check, recorded from the run's stream rather
+ * than inferred from a marker file the hook had to write. Needs `transcript`.
+ */
+export function assertHookFired(
+  trace: Trace,
+  name: string | RegExp,
+  opts: { blocked?: boolean } = {},
+): void {
+  if (!hookFired(trace, name)) {
+    fail(
+      `expected a hook matching ${String(name)} to fire; hooks fired: [${hookNames(trace)}] (did you set transcript:true?)`,
+    );
+  }
+  if (opts.blocked === true && !hookBlocked(trace, name)) {
+    fail(
+      `expected a hook matching ${String(name)} to block, but none did; hooks fired: [${hookNames(trace)}]`,
+    );
+  }
+}
+
 // --- sequence / budget invariants over the agent's actions -----------------
 
 /**
@@ -273,6 +342,35 @@ export function assertToolCalls(
 ): void {
   if (!predicate(trace.toolCalls)) {
     fail(`${message}; tools used: [${toolNames(trace)}]`);
+  }
+}
+
+/**
+ * Did `arm` succeed on EVERY trial for `metric` — τ-bench pass^k = 1? The
+ * reliability predicate over an eval report (vs. `improvement`, which reads the
+ * mean gap). Reads `report.arms[arm].stats[metric].passK`.
+ */
+export function reliable(
+  report: EvalReport,
+  arm: string,
+  metric: string,
+): boolean {
+  return report.arms[arm]?.stats[metric]?.passK === 1;
+}
+
+/**
+ * Assert `arm` passed `metric` on every trial (pass^k = 1) — the reliability
+ * gate for a non-deterministic harness ("worked every time", not "on average").
+ */
+export function assertReliable(
+  report: EvalReport,
+  opts: { arm: string; metric: string },
+): void {
+  if (!reliable(report, opts.arm, opts.metric)) {
+    const pk = report.arms[opts.arm]?.stats[opts.metric]?.passK;
+    fail(
+      `expected ${opts.arm} to pass ${opts.metric} on every trial (pass^k=1), got pass^k=${String(pk ?? "n/a")}`,
+    );
   }
 }
 

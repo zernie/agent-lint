@@ -96,27 +96,28 @@ Two rules fall out of this (and correct an earlier sketch that blurred them):
 
 ## What we have vs. what this says to build
 
-| Need (from the field)                        | vigiles today                                                                                    | gap                                       |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| A unified **Trace** from both tiers          | ✅ one `Trace` (`toolCalls`+`output`+`turns`+`file`) from `runHarnessTest` _and_ `runEval`'s ctx | — (shipped)                               |
-| `trace.output` (final answer) for judge      | ✅ `parseOutput` reads the terminal `result` event                                               | — (shipped)                               |
-| `trace.hooks` (which fired + decision)       | inferred via marker files                                                                        | **deferred** — needs mock instrumentation |
-| **Predicates** separate from **`assert*`**   | ✅ bare `usedTool`/`toolCount`/`skillResolved`/`toolUsedWith`; `assert*` wrap them               | — (shipped)                               |
-| **pass^k** reliability (not just mean ± se)  | ✅ `MetricStat.passK` + `formatEvalReport`                                                       | — (shipped)                               |
-| Tool-**argument** assertions (not just name) | ✅ `toolUsedWith` / `assertToolUsedWith` over `input`                                            | — (shipped)                               |
-| State-over-self-report outcome               | ✅ `sh("npm test")` after the agent stops                                                        | — (validated)                             |
-| Procedure-aware / trajectory invariants      | ✅ `assertToolSequence`, "Edit after Read"                                                       | — (validated; this is "corrupt success")  |
+| Need (from the field)                        | vigiles today                                                                                    | gap                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| A unified **Trace** from both tiers          | ✅ one `Trace` (`toolCalls`+`output`+`turns`+`file`) from `runHarnessTest` _and_ `runEval`'s ctx | — (shipped)                              |
+| `trace.output` (final answer) for judge      | ✅ `parseOutput` reads the terminal `result` event                                               | — (shipped)                              |
+| `trace.hooks` (which fired + decision)       | ✅ `parseHooks` records it from the CLI's `hook_response` stream events                          | — (shipped; no instrumentation needed)   |
+| **Predicates** separate from **`assert*`**   | ✅ bare `usedTool`/`toolCount`/`skillResolved`/`toolUsedWith`; `assert*` wrap them               | — (shipped)                              |
+| **pass^k** reliability (not just mean ± se)  | ✅ `MetricStat.passK` + `formatEvalReport`                                                       | — (shipped)                              |
+| Tool-**argument** assertions (not just name) | ✅ `toolUsedWith` / `assertToolUsedWith` over `input`                                            | — (shipped)                              |
+| State-over-self-report outcome               | ✅ `sh("npm test")` after the agent stops                                                        | — (validated)                            |
+| Procedure-aware / trajectory invariants      | ✅ `assertToolSequence`, "Edit after Read"                                                       | — (validated; this is "corrupt success") |
 
 ## Bottom line
 
 The design holds up against prior art: **a shared `Trace` + a deterministic
 predicate vocabulary, with judge a minority and eval kept as a separate
-statistical consumer.** The sharpest moves the field pointed at are now shipped
-(PR `feat: unified Trace + predicate vocabulary`): the **`Trace`** is unified
-across both tiers (with `output`), predicates are **split from `assert*`**, and
-**pass^k** + tool-argument assertions are in. The one piece left is
-**`trace.hooks`** (which hook fired + its decision) — deferred until it's needed,
-since it requires recording hook invocations rather than inferring them.
+statistical consumer.** The moves the field pointed at are shipped (PR `feat:
+unified Trace + predicate vocabulary`): the **`Trace`** is unified across both
+tiers (with `output` **and `hooks`**), predicates are **split from `assert*`**,
+and **pass^k** + tool-argument + output + reliability assertions are in.
+`trace.hooks` turned out not to need mock instrumentation at all — the CLI
+already surfaces hook firing in `stream-json` (`hook_response` events), so
+`parseHooks` simply records it.
 
 ## See also
 

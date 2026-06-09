@@ -37,6 +37,7 @@ import { resolveHarness } from "./plugin-loader.js";
 import {
   parseToolCalls,
   parseResultEvent,
+  parseHooks,
   type ToolCall,
   type Trace,
 } from "./harness-test.js";
@@ -207,6 +208,7 @@ function makeContext(cwd: string, out: RunOut): RunContext {
     stdout: out.stdout,
     turns,
     toolCalls: parseToolCalls(out.stdout),
+    hooks: parseHooks(out.stdout),
     output,
     file: (p) => {
       const f = resolve(cwd, p);
