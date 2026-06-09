@@ -78,7 +78,9 @@ test.
    (`examples/harness/skill-outcome.eval.mjs`). We measure "if the agent reads
    this prose, does output change" — **not** "does Claude trigger this skill by
    its description." The activation mechanism, the thing that makes a skill a
-   skill, is untested.
+   skill, is untested. _(Update: a 2026-06-09 spike shows activation **is**
+   testable via `--plugin-dir` — see the Spike section below. Fix identified, not
+   yet built.)_
 2. **Edit/Write hooks are headless-gated.** The Edit/Write tools don't fire via
    the mock in headless mode, so the deterministic tier can't drive Edit/Write
    tool-event hooks; you fall back to the unit tier (logic) or the eval tier.
@@ -91,19 +93,19 @@ test.
 
 ## Cross-cutting capabilities (provided vs. should)
 
-| Capability                                                                            | Status | Notes                                                                     |
-| ------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------- |
-| Plugin loader — real layouts, materialize, surface warnings                           | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine             |
-| Real-plugin dogfood — pinned, vendored snapshots                                      | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)             |
-| Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                             |
-| LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)               |
-| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🔴     | the fix for caveat #1 — install the plugin, don't fake-read its files     |
-| **Deterministic Edit/Write driver** (un-gate tool events)                             | 🔴     | the fix for caveat #2 — a headless path that fires Edit/Write             |
-| **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically               |
-| **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                          |
-| **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify |
-| Line-coverage tooling (c8/nyc) on the suite                                           | 🔴     | no coverage % exists today                                                |
-| CI guard: fail (not skip) when `claude` is absent                                     | 🔴     | the deterministic tier silently skips off-box                             |
+| Capability                                                                            | Status | Notes                                                                                              |
+| ------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| Plugin loader — real layouts, materialize, surface warnings                           | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                      |
+| Real-plugin dogfood — pinned, vendored snapshots                                      | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                      |
+| Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                                                      |
+| LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                        |
+| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🔴     | fix for caveat #1 — **spike-confirmed via `--plugin-dir`** (whole-plugin vendoring); not yet wired |
+| **Deterministic Edit/Write driver** (un-gate tool events)                             | 🔴     | the fix for caveat #2 — a headless path that fires Edit/Write                                      |
+| **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically                                        |
+| **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                                                   |
+| **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                          |
+| Line-coverage tooling (c8/nyc) on the suite                                           | 🔴     | no coverage % exists today                                                                         |
+| CI guard: fail (not skip) when `claude` is absent                                     | 🔴     | the deterministic tier silently skips off-box                                                      |
 
 ## What we should build, prioritized (value × cost)
 
@@ -123,6 +125,42 @@ test.
 6. **Coverage tooling + fail-not-skip guard** — make "how much do we test"
    answerable as a number, and stop the deterministic tier from silently
    skipping. Low cost.
+
+## Spike — is skill activation testable for real? (2026-06-09, claude 2.1.169)
+
+Caveat #1 said skill activation is _faked_. A spike against the real CLI settles
+it: **it is testable — via `--plugin-dir`, not file materialization.**
+
+Method: load the vendored obra/superpowers snapshot with
+`claude --plugin-dir <dir> --print --output-format stream-json` against the real
+model (haiku), from a clean temp dir so the plugin is the only context.
+
+Findings:
+
+1. **`--plugin-dir` natively registers the plugin's skills.** A/B self-report
+   ("do you have skill `test-driven-development`?") → **YES** with the flag,
+   **NO** without.
+2. **The model genuinely _activates_ a skill.** Given a TDD-shaped task it emitted
+   a real `Skill` tool call — `{"skill":"superpowers:test-driven-development",
+"args":"isPrime(n)…"}` — under the `<plugin>:<skill>` namespace. That is native
+   activation, not the working-dir file-read the current eval fakes.
+3. **Fidelity lesson:** native install resolves the plugin's _internal_
+   references, so a partial vendor breaks — the TDD skill `cat`-ed a sibling
+   `using-superpowers/SKILL.md` we hadn't vendored and errored. Vendor the **whole
+   plugin** (or its dependency closure), not an arbitrary slice.
+
+Consequences:
+
+- **#1 is feasible.** The mechanism is `--plugin-dir`; the build is to have
+  `loadPlugin` / `runHarnessTest` / `runEval` install plugins that way (and
+  vendor whole plugins). Closes caveat #1.
+- **Bonus deterministic win.** Because activation surfaces as a `Skill` tool call,
+  a _scripted mock model_ can emit that exact `tool_use`, so `runHarnessTest` can
+  assert a skill **resolves and runs** deterministically (wiring) — distinct from
+  the eval tier, which is whether the model _chooses_ it. That moves the Skills
+  **integration** cell from 🔴 toward ✅.
+- **Still open:** the Edit/Write headless question (caveat #2 / build #3) is a
+  separate, key-free probe — `scriptModel` an Edit `tool_use` and see if it fires.
 
 ## See also
 
