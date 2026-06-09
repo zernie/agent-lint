@@ -197,7 +197,7 @@ here for later:
 ### Trace unification & shared vocabulary (from the prior-art survey)
 
 Prior art on testing non-deterministic AI tools
-([`testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md)) converges on
+([`research/testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md)) converges on
 one model — **a shared `Trace` + a deterministic predicate vocabulary, with judge
 a minority and eval a separate consumer**. The gaps it points at, in priority:
 
