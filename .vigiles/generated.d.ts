@@ -89,7 +89,7 @@ declare module "vigiles/generated" {
     | "test:jest"
     | "test:types";
 
-  /** 67 project files. */
+  /** 69 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -125,6 +125,8 @@ declare module "vigiles/generated" {
     | "src/judge.test.ts"
     | "src/judge.ts"
     | "src/linters.ts"
+    | "src/mcp.test.ts"
+    | "src/mcp.ts"
     | "src/mock-model.ts"
     | "src/orphans.test.ts"
     | "src/orphans.ts"
@@ -264,6 +266,8 @@ declare module "vigiles/spec" {
       | "src/judge.test.ts"
       | "src/judge.ts"
       | "src/linters.ts"
+      | "src/mcp.test.ts"
+      | "src/mcp.ts"
       | "src/mock-model.ts"
       | "src/orphans.test.ts"
       | "src/orphans.ts"

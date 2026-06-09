@@ -46,21 +46,21 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 
 ## Surface × test type
 
-| Surface                                       | Unit / static                       | Integration (assembled, mock model)                   | E2E / eval (real model, **non-deterministic**)                         |
-| --------------------------------------------- | ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
-| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                                   | ✅ behaviour                                                           |
-| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                                    | ✅                                                                     |
-| Hook — SessionStart                           | ✅ logic                            | ✅                                                    | ✅                                                                     |
-| Hook — Stop                                   | ✅ logic                            | ✅                                                    | ✅                                                                     |
-| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | ✅ fires (claude 2.1.169 — see spike)                 | ✅                                                                     |
-| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                                 | 🟡 partial                                                             |
-| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                                 | 🟡 partial                                                             |
-| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour                  | ✅ moves behaviour                                                     |
-| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | ✅ scripted `Skill` resolves via `pluginDir`          | ✅ real activation via `pluginDir` arm (off: no skill → on: activates) |
-| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 deterministic hard (nested mock sessions)          | ✅ registers + runs via `pluginDir` + Task (probed)                    |
-| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🟡 expansion is pre-model (needs mock-prompt capture) | ✅ registers + runs via `pluginDir` + `/cmd` (probed)                  |
-| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                                          | 🔴 bring-your-own                                                      |
-| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                                 | ✅                                                                     |
+| Surface                                       | Unit / static                          | Integration (assembled, mock model)                   | E2E / eval (real model, **non-deterministic**)                         |
+| --------------------------------------------- | -------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                   | ✅ fires in machine                                   | ✅ behaviour                                                           |
+| Hook — UserPromptSubmit                       | ✅ logic                               | ✅                                                    | ✅                                                                     |
+| Hook — SessionStart                           | ✅ logic                               | ✅                                                    | ✅                                                                     |
+| Hook — Stop                                   | ✅ logic                               | ✅                                                    | ✅                                                                     |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                               | ✅ fires (claude 2.1.169 — see spike)                 | ✅                                                                     |
+| Hook — SubagentStop                           | ✅ logic                               | 🔴 mock can't trigger                                 | 🟡 partial                                                             |
+| Hook — PreCompact / Notification / SessionEnd | ✅ logic                               | 🔴 mock can't trigger                                 | 🟡 partial                                                             |
+| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)             | 🟡 present in context, not behaviour                  | ✅ moves behaviour                                                     |
+| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs`    | ✅ scripted `Skill` resolves via `pluginDir`          | ✅ real activation via `pluginDir` arm (off: no skill → on: activates) |
+| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)        | 🔴 deterministic hard (nested mock sessions)          | ✅ registers + runs via `pluginDir` + Task (probed)                    |
+| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)        | 🟡 expansion is pre-model (needs mock-prompt capture) | ✅ registers + runs via `pluginDir` + `/cmd` (probed)                  |
+| MCP servers                                   | 🟡 **tool refs verifiable** (`mcp.ts`) | 🔴 not wired                                          | 🔴 bring-your-own                                                      |
+| settings.json — permissions / env             | 🟡 assert merged                       | ✅ applied to sandbox                                 | ✅                                                                     |
 
 **The honest read of this table:** every surface has a **unit / static** check —
 for hooks it's logic, for prose it's reference verification (vigiles' first
@@ -114,7 +114,8 @@ tier.
 | **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped)                                                                                                    | 🟡     | **skills done both tiers** via `pluginDir` (`runHarnessTest` + `runEval`); subagents/commands not yet verified to register                                                                               |
 | ~~Deterministic Edit/Write driver~~ → regression test                                                                                                                                    | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)                                                                                                               |
 | **Deterministic subagent / command wiring**                                                                                                                                              | 🔴     | both register via `pluginDir` (eval ✅); deterministic needs: command = capture the mock-received (expanded) prompt; subagent = hard (nested mock sessions)                                              |
-| **MCP server harness** (loader stands the server up)                                                                                                                                     | 🔴     | today the loader warns and stops                                                                                                                                                                         |
+| **MCP tool-reference verification** (`mcp.ts`: `listMcpTools` / `verifyMcpTool`)                                                                                                         | ✅     | starts a stdio MCP server, handshakes, lists tools, verifies a cited tool exists with Levenshtein "did you mean"; tested on a real fixture server + probed on `@modelcontextprotocol/server-everything`  |
+| **MCP harness** — `mcp()` spec builder + audit wiring + `mcpConfig` option                                                                                                               | 🟡     | engine ships (above); remaining: a spec `mcp("server","tool")` reference + `audit` integration, and `mcpConfig` on `runHarnessTest`/`runEval` to run a live server                                       |
 | **Sandboxed untrusted exec** (bwrap / docker)                                                                                                                                            | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                                                                                                                                |
 | Line-coverage tooling (c8/nyc) on the suite                                                                                                                                              | 🔴     | no coverage % exists today                                                                                                                                                                               |
 | CI guard: fail (not skip) when `claude` is absent                                                                                                                                        | 🔴     | the deterministic tier silently skips off-box                                                                                                                                                            |
@@ -140,14 +141,15 @@ tier.
 4. **Scripted subagent / command stubs** — cheap wiring assurance for the Task /
    slash surfaces without paying for a model. Low–medium cost.
 5. **MCP harness — reference verification + behavioral wiring.** _The standout
-   remaining gap, and the only one that's vigiles-shaped (not commoditized)._ Two
-   parts: **(a)** a new reference kind — `mcp("github", "issue_write")` that starts
-   the MCP server, lists its tools, and verifies the cited tool exists (like
-   `enforce()` resolves a linter rule against the live catalog) — catches a
-   skill/CLAUDE.md citing an MCP tool that was renamed/removed; **(b)** a
-   `mcpConfig` option on `runHarnessTest`/`runEval` that threads `--mcp-config`, so
-   behavioral tests run a live server and `r.toolCalls` asserts `mcp__*` usage.
-   Medium cost.
+   vigiles-shaped item (not commoditized)._ Part **(a) shipped:** `src/mcp.ts`
+   (`listMcpTools` / `verifyMcpTool`) starts a stdio MCP server, handshakes, lists
+   its tools, and verifies a cited tool exists with a Levenshtein "did you mean"
+   — tested against a real fixture server and probed on
+   `@modelcontextprotocol/server-everything`. **Remaining:** a spec
+   `mcp("github","issue_write")` reference kind + `audit` integration (surface it
+   like `enforce()`), and **(b)** a `mcpConfig` option on
+   `runHarnessTest`/`runEval` that threads `--mcp-config` so behavioral tests run a
+   live server and `r.toolCalls` asserts `mcp__*` usage.
 6. **Coverage tooling + fail-not-skip guard** — make "how much do we test"
    answerable as a number, and stop the deterministic tier from silently
    skipping. Low cost.
