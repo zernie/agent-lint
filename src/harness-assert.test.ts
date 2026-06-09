@@ -15,6 +15,9 @@ import {
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolCount,
+  assertToolSequence,
+  assertToolCalls,
   vigilesMatchers,
 } from "./harness-assert.js";
 import type { EvalReport } from "./eval.js";
@@ -156,5 +159,57 @@ test("assertSkillResolved: needs a non-error Skill tool_use with that name", () 
   const errored = { ...skillCall, isError: true, resultText: "No such skill" };
   assert.throws(() => {
     assertSkillResolved(fakeResult([], [errored]), "demo:greet"); // errored
+  });
+});
+
+// --- sequence / budget invariants (idea 1) ---------------------------------
+
+const call = (name: string) => ({
+  name,
+  input: {},
+  resultText: "",
+  isError: false,
+});
+
+test("assertToolCount: min / max / exactly bounds", () => {
+  const r = fakeResult([], [call("Read"), call("Write"), call("Write")]);
+  assertToolCount(r, "Write", { max: 2 });
+  assertToolCount(r, "Read", { exactly: 1 });
+  assertToolCount(r, /^mcp__/, { exactly: 0 });
+  assert.throws(() => {
+    assertToolCount(r, "Write", { max: 1 }); // 2 > 1
+  });
+  assert.throws(() => {
+    assertToolCount(r, "Read", { min: 2 }); // only 1
+  });
+});
+
+test("assertToolSequence: in-order subsequence (gaps allowed)", () => {
+  const r = fakeResult([], [call("Read"), call("Bash"), call("Edit")]);
+  assertToolSequence(r, ["Read", "Edit"]); // Read before Edit (Bash between is fine)
+  assertToolSequence(r, [/^Read$/, /^Edit$/]); // regex form
+  assert.throws(() => {
+    assertToolSequence(r, ["Edit", "Read"]); // wrong order
+  });
+  assert.throws(() => {
+    assertToolSequence(r, ["Read", "Read"]); // only one Read
+  });
+});
+
+test("assertToolCalls: custom invariant — every Edit preceded by a Read", () => {
+  const everyEditAfterRead = (calls: readonly { name: string }[]) => {
+    let read = false;
+    for (const c of calls) {
+      if (c.name === "Read") read = true;
+      if (c.name === "Edit" && !read) return false;
+    }
+    return true;
+  };
+  assertToolCalls(
+    fakeResult([], [call("Read"), call("Edit")]),
+    everyEditAfterRead,
+  );
+  assert.throws(() => {
+    assertToolCalls(fakeResult([], [call("Edit")]), everyEditAfterRead);
   });
 });

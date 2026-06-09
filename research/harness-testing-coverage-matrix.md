@@ -103,21 +103,21 @@ tier.
 
 ## Cross-cutting capabilities (provided vs. should)
 
-| Capability                                                                                                   | Status | Notes                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Plugin loader — real layouts, materialize, surface warnings                                                  | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                                                                                |
-| Real-plugin dogfood — pinned, vendored snapshots                                                             | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                                                                                |
-| Eval aggregation — mean ± se, variance, report                                                               | ✅     | `src/eval.ts`                                                                                                                                                |
-| **Action-invariant assertions** (`r.toolCalls` + `assertToolUsed`/`assertToolNotUsed`/`assertSkillResolved`) | ✅     | parse the transcript so tests assert on the agent's _actions_ (skills/MCP/tools), not a brittle stdout match; grounded on real superpowers + wshobson skills |
-| **MCP governance** (block a destructive `mcp__…` tool)                                                       | ✅     | `runHook` covers it (no server) — `src/run-hook.test.ts` (`mcp__github__merge_pull_request`)                                                                 |
-| LLM-as-judge — verdict parsing                                                                               | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                                                                                  |
-| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped)                        | 🟡     | **skills done both tiers** via `pluginDir` (`runHarnessTest` + `runEval`); subagents/commands not yet verified to register                                   |
-| ~~Deterministic Edit/Write driver~~ → regression test                                                        | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)                                                                   |
-| **Deterministic subagent / command wiring**                                                                  | 🔴     | both register via `pluginDir` (eval ✅); deterministic needs: command = capture the mock-received (expanded) prompt; subagent = hard (nested mock sessions)  |
-| **MCP server harness** (loader stands the server up)                                                         | 🔴     | today the loader warns and stops                                                                                                                             |
-| **Sandboxed untrusted exec** (bwrap / docker)                                                                | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                                                                                    |
-| Line-coverage tooling (c8/nyc) on the suite                                                                  | 🔴     | no coverage % exists today                                                                                                                                   |
-| CI guard: fail (not skip) when `claude` is absent                                                            | 🔴     | the deterministic tier silently skips off-box                                                                                                                |
+| Capability                                                                                                                                                                               | Status | Notes                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plugin loader — real layouts, materialize, surface warnings                                                                                                                              | ✅     | `src/plugin-loader.ts`; never silently tests an empty machine                                                                                                                                            |
+| Real-plugin dogfood — pinned, vendored snapshots                                                                                                                                         | ✅     | `examples/harness/real-*.harness.mjs` (superpowers, wshobson)                                                                                                                                            |
+| Eval aggregation — mean ± se, variance, report                                                                                                                                           | ✅     | `src/eval.ts`                                                                                                                                                                                            |
+| **Action-invariant assertions** (`r.toolCalls` + `assertToolUsed`/`assertToolNotUsed`/`assertSkillResolved` + sequence/budget: `assertToolSequence`/`assertToolCount`/`assertToolCalls`) | ✅     | parse the transcript so tests assert on the agent's _actions_ and _workflows_ (ordering, budgets, "every Edit after a Read"), not a brittle stdout match; grounded on real superpowers + wshobson skills |
+| **MCP governance** (block a destructive `mcp__…` tool)                                                                                                                                   | ✅     | `runHook` covers it (no server) — `src/run-hook.test.ts` (`mcp__github__merge_pull_request`)                                                                                                             |
+| LLM-as-judge — verdict parsing                                                                                                                                                           | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                                                                                                                              |
+| **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped)                                                                                                    | 🟡     | **skills done both tiers** via `pluginDir` (`runHarnessTest` + `runEval`); subagents/commands not yet verified to register                                                                               |
+| ~~Deterministic Edit/Write driver~~ → regression test                                                                                                                                    | ✅     | shipped: `src/harness-test.test.ts` (Write→PostToolUse fires; Read→Edit→PreToolUse blocks)                                                                                                               |
+| **Deterministic subagent / command wiring**                                                                                                                                              | 🔴     | both register via `pluginDir` (eval ✅); deterministic needs: command = capture the mock-received (expanded) prompt; subagent = hard (nested mock sessions)                                              |
+| **MCP server harness** (loader stands the server up)                                                                                                                                     | 🔴     | today the loader warns and stops                                                                                                                                                                         |
+| **Sandboxed untrusted exec** (bwrap / docker)                                                                                                                                            | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                                                                                                                                |
+| Line-coverage tooling (c8/nyc) on the suite                                                                                                                                              | 🔴     | no coverage % exists today                                                                                                                                                                               |
+| CI guard: fail (not skip) when `claude` is absent                                                                                                                                        | 🔴     | the deterministic tier silently skips off-box                                                                                                                                                            |
 
 ## What we should build, prioritized (value × cost)
 
@@ -143,6 +143,26 @@ tier.
 6. **Coverage tooling + fail-not-skip guard** — make "how much do we test"
    answerable as a number, and stop the deterministic tier from silently
    skipping. Low cost.
+
+### Richer invariants (beyond bool asserts)
+
+Sequence/budget invariants over `r.toolCalls` (idea 1) **shipped** —
+`assertToolSequence` / `assertToolCount` / `assertToolCalls`. Two siblings parked
+here for later:
+
+7. **Property-based fuzzing for hooks** (idea 2) — generate hundreds of inputs and
+   assert a hook's invariant holds for all (e.g. _"blocks iff the command matches
+   the danger set"_), catching edge cases two examples miss. Hooks are pure
+   decision functions — the ideal target. **Unit tier only** (never fuzz a
+   `claude`-spawning test). Needs a generator (`fast-check` as an optional dep, or
+   the home-grown `propertyTest` in `src/proofs.ts`). Medium cost.
+8. **Monotonic / relational eval invariants** (idea 3) — instead of "arm A scored
+   higher" (could be noise), assert a relationship that must always hold, e.g.
+   `assertMonotone(report, { metric, direction, arm, baseline })`: _"turning the
+   hook on never makes the forbidden-action rate worse"_, with the gap clearing the
+   combined se. Separates signal from luck; the behavioural analogue of the spec
+   `checkMonotonicity` proof (`src/proofs.ts`). Builds on the `se` `runEval` already
+   computes. Small–medium cost.
 
 ## Spike — is skill activation testable for real? (2026-06-09, claude 2.1.169)
 

@@ -17,6 +17,7 @@ import {
   runHarnessTest,
   type HarnessTestSpec,
   type HarnessTestResult,
+  type ToolCall,
 } from "./harness-test.js";
 import type { EvalReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
@@ -143,6 +144,67 @@ export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
     fail(
       `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
     );
+  }
+}
+
+// --- sequence / budget invariants over the agent's actions -----------------
+
+/**
+ * Assert how many tools matching `name` the agent invoked is within bounds — a
+ * budget invariant (e.g. `{ max: 1 }` = "at most one Write", `{ exactly: 0 }` =
+ * "never touched it"). Catches runaway loops and wasted work. Needs `transcript`.
+ */
+export function assertToolCount(
+  r: HarnessTestResult,
+  name: string | RegExp,
+  bounds: { min?: number; max?: number; exactly?: number },
+): void {
+  const n = r.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+  const ok =
+    (bounds.exactly === undefined || n === bounds.exactly) &&
+    (bounds.min === undefined || n >= bounds.min) &&
+    (bounds.max === undefined || n <= bounds.max);
+  if (!ok) {
+    fail(
+      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(r)}])`,
+    );
+  }
+}
+
+/**
+ * Assert the named tools occurred in this order (as a subsequence — gaps allowed)
+ * — an ordering invariant. e.g. `["Read", "Edit"]` checks a Read came before an
+ * Edit. For a stricter rule (every Edit preceded by a Read), use `assertToolCalls`.
+ * Needs `transcript`.
+ */
+export function assertToolSequence(
+  r: HarnessTestResult,
+  names: ReadonlyArray<string | RegExp>,
+): void {
+  let i = 0;
+  for (const c of r.toolCalls) {
+    const want = names[i];
+    if (want !== undefined && nameMatches(c.name, want)) i++;
+  }
+  if (i < names.length) {
+    fail(
+      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(r)}]`,
+    );
+  }
+}
+
+/**
+ * The escape hatch: assert any custom invariant over the full list of tool calls
+ * the agent made — for rules the helpers above don't express, e.g. "every Edit
+ * was preceded by a Read of that file". Needs `transcript`.
+ */
+export function assertToolCalls(
+  r: HarnessTestResult,
+  predicate: (calls: readonly ToolCall[]) => boolean,
+  message = "tool-call invariant failed",
+): void {
+  if (!predicate(r.toolCalls)) {
+    fail(`${message}; tools used: [${toolNames(r)}]`);
   }
 }
 

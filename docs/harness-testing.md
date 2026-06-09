@@ -130,6 +130,19 @@ skills this way — no marker needed. This is the deterministic **wiring** tier
 (does the skill resolve); whether the real model _chooses_ a skill is the eval
 tier.
 
+Beyond a single tool, you can assert on the **sequence and budget** of what the
+agent did:
+
+```ts
+assertToolSequence(r, ["Read", "Edit"]); // ordering — Read before Edit
+assertToolCount(r, "Write", { max: 1 }); // budget — no runaway writes
+assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
+```
+
+`assertToolSequence` matches an in-order subsequence (gaps allowed);
+`assertToolCount` takes `{ min, max, exactly }`; `assertToolCalls` is the escape
+hatch for a custom invariant like _"every Edit was preceded by a Read"_.
+
 `runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
 and measure **real** activation (the model triggering the skill by its
 description), superseding the older "tell the agent to read a SKILL.md" trick:
