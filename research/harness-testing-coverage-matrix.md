@@ -8,43 +8,53 @@
 > [`research/harness-testing.md`](harness-testing.md); the sandbox capability is
 > [`research/feature-ideas.md`](feature-ideas.md) §13.
 
-## The three tiers (columns)
+## The three test types (columns)
 
-- **Unit** — model-free, the handler's _logic_ in isolation. `runHook` synthesizes
-  an event JSON and reads the decision. Cheap (ms), reaches every event, but
-  proves only logic, not wiring.
-- **Integration (deterministic)** — real `claude` CLI + a **scripted mock model**
-  (`runHarnessTest`). Real hooks fire, model turns are fixed. No API key, no cost.
-  Proves **wiring** — that the surface fires inside the assembled machine.
-- **E2E (eval)** — the **real model**, N trials per arm (`runEval`). Proves
-  **behaviour** — does the surface change what the agent does. Statistical, costs
-  real money, non-deterministic.
+The standard pyramid, lowest cost first. Each maps to a vigiles entry point — and
+for the **prose** surfaces (skills, agents, commands, CLAUDE.md) the "unit" tier
+is **static verification** (vigiles' other pillar), not logic execution, so every
+surface has _some_ unit-level check.
+
+- **Unit / static** — isolated, model-free, deterministic. Two flavours: a hook's
+  _logic_ in isolation (`runHook` — synthesize an event, read the block/allow
+  decision), and _reference / contract verification_ of instruction / skill /
+  agent / command files (`vigiles audit` / `refs` — do the cited rules, files,
+  commands, and symbols actually exist?). Milliseconds.
+- **Integration** — the _assembled_ harness: real `claude` CLI + real
+  hooks/settings against a **scripted mock model** (`runHarnessTest`), plus
+  structural assembly (`loadPlugin`). No API key, no cost. Proves **wiring** — the
+  surface fires / loads inside the real machine.
+- **E2E** — the whole machine under the **real model**, N trials per arm
+  (`runEval`). Proves **behaviour** — does the surface change what the agent does.
+  Statistical, real cost, non-deterministic.
 
 Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜ n/a.
 
-## Surface × tier
+## Surface × test type
 
-| Surface                                       | Unit (`runHook`)       | Integration (`runHarnessTest`)       | E2E (`runEval`)                       |
-| --------------------------------------------- | ---------------------- | ------------------------------------ | ------------------------------------- |
-| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic               | ✅ fires in machine                  | ✅ behaviour                          |
-| Hook — UserPromptSubmit                       | ✅                     | ✅                                   | ✅                                    |
-| Hook — SessionStart                           | ✅                     | ✅                                   | ✅                                    |
-| Hook — Stop                                   | ✅                     | ✅                                   | ✅                                    |
-| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅                     | 🟡 headless-gated (drive via Bash)   | ✅                                    |
-| Hook — SubagentStop                           | ✅                     | 🔴 mock can't trigger                | 🟡 partial                            |
-| Hook — PreCompact / Notification / SessionEnd | ✅                     | 🔴 mock can't trigger                | 🟡 partial                            |
-| CLAUDE.md / instruction files                 | ⬜ (refs → audit tier) | 🟡 present in context, not behaviour | ✅ moves behaviour                    |
-| Skills — procedure / outcome                  | 🔴 prose, no unit seam | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked** |
-| Subagents (`agents/`)                         | ⬜                     | 🔴 materialized, not invoked         | ✅ via Task                           |
-| Slash commands (`commands/`)                  | ⬜                     | 🔴 materialized, not invoked         | ✅ via invocation                     |
-| MCP servers                                   | ⬜                     | 🔴 not wired (warned)                | 🔴 bring-your-own                     |
-| settings.json — permissions / env             | 🟡 assert merged       | ✅ applied to sandbox                | ✅                                    |
+| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E (real model)                      |
+| --------------------------------------------- | ----------------------------------- | ------------------------------------ | ------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                  | ✅ behaviour                          |
+| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                   | ✅                                    |
+| Hook — SessionStart                           | ✅ logic                            | ✅                                   | ✅                                    |
+| Hook — Stop                                   | ✅ logic                            | ✅                                   | ✅                                    |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | 🟡 headless-gated (drive via Bash)   | ✅                                    |
+| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                            |
+| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                            |
+| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour | ✅ moves behaviour                    |
+| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked** |
+| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via Task                           |
+| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via invocation                     |
+| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                         | 🔴 bring-your-own                     |
+| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                | ✅                                    |
 
-**The honest read of this table:** the **deterministic reach is hooks + settings**
-(the governance shapes). Everything model-driven — skills, subagents, slash
-commands — has **no unit tier and no deterministic tier**; it can only be reached
-at the costly, statistical eval tier. The loader _materializes_ those surfaces and
-_warns_, but materialization is not testing.
+**The honest read of this table:** every surface has a **unit / static** check —
+for hooks it's logic, for prose it's reference verification (vigiles' first
+pillar). But the **integration (wiring) reach is hooks + settings only**;
+everything model-driven — skills, subagents, slash commands — drops straight from
+the static tier to the costly, statistical **e2e** tier, with no deterministic
+middle. The loader _materializes + warns_ for those, but materialization is not a
+test.
 
 ## Fidelity caveats (why some ✅/🟡 are softer than they look)
 
