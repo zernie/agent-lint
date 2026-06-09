@@ -34,11 +34,11 @@
 
 **Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · eval whether your hooks, skills, and CLAUDE.md actually change what the agent does
 
-- [Evals — does my change move agent behaviour?](#evals--does-my-change-move-agent-behaviour)
-- [Deterministic tests — does my hook fire?](#deterministic-tests--does-my-hook-fire)
-- [Unit-test a hook — no `claude` at all](#unit-test-a-hook--no-claude-at-all)
-- [Run them as a CI command](#run-them-as-a-ci-command)
-- [Test the whole machine](#test-the-whole-machine)
+- [Level 1 — unit-test a hook (no AI)](#level-1--test-a-hook-by-itself-no-ai-milliseconds)
+- [Level 2 — does it fire in a real session?](#level-2--does-it-fire-in-a-real-session-free-scripted-ai)
+- [Level 3 — does it change behaviour?](#level-3--does-it-change-what-claude-does-real-ai-occasional)
+- [Test skills for real + assert on actions](#test-your-skills-for-real--and-assert-on-what-claude-did)
+- [Run them in CI](#run-them-in-ci)
 
 **More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Maturity levels](#maturity-levels) · [Related tools](#related-tools)
 
@@ -242,75 +242,17 @@ export default claude({
 
 ## Test your Claude Code harness
 
-vigiles also ships a library for **testing the harness itself** — your hooks,
-settings, skills, and instruction files. `Agent = Model + Harness`; this tests
-the harness, at three levels.
+You wrote hooks, a skill, a CLAUDE.md rule — how do you know they work, beyond
+running Claude and eyeballing it? vigiles ships a library to **test the harness
+itself**, at three levels, cheapest first. It's plain async functions, so it
+drops into **node:test / vitest / jest**, or a zero-setup `vigiles test`.
 
-### Evals — does my change move agent behaviour?
+### Level 1 — test a hook by itself (no AI, milliseconds)
 
-Define a fixture, a set
-of **arms** (a hook on vs off, with/without a CLAUDE.md rule), a task, and a
-metric; `runEval` drives the real `claude` CLI N trials per arm and aggregates.
-
-```typescript
-import { runEval, formatEvalReport } from "vigiles/eval";
-
-const report = await runEval({
-  fixture: { "src/billing.ts": "export function chargeCard() {}" },
-  arms: {
-    vanilla: {},
-    gated: { settings: { hooks: { PostToolUse: [refsHook] } } },
-  },
-  task: "Document chargeCard in SKILL.md, referencing it by name.",
-  measure: (ctx) => ({
-    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
-  }),
-  trials: 6,
-});
-console.log(formatEvalReport(report)); //  vanilla marked=0.00   gated marked=0.50
-```
-
-### Deterministic tests — does my hook fire?
-
-No API key, no cost.
-`runHarnessTest` runs real `claude` against a **scripted mock model**
-(`vigiles/mock-model`), so your real hooks fire but the agent's turns are fixed.
-
-```typescript
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-
-const r = await runHarnessTest({
-  settings: {
-    hooks: {
-      Stop: [
-        {
-          hooks: [
-            {
-              type: "command",
-              command: "test -f DONE || { echo 'not done' >&2; exit 2; }",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  model: scriptModel([
-    { text: "I'm done" }, // tries to stop → blocked
-    { tool: "Bash", input: { command: "touch DONE" } },
-    { text: "now done" },
-  ]),
-});
-assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
-```
-
-Reliable for **SessionStart, Stop, UserPromptSubmit, and Bash PreToolUse/PostToolUse** hooks — the governance shapes most plugins use. Edit/Write tool-event hooks are headless-gated, so test those at the unit tier below.
-
-### Unit-test a hook — no `claude` at all
-
-A hook is just a process: `runHook`
-pipes an event JSON to its stdin and reports the block/allow decision —
-milliseconds, and the only tier that reaches **every** event (incl. Edit/Write,
-PreCompact, SessionEnd, which the deterministic mock can't trigger).
+A hook is just a process that's handed a "Claude is about to do X" event and
+answers block/allow. Hand it a fake event and check the answer — no `claude`, no
+model, and **every** event type is reachable (incl. Edit/Write, PreCompact,
+SessionEnd):
 
 ```typescript
 import { runHook } from "vigiles/run-hook";
@@ -320,28 +262,110 @@ const r = runHook(guardCommand, {
   tool_name: "Bash",
   tool_input: { command: "git commit --no-verify" },
 });
-assert(r.blocked); // exit 2, decision:"block", or permissionDecision:"deny"
+assert(r.blocked); // exit 2 / decision:"block" / permissionDecision:"deny"
 ```
 
-### Run them as a CI command
+The same shape governs **MCP tools** — the dominant real MCP test — with no
+server running, because the hook only sees the tool _name_:
 
-`vigiles test` discovers `*.harness.mjs` files
-(deterministic, no API key) and `vigiles eval` discovers `*.eval.mjs` files
-(real model). Canonical, real-plugin-shaped examples to copy:
+```typescript
+// block the destructive github-MCP tool; read-only ones pass
+runHook(guard, {
+  hook_event_name: "PreToolUse",
+  tool_name: "mcp__github__merge_pull_request",
+  tool_input: { pull_number: 42 },
+}).blocked; // true
+```
 
-- [`examples/harness/policy-gate.harness.mjs`](examples/harness/policy-gate.harness.mjs) — a `PreToolUse` Bash policy gate (block `git commit --no-verify`) and a `SessionStart` setup hook, deterministic.
-- [`examples/harness/skill-outcome.eval.mjs`](examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output? (the question you ask of any `SKILL.md`).
+### Level 2 — does it fire in a real session? (free, scripted "AI")
+
+Right logic ≠ wired in correctly. `runHarnessTest` runs the **real** `claude`
+against a **scripted mock model** you control — your hooks fire for real, the
+agent's turns are fixed, no API key, same result every time. Covers the
+governance shapes: SessionStart, Stop, UserPromptSubmit, and Bash **and
+Edit/Write** Pre/PostToolUse.
+
+```typescript
+import { runHarnessTest, scriptModel } from "vigiles/harness-test";
+
+const r = await runHarnessTest({
+  settings: {
+    hooks: {
+      Stop: [
+        { hooks: [{ type: "command", command: "test -f DONE || exit 2" }] },
+      ],
+    },
+  },
+  model: scriptModel([
+    { text: "I'm done" }, // tries to stop → blocked (no DONE)
+    { tool: "Bash", input: { command: "touch DONE" } },
+    { text: "now done" },
+  ]),
+});
+assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
+```
+
+### Level 3 — does it change what Claude does? (real AI, occasional)
+
+`runEval` runs the **real** model N times with your change **on vs off** and
+reports the gap. Costs tokens, so you run it now and then — not on every save:
+
+```typescript
+import { runEval, formatEvalReport } from "vigiles/eval";
+
+const report = await runEval({
+  arms: { off: {}, on: { settings: { hooks: { PostToolUse: [refsHook] } } } },
+  task: "Document chargeCard in SKILL.md, referencing it by name.",
+  measure: (ctx) => ({
+    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
+  }),
+  trials: 6,
+});
+console.log(formatEvalReport(report)); // off marked=0.00   on marked=0.50
+```
+
+### Test your skills for real — and assert on what Claude _did_
+
+Install a plugin the way Claude actually does (`pluginDir` → `--plugin-dir`) so
+its **skills genuinely activate**, then assert on the agent's _actions_, not a
+stdout grep:
+
+```typescript
+import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
+
+const r = await runHarnessTest({
+  pluginDir: "./my-plugin",
+  transcript: true, // populate r.toolCalls
+  allowedTools: ["Read", "Write", "Bash", "Skill"],
+  model: scriptModel([
+    { tool: "Skill", input: { skill: "my-plugin:greet" } },
+    { text: "ok" },
+  ]),
+});
+assertSkillResolved(r, "my-plugin:greet"); // the skill fired, no error
+assertToolNotUsed(r, /^mcp__github__merge/); // the safety negative: the scary tool was never called
+```
+
+`assertToolNotUsed` is how you test a safety rule **honestly** — _proving_ the
+dangerous tool was never used, which "the file looks unchanged" can't. It works
+on **real third-party plugins** too: the suite confirms real `obra/superpowers`
+and `wshobson/agents` skills resolve this way, with no markers injected.
+
+### Run them in CI
+
+`vigiles test` runs `*.harness.mjs` files (free, no key); `vigiles eval` runs
+`*.eval.mjs` files (real model). Point a test at a whole plugin (or `"./"` for
+your repo) to load **what ships** — hooks (with `${CLAUDE_PLUGIN_ROOT}`
+resolved), CLAUDE.md, skills, subagents, commands — and `loadPlugin().warnings`
+flags anything only a real model can drive, so you never silently test an empty
+machine.
 
 ```bash
 npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
-### Test the whole machine
-
-Point `plugin` at a plugin (or `"./"` for your repo) and the real harness — hooks (with `${CLAUDE_PLUGIN_ROOT}` resolved), CLAUDE.md, skills, subagents and commands — is loaded into the sandbox, so you test what ships, not a retyped subset. `loadPlugin(...).warnings` flags surfaces only a real model can drive (subagents, slash commands, MCP), so a whole-plugin load never silently tests an empty machine. The library is plain async functions — it runs in **node:test, vitest, or jest** unchanged.
-
-[Full guide → `docs/harness-testing.md`](docs/harness-testing.md). Design rationale and a coverage assessment against real plugins live in [`research/harness-testing.md`](research/harness-testing.md); benchmark findings in [`research/benchmarks-runtime-gates.md`](research/benchmarks-runtime-gates.md).
+[Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [what's covered (matrix)](research/harness-testing-coverage-matrix.md) · [benchmarks](research/benchmarks-runtime-gates.md).
 
 ## CLI & CI
 
