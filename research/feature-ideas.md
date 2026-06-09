@@ -4,6 +4,37 @@ Focus: **deterministic, mechanically checkable** features that vigiles provides 
 
 ---
 
+## Status & priority (start here)
+
+This is the **product backlog** — verification features for _users_ (mostly pillar 1, "verify the references"). It is **not** the harness-testing roadmap; that's [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md) (pillar 2, "test the harness"). The two overlap only at §13 (sandboxed exec). Several ideas below already shipped — grouped by theme, with a rough value × cost priority on the open ones. Numbers refer to the detailed sections that follow.
+
+**Already shipped — don't rebuild**
+
+- ✅ **#3 Dead Enforcement** — a referenced rule that's disabled is a compile/audit error (`linters.ts`).
+- ✅ **#5 Stale References** — `file()` / `cmd()` / `symbol()` + the `vigiles:symbol` / `vigiles:mcp` marks (`refs.ts`, `symbols.ts`, `mcp.ts`).
+- ✅ **#6 `vigiles init`** scaffold.
+- 🟡 **#2 Reverse Coverage** — partial: the `coverage` rule does linter-rule % (`coverage.ts`); the "documents 5 of 47 rules" report is unbuilt.
+- 🟡 **#12 Annotation typo** — partial: closest-match on rule names; annotation-_format_ near-misses (`Enforced By:`) unbuilt.
+
+**Open — grouped & ranked**
+
+| Group                                 | Idea                           | Priority | Why                                                                                                          |
+| ------------------------------------- | ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------ |
+| **Catch more silent lies** (the moat) | **#2 finish Reverse Coverage** | **High** | "your CLAUDE.md documents 5 of 47 enabled rules" — a shareable artifact (distribution lever) _and_ pure moat |
+|                                       | #12 finish Annotation typo     | Med      | cheap; a mistyped `**Enforced By:**` is silently ignored                                                     |
+|                                       | #11 Dependency graph           | Low      | cross-file instruction refs; niche                                                                           |
+| **Change safety / governance**        | #10 Instruction Diff (PR-time) | Med      | catch a rule weakened/removed in review — a concrete CI/PR hook                                              |
+|                                       | #4 Snapshot testing            | Med      | overlaps with #10 and the `integrity` rule                                                                   |
+|                                       | #9 Hook validation             | Med      | a broken `.claude/settings.json` hook fails silently — harness-pillar-adjacent                               |
+| **Authoring ergonomics**              | #1 Custom Rule Plugin API      | Med–Low  | power-user extensibility; worth more once there are users                                                    |
+|                                       | #7 Token budget                | Low      | niche                                                                                                        |
+| **Skills & harness**                  | #8 Skill coloring              | Low–Med  | side-effect classification; speculative                                                                      |
+|                                       | #13 Sandboxed exec             | Med      | real (run untrusted plugins safely), but heavy; also tracked in the harness roadmap                          |
+
+**If picking one open item:** **#2 (finish Reverse Coverage)** — the only one that's simultaneously the moat _and_ a distribution artifact (it pairs with the `vigiles starter` idea in [`distribution-strategy.md`](distribution-strategy.md)).
+
+---
+
 ## 1. Custom Rule Plugin API (Railway-Composable)
 
 **Analog:** Railway-oriented programming + ESLint's plugin system.
