@@ -1,0 +1,28 @@
+{
+  "name": "example-governance",
+  "version": "1.0.0",
+  "description": "A tiny example plugin used to demonstrate cohesion testing — a SessionStart setup hook and a PreToolUse Bash policy gate, working together.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

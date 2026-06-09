@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:b6eeb58f8ebc9586 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:50302f93695fb02f compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -12,13 +12,16 @@ The cross-referencing engine is the core moat: `enforce("@typescript-eslint/no-f
 
 Authoring-time feedback comes two ways: `generate-types` emits a `.d.ts` so the TS compiler PROVES `.spec.ts` references at edit time, and `generate-schema` emits a JSON Schema so a YAML LSP autocompletes and squiggles `vigiles:` frontmatter rule names — same guarantee, no TypeScript required. Both scan all 7 catalog APIs, package.json, and project files.
 
+Second pillar — testing the harness. Beyond verifying instruction files, vigiles tests the harness itself (hooks, settings, skills) as an assembled machine, not one hook at a time: `runHarnessTest`/`runEval` take a `plugin` path that loads the real harness (hooks with `${CLAUDE_PLUGIN_ROOT}` resolved, CLAUDE.md, skills) from `.claude-plugin/plugin.json` or `.claude/settings.json` (`src/plugin-loader.ts`), so you test what ships. Three tiers, lowest cost first: `runHook` pipes a synthesized event JSON straight to a hook process (no `claude`, no model) and checks the block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event incl. Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop (`src/run-hook.ts`); `runHarnessTest` runs the real `claude` CLI against a scripted mock model for deterministic, key-free checks that a hook is wired into the assembled machine and fires (`src/harness-test.ts`, `src/mock-model.ts`); and `runEval` drives the real model across A/B arms × trials, aggregating mean ± se so a gap can be read for significance (`src/eval.ts`). The loader materializes hooks, CLAUDE.md, skills, subagents and commands, and flags via `loadPlugin().warnings` any surface only a real model can drive — so loading a whole plugin never silently tests an empty machine. The API is runner-agnostic (node:test, vitest, jest) via plain async functions plus helpers/matchers in `src/harness-assert.ts` and an optional LLM-as-judge in `src/judge.ts`; a zero-dep CLI fallback runs them as `vigiles test` (`*.harness.mjs`) and `vigiles eval` (`*.eval.mjs`), with canonical examples under `examples/harness/`. Unlike reference verification (bounded by undecidability), this pillar has no ceiling: a test measures reality, so there is nothing to game. See `docs/harness-testing.md` and `research/harness-testing.md`.
+
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via `enforce()`.
 
 ## Architecture
 
-Two rule types in specs:
+Three rule types in specs:
 
 - `enforce()` — delegated to external tool (linter, ast-grep, dependency-cruiser). vigiles verifies the rule exists and is enabled.
+- `guard()` — a path→command guard (e.g. `*.spec.ts` → `npx vigiles compile`), compiles to `**Guard:**` and wires spec-driven automation into hook engines.
 - `guidance()` — prose only, compiles to `**Guidance only**` in markdown.
 
 Architectural linting (file pairing, import boundaries, AST patterns) belongs in external tools — reference them via `enforce()`.
@@ -37,7 +40,9 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
 - `src/generate-schema.ts` — JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names
-- `src/cli.ts` — CLI: init, compile, audit (3 primary commands + generate-types plumbing)
+- `src/cli.ts` — CLI: init, compile, audit, test, eval (primary commands + generate-types plumbing)
+- `src/run-scripts.ts` — Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.mjs` / `*.eval.mjs`, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)
+- `src/run-scripts.test.ts` — Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting
 - `src/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption
 - `src/frontmatter.ts` — Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)
 - `src/frontmatter.test.ts` — Frontmatter parser test suite (node:test)
@@ -64,8 +69,22 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/mock-model.ts` — Scriptable, dependency-free Anthropic Messages SSE mock (startMock/scriptModel) — point real claude at it via ANTHROPIC_BASE_URL for deterministic harness tests
 - `src/harness-test.ts` — Deterministic Claude Code harness testing: runHarnessTest runs real claude + real hooks/settings against a scripted mock model (Stop-hooks reliable; tool-event hooks via the eval tier)
 - `src/harness-test.test.ts` — Harness-test suite (node:test, skips without claude)
-- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates a metric — the empirical half of testing your harness (generalizes bench/)
-- `src/eval.test.ts` — Eval aggregation/formatting test suite (node:test)
+- `src/run-hook.ts` — Hook unit tier: runHook pipes a synthesized event JSON to a hook process (no claude, no model) and reports exit code + normalized block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event (Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop); parseHookOutput/decideHook are the pure, testable decision logic
+- `src/run-hook.test.ts` — Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions
+- `src/eval.ts` — Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) — the empirical half of testing your harness (generalizes bench/)
+- `src/eval.test.ts` — Eval aggregation/formatting + variance test suite (node:test)
+- `src/plugin-loader.ts` — Plugin/repo harness loader: loadPlugin reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills + agents + commands materialized; .warnings flags surfaces the deterministic tier can't drive (subagents/commands/MCP, or an empty machine) so a plugin load never silently tests nothing; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine
+- `src/plugin-loader.test.ts` — Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills/agents/commands materialization, surface + empty-machine + MCP warnings, settings merge, in-repo dogfood
+- `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed (node:test/any runner), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend
+- `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
+- `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure); parseJudgeOutput is the pure, testable verdict parser
+- `src/judge.test.ts` — Judge verdict-parsing test suite (node:test): result-field unwrap, prose-wrapped JSON, threshold, clamping, unparseable fallback
+- `src/vitest.mts` — Opt-in vitest integration entry (ESM, since vitest is ESM-only): registers vigilesMatchers + augments @vitest/expect Matchers so toHaveCreated/toBeatBaseline type-check; vitest is an optional peer dep
+- `src/jest.ts` — Opt-in jest integration entry (CJS): registers vigilesMatchers + augments @jest/expect Matchers; jest is an optional peer dep
+- `test/types/smoke.vitest.ts` — Type-level constraint: `vigiles/vitest` makes the matchers type-check on vitest's expect (tsc --noEmit via npm run test:types)
+- `test/types/smoke.jest.ts` — Type-level constraint: `vigiles/jest` makes the matchers type-check on jest's expect
+- `test/runners/matchers.vitest.mjs` — Cross-runner constraint: vigilesMatchers + helpers register and pass under vitest (proves runner-agnostic; `src/*.test.ts` excluded via vitest.config.mjs)
+- `test/runners/matchers.jest.cjs` — Cross-runner constraint: the same vigilesMatchers register and pass under jest (CommonJS dist required natively; scoped via jest.config.cjs)
 - `src/test-utils.ts` — Shared test utilities: makeTmpDir, makeSpec, cleanupTmpDir, initGitRepo
 - `src/types.ts` — Shared types: RulesConfig, VigilesConfig, FreshnessMode, CoverageThresholds
 - `src/proofs.ts` — Deterministic proof algorithms (monotonicity lattice, NCD, Bloom filter, Merkle DAG, fixed-point, property testing)
@@ -73,6 +92,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/proofs.test.ts` — Proof system + evolution engine tests (node:test)
 - `CLAUDE.md.spec.ts` — This file — the source of truth for CLAUDE.md
 - `examples/SKILL.md.spec.ts` — Example SKILL.md spec
+- `examples/harness/hook-unit.harness.mjs` — Canonical hook unit-tier example (runHook): test a hook's logic in isolation with no claude CLI — the cheap base of the pyramid; runs in CI for free
+- `examples/harness/policy-gate.harness.mjs` — Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)
+- `examples/harness/skill-outcome.eval.mjs` — Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md
+- `examples/harness/plugin-cohesion.harness.mjs` — Canonical cohesion test (runHarnessTest with plugin:): load a whole plugin (.claude-plugin/plugin.json + CLAUDE.md) and assert multiple hooks fire together
+- `bench/evals/refs-hook.eval.mjs` — Worked eval reproducing benchmark #4 (forcing symbol marks → verifiable references?) as a runEval library call
 - `research/adoption-strategy.md` — Adoption strategy: zero-config setup, progressive enforcement, agent workflows
 - `research/competitive-landscape.md` — Competitive landscape: rule-porter, rulesync, vibe-cli, Ruler
 - `research/executable-specs.md` — Design doc: executable spec system
@@ -91,8 +115,10 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/sync-landscape-analysis.md` — Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals
 - `research/distribution-strategy.md` — Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention
 - `research/reference-verification-limits.md` — Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)
-- `research/harness-testing.md` — Testing the Claude Code harness — the two-tier design (deterministic runHarnessTest + real-model runEval) and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, 156 wshobson skills)
+- `research/harness-testing.md` — Testing the Claude Code harness — the three-tier design (unit runHook + deterministic runHarnessTest + real-model runEval), the assembled-machine plugin loader, and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, wshobson agents/skills)
 - `research/skill-authoring-pains.md` — Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references
+- `docs/harness-testing.md` — Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback
+- `docs/testing-matrix.md` — Testing matrix: every harness-testing use case mapped to its test tier (unit / cross-runner / type / integration-CI) and file, plus why the CLI examples are .mjs and the API is TypeScript
 - `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
 - `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
@@ -118,6 +144,11 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `npm run fmt` — Format with prettier
 - `npm run fmt:check` — Check formatting
 - `npm run lint` — Run ESLint on src/
+- `npm run test:harness` — Build + run the deterministic harness tests (`*.harness.mjs`) on the in-repo CLI — needs the claude CLI, no API key
+- `npm run test:eval` — Build + run the real-model harness evals (`*.eval.mjs`) on the in-repo CLI — needs claude + model auth
+- `npm run test:vitest` — Build + run the cross-runner matcher constraints under vitest (`test/runners/*.vitest.mjs`)
+- `npm run test:jest` — Build + run the cross-runner matcher constraints under jest (`test/runners/*.jest.cjs`)
+- `npm run test:types` — Build + type-check the vitest/jest matcher augmentation (tsc --noEmit on test/types/)
 
 ## Rules
 

@@ -75,16 +75,20 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 6 npm scripts from package.json. */
+  /** 10 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
     | "lint"
     | "fmt"
     | "fmt:check"
-    | "test:e2e";
+    | "test:e2e"
+    | "test:harness"
+    | "test:eval"
+    | "test:vitest"
+    | "test:jest";
 
-  /** 46 project files. */
+  /** 64 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -101,20 +105,35 @@ declare module "vigiles/generated" {
     | "src/coverage.ts"
     | "src/doc-refs.test.ts"
     | "src/doc-refs.ts"
+    | "src/eval.test.ts"
+    | "src/eval.ts"
     | "src/evolve.ts"
     | "src/frontmatter.test.ts"
     | "src/frontmatter.ts"
     | "src/generate-schema.ts"
     | "src/generate-types.ts"
+    | "src/harness-assert.test.ts"
+    | "src/harness-assert.ts"
+    | "src/harness-test.test.ts"
+    | "src/harness-test.ts"
     | "src/hash.ts"
     | "src/inline.test.ts"
     | "src/inline.ts"
     | "src/integrity.ts"
+    | "src/jest.ts"
+    | "src/judge.ts"
     | "src/linters.ts"
+    | "src/mock-model.ts"
     | "src/orphans.test.ts"
     | "src/orphans.ts"
+    | "src/plugin-loader.test.ts"
+    | "src/plugin-loader.ts"
     | "src/proofs.test.ts"
     | "src/proofs.ts"
+    | "src/refs.test.ts"
+    | "src/refs.ts"
+    | "src/run-scripts.test.ts"
+    | "src/run-scripts.ts"
     | "src/session.test.ts"
     | "src/session.ts"
     | "src/sidecar.test.ts"
@@ -128,10 +147,13 @@ declare module "vigiles/generated" {
     | "src/skill-test.ts"
     | "src/spec.test.ts"
     | "src/spec.ts"
+    | "src/symbols.test.ts"
+    | "src/symbols.ts"
     | "src/test-utils.ts"
     | "src/types.ts"
     | "src/validate.test.ts"
-    | "src/validate.ts";
+    | "src/validate.ts"
+    | "src/vitest.mts";
 }
 
 declare module "vigiles/spec" {
@@ -219,20 +241,35 @@ declare module "vigiles/spec" {
       | "src/coverage.ts"
       | "src/doc-refs.test.ts"
       | "src/doc-refs.ts"
+      | "src/eval.test.ts"
+      | "src/eval.ts"
       | "src/evolve.ts"
       | "src/frontmatter.test.ts"
       | "src/frontmatter.ts"
       | "src/generate-schema.ts"
       | "src/generate-types.ts"
+      | "src/harness-assert.test.ts"
+      | "src/harness-assert.ts"
+      | "src/harness-test.test.ts"
+      | "src/harness-test.ts"
       | "src/hash.ts"
       | "src/inline.test.ts"
       | "src/inline.ts"
       | "src/integrity.ts"
+      | "src/jest.ts"
+      | "src/judge.ts"
       | "src/linters.ts"
+      | "src/mock-model.ts"
       | "src/orphans.test.ts"
       | "src/orphans.ts"
+      | "src/plugin-loader.test.ts"
+      | "src/plugin-loader.ts"
       | "src/proofs.test.ts"
       | "src/proofs.ts"
+      | "src/refs.test.ts"
+      | "src/refs.ts"
+      | "src/run-scripts.test.ts"
+      | "src/run-scripts.ts"
       | "src/session.test.ts"
       | "src/session.ts"
       | "src/sidecar.test.ts"
@@ -246,10 +283,13 @@ declare module "vigiles/spec" {
       | "src/skill-test.ts"
       | "src/spec.test.ts"
       | "src/spec.ts"
+      | "src/symbols.test.ts"
+      | "src/symbols.ts"
       | "src/test-utils.ts"
       | "src/types.ts"
       | "src/validate.test.ts"
-      | "src/validate.ts";
+      | "src/validate.ts"
+      | "src/vitest.mts";
   }
   interface KnownNpmScripts {
     scripts: 
@@ -258,6 +298,10 @@ declare module "vigiles/spec" {
       | "lint"
       | "fmt"
       | "fmt:check"
-      | "test:e2e";
+      | "test:e2e"
+      | "test:harness"
+      | "test:eval"
+      | "test:vitest"
+      | "test:jest";
   }
 }

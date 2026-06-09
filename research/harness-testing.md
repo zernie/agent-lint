@@ -1,11 +1,12 @@
 # Testing the Claude Code harness — design & coverage
 
-> Status: shipped (2026-06-08). The second pillar that came out of this work: a
-> library for **testing the harness itself** — hooks, settings, skills,
-> instruction files. Unlike reference verification (bounded by undecidability —
-> `reference-verification-limits.md`), harness testing has no such ceiling: a
-> test/eval _measures reality_, so there is nothing to game. `src/harness-test.ts`,
-> `src/mock-model.ts`, `src/eval.ts`.
+> Status: shipped (2026-06-08, extended 2026-06-09). The second pillar that came
+> out of this work: a library for **testing the harness itself** — hooks,
+> settings, skills, instruction files. Unlike reference verification (bounded by
+> undecidability — `reference-verification-limits.md`), harness testing has no
+> such ceiling: a test/eval _measures reality_, so there is nothing to game.
+> `src/run-hook.ts`, `src/harness-test.ts`, `src/mock-model.ts`, `src/eval.ts`,
+> `src/plugin-loader.ts`.
 
 ## Why this is a pillar
 
@@ -16,14 +17,42 @@ harness change actually helps"_ — **is** the product. It is also the one direc
 with no undecidability wall: you are not forcing a judgment, you are observing an
 outcome.
 
-## Two tiers
+## Three tiers, lowest cost first
+
+The tiers form a pyramid: each is cheaper and reaches more of the surface than
+the one above it, and each answers a different question.
+
+### Unit — `runHook` (no `claude`, no model, every event)
+
+A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
+back an exit code (`2` = block) and an optional JSON decision on stdout.
+`runHook` drives exactly that contract — no `claude` binary, no model, no sandbox
+— so a hook's _logic_ is testable in milliseconds.
+
+```ts
+runHook(guardCommand, {
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "git commit --no-verify" },
+}).blocked; // true — exit 2 / decision:block / permissionDecision:deny
+```
+
+This is the base of the pyramid, and the **only** tier that reaches every event.
+The deterministic mock (below) can't trigger Edit/Write tool events
+(headless-gated), `PreCompact`, `Notification`, `SessionEnd`, or `SubagentStop`;
+here you hand the hook the event JSON yourself, so all of them are testable. What
+it does _not_ prove: that the hook is wired into the harness — that's the next
+tier. `parseHookOutput` / `decideHook` are pure, so the block/allow policy is
+unit-testable with no process at all.
 
 ### Deterministic — `runHarnessTest` (no key, no cost, CI-fast)
 
 Real `claude` CLI + your **real** hooks/settings, pointed at a **scripted mock
 model** (`mock-model.ts`, via `ANTHROPIC_BASE_URL` + a dummy key). The agent's
 turns are fixed, so the outcome is reproducible. The scripted "steps" are the
-model's turns — this is their real home (not production enforcement).
+model's turns — this is their real home (not production enforcement). Where the
+unit tier proves logic, this tier proves **wiring**: that settings point at the
+hook and it fires inside the assembled machine.
 
 ```ts
 runHarnessTest({
@@ -37,7 +66,8 @@ runHarnessTest({
 PreToolUse/PostToolUse — the hooks that don't depend on the agent's _edit_ tools.
 **Not reliable for**: Edit/Write **tool-event** hooks — the Edit/Write tools are
 gated in headless mode and don't fire via the mock, and under heavy nested-CLI
-load the endpoint can return a 1-turn no-op. Route those to the eval tier.
+load the endpoint can return a 1-turn no-op. Test those at the unit tier (logic)
+or the eval tier (behaviour).
 
 ### Eval — `runEval` (real model, statistical)
 
@@ -58,35 +88,66 @@ runEval({
 Worked reference: `bench/evals/refs-hook.eval.mjs` reproduces benchmark #4 as a
 library call — `vanilla caught=0.00` vs `gated marks/caught > 0`.
 
+## Test the assembled machine — the plugin loader
+
+The unit that matters in practice is not one hook but the _assembled_ plugin: the
+hooks, CLAUDE.md, skills, subagents, and commands a plugin ships, working
+together. `src/plugin-loader.ts` reads that real harness — handling every
+real-world layout (inline `plugin.json` hooks, a `hooks` string path, the
+`hooks/hooks.json` convention, a plain repo's `.claude/settings.json`) and
+expanding `${CLAUDE_PLUGIN_ROOT}` to the real scripts — so a test/eval runs
+against **what ships**, not a retyped subset that drifts.
+
+It also returns `warnings`: surfaces the deterministic tier can't drive. That
+matters because a plugin can be all subagents and slash commands with **no
+hooks** — and a "load the whole plugin" test against such a plugin would
+otherwise pass having exercised _nothing_. Dogfooding the loader on the
+wshobson/agents marketplace caught exactly this: `tdd-workflows` ships two
+subagents and four commands with zero hooks, so the loader now materializes those
+surfaces and flags them for the eval tier rather than silently loading an empty
+machine.
+
 ## Coverage of real plugins (local corpus assessment)
 
-| Real plugin                          | Hook type                                                  | Coverage                                                                      |
+| Real plugin                          | Surface                                                    | Coverage                                                                      |
 | ------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **obra/superpowers**                 | `SessionStart` (run setup cmd)                             | ✅ deterministic, **verified** (model-independent)                            |
-| **block-no-verify** (wshobson)       | `PreToolUse` Bash (block `git commit --no-verify`)         | ✅ deterministic in principle; eval tier for reliability                      |
+| **obra/superpowers**                 | `SessionStart` (run setup cmd) + 40 skills                 | ✅ deterministic, **verified** (model-independent)                            |
+| **block-no-verify** (wshobson)       | `PreToolUse` Bash (block `git commit --no-verify`)         | ✅ unit tier verifies the guard logic directly; deterministic for wiring      |
 | **protect-mcp**                      | `PreToolUse`/`PostToolUse` `.*` (Cedar policy gate + sign) | ✅ runs the real `npx protect-mcp …` command verbatim; eval for full coverage |
 | **review-agent-governance**          | `PreToolUse` policy + approval flag                        | ✅ same — runs the exact command + env                                        |
+| **wshobson/agents** — subagents      | `agents/` + `commands/` (often no hooks)                   | ⚠ materialized + flagged by `loadPlugin().warnings`; eval tier for behaviour  |
 | **wshobson/agents** — 156 `SKILL.md` | skills (no hooks)                                          | ✅ eval tier — "does the skill produce the right outcome"                     |
 
-Two findings from the pass:
+Findings from the pass:
 
 1. **Hooks that shell out to external binaries** (`npx protect-mcp`,
    `run-hook.cmd`) are a first-class fit — the API runs the command + env
    verbatim, so you test the _actual_ hook, not a reimplementation.
 2. **The `.*`-matcher policy gate** (gate every tool through a Cedar policy) is a
    common real pattern and maps directly onto the action-gate/refs-hook test shape.
+3. **Subagents and slash commands are the dominant surface** across the
+   wshobson/agents marketplace, and neither runs without a real model — so the
+   loader's job is to materialize + flag them, and the eval tier is where they're
+   actually exercised. The unit tier, conversely, closes the Edit/Write +
+   every-event gap that the deterministic tier can't reach.
 
-The real-world hook population is overwhelmingly **governance/policy**
-(SessionStart / Stop / Bash / `.*`) — exactly what the deterministic tier covers.
-The Edit/Write tool-event gap is where the eval tier earns its place.
+The real-world _hook_ population is overwhelmingly **governance/policy**
+(SessionStart / Stop / Bash / `.*`) — exactly what the deterministic tier covers;
+the unit tier covers the rest of the events, and the eval tier covers behaviour
+and the agents/commands surfaces.
 
 ## The split, stated once
 
-- **Deterministic** = "does my hook _fire / block_ correctly?" — logic, fast, free.
-- **Eval** = "does my hook / CLAUDE.md / skill _change what the agent does_?" —
-  behaviour, statistical, real cost.
+- **Unit** (`runHook`) = "given this event, does my hook _block / allow_?" —
+  logic, no `claude`, every event.
+- **Deterministic** (`runHarnessTest`) = "is my hook _wired in_ and does it fire
+  in the assembled machine?" — wiring, fast, free.
+- **Eval** (`runEval`) = "does my hook / CLAUDE.md / skill / subagent _change what
+  the agent does_?" — behaviour, statistical, real cost.
 
 ## See also
 
 - `research/benchmarks-runtime-gates.md` — evals in anger (the four findings).
 - `research/reference-verification-limits.md` — the other pillar and its ceiling.
+- `docs/harness-testing.md` / `docs/testing-matrix.md` — the user-facing guide and
+  the use-case × tier matrix.

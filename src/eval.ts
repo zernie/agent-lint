@@ -33,12 +33,20 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
+import { resolveHarness } from "./plugin-loader.js";
+
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
   /** Files written on top of the base fixture for this arm. */
   readonly files?: Record<string, string>;
   /** `.claude/settings.json` (hooks/permissions) for this arm; omit for none. */
   readonly settings?: unknown;
+  /**
+   * Path to a real plugin/repo to load for this arm (hooks + CLAUDE.md +
+   * skills). Lets an arm be "the whole plugin on" vs "off". See
+   * src/plugin-loader.ts.
+   */
+  readonly plugin?: string;
 }
 
 /** Context handed to `measure` after a run, to compute that run's metrics. */
@@ -78,10 +86,24 @@ export interface EvalSpec<M extends Metrics> {
   readonly spacingSec?: number;
 }
 
+/** Per-metric summary statistics across an arm's runs. */
+export interface MetricStat {
+  /** Mean (numbers) / fraction-true (booleans). */
+  readonly mean: number;
+  /** Sample standard deviation (0 when n < 2). */
+  readonly std: number;
+  /** Standard error of the mean (std / √n). */
+  readonly se: number;
+  /** Number of runs the metric was observed in. */
+  readonly n: number;
+}
+
 export interface ArmReport {
   readonly runs: number;
   /** Aggregated metrics: mean for numbers, fraction-true (0..1) for booleans. */
   readonly metrics: Record<string, number>;
+  /** Per-metric mean / std / se / n, so an A/B gap can be read for significance. */
+  readonly stats: Record<string, MetricStat>;
 }
 
 export interface EvalReport {
@@ -176,25 +198,45 @@ function makeContext(cwd: string, out: RunOut): RunContext {
   };
 }
 
+/** Coerce a metric value to a number (booleans → 0/1), or null if absent. */
+function numeric(v: number | boolean | undefined): number | null {
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  return null;
+}
+
 /** Aggregate per-run metrics: mean for numbers, fraction-true (0..1) for booleans. */
 export function aggregate(rows: readonly Metrics[]): Record<string, number> {
+  const stats = aggregateStats(rows);
+  const out: Record<string, number> = {};
+  for (const [k, s] of Object.entries(stats)) out[k] = s.mean;
+  return out;
+}
+
+/**
+ * Aggregate per-run metrics with spread: mean, sample std, standard error, and
+ * n. The se/std let you judge whether an A/B gap between arms is real or noise —
+ * a difference smaller than the combined se is not yet significant.
+ */
+export function aggregateStats(
+  rows: readonly Metrics[],
+): Record<string, MetricStat> {
   const keys = new Set<string>();
   for (const r of rows) for (const k of Object.keys(r)) keys.add(k);
-  const out: Record<string, number> = {};
+  const out: Record<string, MetricStat> = {};
   for (const k of keys) {
-    let sum = 0;
-    let n = 0;
+    const values: number[] = [];
     for (const r of rows) {
-      const v = r[k];
-      if (typeof v === "number") {
-        sum += v;
-        n++;
-      } else if (typeof v === "boolean") {
-        sum += v ? 1 : 0;
-        n++;
-      }
+      const v = numeric(r[k]);
+      if (v !== null) values.push(v);
     }
-    out[k] = n > 0 ? sum / n : 0;
+    const n = values.length;
+    const mean = n > 0 ? values.reduce((a, b) => a + b, 0) / n : 0;
+    const std =
+      n > 1
+        ? Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1))
+        : 0;
+    out[k] = { mean, std, se: n > 0 ? std / Math.sqrt(n) : 0, n };
   }
   return out;
 }
@@ -219,12 +261,17 @@ export async function runEval<M extends Metrics>(
     for (let t = 0; t < trials; t++) {
       const cwd = mkdtempSync(join(tmpdir(), "vigiles-eval-"));
       try {
-        writeFiles(cwd, { ...spec.fixture, ...arm.files });
-        const hasSettings = arm.settings !== undefined;
+        const { files, settings } = resolveHarness({
+          plugin: arm.plugin,
+          settings: arm.settings,
+          files: { ...spec.fixture, ...arm.files },
+        });
+        writeFiles(cwd, files);
+        const hasSettings = settings !== undefined;
         if (hasSettings) {
           writeFileSync(
             join(cwd, "settings.json"),
-            JSON.stringify(arm.settings, null, 2).replaceAll("{cwd}", cwd),
+            JSON.stringify(settings, null, 2).replaceAll("{cwd}", cwd),
           );
         }
         const out = await spawnAgent(
@@ -241,17 +288,26 @@ export async function runEval<M extends Metrics>(
         await sleep(spacing);
       }
     }
-    arms[armName] = { runs: rows.length, metrics: aggregate(rows) };
+    arms[armName] = {
+      runs: rows.length,
+      metrics: aggregate(rows),
+      stats: aggregateStats(rows),
+    };
   }
   return { name: spec.name ?? "eval", trials, arms };
 }
 
-/** Format an eval report as a compact table for the console. */
+/** Format an eval report as a compact table for the console (mean ± se). */
 export function formatEvalReport(report: EvalReport): string {
   const lines = [`${report.name} (${String(report.trials)} trials/arm)`];
   for (const [arm, r] of Object.entries(report.arms)) {
     const parts = Object.entries(r.metrics)
-      .map(([k, v]) => `${k}=${v.toFixed(2)}`)
+      .map(([k, v]) => {
+        const se = r.stats[k]?.se ?? 0;
+        return se > 0
+          ? `${k}=${v.toFixed(2)}±${se.toFixed(2)}`
+          : `${k}=${v.toFixed(2)}`;
+      })
       .join("  ");
     lines.push(`  ${arm.padEnd(10)} ${parts}`);
   }
