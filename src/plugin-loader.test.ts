@@ -292,6 +292,37 @@ test("loadPlugin warns when a plugin declares MCP servers", () => {
   }
 });
 
+test("loadPlugin warns when the manifest declares mcpServers (no .mcp.json)", () => {
+  const root = makeTmpDir("mcpmanifest");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# x\n");
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "m", mcpServers: { demo: { command: "x" } } }),
+    );
+    assert.ok(loadPlugin(root).warnings.some((w) => w.includes("MCP")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin tolerates a malformed plugin.json (does not crash)", () => {
+  const root = makeTmpDir("badmanifest");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# x\n");
+    writeFileSync(join(root, ".claude-plugin", "plugin.json"), "{ not json");
+    const loaded = loadPlugin(root);
+    // malformed manifest → no hooks, no MCP warning; CLAUDE.md still loads.
+    assert.deepEqual(loaded.settings, {});
+    assert.ok(!loaded.warnings.some((w) => w.includes("MCP")));
+    assert.equal(loaded.files["CLAUDE.md"], "# x\n");
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("a fully-covered plugin (hooks + CLAUDE.md + skills) has no warnings", () => {
   const root = makePlugin();
   try {

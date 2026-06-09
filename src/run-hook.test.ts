@@ -21,6 +21,8 @@ test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   });
   assert.equal(parseHookOutput("just a log line"), null);
   assert.equal(parseHookOutput("  not json {x"), null);
+  // starts with "{" but invalid JSON → JSON.parse throws → caught → null
+  assert.equal(parseHookOutput('{"unterminated": '), null);
 });
 
 test("decideHook: exit 2 blocks regardless of stdout", () => {

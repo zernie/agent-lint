@@ -1,12 +1,20 @@
 /**
- * Tests for the eval aggregation/formatting (deterministic, no model). The full
- * `runEval` drives the real `claude` CLI and is exercised by the `bench/`
- * harness rather than the unit suite.
+ * Tests for the eval aggregation/formatting + orchestration (deterministic, no
+ * model). `runEval` itself spawns the real `claude` CLI (bench/ exercises that);
+ * `runEvalWith` takes an injected runner, so the loop / `measure` context /
+ * aggregation are tested here against canned stream-json — no model.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { aggregate, aggregateStats, formatEvalReport } from "./eval.js";
+import {
+  aggregate,
+  aggregateStats,
+  formatEvalReport,
+  runEvalWith,
+  type AgentRunArgs,
+} from "./eval.js";
+import { usedTool, outputContains } from "./harness-assert.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
@@ -49,6 +57,117 @@ test("aggregate tolerates missing keys across rows", () => {
   const agg = aggregate([{ a: 1 }, { b: true }]);
   assert.equal(agg.a, 1); // averaged over the 1 row that has it
   assert.equal(agg.b, 1);
+});
+
+test("runEvalWith drives arms × trials via an injected runner (no model)", async () => {
+  // Canned stream-json: the `on` arm reports a Skill tool_use, a hook firing,
+  // and a result with num_turns + answer; the `off` arm reports a bare result
+  // (no tool / hook / num_turns / answer) — exercising both makeContext branches.
+  const onStream = [
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }),
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "Stop",
+      hook_event: "Stop",
+      exit_code: 0,
+      outcome: "success",
+      output: "",
+    }),
+    JSON.stringify({ type: "result", result: "answer is on", num_turns: 2 }),
+  ].join("\n");
+  const offStream = JSON.stringify({ type: "result" }); // no num_turns/result
+
+  const seen: AgentRunArgs[] = [];
+  const fakeRunner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: a.hasSettings ? onStream : offStream,
+    });
+  };
+
+  const report = await runEvalWith(
+    {
+      fixture: { "a.txt": "hi" },
+      arms: {
+        off: {},
+        on: {
+          settings: {
+            hooks: {
+              Stop: [{ hooks: [{ type: "command", command: "true" }] }],
+            },
+          },
+        },
+      },
+      task: "do it",
+      trials: 2,
+      spacingSec: 0,
+      measure: (ctx) => ({
+        used: usedTool(ctx, "Skill"),
+        turns: ctx.turns,
+        sawFile: ctx.file("a.txt") !== null,
+        missing: ctx.file("nope.txt") === null,
+        shOk: ctx.sh("echo hi") === "hi",
+        // failing command WITH stdout → catch returns the partial stdout
+        shPartial: ctx.sh("echo part; exit 1") === "part",
+        // failing command WITHOUT stdout → catch returns ""
+        shEmpty: ctx.sh("exit 7") === "",
+        onArm: outputContains(ctx, "answer is on"),
+      }),
+    },
+    fakeRunner,
+  );
+
+  assert.equal(seen.length, 4); // 2 arms × 2 trials
+  assert.equal(report.arms.off?.runs, 2);
+  assert.equal(report.arms.on?.runs, 2);
+  // `on` arm: Skill used, 2 turns, answer present → all true (pass^k = 1)
+  assert.equal(report.arms.on?.metrics.used, 1);
+  assert.equal(report.arms.on?.metrics.turns, 2);
+  assert.equal(report.arms.on?.stats.used?.passK, 1);
+  // `off` arm: no Skill, 0 turns, no answer
+  assert.equal(report.arms.off?.metrics.used, 0);
+  assert.equal(report.arms.off?.metrics.turns, 0);
+  // both arms: the fixture file is present, sh try/catch all hold
+  assert.equal(report.arms.off?.metrics.sawFile, 1);
+  assert.equal(report.arms.off?.metrics.shOk, 1);
+  assert.equal(report.arms.off?.metrics.shPartial, 1);
+  assert.equal(report.arms.off?.metrics.shEmpty, 1);
+});
+
+test("runEvalWith honors provided optionals (name/model/tools/timeout, arm.files)", async () => {
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  const report = await runEvalWith(
+    {
+      name: "custom",
+      fixture: { "base.txt": "b" },
+      arms: { a: { files: { "extra.txt": "e" } } }, // arm.files spread branch
+      task: "t",
+      trials: 1,
+      model: "sonnet",
+      allowedTools: ["Read"],
+      timeoutMs: 1000,
+      spacingSec: 0,
+      measure: (ctx) => ({
+        both: ctx.file("base.txt") !== null && ctx.file("extra.txt") !== null,
+      }),
+    },
+    runner,
+  );
+  assert.equal(report.name, "custom"); // spec.name provided
+  assert.equal(report.arms.a?.metrics.both, 1);
 });
 
 test("formatEvalReport renders one line per arm", () => {

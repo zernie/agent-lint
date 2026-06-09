@@ -14,6 +14,8 @@ import {
   assertCreated,
   assertNotCreated,
   assertServedTurns,
+  assertHookBlocked,
+  assertHookAllowed,
   usedTool,
   toolCount,
   skillResolved,
@@ -34,6 +36,19 @@ import {
 } from "./harness-assert.js";
 import type { EvalReport } from "./eval.js";
 import type { HarnessTestResult, HookFire } from "./harness-test.js";
+import type { HookRunResult } from "./run-hook.js";
+
+/** Minimal HookRunResult stand-in for the run-hook-tier assertions/matcher. */
+function fakeHook(blocked: boolean): HookRunResult {
+  return {
+    exitCode: blocked ? 2 : 0,
+    stdout: "",
+    stderr: "",
+    json: null,
+    blocked,
+    decision: blocked ? "deny" : undefined,
+  };
+}
 
 const report: EvalReport = {
   name: "demo",
@@ -140,10 +155,53 @@ test("assertServedTurns checks the mock turn count", () => {
   });
 });
 
+test("assertHookBlocked / assertHookAllowed (run-hook results)", () => {
+  assert.doesNotThrow(() => {
+    assertHookBlocked(fakeHook(true));
+  });
+  assert.throws(() => {
+    assertHookBlocked(fakeHook(false));
+  });
+  assert.doesNotThrow(() => {
+    assertHookAllowed(fakeHook(false));
+  });
+  assert.throws(() => {
+    assertHookAllowed(fakeHook(true));
+  });
+});
+
 test("vigilesMatchers.toHaveCreated reports pass/fail", () => {
   const r = fakeResult(["BLOCKED"]);
   assert.equal(vigilesMatchers.toHaveCreated(r, "BLOCKED").pass, true);
   assert.equal(vigilesMatchers.toHaveCreated(r, "nope").pass, false);
+});
+
+test("vigilesMatchers.toBlock + every matcher's message() render both states", () => {
+  assert.equal(vigilesMatchers.toBlock(fakeHook(true)).pass, true);
+  assert.equal(vigilesMatchers.toBlock(fakeHook(false)).pass, false);
+  // invoke .message() in pass and fail states to cover the message closures
+  assert.match(vigilesMatchers.toBlock(fakeHook(true)).message(), /to block/);
+  assert.match(vigilesMatchers.toBlock(fakeHook(false)).message(), /to block/);
+  assert.match(
+    vigilesMatchers.toHaveCreated(fakeResult(["X"]), "X").message(),
+    /to create/,
+  );
+  assert.match(
+    vigilesMatchers.toHaveCreated(fakeResult([]), "X").message(),
+    /to create/,
+  );
+  assert.match(
+    vigilesMatchers
+      .toBeatBaseline(report, "vanilla", "gated", "caught")
+      .message(),
+    /to beat/,
+  );
+  assert.match(
+    vigilesMatchers
+      .toBeatBaseline(report, "gated", "vanilla", "caught")
+      .message(),
+    /to beat/,
+  );
 });
 
 test("vigilesMatchers.toBeatBaseline respects the `by` threshold", () => {

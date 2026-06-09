@@ -50,3 +50,10 @@ test("returns a safe verdict on unparseable / empty output", () => {
   assert.equal(noScore.score, 0);
   assert.match(noScore.reason, /unparseable/);
 });
+
+test("tolerates malformed JSON between braces (firstJsonObject catch)", () => {
+  // Has `{` and `}` but invalid JSON between → JSON.parse throws → null.
+  const v = parseJudgeOutput("prefix { score: nope, } suffix");
+  assert.equal(v.score, 0);
+  assert.match(v.reason, /unparseable/);
+});

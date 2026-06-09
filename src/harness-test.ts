@@ -272,6 +272,9 @@ export function parseHooks(stdout: string): HookFire[] {
   return hooks;
 }
 
+/* v8 ignore start -- spawns the real claude CLI + filesystem; exercised by the
+   claude-backed suite, excluded from the deterministic coverage gate (the parse
+   helpers above carry the testable logic). */
 /** Whether the `claude` CLI is available — harness tests need it. */
 export function claudeAvailable(): boolean {
   try {
@@ -390,3 +393,4 @@ export async function runHarnessTest(
     mock.close();
   }
 }
+/* v8 ignore stop */

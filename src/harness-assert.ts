@@ -28,6 +28,7 @@ import type { HookRunResult } from "./run-hook.js";
  * Returns whatever `fn` returns. Use this instead of calling `cleanup()` by
  * hand — it survives assertion failures.
  */
+/* v8 ignore start -- thin wrapper over runHarnessTest (spawns the real CLI) */
 export async function withHarness<T>(
   spec: HarnessTestSpec,
   fn: (r: HarnessTestResult) => T | Promise<T>,
@@ -39,6 +40,7 @@ export async function withHarness<T>(
     r.cleanup();
   }
 }
+/* v8 ignore stop */
 
 // --- Plain throwing assertions (any runner) --------------------------------
 
@@ -186,10 +188,11 @@ export function assertToolUsed(trace: Trace, name: string | RegExp): void {
  * accident; "the tool was never used" is the real invariant. Needs `transcript`.
  */
 export function assertToolNotUsed(trace: Trace, name: string | RegExp): void {
-  if (usedTool(trace, name)) {
-    const hit = trace.toolCalls.find((c) => nameMatches(c.name, name));
+  // `find` is the negative of `usedTool` and narrows the hit for the message.
+  const hit = trace.toolCalls.find((c) => nameMatches(c.name, name));
+  if (hit) {
     fail(
-      `expected no tool matching ${String(name)} to be used, but ${hit?.name ?? String(name)} was`,
+      `expected no tool matching ${String(name)} to be used, but ${hit.name} was`,
     );
   }
 }

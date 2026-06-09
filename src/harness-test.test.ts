@@ -321,8 +321,56 @@ test("parseToolCalls: pairs tool_use with tool_result from a stream-json transcr
   assert.equal(parseToolCalls("{not stream json}").length, 0);
 });
 
+test("parseToolCalls: covers id / content-shape / error / no-result branches", () => {
+  const stream = [
+    "", // blank line skipped
+    "not json — ignored", // parse error skipped
+    JSON.stringify({ type: "x", message: { content: "notarray" } }), // content not an array
+    JSON.stringify({
+      type: "a",
+      message: {
+        content: [
+          { type: "text", text: "prose" }, // neither tool_use nor tool_result
+          { type: "tool_use", id: "u1", name: "A", input: {} },
+          { type: "tool_use", input: {} }, // tool_use with no name → skipped
+          { type: "tool_use", name: "NoId", input: {} }, // tool_use with no id
+          { type: "tool_use", id: "u3", name: "C", input: {} },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "u",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "u1",
+            content: "plain",
+            is_error: true,
+          },
+          { type: "tool_result", content: ["x", { text: "y" }, { z: 1 }] }, // no id; array w/ string + text + no-text
+          { type: "tool_result", tool_use_id: "u3", content: 42 }, // non-string, non-array content
+        ],
+      },
+    }),
+  ].join("\n");
+  const calls = parseToolCalls(stream);
+  assert.equal(calls.length, 3); // A, NoId, C (the no-name tool_use is skipped)
+  const a = calls.find((c) => c.name === "A");
+  assert.equal(a?.resultText, "plain"); // string content
+  assert.equal(a?.isError, true);
+  // The no-id tool_use and the no-id tool_result both key on "" and so pair up;
+  // the array content ["x", {text:"y"}, {no text}] joins to "xy".
+  const noid = calls.find((c) => c.name === "NoId");
+  assert.equal(noid?.resultText, "xy");
+  assert.equal(noid?.isError, false);
+  const c = calls.find((c) => c.name === "C");
+  assert.equal(c?.resultText, ""); // non-string/array content (42) → ""
+});
+
 test("parseOutput: returns the final answer from the terminal result event", () => {
   const stream = [
+    "", // blank line → skipped
     JSON.stringify({ type: "assistant", message: { content: [] } }),
     "not json — ignored",
     JSON.stringify({
@@ -332,6 +380,8 @@ test("parseOutput: returns the final answer from the terminal result event", () 
     }),
   ].join("\n");
   assert.equal(parseOutput(stream), "the answer");
+  // a result event whose `result` is non-string → ""
+  assert.equal(parseOutput(JSON.stringify({ type: "result", result: 42 })), "");
   // single-object `--output-format json` carries the same {type:"result"} shape
   assert.equal(
     parseOutput(JSON.stringify({ type: "result", result: "x" })),
@@ -370,4 +420,35 @@ test("parseHooks: records hook firing + block decision from stream events", () =
   assert.equal(hooks[1]?.exitCode, 2);
   assert.equal(hooks[1]?.blocked, true);
   assert.equal(parseHooks("{not stream json}").length, 0);
+});
+
+test("parseHooks: defensive field coercion + the block decision branches", () => {
+  const stream = [
+    // outcome success but a non-zero exit → blocked via the exit-code arm
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "Stop",
+      hook_event: "Stop",
+      exit_code: 1,
+      outcome: "success",
+      output: "x",
+    }),
+    // malformed: non-number exit_code, missing name/event/output → coerced
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      exit_code: "nope",
+    }),
+    // a non-hook_response system event → skipped
+    JSON.stringify({ type: "system", subtype: "init" }),
+  ].join("\n");
+  const hooks = parseHooks(stream);
+  assert.equal(hooks.length, 2);
+  assert.equal(hooks[0]?.blocked, true); // success + exit 1 → blocked
+  assert.equal(hooks[1]?.exitCode, undefined); // non-number → undefined
+  assert.equal(hooks[1]?.name, ""); // missing → ""
+  assert.equal(hooks[1]?.event, ""); // missing → ""
+  assert.equal(hooks[1]?.output, ""); // missing → ""
+  assert.equal(hooks[1]?.blocked, false); // not error, no numeric exit
 });
