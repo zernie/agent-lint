@@ -64,12 +64,14 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 
 **The honest read of this table:** every surface has a **unit / static** check —
 for hooks it's logic, for prose it's reference verification (vigiles' first
-pillar). The **integration (wiring) tier** now covers hooks, settings, **and
-skills** (via `pluginDir` native install — a scripted `Skill` resolves). The
-remaining gap is **subagents and slash commands**: still no deterministic middle
-(the loader materializes + warns, but materialization is not a test), so they drop
-to the costly, statistical **e2e** tier. Verifying they register via `--plugin-dir`
-too — as skills now do at both tiers — is the rest of build #1.
+pillar). At the **e2e tier** _everything_ is now reachable: `pluginDir` natively
+installs a plugin, so skills, subagents, and slash commands all register and run
+(probed). The **integration (wiring) tier** covers hooks, settings, and skills (a
+scripted `Skill` resolves). The only remaining deterministic gaps are the
+non-Edit/Write events the mock can't trigger (PreCompact/Notification/etc.),
+**slash commands** (expansion is pre-model — needs capturing the mock-received
+prompt), and **subagents** (hard — nested mock sessions). MCP is unwired at every
+tier.
 
 ## Fidelity caveats (why some ✅/🟡 are softer than they look)
 
