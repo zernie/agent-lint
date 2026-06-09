@@ -46,21 +46,21 @@ Legend: ✅ shipped · 🟡 partial / caveated · 🔴 gap (should build) · ⬜
 
 ## Surface × test type
 
-| Surface                                       | Unit / static                       | Integration (assembled, mock model)  | E2E / eval (real model, **non-deterministic**) |
-| --------------------------------------------- | ----------------------------------- | ------------------------------------ | ---------------------------------------------- |
-| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                  | ✅ behaviour                                   |
-| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                   | ✅                                             |
-| Hook — SessionStart                           | ✅ logic                            | ✅                                   | ✅                                             |
-| Hook — Stop                                   | ✅ logic                            | ✅                                   | ✅                                             |
-| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | 🟡 headless-gated (drive via Bash)   | ✅                                             |
-| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                                     |
-| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                | 🟡 partial                                     |
-| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour | ✅ moves behaviour                             |
-| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | 🔴 body present, activation n/g      | 🟡 outcome only, activation **faked**          |
-| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via Task                                    |
-| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked         | ✅ via invocation                              |
-| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                         | 🔴 bring-your-own                              |
-| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                | ✅                                             |
+| Surface                                       | Unit / static                       | Integration (assembled, mock model)   | E2E / eval (real model, **non-deterministic**) |
+| --------------------------------------------- | ----------------------------------- | ------------------------------------- | ---------------------------------------------- |
+| Hook — PreToolUse / PostToolUse (Bash)        | ✅ logic (`runHook`)                | ✅ fires in machine                   | ✅ behaviour                                   |
+| Hook — UserPromptSubmit                       | ✅ logic                            | ✅                                    | ✅                                             |
+| Hook — SessionStart                           | ✅ logic                            | ✅                                    | ✅                                             |
+| Hook — Stop                                   | ✅ logic                            | ✅                                    | ✅                                             |
+| Hook — PreToolUse / PostToolUse (Edit/Write)  | ✅ logic                            | ✅ fires (claude 2.1.169 — see spike) | ✅                                             |
+| Hook — SubagentStop                           | ✅ logic                            | 🔴 mock can't trigger                 | 🟡 partial                                     |
+| Hook — PreCompact / Notification / SessionEnd | ✅ logic                            | 🔴 mock can't trigger                 | 🟡 partial                                     |
+| CLAUDE.md / instruction files                 | ✅ refs verified (`audit`)          | 🟡 present in context, not behaviour  | ✅ moves behaviour                             |
+| Skills — procedure / outcome                  | 🟡 SKILL.md refs via `audit`/`refs` | 🔴 body present, activation n/g       | 🟡 outcome only, activation **faked**          |
+| Subagents (`agents/`)                         | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked          | ✅ via Task                                    |
+| Slash commands (`commands/`)                  | 🟡 refs via `audit` (if marked)     | 🔴 materialized, not invoked          | ✅ via invocation                              |
+| MCP servers                                   | 🟡 declaration detected (warned)    | 🔴 not wired                          | 🔴 bring-your-own                              |
+| settings.json — permissions / env             | 🟡 assert merged                    | ✅ applied to sandbox                 | ✅                                             |
 
 **The honest read of this table:** every surface has a **unit / static** check —
 for hooks it's logic, for prose it's reference verification (vigiles' first
@@ -81,9 +81,11 @@ test.
    skill, is untested. _(Update: a 2026-06-09 spike shows activation **is**
    testable via `--plugin-dir` — see the Spike section below. Fix identified, not
    yet built.)_
-2. **Edit/Write hooks are headless-gated.** The Edit/Write tools don't fire via
-   the mock in headless mode, so the deterministic tier can't drive Edit/Write
-   tool-event hooks; you fall back to the unit tier (logic) or the eval tier.
+2. ~~**Edit/Write hooks are headless-gated.**~~ _Disproven by the 2026-06-09
+   spike on claude 2.1.169 — Edit/Write hooks **do** fire in the deterministic
+   tier (PostToolUse 3/3; a PreToolUse `Edit` block held). The gating was
+   real in an earlier version but is no longer reproducible. The fix is to add a
+   regression test, not a "driver" — see the Spike section._
 3. **Subagents / slash commands need a real model.** The deterministic tier never
    invokes them — it only writes their files into the sandbox.
 4. **No safe execution of untrusted code.** Hooks run as real child processes with
@@ -100,7 +102,7 @@ test.
 | Eval aggregation — mean ± se, variance, report                                        | ✅     | `src/eval.ts`                                                                                      |
 | LLM-as-judge — verdict parsing                                                        | 🟡     | parser unit-tested; the model spawn is not (`src/judge.ts`)                                        |
 | **Native plugin-install in the sandbox** (skills/agents/commands activate as shipped) | 🔴     | fix for caveat #1 — **spike-confirmed via `--plugin-dir`** (whole-plugin vendoring); not yet wired |
-| **Deterministic Edit/Write driver** (un-gate tool events)                             | 🔴     | the fix for caveat #2 — a headless path that fires Edit/Write                                      |
+| ~~Deterministic Edit/Write driver~~ → regression test                                 | 🟡     | spike: **already fires** on claude 2.1.169; just lock it in with a test                            |
 | **Scripted subagent / command stubs** (wiring without a model)                        | 🔴     | test that a Task/slash surface is _wired_ deterministically                                        |
 | **MCP server harness** (loader stands the server up)                                  | 🔴     | today the loader warns and stops                                                                   |
 | **Sandboxed untrusted exec** (bwrap / docker)                                         | 🔴     | feature-ideas §13 — turns dogfood from parse-only into execute-and-verify                          |
@@ -116,9 +118,10 @@ test.
 2. **Sandboxed exec tier (bwrap, then docker)** — unlocks safely _running_
    untrusted third-party hooks/skills, the prerequisite for execute-and-verify
    dogfood. Medium cost; feature-ideas §13.
-3. **Deterministic Edit/Write driver** — closes the headless hole so the most
-   common _editing_ hooks get a no-key tier. Cost unknown (may be infeasible
-   headless; fall back to a documented unit+eval split).
+3. **Edit/Write regression test** (was "build a driver") — the spike shows the
+   deterministic tier _already_ fires Edit/Write on claude 2.1.169, so this
+   collapses to a lock-in test (Write→PostToolUse fires; Edit→PreToolUse blocks)
+   guarding against a future re-gate. Low cost.
 4. **Scripted subagent / command stubs** — cheap wiring assurance for the Task /
    slash surfaces without paying for a model. Low–medium cost.
 5. **MCP server harness** — wire declared MCP servers into the sandbox. Medium.
@@ -159,8 +162,28 @@ Consequences:
   assert a skill **resolves and runs** deterministically (wiring) — distinct from
   the eval tier, which is whether the model _chooses_ it. That moves the Skills
   **integration** cell from 🔴 toward ✅.
-- **Still open:** the Edit/Write headless question (caveat #2 / build #3) is a
-  separate, key-free probe — `scriptModel` an Edit `tool_use` and see if it fires.
+
+### Edit/Write — is the deterministic tier really gated? (same spike)
+
+Caveat #2 claimed Edit/Write tool-event hooks don't fire via the mock in headless
+mode. **Disproven on claude 2.1.169** (key-free, mock model):
+
+- Real model, headless `-p` + `--permission-mode acceptEdits`: the `Write` tool
+  fired and a `Write|Edit` PostToolUse hook fired — so it's not a platform gate.
+- **Mock-model tier** (`runHarnessTest`, scripted `Write` tool_use, no key): the
+  Write executed and the PostToolUse hook fired **3/3** runs.
+- **Mock-model PreToolUse block**: a scripted `Edit` against a `PreToolUse: Edit →
+exit 2` hook was blocked — the edit did not apply.
+
+Why it works now: `runHarnessTest` passes `--allowedTools Read Edit Write Bash`,
+which allowlists the edit tools past the permission prompt; no `--permission-mode`
+is needed (the eval tier additionally sets `acceptEdits`). The gating was real in
+an earlier CLI but is **not reproducible on 2.1.169**.
+
+Consequence: **build #3 collapses.** There's no "Edit/Write driver" to write — the
+deterministic tier already drives them. The work is a **regression test** in the
+harness suite (Write→PostToolUse fires; Edit→PreToolUse blocks) so we catch it if a
+future CLI re-gates, plus removing the stale warning from the docs.
 
 ## See also
 
