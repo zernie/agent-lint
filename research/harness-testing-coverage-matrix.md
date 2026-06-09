@@ -139,10 +139,33 @@ tier.
    does).
 4. **Scripted subagent / command stubs** — cheap wiring assurance for the Task /
    slash surfaces without paying for a model. Low–medium cost.
-5. **MCP server harness** — wire declared MCP servers into the sandbox. Medium.
+5. **MCP harness — reference verification + behavioral wiring.** _The standout
+   remaining gap, and the only one that's vigiles-shaped (not commoditized)._ Two
+   parts: **(a)** a new reference kind — `mcp("github", "issue_write")` that starts
+   the MCP server, lists its tools, and verifies the cited tool exists (like
+   `enforce()` resolves a linter rule against the live catalog) — catches a
+   skill/CLAUDE.md citing an MCP tool that was renamed/removed; **(b)** a
+   `mcpConfig` option on `runHarnessTest`/`runEval` that threads `--mcp-config`, so
+   behavioral tests run a live server and `r.toolCalls` asserts `mcp__*` usage.
+   Medium cost.
 6. **Coverage tooling + fail-not-skip guard** — make "how much do we test"
    answerable as a number, and stop the deterministic tier from silently
    skipping. Low cost.
+7. **Turnkey triggering eval** (`measureTriggerRate`) — the #1 documented skill
+   pain is non-deterministic activation (passive descriptions fire 37–87%,
+   directive 94–100%). Built on `pluginDir`: drive the real model with N prompts
+   and report the trigger rate per skill, so authors iterate a description from
+   "never fires" to "always fires". Eval-tier (real cost). _Roadmap._
+
+### Evaluated and dropped (covered elsewhere)
+
+- **Skill frontmatter lint** — commoditized: [`skill-validator`](https://playbooks.com/skills/louloulin/claude-agent-sdk/skill-validator),
+  the [Skill Specification Linter](https://mcpmarket.com/tools/skills/skill-specification-linter)
+  (agentskills.io), and a [Plugin Validator](https://mcpmarket.com/tools/skills/plugin-validator-linter)
+  already check name/description/version/YAML/broken-links. vigiles only adds
+  _deep_ reference resolution (rule/symbol/command actually resolves), which
+  `audit`/`refs` already do. Not worth a dedicated check.
+- **Slash-command structure lint** — same: covered by the plugin validators above.
 
 ### Richer invariants (beyond bool asserts)
 
@@ -150,13 +173,13 @@ Sequence/budget invariants over `r.toolCalls` (idea 1) **shipped** —
 `assertToolSequence` / `assertToolCount` / `assertToolCalls`. Two siblings parked
 here for later:
 
-7. **Property-based fuzzing for hooks** (idea 2) — generate hundreds of inputs and
+8. **Property-based fuzzing for hooks** (idea 2) — generate hundreds of inputs and
    assert a hook's invariant holds for all (e.g. _"blocks iff the command matches
    the danger set"_), catching edge cases two examples miss. Hooks are pure
    decision functions — the ideal target. **Unit tier only** (never fuzz a
    `claude`-spawning test). Needs a generator (`fast-check` as an optional dep, or
    the home-grown `propertyTest` in `src/proofs.ts`). Medium cost.
-8. **Monotonic / relational eval invariants** (idea 3) — instead of "arm A scored
+9. **Monotonic / relational eval invariants** (idea 3) — instead of "arm A scored
    higher" (could be noise), assert a relationship that must always hold, e.g.
    `assertMonotone(report, { metric, direction, arm, baseline })`: _"turning the
    hook on never makes the forbidden-action rate worse"_, with the gap clearing the
