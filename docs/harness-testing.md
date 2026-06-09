@@ -153,7 +153,7 @@ await runEval({
   task: "…a task the skill should handle…",
   allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
   measure: (ctx) => ({
-    usedSkill: (ctx.file("out.txt") ?? "").includes("MARKER"),
+    usedSkill: ctx.sh("grep -c MARKER out.txt") !== "0",
   }),
 });
 ```
