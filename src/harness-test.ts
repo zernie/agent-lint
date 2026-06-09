@@ -56,12 +56,29 @@ export interface HarnessTestSpec {
    * subset. Inline `settings`/`files` layer on top. See src/plugin-loader.ts.
    */
   readonly plugin?: string;
+  /**
+   * Path to a plugin dir to install NATIVELY via `claude --plugin-dir`, so its
+   * skills / commands / agents / hooks register and ACTIVATE the real way — a
+   * scripted `Skill` tool_use resolves, and the real model can trigger them.
+   * Unlike `plugin` (which materializes a file subset that does NOT register
+   * skills for the `Skill` tool), this is the real install path, so point it at a
+   * COMPLETE plugin (internal references resolve). Inline `settings`/`files` and
+   * `plugin` still layer on top. Resolved to an absolute path.
+   */
+  readonly pluginDir?: string;
   /** The scripted model turns the agent will take. */
   readonly model: readonly ModelTurn[];
   /** The user prompt. Default: "go". */
   readonly prompt?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash. */
   readonly allowedTools?: readonly string[];
+  /**
+   * Capture the full event transcript (`--output-format stream-json`) into
+   * `stdout`, instead of just the final result object, so you can assert on what
+   * the agent's tools returned — e.g. the body a `Skill` tool_use resolved. With
+   * this on, `stdout` is newline-delimited JSON events, not a single object.
+   */
+  readonly transcript?: boolean;
   /** Per-run wall-clock timeout in ms. Default 60000. */
   readonly timeoutMs?: number;
 }
@@ -165,10 +182,14 @@ export async function runHarnessTest(
     const args = [
       "-p",
       spec.prompt ?? "go",
-      "--output-format",
-      "json",
+      ...(spec.transcript
+        ? ["--output-format", "stream-json", "--verbose"]
+        : ["--output-format", "json"]),
       "--model",
       "claude-sonnet-4-5",
+      ...(spec.pluginDir !== undefined
+        ? ["--plugin-dir", resolve(spec.pluginDir)]
+        : []),
       ...(settings !== undefined ? ["--settings", "settings.json"] : []),
       "--allowedTools",
       ...tools,

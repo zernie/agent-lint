@@ -10,6 +10,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 
 import {
   runHarnessTest,
@@ -153,3 +154,38 @@ maybe("a blocking Stop hook forces the agent to keep working", async () => {
     r.cleanup();
   }
 });
+
+// Skill-wiring: a plugin installed natively via `--plugin-dir` registers its
+// skills, so a scripted `Skill` tool_use RESOLVES (the skill body is injected) —
+// deterministic, no real model. This is the wiring tier for skills; whether the
+// model *chooses* a skill is the eval tier. (File-materialization does NOT
+// register skills — only --plugin-dir does — see research/harness-testing-coverage-matrix.md.)
+maybe(
+  "a plugin skill installed via --plugin-dir resolves through the Skill tool",
+  async () => {
+    // __dirname is dist/ at runtime; the fixture lives at the repo root.
+    const pluginDir = join(
+      __dirname,
+      "../examples/harness/fixture-skill-plugin",
+    );
+    const r = await runHarnessTest({
+      pluginDir,
+      allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+      transcript: true, // capture the Skill tool_result so we can assert on it
+      model: scriptModel([
+        { tool: "Skill", input: { skill: "demo:greet" } },
+        { text: "ok" },
+      ]),
+      timeoutMs: 90000,
+    });
+    try {
+      assert.match(
+        r.stdout,
+        /GREET_SKILL_MARKER_42/,
+        "the demo:greet skill resolved (its body was injected into the transcript)",
+      );
+    } finally {
+      r.cleanup();
+    }
+  },
+);

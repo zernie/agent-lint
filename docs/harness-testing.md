@@ -91,6 +91,34 @@ if (warnings.length) console.warn(warnings.join("\n"));
 // ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
 ```
 
+### Native install: testing skills (`pluginDir`)
+
+`plugin` materializes a plugin's files into the sandbox — good for hooks and
+CLAUDE.md, but those files do **not** register a plugin's _skills_ for the `Skill`
+tool. To test skills, install the plugin **natively** with `pluginDir` (passes
+`claude --plugin-dir`), so its skills register and a scripted `Skill` tool_use
+resolves. Point it at a **complete** plugin (native install resolves the plugin's
+internal references). Add `transcript: true` to capture the event stream so you
+can assert the skill's body was injected:
+
+```ts
+const r = await runHarnessTest({
+  pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
+  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
+  transcript: true,
+  model: scriptModel([
+    { tool: "Skill", input: { skill: "demo:greet" } }, // resolves the skill
+    { text: "ok" },
+  ]),
+});
+assert.match(r.stdout, /GREET_SKILL_MARKER_42/); // the skill body was injected
+```
+
+This is the deterministic **wiring** tier for skills (does the skill resolve);
+whether the real model _chooses_ a skill by its description is the eval tier. See
+the worked test in `src/harness-test.test.ts` and the fixture at
+`examples/harness/fixture-skill-plugin/`.
+
 ### Dogfooding real third-party plugins (and the sandbox boundary)
 
 The loader is exercised against **real, pinned** Claude Code plugins, not just
