@@ -238,6 +238,9 @@ function makeContext(cwd: string, out: RunOut): RunContext {
     toolCalls: parseToolCalls(out.stdout),
     hooks: parseHooks(out.stdout),
     output,
+    // The eval tier drives the real API (no mock between claude and the model),
+    // so the requests can't be captured here — modelRequests is harness-tier only.
+    modelRequests: [],
     file: (p) => {
       const f = resolve(cwd, p);
       return existsSync(f) ? readFileSync(f, "utf-8") : null;

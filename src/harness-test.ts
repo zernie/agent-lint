@@ -40,10 +40,14 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
-import { startMock, type ModelTurn } from "./mock-model.js";
+import { startMock, type ModelTurn, type ModelRequest } from "./mock-model.js";
 import { resolveHarness } from "./plugin-loader.js";
 
-export { scriptModel, type ModelTurn } from "./mock-model.js";
+export {
+  scriptModel,
+  type ModelTurn,
+  type ModelRequest,
+} from "./mock-model.js";
 export { loadPlugin, resolveHarness } from "./plugin-loader.js";
 
 export interface HarnessTestSpec {
@@ -128,6 +132,16 @@ export interface Trace {
   readonly hooks: readonly HookFire[];
   /** The agent's final answer text (the terminal `result` event), or "". */
   readonly output: string;
+  /**
+   * The requests the model received, captured by the scripted mock — each with
+   * its `system` prompt and `messages`, flattened to text. Lets a test assert
+   * what actually reached the model (a SessionStart hook's injected context, a
+   * slash command's expansion), not just that a hook fired. **Harness tier
+   * only**: the mock sees the requests, so this is populated by `runHarnessTest`
+   * (with or without `transcript`); the eval tier drives the real API, so its
+   * `modelRequests` is always empty.
+   */
+  readonly modelRequests: readonly ModelRequest[];
   /** Number of model turns. */
   readonly turns: number;
   /** Final contents of a file under the working dir, or null if absent. */
@@ -381,6 +395,7 @@ export async function runHarnessTest(
       toolCalls: parseToolCalls(out.stdout),
       hooks: parseHooks(out.stdout),
       output: parseOutput(out.stdout),
+      modelRequests: [...mock.requests],
       file: (p: string): string | null => {
         const f = resolve(cwd, p);
         return existsSync(f) ? readFileSync(f, "utf-8") : null;

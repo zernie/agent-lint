@@ -41,11 +41,29 @@ export interface TurnInfo {
   readonly hasToolResult: boolean;
 }
 
+/**
+ * One `/v1/messages` request the mock received, flattened to text for
+ * assertions. This is the seam that lets a harness test prove what reached the
+ * model — a SessionStart hook's injected `additionalContext`, or a slash
+ * command's expansion — not just that a hook fired.
+ */
+export interface ModelRequest {
+  /** The system prompt, flattened to text (string or text-block array). */
+  readonly system: string;
+  /** The conversation messages, each flattened to `{ role, text }`. */
+  readonly messages: readonly {
+    readonly role: string;
+    readonly text: string;
+  }[];
+}
+
 export interface MockHandle {
   readonly url: string;
   close(): void;
   /** Number of model turns served so far. */
   readonly count: number;
+  /** Every `/v1/messages` request the mock received, in order. */
+  readonly requests: readonly ModelRequest[];
 }
 
 function writeEvent(res: ServerResponse, event: string, data: unknown): void {
@@ -156,7 +174,42 @@ function jsonTurn(res: ServerResponse, turn: ModelTurn, model: string): void {
 interface ReqBody {
   stream?: boolean;
   model?: string;
-  messages?: { content?: unknown }[];
+  system?: unknown;
+  messages?: { role?: unknown; content?: unknown }[];
+}
+
+/** Flatten Anthropic content (string, or an array of text/other blocks) to text. */
+function flattenContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b) => {
+      if (typeof b === "string") return b;
+      const t = (b as { text?: unknown }).text;
+      return typeof t === "string" ? t : "";
+    })
+    .join("");
+}
+
+/**
+ * Extract a {@link ModelRequest} from a request body — the `system` prompt and
+ * `messages`, each flattened to text. Pure and exported so the capture logic is
+ * testable without the HTTP server.
+ */
+export function extractRequest(body: {
+  system?: unknown;
+  messages?: unknown;
+}): ModelRequest {
+  const messages = Array.isArray(body.messages)
+    ? body.messages.map((m) => {
+        const msg = m as { role?: unknown; content?: unknown };
+        return {
+          role: typeof msg.role === "string" ? msg.role : "",
+          text: flattenContent(msg.content),
+        };
+      })
+    : [];
+  return { system: flattenContent(body.system), messages };
 }
 
 /**
@@ -169,6 +222,7 @@ export function startMock(
   opts: { onTurn?: (info: TurnInfo) => void } = {},
 ): Promise<MockHandle> {
   let i = 0;
+  const requests: ModelRequest[] = [];
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c as string));
@@ -192,6 +246,7 @@ export function startMock(
         res.end(JSON.stringify({ input_tokens: 10 }));
         return;
       }
+      requests.push(extractRequest(reqBody));
       const last = JSON.stringify(reqBody.messages?.at(-1)?.content ?? "");
       opts.onTurn?.({
         n: i,
@@ -213,6 +268,9 @@ export function startMock(
         close: () => server.close(),
         get count() {
           return i;
+        },
+        get requests() {
+          return requests;
         },
       });
     });

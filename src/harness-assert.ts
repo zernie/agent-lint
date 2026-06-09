@@ -149,6 +149,28 @@ export function outputContains(trace: Trace, needle: string | RegExp): boolean {
     : needle.test(trace.output);
 }
 
+/** All text the model received across every request (system + every message). */
+function requestText(trace: Trace): string {
+  return trace.modelRequests
+    .map((r) => [r.system, ...r.messages.map((m) => m.text)].join("\n"))
+    .join("\n");
+}
+
+/**
+ * Did ANY request the model received contain `needle` — searching the system
+ * prompt and every message across all requests? The predicate that proves
+ * injected context *reached the model*: a SessionStart hook's `additionalContext`
+ * or a slash command's expansion. Harness tier only — the eval tier drives the
+ * real API, so its `modelRequests` (and this) is empty. Behind `assertRequestContains`.
+ */
+export function requestContains(
+  trace: Trace,
+  needle: string | RegExp,
+): boolean {
+  const text = requestText(trace);
+  return typeof needle === "string" ? text.includes(needle) : needle.test(text);
+}
+
 /**
  * Did a hook matching `name` fire? Matches against both the hook label
  * (`"PreToolUse:Edit"`) and the bare event (`"PreToolUse"`), so `/PreToolUse/`
@@ -257,6 +279,28 @@ export function assertOutputContains(
     const shown = trace.output.slice(0, 200) || "(empty)";
     fail(
       `expected the agent's final answer to contain ${String(needle)}; got: ${shown}`,
+    );
+  }
+}
+
+/**
+ * Assert some request the model received contained `needle` — the "did the
+ * injected context land" invariant (SessionStart `additionalContext`, slash
+ * command expansion). Harness tier only; a zero-request trace fails with a hint
+ * that the eval tier can't capture requests.
+ */
+export function assertRequestContains(
+  trace: Trace,
+  needle: string | RegExp,
+): void {
+  if (!requestContains(trace, needle)) {
+    const n = trace.modelRequests.length;
+    const hint =
+      n === 0
+        ? " (no requests captured — modelRequests is harness-tier only)"
+        : "";
+    fail(
+      `expected a model request to contain ${String(needle)}; ${String(n)} request(s) captured${hint}`,
     );
   }
 }
