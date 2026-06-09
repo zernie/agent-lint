@@ -3,7 +3,7 @@
  * steps → vigiles:gate markers, and the result postcondition gate. Gate
  * references are verified against the project at compile time.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { skill, step, input, cmd, file } from "./spec.js";

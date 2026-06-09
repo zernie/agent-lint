@@ -3,7 +3,7 @@
  *
  * These test the full flow: CLI → init/compile/audit → filesystem output.
  */
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,

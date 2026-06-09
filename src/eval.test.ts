@@ -3,7 +3,7 @@
  * `runEval` drives the real `claude` CLI and is exercised by the `bench/`
  * harness rather than the unit suite.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { aggregate, aggregateStats, formatEvalReport } from "./eval.js";

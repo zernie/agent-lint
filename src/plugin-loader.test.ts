@@ -3,7 +3,7 @@
  * real assembled machine (hooks + CLAUDE.md + skills) so a test/eval runs
  * against what ships, not a retyped subset. Model-free.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
