@@ -220,3 +220,26 @@ What this resolves from the funnel analysis:
 `vigiles starter` (auto-generate markers from config) is still a good idea and composes cleanly on top of Level 0/1 — it's the natural next funnel experiment now that the levels exist. The shareable-artifact framing from the starter proposal carries over: "vigiles added 8 verified rules to my CLAUDE.md in one command" works identically whether the markers land as inline comments or a frontmatter block.
 
 README and docs were inverted to lead with markdown mode (see `docs/markdown-mode.md` and `examples/frontmatter-CLAUDE.md`). Next: measure whether dropping the TS barrier moves the npm-download / star baseline before investing in `starter` automation or the distribution pushes (B/C/E) above.
+
+## Update: runnable 60-second demo shipped (`npm run demo`)
+
+The "value visible in the first 30 seconds, output is the product" artifact that proposal **A** asked for now exists — but built to dodge the trap that got A _reconsidered_ (heuristic backtick-parsing has a low hit rate and high false positives). `examples/demo/` is a **curated, deterministic** demo, not a prose scanner: an instruction file whose references are explicit marks against real sources, two of which lie. `npm run demo` →
+
+```text
+✗ "refreshSession" is not defined in src/auth.ts
+✗ MCP tool "helper#purge_all" not found — did you mean "purge"?
+```
+
+Why this resolves the A-vs-reconsidered tension:
+
+- **The tweetable artifact materializes** because it's deterministic — no "did the heuristic guess right?" coin-flip. Curated input, 100% signal, real findings (the symbol check parses the file; the MCP check starts a real stdio server and lists its tools).
+- **It's honest, not staged** — every catch is a real `vigiles audit` run, reproducible by anyone who clones (`npm run demo`).
+- It addresses **Stage 3** (value in 60s, zero setup) and seeds **Stage 1** (shareable output) — same triple-stage logic as A.
+
+What it is _not_: the "scan the user's OWN repo and surface their pre-existing broken refs" hook (the strongest **Stage 2** lever). That remains the heuristic problem A was reconsidered over; the shipped path to a user's own repo is still _add a Level-0 mark, then `audit`_.
+
+**New distinctive Reach hook — MCP reference verification.** `` `vigiles:mcp server#tool` `` starts the declared MCP server and verifies the cited tool exists (with a "did you mean"). No other instruction-file tool does this, and "the GitHub MCP server renamed `create_issue` → `issue_write` and your skill silently broke" is a concrete, current, MCP-ecosystem-shaped pain — a sharper wedge than generic "stale refs."
+
+**E1 substance now exists.** The proposal to "run scan on popular repos and publish findings" needs real targets; the harness work shipped exactly that — vigiles loads and verifies real **obra/superpowers** and **wshobson/agents** plugins (`examples/harness/vendor/`, `real-*.harness.mjs`). The dogfood is the evidence base for an E1 post: _"we pointed vigiles at the top Claude Code plugins — here's what resolves and what doesn't."_
+
+Order of operations from here is unchanged but now unblocked: the demo is the artifact (**A**, done) → publish an E1 piece using the real-plugin dogfood → seed into communities (**B**). The open question is still **measurement**: does any of this move the npm/star baseline? Nothing here is worth repeating until that signal exists.
