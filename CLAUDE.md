@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:80ee91184e0c3c2d compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:50302f93695fb02f compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -18,9 +18,10 @@ vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Ste
 
 ## Architecture
 
-Two rule types in specs:
+Three rule types in specs:
 
 - `enforce()` — delegated to external tool (linter, ast-grep, dependency-cruiser). vigiles verifies the rule exists and is enabled.
+- `guard()` — a path→command guard (e.g. `*.spec.ts` → `npx vigiles compile`), compiles to `**Guard:**` and wires spec-driven automation into hook engines.
 - `guidance()` — prose only, compiles to `**Guidance only**` in markdown.
 
 Architectural linting (file pairing, import boundaries, AST patterns) belongs in external tools — reference them via `enforce()`.

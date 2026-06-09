@@ -20,9 +20,10 @@ Second pillar — testing the harness. Beyond verifying instruction files, vigil
 
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via \`enforce()\`.`,
 
-    architecture: `Two rule types in specs:
+    architecture: `Three rule types in specs:
 
 - \`enforce()\` — delegated to external tool (linter, ast-grep, dependency-cruiser). vigiles verifies the rule exists and is enabled.
+- \`guard()\` — a path→command guard (e.g. \`*.spec.ts\` → \`npx vigiles compile\`), compiles to \`**Guard:**\` and wires spec-driven automation into hook engines.
 - \`guidance()\` — prose only, compiles to \`**Guidance only**\` in markdown.
 
 Architectural linting (file pairing, import boundaries, AST patterns) belongs in external tools — reference them via \`enforce()\`.
