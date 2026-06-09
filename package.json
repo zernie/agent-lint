@@ -44,6 +44,7 @@
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
+    "demo": "npm run build && bash examples/demo/run.sh",
     "test:e2e": "bash test/e2e/run.sh",
     "test:harness": "npm run build && node dist/cli.js test",
     "test:eval": "npm run build && node dist/cli.js eval",
