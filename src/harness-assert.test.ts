@@ -21,6 +21,8 @@ import {
   skillResolved,
   toolUsedWith,
   outputContains,
+  requestContains,
+  assertRequestContains,
   hookFired,
   hookBlocked,
   assertToolUsed,
@@ -63,7 +65,11 @@ const report: EvalReport = {
 function fakeResult(
   present: string[],
   toolCalls: HarnessTestResult["toolCalls"] = [],
-  extra: { output?: string; hooks?: readonly HookFire[] } = {},
+  extra: {
+    output?: string;
+    hooks?: readonly HookFire[];
+    modelRequests?: HarnessTestResult["modelRequests"];
+  } = {},
 ): HarnessTestResult {
   return {
     exitCode: 0,
@@ -74,6 +80,7 @@ function fakeResult(
     toolCalls,
     hooks: extra.hooks ?? [],
     output: extra.output ?? "",
+    modelRequests: extra.modelRequests ?? [],
     file: (p: string) => (present.includes(p) ? "content" : null),
     cleanup: () => undefined,
   };
@@ -322,6 +329,44 @@ test("outputContains / assertOutputContains check trace.output", () => {
   assert.throws(() => {
     assertOutputContains(r, "nope");
   });
+});
+
+// --- model-request predicate (did the injected context reach the model) ----
+
+test("requestContains / assertRequestContains search system + messages", () => {
+  const r = fakeResult([], [], {
+    modelRequests: [
+      {
+        system: "You have superpowers. Use the using-superpowers skill.",
+        messages: [{ role: "user", text: "go" }],
+      },
+      {
+        system: "",
+        messages: [
+          { role: "user", text: "/audit the repo" },
+          { role: "assistant", text: "on it" },
+        ],
+      },
+    ],
+  });
+  // hits in the system prompt (SessionStart additionalContext shape)
+  assert.equal(requestContains(r, "You have superpowers"), true);
+  assert.equal(requestContains(r, /super\w+/), true);
+  // hits in a message (slash-command expansion shape)
+  assert.equal(requestContains(r, "/audit the repo"), true);
+  assert.equal(requestContains(r, "never sent"), false);
+  assertRequestContains(r, "superpowers");
+  assert.throws(() => {
+    assertRequestContains(r, "never sent");
+  });
+});
+
+test("assertRequestContains hints when no requests were captured (eval tier)", () => {
+  const r = fakeResult([], [], { modelRequests: [] });
+  assert.equal(requestContains(r, "anything"), false);
+  assert.throws(() => {
+    assertRequestContains(r, "anything");
+  }, /harness-tier only/);
 });
 
 // --- hook predicates (recorded from the stream, not marker files) ----------
