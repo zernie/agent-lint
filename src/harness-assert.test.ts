@@ -52,12 +52,21 @@ function fakeHook(blocked: boolean): HookRunResult {
   };
 }
 
+const NO_USAGE = {
+  totalCostUsd: 0,
+  meanCostUsd: 0,
+  meanDurationMs: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+} as const;
+
 const report: EvalReport = {
   name: "demo",
   trials: 6,
+  totalCostUsd: 0,
   arms: {
-    vanilla: { runs: 6, metrics: { caught: 0 }, stats: {} },
-    gated: { runs: 6, metrics: { caught: 0.5 }, stats: {} },
+    vanilla: { runs: 6, metrics: { caught: 0 }, stats: {}, usage: NO_USAGE },
+    gated: { runs: 6, metrics: { caught: 0.5 }, stats: {}, usage: NO_USAGE },
   },
 };
 
@@ -113,16 +122,19 @@ test("reliable / assertReliable gate on pass^k (succeeded every trial)", () => {
   const rep: EvalReport = {
     name: "rel",
     trials: 4,
+    totalCostUsd: 0,
     arms: {
       flaky: {
         runs: 4,
         metrics: { safe: 0.75 },
         stats: { safe: { mean: 0.75, std: 0.5, se: 0.25, n: 4, passK: 0 } },
+        usage: NO_USAGE,
       },
       solid: {
         runs: 4,
         metrics: { safe: 1 },
         stats: { safe: { mean: 1, std: 0, se: 0, n: 4, passK: 1 } },
+        usage: NO_USAGE,
       },
     },
   };

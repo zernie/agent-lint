@@ -171,3 +171,15 @@ Discipline carried from the rest of the repo: every pure module
 every model-spawning addition stays behind `/* v8 ignore */` + an injectable seam
 (like `spawnAgent` / `runEvalWith`), so the 100% statements/lines/functions gate
 holds.
+
+## Status
+
+- **B1 — cost/latency/token capture — DONE.** `parseUsage` reads `total_cost_usd`
+  / `usage` / `duration_ms` from the result event; `RunContext.usage` exposes them
+  to `measure`; `ArmReport.usage` + `EvalReport.totalCostUsd` aggregate them;
+  `formatEvalReport` shows `$… · …s/run · …k tok` when present (`src/eval.ts`).
+- **B2 — record/replay cache — DONE.** `src/eval-cache.ts` (key excludes
+  `measure`; snapshots + restores the post-run filesystem); `cache` / `cacheDir`
+  on `EvalSpec`; wired into `runEvalWith` via `runWithCache` / `executeTrial`.
+- **Next:** B3 (bounded concurrency + 429 backoff) and B4 (`maxCostUsd` budget
+  cap), then Phase A (`src/stats.ts`).

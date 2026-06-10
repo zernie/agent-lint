@@ -7,9 +7,14 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   aggregate,
   aggregateStats,
+  aggregateUsage,
+  parseUsage,
   formatEvalReport,
   runEvalWith,
   measureTriggerRateWith,
@@ -21,6 +26,7 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
+import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
@@ -224,6 +230,98 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
 });
 
+test("parseUsage pulls cost/latency/tokens from the result event", () => {
+  const stdout = JSON.stringify({
+    type: "result",
+    total_cost_usd: 0.02,
+    duration_ms: 900,
+    usage: { input_tokens: 120, output_tokens: 30 },
+  });
+  const u = parseUsage(stdout);
+  assert.equal(u.costUsd, 0.02);
+  assert.equal(u.durationMs, 900);
+  assert.equal(u.inputTokens, 120);
+  assert.equal(u.outputTokens, 30);
+});
+
+test("parseUsage is all-zero when no result/usage is present", () => {
+  const u = parseUsage("");
+  assert.equal(u.costUsd, 0);
+  assert.equal(u.durationMs, 0);
+  assert.equal(u.inputTokens, 0);
+  assert.equal(u.outputTokens, 0);
+});
+
+test("aggregateUsage totals and averages cost/latency/tokens", () => {
+  const u = aggregateUsage([
+    { costUsd: 0.01, durationMs: 1000, inputTokens: 100, outputTokens: 50 },
+    { costUsd: 0.03, durationMs: 2000, inputTokens: 200, outputTokens: 150 },
+  ]);
+  assert.ok(Math.abs(u.totalCostUsd - 0.04) < 1e-9);
+  assert.ok(Math.abs(u.meanCostUsd - 0.02) < 1e-9);
+  assert.equal(u.meanDurationMs, 1500);
+  assert.equal(u.totalInputTokens, 300);
+  assert.equal(u.totalOutputTokens, 200);
+});
+
+test("aggregateUsage is all-zero for no runs", () => {
+  const u = aggregateUsage([]);
+  assert.equal(u.totalCostUsd, 0);
+  assert.equal(u.meanCostUsd, 0);
+  assert.equal(u.meanDurationMs, 0);
+});
+
+test("runEvalWith record/replay cache: replays without re-calling the model", async () => {
+  const cacheDir = makeTmpDir("eval-cache");
+  const resultStream = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "done",
+    total_cost_usd: 0.01,
+    duration_ms: 1200,
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+  let calls = 0;
+  const recordingRunner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    writeFileSync(join(a.cwd, "OUT.txt"), "agent output"); // a side-effect to snapshot
+    return Promise.resolve({ code: 0, stdout: resultStream });
+  };
+  const spec = {
+    fixture: { "in.txt": "x" },
+    arms: { only: {} },
+    task: "do it",
+    trials: 2,
+    spacingSec: 0,
+    cacheDir,
+    measure: (ctx: { file: (p: string) => string | null }) => ({
+      created: ctx.file("OUT.txt") !== null,
+    }),
+  };
+  try {
+    const r1 = await runEvalWith(
+      { ...spec, cache: "readwrite" as const },
+      recordingRunner,
+    );
+    assert.equal(calls, 2); // model called for both trials
+    assert.equal(r1.arms.only?.metrics.created, 1);
+    assert.ok(Math.abs(r1.totalCostUsd - 0.02) < 1e-9); // 2 × $0.01
+    assert.equal(r1.arms.only?.usage.totalInputTokens, 200);
+
+    // second run, read-only, with a runner that throws if called → must replay
+    const boom = (): Promise<{ code: number; stdout: string }> => {
+      throw new Error("runner should not be called on a cache hit");
+    };
+    const r2 = await runEvalWith({ ...spec, cache: "read" as const }, boom);
+    assert.equal(r2.arms.only?.metrics.created, 1); // OUT.txt restored → measure sees it
+    assert.ok(Math.abs(r2.totalCostUsd - 0.02) < 1e-9); // replayed usage
+  } finally {
+    cleanupTmpDir(cacheDir);
+  }
+});
+
 test("assertTriggerRate gates on the minimum rate", () => {
   const report = { rate: 0.5, n: 4, perPrompt: [] };
   assert.doesNotThrow(() => {
@@ -234,13 +332,22 @@ test("assertTriggerRate gates on the minimum rate", () => {
   });
 });
 
+const NO_USAGE = {
+  totalCostUsd: 0,
+  meanCostUsd: 0,
+  meanDurationMs: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+} as const;
+
 test("formatEvalReport renders one line per arm", () => {
   const out = formatEvalReport({
     name: "demo",
     trials: 6,
+    totalCostUsd: 0,
     arms: {
-      vanilla: { runs: 6, metrics: { caught: 0 }, stats: {} },
-      gated: { runs: 6, metrics: { caught: 0.5 }, stats: {} },
+      vanilla: { runs: 6, metrics: { caught: 0 }, stats: {}, usage: NO_USAGE },
+      gated: { runs: 6, metrics: { caught: 0.5 }, stats: {}, usage: NO_USAGE },
     },
   });
   assert.match(out, /demo \(6 trials\/arm\)/);
@@ -252,14 +359,40 @@ test("formatEvalReport shows ± se and pass^k when stats are present", () => {
   const out = formatEvalReport({
     name: "demo",
     trials: 3,
+    totalCostUsd: 0,
     arms: {
       gated: {
         runs: 3,
         metrics: { caught: 0.5 },
         stats: { caught: { mean: 0.5, std: 0.5, se: 0.25, n: 3, passK: 0 } },
+        usage: NO_USAGE,
       },
     },
   });
   assert.match(out, /caught=0\.50±0\.25/);
   assert.match(out, /pass\^k=0/);
+});
+
+test("formatEvalReport surfaces cost/latency/tokens when usage is present", () => {
+  const out = formatEvalReport({
+    name: "demo",
+    trials: 2,
+    totalCostUsd: 0.05,
+    arms: {
+      gated: {
+        runs: 2,
+        metrics: { caught: 1 },
+        stats: {},
+        usage: {
+          totalCostUsd: 0.05,
+          meanCostUsd: 0.025,
+          meanDurationMs: 1500,
+          totalInputTokens: 2000,
+          totalOutputTokens: 1400,
+        },
+      },
+    },
+  });
+  assert.match(out, /\$0\.0500 total/);
+  assert.match(out, /\$0\.0500 · 1\.5s\/run · 3\.4k tok/);
 });
