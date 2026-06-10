@@ -192,6 +192,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)",
     "research/harness-testing.md":
       "Testing the Claude Code harness — the three-tier design (unit runHook + deterministic runHarnessTest + real-model runEval), the assembled-machine plugin loader, and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, wshobson agents/skills)",
+    "research/eval-api-landscape.md":
+      "Eval-API landscape: the LLM/agent eval field (promptfoo, DeepEval, Braintrust, Inspect, LangSmith, OpenAI Evals) summarized then scored against our eval API — strengths (harness A/B arms, pass^k, se/std, unified Trace predicates), gaps (cost/concurrency/caching, significance testing, regression gating), and the B→A→C roadmap (defer D)",
     "research/skill-authoring-pains.md":
       "Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references",
     "docs/harness-testing.md":
