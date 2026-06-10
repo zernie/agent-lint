@@ -107,6 +107,10 @@ export interface HarnessTestSpec {
    * available, the run REFUSES rather than executing unconfined. Pass `false` to
    * opt out and run unconfined (you audited the code, or trust the outer
    * container); `"strict"` to force confinement even for trusted code.
+   *
+   * NOTE: confined execution is **Linux only** (bubblewrap is a Linux tool). On
+   * macOS / Windows no sandbox is available, so an untrusted run will REFUSE
+   * under `"auto"`/`"strict"` — use `sandbox: false` there if you trust the code.
    */
   readonly sandbox?: SandboxMode;
 }

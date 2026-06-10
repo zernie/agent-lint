@@ -43,8 +43,15 @@ import { type ModelTurn, type ModelRequest } from "./mock-model.js";
  */
 export type SandboxMode = "auto" | "strict" | false;
 
-/** Whether bubblewrap is available to confine untrusted code. */
+/**
+ * Whether bubblewrap is available to confine untrusted code. **Linux only** —
+ * bubblewrap is a Linux tool, so this is always `false` on macOS / Windows,
+ * where confined execution isn't supported and untrusted code must instead be
+ * run via `sandbox: false` (trusting the outer container) or skipped.
+ */
 export function sandboxAvailable(): boolean {
+  /* v8 ignore next -- non-Linux has no bwrap; CI/coverage runs on Linux */
+  if (process.platform !== "linux") return false;
   try {
     return spawnSync("bwrap", ["--version"], { stdio: "ignore" }).status === 0;
   } catch {
@@ -91,7 +98,7 @@ export function decideSandbox(opts: {
       : {
           action: "throw",
           reason:
-            "sandbox: 'strict' requires bubblewrap (bwrap), which was not found on PATH",
+            "sandbox: 'strict' requires Linux + bubblewrap (bwrap), which was not available",
         };
   }
   // auto: trusted code runs directly; untrusted must be confined or refused.
@@ -102,28 +109,34 @@ export function decideSandbox(opts: {
         action: "throw",
         reason:
           "refusing to execute an untrusted plugin's hooks without a sandbox: " +
-          "install bubblewrap (bwrap) to run confined, or pass sandbox: false " +
-          "to run unconfined if you trust this code / the outer container",
+          "the sandbox needs Linux + bubblewrap (bwrap) — install it to run " +
+          "confined, or pass sandbox: false to run unconfined if you trust this " +
+          "code / the outer container",
       };
 }
 
 /**
  * The bubblewrap confinement argv (everything before the command): a fresh
  * network namespace (`--unshare-all`, loopback-only, no egress), a read-only
- * system, and writable mounts limited to the work dir, the IO dir, and a fresh
- * empty HOME (kept inside the IO dir so it needs no mountpoint on the read-only
- * root, and so no host credentials/config leak in). Pure, so the confinement
- * shape is asserted in a unit test.
+ * system, writable mounts limited to the work dir, the IO dir, and a fresh empty
+ * HOME (inside the IO dir so it needs no mountpoint on the read-only root, and so
+ * no host credentials/config leak in), and a **cleared environment** —
+ * `--clearenv` drops every host variable (API keys, cloud creds) and only PATH /
+ * HOME / TMPDIR are set back, so untrusted code can't even read your secrets.
+ * Pure, so the confinement shape is asserted in a unit test.
  */
 export function bwrapArgs(opts: {
   cwd: string;
   ioDir: string;
   home: string;
+  path: string;
 }): string[] {
   return [
     // New user/net/pid/ipc/uts/cgroup namespaces. The net namespace has only a
     // loopback route, so the in-sandbox mock is reachable but egress is blocked.
     "--unshare-all",
+    // Drop ALL inherited env (host secrets); only the essentials are set back.
+    "--clearenv",
     "--ro-bind",
     "/",
     "/",
@@ -145,6 +158,10 @@ export function bwrapArgs(opts: {
     "--setenv",
     "TMPDIR",
     opts.ioDir,
+    // PATH must be set back explicitly (cleared above) so node/claude resolve.
+    "--setenv",
+    "PATH",
+    opts.path,
     "--chdir",
     opts.cwd,
     "--die-with-parent",
@@ -220,7 +237,12 @@ export function runSandboxed(opts: {
       join(__dirname, "..", "dist", "mock-entry.js"),
     ].find((p) => existsSync(p)) ?? join(__dirname, "mock-entry.js");
   const args = [
-    ...bwrapArgs({ cwd: opts.cwd, ioDir, home }),
+    ...bwrapArgs({
+      cwd: opts.cwd,
+      ioDir,
+      home,
+      path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    }),
     "--setenv",
     "VIG_MOCKENTRY",
     mockEntry,

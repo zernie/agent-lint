@@ -7,6 +7,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 
 import {
   decideSandbox,
@@ -20,6 +21,7 @@ import {
   claudeAvailable,
   scriptModel,
 } from "./harness-test.js";
+import { assertRequestContains, assertHookFired } from "./harness-assert.js";
 
 test("specTrusted: inline-only is trusted, any external plugin is not", () => {
   assert.equal(specTrusted({}), true);
@@ -84,14 +86,21 @@ test("sandboxAvailable returns a boolean (covers the probe)", () => {
   assert.equal(typeof sandboxAvailable(), "boolean");
 });
 
-test("bwrapArgs: isolated net, read-only root, writable work + io + fresh home", () => {
-  const args = bwrapArgs({ cwd: "/work", ioDir: "/io", home: "/io/home" });
+test("bwrapArgs: isolated net, cleared env, ro root, writable work + io + home", () => {
+  const args = bwrapArgs({
+    cwd: "/work",
+    ioDir: "/io",
+    home: "/io/home",
+    path: "/usr/bin:/bin",
+  });
   const joined = args.join(" ");
   assert.ok(args.includes("--unshare-all")); // fresh net namespace, no egress
+  assert.ok(args.includes("--clearenv")); // drop host secrets from env
   assert.ok(joined.includes("--ro-bind / /")); // system read-only
   assert.ok(joined.includes("--bind /work /work")); // writable work dir
   assert.ok(joined.includes("--bind /io /io")); // writable IO relay dir
   assert.ok(joined.includes("--setenv HOME /io/home")); // fresh empty HOME
+  assert.ok(joined.includes("--setenv PATH /usr/bin:/bin")); // PATH set back
   assert.ok(joined.includes("--chdir /work"));
   assert.ok(args.includes("--die-with-parent"));
 });
@@ -146,6 +155,74 @@ test.skipIf(!sandboxRunnable)(
         r.file("NET"),
         "blocked",
         "expected external network to be unreachable from the sandbox",
+      );
+    } finally {
+      r.cleanup();
+    }
+  },
+  130000,
+);
+
+// trace.modelRequests proves injected context actually REACHES the model — a
+// SessionStart hook (emitting Claude Code's nested form) under the sandbox, and
+// we find its additionalContext in the model's request. "fired" AND "landed".
+test.skipIf(!sandboxRunnable)(
+  "a SessionStart hook's injected context reaches the model (trace.modelRequests)",
+  async () => {
+    const marker = "VIGILES_CTX_MARKER_42";
+    const hookCmd = `node -e "console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:'${marker}'}}))"`;
+    const r = await runHarnessTest({
+      settings: {
+        hooks: {
+          SessionStart: [
+            {
+              matcher: "startup",
+              hooks: [{ type: "command", command: hookCmd }],
+            },
+          ],
+        },
+      },
+      sandbox: "strict", // force the sandbox path even though this is trusted
+      transcript: true,
+      model: scriptModel([{ text: "ok" }]),
+      timeoutMs: 120000,
+    });
+    try {
+      assertHookFired(r, "SessionStart");
+      assertRequestContains(r, marker); // the injected context landed in the model's request
+    } finally {
+      r.cleanup();
+    }
+  },
+  130000,
+);
+
+// Dogfood — the execute-and-verify payoff on a REAL pinned third-party plugin:
+// obra/superpowers' SessionStart hook is UNTRUSTED, so it runs CONFINED (no
+// sandbox:false). We assert the real hook FIRED inside the sandbox and produced
+// its genuine output. (It emits a *top-level* additionalContext, which Claude
+// Code — reading the *nested* form — does NOT inject; so trace.modelRequests
+// shows the context did NOT reach the model. That "fired ≠ landed" gap is exactly
+// what modelRequests exists to surface, proven against real third-party code.)
+test.skipIf(!sandboxRunnable)(
+  "dogfood: superpowers' SessionStart runs confined and its real output is captured",
+  async () => {
+    const superpowers = join(
+      __dirname,
+      "../examples/harness/vendor/superpowers@6fd4507",
+    );
+    const r = await runHarnessTest({
+      plugin: superpowers, // external → untrusted → confined (no sandbox:false)
+      transcript: true,
+      model: scriptModel([{ text: "ok" }]),
+      timeoutMs: 120000,
+    });
+    try {
+      assertHookFired(r, "SessionStart"); // the real third-party hook ran, confined
+      const ctx = r.hooks.find((h) => h.event === "SessionStart")?.output ?? "";
+      assert.ok(
+        ctx.includes("You have superpowers"),
+        "expected superpowers' SessionStart to produce its real injected-context output",
       );
     } finally {
       r.cleanup();
