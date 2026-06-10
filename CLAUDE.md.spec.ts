@@ -106,9 +106,13 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/run-hook.test.ts":
       "Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions",
     "src/eval.ts":
-      "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance); measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (the #1 skill-authoring pain) — the empirical half of testing your harness (generalizes bench/)",
+      "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) + cost/latency/token usage; record/replay cache (cache:readwrite) replays runs so editing measure re-scores for free; measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (the #1 skill-authoring pain) — the empirical half of testing your harness (generalizes bench/)",
     "src/eval.test.ts":
-      "Eval aggregation/formatting + variance test suite (node:test)",
+      "Eval aggregation/formatting + variance + usage/cache test suite (node:test)",
+    "src/eval-cache.ts":
+      "Eval record/replay cache: cacheKey hashes the model-affecting inputs (task, resolved files+settings, model, tools, trialIndex) but NOT measure, so re-scoring replays for free; snapshotDir/restoreDir round-trip the post-run filesystem so ctx.file()/ctx.sh() stay sound on replay",
+    "src/eval-cache.test.ts":
+      "Eval-cache test suite (node:test): key stability/sensitivity, record round-trip + malformed-record tolerance, filesystem snapshot/restore",
     "src/plugin-loader.ts":
       "Plugin/repo harness loader: loadPlugin reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills + agents + commands materialized; .warnings flags surfaces the deterministic tier can't drive (subagents/commands/MCP, an empty machine, or dangling intra-plugin file refs e.g. a partial vendor) so a plugin load never silently tests nothing; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine",
     "src/plugin-loader.test.ts":
