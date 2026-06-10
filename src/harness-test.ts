@@ -42,6 +42,13 @@ import { resolve, join, dirname } from "node:path";
 
 import { startMock, type ModelTurn, type ModelRequest } from "./mock-model.js";
 import { resolveHarness } from "./plugin-loader.js";
+import {
+  decideSandbox,
+  specTrusted,
+  sandboxAvailable,
+  runSandboxed,
+  type SandboxMode,
+} from "./sandbox.js";
 
 export {
   scriptModel,
@@ -49,6 +56,12 @@ export {
   type ModelRequest,
 } from "./mock-model.js";
 export { loadPlugin, resolveHarness } from "./plugin-loader.js";
+export {
+  decideSandbox,
+  specTrusted,
+  sandboxAvailable,
+  type SandboxMode,
+} from "./sandbox.js";
 
 export interface HarnessTestSpec {
   /** Fixture files to write in a fresh temp working dir (path → contents). */
@@ -86,6 +99,16 @@ export interface HarnessTestSpec {
   readonly transcript?: boolean;
   /** Per-run wall-clock timeout in ms. Default 60000. */
   readonly timeoutMs?: number;
+  /**
+   * Confinement policy for the code this run executes (`src/sandbox.ts`).
+   * Default `"auto"` is safe-by-default: an inline-only spec (you authored it)
+   * runs directly, but an external `plugin` / `pluginDir` brings in untrusted
+   * third-party hooks and is run under bubblewrap — or, if no sandbox is
+   * available, the run REFUSES rather than executing unconfined. Pass `false` to
+   * opt out and run unconfined (you audited the code, or trust the outer
+   * container); `"strict"` to force confinement even for trusted code.
+   */
+  readonly sandbox?: SandboxMode;
 }
 
 /**
@@ -286,6 +309,33 @@ export function parseHooks(stdout: string): HookFire[] {
   return hooks;
 }
 
+/**
+ * The `claude` CLI argv for a harness run (shared by the direct and sandboxed
+ * paths). `ANTHROPIC_BASE_URL` is set by the caller's environment / wrapper, not
+ * here. Pure, so the arg shape is unit-tested.
+ */
+export function buildClaudeArgs(
+  spec: HarnessTestSpec,
+  hasSettings: boolean,
+): string[] {
+  const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"];
+  return [
+    "-p",
+    spec.prompt ?? "go",
+    ...(spec.transcript
+      ? ["--output-format", "stream-json", "--verbose"]
+      : ["--output-format", "json"]),
+    "--model",
+    "claude-sonnet-4-5",
+    ...(spec.pluginDir !== undefined
+      ? ["--plugin-dir", resolve(spec.pluginDir)]
+      : []),
+    ...(hasSettings ? ["--settings", "settings.json"] : []),
+    "--allowedTools",
+    ...tools,
+  ];
+}
+
 /* v8 ignore start -- spawns the real claude CLI + filesystem; exercised by the
    claude-backed suite, excluded from the deterministic coverage gate (the parse
    helpers above carry the testable logic). */
@@ -355,10 +405,22 @@ function spawnClaude(
 /**
  * Run the real `claude` CLI against a scripted mock model, with the given
  * fixture and settings (hooks). Deterministic — same script, same result.
+ *
+ * Safe by default: an external `plugin` / `pluginDir` brings in untrusted
+ * third-party hooks and is confined under bubblewrap (`spec.sandbox`, default
+ * `"auto"`); if no sandbox is available the run REFUSES rather than executing
+ * unconfined. See `src/sandbox.ts`.
  */
 export async function runHarnessTest(
   spec: HarnessTestSpec,
 ): Promise<HarnessTestResult> {
+  const decision = decideSandbox({
+    trusted: specTrusted(spec),
+    mode: spec.sandbox ?? "auto",
+    available: sandboxAvailable(),
+  });
+  if (decision.action === "throw") throw new Error(decision.reason);
+
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
   const { files, settings } = resolveHarness({
     plugin: spec.plugin,
@@ -366,44 +428,48 @@ export async function runHarnessTest(
     files: spec.files,
   });
   writeFixture(cwd, files, settings);
+  const args = buildClaudeArgs(spec, settings !== undefined);
+  const timeoutMs = spec.timeoutMs ?? 60000;
 
+  const build = (
+    out: { code: number; stdout: string; stderr?: string },
+    turns: number,
+    modelRequests: readonly ModelRequest[],
+  ): HarnessTestResult => ({
+    exitCode: out.code,
+    stdout: out.stdout,
+    stderr: out.stderr ?? "",
+    cwd,
+    turns,
+    toolCalls: parseToolCalls(out.stdout),
+    hooks: parseHooks(out.stdout),
+    output: parseOutput(out.stdout),
+    modelRequests,
+    file: (p: string): string | null => {
+      const f = resolve(cwd, p);
+      return existsSync(f) ? readFileSync(f, "utf-8") : null;
+    },
+    cleanup: (): void => {
+      rmSync(cwd, { recursive: true, force: true });
+    },
+  });
+
+  // Confined path: the mock is co-launched inside the sandbox's netns.
+  if (decision.action === "sandbox") {
+    const out = await runSandboxed({
+      cwd,
+      claudeArgs: args,
+      script: spec.model,
+      timeoutMs,
+    });
+    return build(out, out.requests.length, out.requests);
+  }
+
+  // Direct path: mock runs in this process; claude reaches it over localhost.
   const mock = await startMock(spec.model);
   try {
-    const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"];
-    const args = [
-      "-p",
-      spec.prompt ?? "go",
-      ...(spec.transcript
-        ? ["--output-format", "stream-json", "--verbose"]
-        : ["--output-format", "json"]),
-      "--model",
-      "claude-sonnet-4-5",
-      ...(spec.pluginDir !== undefined
-        ? ["--plugin-dir", resolve(spec.pluginDir)]
-        : []),
-      ...(settings !== undefined ? ["--settings", "settings.json"] : []),
-      "--allowedTools",
-      ...tools,
-    ];
-    const out = await spawnClaude(args, cwd, mock.url, spec.timeoutMs ?? 60000);
-    return {
-      exitCode: out.code,
-      stdout: out.stdout,
-      stderr: out.stderr,
-      cwd,
-      turns: mock.count,
-      toolCalls: parseToolCalls(out.stdout),
-      hooks: parseHooks(out.stdout),
-      output: parseOutput(out.stdout),
-      modelRequests: [...mock.requests],
-      file: (p: string): string | null => {
-        const f = resolve(cwd, p);
-        return existsSync(f) ? readFileSync(f, "utf-8") : null;
-      },
-      cleanup: (): void => {
-        rmSync(cwd, { recursive: true, force: true });
-      },
-    };
+    const out = await spawnClaude(args, cwd, mock.url, timeoutMs);
+    return build(out, mock.count, [...mock.requests]);
   } finally {
     mock.close();
   }

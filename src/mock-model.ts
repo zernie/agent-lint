@@ -219,7 +219,12 @@ export function extractRequest(body: {
  */
 export function startMock(
   script: readonly ModelTurn[],
-  opts: { onTurn?: (info: TurnInfo) => void } = {},
+  opts: {
+    onTurn?: (info: TurnInfo) => void;
+    /** Called with each `/v1/messages` request as it arrives — used by the
+     * in-sandbox mock entry to stream requests to a file for the parent. */
+    onRequest?: (req: ModelRequest) => void;
+  } = {},
 ): Promise<MockHandle> {
   let i = 0;
   const requests: ModelRequest[] = [];
@@ -246,7 +251,9 @@ export function startMock(
         res.end(JSON.stringify({ input_tokens: 10 }));
         return;
       }
-      requests.push(extractRequest(reqBody));
+      const request = extractRequest(reqBody);
+      requests.push(request);
+      opts.onRequest?.(request);
       const last = JSON.stringify(reqBody.messages?.at(-1)?.content ?? "");
       opts.onTurn?.({
         n: i,
