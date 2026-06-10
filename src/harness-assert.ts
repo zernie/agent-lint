@@ -20,7 +20,7 @@ import {
   type ToolCall,
   type Trace,
 } from "./harness-test.js";
-import type { EvalReport } from "./eval.js";
+import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
 
 /**
@@ -447,6 +447,22 @@ export function assertImproves(
   if (delta <= by) {
     fail(
       `expected ${opts.arm} to beat ${opts.baseline} on ${opts.metric} by > ${String(by)}, got ${delta.toFixed(3)}`,
+    );
+  }
+}
+
+/**
+ * Assert a skill/behaviour triggered on at least `min` (0..1) of its runs — the
+ * reliability gate for a skill's *activation* (does its description fire on the
+ * task), over a {@link TriggerRateReport} from `measureTriggerRate`.
+ */
+export function assertTriggerRate(
+  report: TriggerRateReport,
+  opts: { min: number },
+): void {
+  if (report.rate < opts.min) {
+    fail(
+      `expected a trigger rate ≥ ${String(opts.min)}, got ${report.rate.toFixed(2)} (${String(report.n)} runs)`,
     );
   }
 }

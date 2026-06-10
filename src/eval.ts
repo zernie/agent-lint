@@ -390,3 +390,122 @@ export function formatEvalReport(report: EvalReport): string {
   }
   return lines.join("\n");
 }
+
+// --- trigger-rate: does a skill/behaviour actually FIRE across varied prompts ---
+
+/**
+ * Measure how reliably a skill/behaviour *triggers*. A skill's value is its
+ * description firing on the right task — the #1 documented skill-authoring pain —
+ * and that's a property of the real model, not the wiring (which the
+ * deterministic tier already proves). Install the plugin natively (`pluginDir`),
+ * give a set of varied `prompts`, and a `fired` predicate over the run's `Trace`
+ * (reuse the bare predicates, e.g. `(t) => skillResolved(t, "x:y")`).
+ */
+export interface TriggerRateSpec {
+  /** Plugin dir installed natively (`--plugin-dir`) so its skills/commands activate. */
+  readonly pluginDir: string;
+  /** The varied prompts to test the trigger against. */
+  readonly prompts: readonly string[];
+  /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
+  readonly fired: (trace: Trace) => boolean;
+  /** Trials per prompt. Default 1. */
+  readonly trials?: number;
+  /** Model alias. Default "haiku". */
+  readonly model?: string;
+  /** Tools the agent may use. Default: Read Edit Write Bash Skill. */
+  readonly allowedTools?: readonly string[];
+  /** Per-run timeout ms. Default 240000. */
+  readonly timeoutMs?: number;
+  /** Seconds to wait between runs (avoid rate-limit bursts). Default 4. */
+  readonly spacingSec?: number;
+}
+
+/** Per-prompt trigger result: how many of its trials fired. */
+export interface PromptTriggerStat {
+  readonly prompt: string;
+  readonly fired: number;
+  readonly trials: number;
+  /** `fired / trials` (0 when no trials). */
+  readonly rate: number;
+}
+
+export interface TriggerRateReport {
+  /** Overall fraction of runs in which the behaviour fired (0..1). */
+  readonly rate: number;
+  /** Total runs (prompts × trials). */
+  readonly n: number;
+  readonly perPrompt: readonly PromptTriggerStat[];
+}
+
+/**
+ * Trigger-rate orchestration — every prompt × trial via `runner`, the `fired`
+ * predicate evaluated per run and aggregated into an overall + per-prompt rate.
+ * Exported with an injectable `runner` so the loop is unit-testable without a
+ * model; `measureTriggerRate` is this with the real agent runner.
+ */
+export async function measureTriggerRateWith(
+  spec: TriggerRateSpec,
+  runner: AgentRunner,
+): Promise<TriggerRateReport> {
+  const trials = spec.trials ?? 1;
+  const model = spec.model ?? "haiku";
+  const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"];
+  const timeoutMs = spec.timeoutMs ?? 240000;
+  const spacing = (spec.spacingSec ?? 4) * 1000;
+
+  const perPrompt: PromptTriggerStat[] = [];
+  let firedTotal = 0;
+  let n = 0;
+  for (const prompt of spec.prompts) {
+    let fired = 0;
+    for (let t = 0; t < trials; t++) {
+      const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
+      try {
+        const out = await runner({
+          task: prompt,
+          cwd,
+          model,
+          tools,
+          hasSettings: false,
+          pluginDir: spec.pluginDir,
+          timeoutMs,
+        });
+        if (spec.fired(makeContext(cwd, out))) fired++;
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+        await sleep(spacing);
+      }
+    }
+    perPrompt.push({
+      prompt,
+      fired,
+      trials,
+      rate: trials > 0 ? fired / trials : 0,
+    });
+    firedTotal += fired;
+    n += trials;
+  }
+  return { rate: n > 0 ? firedTotal / n : 0, n, perPrompt };
+}
+
+/* v8 ignore start -- real claude subprocess; thin wrapper over measureTriggerRateWith */
+/**
+ * Measure a skill/behaviour's real trigger rate across prompts × trials against
+ * the real `claude` CLI. Requires `claude` + model auth.
+ */
+export async function measureTriggerRate(
+  spec: TriggerRateSpec,
+): Promise<TriggerRateReport> {
+  return measureTriggerRateWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
+
+/** Format a trigger-rate report: overall %, then each prompt's rate. */
+export function formatTriggerRateReport(report: TriggerRateReport): string {
+  const pct = (report.rate * 100).toFixed(0);
+  const lines = [`trigger-rate: ${pct}% (${String(report.n)} runs)`];
+  for (const p of report.perPrompt) {
+    lines.push(`  ${p.rate.toFixed(2)}  ${p.prompt.slice(0, 60)}`);
+  }
+  return lines.join("\n");
+}
