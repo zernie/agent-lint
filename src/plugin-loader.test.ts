@@ -54,6 +54,45 @@ test("loadPlugin resolves CLAUDE_PLUGIN_ROOT to the absolute plugin path", () =>
   }
 });
 
+test("loadPlugin warns on dangling intra-plugin file references", () => {
+  const root = makeTmpDir("plugin-dangling");
+  try {
+    // a hook script that reads one skill that exists and one that doesn't
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, "hooks", "session-start"),
+      // the missing ref appears twice → exercises the dedup (seen) path
+      'cat "$ROOT/skills/present/SKILL.md"\ncat "$ROOT/skills/missing/SKILL.md"\necho "$ROOT/skills/missing/SKILL.md"\n',
+    );
+    mkdirSync(join(root, "skills", "present"), { recursive: true });
+    writeFileSync(join(root, "skills", "present", "SKILL.md"), "# present\n");
+
+    const { warnings } = loadPlugin(root);
+    const dangling = warnings.find((w) => w.includes("intra-plugin"));
+    assert.ok(dangling, "expected a dangling-ref warning");
+    assert.ok(
+      dangling.includes("skills/missing/SKILL.md"),
+      "names the missing ref",
+    );
+    assert.ok(
+      !dangling.includes("skills/present/SKILL.md"),
+      "ignores the present ref",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin: a complete plugin has no dangling-ref warning", () => {
+  const root = makePlugin(); // skills/foo/SKILL.md exists, no broken refs
+  try {
+    const { warnings } = loadPlugin(root);
+    assert.ok(!warnings.some((w) => w.includes("intra-plugin")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin materializes CLAUDE.md and skills into the sandbox", () => {
   const root = makePlugin();
   try {

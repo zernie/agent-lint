@@ -12,9 +12,15 @@ import {
   aggregateStats,
   formatEvalReport,
   runEvalWith,
+  measureTriggerRateWith,
+  formatTriggerRateReport,
   type AgentRunArgs,
 } from "./eval.js";
-import { usedTool, outputContains } from "./harness-assert.js";
+import {
+  usedTool,
+  outputContains,
+  assertTriggerRate,
+} from "./harness-assert.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
@@ -168,6 +174,64 @@ test("runEvalWith honors provided optionals (name/model/tools/timeout, arm.files
   );
   assert.equal(report.name, "custom"); // spec.name provided
   assert.equal(report.arms.a?.metrics.both, 1);
+});
+
+test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plainStream = JSON.stringify({ type: "result", num_turns: 1 });
+
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    // prompts containing "fire" trigger the Skill; the rest don't
+    return Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("fire") ? skillStream : plainStream,
+    });
+  };
+
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/some/plugin",
+      prompts: ["fire one", "ignore this", "fire two"],
+      fired: (t) => usedTool(t, "Skill"),
+      trials: 2,
+      spacingSec: 0,
+    },
+    runner,
+  );
+
+  assert.equal(report.n, 6); // 3 prompts × 2 trials
+  assert.equal(seen.length, 6);
+  assert.equal(seen[0]?.pluginDir, "/some/plugin"); // pluginDir forwarded
+  assert.ok(Math.abs(report.rate - 4 / 6) < 1e-9); // 2 firing prompts × 2 trials
+  const fireOne = report.perPrompt.find((p) => p.prompt === "fire one");
+  assert.equal(fireOne?.fired, 2);
+  assert.equal(fireOne?.rate, 1);
+  const ignore = report.perPrompt.find((p) => p.prompt === "ignore this");
+  assert.equal(ignore?.fired, 0);
+  assert.equal(ignore?.rate, 0);
+  assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("assertTriggerRate gates on the minimum rate", () => {
+  const report = { rate: 0.5, n: 4, perPrompt: [] };
+  assert.doesNotThrow(() => {
+    assertTriggerRate(report, { min: 0.5 });
+  });
+  assert.throws(() => {
+    assertTriggerRate(report, { min: 0.8 });
+  });
 });
 
 test("formatEvalReport renders one line per arm", () => {
