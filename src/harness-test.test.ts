@@ -19,6 +19,7 @@ import {
   parseToolCalls,
   parseOutput,
   parseHooks,
+  buildClaudeArgs,
 } from "./harness-test.js";
 import {
   assertToolUsed,
@@ -32,6 +33,38 @@ import {
 } from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
+
+// Pure: the shared claude argv (no model, no claude). Covers the transcript /
+// pluginDir / settings / default-tools branches.
+test("buildClaudeArgs: transcript, pluginDir, settings, and tool defaults", () => {
+  const base = buildClaudeArgs({ model: scriptModel([]) }, false);
+  assert.deepEqual(base.slice(0, 2), ["-p", "go"]); // default prompt
+  assert.ok(base.includes("json") && !base.includes("stream-json"));
+  assert.ok(!base.includes("--plugin-dir") && !base.includes("--settings"));
+  // default allowed tools come last
+  assert.deepEqual(base.slice(-5), [
+    "--allowedTools",
+    "Read",
+    "Edit",
+    "Write",
+    "Bash",
+  ]);
+
+  const full = buildClaudeArgs(
+    {
+      model: scriptModel([]),
+      prompt: "do it",
+      transcript: true,
+      pluginDir: "examples/harness/fixture-skill-plugin",
+      allowedTools: ["Bash"],
+    },
+    true,
+  );
+  assert.deepEqual(full.slice(0, 2), ["-p", "do it"]);
+  assert.ok(full.includes("stream-json") && full.includes("--verbose"));
+  assert.ok(full.includes("--plugin-dir") && full.includes("--settings"));
+  assert.deepEqual(full.slice(-2), ["--allowedTools", "Bash"]);
+});
 
 // Regression: a PostToolUse hook fires on an Edit/Write tool use. This is the
 // deterministic-tier capability a stale comment once said was impossible; the
@@ -191,6 +224,7 @@ maybe(
     );
     const r = await runHarnessTest({
       pluginDir,
+      sandbox: false, // in-repo fixture we authored → trusted, run direct
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
       transcript: true, // populate r.toolCalls
       model: scriptModel([
@@ -229,6 +263,7 @@ for (const [label, dir, skill] of [
   maybe(`a real ${label} skill resolves via --plugin-dir`, async () => {
     const r = await runHarnessTest({
       pluginDir: join(__dirname, dir),
+      sandbox: false, // pinned vendored plugin we audited → trusted, run direct
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
       transcript: true,
       model: scriptModel([{ tool: "Skill", input: { skill } }, { text: "ok" }]),

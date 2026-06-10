@@ -39,6 +39,7 @@ const plugin = fileURLToPath(new URL("./fixture-plugin", import.meta.url));
 await withHarness(
   {
     plugin, // fixture-plugin's real hooks (SessionStart + PreToolUse) + CLAUDE.md
+    sandbox: false, // in-repo fixture we authored → trusted, run direct
     model: scriptModel([
       { tool: "Bash", input: { command: "rm -rf /tmp/should-be-blocked" } },
       { tool: "Bash", input: { command: "echo ok > RESULT" } },

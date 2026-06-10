@@ -245,21 +245,34 @@ upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
 clone at test time, so they run **offline and deterministically**. Refresh
 deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
 
-**The safety line: `loadPlugin` parses, it never executes.** A hook is a real
-child process with full `env` — `runHook`/`runHarnessTest` run the _actual_ hook,
-not a reimplementation, and there is **no sandbox** beyond a temp cwd and a
-timeout. That is fine for hooks _you_ wrote and for read-only governance hooks
-(inspect the event → decide), but a third-party **setup** hook (superpowers'
-`SessionStart`, say) can install, write, or call out. So the dogfood asserts such
-a hook is correctly **wired** and stops there; it does not run it.
+**Safe by default — untrusted hooks are confined, not trusted.** A hook is a
+real child process: `runHarnessTest` runs the _actual_ hook, not a
+reimplementation. Code _you_ authored (inline `settings`/`files`) is trusted and
+runs directly. But an external `plugin` / `pluginDir` brings in **third-party
+hooks**, and those are confined by default (`sandbox: "auto"`):
 
-To actually _execute_ untrusted third-party hooks, put a real boundary around it:
-the cheapest correct one is the **ephemeral CI container** (the runner is the
-sandbox) — run that job only there, never in a plain local `npm test`. A
-heavier-weight local sandbox (bubblewrap/`bwrap`, `sandbox-exec`, or Docker) is a
-reasonable opt-in if you need it, but it is not built into the library today —
-it's tracked as a potential improvement (an opt-in `sandbox:` option on the
-execution tiers) in [`research/feature-ideas.md`](../research/feature-ideas.md) §13.
+- **bubblewrap available** → the run is confined. The mock and `claude` are
+  co-launched inside **one network namespace** (`--unshare-all`): loopback is up
+  so the in-sandbox mock is reachable, but there is **no external route**, so a
+  malicious hook cannot phone home. The filesystem is read-only except the
+  throwaway work dir, a fresh empty `$HOME`, and an IO dir.
+- **no bubblewrap** → the run **refuses** (throws) rather than executing an
+  untrusted hook unconfined. Install `bwrap`, or pass `sandbox: false` to opt out
+  if you trust the code / the outer container.
+
+```ts
+runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
+runHarnessTest({ pluginDir: "./vendor/audited", model, sandbox: false }); // you vouch for it → direct
+runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
+```
+
+The policy lives in [`src/sandbox.ts`](../src/sandbox.ts) (`decideSandbox` is a
+pure function — untrusted code never runs unconfined unless you typed
+`sandbox: false`), and the end-to-end test proves egress is blocked while the
+mock stays reachable. Network egress confinement on a bare laptop comes from the
+netns; in CI the ephemeral container is an additional boundary. Subtlety: bwrap
+confines filesystem + network here, not a kernel-exploit boundary — for that you
+still want the outer container / a microVM.
 
 ## Deterministic tests in your runner
 
