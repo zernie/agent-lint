@@ -40,6 +40,11 @@ import { parseFrontmatterRules } from "./frontmatter.js";
 import { generateSchema } from "./generate-schema.js";
 import { compileGeneratorSkill } from "./compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
+import {
+  evaluatePreToolUse,
+  setActiveAgent,
+  clearActiveAgent,
+} from "./agent-runtime.js";
 import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
 import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./mcp.js";
 import {
@@ -2076,6 +2081,43 @@ function skillStartCommand(target: string | undefined): void {
   console.log(`Active skill: ${target}`);
 }
 
+/**
+ * PreToolUse-hook entrypoint: enforce the active subagent's allowed-tools
+ * contract. Reads the tool event on stdin, parses the active agent's compiled
+ * `.md` tool rail, and blocks (exit 2 + reason on stderr) any tool outside it —
+ * the deterministic boundary `tools:` alone can't provide (Claude Code #54898).
+ */
+function agentHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let tool = "";
+  try {
+    tool = (JSON.parse(raw) as { tool_name?: string }).tool_name ?? "";
+  } catch {
+    /* malformed input → no tool, allow */
+  }
+  if (!tool) return;
+  const decision = evaluatePreToolUse(process.cwd(), tool);
+  if (!decision.allow) {
+    console.error(decision.message);
+    process.exit(2);
+  }
+}
+
+/** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
+function agentStartCommand(target: string | undefined): void {
+  if (!target) {
+    console.error("Usage: vigiles agent-start <agents/<name>.md>");
+    process.exit(2);
+  }
+  setActiveAgent(process.cwd(), target);
+  console.log(`Active agent: ${target}`);
+}
+
 /** Dispatch the skill-runtime subcommands. Returns false if unrecognized. */
 function handleSkillCommand(command: string, restArgs: string[]): boolean {
   switch (command) {
@@ -2090,6 +2132,15 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "skill-hook":
       skillHookCommand();
+      return true;
+    case "agent-start":
+      agentStartCommand(restArgs[0]);
+      return true;
+    case "agent-done":
+      clearActiveAgent(process.cwd());
+      return true;
+    case "agent-hook":
+      agentHookCommand();
       return true;
     case "action-hook":
       actionHookCommand();

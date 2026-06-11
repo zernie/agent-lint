@@ -133,8 +133,10 @@ Layer them like the adoption ladder: **(1) marks** as the on-ramp for today's
 hand-written orchestrators; **(2) `workflow()` compilation** as the core
 deliverable (typed, verified plan-as-code — the direct, differentiated answer to
 ultra-plan); **(3) the deterministic driver** as the north star, built thin over
-the harness, only once (2) has users. Build the agent `PreToolUse` enforcement
-hook first regardless — it's the shared rail both (2) and (3) emit.
+the harness, only once (2) has users. The agent `PreToolUse` enforcement hook —
+the shared rail both (2) and (3) emit — is **already shipped**
+(`src/agent-runtime.ts`, `vigiles agent-hook`; see `research/subagent-compilation.md`),
+so a `workflow()` only needs to point per-delegate rails at it.
 
 ## Status / open questions
 

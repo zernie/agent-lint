@@ -194,30 +194,40 @@ If 5+ agents ever need real flow, that's an `OrchestrationSpec`, not a retrofit 
 hash, tool-contract verification (built-in set + `mcp__server__tool` pattern +
 "did you mean", and an error for never-available tools), and `adoptDiff` support.
 
+**Shipped (the differentiator):** the **`PreToolUse` enforcement hook**
+(`src/agent-runtime.ts`, `vigiles agent-hook`). The compiled `.md` frontmatter
+`tools:` is the single source of truth: `parseAgentTools` reads it back, the
+PreToolUse hook blocks (exit 2 + the contract fed to the model) any tool outside
+it for the active subagent, and `decidePreToolUse` is the pure allow/deny.
+`.vigiles/active-agent.json` records the dispatched agent (Claude Code doesn't
+surface it), mirroring the skill `Stop`-hook (`src/skill-runtime.ts`). The
+declared list and the enforced rail are compiled from the same source, so they
+**agree by construction** — proved by a round-trip test (compile → parse the
+frontmatter the hook reads → it equals the declared `tools` and allows exactly
+those). Proven deterministically at the `runHook` unit tier against the real
+built CLI process: a tool-event hook is reached cheaply there, where driving a
+live tool call against a scripted mock is flaky (so the e2e defers to it).
+
 For orchestration _over_ subagents (the railway), see
 `research/railway-subagents.md` — verified plan-as-code, the Temporal analogy, and
 the marks / `workflow()`-spec / deterministic-driver options.
 
 **Next, prioritized (research-driven):**
 
-1. **Generated `PreToolUse` enforcement hook** — compile the `tools` contract into
-   a hook that blocks out-of-contract tools, and assert hook ⇄ allowlist agree.
-   _The differentiator; the deterministic rail; answers #54898._ Not greenfield:
-   vigiles already emits an enforcement hook — the `vigiles:result` mark compiles
-   to a `Stop` hook (`skill-hook`) that gates skill completion (see
-   `test/e2e/run.sh`, `research/runtime-enforcement.md`). The agent rail is the
-   same emit-a-hook pattern pointed at `PreToolUse` — mirror it.
-2. **`disallowedTools` + omitted-`tools` warning** — surface the inherit-everything
-   footgun (needs a warnings channel on `CompileAgentResult`).
-3. **Resolve `Agent(x,y)` handoffs + `skills:`/`mcpServers:` refs** against compiled
+1. **`disallowedTools` + omitted-`tools` warning** — surface the inherit-everything
+   footgun (needs a warnings channel on `CompileAgentResult`). The compiler errors
+   on a bad tool but is silent on the far more common case: no `tools:` line at
+   all (inherit everything). The runtime rail already honors this (no contract →
+   no restriction), so the gap is purely an authoring-time nudge.
+2. **Resolve `Agent(x,y)` handoffs + `skills:`/`mcpServers:` refs** against compiled
    agent/skill/server names — stale-reference detection for the agent graph.
-4. **Reuse `measureTriggerRate` for agent dispatch** — does the `description`
+3. **Reuse `measureTriggerRate` for agent dispatch** — does the `description`
    actually fire (and not mis-route)? Agents are a new target for the existing eval.
-5. **Plugin-context lint** — error when a plugin-targeted agent uses
+4. **Plugin-context lint** — error when a plugin-targeted agent uses
    `hooks`/`mcpServers`/`permissionMode` (silently dropped).
-6. **Linter cross-ref + CLI discovery** — wire agent specs into `vigiles compile`
+5. **Linter cross-ref + CLI discovery** — wire agent specs into `vigiles compile`
    discovery and run the `enforce()` rules through `linters.ts` like CLAUDE.md.
-7. **Optional `outputSchema` / `maxTurns` range checks** — the structured-output
+6. **Optional `outputSchema` / `maxTurns` range checks** — the structured-output
    and limit half of the contract (static slice).
-8. **Drift detection** — declared vs actually-used tools from session transcripts
+7. **Drift detection** — declared vs actually-used tools from session transcripts
    (extends the session-audit pillar; needs runtime data).

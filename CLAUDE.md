@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c53b39dba86166e6 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:1b1137933ad532a6 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -49,6 +49,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/action.ts` — GitHub Action wrapper
 - `src/spec.test.ts` — Spec + compiler test suite (node:test)
 - `src/agent.test.ts` — Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip
+- `src/agent-runtime.ts` — Agent PreToolUse tool-contract rail — the differentiator that closes the declared-vs-enforced gap (#54898): tools: is documentation, so a PreToolUse hook (vigiles agent-hook) blocks any tool outside the active subagent's contract. parseAgentTools reads the compiled .md frontmatter (the single source of truth the hook enforces), decidePreToolUse is the pure allow/deny, and .vigiles/active-agent.json tracks the dispatched agent — mirrors the skill Stop-hook (src/skill-runtime.ts)
+- `src/agent-runtime.test.ts` — Agent-runtime test suite: pure parse/decide logic, active-agent round-trip, hook ⇄ allowlist agree (the declared contract IS the enforced rail), and the real built CLI hook driven deterministically via runHook (the unit tier reaches PreToolUse where a live tool call is flaky)
 - `src/validate.test.ts` — Validation test suite (node:test)
 - `src/cli.test.ts` — CLI integration + E2E test suite (node:test)
 - `src/integrity.ts` — Integrity check: SHA-256 hash verification for compiled markdown (detects hand-edits)
