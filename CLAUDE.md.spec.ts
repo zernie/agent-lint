@@ -37,9 +37,9 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
   keyFiles: {
     "src/spec.ts":
-      "Type system and builder functions (enforce, guidance, claude, skill, file, cmd, ref)",
+      "Type system and builder functions (enforce, guidance, claude, skill, agent, file, cmd, ref)",
     "src/compile.ts":
-      "Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation",
+      "Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks)",
     "src/linters.ts":
       "Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)",
     "src/cedar.test.ts":
@@ -61,6 +61,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/frontmatter.test.ts": "Frontmatter parser test suite (node:test)",
     "src/action.ts": "GitHub Action wrapper",
     "src/spec.test.ts": "Spec + compiler test suite (node:test)",
+    "src/agent.test.ts":
+      "Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip",
     "src/validate.test.ts": "Validation test suite (node:test)",
     "src/cli.test.ts": "CLI integration + E2E test suite (node:test)",
     "src/integrity.ts":
@@ -176,6 +178,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "research/ai-code-quality.md": "Research: AI code quality patterns",
     "research/self-evolving-specs.md":
       "Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)",
+    "research/subagent-compilation.md":
+      "Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)",
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
     "research/runtime-enforcement.md":

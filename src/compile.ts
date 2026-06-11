@@ -14,6 +14,7 @@ import { fileDefinesSymbol, langForFile } from "./symbols.js";
 import type {
   ClaudeSpec,
   SkillSpec,
+  AgentSpec,
   SkillInput,
   SkillStep,
   Gate,
@@ -21,7 +22,7 @@ import type {
   InstructionFragment,
 } from "./spec.js";
 
-import { checkLinterRule, extractLinterName } from "./linters.js";
+import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
 import type { LinterCheckResult } from "./linters.js";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +86,8 @@ export interface CompileError {
     | "section-too-long"
     | "section-has-header"
     | "reserved-section-key"
-    | "spec-name-mismatch";
+    | "spec-name-mismatch"
+    | "unknown-tool";
   message: string;
   path?: string;
 }
@@ -806,6 +808,150 @@ export function compileSkill(
 }
 
 // ---------------------------------------------------------------------------
+// Compile a subagent spec → agents/<name>.md
+// ---------------------------------------------------------------------------
+
+// The tool contract a subagent may declare — the rails it runs on. Anything
+// else must be an MCP tool (mcp__server__tool), else it's a typo / nonexistent
+// tool the dispatched worker could never call.
+const KNOWN_AGENT_TOOLS = [
+  "Read",
+  "Write",
+  "Edit",
+  "Bash",
+  "Grep",
+  "Glob",
+  "WebSearch",
+  "WebFetch",
+  "NotebookEdit",
+  "TodoWrite",
+  "Task",
+  "Skill",
+] as const;
+
+const MCP_TOOL_RE = /^mcp__[a-z0-9_-]+__[a-z0-9_-]+$/i;
+
+// Tools the platform never exposes to a subagent, whatever the list says — so a
+// subagent listing one is a guaranteed-dead reference only a compiler catches.
+const NEVER_AVAILABLE_TOOLS = new Set([
+  "Agent",
+  "AskUserQuestion",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "ScheduleWakeup",
+  "WaitForMcpServers",
+]);
+
+/** Closest known tool by edit distance (≤ 3), for a "did you mean" hint. */
+function closestTool(tool: string): string | null {
+  let best: string | null = null;
+  let bestDistance = Infinity;
+  for (const known of KNOWN_AGENT_TOOLS) {
+    const d = editDistance(tool.toLowerCase(), known.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = known;
+    }
+  }
+  return bestDistance <= 3 ? best : null;
+}
+
+/** Verify a subagent's allowed-tools contract — the rails are real tools. */
+function validateAgentTools(tools: readonly string[]): CompileError[] {
+  const errors: CompileError[] = [];
+  for (const tool of tools) {
+    if (NEVER_AVAILABLE_TOOLS.has(tool)) {
+      errors.push({
+        type: "unknown-tool",
+        message: `Tool "${tool}" is never available to a subagent — remove it from the tools list.`,
+      });
+      continue;
+    }
+    if ((KNOWN_AGENT_TOOLS as readonly string[]).includes(tool)) continue;
+    if (MCP_TOOL_RE.test(tool)) continue;
+    const near = closestTool(tool);
+    const hint = near ? ` Did you mean "${near}"?` : "";
+    errors.push({
+      type: "unknown-tool",
+      message: `Unknown tool "${tool}" in agent tools — use a built-in tool (${KNOWN_AGENT_TOOLS.join(", ")}) or an MCP tool (mcp__server__tool).${hint}`,
+    });
+  }
+  return errors;
+}
+
+/** Build the subagent YAML frontmatter (name / description / model / tools). */
+function renderAgentFrontmatter(spec: AgentSpec): string {
+  const fm = [
+    "---",
+    "",
+    `name: ${spec.name}`,
+    `description: ${spec.description}`,
+  ];
+  if (spec.model !== undefined) fm.push(`model: ${spec.model}`);
+  if (spec.tools && spec.tools.length > 0) {
+    fm.push(`tools: ${spec.tools.join(", ")}`);
+  }
+  fm.push("", "---");
+  return fm.join("\n");
+}
+
+/** Render the rules a subagent must follow as a `## Rules` section. */
+function renderAgentRules(rules: Record<string, Rule>): string {
+  const parts = ["## Rules", ""];
+  for (const [id, rule] of Object.entries(rules)) {
+    parts.push(compileRule(id, rule), "");
+  }
+  return parts.join("\n").trim();
+}
+
+export interface CompileAgentResult {
+  markdown: string;
+  errors: CompileError[];
+}
+
+/**
+ * Compile an AgentSpec into a subagent markdown file with YAML frontmatter.
+ * Verifies the tool contract and the body's references; the marks the body
+ * carries (`vigiles:symbol`, file/cmd refs) are the same ones `audit` re-checks.
+ */
+export function compileAgent(
+  spec: AgentSpec,
+  options: { basePath?: string; specFile?: string } = {},
+): CompileAgentResult {
+  const basePath = options.basePath ?? process.cwd();
+  const specFile = options.specFile ?? "agent.md.spec.ts";
+  const errors: CompileError[] = [];
+
+  if (!specFile.endsWith(".spec.ts")) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" must end with .spec.ts`,
+    });
+  } else if (!/\.md$/i.test(basename(specFile, ".spec.ts"))) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., agents/reviewer.md.spec.ts)`,
+    });
+  }
+
+  if (spec.tools) errors.push(...validateAgentTools(spec.tools));
+  if (Array.isArray(spec.body)) {
+    errors.push(...validateRefs(spec.body, basePath));
+  }
+
+  const sections: string[] = [];
+  if (spec.body !== undefined) sections.push(renderBody(spec.body).trim());
+  if (spec.rules && Object.keys(spec.rules).length > 0) {
+    sections.push(renderAgentRules(spec.rules));
+  }
+  const body = sections.join("\n\n");
+  errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
+
+  const content = renderAgentFrontmatter(spec) + "\n\n" + body.trim() + "\n";
+  return { markdown: addHash(content, specFile), errors };
+}
+
+// ---------------------------------------------------------------------------
 // Hash check for existing files
 // ---------------------------------------------------------------------------
 
@@ -850,7 +996,7 @@ export interface AdoptResult {
  */
 export function adoptDiff(
   filePath: string,
-  spec: ClaudeSpec | SkillSpec,
+  spec: ClaudeSpec | SkillSpec | AgentSpec,
   basePath: string,
 ): AdoptResult {
   const fullPath = resolve(basePath, filePath);
@@ -867,6 +1013,9 @@ export function adoptDiff(
     compiledContent = markdown;
   } else if (spec._specType === "skill") {
     const { markdown } = compileSkill(spec, { basePath, specFile: filePath });
+    compiledContent = markdown;
+  } else if (spec._specType === "agent") {
+    const { markdown } = compileAgent(spec, { basePath, specFile: filePath });
     compiledContent = markdown;
   }
 
