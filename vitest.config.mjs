@@ -38,6 +38,7 @@ export default defineConfig({
         "src/harness-test.ts",
         "src/harness-assert.ts",
         "src/eval.ts",
+        "src/eval-baseline.ts",
         "src/run-hook.ts",
         "src/mock-model.ts",
         "src/plugin-loader.ts",

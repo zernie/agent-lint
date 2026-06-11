@@ -25,11 +25,32 @@ import type { HookRunResult } from "./run-hook.js";
 import type { OutputContract } from "./spec.js";
 import { parseAgentResult, type ParsedAgentResult } from "./agent-result.js";
 import { compareArms } from "./stats.js";
+import {
+  diffReports,
+  type BaselineFile,
+  type DiffOptions,
+} from "./eval-baseline.js";
 
 // Re-export the significance primitives so the whole eval-analysis surface lives
 // behind `vigiles/harness-assert` (no separate entry point).
 export { compareArms } from "./stats.js";
 export type { Comparison } from "./stats.js";
+export {
+  diffReports,
+  toBaselineFile,
+  parseBaselineFile,
+  readBaseline,
+  writeBaseline,
+  formatBaselineDiff,
+  diffToJUnit,
+} from "./eval-baseline.js";
+export type {
+  BaselineFile,
+  BaselineDiff,
+  MetricDiff,
+  DiffStatus,
+  DiffOptions,
+} from "./eval-baseline.js";
 
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.
@@ -568,6 +589,34 @@ export function assertImproves(
     fail(
       `expected ${opts.arm} to beat ${opts.baseline} on ${opts.metric} by > ${String(by)}, got ${delta.toFixed(3)}`,
     );
+  }
+}
+
+/**
+ * Assert the current run has not *regressed* against a committed baseline — the
+ * CI gate (Phase C). A regression is an arm×metric that moved **significantly in
+ * the bad direction** vs. `baseline` (Welch t-test, so sampling noise doesn't
+ * trip it; see `src/eval-baseline.ts`). Higher is better by default; list
+ * `lowerIsBetter` metrics (cost/latency) to flip them. Load the baseline with
+ * `readBaseline(path)` and record a fresh one with `writeBaseline(path, reports)`.
+ */
+export function assertNoRegression(
+  current: EvalReport | readonly EvalReport[],
+  baseline: BaselineFile,
+  opts?: DiffOptions,
+): void {
+  const reports = Array.isArray(current)
+    ? (current as readonly EvalReport[])
+    : [current as EvalReport];
+  const diff = diffReports(baseline, reports, opts);
+  if (!diff.passed) {
+    const detail = diff.regressions
+      .map(
+        (r) =>
+          `${r.report}/${r.arm}/${r.metric} Δ=${r.comparison.delta.toFixed(3)} p=${r.comparison.pValue.toFixed(3)}`,
+      )
+      .join("; ");
+    fail(`regression vs baseline: ${detail}`);
   }
 }
 
