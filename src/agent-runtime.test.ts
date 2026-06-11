@@ -20,7 +20,7 @@ import {
 } from "./agent-runtime.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 import { runHook } from "./run-hook.js";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -353,4 +353,63 @@ test("agent-hook CLI allows on a malformed/empty event (no tool name)", () => {
   } finally {
     cleanupTmpDir(dir);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Grounded in a REAL vendored subagent (not a synthetic fixture)
+//
+// wshobson's ui-visual-validator is pinned under examples/harness/vendor/. It
+// is the documented footgun in the wild: a "rigorous visual validator" that
+// "bases judgments solely on visual evidence" yet ships with NO `tools:` line —
+// so it inherits EVERY tool, including Edit/Write it has no business holding.
+// These assertions check the rail against that actual file, not a hand-built
+// one. __dirname is src/ (unit run) or dist/ (built) — both one level under the
+// repo root, so the relative vendor path resolves either way (matches
+// src/vendor.test.ts).
+// ---------------------------------------------------------------------------
+
+const REAL_AGENT = join(
+  __dirname,
+  "../examples/harness/vendor/wshobson-accessibility@cf6059d/agents/ui-visual-validator.md",
+);
+
+test("real vendored subagent ships no tools: line — the rail correctly reports it inherits all", () => {
+  const md = readFileSync(REAL_AGENT, "utf-8");
+  // The wild footgun: no contract at all → parseAgentTools returns null →
+  // decidePreToolUse imposes no restriction. The rail honestly reports "there
+  // is no rail here yet" rather than inventing one — which is exactly why the
+  // omitted-tools authoring warning is the next roadmap item.
+  assert.equal(parseAgentTools(md), null);
+  assert.equal(decidePreToolUse(parseAgentTools(md), "Write").allow, true);
+});
+
+test("the spec form ADDS the rail the real subagent omits, and it parses + enforces", () => {
+  // Reconstruct the real agent AS a spec with the least-privilege contract its
+  // hand-written original lacks (read + run visual tests; never Edit/Write),
+  // compile it, then prove the SAME PreToolUse rail the hook reads now blocks
+  // the tools the original silently held. This is the differentiator on a real
+  // subagent: compile turns the missing contract into an enforced one.
+  const md = readFileSync(REAL_AGENT, "utf-8");
+  const nameLine = /^name:\s*(.+)$/m.exec(md);
+  const descLine = /^description:\s*(.+)$/m.exec(md);
+  assert.ok(nameLine && descLine); // sanity: we're reading the real frontmatter
+
+  const { markdown, errors } = compileAgent(
+    agent({
+      name: nameLine[1].trim(),
+      description: descLine[1].trim(),
+      model: "sonnet",
+      tools: ["Read", "Grep", "Glob", "Bash"], // the rail the original omits
+      body: "You are an experienced UI visual validation expert.",
+    }),
+    { specFile: "agents/ui-visual-validator.md.spec.ts" },
+  );
+  assert.deepEqual(errors, []);
+
+  const enforced = parseAgentTools(markdown);
+  assert.deepEqual(enforced, ["Read", "Grep", "Glob", "Bash"]);
+  assert.equal(decidePreToolUse(enforced, "Bash").allow, true);
+  // the tools the wild original inherited but a visual validator must not hold:
+  assert.equal(decidePreToolUse(enforced, "Write").allow, false);
+  assert.equal(decidePreToolUse(enforced, "Edit").allow, false);
 });
