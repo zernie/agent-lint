@@ -194,6 +194,10 @@ If 5+ agents ever need real flow, that's an `OrchestrationSpec`, not a retrofit 
 hash, tool-contract verification (built-in set + `mcp__server__tool` pattern +
 "did you mean", and an error for never-available tools), and `adoptDiff` support.
 
+For orchestration _over_ subagents (the railway), see
+`research/railway-subagents.md` — verified plan-as-code, the Temporal analogy, and
+the marks / `workflow()`-spec / deterministic-driver options.
+
 **Next, prioritized (research-driven):**
 
 1. **Generated `PreToolUse` enforcement hook** — compile the `tools` contract into

@@ -179,7 +179,9 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "research/self-evolving-specs.md":
       "Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)",
     "research/subagent-compilation.md":
-      "Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)",
+      "Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), the empirical no-iterator survey (~100 subagents), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)",
+    "research/railway-subagents.md":
+      "Design exploration: railway-style orchestration over flat subagents — verified plan-as-code as the counterpart to ultra-plan/dynamic-workflows, the Temporal analogy (workflow/activity/gate/durable-state), and three options (manual marks / workflow() TS-spec compilation / a thin Temporal-like deterministic driver over the harness's Task+hooks+state)",
     "research/code-search-for-agents.md":
       "Research: code search approaches (grep vs embeddings vs AST-grep)",
     "research/runtime-enforcement.md":

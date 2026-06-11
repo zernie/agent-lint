@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:55c349c7baf495f2 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c53b39dba86166e6 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -113,7 +113,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/feature-ideas.md` — Feature ideas: plugin API, custom rules, exhaustive coverage
 - `research/ai-code-quality.md` — Research: AI code quality patterns
 - `research/self-evolving-specs.md` — Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)
-- `research/subagent-compilation.md` — Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)
+- `research/subagent-compilation.md` — Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), the empirical no-iterator survey (~100 subagents), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)
+- `research/railway-subagents.md` — Design exploration: railway-style orchestration over flat subagents — verified plan-as-code as the counterpart to ultra-plan/dynamic-workflows, the Temporal analogy (workflow/activity/gate/durable-state), and three options (manual marks / workflow() TS-spec compilation / a thin Temporal-like deterministic driver over the harness's Task+hooks+state)
 - `research/code-search-for-agents.md` — Research: code search approaches (grep vs embeddings vs AST-grep)
 - `research/runtime-enforcement.md` — Research: spec-derived runtime enforcement via hooks, skill contracts, session audit
 - `research/agent-integration.md` — Research: deterministic backstop for AI agents — hooks, proofs, static checks anchored at the spec
