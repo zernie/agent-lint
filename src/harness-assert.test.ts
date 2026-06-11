@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import {
   improvement,
   assertImproves,
+  significantlyBeats,
+  assertSignificant,
   reliable,
   assertReliable,
   assertCreated,
@@ -115,6 +117,89 @@ test("assertImproves passes on a positive gap and throws otherwise", () => {
       arm: "gated",
       metric: "caught",
       by: 0.9,
+    });
+  });
+});
+
+test("significantlyBeats / assertSignificant use a computed noise floor", () => {
+  const stat = (mean: number, se: number, n: number) => ({
+    mean,
+    se,
+    n,
+    std: se * Math.sqrt(n),
+    passK: 0,
+  });
+  const sigReport: EvalReport = {
+    name: "sig",
+    trials: 20,
+    totalCostUsd: 0,
+    aborted: false,
+    arms: {
+      base: {
+        runs: 20,
+        metrics: { caught: 0.1 },
+        stats: { caught: stat(0.1, 0.05, 20) },
+        usage: NO_USAGE,
+      },
+      // a real, tight separation → significant
+      good: {
+        runs: 20,
+        metrics: { caught: 0.6 },
+        stats: { caught: stat(0.6, 0.05, 20) },
+        usage: NO_USAGE,
+      },
+      // a small gap drowned in wide se → not significant
+      noisy: {
+        runs: 5,
+        metrics: { caught: 0.2 },
+        stats: { caught: stat(0.2, 0.2, 5) },
+        usage: NO_USAGE,
+      },
+    },
+  };
+
+  assert.equal(significantlyBeats(sigReport, "base", "good", "caught"), true);
+  assert.equal(significantlyBeats(sigReport, "base", "noisy", "caught"), false);
+  assert.equal(significantlyBeats(sigReport, "base", "good", "missing"), false);
+
+  assert.doesNotThrow(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "caught",
+    });
+  });
+  // a real but not-significant gap throws
+  assert.throws(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "noisy",
+      metric: "caught",
+    });
+  });
+  // missing data throws with the no-data message
+  assert.throws(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "missing",
+    });
+  }, /no data to compare/);
+  // assertImproves delegates to the significance test when asked
+  assert.doesNotThrow(() => {
+    assertImproves(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "caught",
+      significant: true,
+    });
+  });
+  assert.throws(() => {
+    assertImproves(sigReport, {
+      baseline: "base",
+      arm: "noisy",
+      metric: "caught",
+      significant: true,
     });
   });
 });

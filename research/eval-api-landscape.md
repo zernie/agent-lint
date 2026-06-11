@@ -100,7 +100,9 @@ Out of scope: explicitly the thing vigiles does _not_ do.
 | Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)          | ✓ (pytest) | ✗ (SaaS)   | ✓                |
 
 (Profiles reflect the ecosystem as understood mid-2026; treat specific competitor
-features as directional, not contractual.)
+features as directional, not contractual. The `vigiles` column is the state **at
+analysis time** — the cost/latency, concurrency, caching, and significance-test
+gaps below have since been closed; see **Status** for what shipped.)
 
 ## What vigiles already does at a world-class level
 
@@ -188,5 +190,22 @@ holds.
 - **B4 — budget cap — DONE.** `maxCostUsd` stops launching new trials once
   measured cost crosses the cap; in-flight finish, the rest are skipped and
   `EvalReport.aborted` is set.
-- **Next:** Phase A — `src/stats.ts` (significance, power, paired/blocked design,
-  `pass@k`/`pass^k` at arbitrary k), then Phase C (regression gating).
+- **Vendored-plugin conformance — DONE.** `src/vendor.test.ts` runs `loadPlugin`
+  over the pinned real plugins and asserts loader/warning invariants — model-free,
+  in-gate, the grounding layer (the shape that caught the partial-vendor bug).
+- **A1 + A5 — significance — DONE.** `src/stats.ts`: Welch's t-test over the
+  per-arm summary stats (mean/se/n) → two-sided p-value + verdict, validated
+  against known t-table critical values; `compareArms` computes the noise floor
+  instead of the hand-fed `assertImproves({ by })`. Surfaced as `assertSignificant`
+  / `significantlyBeats`, and `assertImproves({ significant: true })`.
+- **Scoped down from the original Phase A (deliberately):** A2 (power analysis),
+  A3 (`pass@k` at arbitrary k), and A4 (paired/blocked design) are **deferred** —
+  each is statistically correct but not yet tied to a concrete, observed pain, and
+  building rigor ahead of need is the trap to avoid. Pull them back in when a real
+  eval demands them (e.g. A4 once an eval is shown to be variance-bound).
+- **Empirical cross-check deferred:** with no API key in this environment, A1 is
+  validated on known-answer synthetic distributions, not yet against a real
+  `bench/` finding. Re-run one real comparison through `compareArms` when a key is
+  available, to confirm the verdict matches what we concluded by hand.
+- **Next:** Phase C (regression gating) — JSON/JUnit output + a committed baseline
+  whose gate is a _significant negative delta_ (reuses `compareArms`).
