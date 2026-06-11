@@ -419,6 +419,26 @@ npx vigiles test examples/harness/policy-gate.harness.mjs
 npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 ```
 
+### Tested against real-world skills
+
+These aren't toy fixtures — vigiles dogfoods its loader against **actual shipped
+plugins** (vendored as commit-pinned snapshots, so they run offline and key-free,
+with each upstream `LICENSE` + `SOURCE` kept alongside):
+
+- [`real-superpowers.harness.mjs`](examples/harness/real-superpowers.harness.mjs)
+  — [`obra/superpowers`](https://github.com/obra/superpowers) (MIT): the
+  `hooks/hooks.json` convention + `${CLAUDE_PLUGIN_ROOT}` expansion, and the
+  `SessionStart` skill that resolves with no markers injected. This is the dogfood
+  that caught superpowers' top-level `additionalContext` never reaching the model.
+- [`real-wshobson.harness.mjs`](examples/harness/real-wshobson.harness.mjs) —
+  [`wshobson/agents`](https://github.com/wshobson/agents) (MIT): the dominant
+  marketplace shape — subagents + commands + skills with **no hooks** — which the
+  loader must materialize and warn about rather than silently pass as an empty
+  machine.
+
+`src/vendor.test.ts` runs the same loader invariants over both as a conformance
+suite in the normal `npm test` gate.
+
 ### What's covered today — surface × tier
 
 | Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
