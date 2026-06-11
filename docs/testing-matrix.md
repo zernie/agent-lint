@@ -11,48 +11,55 @@ the file that proves it. Two kinds of coverage:
 
 ## Coverage
 
-| Use case                                                                                                                                       | Tier                     | Where                                                                       |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
-| Hook unit tier — `runHook` (exit codes / stdin event / env / JSON decision)                                                                    | unit                     | `src/run-hook.test.ts`                                                      |
-| Hook decision logic (`parseHookOutput` / `decideHook`)                                                                                         | unit                     | `src/run-hook.test.ts`                                                      |
-| Plugin loader — inline `plugin.json` hooks                                                                                                     | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — `hooks` string-path                                                                                                            | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — `hooks/hooks.json` convention                                                                                                  | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — repo `.claude/settings.json`                                                                                                   | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — manifest-wins precedence                                                                                                       | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — bare dir (no hooks)                                                                                                            | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — `agents/` + `commands/` materialized + surface warnings                                                                        | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — empty-machine + MCP warnings                                                                                                   | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Plugin loader — in-repo dogfood                                                                                                                | unit                     | `src/plugin-loader.test.ts`                                                 |
-| `resolveHarness` — merge / passthrough / undefined                                                                                             | unit                     | `src/plugin-loader.test.ts`                                                 |
-| Eval aggregation (mean, std, se, n) + report formatting                                                                                        | unit                     | `src/eval.test.ts`                                                          |
-| Assert helpers (`assertCreated`/`assertNotCreated`/`assertServedTurns`/`assertHookBlocked`/`assertHookAllowed`/`improvement`/`assertImproves`) | unit                     | `src/harness-assert.test.ts`                                                |
-| Matchers register + pass under **vitest** (via the `vigiles/vitest` entry)                                                                     | unit                     | `test/runners/matchers.vitest.mjs`                                          |
-| Matchers register + pass under **jest** (via the `vigiles/jest` entry)                                                                         | unit                     | `test/runners/matchers.jest.cjs`                                            |
-| Matcher **types** augment vitest/jest `expect`                                                                                                 | unit                     | `test/types/smoke.vitest.ts`, `smoke.jest.ts`                               |
-| CLI runner (`discoverScripts`/`runScripts`/summary)                                                                                            | unit                     | `src/run-scripts.test.ts`                                                   |
-| Judge verdict parsing (`parseJudgeOutput`)                                                                                                     | unit                     | `src/judge.test.ts`                                                         |
-| `runHarnessTest` end-to-end, incl. `plugin:`                                                                                                   | integration (CI)         | `examples/harness/policy-gate.harness.mjs`, `plugin-cohesion.harness.mjs`   |
-| `withHarness` (auto-cleanup wrapper)                                                                                                           | integration (CI)         | `examples/harness/plugin-cohesion.harness.mjs`                              |
-| `runEval` end-to-end, incl. `plugin` arm                                                                                                       | integration (real model) | `bench/evals/refs-hook.eval.mjs`, `examples/harness/skill-outcome.eval.mjs` |
-| `judge()` model call                                                                                                                           | integration (real model) | (parsing is unit-tested; the spawn is not)                                  |
+| Use case                                                                                                                                                                                                       | Tier                     | Where                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| Hook unit tier — `runHook` (exit codes / stdin event / env / JSON decision)                                                                                                                                    | unit                     | `src/run-hook.test.ts`                                                      |
+| Hook decision logic (`parseHookOutput` / `decideHook`)                                                                                                                                                         | unit                     | `src/run-hook.test.ts`                                                      |
+| Plugin loader — inline `plugin.json` hooks                                                                                                                                                                     | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — `hooks` string-path                                                                                                                                                                            | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — `hooks/hooks.json` convention                                                                                                                                                                  | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — repo `.claude/settings.json`                                                                                                                                                                   | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — manifest-wins precedence                                                                                                                                                                       | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — bare dir (no hooks)                                                                                                                                                                            | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — `agents/` + `commands/` materialized + surface warnings                                                                                                                                        | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — empty-machine + MCP + dangling-intra-plugin-ref warnings                                                                                                                                       | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Plugin loader — in-repo dogfood                                                                                                                                                                                | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Vendored **real-plugin** conformance (`loadPlugin` invariants, pinned + offline)                                                                                                                               | unit                     | `src/vendor.test.ts`                                                        |
+| `resolveHarness` — merge / passthrough / undefined                                                                                                                                                             | unit                     | `src/plugin-loader.test.ts`                                                 |
+| Eval aggregation (mean / std / se / n / pass^k) + report formatting                                                                                                                                            | unit                     | `src/eval.test.ts`                                                          |
+| Eval usage capture + aggregation (`parseUsage` / `aggregateUsage`, cost/latency/tokens)                                                                                                                        | unit                     | `src/eval.test.ts`                                                          |
+| Eval record/replay cache (`cacheKey` / snapshot+restore / replay skips the model)                                                                                                                              | unit                     | `src/eval-cache.test.ts`, `src/eval.test.ts`                                |
+| Eval concurrency + rate-limit retry + `maxCostUsd` abort (`runPool` / `isRateLimited`)                                                                                                                         | unit                     | `src/eval.test.ts`                                                          |
+| Trigger-rate orchestration (`measureTriggerRateWith`)                                                                                                                                                          | unit                     | `src/eval.test.ts`                                                          |
+| Significance stats (`welchTTest` / `compareArms` / `tPValueTwoSided` / incomplete-beta vs t-table)                                                                                                             | unit                     | `src/stats.test.ts`                                                         |
+| Assert/predicate helpers (create/turns/hook-block; tool used/notUsed/count/sequence/with; skillResolved; output/request-contains; hookFired; improvement/improves; reliable; **significant**; **triggerRate**) | unit                     | `src/harness-assert.test.ts`                                                |
+| Matchers register + pass under **vitest** (via the `vigiles/vitest` entry)                                                                                                                                     | unit                     | `test/runners/matchers.vitest.mjs`                                          |
+| Matchers register + pass under **jest** (via the `vigiles/jest` entry)                                                                                                                                         | unit                     | `test/runners/matchers.jest.cjs`                                            |
+| Matcher **types** augment vitest/jest `expect`                                                                                                                                                                 | unit                     | `test/types/smoke.vitest.ts`, `smoke.jest.ts`                               |
+| CLI runner (`discoverScripts`/`runScripts`/summary)                                                                                                                                                            | unit                     | `src/run-scripts.test.ts`                                                   |
+| Judge verdict parsing (`parseJudgeOutput`)                                                                                                                                                                     | unit                     | `src/judge.test.ts`                                                         |
+| `runHarnessTest` end-to-end, incl. `plugin:`                                                                                                                                                                   | integration (CI)         | `examples/harness/policy-gate.harness.mjs`, `plugin-cohesion.harness.mjs`   |
+| `withHarness` (auto-cleanup wrapper)                                                                                                                                                                           | integration (CI)         | `examples/harness/plugin-cohesion.harness.mjs`                              |
+| `runEval` end-to-end, incl. `plugin` arm                                                                                                                                                                       | integration (real model) | `bench/evals/refs-hook.eval.mjs`, `examples/harness/skill-outcome.eval.mjs` |
+| `measureTriggerRate` end-to-end (skill activation via `pluginDir`)                                                                                                                                             | integration (real model) | `examples/harness/skill-trigger-rate.eval.mjs`                              |
+| `judge()` model call                                                                                                                                                                                           | integration (real model) | (parsing is unit-tested; the spawn is not)                                  |
 
 ## Surface coverage — which plugin surface is reachable at which tier
 
 A Claude Code plugin/repo has several surfaces. They are reachable at different
 tiers, because some only do anything under a real model:
 
-| Surface                                                       | Hook unit (`runHook`) | Deterministic (`runHarnessTest`)  | Eval (`runEval`)   |
-| ------------------------------------------------------------- | --------------------- | --------------------------------- | ------------------ |
-| Hooks — SessionStart / Stop / UserPromptSubmit                | ✅ logic              | ✅ fires in machine               | ✅                 |
-| Hooks — Bash PreToolUse / PostToolUse                         | ✅ logic              | ✅ fires in machine               | ✅                 |
-| Hooks — Edit/Write PreToolUse / PostToolUse                   | ✅ logic              | ⚠ headless-gated (drive via Bash) | ✅                 |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic              | — (mock can't trigger)            | partial            |
-| CLAUDE.md / instruction files                                 | —                     | ✅ present in context             | ✅ moves behaviour |
-| Skills                                                        | —                     | ✅ body present (activation n/g)  | ✅                 |
-| Subagents (`agents/`)                                         | —                     | ⚠ materialized, not invoked       | ✅ (Task)          |
-| Slash commands (`commands/`)                                  | —                     | ⚠ materialized, not invoked       | ✅                 |
-| MCP servers                                                   | —                     | — (not wired; warned)             | bring-your-own     |
+| Surface                                                       | Hook unit (`runHook`) | Deterministic (`runHarnessTest`)  | Eval (`runEval`)                     |
+| ------------------------------------------------------------- | --------------------- | --------------------------------- | ------------------------------------ |
+| Hooks — SessionStart / Stop / UserPromptSubmit                | ✅ logic              | ✅ fires in machine               | ✅                                   |
+| Hooks — Bash PreToolUse / PostToolUse                         | ✅ logic              | ✅ fires in machine               | ✅                                   |
+| Hooks — Edit/Write PreToolUse / PostToolUse                   | ✅ logic              | ⚠ headless-gated (drive via Bash) | ✅                                   |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic              | — (mock can't trigger)            | partial                              |
+| CLAUDE.md / instruction files                                 | —                     | ✅ present in context             | ✅ moves behaviour                   |
+| Skills                                                        | —                     | ✅ resolves via `pluginDir`       | ✅ activation (`measureTriggerRate`) |
+| Subagents (`agents/`)                                         | —                     | ⚠ materialized, not invoked       | ✅ (Task)                            |
+| Slash commands (`commands/`)                                  | —                     | ⚠ materialized, not invoked       | ✅                                   |
+| MCP servers                                                   | —                     | — (not wired; warned)             | bring-your-own                       |
 
 `loadPlugin(...).warnings` surfaces the ⚠ rows for a given plugin, so a "load the
 whole plugin" test never silently runs an empty machine (e.g. a subagents-only
@@ -61,14 +68,18 @@ and **no** hooks).
 
 ## What is intentionally _not_ unit-tested
 
-`runHarnessTest`, `runEval`, `withHarness`, and `judge()`'s model call all spawn
-the real `claude` CLI (and, for evals, a real model). A unit test can't drive
-that deterministically, so the seam we _can_ pin — the mock model
-(`src/mock-model.ts`), the loader, the aggregation, the parsing, the matchers —
-is unit-tested, and the end-to-end behaviour is exercised by the example suite
-in CI. The deterministic examples (`*.harness.mjs`) run with **no API key** (real
-`claude` + scripted mock model), so they are CI-affordable; the evals
-(`*.eval.mjs`) cost real model calls and are run manually / in a keyed job.
+Only the real-`claude` subprocess is out of the gate: `runHarnessTest`,
+`withHarness`, `judge()`'s model call, and `runEval`/`measureTriggerRate`'s
+default `spawnAgent` runner spawn the CLI (and, for evals, a real model). A unit
+test can't drive that deterministically — but everything _around_ it is pinned.
+The eval **orchestration** (`runEvalWith` / `measureTriggerRateWith`) takes an
+**injected runner**, so the loop, cache, concurrency, budget, usage aggregation,
+and significance run against canned stream-json with no model; the mock model
+(`src/mock-model.ts`), the loader, the parsing, and the matchers are unit-tested
+too. End-to-end behaviour is exercised by the example suite in CI: the
+deterministic examples (`*.harness.mjs`) run with **no API key** (real `claude` +
+scripted mock model), so they're CI-affordable; the evals (`*.eval.mjs`) cost
+real model calls and run manually / in a keyed job.
 
 ## Why are the CLI examples `.mjs` (JavaScript), not TypeScript?
 
