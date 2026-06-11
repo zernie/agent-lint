@@ -80,6 +80,39 @@ enforcement layer leans on them.)
   schema-less; code-first SDKs replace the markdown rather than verify it). This
   is the white space.
 
+## API shape & "generator vs flat flow?" (dogfood finding)
+
+Dogfooded the API against a real OSS subagent — wshobson's `ui-visual-validator`
+(`examples/harness/vendor/wshobson-accessibility@.../agents/`). What it actually
+is, and what that settles:
+
+- **It's a flat, multi-`##`-section role contract** (10 sections: Purpose, Core
+  Principles, Capabilities, Analysis Process, Forbidden Behaviors, …) — prose +
+  `###` subsections, **not** an imperative step/gate pipeline.
+- **It ships with NO `tools:` line** → inherits every tool (the #1 footgun, in the
+  wild). A visual _validator_ that "bases judgments solely on visual evidence"
+  shouldn't hold `Edit`/`Write` — yet it does.
+
+So, the answer to "does it need a generator or only flat flow?":
+
+- **Flat flow — yes; a flow/step generator — no.** Real subagents are flat role
+  contracts. The `step()`/`gate()` pipeline primitive belongs to **skills**
+  (procedures); a subagent's "railway" is a **constraint envelope** (the allowed
+  tools it can't leave + the rules), enforced by a hook — not a state machine.
+  Reusing skill steps here would model the wrong thing.
+- The one _generator_ worth having is authoring-time **tool typing** — a
+  `generate-types`-style emit of the real tool catalog (built-ins + the project's
+  MCP tools from `.mcp.json`) so `tools:` autocompletes and typos squiggle, the
+  same pattern as linter-rule typing. **Optional, not required** (compile already
+  catches bad tools); a nice ergonomic upgrade, not a dependency.
+
+The API therefore mirrors `claude()`, not `skill()`: an optional `body` (the
+"You are…" intro) + named `sections` (the `##` blocks, verified like any
+instruction file) + the `tools` rail + `rules`. The dogfood value-add: the spec
+**adds the least-privilege rail the hand-written original omits**, and compile
+verifies it — `agent.test.ts` reproduces the real agent's shape with a
+`Read/Grep/Glob/Bash` rail (no `Edit`/`Write`) and asserts it compiles clean.
+
 ## Status & roadmap
 
 **Shipped (the foundation):** `agent()` builder + `compileAgent` — frontmatter
