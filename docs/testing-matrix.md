@@ -15,6 +15,7 @@ the file that proves it. Two kinds of coverage:
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
 | Hook unit tier — `runHook` (exit codes / stdin event / env / JSON decision)                                                                                                                                    | unit                     | `src/run-hook.test.ts`                                                      |
 | Hook decision logic (`parseHookOutput` / `decideHook`)                                                                                                                                                         | unit                     | `src/run-hook.test.ts`                                                      |
+| Subagent PreToolUse tool-contract rail — `agent-hook` (parse contract / allow-deny / hook ⇄ allowlist agree / real built-CLI hook via `runHook`; grounded on the vendored `ui-visual-validator`)               | unit                     | `src/agent-runtime.test.ts`                                                 |
 | Plugin loader — inline `plugin.json` hooks                                                                                                                                                                     | unit                     | `src/plugin-loader.test.ts`                                                 |
 | Plugin loader — `hooks` string-path                                                                                                                                                                            | unit                     | `src/plugin-loader.test.ts`                                                 |
 | Plugin loader — `hooks/hooks.json` convention                                                                                                                                                                  | unit                     | `src/plugin-loader.test.ts`                                                 |
@@ -49,22 +50,31 @@ the file that proves it. Two kinds of coverage:
 A Claude Code plugin/repo has several surfaces. They are reachable at different
 tiers, because some only do anything under a real model:
 
-| Surface                                                       | Hook unit (`runHook`) | Deterministic (`runHarnessTest`)  | Eval (`runEval`)                     |
-| ------------------------------------------------------------- | --------------------- | --------------------------------- | ------------------------------------ |
-| Hooks — SessionStart / Stop / UserPromptSubmit                | ✅ logic              | ✅ fires in machine               | ✅                                   |
-| Hooks — Bash PreToolUse / PostToolUse                         | ✅ logic              | ✅ fires in machine               | ✅                                   |
-| Hooks — Edit/Write PreToolUse / PostToolUse                   | ✅ logic              | ⚠ headless-gated (drive via Bash) | ✅                                   |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic              | — (mock can't trigger)            | partial                              |
-| CLAUDE.md / instruction files                                 | —                     | ✅ present in context             | ✅ moves behaviour                   |
-| Skills                                                        | —                     | ✅ resolves via `pluginDir`       | ✅ activation (`measureTriggerRate`) |
-| Subagents (`agents/`)                                         | —                     | ⚠ materialized, not invoked       | ✅ (Task)                            |
-| Slash commands (`commands/`)                                  | —                     | ⚠ materialized, not invoked       | ✅                                   |
-| MCP servers                                                   | —                     | — (not wired; warned)             | bring-your-own                       |
+| Surface                                                       | Hook unit (`runHook`) | Deterministic (`runHarnessTest`)    | Eval (`runEval`)                     |
+| ------------------------------------------------------------- | --------------------- | ----------------------------------- | ------------------------------------ |
+| Hooks — SessionStart / Stop / UserPromptSubmit                | ✅ logic              | ✅ fires in machine                 | ✅                                   |
+| Hooks — Bash PreToolUse / PostToolUse                         | ✅ logic              | ✅ fires in machine                 | ✅                                   |
+| Hooks — Edit/Write PreToolUse / PostToolUse                   | ✅ logic              | ⚠ headless-gated (drive via Bash)   | ✅                                   |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic              | — (mock can't trigger)              | partial                              |
+| CLAUDE.md / instruction files                                 | —                     | ✅ present in context               | ✅ moves behaviour                   |
+| Skills                                                        | —                     | ✅ resolves via `pluginDir`         | ✅ activation (`measureTriggerRate`) |
+| Subagents (`agents/`)                                         | ✅ tool-contract rail | ⚠ materialized; rail not live-armed | ✅ (Task)                            |
+| Slash commands (`commands/`)                                  | —                     | ⚠ materialized, not invoked         | ✅                                   |
+| MCP servers                                                   | —                     | — (not wired; warned)               | bring-your-own                       |
 
 `loadPlugin(...).warnings` surfaces the ⚠ rows for a given plugin, so a "load the
 whole plugin" test never silently runs an empty machine (e.g. a subagents-only
 plugin like wshobson/agents `tdd-workflows`, which ships 2 agents + 4 commands
 and **no** hooks).
+
+The **subagent tool-contract rail** (`agent-hook`) makes the `agents/` Hook-unit
+cell `✅`: the generated `PreToolUse` hook that enforces an agent's declared
+`tools:` is `runHook`-testable like any other hook, and the declared list and the
+enforced rail are compiled from one source (proven by a round-trip test). The
+deterministic cell stays ⚠ for an honest reason — Claude Code doesn't surface the
+active subagent to hooks, so arming the rail in a live session
+(`.vigiles/active-agent.json`) is still unsolved; the logic is proven at the unit
+tier, not yet end-to-end in a real dispatch. See `research/subagent-compilation.md`.
 
 ## What is intentionally _not_ unit-tested
 

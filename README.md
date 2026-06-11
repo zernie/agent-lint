@@ -428,7 +428,7 @@ npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 | Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
 | CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
 | Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | 🟡 refs                      | 🔴 hard                     | ✅ via Task       |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
 | Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
 | MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
 | settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
