@@ -72,12 +72,6 @@ export interface EvalArm {
   readonly pluginDir?: string;
 }
 
-/**
- * Context handed to `measure` after a run, to compute that run's metrics. It is
- * a `Trace` (so the bare predicates `usedTool` / `skillResolved` / `toolCount` /
- * `toolUsedWith` from `harness-assert.ts` run over it, the same as over a
- * `runHarnessTest` result) plus the eval-only `sh` end-state probe.
- */
 /** Per-run resource use, parsed from the terminal `result` event (0 when absent). */
 export interface EvalUsage {
   /** `total_cost_usd` reported by claude. */
@@ -88,6 +82,12 @@ export interface EvalUsage {
   readonly outputTokens: number;
 }
 
+/**
+ * Context handed to `measure` after a run, to compute that run's metrics. It is
+ * a `Trace` (so the bare predicates `usedTool` / `skillResolved` / `toolCount` /
+ * `toolUsedWith` from `harness-assert.ts` run over it, the same as over a
+ * `runHarnessTest` result) plus the eval-only `sh` end-state probe and `usage`.
+ */
 export interface RunContext extends Trace {
   readonly cwd: string;
   readonly exitCode: number;
@@ -134,6 +134,22 @@ export interface EvalSpec<M extends Metrics> {
   readonly cache?: CacheMode;
   /** Where cache records live. Default `.vigiles/eval-cache` under cwd. */
   readonly cacheDir?: string;
+  /**
+   * How many trials to run at once (across all arms × trials). Default 1 (fully
+   * sequential — the safe, no-surprise default). Raise it to cut wall-clock time;
+   * rate-limit bursts are absorbed by the retry/backoff below.
+   */
+  readonly concurrency?: number;
+  /**
+   * Abort the run once measured cost reaches this many USD. In-flight trials
+   * finish; remaining ones are skipped and `report.aborted` is set. Needs the
+   * model to report `total_cost_usd` (the eval tier does).
+   */
+  readonly maxCostUsd?: number;
+  /** Retries on a detected rate-limit/overload before giving up. Default 3. */
+  readonly rateLimitRetries?: number;
+  /** Base backoff ms (doubled each retry). Default 1000. */
+  readonly retryBackoffMs?: number;
 }
 
 /** Per-metric summary statistics across an arm's runs. */
@@ -180,6 +196,8 @@ export interface EvalReport {
   readonly arms: Record<string, ArmReport>;
   /** Total measured cost across every arm × trial (0 when usage wasn't reported). */
   readonly totalCostUsd: number;
+  /** True if a `maxCostUsd` budget cap stopped the run before all trials ran. */
+  readonly aborted: boolean;
 }
 
 function writeFiles(cwd: string, files: Record<string, string>): void {
@@ -190,10 +208,12 @@ function writeFiles(cwd: string, files: Record<string, string>): void {
   }
 }
 
-/** The raw output of one trial: the agent's exit code + captured stdout stream. */
+/** The raw output of one trial: the agent's exit code + captured streams. */
 export interface RunOut {
   code: number;
   stdout: string;
+  /** Captured stderr, when the runner provides it (used for rate-limit detection). */
+  stderr?: string;
 }
 
 /** The per-trial arguments handed to an {@link AgentRunner}. */
@@ -244,11 +264,13 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
     const timer = setTimeout(() => child.kill("SIGKILL"), a.timeoutMs);
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolvePromise({ code: code ?? 0, stdout });
+      resolvePromise({ code: code ?? 0, stdout, stderr });
     });
   });
 }
@@ -472,39 +494,90 @@ async function executeTrial<M extends Metrics>(
   }
 }
 
-/**
- * The eval orchestration — every arm × trial via `runner`, metric + usage
- * computed per run and aggregated per arm. Exported with an injectable `runner`
- * so the loop, `measure` context, caching, and aggregation are unit-testable
- * without spawning a model (pass a fake returning canned stream-json). `runEval`
- * is this with the real agent runner.
- */
-export async function runEvalWith<M extends Metrics>(
-  spec: EvalSpec<M>,
-  runner: AgentRunner,
-): Promise<EvalReport> {
-  const trials = spec.trials ?? 5;
-  const spacing = (spec.spacingSec ?? 4) * 1000;
-  const cfg: RunConfig = {
-    model: spec.model ?? "haiku",
-    tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"],
-    timeoutMs: spec.timeoutMs ?? 240000,
-    cache: spec.cache ?? "off",
-    cacheDir: spec.cacheDir ?? resolve(process.cwd(), ".vigiles", "eval-cache"),
-  };
+// A signal in the captured streams that the model call was rate-limited /
+// overloaded — worth a backoff + retry rather than counting as a real sample.
+const RATE_LIMIT_RE = /rate.?limit|\b429\b|overloaded|too many requests/i;
 
+/** Whether a run's captured output looks like a rate-limit / overload. Pure. */
+export function isRateLimited(out: RunOut): boolean {
+  return RATE_LIMIT_RE.test(`${out.stderr ?? ""}\n${out.stdout}`);
+}
+
+/** Call `runner`, retrying with exponential backoff while it looks rate-limited. */
+async function runWithRetry(
+  runArgs: AgentRunArgs,
+  runner: AgentRunner,
+  retries: number,
+  baseMs: number,
+): Promise<RunOut> {
+  for (let attempt = 0; ; attempt++) {
+    const out = await runner(runArgs);
+    if (!isRateLimited(out) || attempt >= retries) return out;
+    await sleep(baseMs * 2 ** attempt);
+  }
+}
+
+/** Map `worker` over `items` with at most `concurrency` in flight, order preserved. */
+export async function runPool<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const drain = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      const item = items[i];
+      if (i >= items.length || item === undefined) return;
+      results[i] = await worker(item);
+    }
+  };
+  const workers = Math.max(1, Math.min(concurrency, items.length || 1));
+  await Promise.all(Array.from({ length: workers }, drain));
+  return results;
+}
+
+/** One unit of work: a single trial of a single arm. */
+interface Unit {
+  readonly armName: string;
+  readonly arm: EvalArm;
+  readonly trialIndex: number;
+}
+
+/** Flatten arms × trials into a single work list (so concurrency spans both). */
+function buildUnits(arms: Record<string, EvalArm>, trials: number): Unit[] {
+  const units: Unit[] = [];
+  for (const [armName, arm] of Object.entries(arms)) {
+    for (let t = 0; t < trials; t++)
+      units.push({ armName, arm, trialIndex: t });
+  }
+  return units;
+}
+
+type DoneResult<M extends Metrics> = {
+  readonly armName: string;
+  readonly skipped: false;
+  readonly row: M;
+  readonly usage: EvalUsage;
+};
+type UnitResult<M extends Metrics> =
+  | DoneResult<M>
+  | { readonly armName: string; readonly skipped: true };
+
+/** Group completed (non-skipped) unit results by arm and aggregate each. */
+function aggregateArms<M extends Metrics>(
+  armNames: readonly string[],
+  results: readonly UnitResult<M>[],
+): { arms: Record<string, ArmReport>; totalCostUsd: number } {
   const arms: Record<string, ArmReport> = {};
   let totalCostUsd = 0;
-  for (const [armName, arm] of Object.entries(spec.arms)) {
-    const rows: M[] = [];
-    const usages: EvalUsage[] = [];
-    for (let t = 0; t < trials; t++) {
-      const { row, usage } = await executeTrial(spec, arm, t, runner, cfg);
-      rows.push(row);
-      usages.push(usage);
-      await sleep(spacing);
-    }
-    const usage = aggregateUsage(usages);
+  for (const armName of armNames) {
+    const done = results.filter(
+      (r): r is DoneResult<M> => !r.skipped && r.armName === armName,
+    );
+    const rows = done.map((d) => d.row);
+    const usage = aggregateUsage(done.map((d) => d.usage));
     totalCostUsd += usage.totalCostUsd;
     arms[armName] = {
       runs: rows.length,
@@ -513,7 +586,63 @@ export async function runEvalWith<M extends Metrics>(
       usage,
     };
   }
-  return { name: spec.name ?? "eval", trials, arms, totalCostUsd };
+  return { arms, totalCostUsd };
+}
+
+/**
+ * The eval orchestration — every arm × trial via `runner`, run through the cache
+ * and a rate-limit retry, with at most `concurrency` in flight and an optional
+ * `maxCostUsd` budget cap; metric + usage computed per run and aggregated per
+ * arm. Exported with an injectable `runner` so the loop, `measure` context,
+ * caching, pooling, and aggregation are unit-testable without spawning a model
+ * (pass a fake returning canned stream-json). `runEval` is this with the real
+ * agent runner.
+ */
+export async function runEvalWith<M extends Metrics>(
+  spec: EvalSpec<M>,
+  runner: AgentRunner,
+): Promise<EvalReport> {
+  const trials = spec.trials ?? 5;
+  const spacing = (spec.spacingSec ?? 4) * 1000;
+  const concurrency = spec.concurrency ?? 1;
+  const retries = spec.rateLimitRetries ?? 3;
+  const backoffMs = spec.retryBackoffMs ?? 1000;
+  const cfg: RunConfig = {
+    model: spec.model ?? "haiku",
+    tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"],
+    timeoutMs: spec.timeoutMs ?? 240000,
+    cache: spec.cache ?? "off",
+    cacheDir: spec.cacheDir ?? resolve(process.cwd(), ".vigiles", "eval-cache"),
+  };
+  const retrying: AgentRunner = (a) =>
+    runWithRetry(a, runner, retries, backoffMs);
+
+  const units = buildUnits(spec.arms, trials);
+  let spent = 0;
+  let aborted = false;
+  const worker = async (unit: Unit): Promise<UnitResult<M>> => {
+    if (aborted) return { armName: unit.armName, skipped: true };
+    const { row, usage } = await executeTrial(
+      spec,
+      unit.arm,
+      unit.trialIndex,
+      retrying,
+      cfg,
+    );
+    spent += usage.costUsd;
+    if (spec.maxCostUsd !== undefined && spent >= spec.maxCostUsd) {
+      aborted = true;
+    }
+    if (spacing > 0) await sleep(spacing);
+    return { armName: unit.armName, skipped: false, row, usage };
+  };
+
+  const results = await runPool(units, concurrency, worker);
+  const { arms, totalCostUsd } = aggregateArms<M>(
+    Object.keys(spec.arms),
+    results,
+  );
+  return { name: spec.name ?? "eval", trials, arms, totalCostUsd, aborted };
 }
 
 /** Render one metric: `name=mean±se pass^k=…` (se/pass^k shown when measured). */

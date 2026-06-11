@@ -64,6 +64,7 @@ const report: EvalReport = {
   name: "demo",
   trials: 6,
   totalCostUsd: 0,
+  aborted: false,
   arms: {
     vanilla: { runs: 6, metrics: { caught: 0 }, stats: {}, usage: NO_USAGE },
     gated: { runs: 6, metrics: { caught: 0.5 }, stats: {}, usage: NO_USAGE },
@@ -123,6 +124,7 @@ test("reliable / assertReliable gate on pass^k (succeeded every trial)", () => {
     name: "rel",
     trials: 4,
     totalCostUsd: 0,
+    aborted: false,
     arms: {
       flaky: {
         runs: 4,
