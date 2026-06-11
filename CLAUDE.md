@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:87635669fabd7333 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:6e9376846fba8d53 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -80,7 +80,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/eval-cache.test.ts` — Eval-cache test suite (node:test): key stability/sensitivity, record round-trip + malformed-record tolerance, filesystem snapshot/restore
 - `src/plugin-loader.ts` — Plugin/repo harness loader: loadPlugin reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills + agents + commands materialized; .warnings flags surfaces the deterministic tier can't drive (subagents/commands/MCP, an empty machine, or dangling intra-plugin file refs e.g. a partial vendor) so a plugin load never silently tests nothing; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine
 - `src/plugin-loader.test.ts` — Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills/agents/commands materialization, surface + empty-machine + MCP warnings, settings merge, in-repo dogfood
-- `src/vendor.test.ts` — Conformance suite over REAL vendored plugins (examples/harness/vendor/\*): model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor
+- `src/vendor.test.ts` — Conformance suite over REAL vendored plugins under examples/harness/vendor/: model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor
 - `src/harness-assert.ts` — Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed (node:test/any runner), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend
 - `src/harness-assert.test.ts` — Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic
 - `src/judge.ts` — Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure); parseJudgeOutput is the pure, testable verdict parser

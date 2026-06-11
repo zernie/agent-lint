@@ -118,7 +118,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/plugin-loader.test.ts":
       "Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills/agents/commands materialization, surface + empty-machine + MCP warnings, settings merge, in-repo dogfood",
     "src/vendor.test.ts":
-      "Conformance suite over REAL vendored plugins (examples/harness/vendor/*): model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor",
+      "Conformance suite over REAL vendored plugins under examples/harness/vendor/: model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor",
     "src/harness-assert.ts":
       "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed (node:test/any runner), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend",
     "src/harness-assert.test.ts":
