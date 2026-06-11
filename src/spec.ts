@@ -491,6 +491,173 @@ export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec {
 }
 
 // ---------------------------------------------------------------------------
+// Subagent specs
+// ---------------------------------------------------------------------------
+
+/**
+ * A subagent definition (compiles to `agents/<name>.md`). Unlike a skill —
+ * reference material the model reads on activation — a subagent is a *delegated
+ * worker with a contract*: a dispatch `description`, an allowed-`tools` rail, an
+ * optional `model`, a system-prompt `body`, and the `rules` it must follow. That
+ * tool contract + those rules are the "railway" a subagent runs on, and they're
+ * exactly the compile-time-verifiable surface vigiles owns: the body's
+ * `file()`/`cmd()`/`symbol()` marks are checked like any instruction file, and
+ * the tools list is verified against the real tool set.
+ */
+export interface AgentSpec {
+  readonly _specType: "agent";
+  /** Subagent name (frontmatter + dispatch handle). */
+  readonly name: string;
+  /** When to dispatch this subagent — the trigger (frontmatter). */
+  readonly description: string;
+  /** Model alias (e.g. "sonnet", "opus", "haiku", "inherit"). Optional. */
+  readonly model?: string;
+  /**
+   * The allowed-tools contract — the rails the worker runs on. Each entry must be
+   * a known built-in tool (Read/Write/Edit/Bash/Grep/Glob/WebSearch/WebFetch/
+   * NotebookEdit/TodoWrite/Task/Skill) or an MCP tool (`mcp__server__tool`).
+   * Omit to inherit all tools. Verified at compile time.
+   */
+  readonly tools?: readonly string[];
+  /**
+   * The lead/intro prose of the system prompt (the "You are…" opener), before any
+   * sections. Carries verified `file()`/`cmd()`/`symbol()`/`ref()` marks. No
+   * markdown headers — use `sections` for those.
+   */
+  readonly body?: string | InstructionFragment[];
+  /**
+   * Named `##` sections of the system prompt (e.g. Purpose, Core Principles,
+   * Capabilities) — the shape real subagents actually take. Same verified-ref +
+   * no-nested-`##` rules as a CLAUDE.md spec's sections. Use `body` for the intro
+   * and `sections` for the structured rest.
+   */
+  readonly sections?: Record<string, string | InstructionFragment[]>;
+  /** Rules the worker must follow — rendered as a `## Rules` section. */
+  readonly rules?: Record<string, Rule>;
+  /**
+   * The typed result contract — what this worker returns on success/error. When
+   * set, compiles to an `## Output contract` section instructing the worker to
+   * end with a `vigiles:ok` / `vigiles:err` block, so its outcome is parseable
+   * and testable (see `result()`, `parseAgentResult`, `assertAgentOk`).
+   */
+  readonly output?: OutputContract;
+}
+
+/**
+ * Define a subagent specification (compiles to `agents/<name>.md`).
+ *
+ *   // agents/reviewer.md.spec.ts
+ *   export default agent({
+ *     name: "reviewer",
+ *     description: "Review a diff for correctness. Dispatch PROACTIVELY after edits.",
+ *     model: "sonnet",
+ *     tools: ["Read", "Grep", "Bash"],
+ *     body: instructions`Review the diff. Run ${cmd("npm test")} first.`,
+ *     rules: {
+ *       "no-floating": enforce("@typescript-eslint/no-floating-promises", "Await promises."),
+ *     },
+ *   });
+ */
+export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec {
+  return { _specType: "agent", ...spec };
+}
+
+// ---------------------------------------------------------------------------
+// Subagent result contract + railway composition (railway-oriented subagents)
+//
+// A subagent is a flat worker, but instead of returning prose it returns a
+// typed Result — either success or error, with rich detail on BOTH tracks. A
+// `railway()` then composes flat workers: the success track flows worker→worker,
+// and the first error short-circuits to an error handler. This is Wlaschin's
+// railway-oriented programming with a subagent as the step. It is deliberately
+// sub-Turing — a finite list of steps + a bounded recovery, no loop/iterator
+// combinator — so termination is readable off the value and every reference is
+// statically checkable (the thing ultraplan's generated script can't be). See
+// research/railway-subagents.md and research/subagent-compilation.md.
+// ---------------------------------------------------------------------------
+
+/** The field types a result contract can declare (kept tiny + dependency-free). */
+export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
+
+/**
+ * A subagent's typed result contract: the shape it must return on success
+ * (`ok`) and on failure (`err`). Rich on both tracks — an error is structured
+ * detail, not a bare pass/fail bit. Compiles into the worker's system prompt
+ * (the `vigiles:ok` / `vigiles:err` block it must emit) and is the schema the
+ * `parseAgentResult` parser + the `assertAgentOk/Err` test helpers validate.
+ */
+export interface OutputContract {
+  readonly _ref: "output";
+  readonly ok: Readonly<Record<string, OutputFieldType>>;
+  readonly err: Readonly<Record<string, OutputFieldType>>;
+}
+
+/**
+ * Declare a subagent's success/error result contract.
+ *
+ *   result(
+ *     { files: "string[]", summary: "string" },          // rich success
+ *     { reason: "string", retryable: "boolean" },         // rich error
+ *   )
+ *
+ * (Distinct from a skill's `result:` postcondition gate — this types a
+ * subagent's *return value*, the success/error tracks of the railway.)
+ */
+export function result(
+  ok: Record<string, OutputFieldType>,
+  err: Record<string, OutputFieldType>,
+): OutputContract {
+  return { _ref: "output", ok, err };
+}
+
+/** One step on a railway: dispatch a flat subagent (the "activity"). */
+export interface RailwayStep {
+  readonly _step: "delegate";
+  /** The subagent to dispatch — resolved against compiled agent names. */
+  readonly agent: string;
+  /** Optional task hint passed to the worker. */
+  readonly task?: string;
+}
+
+/** Build a railway step that dispatches `agent` (optionally with a task hint). */
+export function delegate(agent: string, task?: string): RailwayStep {
+  return task === undefined
+    ? { _step: "delegate", agent }
+    : { _step: "delegate", agent, task };
+}
+
+/**
+ * A railway over flat subagents. `steps` run in order on the success track; the
+ * first step that returns an error short-circuits to `onError`. `recover`
+ * optionally retries the failing step a *bounded* number of times before the
+ * error track. There is intentionally no loop combinator — the value is a finite
+ * tree, so it always terminates and is fully verifiable at compile time.
+ */
+export interface Railway {
+  readonly _specType: "railway";
+  readonly name: string;
+  readonly steps: readonly RailwayStep[];
+  /** Error track — runs with the failing step's error payload. */
+  readonly onError?: RailwayStep;
+  /** Bounded recovery: retry the failing step up to `max` times (finite). */
+  readonly recover?: { readonly step: RailwayStep; readonly max: number };
+}
+
+/**
+ * Compose flat subagents into a railway (compiles to an orchestrator command).
+ *
+ *   railway({
+ *     name: "ship",
+ *     steps: [delegate("planner"), delegate("coder"), delegate("reviewer")],
+ *     onError: delegate("reporter"),
+ *     recover: { step: delegate("fixer"), max: 2 },
+ *   })
+ */
+export function railway(spec: Omit<Railway, "_specType">): Railway {
+  return { _specType: "railway", ...spec };
+}
+
+// ---------------------------------------------------------------------------
 // Spec file naming convention (#11)
 //
 // Type-level proof that a spec filename maps to its output.

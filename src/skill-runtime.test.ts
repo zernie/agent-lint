@@ -2,7 +2,7 @@
  * Tests for the skill runtime: parsing vigiles:gate / vigiles:result markers
  * out of a compiled SKILL.md and executing the gate ladder with short-circuit.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";

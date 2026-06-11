@@ -1,8 +1,8 @@
 /**
  * Tests for the skill-testing wrapper: scripting the model and asserting the
- * deterministic action/gate sequence with plain node:test assertions.
+ * deterministic action/gate sequence with plain assertions.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { cmd } from "./spec.js";

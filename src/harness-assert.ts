@@ -18,15 +18,25 @@ import {
   type HarnessTestSpec,
   type HarnessTestResult,
   type ToolCall,
+  type Trace,
 } from "./harness-test.js";
-import type { EvalReport } from "./eval.js";
+import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
+import type { OutputContract } from "./spec.js";
+import { parseAgentResult, type ParsedAgentResult } from "./agent-result.js";
+import { compareArms } from "./stats.js";
+
+// Re-export the significance primitives so the whole eval-analysis surface lives
+// behind `vigiles/harness-assert` (no separate entry point).
+export { compareArms } from "./stats.js";
+export type { Comparison } from "./stats.js";
 
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.
  * Returns whatever `fn` returns. Use this instead of calling `cleanup()` by
  * hand — it survives assertion failures.
  */
+/* v8 ignore start -- thin wrapper over runHarnessTest (spawns the real CLI) */
 export async function withHarness<T>(
   spec: HarnessTestSpec,
   fn: (r: HarnessTestResult) => T | Promise<T>,
@@ -38,6 +48,7 @@ export async function withHarness<T>(
     r.cleanup();
   }
 }
+/* v8 ignore stop */
 
 // --- Plain throwing assertions (any runner) --------------------------------
 
@@ -80,12 +91,164 @@ export function assertHookAllowed(r: HookRunResult): void {
   }
 }
 
+// --- subagent railway outcome (parse the worker's result block) ------------
+//
+// A subagent with a result() contract ends its turn with a vigiles:ok/err block.
+// These wrap parseAgentResult so a test can assert the worker's *outcome* the
+// same way it asserts a hook decision — the testing-framework payoff of the
+// railway contract: `assertAgentOk(r.output)` instead of substring-matching prose.
+
+/**
+ * Assert the worker's output is a success result, and return its `value`. With a
+ * `contract`, the value is validated against the success shape (a wrong/missing
+ * field fails the assertion). A malformed or error result throws.
+ */
+export function assertAgentOk(
+  output: string,
+  contract?: OutputContract,
+): Record<string, unknown> {
+  const r = parseAgentResult(output, contract);
+  if (r.kind === "ok") return r.value;
+  const why = r.kind === "err" ? "returned an error result" : r.reason;
+  return fail(`expected a success result from the subagent, but ${why}`);
+}
+
+/**
+ * Assert the worker's output is an error result, and return its `error`. The
+ * railway's error track — proves the worker reported failure with rich detail
+ * (not that it crashed or returned prose). A malformed or success result throws.
+ */
+export function assertAgentErr(
+  output: string,
+  contract?: OutputContract,
+): Record<string, unknown> {
+  const r = parseAgentResult(output, contract);
+  if (r.kind === "err") return r.error;
+  const why = r.kind === "ok" ? "returned a success result" : r.reason;
+  return fail(`expected an error result from the subagent, but ${why}`);
+}
+
+/**
+ * Assert the parsed result satisfies `predicate` — the general form, for
+ * checking rich detail (e.g. `(r) => r.kind === "ok" && r.value.files.length > 0`).
+ */
+export function assertAgentResult(
+  output: string,
+  predicate: (r: ParsedAgentResult) => boolean,
+  contract?: OutputContract,
+): void {
+  const r = parseAgentResult(output, contract);
+  if (!predicate(r)) {
+    const detail = r.kind === "malformed" ? ` (${r.reason})` : "";
+    fail(`subagent result did not satisfy the predicate: ${r.kind}${detail}`);
+  }
+}
+
 function nameMatches(name: string, pat: string | RegExp): boolean {
   return typeof pat === "string" ? name === pat : pat.test(name);
 }
 
-function toolNames(r: HarnessTestResult): string {
-  return r.toolCalls.map((c) => c.name).join(", ") || "none";
+function toolNames(trace: Trace): string {
+  return trace.toolCalls.map((c) => c.name).join(", ") || "none";
+}
+
+// --- bare predicates over a Trace (the shared vocabulary, no throw) ---------
+//
+// Pure fns returning a value, so the SAME vocabulary runs in both consumers:
+// the throwing `assert*` helpers below wrap them for the testing tier, and an
+// eval `measure` reuses them directly as metrics (`measure: (t) => ({ safe:
+// !usedTool(t, /merge|delete/) })`). Never one dual-purpose function.
+
+/**
+ * Did the agent invoke a tool whose name matches `name` (string = exact,
+ * RegExp = test)? The predicate behind `assertToolUsed` / `assertToolNotUsed`.
+ */
+export function usedTool(trace: Trace, name: string | RegExp): boolean {
+  return trace.toolCalls.some((c) => nameMatches(c.name, name));
+}
+
+/** How many tools matching `name` the agent invoked. Behind `assertToolCount`. */
+export function toolCount(trace: Trace, name: string | RegExp): number {
+  return trace.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+}
+
+/**
+ * Did the `Skill` tool resolve `skill` (e.g. `"superpowers:test-driven-development"`)
+ * without error? The skill-activation predicate behind `assertSkillResolved`.
+ */
+export function skillResolved(trace: Trace, skill: string): boolean {
+  const call = trace.toolCalls.find(
+    (c) =>
+      c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
+  );
+  return call !== undefined && !call.isError;
+}
+
+/**
+ * Did the agent invoke a tool matching `name` whose INPUT satisfies
+ * `inputMatcher` — a tool-ARGUMENT predicate (DeepEval-style), e.g. an `Edit`
+ * that targeted the right file. The predicate behind `assertToolUsedWith`.
+ */
+export function toolUsedWith(
+  trace: Trace,
+  name: string | RegExp,
+  inputMatcher: (input: unknown) => boolean,
+): boolean {
+  return trace.toolCalls.some(
+    (c) => nameMatches(c.name, name) && inputMatcher(c.input),
+  );
+}
+
+/**
+ * Does the agent's final answer (`trace.output`) contain `needle` (string =
+ * substring, RegExp = test)? The output predicate behind `assertOutputContains`
+ * — the DeepEval-style "what did the agent actually say" check.
+ */
+export function outputContains(trace: Trace, needle: string | RegExp): boolean {
+  return typeof needle === "string"
+    ? trace.output.includes(needle)
+    : needle.test(trace.output);
+}
+
+/** All text the model received across every request (system + every message). */
+function requestText(trace: Trace): string {
+  return trace.modelRequests
+    .map((r) => [r.system, ...r.messages.map((m) => m.text)].join("\n"))
+    .join("\n");
+}
+
+/**
+ * Did ANY request the model received contain `needle` — searching the system
+ * prompt and every message across all requests? The predicate that proves
+ * injected context *reached the model*: a SessionStart hook's `additionalContext`
+ * or a slash command's expansion. Harness tier only — the eval tier drives the
+ * real API, so its `modelRequests` (and this) is empty. Behind `assertRequestContains`.
+ */
+export function requestContains(
+  trace: Trace,
+  needle: string | RegExp,
+): boolean {
+  const text = requestText(trace);
+  return typeof needle === "string" ? text.includes(needle) : needle.test(text);
+}
+
+/**
+ * Did a hook matching `name` fire? Matches against both the hook label
+ * (`"PreToolUse:Edit"`) and the bare event (`"PreToolUse"`), so `/PreToolUse/`
+ * or `"PreToolUse:Edit"` both work. The predicate behind `assertHookFired`.
+ */
+export function hookFired(trace: Trace, name: string | RegExp): boolean {
+  return trace.hooks.some(
+    (h) => nameMatches(h.name, name) || nameMatches(h.event, name),
+  );
+}
+
+/** Did a hook matching `name` fire AND block (exit ≠ 0 / outcome "error")? */
+export function hookBlocked(trace: Trace, name: string | RegExp): boolean {
+  return trace.hooks.some(
+    (h) =>
+      (nameMatches(h.name, name) || nameMatches(h.event, name)) && h.blocked,
+  );
 }
 
 /**
@@ -94,13 +257,10 @@ function toolNames(r: HarnessTestResult): string {
  * a subagent (`"Task"`). Needs `transcript: true`. The action invariant the
  * skill/MCP/command surfaces are really about.
  */
-export function assertToolUsed(
-  r: HarnessTestResult,
-  name: string | RegExp,
-): void {
-  if (!r.toolCalls.some((c) => nameMatches(c.name, name))) {
+export function assertToolUsed(trace: Trace, name: string | RegExp): void {
+  if (!usedTool(trace, name)) {
     fail(
-      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(r)}] (did you set transcript:true?)`,
+      `expected a tool matching ${String(name)} to be used; tools used: [${toolNames(trace)}] (did you set transcript:true?)`,
     );
   }
 }
@@ -110,11 +270,9 @@ export function assertToolUsed(
  * (e.g. a destructive MCP tool was never called). "File unchanged" can pass by
  * accident; "the tool was never used" is the real invariant. Needs `transcript`.
  */
-export function assertToolNotUsed(
-  r: HarnessTestResult,
-  name: string | RegExp,
-): void {
-  const hit = r.toolCalls.find((c) => nameMatches(c.name, name));
+export function assertToolNotUsed(trace: Trace, name: string | RegExp): void {
+  // `find` is the negative of `usedTool` and narrows the hit for the message.
+  const hit = trace.toolCalls.find((c) => nameMatches(c.name, name));
   if (hit) {
     fail(
       `expected no tool matching ${String(name)} to be used, but ${hit.name} was`,
@@ -126,13 +284,16 @@ export function assertToolNotUsed(
  * Assert the `Skill` tool resolved `skill` (e.g. `"superpowers:test-driven-development"`)
  * without error — the correct skill-activation invariant, vs. grepping the body.
  */
-export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
-  const call = r.toolCalls.find(
+export function assertSkillResolved(trace: Trace, skill: string): void {
+  if (skillResolved(trace, skill)) return;
+  // skillResolved is false → either no matching Skill call, or it errored.
+  // Reconstruct which, for a useful message.
+  const call = trace.toolCalls.find(
     (c) =>
       c.name === "Skill" && (c.input as { skill?: string })?.skill === skill,
   );
   if (!call) {
-    const seen = r.toolCalls
+    const seen = trace.toolCalls
       .filter((c) => c.name === "Skill")
       .map((c) => (c.input as { skill?: string })?.skill ?? "?")
       .join(", ");
@@ -140,9 +301,93 @@ export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
       `expected the Skill tool to resolve "${skill}"; Skill calls: [${seen || "none"}]`,
     );
   }
-  if (call.isError) {
+  fail(
+    `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+  );
+}
+
+/**
+ * Assert the agent invoked a tool matching `name` whose INPUT satisfies
+ * `inputMatcher` — a tool-ARGUMENT invariant (DeepEval-style). Asserts not just
+ * *that* a tool ran but *with what args*, e.g. an `Edit` that targeted the right
+ * file: `assertToolUsedWith(r, "Edit", (i) => (i as { file_path?: string })
+ * .file_path === "src/x.ts")`. Needs `transcript`.
+ */
+export function assertToolUsedWith(
+  trace: Trace,
+  name: string | RegExp,
+  inputMatcher: (input: unknown) => boolean,
+  message?: string,
+): void {
+  if (!toolUsedWith(trace, name, inputMatcher)) {
+    const seen = trace.toolCalls
+      .filter((c) => nameMatches(c.name, name))
+      .map((c) => JSON.stringify(c.input))
+      .join(", ");
     fail(
-      `the Skill "${skill}" was invoked but errored: ${call.resultText.slice(0, 200)}`,
+      message ??
+        `expected a ${String(name)} call whose input matches; ${String(name)} inputs: [${seen || "none"}]`,
+    );
+  }
+}
+
+/** Assert the agent's final answer contains `needle` (string substring / RegExp). */
+export function assertOutputContains(
+  trace: Trace,
+  needle: string | RegExp,
+): void {
+  if (!outputContains(trace, needle)) {
+    const shown = trace.output.slice(0, 200) || "(empty)";
+    fail(
+      `expected the agent's final answer to contain ${String(needle)}; got: ${shown}`,
+    );
+  }
+}
+
+/**
+ * Assert some request the model received contained `needle` — the "did the
+ * injected context land" invariant (SessionStart `additionalContext`, slash
+ * command expansion). Harness tier only; a zero-request trace fails with a hint
+ * that the eval tier can't capture requests.
+ */
+export function assertRequestContains(
+  trace: Trace,
+  needle: string | RegExp,
+): void {
+  if (!requestContains(trace, needle)) {
+    const n = trace.modelRequests.length;
+    const hint =
+      n === 0
+        ? " (no requests captured — modelRequests is harness-tier only)"
+        : "";
+    fail(
+      `expected a model request to contain ${String(needle)}; ${String(n)} request(s) captured${hint}`,
+    );
+  }
+}
+
+function hookNames(trace: Trace): string {
+  return trace.hooks.map((h) => h.name).join(", ") || "none";
+}
+
+/**
+ * Assert a hook matching `name` fired (and, with `{ blocked: true }`, that it
+ * blocked) — the honest hook-firing check, recorded from the run's stream rather
+ * than inferred from a marker file the hook had to write. Needs `transcript`.
+ */
+export function assertHookFired(
+  trace: Trace,
+  name: string | RegExp,
+  opts: { blocked?: boolean } = {},
+): void {
+  if (!hookFired(trace, name)) {
+    fail(
+      `expected a hook matching ${String(name)} to fire; hooks fired: [${hookNames(trace)}] (did you set transcript:true?)`,
+    );
+  }
+  if (opts.blocked === true && !hookBlocked(trace, name)) {
+    fail(
+      `expected a hook matching ${String(name)} to block, but none did; hooks fired: [${hookNames(trace)}]`,
     );
   }
 }
@@ -155,18 +400,18 @@ export function assertSkillResolved(r: HarnessTestResult, skill: string): void {
  * "never touched it"). Catches runaway loops and wasted work. Needs `transcript`.
  */
 export function assertToolCount(
-  r: HarnessTestResult,
+  trace: Trace,
   name: string | RegExp,
   bounds: { min?: number; max?: number; exactly?: number },
 ): void {
-  const n = r.toolCalls.filter((c) => nameMatches(c.name, name)).length;
+  const n = toolCount(trace, name);
   const ok =
     (bounds.exactly === undefined || n === bounds.exactly) &&
     (bounds.min === undefined || n >= bounds.min) &&
     (bounds.max === undefined || n <= bounds.max);
   if (!ok) {
     fail(
-      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(r)}])`,
+      `expected count of ${String(name)} to satisfy ${JSON.stringify(bounds)}, got ${String(n)} (tools: [${toolNames(trace)}])`,
     );
   }
 }
@@ -178,17 +423,17 @@ export function assertToolCount(
  * Needs `transcript`.
  */
 export function assertToolSequence(
-  r: HarnessTestResult,
+  trace: Trace,
   names: ReadonlyArray<string | RegExp>,
 ): void {
   let i = 0;
-  for (const c of r.toolCalls) {
+  for (const c of trace.toolCalls) {
     const want = names[i];
     if (want !== undefined && nameMatches(c.name, want)) i++;
   }
   if (i < names.length) {
     fail(
-      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(r)}]`,
+      `expected tools in order [${names.map((n) => String(n)).join(" → ")}]; got [${toolNames(trace)}]`,
     );
   }
 }
@@ -199,12 +444,41 @@ export function assertToolSequence(
  * was preceded by a Read of that file". Needs `transcript`.
  */
 export function assertToolCalls(
-  r: HarnessTestResult,
+  trace: Trace,
   predicate: (calls: readonly ToolCall[]) => boolean,
   message = "tool-call invariant failed",
 ): void {
-  if (!predicate(r.toolCalls)) {
-    fail(`${message}; tools used: [${toolNames(r)}]`);
+  if (!predicate(trace.toolCalls)) {
+    fail(`${message}; tools used: [${toolNames(trace)}]`);
+  }
+}
+
+/**
+ * Did `arm` succeed on EVERY trial for `metric` — τ-bench pass^k = 1? The
+ * reliability predicate over an eval report (vs. `improvement`, which reads the
+ * mean gap). Reads `report.arms[arm].stats[metric].passK`.
+ */
+export function reliable(
+  report: EvalReport,
+  arm: string,
+  metric: string,
+): boolean {
+  return report.arms[arm]?.stats[metric]?.passK === 1;
+}
+
+/**
+ * Assert `arm` passed `metric` on every trial (pass^k = 1) — the reliability
+ * gate for a non-deterministic harness ("worked every time", not "on average").
+ */
+export function assertReliable(
+  report: EvalReport,
+  opts: { arm: string; metric: string },
+): void {
+  if (!reliable(report, opts.arm, opts.metric)) {
+    const pk = report.arms[opts.arm]?.stats[opts.metric]?.passK;
+    fail(
+      `expected ${opts.arm} to pass ${opts.metric} on every trial (pass^k=1), got pass^k=${String(pk ?? "n/a")}`,
+    );
   }
 }
 
@@ -221,19 +495,94 @@ export function improvement(
 }
 
 /**
- * Assert `arm` beats `baseline` on `metric` by more than `by`. With `by` left at
- * 0 this just asserts a positive gap; pass the combined se to demand the gap
- * clear the noise floor.
+ * Did `arm` *significantly* beat `baseline` on `metric` — a positive gap whose
+ * two-sided Welch t-test p-value is below `alpha` (default 0.05)? The grounded
+ * upgrade over `improvement`: the noise floor is computed from the arms' spread,
+ * not hand-fed. False when either arm/metric is missing. See `src/stats.ts`.
+ */
+// eslint-disable-next-line max-params -- positional predicate mirrors `improvement` + alpha
+export function significantlyBeats(
+  report: EvalReport,
+  baseline: string,
+  arm: string,
+  metric: string,
+  alpha = 0.05,
+): boolean {
+  const c = compareArms(report, baseline, arm, metric, alpha);
+  return c !== null && c.delta > 0 && c.significant;
+}
+
+/**
+ * Assert `arm` significantly beats `baseline` on `metric` (positive gap, p < α).
+ * The statistical gate for a non-deterministic A/B — "the gap clears the noise",
+ * with the noise floor computed, not supplied. The honest version of
+ * `assertImproves(..., { by: se })`.
+ */
+export function assertSignificant(
+  report: EvalReport,
+  opts: { baseline: string; arm: string; metric: string; alpha?: number },
+): void {
+  const c = compareArms(
+    report,
+    opts.baseline,
+    opts.arm,
+    opts.metric,
+    opts.alpha,
+  );
+  if (c === null) {
+    fail(
+      `no data to compare ${opts.arm} vs ${opts.baseline} on ${opts.metric}`,
+    );
+  }
+  const alpha = opts.alpha ?? 0.05;
+  if (!(c.delta > 0 && c.significant)) {
+    fail(
+      `expected ${opts.arm} to significantly beat ${opts.baseline} on ${opts.metric} (α=${String(alpha)}); Δ=${c.delta.toFixed(3)}, p=${c.pValue.toFixed(3)}`,
+    );
+  }
+}
+
+/**
+ * Assert `arm` beats `baseline` on `metric`. By default just a positive gap > `by`
+ * (pass the combined se to clear the noise floor by hand). Pass `{ significant:
+ * true }` to demand a Welch t-test at `alpha` instead — the computed noise floor.
  */
 export function assertImproves(
   report: EvalReport,
-  opts: { baseline: string; arm: string; metric: string; by?: number },
+  opts: {
+    baseline: string;
+    arm: string;
+    metric: string;
+    by?: number;
+    significant?: boolean;
+    alpha?: number;
+  },
 ): void {
+  if (opts.significant === true) {
+    assertSignificant(report, opts);
+    return;
+  }
   const by = opts.by ?? 0;
   const delta = improvement(report, opts.baseline, opts.arm, opts.metric);
   if (delta <= by) {
     fail(
       `expected ${opts.arm} to beat ${opts.baseline} on ${opts.metric} by > ${String(by)}, got ${delta.toFixed(3)}`,
+    );
+  }
+}
+
+/**
+ * Assert a skill/behaviour triggered on at least `min` (0..1) of its runs — the
+ * reliability gate for a skill's *activation* (does its description fire on the
+ * task), over a {@link TriggerRateReport} from `measureTriggerRate`.
+ */
+export function assertTriggerRate(
+  report: TriggerRateReport,
+  opts: { min: number },
+): void {
+  if (report.rate < opts.min) {
+    fail(
+      `expected a trigger rate ≥ ${String(opts.min)}, got ${report.rate.toFixed(2)} (${String(report.n)} runs)`,
     );
   }
 }

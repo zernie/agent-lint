@@ -22,10 +22,11 @@
  * The "steps" are the scripted model turns — their real home is deterministic
  * harness testing, not production enforcement.
  *
- * Note: the simple mock drives the Bash tool and Stop hooks reliably; the
- * Edit/Write tools are gated in headless mode and don't fire via the mock —
- * drive file actions through Bash, or use the real-model eval tier (`eval.ts`)
- * for Edit/Write hooks.
+ * Note: the mock drives Bash and Stop hooks, and — verified on claude 2.1.169 —
+ * the Edit/Write tools too (allowlisted past the permission prompt), so their
+ * PreToolUse/PostToolUse hooks fire in this tier. The events the mock can't
+ * trigger (PreCompact / Notification / SessionEnd / SubagentStop) belong to the
+ * `runHook` unit tier.
  */
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -39,11 +40,28 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
-import { startMock, type ModelTurn } from "./mock-model.js";
+import { startMock, type ModelTurn, type ModelRequest } from "./mock-model.js";
 import { resolveHarness } from "./plugin-loader.js";
+import {
+  decideSandbox,
+  specTrusted,
+  sandboxAvailable,
+  runSandboxed,
+  type SandboxMode,
+} from "./sandbox.js";
 
-export { scriptModel, type ModelTurn } from "./mock-model.js";
+export {
+  scriptModel,
+  type ModelTurn,
+  type ModelRequest,
+} from "./mock-model.js";
 export { loadPlugin, resolveHarness } from "./plugin-loader.js";
+export {
+  decideSandbox,
+  specTrusted,
+  sandboxAvailable,
+  type SandboxMode,
+} from "./sandbox.js";
 
 export interface HarnessTestSpec {
   /** Fixture files to write in a fresh temp working dir (path → contents). */
@@ -81,9 +99,83 @@ export interface HarnessTestSpec {
   readonly transcript?: boolean;
   /** Per-run wall-clock timeout in ms. Default 60000. */
   readonly timeoutMs?: number;
+  /**
+   * Confinement policy for the code this run executes (`src/sandbox.ts`).
+   * Default `"auto"` is safe-by-default: an inline-only spec (you authored it)
+   * runs directly, but an external `plugin` / `pluginDir` brings in untrusted
+   * third-party hooks and is run under bubblewrap — or, if no sandbox is
+   * available, the run REFUSES rather than executing unconfined. Pass `false` to
+   * opt out and run unconfined (you audited the code, or trust the outer
+   * container); `"strict"` to force confinement even for trusted code.
+   *
+   * NOTE: confined execution is **Linux only** (bubblewrap is a Linux tool). On
+   * macOS / Windows no sandbox is available, so an untrusted run will REFUSE
+   * under `"auto"`/`"strict"` — use `sandbox: false` there if you trust the code.
+   */
+  readonly sandbox?: SandboxMode;
 }
 
-export interface HarnessTestResult {
+/**
+ * A hook invocation observed during the run, recorded (not inferred) from the
+ * `hook_response` system events the CLI emits in the stream — so a test can
+ * assert which hook fired and whether it blocked, instead of inferring it from a
+ * marker file the hook had to write.
+ */
+export interface HookFire {
+  /** The hook label, e.g. `"PreToolUse:Edit"` (`Event:Matcher`). */
+  readonly name: string;
+  /** The hook event, e.g. `"PreToolUse"`, `"PostToolUse"`, `"Stop"`. */
+  readonly event: string;
+  /** The hook process exit code (2 = block), or undefined if not reported. */
+  readonly exitCode: number | undefined;
+  /** Whether the hook blocked / errored (exit ≠ 0 or outcome "error"). */
+  readonly blocked: boolean;
+  /** What the hook printed (its block reason / diagnostic), or "". */
+  readonly output: string;
+}
+
+/**
+ * The observable record of ONE run — the unified shape produced by BOTH testing
+ * tiers: `runHarnessTest`'s result and `runEval`'s `measure` ctx (`eval.ts`)
+ * both satisfy it. That's what lets the bare predicates in `harness-assert.ts`
+ * (`usedTool` / `skillResolved` / `toolCount` / `toolUsedWith` / `hookFired` /
+ * `outputContains`) run over either, with the testing helpers asserting and eval
+ * measuring over the same vocabulary.
+ */
+export interface Trace {
+  /**
+   * The tools the agent invoked, each paired with its result — parsed from the
+   * transcript. Empty unless the run captured the stream (`transcript: true` on
+   * the harness tier; always on the eval tier). Lets a test assert on the
+   * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
+   */
+  readonly toolCalls: readonly ToolCall[];
+  /**
+   * The hooks that fired during the run, each with its decision — parsed from
+   * the CLI's `hook_response` stream events. Same capture requirement as
+   * `toolCalls` (empty without the stream). Lets a test assert hook firing
+   * honestly instead of via a marker file.
+   */
+  readonly hooks: readonly HookFire[];
+  /** The agent's final answer text (the terminal `result` event), or "". */
+  readonly output: string;
+  /**
+   * The requests the model received, captured by the scripted mock — each with
+   * its `system` prompt and `messages`, flattened to text. Lets a test assert
+   * what actually reached the model (a SessionStart hook's injected context, a
+   * slash command's expansion), not just that a hook fired. **Harness tier
+   * only**: the mock sees the requests, so this is populated by `runHarnessTest`
+   * (with or without `transcript`); the eval tier drives the real API, so its
+   * `modelRequests` is always empty.
+   */
+  readonly modelRequests: readonly ModelRequest[];
+  /** Number of model turns. */
+  readonly turns: number;
+  /** Final contents of a file under the working dir, or null if absent. */
+  file(path: string): string | null;
+}
+
+export interface HarnessTestResult extends Trace {
   readonly exitCode: number;
   readonly stdout: string;
   /** Hook block messages and diagnostics land here. */
@@ -92,14 +184,6 @@ export interface HarnessTestResult {
   readonly cwd: string;
   /** Number of model turns the agent took (mock turns served). */
   readonly turns: number;
-  /**
-   * The tools the agent invoked, each paired with its result — parsed from the
-   * transcript. Empty unless `transcript: true`. Lets a test assert on the
-   * agent's *actions* (skills, MCP tools, subagents) instead of grepping stdout.
-   */
-  readonly toolCalls: readonly ToolCall[];
-  /** Final contents of a file under the working dir, or null if absent. */
-  file(path: string): string | null;
   /** Remove the temp working dir. */
   cleanup(): void;
 }
@@ -166,6 +250,99 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
   }));
 }
 
+/**
+ * The terminal `result` event — present in BOTH `--output-format` shapes (a
+ * `{type:"result", …}` line in stream-json, the single object in `json`), or
+ * null. The seam for the final answer + turn count without parsing twice.
+ */
+export function parseResultEvent(
+  stdout: string,
+): Record<string, unknown> | null {
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (evt.type === "result") return evt;
+  }
+  return null;
+}
+
+/** The agent's final answer text from a transcript / result object, or "". */
+export function parseOutput(stdout: string): string {
+  const result = parseResultEvent(stdout)?.result;
+  return typeof result === "string" ? result : "";
+}
+
+/**
+ * The hooks that fired, recorded from the CLI's `hook_response` stream events
+ * (`--output-format stream-json`). Each carries the hook name/event, its exit
+ * code, and whether it blocked — the honest record vs. inferring from marker
+ * files. Returns [] for the non-stream `json` output (no per-hook events).
+ */
+function toHookFire(evt: Record<string, unknown>): HookFire {
+  const exitCode =
+    typeof evt.exit_code === "number" ? evt.exit_code : undefined;
+  return {
+    name: typeof evt.hook_name === "string" ? evt.hook_name : "",
+    event: typeof evt.hook_event === "string" ? evt.hook_event : "",
+    exitCode,
+    blocked:
+      evt.outcome === "error" || (exitCode !== undefined && exitCode !== 0),
+    output: typeof evt.output === "string" ? evt.output : "",
+  };
+}
+
+export function parseHooks(stdout: string): HookFire[] {
+  const hooks: HookFire[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (evt.type === "system" && evt.subtype === "hook_response") {
+      hooks.push(toHookFire(evt));
+    }
+  }
+  return hooks;
+}
+
+/**
+ * The `claude` CLI argv for a harness run (shared by the direct and sandboxed
+ * paths). `ANTHROPIC_BASE_URL` is set by the caller's environment / wrapper, not
+ * here. Pure, so the arg shape is unit-tested.
+ */
+export function buildClaudeArgs(
+  spec: HarnessTestSpec,
+  hasSettings: boolean,
+): string[] {
+  const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"];
+  return [
+    "-p",
+    spec.prompt ?? "go",
+    ...(spec.transcript
+      ? ["--output-format", "stream-json", "--verbose"]
+      : ["--output-format", "json"]),
+    "--model",
+    "claude-sonnet-4-5",
+    ...(spec.pluginDir !== undefined
+      ? ["--plugin-dir", resolve(spec.pluginDir)]
+      : []),
+    ...(hasSettings ? ["--settings", "settings.json"] : []),
+    "--allowedTools",
+    ...tools,
+  ];
+}
+
+/* v8 ignore start -- spawns the real claude CLI + filesystem; exercised by the
+   claude-backed suite, excluded from the deterministic coverage gate (the parse
+   helpers above carry the testable logic). */
 /** Whether the `claude` CLI is available — harness tests need it. */
 export function claudeAvailable(): boolean {
   try {
@@ -232,10 +409,22 @@ function spawnClaude(
 /**
  * Run the real `claude` CLI against a scripted mock model, with the given
  * fixture and settings (hooks). Deterministic — same script, same result.
+ *
+ * Safe by default: an external `plugin` / `pluginDir` brings in untrusted
+ * third-party hooks and is confined under bubblewrap (`spec.sandbox`, default
+ * `"auto"`); if no sandbox is available the run REFUSES rather than executing
+ * unconfined. See `src/sandbox.ts`.
  */
 export async function runHarnessTest(
   spec: HarnessTestSpec,
 ): Promise<HarnessTestResult> {
+  const decision = decideSandbox({
+    trusted: specTrusted(spec),
+    mode: spec.sandbox ?? "auto",
+    available: sandboxAvailable(),
+  });
+  if (decision.action === "throw") throw new Error(decision.reason);
+
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
   const { files, settings } = resolveHarness({
     plugin: spec.plugin,
@@ -243,42 +432,50 @@ export async function runHarnessTest(
     files: spec.files,
   });
   writeFixture(cwd, files, settings);
+  const args = buildClaudeArgs(spec, settings !== undefined);
+  const timeoutMs = spec.timeoutMs ?? 60000;
 
+  const build = (
+    out: { code: number; stdout: string; stderr?: string },
+    turns: number,
+    modelRequests: readonly ModelRequest[],
+  ): HarnessTestResult => ({
+    exitCode: out.code,
+    stdout: out.stdout,
+    stderr: out.stderr ?? "",
+    cwd,
+    turns,
+    toolCalls: parseToolCalls(out.stdout),
+    hooks: parseHooks(out.stdout),
+    output: parseOutput(out.stdout),
+    modelRequests,
+    file: (p: string): string | null => {
+      const f = resolve(cwd, p);
+      return existsSync(f) ? readFileSync(f, "utf-8") : null;
+    },
+    cleanup: (): void => {
+      rmSync(cwd, { recursive: true, force: true });
+    },
+  });
+
+  // Confined path: the mock is co-launched inside the sandbox's netns.
+  if (decision.action === "sandbox") {
+    const out = await runSandboxed({
+      cwd,
+      claudeArgs: args,
+      script: spec.model,
+      timeoutMs,
+    });
+    return build(out, out.requests.length, out.requests);
+  }
+
+  // Direct path: mock runs in this process; claude reaches it over localhost.
   const mock = await startMock(spec.model);
   try {
-    const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"];
-    const args = [
-      "-p",
-      spec.prompt ?? "go",
-      ...(spec.transcript
-        ? ["--output-format", "stream-json", "--verbose"]
-        : ["--output-format", "json"]),
-      "--model",
-      "claude-sonnet-4-5",
-      ...(spec.pluginDir !== undefined
-        ? ["--plugin-dir", resolve(spec.pluginDir)]
-        : []),
-      ...(settings !== undefined ? ["--settings", "settings.json"] : []),
-      "--allowedTools",
-      ...tools,
-    ];
-    const out = await spawnClaude(args, cwd, mock.url, spec.timeoutMs ?? 60000);
-    return {
-      exitCode: out.code,
-      stdout: out.stdout,
-      stderr: out.stderr,
-      cwd,
-      turns: mock.count,
-      toolCalls: parseToolCalls(out.stdout),
-      file: (p: string): string | null => {
-        const f = resolve(cwd, p);
-        return existsSync(f) ? readFileSync(f, "utf-8") : null;
-      },
-      cleanup: (): void => {
-        rmSync(cwd, { recursive: true, force: true });
-      },
-    };
+    const out = await spawnClaude(args, cwd, mock.url, timeoutMs);
+    return build(out, mock.count, [...mock.requests]);
   } finally {
     mock.close();
   }
 }
+/* v8 ignore stop */

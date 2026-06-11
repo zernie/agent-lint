@@ -2,7 +2,7 @@
  * Tests for the cross-language symbol index (ast-grep): per-file extraction,
  * the project index, and bare/scoped resolution (unique/ambiguous/missing).
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

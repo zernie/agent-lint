@@ -4,7 +4,7 @@
  * decision logic and real (tiny shell) hooks across exit codes / JSON output /
  * stdin passthrough / env injection.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {
@@ -21,6 +21,8 @@ test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   });
   assert.equal(parseHookOutput("just a log line"), null);
   assert.equal(parseHookOutput("  not json {x"), null);
+  // starts with "{" but invalid JSON → JSON.parse throws → caught → null
+  assert.equal(parseHookOutput('{"unterminated": '), null);
 });
 
 test("decideHook: exit 2 blocks regardless of stdout", () => {

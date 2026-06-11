@@ -143,6 +143,80 @@ assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
 `assertToolCount` takes `{ min, max, exactly }`; `assertToolCalls` is the escape
 hatch for a custom invariant like _"every Edit was preceded by a Read"_.
 
+You can also assert on a tool's **arguments**, not just its name (DeepEval-style)
+— e.g. the `Edit` targeted the right file, not just that _an_ Edit ran:
+
+```ts
+import { assertToolUsedWith } from "vigiles/harness-assert";
+
+assertToolUsedWith(
+  r,
+  "Edit",
+  (input) => (input as { file_path?: string }).file_path === "src/billing.ts",
+);
+```
+
+## One Trace, two consumers — predicates and assertions
+
+Both tiers produce one **`Trace`**: the observable record of a run —
+`toolCalls`, `hooks` (which fired + its decision), `output` (the final answer),
+`turns`, and `file(p)`. A `runHarnessTest` result _is_ a `Trace`, and so is the
+`ctx` handed to a `runEval` `measure`. Over that one shape there is one set of
+**bare predicates** — pure functions returning a value, with **no `assert`
+prefix and no throw**:
+
+```ts
+import {
+  usedTool,
+  toolCount,
+  skillResolved,
+  toolUsedWith,
+  outputContains,
+  hookFired,
+  hookBlocked,
+} from "vigiles/harness-assert";
+
+usedTool(trace, "Skill"); // boolean
+usedTool(trace, /^mcp__github__merge/); // boolean (regex)
+toolCount(trace, "Write"); // number
+skillResolved(trace, "demo:greet"); // boolean
+toolUsedWith(trace, "Edit", (i) => isRightFile(i)); // boolean (tool argument)
+outputContains(trace, /done/i); // boolean (the agent's final answer)
+hookFired(trace, "PreToolUse:Edit"); // boolean (recorded from the stream)
+hookBlocked(trace, "PreToolUse"); // boolean (fired AND exit ≠ 0)
+```
+
+`trace.hooks` is **recorded**, not inferred: each `HookFire` (`name`, `event`,
+`exitCode`, `blocked`, `output`) comes from the CLI's `hook_response` stream
+events, so a test asserts a hook _actually_ fired and blocked — no marker file
+the hook had to write. Capture it the same way as `toolCalls` (`transcript:
+true` on the harness tier; always on at the eval tier). The throwing form is
+`assertHookFired(trace, name, { blocked: true })`; `assertOutputContains(trace,
+needle)` does the same for the final answer.
+
+The two consumers stay **separate** — same vocabulary, never one dual-purpose
+function:
+
+- **Testing** asserts (pass/fail, every commit, free). Each `assert*` is just a
+  predicate wrapped in a throw: `assertToolUsed` is `usedTool` + throw,
+  `assertSkillResolved` is `skillResolved` + throw.
+- **Eval** measures (mean ± se / pass^k, occasional, paid). A `measure` reuses
+  the **bare** predicates directly as metrics:
+
+```ts
+measure: (trace) => ({
+  usedSkill: skillResolved(trace, "demo:greet"), // bool → fraction-true + pass^k
+  safe: !usedTool(trace, /merge|delete/), // bool → fraction-true + pass^k
+});
+```
+
+A test can then gate on the result three ways: `assertImproves` (the mean gap
+beats a threshold), `assertSignificant(report, { baseline, arm, metric })` — a
+Welch t-test decides whether the gap clears the noise floor (computed from the
+arms' spread, not hand-fed) — or `assertReliable(report, { arm, metric })`, the
+metric succeeded on **every** trial (pass^k = 1), the reliability bar for a
+non-deterministic harness.
+
 `runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
 and measure **real** activation (the model triggering the skill by its
 description), superseding the older "tell the agent to read a SKILL.md" trick:
@@ -173,21 +247,34 @@ upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
 clone at test time, so they run **offline and deterministically**. Refresh
 deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
 
-**The safety line: `loadPlugin` parses, it never executes.** A hook is a real
-child process with full `env` — `runHook`/`runHarnessTest` run the _actual_ hook,
-not a reimplementation, and there is **no sandbox** beyond a temp cwd and a
-timeout. That is fine for hooks _you_ wrote and for read-only governance hooks
-(inspect the event → decide), but a third-party **setup** hook (superpowers'
-`SessionStart`, say) can install, write, or call out. So the dogfood asserts such
-a hook is correctly **wired** and stops there; it does not run it.
+**Safe by default — untrusted hooks are confined, not trusted.** A hook is a
+real child process: `runHarnessTest` runs the _actual_ hook, not a
+reimplementation. Code _you_ authored (inline `settings`/`files`) is trusted and
+runs directly. But an external `plugin` / `pluginDir` brings in **third-party
+hooks**, and those are confined by default (`sandbox: "auto"`):
 
-To actually _execute_ untrusted third-party hooks, put a real boundary around it:
-the cheapest correct one is the **ephemeral CI container** (the runner is the
-sandbox) — run that job only there, never in a plain local `npm test`. A
-heavier-weight local sandbox (bubblewrap/`bwrap`, `sandbox-exec`, or Docker) is a
-reasonable opt-in if you need it, but it is not built into the library today —
-it's tracked as a potential improvement (an opt-in `sandbox:` option on the
-execution tiers) in [`research/feature-ideas.md`](../research/feature-ideas.md) §13.
+- **bubblewrap available** → the run is confined. The mock and `claude` are
+  co-launched inside **one network namespace** (`--unshare-all`): loopback is up
+  so the in-sandbox mock is reachable, but there is **no external route**, so a
+  malicious hook cannot phone home. The filesystem is read-only except the
+  throwaway work dir, a fresh empty `$HOME`, and an IO dir.
+- **no bubblewrap** → the run **refuses** (throws) rather than executing an
+  untrusted hook unconfined. Install `bwrap`, or pass `sandbox: false` to opt out
+  if you trust the code / the outer container.
+
+```ts
+runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
+runHarnessTest({ pluginDir: "./vendor/audited", model, sandbox: false }); // you vouch for it → direct
+runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
+```
+
+The policy lives in [`src/sandbox.ts`](../src/sandbox.ts) (`decideSandbox` is a
+pure function — untrusted code never runs unconfined unless you typed
+`sandbox: false`), and the end-to-end test proves egress is blocked while the
+mock stays reachable. Network egress confinement on a bare laptop comes from the
+netns; in CI the ephemeral container is an additional boundary. Subtlety: bwrap
+confines filesystem + network here, not a kernel-exploit boundary — for that you
+still want the outer container / a microVM.
 
 ## Deterministic tests in your runner
 
@@ -260,17 +347,27 @@ and the type augmentation is compile-checked in
 jest uses the CommonJS dist natively (no ESM flags); the `vigiles/vitest` entry
 is ESM because vitest is ESM-only.
 
-**Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash
-PreToolUse/PostToolUse — the governance/policy shapes most real plugins use.
-**Not** for Edit/Write tool-event hooks (headless-gated — drive file actions via
-Bash, or test those at the eval tier).
+**Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash **and
+Edit/Write** PreToolUse/PostToolUse — the governance/policy shapes most real
+plugins use (`--allowedTools` allowlists the edit tools past the permission
+prompt; verified on claude 2.1.169). The events the mock can't trigger —
+PreCompact, Notification, SessionEnd, SubagentStop — belong to the `runHook`
+unit tier.
 
 ## Evals — does the change move behaviour?
 
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
 numbers, **fraction-true** for booleans, with **std / se** so you can tell a
-real gap from noise (`formatEvalReport` prints `metric=mean±se`). An arm is a
-fixture + settings, or a whole `plugin`.
+real gap from noise, plus **pass^k** (τ-bench) — _did the metric succeed on
+every trial?_ — the reliability question a non-deterministic harness needs
+("worked every time" ≠ "worked on average"). `formatEvalReport` prints
+`metric=mean±se pass^k=…`; each `stat` carries `passK`. An arm is a fixture +
+settings, or a whole `plugin`.
+
+The `measure` ctx is a full `Trace`, so a metric can read the agent's
+**actions** (`ctx.toolCalls`) and its **final answer** (`ctx.output`), not just
+end-state files — reuse the bare predicates above (`usedTool`, `skillResolved`,
+…) to compute them.
 
 ```ts
 import { runEval, formatEvalReport } from "vigiles/eval";
@@ -288,11 +385,81 @@ const report = await runEval({
   }),
   trials: 6,
 });
-console.log(formatEvalReport(report)); // vanilla marked=0.00  gated marked=0.50±0.20
+console.log(formatEvalReport(report));
+// vanilla marked=0.00 pass^k=0   gated marked=0.50±0.20 pass^k=0   ($0.07 · 1.2s/run · 4.1k tok)
 ```
 
-A difference smaller than the combined `se` of the two arms is not yet
-significant — raise `trials`.
+(The cost/latency/token suffix and a `— $… total` header appear when the run
+reports usage; they're silent under the scripted mock.)
+
+### Significance — is the gap real?
+
+`se` gives you the spread; **significance** tells you whether the gap clears it.
+`assertSignificant` runs a Welch's t-test over the two arms' summary stats and
+throws unless the arm beats the baseline at `alpha` (default 0.05) — the noise
+floor is **computed**, not hand-fed via `assertImproves(..., { by })`:
+
+```ts
+import {
+  assertSignificant,
+  significantlyBeats,
+  compareArms,
+} from "vigiles/harness-assert";
+
+assertSignificant(report, {
+  baseline: "vanilla",
+  arm: "gated",
+  metric: "marked",
+});
+significantlyBeats(report, "vanilla", "gated", "marked"); // the bare predicate
+// or: assertImproves(report, { baseline, arm, metric, significant: true });
+
+const c = compareArms(report, "vanilla", "gated", "marked");
+// → { delta, seDelta, t, df, pValue, significant }  (reads mean/se/n, no raw rows)
+```
+
+For 0/1 metrics this is the t approximation to the two-proportion test — close at
+eval trial counts. An insignificant gap means **raise `trials`** until the noise
+floor drops below it.
+
+### Cost, caching, concurrency
+
+Every run captures **cost / latency / tokens** from the result event: `ctx.usage`
+(`{ costUsd, durationMs, inputTokens, outputTokens }`) is on the `measure` ctx,
+`report.arms[a].usage` aggregates per arm, and `report.totalCostUsd` sums the run.
+Three knobs make a real-model eval cheap enough to run often:
+
+- `concurrency: N` — run N trials at once (default 1). Rate-limit / overload
+  responses back off and retry automatically (`rateLimitRetries`, `retryBackoffMs`).
+- `maxCostUsd: N` — stop launching trials once measured cost crosses the cap;
+  in-flight trials finish and `report.aborted` is set.
+- `cache: "readwrite"` — **record/replay**. Each trial's output _and_ post-run
+  filesystem are recorded under `cacheDir`; a matching re-run replays without
+  calling the model. The key excludes `measure`, so **editing your metric and
+  re-running re-scores for free** — the model is re-called only when a
+  model-affecting input (task, files, settings, model, tools) changes.
+
+### Trigger rate — does the skill _fire_?
+
+A skill's value is its description activating on the right task — the #1
+skill-authoring pain, and a property only the real model decides (the
+deterministic tier proves the _wiring_; this proves the _activation_).
+`measureTriggerRate` installs a plugin natively and runs the model over a set of
+varied prompts, reporting how often a `Trace` predicate holds:
+
+```ts
+import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
+import { skillResolved, assertTriggerRate } from "vigiles/harness-assert";
+
+const report = await measureTriggerRate({
+  pluginDir: "./my-plugin",
+  prompts: ["…varied tasks the skill should handle…"],
+  fired: (t) => skillResolved(t, "my-plugin:greet"),
+  trials: 2,
+});
+console.log(formatTriggerRateReport(report)); // trigger-rate: 80% (10 runs)
+assertTriggerRate(report, { min: 0.6 }); // gate in CI
+```
 
 ### LLM-as-judge for subjective outcomes
 
@@ -330,6 +497,23 @@ vigiles eval --trials=6      # discover & run *.eval.mjs (forwards VIGILES_TRIAL
 `vigiles test` needs only the `claude` CLI (no API key) — so it runs the
 deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 
+## Coverage
+
+The suite runs under **vitest** (`npm test` → `vitest run`); `npm run coverage`
+adds V8 coverage and prints per-file line/branch/function %:
+
+```bash
+npm run coverage   # vitest run --coverage
+```
+
+The deterministic tiers (`runHook`, `runHarnessTest`) and **all the pure eval
+orchestration** — the loop (`runEvalWith`), the record/replay cache, usage
+aggregation, and the significance stats — are fully unit-tested via an
+**injected runner** (canned stream-json, no model). Only the real-`claude`
+subprocess (`spawnAgent`) is excluded from the gate (exercised by `bench/`);
+everything around it is covered, so the statement/line/function gate holds at
+100%.
+
 ## Canonical examples
 
 - [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
@@ -338,6 +522,7 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 - [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
 - [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
+- [`examples/harness/skill-trigger-rate.eval.mjs`](../examples/harness/skill-trigger-rate.eval.mjs) — does a skill's description _fire_ across varied prompts? (`measureTriggerRate`)
 - [`bench/evals/refs-hook.eval.mjs`](../bench/evals/refs-hook.eval.mjs) — the refs-hook A/B (benchmark #4).
 
 ## See also

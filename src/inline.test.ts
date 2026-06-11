@@ -2,7 +2,7 @@
  * Tests for the inline-rule parser.
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 import { parseInlineRules, hasInlineRules } from "./inline.js";

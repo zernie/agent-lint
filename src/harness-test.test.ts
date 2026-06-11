@@ -8,7 +8,7 @@
  * tests below. An earlier claude version gated them headlessly; the tests lock in
  * that they work on current CLIs (verified on 2.1.169) and catch a re-gate.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
@@ -17,17 +17,54 @@ import {
   scriptModel,
   claudeAvailable,
   parseToolCalls,
+  parseOutput,
+  parseHooks,
+  buildClaudeArgs,
 } from "./harness-test.js";
 import {
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolUsedWith,
   assertToolSequence,
   assertToolCount,
   assertToolCalls,
+  assertHookFired,
 } from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
+
+// Pure: the shared claude argv (no model, no claude). Covers the transcript /
+// pluginDir / settings / default-tools branches.
+test("buildClaudeArgs: transcript, pluginDir, settings, and tool defaults", () => {
+  const base = buildClaudeArgs({ model: scriptModel([]) }, false);
+  assert.deepEqual(base.slice(0, 2), ["-p", "go"]); // default prompt
+  assert.ok(base.includes("json") && !base.includes("stream-json"));
+  assert.ok(!base.includes("--plugin-dir") && !base.includes("--settings"));
+  // default allowed tools come last
+  assert.deepEqual(base.slice(-5), [
+    "--allowedTools",
+    "Read",
+    "Edit",
+    "Write",
+    "Bash",
+  ]);
+
+  const full = buildClaudeArgs(
+    {
+      model: scriptModel([]),
+      prompt: "do it",
+      transcript: true,
+      pluginDir: "examples/harness/fixture-skill-plugin",
+      allowedTools: ["Bash"],
+    },
+    true,
+  );
+  assert.deepEqual(full.slice(0, 2), ["-p", "do it"]);
+  assert.ok(full.includes("stream-json") && full.includes("--verbose"));
+  assert.ok(full.includes("--plugin-dir") && full.includes("--settings"));
+  assert.deepEqual(full.slice(-2), ["--allowedTools", "Bash"]);
+});
 
 // Regression: a PostToolUse hook fires on an Edit/Write tool use. This is the
 // deterministic-tier capability a stale comment once said was impossible; the
@@ -51,6 +88,7 @@ maybe("a PostToolUse hook fires on an Edit/Write tool use", async () => {
         ],
       },
     },
+    transcript: true, // capture the stream so r.hooks records the firing
     model: scriptModel([
       { tool: "Write", input: { file_path: "hello.txt", content: "banana" } },
       { text: "done" },
@@ -66,6 +104,9 @@ maybe("a PostToolUse hook fires on an Edit/Write tool use", async () => {
       /FIRED/,
       "the Write|Edit PostToolUse hook fired",
     );
+    // Honest check: the hook firing is recorded in the stream, not just inferred
+    // from the marker file above.
+    assertHookFired(r, "PostToolUse");
   } finally {
     r.cleanup();
   }
@@ -94,6 +135,7 @@ maybe("a PreToolUse hook blocks an Edit tool use", async () => {
         ],
       },
     },
+    transcript: true, // capture the stream so r.hooks records the block decision
     model: scriptModel([
       { tool: "Read", input: { file_path: "note.txt" } },
       {
@@ -115,6 +157,9 @@ maybe("a PreToolUse hook blocks an Edit tool use", async () => {
       "old",
       "the PreToolUse hook blocked the edit (file unchanged)",
     );
+    // Honest check: the hook fired AND its decision was a block — recorded from
+    // the stream, not inferred from the marker file + "file unchanged" pair.
+    assertHookFired(r, "PreToolUse:Edit", { blocked: true });
   } finally {
     r.cleanup();
   }
@@ -179,6 +224,7 @@ maybe(
     );
     const r = await runHarnessTest({
       pluginDir,
+      sandbox: false, // in-repo fixture we authored → trusted, run direct
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
       transcript: true, // populate r.toolCalls
       model: scriptModel([
@@ -217,6 +263,7 @@ for (const [label, dir, skill] of [
   maybe(`a real ${label} skill resolves via --plugin-dir`, async () => {
     const r = await runHarnessTest({
       pluginDir: join(__dirname, dir),
+      sandbox: false, // pinned vendored plugin we audited → trusted, run direct
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
       transcript: true,
       model: scriptModel([{ tool: "Skill", input: { skill } }, { text: "ok" }]),
@@ -252,6 +299,13 @@ maybe("tool-call sequence + budget invariants hold on a real run", async () => {
     assertToolSequence(r, ["Read", "Edit"]); // ordering
     assertToolCount(r, "Edit", { max: 1 }); // budget
     assertToolCount(r, "Write", { exactly: 0 });
+    // tool-ARGUMENT invariant: the Edit targeted the right file (not just "an Edit ran")
+    assertToolUsedWith(
+      r,
+      "Edit",
+      (i) => (i as { file_path?: string }).file_path === "note.txt",
+    );
+    assert.equal(typeof r.output, "string"); // unified Trace: final answer captured
     assertToolCalls(
       r,
       (calls) => {
@@ -300,4 +354,136 @@ test("parseToolCalls: pairs tool_use with tool_result from a stream-json transcr
   assert.equal(calls[0]?.resultText, "ran");
   assert.equal(calls[0]?.isError, false);
   assert.equal(parseToolCalls("{not stream json}").length, 0);
+});
+
+test("parseToolCalls: covers id / content-shape / error / no-result branches", () => {
+  const stream = [
+    "", // blank line skipped
+    "not json — ignored", // parse error skipped
+    JSON.stringify({ type: "x", message: { content: "notarray" } }), // content not an array
+    JSON.stringify({
+      type: "a",
+      message: {
+        content: [
+          { type: "text", text: "prose" }, // neither tool_use nor tool_result
+          { type: "tool_use", id: "u1", name: "A", input: {} },
+          { type: "tool_use", input: {} }, // tool_use with no name → skipped
+          { type: "tool_use", name: "NoId", input: {} }, // tool_use with no id
+          { type: "tool_use", id: "u3", name: "C", input: {} },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "u",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "u1",
+            content: "plain",
+            is_error: true,
+          },
+          { type: "tool_result", content: ["x", { text: "y" }, { z: 1 }] }, // no id; array w/ string + text + no-text
+          { type: "tool_result", tool_use_id: "u3", content: 42 }, // non-string, non-array content
+        ],
+      },
+    }),
+  ].join("\n");
+  const calls = parseToolCalls(stream);
+  assert.equal(calls.length, 3); // A, NoId, C (the no-name tool_use is skipped)
+  const a = calls.find((c) => c.name === "A");
+  assert.equal(a?.resultText, "plain"); // string content
+  assert.equal(a?.isError, true);
+  // The no-id tool_use and the no-id tool_result both key on "" and so pair up;
+  // the array content ["x", {text:"y"}, {no text}] joins to "xy".
+  const noid = calls.find((c) => c.name === "NoId");
+  assert.equal(noid?.resultText, "xy");
+  assert.equal(noid?.isError, false);
+  const c = calls.find((c) => c.name === "C");
+  assert.equal(c?.resultText, ""); // non-string/array content (42) → ""
+});
+
+test("parseOutput: returns the final answer from the terminal result event", () => {
+  const stream = [
+    "", // blank line → skipped
+    JSON.stringify({ type: "assistant", message: { content: [] } }),
+    "not json — ignored",
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      result: "the answer",
+    }),
+  ].join("\n");
+  assert.equal(parseOutput(stream), "the answer");
+  // a result event whose `result` is non-string → ""
+  assert.equal(parseOutput(JSON.stringify({ type: "result", result: 42 })), "");
+  // single-object `--output-format json` carries the same {type:"result"} shape
+  assert.equal(
+    parseOutput(JSON.stringify({ type: "result", result: "x" })),
+    "x",
+  );
+  assert.equal(parseOutput("no result event here"), "");
+});
+
+test("parseHooks: records hook firing + block decision from stream events", () => {
+  const stream = [
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "PostToolUse:Bash",
+      hook_event: "PostToolUse",
+      exit_code: 0,
+      outcome: "success",
+      output: "POST_OK\n",
+    }),
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "PreToolUse:Edit",
+      hook_event: "PreToolUse",
+      exit_code: 2,
+      outcome: "error",
+      output: "BLOCKED\n",
+    }),
+    JSON.stringify({ type: "assistant", message: { content: [] } }), // ignored
+  ].join("\n");
+  const hooks = parseHooks(stream);
+  assert.equal(hooks.length, 2);
+  assert.equal(hooks[0]?.name, "PostToolUse:Bash");
+  assert.equal(hooks[0]?.blocked, false);
+  assert.equal(hooks[1]?.event, "PreToolUse");
+  assert.equal(hooks[1]?.exitCode, 2);
+  assert.equal(hooks[1]?.blocked, true);
+  assert.equal(parseHooks("{not stream json}").length, 0);
+});
+
+test("parseHooks: defensive field coercion + the block decision branches", () => {
+  const stream = [
+    // outcome success but a non-zero exit → blocked via the exit-code arm
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      hook_name: "Stop",
+      hook_event: "Stop",
+      exit_code: 1,
+      outcome: "success",
+      output: "x",
+    }),
+    // malformed: non-number exit_code, missing name/event/output → coerced
+    JSON.stringify({
+      type: "system",
+      subtype: "hook_response",
+      exit_code: "nope",
+    }),
+    // a non-hook_response system event → skipped
+    JSON.stringify({ type: "system", subtype: "init" }),
+  ].join("\n");
+  const hooks = parseHooks(stream);
+  assert.equal(hooks.length, 2);
+  assert.equal(hooks[0]?.blocked, true); // success + exit 1 → blocked
+  assert.equal(hooks[1]?.exitCode, undefined); // non-number → undefined
+  assert.equal(hooks[1]?.name, ""); // missing → ""
+  assert.equal(hooks[1]?.event, ""); // missing → ""
+  assert.equal(hooks[1]?.output, ""); // missing → ""
+  assert.equal(hooks[1]?.blocked, false); // not error, no numeric exit
 });

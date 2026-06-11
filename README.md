@@ -313,7 +313,8 @@ assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
 ### Level 3 — does it change what Claude does? (real AI, occasional)
 
 `runEval` runs the **real** model N times with your change **on vs off** and
-reports the gap. Costs tokens, so you run it now and then — not on every save:
+reports the gap as **mean ± se** — so you can tell signal from noise instead of
+eyeballing two averages:
 
 ```typescript
 import { runEval, formatEvalReport } from "vigiles/eval";
@@ -325,9 +326,20 @@ const report = await runEval({
     marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
   }),
   trials: 6,
+  cache: "readwrite", // replay past runs — editing `measure` re-scores for free
 });
-console.log(formatEvalReport(report)); // off marked=0.00   on marked=0.50
+console.log(formatEvalReport(report));
+// off  marked=0.00   on  marked=0.50±0.20 pass^k=0   ($0.07 · 1.2s/run · 4.1k tok)
 ```
+
+`assertSignificant(report, { baseline: "off", arm: "on", metric: "marked" })`
+turns the gap into a CI gate — a Welch t-test decides whether it cleared the
+noise floor, **computed** from the arms' spread, not hand-fed. Runs go
+**concurrently**, track **cost / latency / tokens** (cap them with `maxCostUsd`),
+and the **record/replay cache** makes re-scoring after a `measure` edit free.
+
+Same tier, different question: **`measureTriggerRate`** measures how reliably a
+skill's _description fires_ across varied prompts — the #1 skill-authoring pain.
 
 ### Test your skills for real — and assert on what Claude _did_
 
@@ -356,6 +368,43 @@ dangerous tool was never used, which "the file looks unchanged" can't. It works
 on **real third-party plugins** too: the suite confirms real `obra/superpowers`
 and `wshobson/agents` skills resolve this way, with no markers injected.
 
+### Did the injected context actually reach the model?
+
+A SessionStart hook or a slash command can _fire_ and still inject **nothing** —
+wrong output shape, wrong platform. `trace.modelRequests` records what the model
+actually received (system + messages), so you assert it landed, not just that the
+hook ran — **"fired ≠ landed"**:
+
+```typescript
+import { assertRequestContains } from "vigiles/harness-assert";
+
+assertRequestContains(r, "You have superpowers"); // the additionalContext reached the model
+```
+
+(Dogfood: this is exactly how vigiles found that real `obra/superpowers` emits a
+_top-level_ `additionalContext`, which Claude Code — reading the _nested_ form —
+never injects. The hook fired; the context never landed.)
+
+### Running an untrusted plugin? It's confined by default
+
+Testing a third-party plugin means executing **its** hooks. `runHarnessTest` is
+safe by default: code you wrote (inline `settings`/`files`) runs directly, but an
+external `plugin` / `pluginDir` is **confined under bubblewrap** — a network
+namespace with **no egress** (a malicious hook can't phone home), a read-only
+filesystem, and a **cleared environment** (your `ANTHROPIC_API_KEY` and other
+secrets aren't even visible). If no sandbox is available the run **refuses**
+rather than executing unconfined:
+
+```typescript
+runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // confined, or refuses
+runHarnessTest({ pluginDir: "./audited", model, sandbox: false }); // you vouch for it → direct
+```
+
+Confinement is **Linux-only** (bubblewrap); on macOS / Windows an untrusted run
+refuses unless you pass `sandbox: false`. The suite dogfoods it on real
+`obra/superpowers` — its `SessionStart` hook runs in a no-egress sandbox, and the
+test proves egress is blocked while the scripted mock stays reachable.
+
 ### Run them in CI
 
 `vigiles test` runs `*.harness.mjs` files (free, no key); `vigiles eval` runs
@@ -379,10 +428,12 @@ npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
 | Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
 | CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
 | Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | 🟡 refs                      | 🔴 hard                     | ✅ via Task       |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
 | Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
 | MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
 | settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
+| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
+| Untrusted plugin execution                                    | — n/a                        | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
 

@@ -3,32 +3,77 @@
  * eval delta helpers and the jest/vitest matchers. The pure logic is exercised
  * here with fake result/report objects (no model, no claude).
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {
   improvement,
   assertImproves,
+  significantlyBeats,
+  assertSignificant,
+  reliable,
+  assertReliable,
   assertCreated,
   assertNotCreated,
   assertServedTurns,
+  assertHookBlocked,
+  assertHookAllowed,
+  assertAgentOk,
+  assertAgentErr,
+  assertAgentResult,
+  usedTool,
+  toolCount,
+  skillResolved,
+  toolUsedWith,
+  outputContains,
+  requestContains,
+  assertRequestContains,
+  hookFired,
+  hookBlocked,
   assertToolUsed,
   assertToolNotUsed,
   assertSkillResolved,
+  assertToolUsedWith,
+  assertOutputContains,
+  assertHookFired,
   assertToolCount,
   assertToolSequence,
   assertToolCalls,
   vigilesMatchers,
 } from "./harness-assert.js";
+import { result } from "./spec.js";
 import type { EvalReport } from "./eval.js";
-import type { HarnessTestResult } from "./harness-test.js";
+import type { HarnessTestResult, HookFire } from "./harness-test.js";
+import type { HookRunResult } from "./run-hook.js";
+
+/** Minimal HookRunResult stand-in for the run-hook-tier assertions/matcher. */
+function fakeHook(blocked: boolean): HookRunResult {
+  return {
+    exitCode: blocked ? 2 : 0,
+    stdout: "",
+    stderr: "",
+    json: null,
+    blocked,
+    decision: blocked ? "deny" : undefined,
+  };
+}
+
+const NO_USAGE = {
+  totalCostUsd: 0,
+  meanCostUsd: 0,
+  meanDurationMs: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+} as const;
 
 const report: EvalReport = {
   name: "demo",
   trials: 6,
+  totalCostUsd: 0,
+  aborted: false,
   arms: {
-    vanilla: { runs: 6, metrics: { caught: 0 }, stats: {} },
-    gated: { runs: 6, metrics: { caught: 0.5 }, stats: {} },
+    vanilla: { runs: 6, metrics: { caught: 0 }, stats: {}, usage: NO_USAGE },
+    gated: { runs: 6, metrics: { caught: 0.5 }, stats: {}, usage: NO_USAGE },
   },
 };
 
@@ -36,6 +81,11 @@ const report: EvalReport = {
 function fakeResult(
   present: string[],
   toolCalls: HarnessTestResult["toolCalls"] = [],
+  extra: {
+    output?: string;
+    hooks?: readonly HookFire[];
+    modelRequests?: HarnessTestResult["modelRequests"];
+  } = {},
 ): HarnessTestResult {
   return {
     exitCode: 0,
@@ -44,6 +94,9 @@ function fakeResult(
     cwd: "/tmp/x",
     turns: 2,
     toolCalls,
+    hooks: extra.hooks ?? [],
+    output: extra.output ?? "",
+    modelRequests: extra.modelRequests ?? [],
     file: (p: string) => (present.includes(p) ? "content" : null),
     cleanup: () => undefined,
   };
@@ -69,6 +122,120 @@ test("assertImproves passes on a positive gap and throws otherwise", () => {
       metric: "caught",
       by: 0.9,
     });
+  });
+});
+
+test("significantlyBeats / assertSignificant use a computed noise floor", () => {
+  const stat = (mean: number, se: number, n: number) => ({
+    mean,
+    se,
+    n,
+    std: se * Math.sqrt(n),
+    passK: 0,
+  });
+  const sigReport: EvalReport = {
+    name: "sig",
+    trials: 20,
+    totalCostUsd: 0,
+    aborted: false,
+    arms: {
+      base: {
+        runs: 20,
+        metrics: { caught: 0.1 },
+        stats: { caught: stat(0.1, 0.05, 20) },
+        usage: NO_USAGE,
+      },
+      // a real, tight separation → significant
+      good: {
+        runs: 20,
+        metrics: { caught: 0.6 },
+        stats: { caught: stat(0.6, 0.05, 20) },
+        usage: NO_USAGE,
+      },
+      // a small gap drowned in wide se → not significant
+      noisy: {
+        runs: 5,
+        metrics: { caught: 0.2 },
+        stats: { caught: stat(0.2, 0.2, 5) },
+        usage: NO_USAGE,
+      },
+    },
+  };
+
+  assert.equal(significantlyBeats(sigReport, "base", "good", "caught"), true);
+  assert.equal(significantlyBeats(sigReport, "base", "noisy", "caught"), false);
+  assert.equal(significantlyBeats(sigReport, "base", "good", "missing"), false);
+
+  assert.doesNotThrow(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "caught",
+    });
+  });
+  // a real but not-significant gap throws
+  assert.throws(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "noisy",
+      metric: "caught",
+    });
+  });
+  // missing data throws with the no-data message
+  assert.throws(() => {
+    assertSignificant(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "missing",
+    });
+  }, /no data to compare/);
+  // assertImproves delegates to the significance test when asked
+  assert.doesNotThrow(() => {
+    assertImproves(sigReport, {
+      baseline: "base",
+      arm: "good",
+      metric: "caught",
+      significant: true,
+    });
+  });
+  assert.throws(() => {
+    assertImproves(sigReport, {
+      baseline: "base",
+      arm: "noisy",
+      metric: "caught",
+      significant: true,
+    });
+  });
+});
+
+test("reliable / assertReliable gate on pass^k (succeeded every trial)", () => {
+  const rep: EvalReport = {
+    name: "rel",
+    trials: 4,
+    totalCostUsd: 0,
+    aborted: false,
+    arms: {
+      flaky: {
+        runs: 4,
+        metrics: { safe: 0.75 },
+        stats: { safe: { mean: 0.75, std: 0.5, se: 0.25, n: 4, passK: 0 } },
+        usage: NO_USAGE,
+      },
+      solid: {
+        runs: 4,
+        metrics: { safe: 1 },
+        stats: { safe: { mean: 1, std: 0, se: 0, n: 4, passK: 1 } },
+        usage: NO_USAGE,
+      },
+    },
+  };
+  assert.equal(reliable(rep, "solid", "safe"), true);
+  assert.equal(reliable(rep, "flaky", "safe"), false);
+  assert.doesNotThrow(() => {
+    assertReliable(rep, { arm: "solid", metric: "safe" });
+  });
+  assert.throws(() => {
+    assertReliable(rep, { arm: "flaky", metric: "safe" });
   });
 });
 
@@ -98,10 +265,82 @@ test("assertServedTurns checks the mock turn count", () => {
   });
 });
 
+test("assertHookBlocked / assertHookAllowed (run-hook results)", () => {
+  assert.doesNotThrow(() => {
+    assertHookBlocked(fakeHook(true));
+  });
+  assert.throws(() => {
+    assertHookBlocked(fakeHook(false));
+  });
+  assert.doesNotThrow(() => {
+    assertHookAllowed(fakeHook(false));
+  });
+  assert.throws(() => {
+    assertHookAllowed(fakeHook(true));
+  });
+});
+
+test("assertAgentOk / assertAgentErr / assertAgentResult (subagent outcomes)", () => {
+  const ok = '```vigiles:ok\n{ "summary": "done" }\n```';
+  const err = '```vigiles:err\n{ "reason": "boom" }\n```';
+  const c = result({ summary: "string" }, { reason: "string" });
+
+  // assertAgentOk: returns the value on success; throws on err / malformed
+  assert.deepEqual(assertAgentOk(ok), { summary: "done" });
+  assert.deepEqual(assertAgentOk(ok, c), { summary: "done" });
+  assert.throws(() => assertAgentOk(err), /returned an error result/);
+  assert.throws(() => assertAgentOk("no block here"), /no vigiles/);
+
+  // assertAgentErr: returns the error on failure; throws on ok / malformed
+  assert.deepEqual(assertAgentErr(err), { reason: "boom" });
+  assert.throws(() => assertAgentErr(ok), /returned a success result/);
+  assert.throws(() => assertAgentErr("nope"), /expected an error result/);
+
+  // assertAgentResult: general predicate
+  assert.doesNotThrow(() => {
+    assertAgentResult(ok, (r) => r.kind === "ok" && r.value.summary === "done");
+  });
+  assert.throws(() => {
+    assertAgentResult(ok, (r) => r.kind === "err");
+  }, /did not satisfy the predicate: ok/);
+  // malformed path includes the reason in the message
+  assert.throws(() => {
+    assertAgentResult("plain", (r) => r.kind === "ok");
+  }, /malformed \(no vigiles/);
+});
+
 test("vigilesMatchers.toHaveCreated reports pass/fail", () => {
   const r = fakeResult(["BLOCKED"]);
   assert.equal(vigilesMatchers.toHaveCreated(r, "BLOCKED").pass, true);
   assert.equal(vigilesMatchers.toHaveCreated(r, "nope").pass, false);
+});
+
+test("vigilesMatchers.toBlock + every matcher's message() render both states", () => {
+  assert.equal(vigilesMatchers.toBlock(fakeHook(true)).pass, true);
+  assert.equal(vigilesMatchers.toBlock(fakeHook(false)).pass, false);
+  // invoke .message() in pass and fail states to cover the message closures
+  assert.match(vigilesMatchers.toBlock(fakeHook(true)).message(), /to block/);
+  assert.match(vigilesMatchers.toBlock(fakeHook(false)).message(), /to block/);
+  assert.match(
+    vigilesMatchers.toHaveCreated(fakeResult(["X"]), "X").message(),
+    /to create/,
+  );
+  assert.match(
+    vigilesMatchers.toHaveCreated(fakeResult([]), "X").message(),
+    /to create/,
+  );
+  assert.match(
+    vigilesMatchers
+      .toBeatBaseline(report, "vanilla", "gated", "caught")
+      .message(),
+    /to beat/,
+  );
+  assert.match(
+    vigilesMatchers
+      .toBeatBaseline(report, "gated", "vanilla", "caught")
+      .message(),
+    /to beat/,
+  );
 });
 
 test("vigilesMatchers.toBeatBaseline respects the `by` threshold", () => {
@@ -159,6 +398,147 @@ test("assertSkillResolved: needs a non-error Skill tool_use with that name", () 
   const errored = { ...skillCall, isError: true, resultText: "No such skill" };
   assert.throws(() => {
     assertSkillResolved(fakeResult([], [errored]), "demo:greet"); // errored
+  });
+});
+
+// --- bare predicates (the shared vocabulary) -------------------------------
+
+test("usedTool / toolCount: bare predicates return values, don't throw", () => {
+  const r = fakeResult([], [skillCall, bashCall, bashCall]);
+  assert.equal(usedTool(r, "Skill"), true);
+  assert.equal(usedTool(r, /^Bash$/), true);
+  assert.equal(usedTool(r, "Task"), false);
+  assert.equal(toolCount(r, "Bash"), 2);
+  assert.equal(toolCount(r, /^mcp__/), 0);
+});
+
+test("skillResolved: true only for a non-error Skill call by that name", () => {
+  assert.equal(skillResolved(fakeResult([], [skillCall]), "demo:greet"), true);
+  assert.equal(skillResolved(fakeResult([], [skillCall]), "demo:other"), false);
+  const errored = { ...skillCall, isError: true, resultText: "No such skill" };
+  assert.equal(skillResolved(fakeResult([], [errored]), "demo:greet"), false);
+});
+
+test("toolUsedWith: matches a tool by name AND its input", () => {
+  const editCall = {
+    name: "Edit",
+    input: { file_path: "src/x.ts", old_string: "a", new_string: "b" },
+    resultText: "",
+    isError: false,
+  };
+  const r = fakeResult([], [editCall]);
+  const targets = (p: string) => (i: unknown) =>
+    (i as { file_path?: string }).file_path === p;
+  assert.equal(toolUsedWith(r, "Edit", targets("src/x.ts")), true);
+  assert.equal(toolUsedWith(r, "Edit", targets("src/other.ts")), false);
+  assert.equal(toolUsedWith(r, "Write", targets("src/x.ts")), false);
+});
+
+test("assertToolUsedWith: tool-argument assertion (asserts on input, not name)", () => {
+  const editCall = {
+    name: "Edit",
+    input: { file_path: "note.txt" },
+    resultText: "",
+    isError: false,
+  };
+  const r = fakeResult([], [editCall]);
+  const targets = (p: string) => (i: unknown) =>
+    (i as { file_path?: string }).file_path === p;
+  assertToolUsedWith(r, "Edit", targets("note.txt"));
+  assert.throws(() => {
+    assertToolUsedWith(r, "Edit", targets("WRONG.txt"));
+  });
+});
+
+// --- output predicate (DeepEval-style "what did the agent say") ------------
+
+test("outputContains / assertOutputContains check trace.output", () => {
+  const r = fakeResult([], [], { output: "All done: created RESULT.md" });
+  assert.equal(outputContains(r, "RESULT.md"), true);
+  assert.equal(outputContains(r, /created \w+/), true);
+  assert.equal(outputContains(r, "missing"), false);
+  assertOutputContains(r, "All done");
+  assert.throws(() => {
+    assertOutputContains(r, "nope");
+  });
+});
+
+// --- model-request predicate (did the injected context reach the model) ----
+
+test("requestContains / assertRequestContains search system + messages", () => {
+  const r = fakeResult([], [], {
+    modelRequests: [
+      {
+        system: "You have superpowers. Use the using-superpowers skill.",
+        messages: [{ role: "user", text: "go" }],
+      },
+      {
+        system: "",
+        messages: [
+          { role: "user", text: "/audit the repo" },
+          { role: "assistant", text: "on it" },
+        ],
+      },
+    ],
+  });
+  // hits in the system prompt (SessionStart additionalContext shape)
+  assert.equal(requestContains(r, "You have superpowers"), true);
+  assert.equal(requestContains(r, /super\w+/), true);
+  // hits in a message (slash-command expansion shape)
+  assert.equal(requestContains(r, "/audit the repo"), true);
+  assert.equal(requestContains(r, "never sent"), false);
+  assertRequestContains(r, "superpowers");
+  assert.throws(() => {
+    assertRequestContains(r, "never sent");
+  });
+});
+
+test("assertRequestContains hints when no requests were captured (eval tier)", () => {
+  const r = fakeResult([], [], { modelRequests: [] });
+  assert.equal(requestContains(r, "anything"), false);
+  assert.throws(() => {
+    assertRequestContains(r, "anything");
+  }, /harness-tier only/);
+});
+
+// --- hook predicates (recorded from the stream, not marker files) ----------
+
+const hookFires: readonly HookFire[] = [
+  {
+    name: "PreToolUse:Edit",
+    event: "PreToolUse",
+    exitCode: 2,
+    blocked: true,
+    output: "BLOCKED",
+  },
+  {
+    name: "PostToolUse:Bash",
+    event: "PostToolUse",
+    exitCode: 0,
+    blocked: false,
+    output: "ok",
+  },
+];
+
+test("hookFired / hookBlocked: match by label and by bare event", () => {
+  const r = fakeResult([], [], { hooks: hookFires });
+  assert.equal(hookFired(r, "PreToolUse:Edit"), true); // full label
+  assert.equal(hookFired(r, "PostToolUse"), true); // bare event
+  assert.equal(hookFired(r, /^PreToolUse/), true); // regex
+  assert.equal(hookFired(r, "SessionStart"), false);
+  assert.equal(hookBlocked(r, "PreToolUse"), true); // the Edit hook blocked
+  assert.equal(hookBlocked(r, "PostToolUse"), false); // the Bash hook didn't
+});
+
+test("assertHookFired: fires, and { blocked: true } demands a block", () => {
+  const r = fakeResult([], [], { hooks: hookFires });
+  assertHookFired(r, "PreToolUse:Edit");
+  assertHookFired(r, "PreToolUse", { blocked: true });
+  assert.throws(() => {
+    assertHookFired(r, "SessionStart"); // never fired
+  });
+  assert.throws(() => {
+    assertHookFired(r, "PostToolUse", { blocked: true }); // fired but didn't block
   });
 });
 
