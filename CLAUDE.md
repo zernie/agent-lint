@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:69425adceb9e56c2 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:55c349c7baf495f2 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -34,8 +34,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 
 ## Key Files
 
-- `src/spec.ts` — Type system and builder functions (enforce, guidance, claude, skill, file, cmd, ref)
-- `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation
+- `src/spec.ts` — Type system and builder functions (enforce, guidance, claude, skill, agent, file, cmd, ref)
+- `src/compile.ts` — Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks)
 - `src/linters.ts` — Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)
 - `src/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
@@ -48,6 +48,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/frontmatter.test.ts` — Frontmatter parser test suite (node:test)
 - `src/action.ts` — GitHub Action wrapper
 - `src/spec.test.ts` — Spec + compiler test suite (node:test)
+- `src/agent.test.ts` — Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip
 - `src/validate.test.ts` — Validation test suite (node:test)
 - `src/cli.test.ts` — CLI integration + E2E test suite (node:test)
 - `src/integrity.ts` — Integrity check: SHA-256 hash verification for compiled markdown (detects hand-edits)
@@ -112,6 +113,7 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `research/feature-ideas.md` — Feature ideas: plugin API, custom rules, exhaustive coverage
 - `research/ai-code-quality.md` — Research: AI code quality patterns
 - `research/self-evolving-specs.md` — Design doc: self-evolving spec system (proofs, Merkle history, evolution engine)
+- `research/subagent-compilation.md` — Research + roadmap: compiling typed subagent definitions (agent() → agents/<name>.md) — the real Claude Code frontmatter, the declared-vs-enforced gap (tools: is documentation; PreToolUse hook is the rail, issue #54898), prior-art agent contracts, and the prioritized next layers (generated enforcement hook, handoff resolution, trigger-rate for dispatch)
 - `research/code-search-for-agents.md` — Research: code search approaches (grep vs embeddings vs AST-grep)
 - `research/runtime-enforcement.md` — Research: spec-derived runtime enforcement via hooks, skill contracts, session audit
 - `research/agent-integration.md` — Research: deterministic backstop for AI agents — hooks, proofs, static checks anchored at the spec

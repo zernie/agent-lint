@@ -462,7 +462,7 @@ function makeResult(
  * short so edit distance is more appropriate than NCD (which is tuned
  * for longer texts).
  */
-function editDistance(a: string, b: string): number {
+export function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   const m = a.length;
   const n = b.length;

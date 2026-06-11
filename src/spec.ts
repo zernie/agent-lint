@@ -491,6 +491,60 @@ export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec {
 }
 
 // ---------------------------------------------------------------------------
+// Subagent specs
+// ---------------------------------------------------------------------------
+
+/**
+ * A subagent definition (compiles to `agents/<name>.md`). Unlike a skill —
+ * reference material the model reads on activation — a subagent is a *delegated
+ * worker with a contract*: a dispatch `description`, an allowed-`tools` rail, an
+ * optional `model`, a system-prompt `body`, and the `rules` it must follow. That
+ * tool contract + those rules are the "railway" a subagent runs on, and they're
+ * exactly the compile-time-verifiable surface vigiles owns: the body's
+ * `file()`/`cmd()`/`symbol()` marks are checked like any instruction file, and
+ * the tools list is verified against the real tool set.
+ */
+export interface AgentSpec {
+  readonly _specType: "agent";
+  /** Subagent name (frontmatter + dispatch handle). */
+  readonly name: string;
+  /** When to dispatch this subagent — the trigger (frontmatter). */
+  readonly description: string;
+  /** Model alias (e.g. "sonnet", "opus", "haiku", "inherit"). Optional. */
+  readonly model?: string;
+  /**
+   * The allowed-tools contract — the rails the worker runs on. Each entry must be
+   * a known built-in tool (Read/Write/Edit/Bash/Grep/Glob/WebSearch/WebFetch/
+   * NotebookEdit/TodoWrite/Task/Skill) or an MCP tool (`mcp__server__tool`).
+   * Omit to inherit all tools. Verified at compile time.
+   */
+  readonly tools?: readonly string[];
+  /** The system-prompt body (prose + verified `file()`/`cmd()`/`symbol()`/`ref()` marks). */
+  readonly body?: string | InstructionFragment[];
+  /** Rules the worker must follow — rendered as a `## Rules` section. */
+  readonly rules?: Record<string, Rule>;
+}
+
+/**
+ * Define a subagent specification (compiles to `agents/<name>.md`).
+ *
+ *   // agents/reviewer.md.spec.ts
+ *   export default agent({
+ *     name: "reviewer",
+ *     description: "Review a diff for correctness. Dispatch PROACTIVELY after edits.",
+ *     model: "sonnet",
+ *     tools: ["Read", "Grep", "Bash"],
+ *     body: instructions`Review the diff. Run ${cmd("npm test")} first.`,
+ *     rules: {
+ *       "no-floating": enforce("@typescript-eslint/no-floating-promises", "Await promises."),
+ *     },
+ *   });
+ */
+export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec {
+  return { _specType: "agent", ...spec };
+}
+
+// ---------------------------------------------------------------------------
 // Spec file naming convention (#11)
 //
 // Type-level proof that a spec filename maps to its output.
