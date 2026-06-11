@@ -422,6 +422,44 @@ For 0/1 metrics this is the t approximation to the two-proportion test — close
 eval trial counts. An insignificant gap means **raise `trials`** until the noise
 floor drops below it.
 
+### Regression gating — did this PR make the harness worse?
+
+Significance compares two _arms_ in one run; **regression gating** compares one
+run against a **committed baseline** — "jest snapshots for agent behaviour, with a
+real noise floor". Record a baseline once, commit it, then fail CI when any
+arm×metric moves _significantly in the bad direction_ vs. that baseline (a bare
+pass-rate can't tell a real regression from sampling noise — the same Welch test
+can, current vs. baseline):
+
+```ts
+import {
+  writeBaseline,
+  readBaseline,
+  assertNoRegression,
+  diffToJUnit,
+  diffReports,
+} from "vigiles/harness-assert";
+
+const report = await runEval({
+  /* … */
+});
+
+// Record once (commit .vigiles/eval-baseline.json):
+writeBaseline(".vigiles/eval-baseline.json", [report]);
+
+// In CI thereafter — throws on a significant regression:
+const baseline = readBaseline(".vigiles/eval-baseline.json");
+if (baseline) {
+  assertNoRegression(report, baseline, { lowerIsBetter: ["cost"] });
+  // or emit JUnit for your CI: diffToJUnit(diffReports(baseline, [report]))
+}
+```
+
+Higher is better by default; list `lowerIsBetter` metrics (cost/latency) to flip
+them. A new arm/metric absent from the baseline is skipped (not a regression).
+`diffToJUnit` renders one `<testcase>` per metric with a `<failure>` per
+regression, so eval regressions show up alongside unit-test failures.
+
 ### Cost, caching, concurrency
 
 Every run captures **cost / latency / tokens** from the result event: `ctx.usage`

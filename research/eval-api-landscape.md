@@ -245,9 +245,16 @@ holds.
   validated on known-answer synthetic distributions, not yet against a real
   `bench/` finding. Re-run one real comparison through `compareArms` when a key is
   available, to confirm the verdict matches what we concluded by hand.
-- **Next:** Phase C (regression gating) — JSON/JUnit output + a committed baseline
-  whose gate is a _significant negative delta_ (reuses `compareArms`). **Active —
-  greenlit 2026-06-11.**
+- **Phase C — regression gating — core DONE (2026-06-11).** `src/eval-baseline.ts`:
+  record a run's `EvalReport`s to a committed baseline (`toBaselineFile` /
+  `writeBaseline`), then `diffReports` flags any arm×metric that moved
+  _significantly in the bad direction_ vs. baseline — reusing `welchTTest` (current
+  vs. baseline), so a bare pass-rate's noise can't trip it; `lowerIsBetter` flips
+  cost/latency. JSON (`parseBaselineFile`/`readBaseline`) + JUnit (`diffToJUnit`)
+  output; the throwing gate is `assertNoRegression` in `harness-assert.ts`. Pure
+  core fully unit-tested (`src/eval-baseline.test.ts`) at the 100% include gate.
+  **Deferred follow-ups:** SARIF output, the GitHub PR comparison comment via
+  `src/action.ts`, and trend history — none yet tied to a concrete need.
 - **Phase E (promptfoo interop) — PUNTED (2026-06-11).** Decision: do _not_ chase
   eval-framework parity or build the interop bridges. The eval-runner space is
   promptfoo's (broad adoption, mature assertion/dataset/red-team surface), and our
