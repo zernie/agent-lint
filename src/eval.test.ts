@@ -17,6 +17,8 @@ import {
   parseUsage,
   formatEvalReport,
   runEvalWith,
+  runPool,
+  isRateLimited,
   measureTriggerRateWith,
   formatTriggerRateReport,
   type AgentRunArgs,
@@ -322,6 +324,130 @@ test("runEvalWith record/replay cache: replays without re-calling the model", as
   }
 });
 
+test("runPool maps with bounded concurrency, preserving order", async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const worker = async (n: number): Promise<number> => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return n * 2;
+  };
+  const out = await runPool([1, 2, 3, 4, 5], 2, worker);
+  assert.deepEqual(out, [2, 4, 6, 8, 10]); // order preserved
+  assert.equal(maxInFlight, 2); // never exceeded, did reach the limit
+});
+
+test("isRateLimited detects rate-limit / overload in either stream", () => {
+  assert.ok(
+    isRateLimited({ code: 1, stdout: "", stderr: "Error: 429 happened" }),
+  );
+  assert.ok(isRateLimited({ code: 1, stdout: "overloaded_error" }));
+  assert.ok(isRateLimited({ code: 1, stdout: "rate limit exceeded" }));
+  assert.ok(!isRateLimited({ code: 0, stdout: "all good" }));
+});
+
+test("runEvalWith retries a rate-limited run, then succeeds", async () => {
+  let calls = 0;
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    const stdout =
+      calls === 1
+        ? "rate limit exceeded"
+        : JSON.stringify({ type: "result", num_turns: 1, result: "ok" });
+    return Promise.resolve({ code: 0, stdout });
+  };
+  const report = await runEvalWith(
+    {
+      arms: { only: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      retryBackoffMs: 0,
+      measure: (ctx) => ({ turns: ctx.turns }),
+    },
+    runner,
+  );
+  assert.equal(calls, 2); // retried once
+  assert.equal(report.arms.only?.metrics.turns, 1);
+});
+
+test("runEvalWith gives up after rateLimitRetries=0 (no retry)", async () => {
+  let calls = 0;
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({ code: 0, stdout: "rate limit" });
+  };
+  await runEvalWith(
+    {
+      arms: { only: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      rateLimitRetries: 0,
+      retryBackoffMs: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  assert.equal(calls, 1); // gave up immediately
+});
+
+test("runEvalWith honors concurrency and inter-run spacing", async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const stream = JSON.stringify({ type: "result", num_turns: 1, result: "ok" });
+  const runner = async (): Promise<{ code: number; stdout: string }> => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return { code: 0, stdout: stream };
+  };
+  await runEvalWith(
+    {
+      arms: { a: {}, b: {} },
+      task: "t",
+      trials: 3,
+      spacingSec: 0.001, // > 0 → exercises the spacing path
+      concurrency: 3,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  assert.equal(maxInFlight, 3); // 6 units, 3 in flight at once
+});
+
+test("runEvalWith aborts when maxCostUsd is exceeded", async () => {
+  const stream = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "ok",
+    total_cost_usd: 0.1,
+  });
+  let calls = 0;
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({ code: 0, stdout: stream });
+  };
+  const report = await runEvalWith(
+    {
+      arms: { only: {} },
+      task: "t",
+      trials: 5,
+      spacingSec: 0,
+      maxCostUsd: 0.15, // exceeded after 2 trials ($0.20)
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  assert.equal(report.aborted, true);
+  assert.equal(calls, 2); // stopped early
+  assert.equal(report.arms.only?.runs, 2); // only completed trials counted
+  assert.ok(Math.abs(report.totalCostUsd - 0.2) < 1e-9);
+});
+
 test("assertTriggerRate gates on the minimum rate", () => {
   const report = { rate: 0.5, n: 4, perPrompt: [] };
   assert.doesNotThrow(() => {
@@ -345,6 +471,7 @@ test("formatEvalReport renders one line per arm", () => {
     name: "demo",
     trials: 6,
     totalCostUsd: 0,
+    aborted: false,
     arms: {
       vanilla: { runs: 6, metrics: { caught: 0 }, stats: {}, usage: NO_USAGE },
       gated: { runs: 6, metrics: { caught: 0.5 }, stats: {}, usage: NO_USAGE },
@@ -360,6 +487,7 @@ test("formatEvalReport shows ± se and pass^k when stats are present", () => {
     name: "demo",
     trials: 3,
     totalCostUsd: 0,
+    aborted: false,
     arms: {
       gated: {
         runs: 3,
@@ -378,6 +506,7 @@ test("formatEvalReport surfaces cost/latency/tokens when usage is present", () =
     name: "demo",
     trials: 2,
     totalCostUsd: 0.05,
+    aborted: false,
     arms: {
       gated: {
         runs: 2,

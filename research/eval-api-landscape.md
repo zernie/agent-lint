@@ -181,5 +181,12 @@ holds.
 - **B2 — record/replay cache — DONE.** `src/eval-cache.ts` (key excludes
   `measure`; snapshots + restores the post-run filesystem); `cache` / `cacheDir`
   on `EvalSpec`; wired into `runEvalWith` via `runWithCache` / `executeTrial`.
-- **Next:** B3 (bounded concurrency + 429 backoff) and B4 (`maxCostUsd` budget
-  cap), then Phase A (`src/stats.ts`).
+- **B3 — concurrency + rate-limit backoff — DONE.** `runEvalWith` flattens
+  arms × trials into a unit list run through `runPool` (bounded `concurrency`,
+  default 1); each model call is wrapped in `runWithRetry` (exponential backoff
+  while `isRateLimited` matches, `rateLimitRetries` / `retryBackoffMs`).
+- **B4 — budget cap — DONE.** `maxCostUsd` stops launching new trials once
+  measured cost crosses the cap; in-flight finish, the rest are skipped and
+  `EvalReport.aborted` is set.
+- **Next:** Phase A — `src/stats.ts` (significance, power, paired/blocked design,
+  `pass@k`/`pass^k` at arbitrary k), then Phase C (regression gating).
