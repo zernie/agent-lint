@@ -169,7 +169,8 @@ Four coherent theses of "world-class," each a different bet:
 - **D — Scenarios & scorers.** A dataset/scenario primitive unifying `runEval` /
   `measureTriggerRate`, plus a reusable scorer library (trajectory-vs-reference,
   multi-criteria/pairwise judge). Parity with DeepEval/promptfoo; biggest refactor.
-- **E — promptfoo interop (distribution, not a feature race).** The adoption bet:
+- **E — promptfoo interop (distribution, not a feature race). [PUNTED — see
+  amendment below].** The adoption bet:
   do what they can't (harness-arm A/B loaded as it ships + the no-model/no-key
   cheaper tiers + significance/pass^k) but ship _inside_ their ecosystem so we ride
   their reach. Two thin bridges over seams both sides already expose:
@@ -194,14 +195,16 @@ significance machinery pointed at a committed baseline. D is the largest surface
 change and is deferred unless DeepEval-parity becomes an explicit goal. First
 reviewable unit: **B1 (cost capture) + B2 (record/replay cache)**.
 
-**Amendment (2026-06-11): add E (promptfoo interop) as the distribution track.**
-With B/A/C shipped (see Status) the binding constraint is adoption, not
-capability — and promptfoo has since moved into agentic territory (Tier 0/1/2 SDK
-providers, `trajectory:*` assertions), so a head-to-head feature race on datasets
-(D) is the wrong fight. E rides their reach instead: keep the moat (what they
-structurally can't do), expose it through their provider/runner seams. E partly
-substitutes for D — the dataset/scenario/red-team/UI surface comes from promptfoo
-rather than from us building it.
+**Amendment (2026-06-11): E was scoped, then PUNTED; refocus on cost + sandbox.**
+E (promptfoo interop) was added as a distribution track on the reasoning that the
+binding constraint is adoption, not capability. On reflection it's punted: the
+eval-runner space is promptfoo's, and trying to ride or match it (interop bridges,
+or the dataset/red-team parity of D) is the wrong fight. The durable edge is that
+promptfoo is **real-model only → expensive**, while our cheaper tiers need no model
+and no key, and we can sandbox untrusted harnesses safely. So the active sequence
+is **C now**, then invest in **cost (cheap tiers) + sandboxing** as the moat. Both
+D and E stay deferred (D unless DeepEval/promptfoo parity becomes an explicit goal;
+E unless real inbound demand appears). See Status for the full rationale.
 
 Discipline carried from the rest of the repo: every pure module
 (`stats.ts`, cache key/restore, usage parse, JUnit render) is fully unit-tested;
@@ -243,10 +246,25 @@ holds.
   `bench/` finding. Re-run one real comparison through `compareArms` when a key is
   available, to confirm the verdict matches what we concluded by hand.
 - **Next:** Phase C (regression gating) — JSON/JUnit output + a committed baseline
-  whose gate is a _significant negative delta_ (reuses `compareArms`).
-- **On the roadmap — Phase E (promptfoo interop / distribution).** The
-  adoption-track amendment above: a vigiles promptfoo-provider + a
-  promptfoo-as-`AgentRunner` bridge + a vigiles Agent Skill. Do what they can't,
-  ship inside their reach. Scoped in `research/promptfoo-deep-dive.md`; not yet
-  started. Sequence it after C (the JSON/JUnit emitter C builds is also what the
-  provider bridge serializes), or pull forward if adoption is the live priority.
+  whose gate is a _significant negative delta_ (reuses `compareArms`). **Active —
+  greenlit 2026-06-11.**
+- **Phase E (promptfoo interop) — PUNTED (2026-06-11).** Decision: do _not_ chase
+  eval-framework parity or build the interop bridges. The eval-runner space is
+  promptfoo's (broad adoption, mature assertion/dataset/red-team surface), and our
+  edge there isn't features — it's **cost and safety**. promptfoo is real-model
+  only, so it's _structurally_ expensive (corroborated by a user report that running
+  it is costly); our differentiators are the **no-model / no-key cheaper tiers**
+  (`runHook`, `runHarnessTest`) + caching, and **sandboxing**. So the strategy is
+  not "ship inside promptfoo" but "be the cheap, safe, deterministic way to test a
+  harness." Keep the deep-dive (`research/promptfoo-deep-dive.md`) as analysis;
+  revisit E only if inbound demand for it appears.
+- **Where the moat actually is (the refocus):**
+  1. **Cost** — lead with the cheap tiers. The recurring objection to evals is
+     "real model → real cost + slow"; our answer is that most harness questions
+     (does the hook block? is it wired in?) need **no model and no API key** at
+     all. That is a structural advantage promptfoo cannot cheaply copy.
+  2. **Sandboxing** — be excellent at running _untrusted_ harnesses safely. The
+     deterministic tier already confines under bubblewrap (`src/sandbox.ts`,
+     safe-by-default); the open work is extending that boundary to the **unit tier**
+     (`runHook` runs hooks with full `env`, no sandbox) and the **eval tier**, and
+     beyond Linux (`sandbox-exec` / docker). Tracked as `feature-ideas.md` #13.
