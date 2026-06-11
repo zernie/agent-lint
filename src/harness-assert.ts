@@ -24,6 +24,11 @@ import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
 import { compareArms } from "./stats.js";
 
+// Re-export the significance primitives so the whole eval-analysis surface lives
+// behind `vigiles/harness-assert` (no separate entry point).
+export { compareArms } from "./stats.js";
+export type { Comparison } from "./stats.js";
+
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.
  * Returns whatever `fn` returns. Use this instead of calling `cleanup()` by
