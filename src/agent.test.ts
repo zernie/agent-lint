@@ -163,6 +163,80 @@ test("compileAgent flags a bad spec filename", () => {
   assert.ok(notMd.errors.some((e) => e.type === "spec-name-mismatch"));
 });
 
+test("dogfood: a real OSS subagent as a spec, with the tool rail it shipped WITHOUT", () => {
+  // Reproduces the shape of wshobson's real `ui-visual-validator` subagent
+  // (examples/harness/vendor/wshobson-accessibility@.../agents/ui-visual-validator.md):
+  // model: sonnet, a multi-`##`-section role contract, and — critically — it
+  // ships with NO `tools:` line, so it inherits EVERY tool (the #1 footgun). A
+  // spec ADDS the least-privilege rail (read + run visual tests; never Edit/Write),
+  // which compile verifies. This is the value-add over the hand-written original.
+  const reviewer = agent({
+    name: "ui-visual-validator",
+    description:
+      "Rigorous visual validation expert. Use PROACTIVELY to verify UI modifications achieved their goals.",
+    model: "sonnet",
+    tools: ["Read", "Grep", "Glob", "Bash"], // the rail the original omits
+    body: "You are an experienced UI visual validation expert.",
+    sections: {
+      Purpose:
+        "Verify UI modifications, design-system compliance, and accessibility through systematic visual analysis.",
+      "Core Principles": [
+        "- Default assumption: the goal has NOT been achieved until proven.\n",
+        "- Base judgments solely on visual evidence, never code hints.",
+      ],
+      "Forbidden Behaviors":
+        "- Assuming code changes automatically produce visual results.\n- Accepting 'looks different' as 'looks correct'.",
+    },
+  });
+
+  const { markdown, errors } = compileAgent(reviewer, {
+    specFile: "agents/ui-visual-validator.md.spec.ts",
+  });
+
+  assert.deepEqual(errors, []); // real content compiles clean; tools verified
+  assert.match(markdown, /\nname: ui-visual-validator\n/);
+  assert.match(markdown, /\nmodel: sonnet\n/);
+  assert.match(markdown, /\ntools: Read, Grep, Glob, Bash\n/); // the added rail
+  assert.doesNotMatch(markdown, /\btools:.*Edit/); // least-privilege: no Edit/Write
+  assert.match(markdown, /## Purpose/);
+  assert.match(markdown, /## Forbidden Behaviors/);
+  assert.match(
+    markdown,
+    /You are an experienced UI visual validation expert\./,
+  );
+});
+
+test("compileAgent rejects a section that clashes with the rules field", () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "a",
+      description: "d",
+      sections: { rules: "this should be the rules field" },
+    }),
+    { specFile: "a.md.spec.ts" },
+  );
+  assert.ok(errors.some((e) => e.type === "reserved-section-key"));
+});
+
+test("compileAgent verifies refs inside sections", () => {
+  const dir = makeTmpDir("agent-sections");
+  try {
+    const { errors } = compileAgent(
+      agent({
+        name: "a",
+        description: "d",
+        sections: {
+          Workflow: instructions`First read ${file("missing.ts")}.`, // stale file
+        },
+      }),
+      { basePath: dir, specFile: "a.md.spec.ts" },
+    );
+    assert.ok(errors.some((e) => e.type === "stale-file"));
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("adoptDiff round-trips a compiled agent (valid hash, no changes)", () => {
   const dir = makeTmpDir("agent-adopt");
   try {

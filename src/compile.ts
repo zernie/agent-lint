@@ -895,6 +895,34 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
   return fm.join("\n");
 }
 
+/** Render the subagent's named `##` system-prompt sections (verified like CLAUDE.md). */
+function renderAgentSections(
+  sections: Record<string, string | InstructionFragment[]>,
+  basePath: string,
+): SectionResult {
+  const lines: string[] = [];
+  const errors: CompileError[] = [];
+  for (const [name, content] of Object.entries(sections)) {
+    if (name.toLowerCase() === "rules") {
+      errors.push({
+        type: "reserved-section-key",
+        message: `Section key "${name}" is reserved — use the \`rules\` field instead.`,
+      });
+    }
+    const heading = name.charAt(0).toUpperCase() + name.slice(1);
+    if (typeof content === "string") {
+      errors.push(...validateSectionContent(name, content));
+      lines.push(`## ${heading}\n\n${content.trim()}`);
+    } else {
+      errors.push(...validateRefs(content, basePath));
+      const rendered = content.map(renderFragment).join("");
+      errors.push(...validateSectionContent(name, rendered));
+      lines.push(`## ${heading}\n\n${rendered.trim()}`);
+    }
+  }
+  return { lines, errors };
+}
+
 /** Render the rules a subagent must follow as a `## Rules` section. */
 function renderAgentRules(rules: Record<string, Rule>): string {
   const parts = ["## Rules", ""];
@@ -941,6 +969,11 @@ export function compileAgent(
 
   const sections: string[] = [];
   if (spec.body !== undefined) sections.push(renderBody(spec.body).trim());
+  if (spec.sections) {
+    const result = renderAgentSections(spec.sections, basePath);
+    sections.push(...result.lines);
+    errors.push(...result.errors);
+  }
   if (spec.rules && Object.keys(spec.rules).length > 0) {
     sections.push(renderAgentRules(spec.rules));
   }

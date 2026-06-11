@@ -519,8 +519,19 @@ export interface AgentSpec {
    * Omit to inherit all tools. Verified at compile time.
    */
   readonly tools?: readonly string[];
-  /** The system-prompt body (prose + verified `file()`/`cmd()`/`symbol()`/`ref()` marks). */
+  /**
+   * The lead/intro prose of the system prompt (the "You are…" opener), before any
+   * sections. Carries verified `file()`/`cmd()`/`symbol()`/`ref()` marks. No
+   * markdown headers — use `sections` for those.
+   */
   readonly body?: string | InstructionFragment[];
+  /**
+   * Named `##` sections of the system prompt (e.g. Purpose, Core Principles,
+   * Capabilities) — the shape real subagents actually take. Same verified-ref +
+   * no-nested-`##` rules as a CLAUDE.md spec's sections. Use `body` for the intro
+   * and `sections` for the structured rest.
+   */
+  readonly sections?: Record<string, string | InstructionFragment[]>;
   /** Rules the worker must follow — rendered as a `## Rules` section. */
   readonly rules?: Record<string, Rule>;
 }
