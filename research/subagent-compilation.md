@@ -113,6 +113,79 @@ instruction file) + the `tools` rail + `rules`. The dogfood value-add: the spec
 verifies it — `agent.test.ts` reproduces the real agent's shape with a
 `Read/Grep/Glob/Bash` rail (no `Edit`/`Write`) and asserts it compiles clean.
 
+## Empirical survey: do real subagents need an iterator? (no)
+
+Surveyed **~90 real subagents across 9+ repos and several ecosystems** (haiku
+agents): wshobson/agents, undeadlist, VoltAgent, 0xfurai, lst97, rshah515, plus
+the barkain orchestration plugin. The result saturated — every additional batch
+returned zero structural loops. The question: does any subagent encode an
+**iterative / loop / state-machine control flow** that flat sections + a tool
+contract can't represent — i.e. would we need an iterator/step primitive?
+
+- **Iterative _syntax_ in the agent file: 0 / ~90.** None encode a
+  while/for/repeat-until or a state machine _as structure_. (One collection used
+  iterative _language_ — "iterate", "Analysis → Implementation" — in ~64% of
+  agents, but that's prose, not control flow: 0% iterative syntax.)
+- **Numbered "Process / Approach / Workflow" lists** (≈30–95% of agents) are
+  **advisory prose** — a markdown numbered list, fully representable as a section.
+  Prose, by design: the model adapts/skips/reorders, it's not an automaton.
+- **The only loop-like cases are ORCHESTRATORS** (`team-lead`,
+  `fullstack-qa-orchestrator`, `architect-reviewer`) — and in every one the loop
+  is **prose mediated by the `Task` tool**, not a construct the markdown encodes.
+  _Looping lives in the runtime (Task + model judgment, or a slash command), never
+  in the subagent definition._ That is the decisive finding.
+- **The clincher** — the most sophisticated orchestrator found,
+  `barkain/claude-code-workflow-orchestration`, implements a genuine **DAG / wave
+  scheduler** (dependency analysis, parallel waves, file-conflict resolution,
+  concurrency cap). All of that control flow lives in a \*_slash command
+  (`commands/delegate.md`) + Python validation hooks (`validate*task_graph*_.py`)
+  - JSON state files** — *not in any subagent `.md`*. The subagents it dispatches
+    are still flat workers. So even where real, structured orchestration exists, the
+    flow is a **command + hooks + state\** machine, and the subagent stays a flat
+    role-contract. If vigiles ever compiles orchestration flow, that's a *command\*
+    target (body + enforcing hooks — vigiles' `guard()` model), never the agent spec.
+- **Official Anthropic plugins say the same.** In the Ralph loop, iteration is a
+  **`stop-hook.sh` + state file** that checks a counter, blocks exit, and re-feeds
+  the prompt — the loop is _session-level_, the `.md` only stores state. The
+  PR-review-toolkit ships 6 **flat role skills**; their parallelism is the main
+  agent's reasoning, not declared. The architectural reason is fundamental:
+  markdown is declarative + stateless; a loop is imperative + stateful (counter,
+  conditional exit, re-invocation), so it can _only_ live in a hook or a script.
+  That's the same compile-to-hooks model vigiles already owns — reinforcing that
+  the value is **emitting hooks** (PreToolUse for the tool rail; Stop for a loop),
+  not inventing iterator types.
+- **Handoff/delegation to other named agents (category D): ≈12–15%** — a
+  _reference list_, statically resolvable against compiled agent names. This, not
+  an iterator, is the real orchestrator need.
+- **Formal output schema: ≈0%** — all use markdown templates, not schemas, so a
+  typed `outputSchema` is speculative; defer.
+- **Tool-declaration rate is ecosystem-dependent** — wshobson specialists mostly
+  inherit-all (the footgun), undeadlist declared `tools:` 25/25 — so the
+  omitted-`tools` warning is worth shipping but isn't a universal problem.
+
+**Verdict: ship the flat model; do NOT add an iterator/step/flow primitive** — it
+would be a solution seeking a problem (0 / ~90). The architectural reason is
+clean: a **skill** is a deterministic subroutine, so a `gate()` per step makes
+sense; an **agent** is an autonomous worker, so _whether to loop or retry is the
+model's decision at runtime_, not the spec's — a structural gate would over-
+constrain the autonomy that's the point of a subagent. A **typed iterator/flow
+primitive does not exist anywhere** in the ecosystem (community or the official
+SDK); the official strategy is explicit — _a workflow is a JavaScript script you
+write; the plan lives in code, agents do the thinking._ Even a typed
+**handoff/`Agent(x,y)`** field is only weakly supported: delegation graphs are
+linear or star and usually decided dynamically by the model, so prose + the
+`Task`/`Agent` allowlist already covers them — keep handoff resolution on the
+_maybe_ list, not the build list. Real orchestration flow lives in
+commands+hooks+state, a separate compile target. Output schemas are declared (as
+prose templates) in ~0–32% depending on collection — also a _maybe_, not now.
+
+Confidence ≈90%. Caveats: tool-declaration rate swings hard by ecosystem
+(wshobson specialists inherit-all = footgun; community collections declared
+`tools:` ~100%), so the omitted-`tools` warning matters but isn't universal; the
+orchestrator slice is the thinnest — re-survey if/when the handoff field is built.
+If 5+ agents ever need real flow, that's an `OrchestrationSpec`, not a retrofit of
+`AgentSpec`.
+
 ## Status & roadmap
 
 **Shipped (the foundation):** `agent()` builder + `compileAgent` — frontmatter
