@@ -22,6 +22,8 @@ import {
 } from "./harness-test.js";
 import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
+import type { OutputContract } from "./spec.js";
+import { parseAgentResult, type ParsedAgentResult } from "./agent-result.js";
 import { compareArms } from "./stats.js";
 
 // Re-export the significance primitives so the whole eval-analysis surface lives
@@ -86,6 +88,59 @@ export function assertHookAllowed(r: HookRunResult): void {
     fail(
       `expected the hook to allow, but it blocked (exit ${String(r.exitCode)}, decision ${String(r.decision)})`,
     );
+  }
+}
+
+// --- subagent railway outcome (parse the worker's result block) ------------
+//
+// A subagent with a result() contract ends its turn with a vigiles:ok/err block.
+// These wrap parseAgentResult so a test can assert the worker's *outcome* the
+// same way it asserts a hook decision — the testing-framework payoff of the
+// railway contract: `assertAgentOk(r.output)` instead of substring-matching prose.
+
+/**
+ * Assert the worker's output is a success result, and return its `value`. With a
+ * `contract`, the value is validated against the success shape (a wrong/missing
+ * field fails the assertion). A malformed or error result throws.
+ */
+export function assertAgentOk(
+  output: string,
+  contract?: OutputContract,
+): Record<string, unknown> {
+  const r = parseAgentResult(output, contract);
+  if (r.kind === "ok") return r.value;
+  const why = r.kind === "err" ? "returned an error result" : r.reason;
+  return fail(`expected a success result from the subagent, but ${why}`);
+}
+
+/**
+ * Assert the worker's output is an error result, and return its `error`. The
+ * railway's error track — proves the worker reported failure with rich detail
+ * (not that it crashed or returned prose). A malformed or success result throws.
+ */
+export function assertAgentErr(
+  output: string,
+  contract?: OutputContract,
+): Record<string, unknown> {
+  const r = parseAgentResult(output, contract);
+  if (r.kind === "err") return r.error;
+  const why = r.kind === "ok" ? "returned a success result" : r.reason;
+  return fail(`expected an error result from the subagent, but ${why}`);
+}
+
+/**
+ * Assert the parsed result satisfies `predicate` — the general form, for
+ * checking rich detail (e.g. `(r) => r.kind === "ok" && r.value.files.length > 0`).
+ */
+export function assertAgentResult(
+  output: string,
+  predicate: (r: ParsedAgentResult) => boolean,
+  contract?: OutputContract,
+): void {
+  const r = parseAgentResult(output, contract);
+  if (!predicate(r)) {
+    const detail = r.kind === "malformed" ? ` (${r.reason})` : "";
+    fail(`subagent result did not satisfy the predicate: ${r.kind}${detail}`);
   }
 }
 
