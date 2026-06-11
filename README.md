@@ -313,7 +313,8 @@ assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
 ### Level 3 — does it change what Claude does? (real AI, occasional)
 
 `runEval` runs the **real** model N times with your change **on vs off** and
-reports the gap. Costs tokens, so you run it now and then — not on every save:
+reports the gap as **mean ± se** — so you can tell signal from noise instead of
+eyeballing two averages:
 
 ```typescript
 import { runEval, formatEvalReport } from "vigiles/eval";
@@ -325,9 +326,20 @@ const report = await runEval({
     marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
   }),
   trials: 6,
+  cache: "readwrite", // replay past runs — editing `measure` re-scores for free
 });
-console.log(formatEvalReport(report)); // off marked=0.00   on marked=0.50
+console.log(formatEvalReport(report));
+// off  marked=0.00   on  marked=0.50±0.20 pass^k=0   ($0.07 · 1.2s/run · 4.1k tok)
 ```
+
+`assertSignificant(report, { baseline: "off", arm: "on", metric: "marked" })`
+turns the gap into a CI gate — a Welch t-test decides whether it cleared the
+noise floor, **computed** from the arms' spread, not hand-fed. Runs go
+**concurrently**, track **cost / latency / tokens** (cap them with `maxCostUsd`),
+and the **record/replay cache** makes re-scoring after a `measure` edit free.
+
+Same tier, different question: **`measureTriggerRate`** measures how reliably a
+skill's _description fires_ across varied prompts — the #1 skill-authoring pain.
 
 ### Test your skills for real — and assert on what Claude _did_
 
