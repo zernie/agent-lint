@@ -1127,7 +1127,7 @@ export function compileRailway(
 ): CompileRailwayResult {
   const errors = validateRailway(rw, options.knownAgents);
   const specFile = options.specFile ?? `${rw.name}.railway.spec.ts`;
-  const content = renderRailwayMarkdown(rw);
+  const content = renderRailwayMarkdown(rw) + "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 
