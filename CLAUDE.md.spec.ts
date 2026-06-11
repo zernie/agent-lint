@@ -222,6 +222,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Testing the Claude Code harness — the three-tier design (unit runHook + deterministic runHarnessTest + real-model runEval), the assembled-machine plugin loader, and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, wshobson agents/skills)",
     "research/eval-api-landscape.md":
       "Eval-API landscape: the LLM/agent eval field (promptfoo, DeepEval, Braintrust, Inspect, LangSmith, OpenAI Evals) summarized then scored against our eval API — strengths (harness A/B arms, pass^k, se/std, unified Trace predicates), gaps (cost/concurrency/caching, significance testing, regression gating), and the B→A→C roadmap (defer D)",
+    "research/promptfoo-deep-dive.md":
+      "promptfoo deep dive: what it is in 2026 (eval + red-team + guardrails + agent-skills), the agentic update that makes the old scorecard stale (Tier 0/1/2 SDK providers incl. anthropic:claude-agent-sdk, trajectory:* + cost/latency assertions), the one axis that still separates us (harness-arm A/B loaded as it ships + the two sub-model tiers + significance/pass^k), and the recommendation (interop bridge via ProviderFunction/AgentRunner, lead with the cheaper tiers + regression gating, ship a vigiles Agent Skill, correct the stale claims)",
     "research/skill-authoring-pains.md":
       "Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references",
     "docs/harness-testing.md":

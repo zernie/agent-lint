@@ -29,11 +29,19 @@ matter for harness evals.
 
 ### promptfoo
 
-Config-first (YAML) prompt/provider matrix runner with a CLI and local web view.
-Strong: zero-SaaS, CI-friendly, concurrency, result caching, assertion library
-(`contains`, `llm-rubric`, `javascript`), red-team add-on. Weak for us: the matrix
-is prompts×providers, not _harness arms_; no statistical spread/significance; no
-agent-trajectory/tool assertions; reliability is pass-rate, not pass^k.
+Config-first (YAML) runner with a CLI and local web view. Strong: zero-SaaS,
+CI-friendly, concurrency, result caching, a deep assertion library
+(`contains`, `llm-rubric`, `g-eval`, ROUGE/BLEU, schema, `javascript`/`python`),
+a first-class **red-team** pillar, and — the part that dates the rest of this
+section — **agentic support**: tiered SDK providers (`anthropic:claude-agent-sdk`,
+`openai:codex-sdk`, a Tier-0 baseline LLM control), **`trajectory:*` assertions**
+(e.g. `trajectory:step-count` over a command pattern), and `cost`/`latency`
+assertions. Weak for us — and this is now the _only_ gap, narrower than the rest of
+this doc implies: the matrix is prompts×**providers**, not _harness arms loaded as
+they ship_ (it configures the SDK from YAML, not a real `plugin.json`/`hooks.json`/
+`settings.json`/`CLAUDE.md`); it has no sub-model tiers (no `runHook`/mock-model
+analog — every run is a real-model call); and reliability is pass-rate with no
+se/significance/pass^k. See `research/promptfoo-deep-dive.md` for the full zoom-in.
 
 ### DeepEval
 
@@ -84,20 +92,20 @@ Out of scope: explicitly the thing vigiles does _not_ do.
 
 ## Scorecard
 
-| Dimension                                                 | vigiles                | promptfoo        | DeepEval   | Braintrust | Inspect          |
-| --------------------------------------------------------- | ---------------------- | ---------------- | ---------- | ---------- | ---------------- |
-| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix) | ✗          | partial    | partial          |
-| pass^k reliability (τ-bench)                              | **✓**                  | ✗                | ✗          | ✗          | partial (epochs) |
-| Statistical spread (std/se)                               | **✓**                  | ✗                | ✗          | partial    | ✓ (stderr)       |
-| Significance test (CI / p-value)                          | ✗                      | ✗                | ✗          | partial    | partial          |
-| Tool / trajectory assertions                              | **✓ strong**           | partial          | ✓          | ✓          | ✓                |
-| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                | **✓✓**     | ✓          | ✓                |
-| Dataset / scenario primitive                              | ✗                      | ✓✓               | ✓✓         | ✓✓         | ✓✓               |
-| Cost / latency / token metrics                            | ✗                      | ✓                | ✓          | ✓          | ✓                |
-| Concurrency                                               | ✗ (sequential + sleep) | ✓                | ✓          | ✓          | ✓                |
-| Caching / record-replay                                   | ✗ (eval tier)          | ✓                | partial    | ✓          | partial          |
-| Persisted reports / regression gating                     | ✗ (console string)     | ✓                | partial    | ✓✓         | ✓                |
-| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)          | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+| Dimension                                                 | vigiles                | promptfoo          | DeepEval   | Braintrust | Inspect          |
+| --------------------------------------------------------- | ---------------------- | ------------------ | ---------- | ---------- | ---------------- |
+| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix)   | ✗          | partial    | partial          |
+| pass^k reliability (τ-bench)                              | **✓**                  | ✗                  | ✗          | ✗          | partial (epochs) |
+| Statistical spread (std/se)                               | **✓**                  | ✗                  | ✗          | partial    | ✓ (stderr)       |
+| Significance test (CI / p-value)                          | ✗                      | ✗                  | ✗          | partial    | partial          |
+| Tool / trajectory assertions                              | **✓ strong**           | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
+| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                  | **✓✓**     | ✓          | ✓                |
+| Dataset / scenario primitive                              | ✗                      | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
+| Cost / latency / token metrics                            | ✗                      | ✓                  | ✓          | ✓          | ✓                |
+| Concurrency                                               | ✗ (sequential + sleep) | ✓                  | ✓          | ✓          | ✓                |
+| Caching / record-replay                                   | ✗ (eval tier)          | ✓                  | partial    | ✓          | partial          |
+| Persisted reports / regression gating                     | ✗ (console string)     | ✓                  | partial    | ✓✓         | ✓                |
+| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
 
 (Profiles reflect the ecosystem as understood mid-2026; treat specific competitor
 features as directional, not contractual. The `vigiles` column is the state **at
