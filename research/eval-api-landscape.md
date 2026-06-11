@@ -169,12 +169,39 @@ Four coherent theses of "world-class," each a different bet:
 - **D — Scenarios & scorers.** A dataset/scenario primitive unifying `runEval` /
   `measureTriggerRate`, plus a reusable scorer library (trajectory-vs-reference,
   multi-criteria/pairwise judge). Parity with DeepEval/promptfoo; biggest refactor.
+- **E — promptfoo interop (distribution, not a feature race).** The adoption bet:
+  do what they can't (harness-arm A/B loaded as it ships + the no-model/no-key
+  cheaper tiers + significance/pass^k) but ship _inside_ their ecosystem so we ride
+  their reach. Two thin bridges over seams both sides already expose:
+  - **vigiles-as-a-promptfoo-provider** — a `file://vigiles-provider.js`
+    (`ProviderFunction → ProviderResponse`) that takes a harness _arm_ (a plugin
+    path / settings), resolves it via `src/plugin-loader.ts`, drives the real
+    `claude` CLI, and returns the trajectory + tool calls + cost. A user then A/Bs
+    the harness (`vigiles:plugin=./x` vs `off`) **inside** promptfoo and gets their
+    dataset/scenario primitive, assertion library, red-team, web UI, and JUnit/CI
+    output for free — i.e. it borrows most of D instead of building it.
+  - **promptfoo-as-an-`AgentRunner`** — wrap a promptfoo invocation as the
+    injectable `AgentRunner` (`src/eval.ts`) so a vigiles eval can reuse their
+    providers/assertions under _our_ statistics + pass^k.
+  - **a vigiles Agent Skill** — copy promptfoo's own move (a Claude Code
+    marketplace plugin that teaches an agent to author the configs); aimed at the
+    funnel in `research/distribution-strategy.md`.
+    See `research/promptfoo-deep-dive.md` for the full case.
 
 **Decision (2026-06-10): pursue B → A → C; defer D.** B builds the seed/cache
 plumbing A's paired design and C's iteration lean on; C's regression gate _is_ A's
 significance machinery pointed at a committed baseline. D is the largest surface
 change and is deferred unless DeepEval-parity becomes an explicit goal. First
 reviewable unit: **B1 (cost capture) + B2 (record/replay cache)**.
+
+**Amendment (2026-06-11): add E (promptfoo interop) as the distribution track.**
+With B/A/C shipped (see Status) the binding constraint is adoption, not
+capability — and promptfoo has since moved into agentic territory (Tier 0/1/2 SDK
+providers, `trajectory:*` assertions), so a head-to-head feature race on datasets
+(D) is the wrong fight. E rides their reach instead: keep the moat (what they
+structurally can't do), expose it through their provider/runner seams. E partly
+substitutes for D — the dataset/scenario/red-team/UI surface comes from promptfoo
+rather than from us building it.
 
 Discipline carried from the rest of the repo: every pure module
 (`stats.ts`, cache key/restore, usage parse, JUnit render) is fully unit-tested;
@@ -217,3 +244,9 @@ holds.
   available, to confirm the verdict matches what we concluded by hand.
 - **Next:** Phase C (regression gating) — JSON/JUnit output + a committed baseline
   whose gate is a _significant negative delta_ (reuses `compareArms`).
+- **On the roadmap — Phase E (promptfoo interop / distribution).** The
+  adoption-track amendment above: a vigiles promptfoo-provider + a
+  promptfoo-as-`AgentRunner` bridge + a vigiles Agent Skill. Do what they can't,
+  ship inside their reach. Scoped in `research/promptfoo-deep-dive.md`; not yet
+  started. Sequence it after C (the JSON/JUnit emitter C builds is also what the
+  provider bridge serializes), or pull forward if adoption is the live priority.
