@@ -18,6 +18,9 @@ import {
   assertServedTurns,
   assertHookBlocked,
   assertHookAllowed,
+  assertAgentOk,
+  assertAgentErr,
+  assertAgentResult,
   usedTool,
   toolCount,
   skillResolved,
@@ -38,6 +41,7 @@ import {
   assertToolCalls,
   vigilesMatchers,
 } from "./harness-assert.js";
+import { result } from "./spec.js";
 import type { EvalReport } from "./eval.js";
 import type { HarnessTestResult, HookFire } from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
@@ -274,6 +278,35 @@ test("assertHookBlocked / assertHookAllowed (run-hook results)", () => {
   assert.throws(() => {
     assertHookAllowed(fakeHook(true));
   });
+});
+
+test("assertAgentOk / assertAgentErr / assertAgentResult (subagent outcomes)", () => {
+  const ok = '```vigiles:ok\n{ "summary": "done" }\n```';
+  const err = '```vigiles:err\n{ "reason": "boom" }\n```';
+  const c = result({ summary: "string" }, { reason: "string" });
+
+  // assertAgentOk: returns the value on success; throws on err / malformed
+  assert.deepEqual(assertAgentOk(ok), { summary: "done" });
+  assert.deepEqual(assertAgentOk(ok, c), { summary: "done" });
+  assert.throws(() => assertAgentOk(err), /returned an error result/);
+  assert.throws(() => assertAgentOk("no block here"), /no vigiles/);
+
+  // assertAgentErr: returns the error on failure; throws on ok / malformed
+  assert.deepEqual(assertAgentErr(err), { reason: "boom" });
+  assert.throws(() => assertAgentErr(ok), /returned a success result/);
+  assert.throws(() => assertAgentErr("nope"), /expected an error result/);
+
+  // assertAgentResult: general predicate
+  assert.doesNotThrow(() => {
+    assertAgentResult(ok, (r) => r.kind === "ok" && r.value.summary === "done");
+  });
+  assert.throws(() => {
+    assertAgentResult(ok, (r) => r.kind === "err");
+  }, /did not satisfy the predicate: ok/);
+  // malformed path includes the reason in the message
+  assert.throws(() => {
+    assertAgentResult("plain", (r) => r.kind === "ok");
+  }, /malformed \(no vigiles/);
 });
 
 test("vigilesMatchers.toHaveCreated reports pass/fail", () => {

@@ -20,6 +20,10 @@ import type {
   Gate,
   Rule,
   InstructionFragment,
+  OutputContract,
+  OutputFieldType,
+  Railway,
+  RailwayStep,
 } from "./spec.js";
 
 import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
@@ -87,7 +91,8 @@ export interface CompileError {
     | "section-has-header"
     | "reserved-section-key"
     | "spec-name-mismatch"
-    | "unknown-tool";
+    | "unknown-tool"
+    | "invalid-railway";
   message: string;
   path?: string;
 }
@@ -923,6 +928,40 @@ function renderAgentSections(
   return { lines, errors };
 }
 
+/** Render a result-contract track shape as a compact `{ "f": type, … }` line. */
+function renderShape(shape: Readonly<Record<string, OutputFieldType>>): string {
+  const fields = Object.entries(shape)
+    .map(([k, t]) => `"${k}": ${t}`)
+    .join(", ");
+  return fields ? `{ ${fields} }` : "{}";
+}
+
+/**
+ * Render the subagent's typed result contract — the `## Output contract` section
+ * that turns a flat worker into a railway step: it must end its turn with a
+ * `vigiles:ok` / `vigiles:err` block matching one of these shapes, so its
+ * outcome is parseable (`parseAgentResult`) and testable (`assertAgentOk`).
+ */
+function renderOutputContract(contract: OutputContract): string {
+  return [
+    "## Output contract",
+    "",
+    "Finish your turn with exactly one fenced block — success or error — matching one of these shapes.",
+    "",
+    "On success:",
+    "",
+    "```vigiles:ok",
+    renderShape(contract.ok),
+    "```",
+    "",
+    "On error:",
+    "",
+    "```vigiles:err",
+    renderShape(contract.err),
+    "```",
+  ].join("\n");
+}
+
 /** Render the rules a subagent must follow as a `## Rules` section. */
 function renderAgentRules(rules: Record<string, Rule>): string {
   const parts = ["## Rules", ""];
@@ -977,10 +1016,118 @@ export function compileAgent(
   if (spec.rules && Object.keys(spec.rules).length > 0) {
     sections.push(renderAgentRules(spec.rules));
   }
+  if (spec.output) sections.push(renderOutputContract(spec.output));
   const body = sections.join("\n\n");
   errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
 
   const content = renderAgentFrontmatter(spec) + "\n\n" + body.trim() + "\n";
+  return { markdown: addHash(content, specFile), errors };
+}
+
+// ---------------------------------------------------------------------------
+// Compile a railway → an orchestrator command
+//
+// A railway composes flat subagents on a success/error track. It compiles to an
+// orchestrator command the lead agent reads — NOT a runtime engine (vigiles
+// verifies + emits; the agent executes; the per-step rails enforce). Every
+// delegate target is resolved against the known agent set (stale-ref), the
+// step list must be non-empty, and recovery must be bounded — the finite,
+// sub-Turing guarantees that make the whole flow checkable.
+// ---------------------------------------------------------------------------
+
+export interface CompileRailwayOptions {
+  /** Names of compiled agents, to resolve `delegate` targets. Skipped if omitted. */
+  knownAgents?: readonly string[];
+  specFile?: string;
+}
+
+export interface CompileRailwayResult {
+  markdown: string;
+  errors: CompileError[];
+}
+
+/** Verify a railway: non-empty, bounded recovery, every delegate target real. */
+export function validateRailway(
+  rw: Railway,
+  knownAgents?: readonly string[],
+): CompileError[] {
+  const errors: CompileError[] = [];
+  if (rw.steps.length === 0) {
+    errors.push({
+      type: "invalid-railway",
+      message: `Railway "${rw.name}" has no steps.`,
+    });
+  }
+  if (rw.recover && rw.recover.max < 1) {
+    errors.push({
+      type: "invalid-railway",
+      message: `Railway "${rw.name}" recover.max must be ≥ 1 (got ${String(rw.recover.max)}).`,
+    });
+  }
+  if (knownAgents) {
+    const known = new Set(knownAgents);
+    const refs: RailwayStep[] = [...rw.steps];
+    if (rw.onError) refs.push(rw.onError);
+    if (rw.recover) refs.push(rw.recover.step);
+    for (const s of refs) {
+      if (!known.has(s.agent)) {
+        errors.push({
+          type: "stale-ref",
+          message: `Railway "${rw.name}" delegates to unknown agent "${s.agent}".`,
+          path: s.agent,
+        });
+      }
+    }
+  }
+  return errors;
+}
+
+/** Render the orchestrator command markdown for a railway. */
+function renderRailwayMarkdown(rw: Railway): string {
+  const lines = [
+    `# Railway: ${rw.name}`,
+    "",
+    "Dispatch these subagents on the **success track**, in order. Each returns a " +
+      "result block (`vigiles:ok` / `vigiles:err`). If a step returns an error, " +
+      "stop the success track and run the error handler with that error payload.",
+    "",
+    "## Success track",
+    "",
+  ];
+  rw.steps.forEach((s, i) => {
+    const task = s.task ? ` — ${s.task}` : "";
+    lines.push(`${String(i + 1)}. **${s.agent}**${task}`);
+  });
+  if (rw.recover) {
+    lines.push(
+      "",
+      "## Recovery",
+      "",
+      `If a step errors, retry it via **${rw.recover.step.agent}** up to ${String(rw.recover.max)}× before falling to the error track.`,
+    );
+  }
+  if (rw.onError) {
+    lines.push(
+      "",
+      "## On error",
+      "",
+      `Run **${rw.onError.agent}** with the failing step's error payload.`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Compile a railway into an orchestrator command markdown (with integrity hash),
+ * resolving every delegate target against `knownAgents` when provided.
+ */
+export function compileRailway(
+  rw: Railway,
+  options: CompileRailwayOptions = {},
+): CompileRailwayResult {
+  const errors = validateRailway(rw, options.knownAgents);
+  const specFile = options.specFile ?? `${rw.name}.railway.spec.ts`;
+  const content = renderRailwayMarkdown(rw);
   return { markdown: addHash(content, specFile), errors };
 }
 

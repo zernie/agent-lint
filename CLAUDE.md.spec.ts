@@ -37,9 +37,9 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
 
   keyFiles: {
     "src/spec.ts":
-      "Type system and builder functions (enforce, guidance, claude, skill, agent, file, cmd, ref)",
+      "Type system and builder functions (enforce, guidance, claude, skill, agent, file, cmd, ref; result/railway/delegate for railway-oriented subagents)",
     "src/compile.ts":
-      "Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks)",
+      "Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks + result-contract Output section) + compileRailway/validateRailway (orchestrator command over flat workers; delegate-target resolution + bounded recovery)",
     "src/linters.ts":
       "Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)",
     "src/cedar.test.ts":
@@ -67,6 +67,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Agent PreToolUse tool-contract rail — the differentiator that closes the declared-vs-enforced gap (#54898): tools: is documentation, so a PreToolUse hook (vigiles agent-hook) blocks any tool outside the active subagent's contract. parseAgentTools reads the compiled .md frontmatter (the single source of truth the hook enforces), decidePreToolUse is the pure allow/deny, and .vigiles/active-agent.json tracks the dispatched agent — mirrors the skill Stop-hook (src/skill-runtime.ts)",
     "src/agent-runtime.test.ts":
       "Agent-runtime test suite: pure parse/decide logic, active-agent round-trip, hook ⇄ allowlist agree (the declared contract IS the enforced rail), the real built CLI hook driven deterministically via runHook (the unit tier reaches PreToolUse where a live tool call is flaky), and grounding on the REAL vendored wshobson ui-visual-validator (ships no tools: line → inherits all; the spec adds the rail it omits)",
+    "src/agent-result.ts":
+      "Railway result parser: a subagent with a result() contract ends its turn with a vigiles:ok/err block; parseAgentResult turns that text into a discriminated outcome (ok | err | malformed) and validates it against the contract shape. Pure text→Result<S,E>, the primitive the orchestrator + the assertAgentOk/Err/Result test helpers both reuse",
+    "src/agent-result.test.ts":
+      "Railway result-parser test suite: ok/err/malformed tracks, last-block-wins, JSON + shape validation across every field type (string/number/boolean/string[]), both success and error tracks",
+    "src/railway.test.ts":
+      "Railway surface test suite: result() Output-contract rendering in compileAgent, delegate()/railway() builders, compileRailway orchestrator output, validateRailway static checks (unknown delegate target, empty railway, bounded recovery — the sub-Turing guarantees)",
     "src/validate.test.ts": "Validation test suite (node:test)",
     "src/cli.test.ts": "CLI integration + E2E test suite (node:test)",
     "src/integrity.ts":
@@ -130,7 +136,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/vendor.test.ts":
       "Conformance suite over REAL vendored plugins under examples/harness/vendor/: model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor",
     "src/harness-assert.ts":
-      "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed (node:test/any runner), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend",
+      "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed and assertAgentOk/Err/Result (test a subagent's railway outcome via parseAgentResult — the testing-framework payoff of the result contract), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend",
     "src/harness-assert.test.ts":
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
     "src/judge.ts":

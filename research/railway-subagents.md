@@ -138,7 +138,32 @@ the shared rail both (2) and (3) emit — is **already shipped**
 (`src/agent-runtime.ts`, `vigiles agent-hook`; see `research/subagent-compilation.md`),
 so a `workflow()` only needs to point per-delegate rails at it.
 
-## Status / open questions
+## Status: prototype shipped (Option 2, the static half)
+
+The typed `workflow()` direction now has a concrete prototype — railway-oriented
+programming with a subagent as the step:
+
+- **`result(ok, err)`** (`src/spec.ts`) — a subagent's typed Result contract,
+  rich on both tracks; compiles into a `## Output contract` section telling the
+  worker to end with a `vigiles:ok` / `vigiles:err` block.
+- **`parseAgentResult`** (`src/agent-result.ts`) — pure `text → Result<S,E>` (ok |
+  err | malformed), validated against the contract shape. The shared primitive.
+- **`railway({ steps, onError, recover })` + `delegate()`** (`src/spec.ts`) — the
+  sub-Turing composer: a finite step list + bounded recovery, **no loop
+  combinator**, so termination is structural. **`compileRailway`/`validateRailway`**
+  (`src/compile.ts`) emit the orchestrator command and resolve every delegate
+  target against the known agent set (stale-ref), reject an empty railway, and
+  require `recover.max ≥ 1`.
+- **`assertAgentOk` / `assertAgentErr` / `assertAgentResult`** (`src/harness-assert.ts`)
+  — the testing-framework payoff: assert a subagent's outcome the way you assert a
+  hook decision, reusing `parseAgentResult`.
+
+What's deliberately deferred (the runtime half): vigiles emits + verifies, it does
+not _drive_ the railway (that'd be Option 3, the engine). And the runtime
+enforcement of "did the worker actually emit a valid result block?" awaits
+confirmation of what a `SubagentStop` hook can see — see the open question below.
+
+## Open questions
 
 - **Verification (partial — and a product caveat).** Plan-as-code is **confirmed
   for Claude Code**: earlier in-session research found `code.claude.com/docs/en/
