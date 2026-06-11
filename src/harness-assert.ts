@@ -22,6 +22,7 @@ import {
 } from "./harness-test.js";
 import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult } from "./run-hook.js";
+import { compareArms } from "./stats.js";
 
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.
@@ -434,14 +435,73 @@ export function improvement(
 }
 
 /**
- * Assert `arm` beats `baseline` on `metric` by more than `by`. With `by` left at
- * 0 this just asserts a positive gap; pass the combined se to demand the gap
- * clear the noise floor.
+ * Did `arm` *significantly* beat `baseline` on `metric` — a positive gap whose
+ * two-sided Welch t-test p-value is below `alpha` (default 0.05)? The grounded
+ * upgrade over `improvement`: the noise floor is computed from the arms' spread,
+ * not hand-fed. False when either arm/metric is missing. See `src/stats.ts`.
+ */
+// eslint-disable-next-line max-params -- positional predicate mirrors `improvement` + alpha
+export function significantlyBeats(
+  report: EvalReport,
+  baseline: string,
+  arm: string,
+  metric: string,
+  alpha = 0.05,
+): boolean {
+  const c = compareArms(report, baseline, arm, metric, alpha);
+  return c !== null && c.delta > 0 && c.significant;
+}
+
+/**
+ * Assert `arm` significantly beats `baseline` on `metric` (positive gap, p < α).
+ * The statistical gate for a non-deterministic A/B — "the gap clears the noise",
+ * with the noise floor computed, not supplied. The honest version of
+ * `assertImproves(..., { by: se })`.
+ */
+export function assertSignificant(
+  report: EvalReport,
+  opts: { baseline: string; arm: string; metric: string; alpha?: number },
+): void {
+  const c = compareArms(
+    report,
+    opts.baseline,
+    opts.arm,
+    opts.metric,
+    opts.alpha,
+  );
+  if (c === null) {
+    fail(
+      `no data to compare ${opts.arm} vs ${opts.baseline} on ${opts.metric}`,
+    );
+  }
+  const alpha = opts.alpha ?? 0.05;
+  if (!(c.delta > 0 && c.significant)) {
+    fail(
+      `expected ${opts.arm} to significantly beat ${opts.baseline} on ${opts.metric} (α=${String(alpha)}); Δ=${c.delta.toFixed(3)}, p=${c.pValue.toFixed(3)}`,
+    );
+  }
+}
+
+/**
+ * Assert `arm` beats `baseline` on `metric`. By default just a positive gap > `by`
+ * (pass the combined se to clear the noise floor by hand). Pass `{ significant:
+ * true }` to demand a Welch t-test at `alpha` instead — the computed noise floor.
  */
 export function assertImproves(
   report: EvalReport,
-  opts: { baseline: string; arm: string; metric: string; by?: number },
+  opts: {
+    baseline: string;
+    arm: string;
+    metric: string;
+    by?: number;
+    significant?: boolean;
+    alpha?: number;
+  },
 ): void {
+  if (opts.significant === true) {
+    assertSignificant(report, opts);
+    return;
+  }
   const by = opts.by ?? 0;
   const delta = improvement(report, opts.baseline, opts.arm, opts.metric);
   if (delta <= by) {
