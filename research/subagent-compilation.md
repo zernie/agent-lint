@@ -198,7 +198,11 @@ hash, tool-contract verification (built-in set + `mcp__server__tool` pattern +
 
 1. **Generated `PreToolUse` enforcement hook** — compile the `tools` contract into
    a hook that blocks out-of-contract tools, and assert hook ⇄ allowlist agree.
-   _The differentiator; the deterministic rail; answers #54898._
+   _The differentiator; the deterministic rail; answers #54898._ Not greenfield:
+   vigiles already emits an enforcement hook — the `vigiles:result` mark compiles
+   to a `Stop` hook (`skill-hook`) that gates skill completion (see
+   `test/e2e/run.sh`, `research/runtime-enforcement.md`). The agent rail is the
+   same emit-a-hook pattern pointed at `PreToolUse` — mirror it.
 2. **`disallowedTools` + omitted-`tools` warning** — surface the inherit-everything
    footgun (needs a warnings channel on `CompileAgentResult`).
 3. **Resolve `Agent(x,y)` handoffs + `skills:`/`mcpServers:` refs** against compiled
