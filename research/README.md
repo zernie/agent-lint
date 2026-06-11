@@ -26,6 +26,11 @@ how-to docs live in [`../docs/`](../docs/README.md).)
 - [`benchmarks-runtime-gates.md`](benchmarks-runtime-gates.md) — the evals run in anger: runtime gates are a no-op/net-negative; verifying the map beats policing the route.
 - [`testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md) — prior art on testing non-deterministic AI/agent tools (DeepEval, Braintrust, τ-bench, pass^k, procedure-aware eval) and the `Trace` + predicate model it implies.
 
+## Subagents & orchestration
+
+- [`subagent-compilation.md`](subagent-compilation.md) — compiling typed subagent definitions (`agent()` → `agents/<name>.md`); the declared-vs-enforced tool gap (`tools:` is documentation, a `PreToolUse` hook is the rail); the empirical "no iterator in a subagent" survey (~100 agents).
+- [`railway-subagents.md`](railway-subagents.md) — **railway-style orchestration over flat subagents.** The direct, differentiated answer to Anthropic's **ultraplan / dynamic-workflows** (plan-as-code): be the _typed, verified, compiled_ counterpart to its ephemeral generated script. Includes the Temporal analogy and the marks / `workflow()`-spec / deterministic-driver options. **Closest external thing to our direction — read for inspiration.**
+
 ## Skills
 
 - [`skill-authoring-pains.md`](skill-authoring-pains.md) — the documented real-world pains (triggering, silent frontmatter failures, refs rot) + the doc-vs-procedure split.

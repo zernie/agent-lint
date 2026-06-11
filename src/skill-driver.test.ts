@@ -3,7 +3,7 @@
  * short-circuit — the control flow the declarative steps form can't express.
  * The model is a scripted mock; gates use `true`/`false` for determinism.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

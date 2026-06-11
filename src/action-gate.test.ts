@@ -2,7 +2,7 @@
  * Tests for action gates: deterministic checks bound to a tool action type,
  * fired regardless of plan order (the dynamic-workflow reframe).
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { evaluateAction, type ActionGate } from "./action-gate.js";

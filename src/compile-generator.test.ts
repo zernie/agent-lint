@@ -3,7 +3,7 @@
  * rendering steps / gates / branches / loops to markdown, plus verifying the
  * gate references it carries.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import {

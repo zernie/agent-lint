@@ -3,7 +3,7 @@
  *
  * These test the full flow: CLI → init/compile/audit → filesystem output.
  */
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -123,6 +123,55 @@ describe("CLI: vigiles compile", () => {
     const { stdout, exitCode } = run("compile CLAUDE.md.spec.ts", tmpDir);
     assert.equal(exitCode, 0, stdout);
     assert.ok(stdout.includes("CLAUDE.md.spec.ts"));
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should compile agent + railway specs and resolve delegate targets", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-compile-railway-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    writeFileSync(
+      join(tmpDir, "worker.md.spec.ts"),
+      `import { agent, result } from "${specSrc}";\n` +
+        `export default agent({ name: "worker", description: "d", tools: ["Read"], body: "b", output: result({ summary: "string" }, { reason: "string" }) });\n`,
+    );
+    writeFileSync(
+      join(tmpDir, "flow.md.spec.ts"),
+      `import { railway, delegate } from "${specSrc}";\n` +
+        `export default railway({ name: "flow", steps: [delegate("worker")] });\n`,
+    );
+    const { stdout, exitCode } = run(
+      "compile worker.md.spec.ts flow.md.spec.ts",
+      tmpDir,
+    );
+    assert.equal(exitCode, 0, stdout);
+    const agentMd = readFileSync(join(tmpDir, "worker.md"), "utf8");
+    assert.ok(agentMd.includes("## Output contract"), agentMd);
+    assert.ok(agentMd.includes("```vigiles:ok"), agentMd);
+    const flowMd = readFileSync(join(tmpDir, "flow.md"), "utf8");
+    assert.ok(flowMd.includes("# Railway: flow"), flowMd);
+    assert.ok(flowMd.includes("**worker**"), flowMd);
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("should fail when a railway delegates to an unknown agent", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-compile-railway-bad-"));
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
+    );
+    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    writeFileSync(
+      join(tmpDir, "flow.md.spec.ts"),
+      `import { railway, delegate } from "${specSrc}";\n` +
+        `export default railway({ name: "flow", steps: [delegate("ghost")] });\n`,
+    );
+    const { stdout, exitCode } = run("compile flow.md.spec.ts", tmpDir);
+    assert.equal(exitCode, 1, stdout);
+    assert.ok(stdout.includes("unknown agent"), stdout);
     rmSync(tmpDir, { recursive: true, force: true });
   });
 

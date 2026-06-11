@@ -163,5 +163,7 @@ and the agents/commands surfaces.
   surface (unit / integration / e2e + sandboxing), shipped vs. should-build.
 - `research/benchmarks-runtime-gates.md` — evals in anger (the four findings).
 - `research/reference-verification-limits.md` — the other pillar and its ceiling.
+- `research/eval-api-landscape.md` — the eval-API field summarized and scored
+  against our eval API, with the B→A→C roadmap to make it world-class.
 - `docs/harness-testing.md` / `docs/testing-matrix.md` — the user-facing guide and
   the use-case × tier matrix.

@@ -14,14 +14,19 @@ import { fileDefinesSymbol, langForFile } from "./symbols.js";
 import type {
   ClaudeSpec,
   SkillSpec,
+  AgentSpec,
   SkillInput,
   SkillStep,
   Gate,
   Rule,
   InstructionFragment,
+  OutputContract,
+  OutputFieldType,
+  Railway,
+  RailwayStep,
 } from "./spec.js";
 
-import { checkLinterRule, extractLinterName } from "./linters.js";
+import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
 import type { LinterCheckResult } from "./linters.js";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +90,9 @@ export interface CompileError {
     | "section-too-long"
     | "section-has-header"
     | "reserved-section-key"
-    | "spec-name-mismatch";
+    | "spec-name-mismatch"
+    | "unknown-tool"
+    | "invalid-railway";
   message: string;
   path?: string;
 }
@@ -806,6 +813,325 @@ export function compileSkill(
 }
 
 // ---------------------------------------------------------------------------
+// Compile a subagent spec → agents/<name>.md
+// ---------------------------------------------------------------------------
+
+// The tool contract a subagent may declare — the rails it runs on. Anything
+// else must be an MCP tool (mcp__server__tool), else it's a typo / nonexistent
+// tool the dispatched worker could never call.
+const KNOWN_AGENT_TOOLS = [
+  "Read",
+  "Write",
+  "Edit",
+  "Bash",
+  "Grep",
+  "Glob",
+  "WebSearch",
+  "WebFetch",
+  "NotebookEdit",
+  "TodoWrite",
+  "Task",
+  "Skill",
+] as const;
+
+const MCP_TOOL_RE = /^mcp__[a-z0-9_-]+__[a-z0-9_-]+$/i;
+
+// Tools the platform never exposes to a subagent, whatever the list says — so a
+// subagent listing one is a guaranteed-dead reference only a compiler catches.
+const NEVER_AVAILABLE_TOOLS = new Set([
+  "Agent",
+  "AskUserQuestion",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "ScheduleWakeup",
+  "WaitForMcpServers",
+]);
+
+/** Closest known tool by edit distance (≤ 3), for a "did you mean" hint. */
+function closestTool(tool: string): string | null {
+  let best: string | null = null;
+  let bestDistance = Infinity;
+  for (const known of KNOWN_AGENT_TOOLS) {
+    const d = editDistance(tool.toLowerCase(), known.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = known;
+    }
+  }
+  return bestDistance <= 3 ? best : null;
+}
+
+/** Verify a subagent's allowed-tools contract — the rails are real tools. */
+function validateAgentTools(tools: readonly string[]): CompileError[] {
+  const errors: CompileError[] = [];
+  for (const tool of tools) {
+    if (NEVER_AVAILABLE_TOOLS.has(tool)) {
+      errors.push({
+        type: "unknown-tool",
+        message: `Tool "${tool}" is never available to a subagent — remove it from the tools list.`,
+      });
+      continue;
+    }
+    if ((KNOWN_AGENT_TOOLS as readonly string[]).includes(tool)) continue;
+    if (MCP_TOOL_RE.test(tool)) continue;
+    const near = closestTool(tool);
+    const hint = near ? ` Did you mean "${near}"?` : "";
+    errors.push({
+      type: "unknown-tool",
+      message: `Unknown tool "${tool}" in agent tools — use a built-in tool (${KNOWN_AGENT_TOOLS.join(", ")}) or an MCP tool (mcp__server__tool).${hint}`,
+    });
+  }
+  return errors;
+}
+
+/** Build the subagent YAML frontmatter (name / description / model / tools). */
+function renderAgentFrontmatter(spec: AgentSpec): string {
+  const fm = [
+    "---",
+    "",
+    `name: ${spec.name}`,
+    `description: ${spec.description}`,
+  ];
+  if (spec.model !== undefined) fm.push(`model: ${spec.model}`);
+  if (spec.tools && spec.tools.length > 0) {
+    fm.push(`tools: ${spec.tools.join(", ")}`);
+  }
+  fm.push("", "---");
+  return fm.join("\n");
+}
+
+/** Render the subagent's named `##` system-prompt sections (verified like CLAUDE.md). */
+function renderAgentSections(
+  sections: Record<string, string | InstructionFragment[]>,
+  basePath: string,
+): SectionResult {
+  const lines: string[] = [];
+  const errors: CompileError[] = [];
+  for (const [name, content] of Object.entries(sections)) {
+    if (name.toLowerCase() === "rules") {
+      errors.push({
+        type: "reserved-section-key",
+        message: `Section key "${name}" is reserved — use the \`rules\` field instead.`,
+      });
+    }
+    const heading = name.charAt(0).toUpperCase() + name.slice(1);
+    if (typeof content === "string") {
+      errors.push(...validateSectionContent(name, content));
+      lines.push(`## ${heading}\n\n${content.trim()}`);
+    } else {
+      errors.push(...validateRefs(content, basePath));
+      const rendered = content.map(renderFragment).join("");
+      errors.push(...validateSectionContent(name, rendered));
+      lines.push(`## ${heading}\n\n${rendered.trim()}`);
+    }
+  }
+  return { lines, errors };
+}
+
+/** Render a result-contract track shape as a compact `{ "f": type, … }` line. */
+function renderShape(shape: Readonly<Record<string, OutputFieldType>>): string {
+  const fields = Object.entries(shape)
+    .map(([k, t]) => `"${k}": ${t}`)
+    .join(", ");
+  return fields ? `{ ${fields} }` : "{}";
+}
+
+/**
+ * Render the subagent's typed result contract — the `## Output contract` section
+ * that turns a flat worker into a railway step: it must end its turn with a
+ * `vigiles:ok` / `vigiles:err` block matching one of these shapes, so its
+ * outcome is parseable (`parseAgentResult`) and testable (`assertAgentOk`).
+ */
+function renderOutputContract(contract: OutputContract): string {
+  return [
+    "## Output contract",
+    "",
+    "Finish your turn with exactly one fenced block — success or error — matching one of these shapes.",
+    "",
+    "On success:",
+    "",
+    "```vigiles:ok",
+    renderShape(contract.ok),
+    "```",
+    "",
+    "On error:",
+    "",
+    "```vigiles:err",
+    renderShape(contract.err),
+    "```",
+  ].join("\n");
+}
+
+/** Render the rules a subagent must follow as a `## Rules` section. */
+function renderAgentRules(rules: Record<string, Rule>): string {
+  const parts = ["## Rules", ""];
+  for (const [id, rule] of Object.entries(rules)) {
+    parts.push(compileRule(id, rule), "");
+  }
+  return parts.join("\n").trim();
+}
+
+export interface CompileAgentResult {
+  markdown: string;
+  errors: CompileError[];
+}
+
+/**
+ * Compile an AgentSpec into a subagent markdown file with YAML frontmatter.
+ * Verifies the tool contract and the body's references; the marks the body
+ * carries (`vigiles:symbol`, file/cmd refs) are the same ones `audit` re-checks.
+ */
+export function compileAgent(
+  spec: AgentSpec,
+  options: { basePath?: string; specFile?: string } = {},
+): CompileAgentResult {
+  const basePath = options.basePath ?? process.cwd();
+  const specFile = options.specFile ?? "agent.md.spec.ts";
+  const errors: CompileError[] = [];
+
+  if (!specFile.endsWith(".spec.ts")) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" must end with .spec.ts`,
+    });
+  } else if (!/\.md$/i.test(basename(specFile, ".spec.ts"))) {
+    errors.push({
+      type: "spec-name-mismatch",
+      message: `Spec file "${specFile}" should be named <output>.spec.ts (e.g., agents/reviewer.md.spec.ts)`,
+    });
+  }
+
+  if (spec.tools) errors.push(...validateAgentTools(spec.tools));
+  if (Array.isArray(spec.body)) {
+    errors.push(...validateRefs(spec.body, basePath));
+  }
+
+  const sections: string[] = [];
+  if (spec.body !== undefined) sections.push(renderBody(spec.body).trim());
+  if (spec.sections) {
+    const result = renderAgentSections(spec.sections, basePath);
+    sections.push(...result.lines);
+    errors.push(...result.errors);
+  }
+  if (spec.rules && Object.keys(spec.rules).length > 0) {
+    sections.push(renderAgentRules(spec.rules));
+  }
+  if (spec.output) sections.push(renderOutputContract(spec.output));
+  const body = sections.join("\n\n");
+  errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
+
+  const content = renderAgentFrontmatter(spec) + "\n\n" + body.trim() + "\n";
+  return { markdown: addHash(content, specFile), errors };
+}
+
+// ---------------------------------------------------------------------------
+// Compile a railway → an orchestrator command
+//
+// A railway composes flat subagents on a success/error track. It compiles to an
+// orchestrator command the lead agent reads — NOT a runtime engine (vigiles
+// verifies + emits; the agent executes; the per-step rails enforce). Every
+// delegate target is resolved against the known agent set (stale-ref), the
+// step list must be non-empty, and recovery must be bounded — the finite,
+// sub-Turing guarantees that make the whole flow checkable.
+// ---------------------------------------------------------------------------
+
+export interface CompileRailwayOptions {
+  /** Names of compiled agents, to resolve `delegate` targets. Skipped if omitted. */
+  knownAgents?: readonly string[];
+  specFile?: string;
+}
+
+export interface CompileRailwayResult {
+  markdown: string;
+  errors: CompileError[];
+}
+
+/** Verify a railway: non-empty, bounded recovery, every delegate target real. */
+export function validateRailway(
+  rw: Railway,
+  knownAgents?: readonly string[],
+): CompileError[] {
+  const errors: CompileError[] = [];
+  if (rw.steps.length === 0) {
+    errors.push({
+      type: "invalid-railway",
+      message: `Railway "${rw.name}" has no steps.`,
+    });
+  }
+  if (rw.recover && rw.recover.max < 1) {
+    errors.push({
+      type: "invalid-railway",
+      message: `Railway "${rw.name}" recover.max must be ≥ 1 (got ${String(rw.recover.max)}).`,
+    });
+  }
+  if (knownAgents) {
+    const known = new Set(knownAgents);
+    const refs: RailwayStep[] = [...rw.steps];
+    if (rw.onError) refs.push(rw.onError);
+    if (rw.recover) refs.push(rw.recover.step);
+    for (const s of refs) {
+      if (!known.has(s.agent)) {
+        errors.push({
+          type: "stale-ref",
+          message: `Railway "${rw.name}" delegates to unknown agent "${s.agent}".`,
+          path: s.agent,
+        });
+      }
+    }
+  }
+  return errors;
+}
+
+/** Render the orchestrator command markdown for a railway. */
+function renderRailwayMarkdown(rw: Railway): string {
+  const lines = [
+    `# Railway: ${rw.name}`,
+    "",
+    "Dispatch these subagents on the **success track**, in order. Each returns a " +
+      "result block (`vigiles:ok` / `vigiles:err`). If a step returns an error, " +
+      "stop the success track and run the error handler with that error payload.",
+    "",
+    "## Success track",
+    "",
+  ];
+  rw.steps.forEach((s, i) => {
+    const task = s.task ? ` — ${s.task}` : "";
+    lines.push(`${String(i + 1)}. **${s.agent}**${task}`);
+  });
+  if (rw.recover) {
+    lines.push(
+      "",
+      "## Recovery",
+      "",
+      `If a step errors, retry it via **${rw.recover.step.agent}** up to ${String(rw.recover.max)}× before falling to the error track.`,
+    );
+  }
+  if (rw.onError) {
+    lines.push(
+      "",
+      "## On error",
+      "",
+      `Run **${rw.onError.agent}** with the failing step's error payload.`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Compile a railway into an orchestrator command markdown (with integrity hash),
+ * resolving every delegate target against `knownAgents` when provided.
+ */
+export function compileRailway(
+  rw: Railway,
+  options: CompileRailwayOptions = {},
+): CompileRailwayResult {
+  const errors = validateRailway(rw, options.knownAgents);
+  const specFile = options.specFile ?? `${rw.name}.railway.spec.ts`;
+  const content = renderRailwayMarkdown(rw) + "\n";
+  return { markdown: addHash(content, specFile), errors };
+}
+
+// ---------------------------------------------------------------------------
 // Hash check for existing files
 // ---------------------------------------------------------------------------
 
@@ -850,7 +1176,7 @@ export interface AdoptResult {
  */
 export function adoptDiff(
   filePath: string,
-  spec: ClaudeSpec | SkillSpec,
+  spec: ClaudeSpec | SkillSpec | AgentSpec,
   basePath: string,
 ): AdoptResult {
   const fullPath = resolve(basePath, filePath);
@@ -867,6 +1193,9 @@ export function adoptDiff(
     compiledContent = markdown;
   } else if (spec._specType === "skill") {
     const { markdown } = compileSkill(spec, { basePath, specFile: filePath });
+    compiledContent = markdown;
+  } else if (spec._specType === "agent") {
+    const { markdown } = compileAgent(spec, { basePath, specFile: filePath });
     compiledContent = markdown;
   }
 

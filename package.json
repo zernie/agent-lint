@@ -40,7 +40,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/spec.test.js dist/validate.test.js dist/cli.test.js dist/proofs.test.js dist/inline.test.js dist/sidecar.test.js dist/coverage.test.js dist/session.test.js dist/orphans.test.js dist/cedar.test.js dist/doc-refs.test.js dist/frontmatter.test.js dist/skill-pipeline.test.js dist/skill-runtime.test.js dist/skill-driver.test.js dist/skill-test.test.js dist/compile-generator.test.js dist/community-skills.test.js dist/action-gate.test.js dist/symbols.test.js dist/refs.test.js dist/harness-test.test.js dist/eval.test.js dist/run-scripts.test.js dist/plugin-loader.test.js dist/harness-assert.test.js dist/judge.test.js dist/run-hook.test.js dist/mcp.test.js",
+    "test": "npm run build && vitest run",
+    "coverage": "npm run build && vitest run --coverage",
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
@@ -48,7 +49,7 @@
     "test:e2e": "bash test/e2e/run.sh",
     "test:harness": "npm run build && node dist/cli.js test",
     "test:eval": "npm run build && node dist/cli.js eval",
-    "test:vitest": "npm run build && vitest run",
+    "test:vitest": "npm run build && vitest run --project runners",
     "test:jest": "npm run build && jest",
     "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json"
   },
@@ -59,6 +60,7 @@
     "@types/node": "^20.19.39",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.1.0",
     "eslint-plugin-sonarjs": "^4.0.2",
     "globals": "^17.4.0",

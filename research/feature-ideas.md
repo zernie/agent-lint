@@ -33,6 +33,8 @@ This is the **product backlog** — verification features for _users_ (mostly pi
 
 **If picking one open item:** **#2 (finish Reverse Coverage)** — the only one that's simultaneously the moat _and_ a distribution artifact (it pairs with the `vigiles starter` idea in [`distribution-strategy.md`](distribution-strategy.md)).
 
+> **Inspiration to watch — Anthropic's ultraplan / dynamic-workflows (plan-as-code).** The orchestrator generates a JavaScript workflow script on the fly to coordinate subagents — strikingly close to a vigiles-shaped feature, but **ephemeral and unverified**. Our angle is the inverse: a _typed, verified, compiled_ workflow (spec → command + enforcing hooks, refs checked at compile time, regression-testable via `runEval`). It's the nearest external thing to where we're heading — see [`railway-subagents.md`](railway-subagents.md) for the full design (Temporal analogy + options).
+
 ---
 
 ## 1. Custom Rule Plugin API (Railway-Composable)

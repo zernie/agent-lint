@@ -1,5 +1,8 @@
 .vigiles/generated.d.ts
 
+# Coverage artifacts (v8 / lcov output)
+coverage/
+
 # Vendored third-party plugin snapshots (dogfood fixtures) — formatted by their
 # upstreams, not us. See examples/harness/vendor/*/SOURCE.
 examples/harness/vendor/

@@ -37,22 +37,20 @@ export interface LoadedPlugin {
   readonly warnings: readonly string[];
 }
 
-interface PluginManifest {
-  hooks?: unknown;
-  skills?: string;
-  mcpServers?: unknown;
-}
-
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
+
+/** Parse a JSON file, or null on any error (missing / malformed). */
+function safeReadJson(path: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 /** Read and return the `.hooks` field of a JSON file, or undefined on any error. */
 function readHooksFile(path: string): unknown {
-  try {
-    return (JSON.parse(readFileSync(path, "utf-8")) as { hooks?: unknown })
-      .hooks;
-  } catch {
-    return undefined;
-  }
+  return safeReadJson(path)?.hooks;
 }
 
 /**
@@ -63,9 +61,10 @@ function readHooksFile(path: string): unknown {
  *   4. a plain repo's `.claude/settings.json`.
  */
 function readHooks(root: string): unknown {
-  const manifestPath = join(root, ".claude-plugin", "plugin.json");
-  if (existsSync(manifestPath)) {
-    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
+  // A malformed plugin.json must not crash the loader — fall through to the
+  // other layouts (safeReadJson returns null on a parse error).
+  const m = safeReadJson(join(root, ".claude-plugin", "plugin.json"));
+  if (m) {
     if (typeof m.hooks === "string") return readHooksFile(join(root, m.hooks));
     if (m.hooks !== undefined) return m.hooks;
   }
@@ -167,6 +166,15 @@ function pluginWarnings(
       `plugin declares MCP server(s) (mcpServers / .mcp.json) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
     );
   }
+  const dangling = danglingRefs(root);
+  if (dangling.length) {
+    const shown = dangling.slice(0, 5).join(", ");
+    const more =
+      dangling.length > 5 ? `, … (+${String(dangling.length - 5)})` : "";
+    warnings.push(
+      `plugin references ${String(dangling.length)} intra-plugin file(s) that don't exist (broken path / partial vendor): ${shown}${more}`,
+    );
+  }
   if (!hooks && Object.keys(files).length === 0) {
     warnings.push(
       `nothing was loaded (no hooks, CLAUDE.md, skills, agents, or commands) — the deterministic harness would run an effectively empty machine.`,
@@ -178,14 +186,42 @@ function pluginWarnings(
 /** Whether the plugin declares any MCP servers (manifest field or .mcp.json). */
 function hasMcp(root: string): boolean {
   if (existsSync(join(root, ".mcp.json"))) return true;
-  const manifestPath = join(root, ".claude-plugin", "plugin.json");
-  if (!existsSync(manifestPath)) return false;
-  try {
-    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as PluginManifest;
-    return m.mcpServers !== undefined;
-  } catch {
-    return false;
+  return (
+    safeReadJson(join(root, ".claude-plugin", "plugin.json"))?.mcpServers !==
+    undefined
+  );
+}
+
+// A plugin-relative path reference to a file under a standard surface dir, with a
+// known extension — e.g. a hook script that `cat`s `skills/using-superpowers/SKILL.md`.
+const INTRA_REF_RE =
+  /(?:skills|hooks|commands|agents)\/[A-Za-z0-9._/-]+\.(?:md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json)/g;
+
+/**
+ * Intra-plugin file references that don't resolve — the partial-vendor / broken-
+ * path class (e.g. obra/superpowers' `SessionStart` reads
+ * `skills/using-superpowers/SKILL.md`, which a sliced vendor snapshot omits). We
+ * scan the plugin's own text files under the surface dirs (hooks scripts
+ * included — those aren't materialized into `files`) for root-relative path refs
+ * and report the ones missing on disk. A static check that would have caught a
+ * bug the dogfood hit twice. Best-effort: a warning, not an error.
+ */
+function danglingRefs(root: string): string[] {
+  const missing = new Set<string>();
+  const seen = new Set<string>();
+  for (const surface of ["hooks", "skills", "agents", "commands"]) {
+    const dir = join(root, surface);
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    for (const content of Object.values(readTree(dir, root))) {
+      for (const m of content.matchAll(INTRA_REF_RE)) {
+        const ref = m[0];
+        if (seen.has(ref)) continue;
+        seen.add(ref);
+        if (!existsSync(join(root, ref))) missing.add(ref);
+      }
+    }
   }
+  return [...missing];
 }
 
 type HooksObj = { hooks?: Record<string, unknown[]> };

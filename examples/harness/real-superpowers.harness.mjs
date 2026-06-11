@@ -8,11 +8,13 @@
  * commit, with upstream LICENSE + SOURCE). There is no clone at test time, so
  * this runs offline and deterministically — see ./vendor/<plugin>/SOURCE.
  *
- * Safety: `loadPlugin` only PARSES the harness — it never runs a hook.
- * superpowers' hook is a side-effectful SessionStart *setup* script, so this
- * test asserts it is correctly WIRED and deliberately does NOT execute it.
- * Executing third-party hooks belongs to a sandboxed tier (the ephemeral CI
- * container, or a future bwrap/docker boundary), never to a bare `loadPlugin`.
+ * Safety: `loadPlugin` only PARSES the harness — it never runs a hook. This
+ * example verifies superpowers' SessionStart hook is correctly WIRED, key-free.
+ * To actually EXECUTE that untrusted third-party hook, `runHarnessTest` now runs
+ * it CONFINED by default under bubblewrap (`src/sandbox.ts`) — see the dogfood in
+ * `src/sandbox.test.ts`, which runs this same hook in a no-egress sandbox and
+ * checks its real output (and shows, via `trace.modelRequests`, that its
+ * top-level `additionalContext` does NOT reach Claude Code — "fired ≠ landed").
  *
  * Pure + key-free: needs neither the `claude` CLI nor an API key, so it runs in
  * CI for free. Run: `node examples/harness/real-superpowers.harness.mjs`.
@@ -59,7 +61,7 @@ console.log(
 for (const w of loaded.warnings) console.log(`  ⚠ ${w}`);
 console.log(
   "\nNote: loadPlugin parsed the harness; it did NOT execute the SessionStart\n" +
-    "setup hook (side-effectful). Wiring is verified here; execution is deferred\n" +
-    "to a sandboxed tier. No third-party code ran.",
+    "setup hook. Wiring is verified here; CONFINED execution of this same hook is\n" +
+    "dogfooded in src/sandbox.test.ts (bubblewrap, no egress). No code ran here.",
 );
 console.log("\n1 passed.");

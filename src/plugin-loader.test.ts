@@ -3,7 +3,7 @@
  * real assembled machine (hooks + CLAUDE.md + skills) so a test/eval runs
  * against what ships, not a retyped subset. Model-free.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -49,6 +49,45 @@ test("loadPlugin resolves CLAUDE_PLUGIN_ROOT to the absolute plugin path", () =>
       json.includes(`${root}/hooks/session-start.sh`),
       "abs path present",
     );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin warns on dangling intra-plugin file references", () => {
+  const root = makeTmpDir("plugin-dangling");
+  try {
+    // a hook script that reads one skill that exists and one that doesn't
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, "hooks", "session-start"),
+      // the missing ref appears twice → exercises the dedup (seen) path
+      'cat "$ROOT/skills/present/SKILL.md"\ncat "$ROOT/skills/missing/SKILL.md"\necho "$ROOT/skills/missing/SKILL.md"\n',
+    );
+    mkdirSync(join(root, "skills", "present"), { recursive: true });
+    writeFileSync(join(root, "skills", "present", "SKILL.md"), "# present\n");
+
+    const { warnings } = loadPlugin(root);
+    const dangling = warnings.find((w) => w.includes("intra-plugin"));
+    assert.ok(dangling, "expected a dangling-ref warning");
+    assert.ok(
+      dangling.includes("skills/missing/SKILL.md"),
+      "names the missing ref",
+    );
+    assert.ok(
+      !dangling.includes("skills/present/SKILL.md"),
+      "ignores the present ref",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin: a complete plugin has no dangling-ref warning", () => {
+  const root = makePlugin(); // skills/foo/SKILL.md exists, no broken refs
+  try {
+    const { warnings } = loadPlugin(root);
+    assert.ok(!warnings.some((w) => w.includes("intra-plugin")));
   } finally {
     cleanupTmpDir(root);
   }
@@ -287,6 +326,37 @@ test("loadPlugin warns when a plugin declares MCP servers", () => {
     );
     const loaded = loadPlugin(root);
     assert.ok(loaded.warnings.some((w) => w.includes("MCP")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin warns when the manifest declares mcpServers (no .mcp.json)", () => {
+  const root = makeTmpDir("mcpmanifest");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# x\n");
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "m", mcpServers: { demo: { command: "x" } } }),
+    );
+    assert.ok(loadPlugin(root).warnings.some((w) => w.includes("MCP")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin tolerates a malformed plugin.json (does not crash)", () => {
+  const root = makeTmpDir("badmanifest");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# x\n");
+    writeFileSync(join(root, ".claude-plugin", "plugin.json"), "{ not json");
+    const loaded = loadPlugin(root);
+    // malformed manifest → no hooks, no MCP warning; CLAUDE.md still loads.
+    assert.deepEqual(loaded.settings, {});
+    assert.ok(!loaded.warnings.some((w) => w.includes("MCP")));
+    assert.equal(loaded.files["CLAUDE.md"], "# x\n");
   } finally {
     cleanupTmpDir(root);
   }

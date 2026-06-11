@@ -3,7 +3,7 @@
  * Discovery and formatting are pure-ish; `runScripts` spawns trivial node
  * scripts in a temp dir, so the whole suite stays fast and model-free.
  */
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
