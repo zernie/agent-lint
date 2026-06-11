@@ -27,13 +27,15 @@ import { ruleSeverity, ruleOptions } from "./types.js";
 import {
   compileClaude,
   compileSkill,
+  compileAgent,
+  compileRailway,
   checkFileHash,
   addHash,
   validateFileRef,
   validateCommandRef,
 } from "./compile.js";
 import type { CompileError } from "./compile.js";
-import type { ClaudeSpec, SkillSpec } from "./spec.js";
+import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./spec.js";
 import { findSimilarRules } from "./proofs.js";
 import { parseInlineRules } from "./inline.js";
 import { parseFrontmatterRules } from "./frontmatter.js";
@@ -85,9 +87,9 @@ function findSpecs(pattern?: string): string[] {
   });
 }
 
-async function loadSpec(
-  specPath: string,
-): Promise<ClaudeSpec | SkillSpec | null> {
+type AnySpec = ClaudeSpec | SkillSpec | AgentSpec | Railway;
+
+async function loadSpec(specPath: string): Promise<AnySpec | null> {
   const fullPath = resolve(process.cwd(), specPath);
 
   // Try multiple dist/ path strategies
@@ -116,12 +118,12 @@ async function loadSpec(
     if (existsSync(distPath)) {
       try {
         const mod = (await import(distPath)) as {
-          default: ClaudeSpec | SkillSpec | { default: ClaudeSpec | SkillSpec };
+          default: AnySpec | { default: AnySpec };
         };
         // CJS double-default: `{ default: { default: spec } }`.
         const raw = mod.default;
         if (raw && typeof raw === "object" && "default" in raw) {
-          return (raw as { default: ClaudeSpec | SkillSpec }).default;
+          return (raw as { default: AnySpec }).default;
         }
         return raw;
       } catch {
@@ -142,7 +144,7 @@ async function loadSpec(
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 15000,
     });
-    return JSON.parse(output.trim()) as ClaudeSpec | SkillSpec;
+    return JSON.parse(output.trim()) as AnySpec;
   } catch {
     return null;
   }
@@ -243,11 +245,66 @@ function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
   return false;
 }
 
+/** Compile a subagent spec → agents/<name>.md (with its result-contract section). */
+function compileAgentToFile(spec: AgentSpec, specPath: string): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileAgent(spec, {
+    basePath: process.cwd(),
+    specFile: specPath,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath}`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  printErrors(specPath, errors);
+  return false;
+}
+
+/**
+ * Compile a railway spec → the orchestrator command markdown. `knownAgents` is
+ * the set of compiled agent names in the project, so every `delegate()` target
+ * is resolved at compile time (an unknown target is a stale-ref error).
+ */
+function compileRailwayToFile(
+  spec: Railway,
+  specPath: string,
+  knownAgents: readonly string[],
+): boolean {
+  const outputPath = specPath.replace(/\.spec\.ts$/, "");
+  const { markdown, errors } = compileRailway(spec, {
+    specFile: specPath,
+    knownAgents,
+  });
+  writeFileSync(resolve(process.cwd(), outputPath), markdown);
+  if (errors.length === 0) {
+    console.log(`\n✓ ${specPath} → ${outputPath}`);
+    return true;
+  }
+  console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
+  printErrors(specPath, errors);
+  return false;
+}
+
+/** Names of every compiled agent spec in the project — resolves delegate() targets. */
+async function collectAgentNames(): Promise<string[]> {
+  const names: string[] = [];
+  for (const p of findSpecs()) {
+    const s = await loadSpec(p);
+    if (s && s._specType === "agent") names.push(s.name);
+  }
+  return names;
+}
+
 async function compile(
   specPaths: string[],
   config: VigilesConfig,
 ): Promise<boolean> {
   let allValid = true;
+  // Resolved lazily on the first railway spec — every delegate() target is
+  // checked against the agents defined anywhere in the project.
+  let knownAgents: string[] | null = null;
   for (const specPath of specPaths) {
     // Generator skills can't be executed to markdown — compile from source.
     const source = readFileSync(resolve(process.cwd(), specPath), "utf-8");
@@ -268,6 +325,11 @@ async function compile(
       if (!compileClaudeToFile(spec, specPath, config)) allValid = false;
     } else if (spec._specType === "skill") {
       if (!compileSkillToFile(spec, specPath)) allValid = false;
+    } else if (spec._specType === "agent") {
+      if (!compileAgentToFile(spec, specPath)) allValid = false;
+    } else if (spec._specType === "railway") {
+      knownAgents ??= await collectAgentNames();
+      if (!compileRailwayToFile(spec, specPath, knownAgents)) allValid = false;
     }
   }
   return allValid;
