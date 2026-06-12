@@ -252,6 +252,25 @@ running Claude and eyeballing it? vigiles ships a library to **test the harness
 itself**, at three levels, cheapest first. It's plain async functions, so it
 drops into **node:test / vitest / jest**, or a zero-setup `vigiles test`.
 
+Here's the whole surface and how far each tier reaches today — the rest of this
+section walks the tiers left to right:
+
+| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
+| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
+| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
+| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
+| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
+| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
+| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
+| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
+| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
+| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
+
+✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
+
 ### Level 1 — test a hook by itself (no AI, milliseconds)
 
 A hook is just a process that's handed a "Claude is about to do X" event and
@@ -337,11 +356,19 @@ console.log(formatEvalReport(report));
 // off  marked=0.00   on  marked=0.50±0.20 pass^k=0   ($0.07 · 1.2s/run · 4.1k tok)
 ```
 
-`assertSignificant(report, { baseline: "off", arm: "on", metric: "marked" })`
-turns the gap into a CI gate — a Welch t-test decides whether it cleared the
-noise floor, **computed** from the arms' spread, not hand-fed. Runs go
-**concurrently**, track **cost / latency / tokens** (cap them with `maxCostUsd`),
-and the **record/replay cache** makes re-scoring after a `measure` edit free.
+Turn that gap into a CI gate with one line:
+
+```typescript
+assertSignificant(report, { baseline: "off", arm: "on", metric: "marked" });
+```
+
+It runs a Welch t-test and passes only if the difference clears the noise floor —
+and the noise floor is **measured from the runs' own spread**, not a number you
+guessed. The rest is there so the gate is cheap to run:
+
+- **Concurrent** — trials run in parallel, and `maxCostUsd` caps the spend.
+- **Tracked** — every run reports cost, latency, and token usage.
+- **Cached** — editing your `measure` re-scores past runs for free (record/replay).
 
 **Catch regressions over time, too.** Commit a baseline once
 (`writeBaseline(".vigiles/eval-baseline.json", [report])`), then in CI
@@ -381,20 +408,27 @@ and `wshobson/agents` skills resolve this way, with no markers injected.
 
 ### Did the injected context actually reach the model?
 
-A SessionStart hook or a slash command can _fire_ and still inject **nothing** —
-wrong output shape, wrong platform. `trace.modelRequests` records what the model
-actually received (system + messages), so you assert it landed, not just that the
-hook ran — **"fired ≠ landed"**:
+Some hooks exist to add text to the model's context — a `SessionStart` hook that
+injects project rules, for example. But a hook can exit `0`, look perfectly
+healthy, and still inject **nothing**: it printed the JSON in a shape Claude Code
+doesn't read, or it only works on the author's platform. The hook _ran_ — the
+context never _landed_.
+
+So don't check that the hook ran. Check what the model actually received.
+`trace.modelRequests` is the real request sent to the model (its system prompt and
+messages), and `assertRequestContains` asserts your text is in it:
 
 ```typescript
 import { assertRequestContains } from "vigiles/harness-assert";
 
-assertRequestContains(r, "You have superpowers"); // the additionalContext reached the model
+assertRequestContains(r, "You have superpowers"); // the injected context is really there
 ```
 
-(Dogfood: this is exactly how vigiles found that real `obra/superpowers` emits a
-_top-level_ `additionalContext`, which Claude Code — reading the _nested_ form —
-never injects. The hook fired; the context never landed.)
+This is a real bug we caught: `obra/superpowers` puts `additionalContext` at the
+**top level** of its hook output, but Claude Code only reads the **nested** field
+(`hookSpecificOutput.additionalContext`). The hook fired and exited clean, so
+every "did it run?" check passed — yet the context never reached the model. Only
+inspecting the request showed it was missing.
 
 ### Running an untrusted plugin? It's confined by default
 
@@ -447,26 +481,11 @@ with each upstream `LICENSE` + `SOURCE` kept alongside):
   loader must materialize and warn about rather than silently pass as an empty
   machine.
 
-`src/vendor.test.ts` runs the same loader invariants over both as a conformance
-suite in the normal `npm test` gate.
-
-### What's covered today — surface × tier
-
-| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
-| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
-| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
-| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
-| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
-| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
-| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
-| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
-| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
-| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
-
-✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
+**CI runs all of this on every push.** `src/vendor.test.ts` runs the same loader
+invariants over both plugins as a conformance suite inside `npm run coverage`, and
+a dedicated job runs the deterministic harness tests (`vigiles test`) — with
+`bubblewrap` installed so the sandbox confinement test executes for real, not
+skipped.
 
 ### How this compares to promptfoo
 
@@ -522,25 +541,9 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 
 </details>
 
-## Maturity Levels
-
-From [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need): **Vibes → Guardrails → Architecture as Code → The Organism**.
-
-<details>
-<summary>What each level means</summary>
-
-| Level | Name                 | What it means                                                       |
-| ----- | -------------------- | ------------------------------------------------------------------- |
-| 0     | Vibes                | No CI, no linters, no CLAUDE.md                                     |
-| 1     | Guardrails           | CI + standard linters, no custom rules                              |
-| 2     | Architecture as Code | Custom lint rules + enforced CLAUDE.md                              |
-| 3     | The Organism         | CI + custom rules + visual tests + observability + scheduled agents |
-
-</details>
-
 ## Related Tools
 
-vigiles owns one thing: compile-time verification of typed specs against real linter configs, filesystems, and package.json, plus testing the harness those specs describe. Everything else it composes with rather than replaces — architectural linters ([ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)) referenced via `enforce()`, file-sync tools ([Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync)) that distribute the compiled output, and markdown/prose linters that check a different layer. [How vigiles composes with each, and why runtime-LLM rule checkers are the opposite paradigm →](docs/related-tools.md)
+vigiles composes with other tools rather than replacing them: architectural linters ([ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)) referenced via `enforce()`, and file-sync tools ([Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync)) that distribute the compiled output. [How it fits with each, and why runtime-LLM rule checkers are the opposite paradigm →](docs/related-tools.md)
 
 ## Documentation
 
