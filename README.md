@@ -31,19 +31,10 @@
 <details>
 <summary><b>Contents</b></summary>
 
-[**Two pillars — pick one or both**](#two-pillars--pick-one-or-both)
-
-**Pillar 1 — verify your instruction files** · references your CLAUDE.md makes that a linter, the filesystem, and package.json can prove
-
-- Two adoption levels: [markdown](#markdown-mode--no-new-files-no-typescript) → [typed spec](#typed-spec--compiler-grade-guarantees)
-- [What changes with vigiles](#what-changes-with-vigiles)
-- [Quick start](#quick-start)
-- [Three rule types](#three-rule-types) — `enforce` / `guidance` / `guard`
-- [Verified references](#verified-references) — `file` / `cmd` / `symbol` / `ref`
-
-**Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · deterministic, no-API-key tests that your hooks and skills actually fire — full guide in [docs/harness-testing.md](docs/harness-testing.md)
-
-**More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
+- [**Two pillars — pick one or both**](#two-pillars--pick-one-or-both)
+- **Pillar 1** — [verify your instruction files](#verify-your-instruction-files) · full guide: [docs/verifying-instruction-files.md](docs/verifying-instruction-files.md)
+- **Pillar 2** — [test your Claude Code harness](#test-your-claude-code-harness) · full guide: [docs/harness-testing.md](docs/harness-testing.md)
+- [Quick start](#quick-start) · [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
 
 </details>
 
@@ -86,11 +77,7 @@ Reads fine. Four things are wrong:
 
 The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
 
-Two levels, both independently useful: start in **markdown** (no new files), step up to a **typed spec** when you want compiler-grade guarantees.
-
-### Markdown mode — no new files, no TypeScript
-
-Add a comment to your existing CLAUDE.md and audit it:
+Fix it in one line — add a marker to your existing CLAUDE.md and audit it, no install, no new files:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
@@ -100,123 +87,19 @@ Add a comment to your existing CLAUDE.md and audit it:
 npx vigiles audit CLAUDE.md
 ```
 
-Each rule is checked against your real linter config — typos get closest-match suggestions, disabled rules are flagged. `vigiles audit` enforces them in CI. Zero install commitment, zero new files.
+Each reference is checked against reality — a typo gets a closest-match suggestion, a disabled rule is flagged. That's **markdown mode**; step up to a **typed spec** (`.spec.ts` → compiled CLAUDE.md, compiler-grade guarantees) when you want it.
 
-> **Want editor autocomplete?** Promote the rules into a `vigiles:` YAML frontmatter block and run `npx vigiles generate-schema` — your editor's YAML language server then autocompletes rule names and red-squiggles typos at edit time, still with no TypeScript. Same enforcement, nicer authoring. [Markdown mode →](docs/markdown-mode.md)
-
-### Typed spec — compiler-grade guarantees
-
-When you want the strongest guarantees, compile a typed spec. Every linter rule reference is verified against your real config, every file path against the filesystem, every npm script against package.json. Stale references become compile errors — caught at edit time, not when the agent silently ignores you.
-
-```typescript
-// CLAUDE.md.spec.ts
-import { claude, enforce, guidance } from "vigiles/spec";
-
-export default claude({
-  commands: {
-    "npm run build": "Compile TypeScript to dist/",
-    "npm test": "Build and run all tests",
-    // ✗ "npm run typecheck" → compile error: script not in package.json
-  },
-
-  keyFiles: {
-    "src/utils/narrowing.ts": "Type guard utilities",
-    // ✗ "src/utils/type-helpers.ts" → compile error: file not found
-  },
-
-  rules: {
-    "no-explicit-any": enforce(
-      "@typescript-eslint/no-explicit-any",
-      "Use unknown and narrow with type guards.",
-    ),
-    // ✗ if rule is disabled in config → compile error
-
-    "research-first": guidance("Google unfamiliar APIs first."),
-  },
-});
-```
-
-`npx vigiles compile` turns that into CLAUDE.md (with an integrity hash). The spec is the source of truth and CLAUDE.md is a build artifact: the agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
-
-Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
-
-## What Changes With vigiles
-
-### Claude Code
-
-|                                     | Without vigiles              | With vigiles                                                   |
-| ----------------------------------- | ---------------------------- | -------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                      |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                   |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
-| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types            |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
-| **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
-
-**Codex / AGENTS.md** gets the same compile-time checks and the same `vigiles audit` CI pipeline — just no hooks (no plugin system), so you run `vigiles compile` manually or in CI.
-
-Everything vigiles compiles and audits is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](docs/comparison.md)
+→ **Full guide: [docs/verifying-instruction-files.md](docs/verifying-instruction-files.md)** — the adoption ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references (`file` / `cmd` / `symbol` / `ref`), and the before/after tables.
 
 ## Quick Start
-
-The fastest path is markdown mode — add a marker to your existing CLAUDE.md and audit it, no install or new files (see [markdown mode](#markdown-mode--no-new-files-no-typescript) above and [docs/markdown-mode.md](docs/markdown-mode.md)). When you want compiler-grade guarantees, scaffold a typed spec:
 
 ```bash
 npx vigiles init
 ```
 
-The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI.
+The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI. Prefer no new files? Stay in [markdown mode](docs/markdown-mode.md). Start with `guidance()` rules and `/strengthen` them to `enforce()` later; flags and agent usage are in the [CLI reference](docs/cli.md).
 
-Start with `guidance()` rules (zero config) and run `/strengthen` later to upgrade them to compile-verified `enforce()`. Flags, migration of an existing CLAUDE.md, and non-interactive agent usage are in the [CLI reference](docs/cli.md) and [agent setup guide](docs/agent-setup.md).
-
-## Three Rule Types
-
-**`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the catalog AND is enabled in your project config. A disabled rule is a compile error.
-
-<!-- vigiles:ignore -->
-
-```typescript
-"no-any":    enforce("@typescript-eslint/no-explicit-any", "Use unknown and narrow."),
-"no-print":  enforce("ruff/T201", "Use logging module."),
-"no-unwrap": enforce("clippy/unwrap_used", "Use expect() with context."),
-```
-
-Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [Full linter support details →](docs/linter-support.md)
-
-**`guidance()`** — e.g. `guidance("Google unfamiliar APIs first.")` — prose advice with no mechanical enforcement, but not untracked: guidance rules join the monotonicity proof system, so a rule can be strengthened (`guidance` → `enforce`) but never silently weakened or removed without an explicit allowlist.
-
-**`guard()`** — reactive: runs a command when watched files change (e.g. `*.spec.ts` → `npx vigiles compile`). One declaration emits the hook for every supported system (Claude Code PostToolUse, husky pre-commit, CI) — no copy-pasting the trigger across each. [Full spec format →](docs/spec-format.md)
-
-## Verified References
-
-`file()`, `cmd()`, `symbol()`, and `ref()` catch stale references at compile time:
-
-```typescript
-import { claude, file, cmd, symbol, ref, instructions } from "vigiles/spec";
-
-export default claude({
-  sections: {
-    architecture: instructions`
-      Core engine in ${file("src/compile.ts")}.
-      Compile specs with ${symbol("src/compile.ts", "compileClaude")}.
-      Run ${cmd("npm test")} to verify.
-      See ${ref("skills/strengthen/SKILL.md")} for the strengthen skill.
-    `,
-    // If any path / script / symbol is stale → compile error
-  },
-  // ...
-});
-```
-
-There's a small family of inline **marks** that `audit` checks, each binding a reference to its real source:
-
-- `` `vigiles:symbol file#name` `` — the named file actually **defines** that symbol (function, class, method, constant), parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename it and `audit` fails; in markdown mode the `refs-hook` **forces the mark**, blocking edits that leave a code reference bare. [Details →](research/symbol-verification.md)
-- `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its server. `audit` reads `.mcp.json`, starts the server, lists its tools, and flags a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP server renaming `create_issue` → `issue_write`, which otherwise fails silently.
-
-**Typo-safe at authoring time, too.** `vigiles generate-types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](docs/linter-support.md#generate-types)
+Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## Test your Claude Code harness
 
@@ -292,7 +175,8 @@ vigiles composes with other tools rather than replacing them: architectural lint
 
 ## Documentation
 
-- **[docs/](docs/README.md)** — how-to & reference: the adoption ladder, CLI, linter support, the harness-testing guide, skills/agents.
+- **The two pillar guides:** [verifying instruction files](docs/verifying-instruction-files.md) (Pillar 1) · [testing your harness](docs/harness-testing.md) (Pillar 2).
+- **[docs/](docs/README.md)** — the full how-to & reference index: adoption ladder, CLI, linter support, skills/agents.
 - **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
 
 ## License

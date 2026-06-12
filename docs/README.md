@@ -4,6 +4,10 @@ How-to and reference docs for using vigiles. (The thinking _behind_ vigiles —
 design docs, benchmarks, landscape — lives in [`../research/`](../research/README.md).)
 New here? Start with the [README](../README.md).
 
+## Verify your instruction files (pillar 1)
+
+- [`verifying-instruction-files.md`](verifying-instruction-files.md) — the full guide: the markdown→typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references + marks, and the before/after tables.
+
 ## Adoption ladder (pick your commitment level)
 
 - [`markdown-mode.md`](markdown-mode.md) — Level 0/1: inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML frontmatter, no TypeScript.
