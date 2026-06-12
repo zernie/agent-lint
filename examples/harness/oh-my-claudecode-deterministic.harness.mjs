@@ -31,10 +31,7 @@ import {
   scriptModel,
   claudeAvailable,
 } from "../../dist/harness-test.js";
-import {
-  assertHookFired,
-  assertRequestContains,
-} from "../../dist/harness-assert.js";
+import { assertRequestContains } from "../../dist/harness-assert.js";
 
 if (!claudeAvailable()) {
   console.log("skip: `claude` CLI not found");
@@ -60,25 +57,23 @@ const r = await runHarnessTest({
   model: scriptModel([{ text: "on it" }]),
 });
 
-let failed = 0;
-const check = (name, fn) => {
-  try {
-    fn();
-    console.log(`  ✓ ${name}`);
-  } catch (err) {
-    failed++;
-    console.log(`  ✗ ${name}\n      ${err.message}`);
-  }
-};
-
-// 1. fired: the UserPromptSubmit hook ran in the real session.
-check("keyword-detector fired on UserPromptSubmit", () =>
-  assertHookFired(r, "UserPromptSubmit"),
-);
-// 2. landed: the injected routing actually reached the model's request.
-check("the injected ULTRAWORK routing reached the model (fired ≠ landed)", () =>
-  assertRequestContains(r, "ULTRAWORK"),
-);
-
-console.log(failed === 0 ? "\n2 passed." : `\n${failed} failed.`);
-process.exit(failed === 0 ? 0 : 1);
+// The point of this tier: don't just check the hook *ran* — check its output
+// actually reached the model. `assertRequestContains` inspects the real request
+// (`trace.modelRequests`), so it proves both that the UserPromptSubmit hook fired
+// AND that its injected routing LANDED in the model's context. (We assert the
+// landing rather than a separate "fired" event because UserPromptSubmit hook-fire
+// stream events aren't emitted by every claude version, whereas the landing — the
+// thing you actually care about — is observable everywhere.)
+try {
+  assertRequestContains(r, "ULTRAWORK");
+  console.log(
+    "  ✓ the injected ULTRAWORK routing reached the model (the hook fired AND landed)",
+  );
+  console.log("\n1 passed.");
+} catch (err) {
+  console.log(
+    `  ✗ injected routing did not reach the model\n      ${err.message}`,
+  );
+  console.log("\n1 failed.");
+  process.exit(1);
+}
