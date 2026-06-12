@@ -270,6 +270,11 @@ const r = runHook(guardCommand, {
 assert(r.blocked); // exit 2 / decision:"block" / permissionDecision:"deny"
 ```
 
+Unit-testing a hook you don't trust (a vendored third-party script)? Pass
+`sandbox: "auto"` to confine it under bubblewrap — no network egress, a cleared
+environment so it can't read your `ANTHROPIC_API_KEY` (the env _you_ pass is
+added back) — or it refuses rather than running it unconfined.
+
 The same shape governs **MCP tools** — the dominant real MCP test — with no
 server running, because the hook only sees the tool _name_:
 
@@ -337,6 +342,12 @@ turns the gap into a CI gate — a Welch t-test decides whether it cleared the
 noise floor, **computed** from the arms' spread, not hand-fed. Runs go
 **concurrently**, track **cost / latency / tokens** (cap them with `maxCostUsd`),
 and the **record/replay cache** makes re-scoring after a `measure` edit free.
+
+**Catch regressions over time, too.** Commit a baseline once
+(`writeBaseline(".vigiles/eval-baseline.json", [report])`), then in CI
+`assertNoRegression(report, readBaseline(path))` fails only when an arm×metric
+moves _significantly in the bad direction_ vs. that baseline — jest snapshots for
+agent behaviour, with a real noise floor (`diffToJUnit` emits it for CI).
 
 Same tier, different question: **`measureTriggerRate`** measures how reliably a
 skill's _description fires_ across varied prompts — the #1 skill-authoring pain.
@@ -453,9 +464,30 @@ suite in the normal `npm test` gate.
 | MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
 | settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
 | Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
-| Untrusted plugin execution                                    | — n/a                        | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
+| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
+
+### How this compares to promptfoo
+
+[promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
+and it's excellent at what it does. vigiles isn't a competing eval framework: it
+tests **the harness** (your hooks / settings / CLAUDE.md / skills as they ship),
+and it's built to be **cheap and safe** where promptfoo is real-model-only.
+
+| Question you're asking                                  | vigiles                               | promptfoo                      |
+| ------------------------------------------------------- | ------------------------------------- | ------------------------------ |
+| Does my hook block/allow? Is it wired in?               | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
+| Unit under test                                         | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
+| Loads the **real shipped** plugin.json/hooks/CLAUDE.md? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
+| Is an A/B gap real, not noise? (significance / pass^k)  | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
+| Regression vs a committed baseline                      | ✅ `assertNoRegression`               | ✗                              |
+| Run an untrusted harness **confined**                   | ✅ bubblewrap, safe-by-default        | ✗                              |
+| Dataset / red-team / assertion library / web UI         | ✗ (not our game)                      | ✅✅ deep, mature              |
+
+Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
+the harness cheaply and safely.** The full analysis (and why we don't chase
+parity) is in [`research/promptfoo-deep-dive.md`](research/promptfoo-deep-dive.md).
 
 [Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [benchmarks](research/benchmarks-runtime-gates.md).
 
