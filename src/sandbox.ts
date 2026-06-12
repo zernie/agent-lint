@@ -243,6 +243,22 @@ export function parseEgressLog(ndjson: string): EgressAttempt[] {
   return out;
 }
 
+/**
+ * The files in `after` that are new or changed vs `before` — i.e. what a confined
+ * run wrote to its work dir. Each tree maps a relative path to a content
+ * signature (size + mtime). Pure, so the diff is unit-tested without a sandbox.
+ */
+export function diffTrees(
+  before: Readonly<Record<string, string>>,
+  after: Readonly<Record<string, string>>,
+): string[] {
+  const out: string[] = [];
+  for (const [path, sig] of Object.entries(after)) {
+    if (before[path] !== sig) out.push(path);
+  }
+  return out.sort();
+}
+
 /** The raw output of a sandboxed run: exit code, captured stdout, and requests. */
 export interface SandboxRunOut {
   readonly code: number;

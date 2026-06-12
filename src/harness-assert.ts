@@ -160,6 +160,41 @@ export function assertEgressOnly(
   }
 }
 
+// --- file writes (IO) — confined runs --------------------------------------
+//
+// A confined `runHook` records what the hook wrote to its work dir
+// (`r.filesWritten`, relative paths). These assert a hook touched only the files
+// it should — e.g. "wrote nothing but its own state cache".
+
+/** Anything carrying recorded file writes (a confined runHook result). */
+interface HasWrites {
+  readonly filesWritten: readonly string[];
+}
+
+const matches = (f: string, p: string | RegExp): boolean =>
+  typeof p === "string" ? f.includes(p) : p.test(f);
+
+/** Assert the run wrote NO file matching `pattern` (substring or regex). */
+export function assertNoWrite(r: HasWrites, pattern: string | RegExp): void {
+  const bad = r.filesWritten.filter((f) => matches(f, pattern));
+  if (bad.length > 0) {
+    fail(
+      `expected no write matching ${String(pattern)}, but wrote: ${bad.join(", ")}`,
+    );
+  }
+}
+
+/** Assert every file the run wrote matches one of `allowed` (substring or regex). */
+export function assertWroteOnly(
+  r: HasWrites,
+  allowed: ReadonlyArray<string | RegExp>,
+): void {
+  const bad = r.filesWritten.filter((f) => !allowed.some((a) => matches(f, a)));
+  if (bad.length > 0) {
+    fail(`run wrote file(s) outside the allowlist: ${bad.join(", ")}`);
+  }
+}
+
 // --- subagent railway outcome (parse the worker's result block) ------------
 //
 // A subagent with a result() contract ends its turn with a vigiles:ok/err block.

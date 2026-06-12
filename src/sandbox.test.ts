@@ -17,6 +17,7 @@ import {
   setenvArgs,
   parseRequestLog,
   parseEgressLog,
+  diffTrees,
 } from "./sandbox.js";
 import {
   runHarnessTest,
@@ -153,6 +154,17 @@ test("parseEgressLog: parses host/port, skips blank/partial/invalid lines", () =
   // a record without ts defaults to 0
   assert.equal(parseEgressLog('{"host":"h","port":7}')[0]?.ts, 0);
   assert.deepEqual(parseEgressLog(""), []);
+});
+
+test("diffTrees: new + changed files, sorted; unchanged + removed skipped", () => {
+  const before = { "keep.txt": "10:1", "edit.txt": "5:1", "gone.txt": "3:1" };
+  const after = {
+    "keep.txt": "10:1", // unchanged → skipped
+    "edit.txt": "5:2", // mtime changed → written
+    "new/a.json": "2:9", // new → written
+  };
+  assert.deepEqual(diffTrees(before, after), ["edit.txt", "new/a.json"]);
+  assert.deepEqual(diffTrees({}, {}), []);
 });
 
 // --- end-to-end confinement (needs a real bwrap + claude) ------------------
