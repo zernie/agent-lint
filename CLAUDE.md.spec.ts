@@ -124,7 +124,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/egress.test.ts":
       "Egress allowlist test suite: pure helpers — parseGetent family split, resolveAllow (injected resolver), parseResolvers, buildEgressNft (policy drop, DNS allow, per-host v4/ip6 rules, comment sanitize, log+drop tail), buildEgressBwrapArgv (caps/info-fd/`VIG_*` env/sh -c tail), parseNftCounters (v4+v6 sum, drop aggregate), countersToResult, probeEgressAvailable short-circuit",
     "src/eval.ts":
-      "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) + cost/latency/token usage; bounded concurrency (runPool) + rate-limit backoff + maxCostUsd budget cap; record/replay cache (cache:readwrite) replays runs so editing measure re-scores for free; measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (the #1 skill-authoring pain) — the empirical half of testing your harness (generalizes bench/)",
+      "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) + cost/latency/token usage; bounded concurrency (runPool) + rate-limit backoff + maxCostUsd budget cap; record/replay cache (cache:readwrite) replays runs so editing measure re-scores for free; measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (recall) and — with irrelevantPrompts — its precision (falsePositiveRate + precision, so a too-broad description that hijacks unrelated work fails too); the empirical half of testing your harness (generalizes bench/)",
     "src/eval.test.ts":
       "Eval aggregation/formatting + variance + usage/cache test suite (node:test)",
     "src/eval-cache.ts":
@@ -182,6 +182,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md",
     "examples/harness/skill-trigger-rate.eval.mjs":
       "Canonical trigger-rate eval (measureTriggerRate): does a skill's description actually FIRE across varied prompts? — installs a real pinned plugin via pluginDir and reuses the skillResolved predicate",
+    "examples/harness/skill-compression.eval.mjs":
+      "Worked eval verifying a token-compression claim (e.g. Caveman telegraphic style): two arms (verbose/caveman) over one task, measure outputTokens (the optimization target) AND correct (the fact that must survive) — proves the saving is real AND didn't regress behaviour. The on-brand framing for the compression-tool cluster: vigiles measures the claim + the blast radius, it doesn't compress",
     "examples/harness/plugin-cohesion.harness.mjs":
       "Canonical cohesion test (runHarnessTest with plugin:): load a whole plugin (.claude-plugin/plugin.json + CLAUDE.md) and assert multiple hooks fire together",
     "bench/evals/refs-hook.eval.mjs":
@@ -232,6 +234,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Eval-baseline test suite (node:test): baseline round-trip + version/shape validation, regression vs improvement vs unchanged classification, lowerIsBetter direction flip, skip of absent arms/metrics/reports, console + JUnit formatting (counts, failure element, xml escaping), readBaseline null + writeBaseline round-trip",
     "research/eval-api-landscape.md":
       "Eval-API landscape: the LLM/agent eval field (promptfoo, DeepEval, Braintrust, Inspect, LangSmith, OpenAI Evals) summarized then scored against our eval API — strengths (harness A/B arms, pass^k, se/std, unified Trace predicates), gaps (cost/concurrency/caching, significance testing, regression gating), and the B→A→C roadmap (defer D)",
+    "research/skill-eval-landscape.md":
+      "Agent-skill eval landscape: AWS sample-agent-skill-eval scored against our eval pillar (near 1:1 — validates the bet) with the absorb-list — trigger precision (DONE: irrelevantPrompts → falsePositiveRate/precision), unified A-F scorecard + cost-Pareto (deferred candidates), skill security scan (delegate, don't build); plus the token-compression cluster (RTK/Caveman/Claw/Context-Mode/pinchtab/CodeGraph) framed as a use case for runEval (verify the % claim + the behavioural blast radius), demoed in skill-compression.eval.mjs",
     "research/promptfoo-deep-dive.md":
       "promptfoo deep dive: what it is in 2026 (eval + red-team + guardrails + agent-skills), the agentic update that makes the old scorecard stale (Tier 0/1/2 SDK providers incl. anthropic:claude-agent-sdk, trajectory:\\* + cost/latency assertions), the one axis that still separates us (harness-arm A/B loaded as it ships + the two sub-model tiers + significance/pass^k), and the recommendation (interop bridge via ProviderFunction/AgentRunner, lead with the cheaper tiers + regression gating, ship a vigiles Agent Skill, correct the stale claims)",
     "research/skill-authoring-pains.md":
