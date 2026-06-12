@@ -1,5 +1,19 @@
 # Testing your Claude Code harness
 
+> **Try it now — paste this into Claude Code, in any repo:**
+>
+> > Install vigiles and use its **`test-harness`** skill to write and run a
+> > harness test for this project. If I didn't say what to test, pick something
+> > real from my hooks / skills / settings yourself, choose the cheapest tier
+> > that fits, write the test, and run it.
+>
+> The `test-harness` skill ships in the vigiles plugin. It installs vigiles,
+> scans your harness for a real hook or skill to pin down, picks the right tier
+> (unit / deterministic / eval), writes the test, and runs it — defaulting to the
+> cheapest meaningful test when you don't name one. Prefer the CLI?
+> `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
+> model) discover and run `*.harness.mjs` / `*.eval.mjs`.
+
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md —
 is code, and code should be tested. vigiles gives you four layers, lowest cost
 first:
@@ -25,6 +39,146 @@ eval-only frameworks like [promptfoo](https://github.com/promptfoo/promptfoo),
 where every run hits a real model **by design** (and bills accordingly). The
 paid real-model tier (layer 4) is here too, but you reach for it only when the
 question genuinely needs a real model — not to answer "does my hook block this?"
+
+## Contents
+
+- [A worked example: one real plugin, every tier](#a-worked-example-one-real-plugin-every-tier)
+  - [Tier 0 — load the assembled machine](#tier-0--load-the-assembled-machine)
+  - [Tier 1 — unit-test a hook (`runHook`)](#tier-1--unit-test-a-hook-runhook)
+  - [Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)](#tier-2--deterministic-fired-and-landed-runharnesstest)
+  - [Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)](#tier-3--eval-does-the-skill-trigger-measuretriggerrate)
+- [Unit-test a hook (no `claude`, every event)](#unit-test-a-hook-no-claude-every-event)
+- [Test the whole machine, not one hook](#test-the-whole-machine-not-one-hook)
+  - [Native install: testing skills (`pluginDir`)](#native-install-testing-skills-plugindir)
+- [One Trace, two consumers — predicates and assertions](#one-trace-two-consumers--predicates-and-assertions)
+  - [Did the injected context land? (`modelRequests`)](#did-the-injected-context-land-modelrequests)
+  - [Dogfooding real third-party plugins (and the sandbox boundary)](#dogfooding-real-third-party-plugins-and-the-sandbox-boundary)
+- [Deterministic tests in your runner](#deterministic-tests-in-your-runner)
+- [Evals — does the change move behaviour?](#evals--does-the-change-move-behaviour)
+  - [Significance — is the gap real?](#significance--is-the-gap-real)
+  - [Regression gating — did this PR make the harness worse?](#regression-gating--did-this-pr-make-the-harness-worse)
+  - [Cost, caching, concurrency](#cost-caching-concurrency)
+  - [Trigger rate — does the skill _fire_?](#trigger-rate--does-the-skill-fire)
+  - [LLM-as-judge for subjective outcomes](#llm-as-judge-for-subjective-outcomes)
+- [CLI fallback (no runner, CI-friendly)](#cli-fallback-no-runner-ci-friendly)
+- [Coverage](#coverage)
+- [Canonical examples](#canonical-examples)
+- [What's covered today — surface × tier](#whats-covered-today--surface--tier)
+- [How this compares to promptfoo](#how-this-compares-to-promptfoo)
+- [See also](#see-also)
+
+## A worked example: one real plugin, every tier
+
+Rather than scatter synthetic snippets, this section walks **one real, popular
+plugin** up the tiers — unit → deterministic → eval. The plugin is
+[**oh-my-claudecode**](https://github.com/Yeachan-Heo/oh-my-claudecode) (MIT,
+~36k★), chosen because it ships **all four harness surfaces in one plugin** —
+hooks, skills, agents (subagents), and an MCP server — so a single subject can
+demonstrate everything. It's vendored as a pinned, offline **slice** under
+[`examples/harness/vendor/oh-my-claudecode@deee3a4`](../examples/harness/vendor/oh-my-claudecode@deee3a4)
+(see its `SOURCE`); every tier below is a **committed, runnable** file.
+
+### Tier 0 — load the assembled machine
+
+Before testing a hook, load the plugin the way Claude Code assembles it and see
+what's actually there. `loadPlugin` parses the manifest + `hooks/hooks.json`,
+materializes skills/agents, and flags the surfaces only a real model can drive:
+
+```ts
+import { loadPlugin } from "vigiles/plugin-loader";
+
+const p = loadPlugin("examples/harness/vendor/oh-my-claudecode@deee3a4");
+// p.settings.hooks → { UserPromptSubmit: [...] }   (hooks surface)
+// p.files          → .claude/skills/{ask,verify}/SKILL.md + .claude/agents/*  (skills + agents)
+// p.warnings       → "… MCP server(s) …"  +  "… 2 subagent file(s) … test at the eval tier"
+```
+
+All four surfaces in one load. This runs model-free in the gate as a conformance
+case in [`src/vendor.test.ts`](../src/vendor.test.ts), alongside obra/superpowers
+and wshobson/agents.
+
+### Tier 1 — unit-test a hook (`runHook`)
+
+OMC's `keyword-detector` is a `UserPromptSubmit` hook: it scans the prompt for a
+"magic keyword" and, on a hit, injects skill-routing `additionalContext`. Hand it
+an event and check the decision — no `claude`, no model, milliseconds:
+
+```ts
+import { runHook } from "vigiles/run-hook";
+
+const hit = runHook(keywordDetectorCmd, {
+  hook_event_name: "UserPromptSubmit",
+  prompt: "please ultrawork on this",
+});
+// hit.json.hookSpecificOutput.additionalContext includes "ULTRAWORK"
+// a plain prompt → no additionalContext injected
+```
+
+We run this **vendored, audited, pinned** script directly. For a hook you have
+_not_ audited, pass `{ trusted: false }` and `runHook` confines it under
+bubblewrap (no egress, cleared env). Full file:
+[`examples/harness/oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs).
+
+### Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)
+
+Right logic ≠ wired in correctly _and_ reaching the model. Run the real `claude`
+against a scripted mock model with the hook wired on `UserPromptSubmit`, then
+assert both that it **fired** and that its injected context **landed** in the
+model's request (`trace.modelRequests`) — the "fired ≠ landed" check a "did it
+run?" test can't make:
+
+```ts
+import { runHarnessTest, scriptModel } from "vigiles/harness-test";
+import { assertHookFired, assertRequestContains } from "vigiles/harness-assert";
+
+const r = await runHarnessTest({
+  settings: {
+    hooks: {
+      UserPromptSubmit: [
+        { hooks: [{ type: "command", command: keywordDetectorCmd }] },
+      ],
+    },
+  },
+  prompt: "please ultrawork on this refactor",
+  transcript: true,
+  model: scriptModel([{ text: "on it" }]),
+});
+assertHookFired(r, "UserPromptSubmit"); // fired
+assertRequestContains(r, "ULTRAWORK"); // …and landed
+```
+
+Wired via inline `settings` (code you authored → trusted → runs direct, no
+sandbox). Pointing `pluginDir` at the whole untrusted plugin instead would run it
+confined under bubblewrap. Full file:
+[`examples/harness/oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs).
+
+### Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)
+
+Wiring (Tier 0) proves a skill _resolves_; whether the **real model chooses** it
+from its description across varied phrasings is a property only a model can
+answer. Install OMC natively (`pluginDir`) and measure how reliably its `verify`
+skill fires on prompts about confirming a change works:
+
+```ts
+import { measureTriggerRate } from "vigiles/eval";
+import { skillResolved } from "vigiles/harness-assert";
+
+const report = await measureTriggerRate({
+  pluginDir: "examples/harness/vendor/oh-my-claudecode@deee3a4",
+  prompts: [
+    "I think the pagination fix is done — can you confirm it actually works?",
+    "Before I mark this complete, prove the new endpoint really behaves.",
+  ],
+  fired: (t) => skillResolved(t, "oh-my-claudecode:verify"),
+  trials: 3,
+});
+```
+
+This is the **one** tier that needs model auth, so — unlike Tiers 0–2 — it's
+**not** run in CI. Full file:
+[`examples/harness/oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs).
+
+The rest of this guide is the per-API reference behind these four tiers.
 
 ## Unit-test a hook (no `claude`, every event)
 
@@ -607,6 +761,7 @@ everything around it is covered, so the statement/line/function gate holds at
 - [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
+- **The oh-my-claudecode walkthrough** — one real plugin, every tier: [`oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs) (runHook on a real `keyword-detector` hook) · [`oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs) (fired _and_ landed) · [`oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs) (skill trigger-rate).
 - [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
 - [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?

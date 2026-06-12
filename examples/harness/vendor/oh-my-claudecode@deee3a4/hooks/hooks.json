@@ -1,0 +1,17 @@
+{
+  "description": "OMC orchestration hooks (vendored slice — UserPromptSubmit keyword-detector only)",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/keyword-detector.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
