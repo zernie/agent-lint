@@ -83,13 +83,26 @@ export interface RunHookOptions {
   /** Per-run timeout ms. Default 10000. */
   readonly timeoutMs?: number;
   /**
-   * Confine the hook under bubblewrap (Linux). Default `false` — run directly,
-   * since the command is normally one YOU wrote in the test. Pass `"auto"` or
-   * `"strict"` when unit-testing a hook command you DON'T fully trust (a vendored
-   * third-party hook script): it runs in a no-egress namespace with a cleared
-   * environment (your `opts.env` is added back), or **refuses** if no bwrap is
-   * available rather than running it unconfined. macOS/Windows have no bwrap, so
-   * `"auto"`/`"strict"` throw there — see `src/sandbox.ts`.
+   * Provenance of the hook command. `true` (default) means YOU authored it — the
+   * usual case at this tier, a command written inline in the test — so it runs
+   * directly. `false` marks it foreign (a vendored third-party hook script),
+   * which makes confinement the DEFAULT: with no explicit `sandbox`, an untrusted
+   * hook behaves as `sandbox: "auto"` — confined under bubblewrap, or refused if
+   * none is available — so foreign code is never run unconfined by accident. This
+   * mirrors the harness tier, where trust follows `plugin`/`pluginDir`
+   * provenance (`specTrusted` in `src/sandbox.ts`); the unit tier takes a raw
+   * command string with no provenance signal, so you declare it here.
+   */
+  readonly trusted?: boolean;
+  /**
+   * Confine the hook under bubblewrap (Linux). When unset, the mode follows
+   * {@link RunHookOptions.trusted}: a trusted hook runs directly (`false`), an
+   * untrusted one is confined-or-refused (`"auto"`). Set it explicitly to
+   * override: `"auto"`/`"strict"` force confinement (a no-egress namespace with a
+   * cleared environment — your `opts.env` is added back — or a **refusal** if no
+   * bwrap is available), and `false` is the opt-out that runs even untrusted code
+   * unconfined. macOS/Windows have no bwrap, so `"auto"`/`"strict"` throw there —
+   * see `src/sandbox.ts`.
    */
   readonly sandbox?: SandboxMode;
 }
@@ -181,9 +194,17 @@ export function runHookWith(
   opts: RunHookOptions,
   deps: RunHookDeps,
 ): HookRunResult {
+  // Confinement follows provenance: a trusted hook (the default) runs directly;
+  // marking a hook untrusted defaults it to "auto" (confine-or-refuse), so
+  // foreign code is never run unconfined by accident. An explicit `sandbox`
+  // overrides the default either way. The trust fed to decideSandbox stays
+  // `false` at this tier — a raw command has no provenance, so an explicit
+  // "auto"/"strict" here is always a request to *confine*, not "trusted→direct".
+  const mode: SandboxMode =
+    opts.sandbox ?? (opts.trusted === false ? "auto" : false);
   const decision = decideSandbox({
     trusted: false,
-    mode: opts.sandbox ?? false,
+    mode,
     available: deps.available,
   });
   if (decision.action === "throw") throw new Error(decision.reason);
@@ -277,8 +298,9 @@ const REAL_DEPS: RunHookDeps = {
  * Run a hook command, piping `input` as JSON to its stdin, and report the exit
  * code + parsed decision. Synchronous (so it can be used inside an eval's
  * `measure` too). `command` is run through a shell, so the same command string a
- * plugin ships (with args / env refs) works verbatim. Pass `sandbox: "auto"` to
- * confine a hook you don't trust (see {@link RunHookOptions.sandbox}).
+ * plugin ships (with args / env refs) works verbatim. Mark a hook you didn't
+ * write with `trusted: false` and it is confined by default (or pass `sandbox:
+ * "auto"` directly) — see {@link RunHookOptions.trusted}.
  */
 export function runHook(
   command: string,

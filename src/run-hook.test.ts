@@ -185,6 +185,41 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
   );
 });
 
+test("runHookWith: trusted:false confines by default, refuses without bwrap", () => {
+  let used = "";
+  const deps = (available: boolean): RunHookDeps => ({
+    available,
+    direct: () => {
+      used = "direct";
+      return spawnRes();
+    },
+    sandboxed: () => {
+      used = "sandbox";
+      return spawnRes();
+    },
+  });
+
+  // untrusted + no explicit sandbox + available → confined by default
+  runHookWith("x", {}, { trusted: false }, deps(true));
+  assert.equal(used, "sandbox");
+
+  // untrusted + no explicit sandbox + unavailable → refuse, not run unconfined
+  assert.throws(
+    () => runHookWith("x", {}, { trusted: false }, deps(false)),
+    /sandbox|bwrap/,
+  );
+
+  // untrusted but explicit opt-out → direct (you vouch for it / outer container)
+  used = "";
+  runHookWith("x", {}, { trusted: false, sandbox: false }, deps(true));
+  assert.equal(used, "direct");
+
+  // trusted (default) → direct even where a sandbox is available
+  used = "";
+  runHookWith("x", {}, {}, deps(true));
+  assert.equal(used, "direct");
+});
+
 test("runHookWith maps a signal kill to exit 1", () => {
   const deps: RunHookDeps = {
     available: true,
