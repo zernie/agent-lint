@@ -29,6 +29,36 @@ hard-disabled is [Landlock](https://docs.kernel.org/userspace-api/landlock.html)
 > Ubuntu 24.04 runners, unblock it with `sysctl -w
 kernel.apparmor_restrict_unprivileged_userns=0` (see `.github/workflows/ci.yml`).
 
+## Why confinement is opt-in, not always-on
+
+The default is: _untrusted_ code is confined (a `plugin`/`pluginDir`, or `runHook`
+with `trusted: false`), code you authored runs direct. Forcing the sandbox on
+_everything_ is tempting — "why not always be safe?" — but it's the wrong default
+for four concrete reasons, each load-bearing:
+
+1. **It isn't always available.** Confinement is Linux + working unprivileged user
+   namespaces only, and `sandboxAvailable()` probes the real capability (many CI
+   runners ship `bwrap` but disable userns). Force it everywhere and a hook _you
+   wrote_ turns red on every Mac and every hardened runner — `decideSandbox`
+   returns `throw`, not a run. The unit tier is meant to run **anywhere**.
+2. **The sandbox is deliberately hostile.** No egress, `--clearenv` (every host
+   var dropped), a fresh empty `$HOME`, a read-only `/`. Exactly right for foreign
+   code — but a hook you wrote that legitimately needs an env var, the network, or
+   to write outside its work dir now fails for reasons unrelated to its logic, and
+   you have to claw each var back via `setenvArgs`.
+3. **Trust follows provenance.** Inline code you authored is trusted; foreign
+   `plugin`/`pluginDir` is not — committing it to your repo is the same trust
+   decision as taking on a dependency. You already made the call when you vendored
+   it; the sandbox earns its keep on the code you _haven't_ audited.
+4. **Cost.** A direct `spawnSync` is milliseconds — the whole point of the unit
+   tier. The confined path stands up an IO dir, a fresh HOME, before/after tree
+   snapshots, and a `bwrap` spawn. Paid on every _trusted_ hook, that defeats the
+   cheap base of the pyramid.
+
+`sandbox: "strict"` forces confinement even for trusted code when you _do_ want it
+(belt-and-suspenders on inline code). It's just not the default, because as a
+default it mostly punishes the code you trust on the platforms where it can't run.
+
 ## Filesystem (IO) — how good is it against `rm -rf`?
 
 **Against destruction: strong.** Under bwrap the host root is mounted

@@ -106,6 +106,15 @@ export interface RunHookOptions {
    * mirrors the harness tier, where trust follows `plugin`/`pluginDir`
    * provenance (`specTrusted` in `src/sandbox.ts`); the unit tier takes a raw
    * command string with no provenance signal, so you declare it here.
+   *
+   * Why this is opt-in (untrusted) and not always-on: the sandbox isn't always
+   * available (Linux + working userns only — forcing it would *refuse* a hook you
+   * wrote on macOS/hardened CI), it's deliberately hostile (no egress,
+   * `--clearenv`, empty HOME, read-only fs — a false failure for trusted code that
+   * needs the network or an env var), trust follows provenance (you already
+   * vouched for inline code), and direct exec is ms vs. the confined path's
+   * setup+spawn. See `docs/sandboxing.md` ("Why confinement is opt-in"). Use
+   * `sandbox: "strict"` to force confinement even on trusted code.
    */
   readonly trusted?: boolean;
   /**
