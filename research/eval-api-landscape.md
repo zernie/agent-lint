@@ -255,6 +255,16 @@ holds.
   core fully unit-tested (`src/eval-baseline.test.ts`) at the 100% include gate.
   **Deferred follow-ups:** SARIF output, the GitHub PR comparison comment via
   `src/action.ts`, and trend history — none yet tied to a concrete need.
+- **Trigger precision — DONE (2026-06-12).** Prompted by AWS
+  `sample-agent-skill-eval` (the agent-skill mirror of this pillar — scored in
+  [`research/skill-eval-landscape.md`](skill-eval-landscape.md)).
+  `measureTriggerRate` measured recall only; `TriggerRateSpec.irrelevantPrompts`
+  adds the precision side → `report.falsePositiveRate` + `report.precision`,
+  gated by `assertTriggerRate({ maxFalsePositive, minPrecision })` so a too-broad
+  description that hijacks unrelated work fails, not just a too-narrow one. The
+  same note logs the token-compression cluster (RTK/Caveman/…) as a **use case for
+  `runEval`** (verify the headline % + the behavioural blast radius), not a
+  roadmap item — demoed in `examples/harness/skill-compression.eval.mjs`.
 - **Phase E (promptfoo interop) — PUNTED (2026-06-11).** Decision: do _not_ chase
   eval-framework parity or build the interop bridges. The eval-runner space is
   promptfoo's (broad adoption, mature assertion/dataset/red-team surface), and our
