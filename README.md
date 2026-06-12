@@ -19,6 +19,13 @@
   <a href="https://github.com/zernie/vigiles/blob/main/LICENSE"><img src="https://img.shields.io/github/license/zernie/vigiles" alt="License" /></a>
 </p>
 
+<p align="center">
+  <b>Two pillars →</b>
+  &nbsp;<a href="#what-changes-with-vigiles">① Verify your instruction files</a>
+  &nbsp;·&nbsp;
+  <a href="#test-your-claude-code-harness">② Test your Claude Code harness</a>
+</p>
+
 ---
 
 <details>
@@ -40,7 +47,7 @@
 - [Test skills for real + assert on actions](#test-your-skills-for-real--and-assert-on-what-claude-did)
 - [Run them in CI](#run-them-in-ci)
 
-**More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Maturity levels](#maturity-levels) · [Related tools](#related-tools)
+**More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
 
 </details>
 
