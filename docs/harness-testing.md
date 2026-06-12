@@ -824,7 +824,7 @@ parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-div
 
 ## See also
 
-- [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO/`rm -rf`, network deny-all vs `recordEgress`, the tiers and limits.
+- [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO/`rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), the tiers and limits.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier + file (and why the CLI examples are `.mjs`).
 - [`research/harness-testing.md`](../research/harness-testing.md) — the deterministic + eval design rationale + real-plugin coverage.
 - [`research/benchmarks-runtime-gates.md`](../research/benchmarks-runtime-gates.md) — findings from running this harness in anger.
