@@ -133,13 +133,51 @@ so the attempt is captured and nothing leaves.
   Node's own **`fetch()`** needs `NODE_USE_ENV_PROXY`, which only takes effect on
   **Node 22+** (on older Node a `fetch()` is still blocked, just not recorded).
 - It still **blocks**. So a skill that needs a _real_ `npm install` to succeed
-  won't work in this mode — that's the **allowlisted real-egress** mode
-  (`slirp4netns` gateway + `nft` allowlist + logging), which is designed and
-  **proven feasible in a spike** (`slirp4netns --configure` + in-netns nftables —
-  a non-allowlisted host _and_ a raw socket are both dropped, with readable
-  counters) but **not yet shipped** as an `egress: { allow }` option — see
-  [`research/sandbox-network.md`](../research/sandbox-network.md) and
-  [`research/spikes/sandbox-network-allowlist.sh`](../research/spikes/sandbox-network-allowlist.sh).
+  won't work in this mode — that's `egress: { allow }`, below.
+
+## Network — allowlisted real egress (`egress: { allow }`)
+
+**Let it actually reach the network, but only the hosts you list.** When the
+question is "does this skill install cleanly, and _only_ from the registries I
+expect?", a wall (record or not) can't answer it — the install has to succeed.
+`egress: { allow }` lets traffic out to an allowlist and **drops the rest at the
+packet layer**:
+
+```ts
+import { runHook } from "vigiles/run-hook";
+
+const r = runHook(installHookCmd, event, {
+  egress: { allow: ["registry.npmjs.org"] },
+});
+// r.egress       → [{ host: "registry.npmjs.org", allowed: true, packets, bytes }]
+// r.egressDropped → { packets: 0, bytes: 0 }   // nothing reached off the allowlist
+```
+
+How it works (proven in `research/spikes/sandbox-network-allowlist.sh`):
+[`slirp4netns`](https://github.com/rootless-containers/slirp4netns) `--configure`
+attaches a tap to the bwrap netns (rootless egress via a userspace TCP/IP stack);
+an `nft` ruleset **inside** the netns is a `policy drop` output chain that accepts
+only the allowlist's resolved IPs (plus loopback + DNS) and `log`+`drop`s the
+rest; the per-rule `counter`s read back what was reached and what was dropped.
+
+**Why the boundary is `nft`, not a proxy.** A `recordEgress`/`HTTP_PROXY`
+allowlist only constrains tools that _honor the proxy_ — a raw socket ignores the
+env and goes straight out. The `nft` wall is at the packet layer, so a raw
+`bash /dev/tcp` to an off-list host is **dropped too**. Needs Linux + bubblewrap +
+`slirp4netns` + `nft`; it **refuses** (rather than running unconfined) if they're
+absent.
+
+**Honest limits:**
+
+- The allowlist is **resolved to IPs at launch**. A host whose DNS rotates
+  outside the run's window could hand the hook an IP that wasn't pre-resolved (and
+  so gets dropped). The dynamic, resolver-pinned set — a DNS resolver in the netns
+  that authorizes each answer's IPs just-in-time — is the next layer (see
+  [`research/sandbox-network.md`](../research/sandbox-network.md)).
+- The record **names the allowlisted hosts that were reached** and **counts** how
+  much off-list traffic was dropped, but does not yet **name the dropped hosts**
+  (that needs the in-netns DNS-query log). `r.egressDropped.packets > 0` tells you
+  the hook tried to leave the allowlist; the DNS-log layer will say where to.
 
 ## Dogfood — a real finding about a real plugin
 
@@ -157,8 +195,15 @@ in the gate (`src/run-hook.test.ts`, skips where bwrap can't confine):
 That second one isn't a toy curl — it's a genuine supply-chain/privacy property
 of a popular plugin, asserted from its actual code.
 
+The same `session-start` hook is dogfooded a second time under `egress: { allow:
+["registry.npmjs.org"] }`: this time the update-check `fetch()` **succeeds** to
+the registry (`r.egress` records it `allowed: true`) and `r.egressDropped.packets`
+stays `0` — proving, through the allowlist path, that it reaches the npm registry
+**and nothing else**.
+
 ## See also
 
 - [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
 - [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
-- [`research/sandbox-network.md`](../research/sandbox-network.md) — the allowlisted real-egress design.
+- [`src/egress.ts`](../src/egress.ts) — the `egress: { allow }` allowlist: ruleset builder, counter parser, the pure seams.
+- [`research/sandbox-network.md`](../research/sandbox-network.md) — the allowlisted-egress design + the next (resolver-pinned) layer.
