@@ -28,7 +28,14 @@
  * logic here, then assert it fires in the assembled machine there.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,8 +44,12 @@ import {
   sandboxAvailable,
   bwrapArgs,
   setenvArgs,
+  parseEgressLog,
   type SandboxMode,
+  type EgressAttempt,
 } from "./sandbox.js";
+
+export type { EgressAttempt };
 
 /** A hook event payload (the JSON Claude Code writes to the hook's stdin). */
 export interface HookInput {
@@ -105,6 +116,18 @@ export interface RunHookOptions {
    * see `src/sandbox.ts`.
    */
   readonly sandbox?: SandboxMode;
+  /**
+   * Record the hook's network egress. Implies confinement (the recorder lives in
+   * the sandbox netns, so this forces a sandboxed run and refuses if no sandbox is
+   * available). A recording proxy on loopback captures every `host:port` a
+   * proxy-honoring tool (npm/pip/curl/fetch) tries to reach — surfaced as
+   * {@link HookRunResult.egress} — while the netns still **blocks** it (nothing
+   * actually leaves). Use it to test what a hook/skill phones home to, or which
+   * registry an install would hit. Raw-socket egress is blocked but not recorded
+   * (it never reaches the proxy) — the block is the boundary, the record is
+   * best-effort observability over it.
+   */
+  readonly recordEgress?: boolean;
 }
 
 export interface HookRunResult {
@@ -118,6 +141,11 @@ export interface HookRunResult {
    * `permissionDecision:"deny"` all set `blocked = true`.
    */
   readonly blocked: boolean;
+  /**
+   * Network egress the hook attempted, recorded then blocked. Empty unless
+   * {@link RunHookOptions.recordEgress} was set (and the run was confined).
+   */
+  readonly egress: readonly EgressAttempt[];
   /**
    * The decision the hook expressed, preferring the structured
    * `permissionDecision` ("allow"|"deny"|"ask") then legacy `decision`
@@ -162,6 +190,8 @@ export interface HookSpawnResult {
   readonly signal: string | null;
   readonly stdout: string;
   readonly stderr: string;
+  /** Egress attempts captured by the in-sandbox recorder (recordEgress only). */
+  readonly egress?: readonly EgressAttempt[];
 }
 
 /** Spawn a hook (command + piped event) — the injectable seam over the real spawn. */
@@ -200,8 +230,10 @@ export function runHookWith(
   // overrides the default either way. The trust fed to decideSandbox stays
   // `false` at this tier — a raw command has no provenance, so an explicit
   // "auto"/"strict" here is always a request to *confine*, not "trusted→direct".
+  // recordEgress needs the netns recorder, so it forces confinement too.
   const mode: SandboxMode =
-    opts.sandbox ?? (opts.trusted === false ? "auto" : false);
+    opts.sandbox ??
+    (opts.trusted === false || opts.recordEgress ? "auto" : false);
   const decision = decideSandbox({
     trusted: false,
     mode,
@@ -217,7 +249,15 @@ export function runHookWith(
   const stderr = res.stderr ?? "";
   const json = parseHookOutput(stdout);
   const { blocked, decision: dec } = decideHook(exitCode, json);
-  return { exitCode, stdout, stderr, json, blocked, decision: dec };
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    json,
+    blocked,
+    egress: res.egress ?? [],
+    decision: dec,
+  };
 }
 
 /** Run the hook command directly through a shell (the default, unconfined). */
@@ -244,7 +284,33 @@ function directSpawn(
 
 /* v8 ignore start -- spawns real bwrap; exercised by the bwrap-gated integration
    test (skipped without bwrap). The decision logic is runHookWith (unit-tested
-   with fakes); the confinement argv is bwrapArgs/setenvArgs (unit-tested). */
+   with fakes); the confinement argv is bwrapArgs/setenvArgs and the egress log
+   parse is parseEgressLog (all unit-tested). */
+
+// When recordEgress is on: co-launch the recorder on loopback, point HTTP(S)_PROXY
+// at it, run the hook, then stop it. Paths come in via env (no shell escaping).
+const EGRESS_WRAPPER = [
+  'node "$VIG_EGRESS_ENTRY" "$VIG_EGRESS_LOG" "$VIG_EGRESS_PORT" &',
+  "EPID=$!",
+  "i=0",
+  'while [ ! -s "$VIG_EGRESS_PORT" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i+1)); done',
+  'export HTTP_PROXY="http://127.0.0.1:$(cat "$VIG_EGRESS_PORT")"',
+  'export HTTPS_PROXY="$HTTP_PROXY" http_proxy="$HTTP_PROXY" https_proxy="$HTTP_PROXY"',
+  'sh -c "$VIG_HOOK_CMD"',
+  "code=$?",
+  'kill "$EPID" 2>/dev/null',
+  'exit "$code"',
+].join("\n");
+
+function egressProxyEntry(): string {
+  return (
+    [
+      join(__dirname, "egress-proxy.js"),
+      join(__dirname, "..", "dist", "egress-proxy.js"),
+    ].find((p) => existsSync(p)) ?? join(__dirname, "egress-proxy.js")
+  );
+}
+
 function sandboxedSpawn(
   command: string,
   input: HookInput,
@@ -257,7 +323,7 @@ function sandboxedSpawn(
   // the throwaway IO dir (so a hook that writes a marker still works).
   const cwd = opts.cwd ?? ioDir;
   try {
-    const args = [
+    const baseArgs = [
       ...bwrapArgs({
         cwd,
         ioDir,
@@ -265,17 +331,53 @@ function sandboxedSpawn(
         path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
       }),
       ...setenvArgs(opts.env ?? {}),
-      "sh",
-      "-c",
-      command,
     ];
-    const res = spawnSync("bwrap", args, {
+    const spawnOpts = {
       cwd,
       env: process.env,
       input: JSON.stringify(input),
-      encoding: "utf-8",
+      encoding: "utf-8" as const,
       timeout: opts.timeoutMs ?? 10000,
-    });
+    };
+    if (opts.recordEgress) {
+      const egressLog = join(ioDir, "egress.ndjson");
+      const portFile = join(ioDir, "egress.port");
+      writeFileSync(egressLog, "");
+      const args = [
+        ...baseArgs,
+        "--setenv",
+        "VIG_EGRESS_ENTRY",
+        egressProxyEntry(),
+        "--setenv",
+        "VIG_EGRESS_LOG",
+        egressLog,
+        "--setenv",
+        "VIG_EGRESS_PORT",
+        portFile,
+        "--setenv",
+        "VIG_HOOK_CMD",
+        command,
+        "sh",
+        "-c",
+        EGRESS_WRAPPER,
+      ];
+      const res = spawnSync("bwrap", args, spawnOpts);
+      const egress = parseEgressLog(
+        existsSync(egressLog) ? readFileSync(egressLog, "utf-8") : "",
+      );
+      return {
+        status: res.status,
+        signal: res.signal,
+        stdout: res.stdout ?? "",
+        stderr: res.stderr ?? "",
+        egress,
+      };
+    }
+    const res = spawnSync(
+      "bwrap",
+      [...baseArgs, "sh", "-c", command],
+      spawnOpts,
+    );
     return {
       status: res.status,
       signal: res.signal,

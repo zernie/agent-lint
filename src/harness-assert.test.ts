@@ -20,6 +20,9 @@ import {
   assertServedTurns,
   assertHookBlocked,
   assertHookAllowed,
+  assertNoEgress,
+  assertEgressOnly,
+  egressHosts,
   assertAgentOk,
   assertAgentErr,
   assertAgentResult,
@@ -56,6 +59,7 @@ function fakeHook(blocked: boolean): HookRunResult {
     stderr: "",
     json: null,
     blocked,
+    egress: [],
     decision: blocked ? "deny" : undefined,
   };
 }
@@ -279,6 +283,40 @@ test("assertHookBlocked / assertHookAllowed (run-hook results)", () => {
   });
   assert.throws(() => {
     assertHookAllowed(fakeHook(true));
+  });
+});
+
+test("assertNoEgress / assertEgressOnly / egressHosts (recordEgress results)", () => {
+  const clean = { egress: [] };
+  assert.doesNotThrow(() => {
+    assertNoEgress(clean);
+  });
+  assert.deepEqual(egressHosts(clean), []);
+
+  const reached = {
+    egress: [
+      { host: "registry.npmjs.org", port: 443, ts: 1 },
+      { host: "evil.example", port: 80, ts: 2 },
+    ],
+  };
+  assert.deepEqual(egressHosts(reached), [
+    "registry.npmjs.org:443",
+    "evil.example:80",
+  ]);
+  // no-egress assertion names the offenders
+  assert.throws(() => {
+    assertNoEgress(reached);
+  }, /evil\.example/);
+  // allowlist by host string leaves the non-allowlisted one as a failure
+  assert.throws(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org"]);
+  }, /evil\.example:80/);
+  // host regex + exact host:port both satisfy the allowlist
+  assert.doesNotThrow(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org", /evil\./]);
+  });
+  assert.doesNotThrow(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org:443", "evil.example:80"]);
   });
 });
 

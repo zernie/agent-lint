@@ -21,7 +21,7 @@ import {
   type Trace,
 } from "./harness-test.js";
 import type { EvalReport, TriggerRateReport } from "./eval.js";
-import type { HookRunResult } from "./run-hook.js";
+import type { HookRunResult, EgressAttempt } from "./run-hook.js";
 import type { OutputContract } from "./spec.js";
 import { parseAgentResult, type ParsedAgentResult } from "./agent-result.js";
 import { compareArms } from "./stats.js";
@@ -109,6 +109,54 @@ export function assertHookAllowed(r: HookRunResult): void {
     fail(
       `expected the hook to allow, but it blocked (exit ${String(r.exitCode)}, decision ${String(r.decision)})`,
     );
+  }
+}
+
+// --- egress (network) — recordEgress runs ----------------------------------
+//
+// A `runHook(..., { recordEgress: true })` confines the hook AND records every
+// host:port a proxy-honoring tool tried to reach (then blocks it). These assert
+// over that record: a hook should phone home to nothing, or only to an allowlist.
+
+/** Anything carrying recorded egress attempts (a runHook recordEgress result). */
+interface HasEgress {
+  readonly egress: readonly EgressAttempt[];
+}
+
+const hostPort = (e: EgressAttempt): string => `${e.host}:${String(e.port)}`;
+
+/** The `host:port` strings a run attempted, e.g. `["registry.npmjs.org:443"]`. */
+export function egressHosts(r: HasEgress): string[] {
+  return r.egress.map(hostPort);
+}
+
+/** Assert the confined run made NO network egress attempt at all. */
+export function assertNoEgress(r: HasEgress): void {
+  if (r.egress.length > 0) {
+    fail(
+      `expected no egress, but it tried to reach: ${egressHosts(r).join(", ")}`,
+    );
+  }
+}
+
+/**
+ * Assert every egress attempt went to an allowed host. `allowed` matches a host
+ * (exact string or regex), or a specific `host:port`. Any attempt outside the
+ * allowlist fails, naming the offender — exfil / unexpected-registry detection.
+ */
+export function assertEgressOnly(
+  r: HasEgress,
+  allowed: ReadonlyArray<string | RegExp>,
+): void {
+  const ok = (e: EgressAttempt): boolean =>
+    allowed.some((a) =>
+      typeof a === "string"
+        ? a === e.host || a === hostPort(e)
+        : a.test(e.host) || a.test(hostPort(e)),
+    );
+  const bad = r.egress.filter((e) => !ok(e));
+  if (bad.length > 0) {
+    fail(`egress to non-allowlisted host(s): ${bad.map(hostPort).join(", ")}`);
   }
 }
 

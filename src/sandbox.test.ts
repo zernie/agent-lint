@@ -16,6 +16,7 @@ import {
   bwrapArgs,
   setenvArgs,
   parseRequestLog,
+  parseEgressLog,
 } from "./sandbox.js";
 import {
   runHarnessTest,
@@ -131,6 +132,27 @@ test("parseRequestLog: parses ndjson, skips blank and partial lines", () => {
   assert.equal(reqs[0]?.system, "s1");
   assert.equal(reqs[1]?.system, "s2");
   assert.deepEqual(parseRequestLog(""), []);
+});
+
+test("parseEgressLog: parses host/port, skips blank/partial/invalid lines", () => {
+  const ndjson =
+    JSON.stringify({ host: "registry.npmjs.org", port: 443, ts: 1 }) +
+    "\n\n" +
+    JSON.stringify({ host: "evil.example", port: 80, ts: 2 }) +
+    "\n" +
+    JSON.stringify({ host: "no-port" }) + // missing port → skipped
+    "\n" +
+    JSON.stringify({ port: 22 }) + // missing host → skipped
+    "\n" +
+    '{"host":"partial' + // half-written final line → skipped
+    "\n";
+  const out = parseEgressLog(ndjson);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0], { host: "registry.npmjs.org", port: 443, ts: 1 });
+  assert.equal(out[1]?.host, "evil.example");
+  // a record without ts defaults to 0
+  assert.equal(parseEgressLog('{"host":"h","port":7}')[0]?.ts, 0);
+  assert.deepEqual(parseEgressLog(""), []);
 });
 
 // --- end-to-end confinement (needs a real bwrap + claude) ------------------
