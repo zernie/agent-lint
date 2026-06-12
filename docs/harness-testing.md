@@ -54,16 +54,23 @@ What it does **not** prove: that the hook is _wired in_ (settings point at it,
 `${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
 both: unit-test the logic here, then assert it fires in the assembled machine.
 
-**Unit-testing a hook you don't trust?** Pass `sandbox: "auto"` (or `"strict"`)
-to confine a third-party hook command under bubblewrap — a no-egress namespace
-with a cleared environment (so the hook can't read your `ANTHROPIC_API_KEY`),
-while the env _you_ pass in `opts.env` is added back. It refuses rather than
-running unconfined where no sandbox is available (Linux + bwrap only). Same
-safe-by-default policy as `runHarnessTest`'s plugin confinement (`src/sandbox.ts`):
+**Unit-testing a hook you don't trust?** Mark it `trusted: false` and confinement
+is the default — no need to also remember `sandbox: "auto"`. A foreign hook
+command runs under bubblewrap (a no-egress namespace with a cleared environment,
+so it can't read your `ANTHROPIC_API_KEY`, while the env _you_ pass in `opts.env`
+is added back), and **refuses** rather than running unconfined where no sandbox
+is available (Linux + bwrap only). This is the same safe-by-default policy as
+`runHarnessTest`'s plugin confinement (`src/sandbox.ts`) — there trust follows
+`plugin`/`pluginDir` provenance; here you declare it, because the unit tier takes
+a raw command string:
 
 ```ts
-runHook(vendoredHookCmd, event, { sandbox: "auto", env: { GUARD: guardPath } });
+runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
 ```
+
+Set `sandbox` explicitly to override the trust-derived default: `"auto"`/`"strict"`
+force confinement, and `sandbox: false` opts an untrusted hook back out to a
+direct run (you vouch for it, or the outer container is the boundary).
 
 ## Test the whole machine, not one hook
 
