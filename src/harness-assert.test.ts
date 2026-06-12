@@ -20,6 +20,11 @@ import {
   assertServedTurns,
   assertHookBlocked,
   assertHookAllowed,
+  assertNoEgress,
+  assertEgressOnly,
+  egressHosts,
+  assertNoWrite,
+  assertWroteOnly,
   assertAgentOk,
   assertAgentErr,
   assertAgentResult,
@@ -56,6 +61,8 @@ function fakeHook(blocked: boolean): HookRunResult {
     stderr: "",
     json: null,
     blocked,
+    egress: [],
+    filesWritten: [],
     decision: blocked ? "deny" : undefined,
   };
 }
@@ -279,6 +286,61 @@ test("assertHookBlocked / assertHookAllowed (run-hook results)", () => {
   });
   assert.throws(() => {
     assertHookAllowed(fakeHook(true));
+  });
+});
+
+test("assertNoEgress / assertEgressOnly / egressHosts (recordEgress results)", () => {
+  const clean = { egress: [] };
+  assert.doesNotThrow(() => {
+    assertNoEgress(clean);
+  });
+  assert.deepEqual(egressHosts(clean), []);
+
+  const reached = {
+    egress: [
+      { host: "registry.npmjs.org", port: 443, ts: 1 },
+      { host: "evil.example", port: 80, ts: 2 },
+    ],
+  };
+  assert.deepEqual(egressHosts(reached), [
+    "registry.npmjs.org:443",
+    "evil.example:80",
+  ]);
+  // no-egress assertion names the offenders
+  assert.throws(() => {
+    assertNoEgress(reached);
+  }, /evil\.example/);
+  // allowlist by host string leaves the non-allowlisted one as a failure
+  assert.throws(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org"]);
+  }, /evil\.example:80/);
+  // host regex + exact host:port both satisfy the allowlist
+  assert.doesNotThrow(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org", /evil\./]);
+  });
+  assert.doesNotThrow(() => {
+    assertEgressOnly(reached, ["registry.npmjs.org:443", "evil.example:80"]);
+  });
+});
+
+test("assertNoWrite / assertWroteOnly (confined run file writes)", () => {
+  const r = { filesWritten: [".omc/state/x.json", "out.txt"] };
+  // no-write: by substring and by regex
+  assert.doesNotThrow(() => {
+    assertNoWrite(r, ".env");
+  });
+  assert.throws(() => {
+    assertNoWrite(r, "out.txt");
+  }, /out\.txt/);
+  assert.throws(() => {
+    assertNoWrite(r, /\.json$/);
+  }, /x\.json/);
+  // wrote-only: every file must match an allowed pattern; offenders are named
+  assert.throws(() => {
+    assertWroteOnly(r, [/^\.omc\//]);
+  }, /out\.txt/);
+  assert.doesNotThrow(() => {
+    assertWroteOnly(r, [/^\.omc\//, "out.txt"]);
   });
 });
 

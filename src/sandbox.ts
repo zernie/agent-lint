@@ -43,17 +43,37 @@ import { type ModelTurn, type ModelRequest } from "./mock-model.js";
  */
 export type SandboxMode = "auto" | "strict" | false;
 
+let cachedAvailable: boolean | undefined;
+
 /**
- * Whether bubblewrap is available to confine untrusted code. **Linux only** —
- * bubblewrap is a Linux tool, so this is always `false` on macOS / Windows,
- * where confined execution isn't supported and untrusted code must instead be
- * run via `sandbox: false` (trusting the outer container) or skipped.
+ * Whether this environment can ACTUALLY confine untrusted code under bubblewrap.
+ * **Linux only.** Critically, `bwrap --version` succeeding is NOT enough: many CI
+ * runners and hardened hosts ship bubblewrap but disable the **unprivileged user
+ * namespaces** it depends on, so a real confined exec fails even though the binary
+ * is present. We probe that real capability — a throwaway `bwrap --unshare-all …
+ * true` — and cache it, so we never *claim* confinement we can't deliver.
+ * `decideSandbox` then correctly refuses untrusted code in such an environment
+ * (rather than running it in a "sandbox" that doesn't actually sandbox), and the
+ * sandbox-gated tests skip instead of failing. The result is cached because the
+ * probe spawns a process and the answer can't change within a run.
  */
 export function sandboxAvailable(): boolean {
+  if (cachedAvailable === undefined) cachedAvailable = probeSandbox();
+  return cachedAvailable;
+}
+
+function probeSandbox(): boolean {
   /* v8 ignore next -- non-Linux has no bwrap; CI/coverage runs on Linux */
   if (process.platform !== "linux") return false;
   try {
-    return spawnSync("bwrap", ["--version"], { stdio: "ignore" }).status === 0;
+    // The capability that fails when user namespaces are disabled is the
+    // namespace creation itself (`--unshare-all`), so probe exactly that.
+    return (
+      spawnSync("bwrap", ["--unshare-all", "--ro-bind", "/", "/", "true"], {
+        stdio: "ignore",
+        timeout: 10_000,
+      }).status === 0
+    );
   } catch {
     /* v8 ignore next -- defensive: spawnSync only throws on a fork failure */
     return false;
@@ -192,6 +212,51 @@ export function parseRequestLog(ndjson: string): ModelRequest[] {
     }
   }
   return out;
+}
+
+/** A network egress attempt a confined hook made — recorded, then blocked. */
+export interface EgressAttempt {
+  readonly host: string;
+  readonly port: number;
+  /** ms epoch when the attempt was recorded. */
+  readonly ts: number;
+}
+
+/**
+ * Parse the egress recorder's ndjson log into {@link EgressAttempt}s. Pure, so
+ * the record-shape and the malformed-line tolerance are unit-tested without a
+ * sandbox. A line missing host/port is skipped (a partially-flushed final line).
+ */
+export function parseEgressLog(ndjson: string): EgressAttempt[] {
+  const out: EgressAttempt[] = [];
+  for (const line of ndjson.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const o = JSON.parse(line) as Partial<EgressAttempt>;
+      if (typeof o.host === "string" && typeof o.port === "number") {
+        out.push({ host: o.host, port: o.port, ts: Number(o.ts) || 0 });
+      }
+    } catch {
+      /* a partially-written final line — skip */
+    }
+  }
+  return out;
+}
+
+/**
+ * The files in `after` that are new or changed vs `before` — i.e. what a confined
+ * run wrote to its work dir. Each tree maps a relative path to a content
+ * signature (size + mtime). Pure, so the diff is unit-tested without a sandbox.
+ */
+export function diffTrees(
+  before: Readonly<Record<string, string>>,
+  after: Readonly<Record<string, string>>,
+): string[] {
+  const out: string[] = [];
+  for (const [path, sig] of Object.entries(after)) {
+    if (before[path] !== sig) out.push(path);
+  }
+  return out.sort();
 }
 
 /** The raw output of a sandboxed run: exit code, captured stdout, and requests. */
