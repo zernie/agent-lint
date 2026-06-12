@@ -108,15 +108,15 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/harness-test.test.ts":
       "Harness-test suite (node:test, skips without claude)",
     "src/sandbox.ts":
-      "Safe-by-default confinement: decideSandbox is the pure policy (untrusted plugin code never runs unconfined unless sandbox:false), runSandboxed co-launches the mock + claude inside one bubblewrap network namespace (loopback-only — mock reachable, egress blocked); specTrusted/bwrapArgs/parseRequestLog are the pure, tested seams",
+      "Safe-by-default confinement: decideSandbox is the pure policy (untrusted plugin code never runs unconfined unless sandbox:false), runSandboxed co-launches the mock + claude inside one bubblewrap network namespace (loopback-only — mock reachable, egress blocked); specTrusted/bwrapArgs/setenvArgs/parseRequestLog are the pure, tested seams (setenvArgs adds a hook's configured env back after --clearenv, reused by the unit-tier sandbox in run-hook.ts)",
     "src/sandbox.test.ts":
       "Sandbox test suite: pure policy/trust/args/log-parse coverage + a gated end-to-end test proving a sandboxed run blocks network egress while the in-sandbox mock stays reachable (skips without bwrap/claude)",
     "src/mock-entry.ts":
       "In-sandbox mock entry: run as a subprocess inside the bwrap netns so the scripted mock lives on the isolated loopback; streams captured requests to a file the parent reads back for trace.modelRequests",
     "src/run-hook.ts":
-      "Hook unit tier: runHook pipes a synthesized event JSON to a hook process (no claude, no model) and reports exit code + normalized block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event (Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop); parseHookOutput/decideHook are the pure, testable decision logic",
+      'Hook unit tier: runHook pipes a synthesized event JSON to a hook process (no claude, no model) and reports exit code + normalized block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event (Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop); parseHookOutput/decideHook are the pure, testable decision logic; opt-in sandbox: "auto"/"strict" confines an untrusted hook command under bubblewrap (reusing sandbox.ts) via the injectable runHookWith seam (direct/sandboxed/refuse all unit-tested with fakes)',
     "src/run-hook.test.ts":
-      "Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions",
+      "Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions, runHookWith sandbox routing (fake spawners) + a gated bwrap confinement test (host env cleared, opts.env added back)",
     "src/eval.ts":
       "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) + cost/latency/token usage; bounded concurrency (runPool) + rate-limit backoff + maxCostUsd budget cap; record/replay cache (cache:readwrite) replays runs so editing measure re-scores for free; measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (the #1 skill-authoring pain) — the empirical half of testing your harness (generalizes bench/)",
     "src/eval.test.ts":

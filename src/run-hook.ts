@@ -28,6 +28,17 @@
  * logic here, then assert it fires in the assembled machine there.
  */
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  decideSandbox,
+  sandboxAvailable,
+  bwrapArgs,
+  setenvArgs,
+  type SandboxMode,
+} from "./sandbox.js";
 
 /** A hook event payload (the JSON Claude Code writes to the hook's stdin). */
 export interface HookInput {
@@ -71,6 +82,16 @@ export interface RunHookOptions {
   readonly env?: Record<string, string>;
   /** Per-run timeout ms. Default 10000. */
   readonly timeoutMs?: number;
+  /**
+   * Confine the hook under bubblewrap (Linux). Default `false` — run directly,
+   * since the command is normally one YOU wrote in the test. Pass `"auto"` or
+   * `"strict"` when unit-testing a hook command you DON'T fully trust (a vendored
+   * third-party hook script): it runs in a no-egress namespace with a cleared
+   * environment (your `opts.env` is added back), or **refuses** if no bwrap is
+   * available rather than running it unconfined. macOS/Windows have no bwrap, so
+   * `"auto"`/`"strict"` throw there — see `src/sandbox.ts`.
+   */
+  readonly sandbox?: SandboxMode;
 }
 
 export interface HookRunResult {
@@ -122,17 +143,68 @@ export function decideHook(
   return { blocked, decision };
 }
 
-/**
- * Run a hook command, piping `input` as JSON to its stdin, and report the exit
- * code + parsed decision. Synchronous (so it can be used inside an eval's
- * `measure` too). `command` is run through a shell, so the same command string a
- * plugin ships (with args / env refs) works verbatim.
- */
-export function runHook(
+/** The raw fields of a hook spawn that the result parser needs. */
+export interface HookSpawnResult {
+  readonly status: number | null;
+  readonly signal: string | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** Spawn a hook (command + piped event) — the injectable seam over the real spawn. */
+export type HookSpawner = (
   command: string,
   input: HookInput,
-  opts: RunHookOptions = {},
+  opts: RunHookOptions,
+) => HookSpawnResult;
+
+/** The spawn seams `runHookWith` needs, so its decision logic is testable. */
+export interface RunHookDeps {
+  /** Whether bubblewrap confinement is available (Linux + bwrap). */
+  readonly available: boolean;
+  /** Run the command directly (unconfined). */
+  readonly direct: HookSpawner;
+  /** Run the command confined under bubblewrap. */
+  readonly sandboxed: HookSpawner;
+}
+
+/**
+ * The hook-run orchestration with injectable spawn seams: pick direct vs.
+ * confined via the safe-by-default policy (`decideSandbox`), then parse the exit
+ * code + stdout into a normalized decision. Exported so all three branches
+ * (direct / sandbox / refuse) are unit-tested with fake spawners — no real
+ * bwrap. `runHook` is this with the real seams.
+ */
+export function runHookWith(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+  deps: RunHookDeps,
 ): HookRunResult {
+  const decision = decideSandbox({
+    trusted: false,
+    mode: opts.sandbox ?? false,
+    available: deps.available,
+  });
+  if (decision.action === "throw") throw new Error(decision.reason);
+  const res =
+    decision.action === "sandbox"
+      ? deps.sandboxed(command, input, opts)
+      : deps.direct(command, input, opts);
+  const exitCode = res.status ?? (res.signal ? 1 : 0);
+  const stdout = res.stdout ?? "";
+  const stderr = res.stderr ?? "";
+  const json = parseHookOutput(stdout);
+  const { blocked, decision: dec } = decideHook(exitCode, json);
+  return { exitCode, stdout, stderr, json, blocked, decision: dec };
+}
+
+/** Run the hook command directly through a shell (the default, unconfined). */
+function directSpawn(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+): HookSpawnResult {
   const res = spawnSync(command, {
     shell: true,
     cwd: opts.cwd,
@@ -141,10 +213,77 @@ export function runHook(
     encoding: "utf-8",
     timeout: opts.timeoutMs ?? 10000,
   });
-  const exitCode = res.status ?? (res.signal ? 1 : 0);
-  const stdout = res.stdout ?? "";
-  const stderr = res.stderr ?? "";
-  const json = parseHookOutput(stdout);
-  const { blocked, decision } = decideHook(exitCode, json);
-  return { exitCode, stdout, stderr, json, blocked, decision };
+  return {
+    status: res.status,
+    signal: res.signal,
+    stdout: res.stdout ?? "",
+    stderr: res.stderr ?? "",
+  };
+}
+
+/* v8 ignore start -- spawns real bwrap; exercised by the bwrap-gated integration
+   test (skipped without bwrap). The decision logic is runHookWith (unit-tested
+   with fakes); the confinement argv is bwrapArgs/setenvArgs (unit-tested). */
+function sandboxedSpawn(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+): HookSpawnResult {
+  const ioDir = mkdtempSync(join(tmpdir(), "vigiles-hook-sbx-"));
+  const home = join(ioDir, "home");
+  mkdirSync(home);
+  // The hook gets a confined writable work dir: the caller's cwd if given, else
+  // the throwaway IO dir (so a hook that writes a marker still works).
+  const cwd = opts.cwd ?? ioDir;
+  try {
+    const args = [
+      ...bwrapArgs({
+        cwd,
+        ioDir,
+        home,
+        path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+      }),
+      ...setenvArgs(opts.env ?? {}),
+      "sh",
+      "-c",
+      command,
+    ];
+    const res = spawnSync("bwrap", args, {
+      cwd,
+      env: process.env,
+      input: JSON.stringify(input),
+      encoding: "utf-8",
+      timeout: opts.timeoutMs ?? 10000,
+    });
+    return {
+      status: res.status,
+      signal: res.signal,
+      stdout: res.stdout ?? "",
+      stderr: res.stderr ?? "",
+    };
+  } finally {
+    rmSync(ioDir, { recursive: true, force: true });
+  }
+}
+
+const REAL_DEPS: RunHookDeps = {
+  available: sandboxAvailable(),
+  direct: directSpawn,
+  sandboxed: sandboxedSpawn,
+};
+/* v8 ignore stop */
+
+/**
+ * Run a hook command, piping `input` as JSON to its stdin, and report the exit
+ * code + parsed decision. Synchronous (so it can be used inside an eval's
+ * `measure` too). `command` is run through a shell, so the same command string a
+ * plugin ships (with args / env refs) works verbatim. Pass `sandbox: "auto"` to
+ * confine a hook you don't trust (see {@link RunHookOptions.sandbox}).
+ */
+export function runHook(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions = {},
+): HookRunResult {
+  return runHookWith(command, input, opts, REAL_DEPS);
 }

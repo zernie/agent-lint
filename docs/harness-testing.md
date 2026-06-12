@@ -22,8 +22,8 @@ ships a zero-dependency CLI fallback (`vigiles test` / `vigiles eval`).
 
 A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
 back an exit code (`2` = block) and an optional JSON decision on stdout.
-`runHook` exercises exactly that contract — no `claude` binary, no model, no
-sandbox — so a hook's logic is testable in milliseconds, in any runner:
+`runHook` exercises exactly that contract — no `claude` binary, no model — so a
+hook's logic is testable in milliseconds, in any runner:
 
 ```ts
 import { runHook } from "vigiles/run-hook";
@@ -53,6 +53,17 @@ testable.
 What it does **not** prove: that the hook is _wired in_ (settings point at it,
 `${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
 both: unit-test the logic here, then assert it fires in the assembled machine.
+
+**Unit-testing a hook you don't trust?** Pass `sandbox: "auto"` (or `"strict"`)
+to confine a third-party hook command under bubblewrap — a no-egress namespace
+with a cleared environment (so the hook can't read your `ANTHROPIC_API_KEY`),
+while the env _you_ pass in `opts.env` is added back. It refuses rather than
+running unconfined where no sandbox is available (Linux + bwrap only). Same
+safe-by-default policy as `runHarnessTest`'s plugin confinement (`src/sandbox.ts`):
+
+```ts
+runHook(vendoredHookCmd, event, { sandbox: "auto", env: { GUARD: guardPath } });
+```
 
 ## Test the whole machine, not one hook
 
