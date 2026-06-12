@@ -26,7 +26,9 @@ first:
 
 1. **Verify the references** (static, free) — `vigiles audit` checks that the
    linter rules, files, scripts, and symbols your instruction files cite are
-   real. See the [main README](../README.md).
+   real. See [Verify your instruction files](../README.md#verify-your-instruction-files)
+   and [linter support](linter-support.md) for how rules resolve across the 7
+   catalogs.
 2. **Unit-test a hook** (`runHook`, no `claude`) — given this event JSON, does my
    hook block or allow? Milliseconds, no CLI, reaches **every** event.
 3. **Deterministic harness tests** (`runHarnessTest`, no API key) — is the hook
