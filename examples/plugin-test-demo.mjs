@@ -85,8 +85,15 @@ if (!sandboxAvailable()) {
       timeoutMs: 30000,
     },
   );
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
   if (r.egress.length === 0) {
-    line("   → it made no network calls.");
+    line(
+      nodeMajor < 22
+        ? "   (no egress captured — recording a Node fetch() needs Node 22+; you're on " +
+            process.versions.node +
+            ")"
+        : "   → it made no network calls.",
+    );
   } else {
     for (const e of r.egress)
       line(`   → it tried to reach ${e.host}:${e.port}`);

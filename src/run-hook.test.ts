@@ -261,7 +261,12 @@ test.skipIf(!sandboxAvailable())(
 
 // --- recordEgress: record + block a hook's network (needs real bwrap) -------
 
-test.skipIf(!sandboxAvailable())(
+// Capturing Node's global fetch() needs NODE_USE_ENV_PROXY, which only takes
+// effect on Node 22+. Proxy-honoring tools (curl/npm/pip) work on every version;
+// this gate is only for the fetch-based session-start test below.
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+
+test.skipIf(!sandboxAvailable() || nodeMajor < 22)(
   "dogfood: oh-my-claudecode's session-start hook update-checks ONLY the npm registry",
   () => {
     // A REAL, useful finding about a popular plugin: OMC's SessionStart hook

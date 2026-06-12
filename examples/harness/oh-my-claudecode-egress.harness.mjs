@@ -63,33 +63,40 @@ check("oh-my-claudecode keyword-detector makes zero egress", () => {
 // 2. A REAL finding: OMC's session-start hook update-checks the npm registry on
 // every session start. Record it (a Node fetch, via the proxy) and prove it
 // phones the npm registry and NOTHING else — while the netns blocks it.
-check("session-start update-checks ONLY the npm registry", () => {
-  const ws = mkdtempSync(join(tmpdir(), "omc-ws-")); // a workspace anchor
-  writeFileSync(join(ws, ".omc-workspace"), "");
-  const r = runHook(
-    `node "${ROOT}/scripts/run.cjs" "${ROOT}/scripts/session-start.mjs"`,
-    { hook_event_name: "SessionStart", source: "startup" },
-    {
-      recordEgress: true,
-      cwd: ws,
-      env: {
-        CLAUDE_PLUGIN_ROOT: ROOT,
-        OMC_STATE_DIR: mkdtempSync(join(tmpdir(), "omc-state-")),
-      },
-      timeoutMs: 30000,
-    },
-  );
-  const hit = r.egress.find((e) => e.host === "registry.npmjs.org");
-  if (!hit) {
-    throw new Error(
-      `expected the update check recorded; got ${JSON.stringify(r.egress)}`,
-    );
-  }
-  assertEgressOnly(r, ["registry.npmjs.org"]);
+// (Capturing a Node fetch() needs NODE_USE_ENV_PROXY → Node 22+.)
+if (Number(process.versions.node.split(".")[0]) < 22) {
   console.log(
-    `      (recorded ${hit.host}:${hit.port} — its update check — and blocked it)`,
+    "  – session-start update-check skipped (capturing fetch() needs Node 22+)",
   );
-});
+} else {
+  check("session-start update-checks ONLY the npm registry", () => {
+    const ws = mkdtempSync(join(tmpdir(), "omc-ws-")); // a workspace anchor
+    writeFileSync(join(ws, ".omc-workspace"), "");
+    const r = runHook(
+      `node "${ROOT}/scripts/run.cjs" "${ROOT}/scripts/session-start.mjs"`,
+      { hook_event_name: "SessionStart", source: "startup" },
+      {
+        recordEgress: true,
+        cwd: ws,
+        env: {
+          CLAUDE_PLUGIN_ROOT: ROOT,
+          OMC_STATE_DIR: mkdtempSync(join(tmpdir(), "omc-state-")),
+        },
+        timeoutMs: 30000,
+      },
+    );
+    const hit = r.egress.find((e) => e.host === "registry.npmjs.org");
+    if (!hit) {
+      throw new Error(
+        `expected the update check recorded; got ${JSON.stringify(r.egress)}`,
+      );
+    }
+    assertEgressOnly(r, ["registry.npmjs.org"]);
+    console.log(
+      `      (recorded ${hit.host}:${hit.port} — its update check — and blocked it)`,
+    );
+  });
+}
 
-console.log(failed === 0 ? `\n${2} passed.` : `\n${failed} failed.`);
+console.log(failed === 0 ? "\nok" : `\n${failed} failed.`);
 process.exit(failed === 0 ? 0 : 1);
