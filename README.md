@@ -40,7 +40,9 @@
 
 ## Two pillars — pick one or both
 
-`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them — and it's usually trusted on hope. vigiles is the **missing linting + testing layer for agentic coding**: it **lints** your instruction files and **tests** your harness. Two pillars of equal weight — adopt either on its own, or both:
+An agent runs real commands in your repo — it can delete the wrong files, leak a secret, or burn tokens looping on a stale instruction nobody checked. You'd never ship an app without a linter and a test suite. An AI agent steering your codebase is no different — so why is its harness trusted on vibes?
+
+`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them. vigiles is the **missing linting + testing layer for agentic coding**: it **lints** your instruction files and **tests** your harness. Two pillars of equal weight — adopt either on its own, or both:
 
 |       | Pillar                                                              | What it does                                                                                                                                                                 |
 | ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,7 +79,11 @@ Reads fine. Four things are wrong:
 
 The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
 
-Fix it in one line — add a marker to your existing CLAUDE.md and audit it, no install, no new files:
+> **Set it up — paste this into Claude Code:**
+>
+> > Install vigiles and verify my instruction files. Scan my CLAUDE.md / AGENTS.md, turn its real claims into checked references (linter rules, file paths, scripts, symbols), run `vigiles audit`, and show me what's already stale. Use sensible defaults, but **ask me first** whether to stay in markdown mode or generate a typed `.spec.ts`, and whether to wire the audit into CI and install the edit-blocking hooks.
+
+Or do it by hand — add a marker to your existing CLAUDE.md and audit it, no install, no new files:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
@@ -109,6 +115,10 @@ wrong, a skill's description can fail to trigger, injected context can never rea
 the model — all silently, all passing a naive "did it run?" check. So vigiles's
 second pillar **tests the harness itself**, as the assembled machine it ships as.
 
+> **Set it up — paste this into Claude Code:**
+>
+> > Install vigiles and use its `test-harness` skill to write and run a harness test for this project. If I didn't say what to test, pick something real from my hooks / skills / settings, choose the cheapest tier (unit / deterministic / eval), write the test, and run it. Use good defaults, but **ask me** whether to gate it in CI and whether to add a real-model eval.
+
 It's a small library of plain async functions (drops into node:test / vitest /
 jest, or a zero-setup `vigiles test`), with three tiers, cheapest first. The
 design bet is **deterministic and cheap**: the first two tiers never call a model
@@ -122,7 +132,7 @@ needs it.
 - **Eval** — `runEval` runs the real model A/B (change on vs off) and reports the gap as **mean ± se**, with a Welch-t-test [significance gate](docs/harness-testing.md#significance--is-the-gap-real), regression baselines, and cost/latency/token tracking.
 
 ```typescript
-import { runHook } from "vigiles/run-hook";
+import { runHook } from "vigiles/testing";
 
 const r = runHook(guardCommand, {
   hook_event_name: "PreToolUse",
