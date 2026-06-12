@@ -88,13 +88,21 @@ so the attempt is captured and nothing leaves.
   which is designed but **not yet shipped** — see
   [`research/sandbox-network.md`](../research/sandbox-network.md).
 
-## Dogfood
+## Dogfood — a real finding about a real plugin
 
-The egress recorder runs against a **real, vendored** third-party hook in the
-gate: `src/run-hook.test.ts` confines `oh-my-claudecode`'s `keyword-detector`
-hook under `recordEgress` and asserts it phones home to nothing
-(`assertNoEgress`) — while still doing its job. A second test proves the positive
-case (a `curl` is recorded and blocked). Both skip where bwrap can't confine.
+The egress recorder runs against the **real, vendored** `oh-my-claudecode` plugin
+in the gate (`src/run-hook.test.ts`, skips where bwrap can't confine):
+
+- its `keyword-detector` (UserPromptSubmit) hook → `assertNoEgress` (it phones
+  home to nothing, while still doing its job);
+- its `session-start` (SessionStart) hook → it `fetch()`es
+  `registry.npmjs.org` for an **update check on every session start**. The
+  recorder captures it (Node `fetch` via `NODE_USE_ENV_PROXY`), blocks it, and
+  `assertEgressOnly(r, ["registry.npmjs.org"])` proves it phones the npm
+  registry **and nowhere else**.
+
+That second one isn't a toy curl — it's a genuine supply-chain/privacy property
+of a popular plugin, asserted from its actual code.
 
 ## See also
 

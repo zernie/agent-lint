@@ -91,10 +91,15 @@ mkdir -p "$OMC_DIR/.claude-plugin" "$OMC_DIR/hooks" "$OMC_DIR/scripts/lib" \
   "$OMC_DIR/skills" "$OMC_DIR/agents"
 cp "$OMC/LICENSE" "$OMC_DIR/LICENSE"
 cp "$OMC/.mcp.json" "$OMC_DIR/.mcp.json"
-cp "$OMC/scripts/run.cjs" "$OMC/scripts/keyword-detector.mjs" "$OMC_DIR/scripts/"
+cp "$OMC/scripts/run.cjs" "$OMC/scripts/keyword-detector.mjs" \
+  "$OMC/scripts/session-start.mjs" "$OMC_DIR/scripts/"
 cp "$OMC/scripts/lib/atomic-write.mjs" "$OMC/scripts/lib/config-dir.mjs" \
-  "$OMC/scripts/lib/state-root.mjs" "$OMC/scripts/lib/stdin.mjs" "$OMC_DIR/scripts/lib/"
+  "$OMC/scripts/lib/state-root.mjs" "$OMC/scripts/lib/stdin.mjs" \
+  "$OMC/scripts/lib/model-routing-override-message.mjs" "$OMC_DIR/scripts/lib/"
 cp -r "$OMC/skills/ask" "$OMC/skills/verify" "$OMC_DIR/skills/"
+# minimal package.json: session-start reads package.json#version to gate its
+# npm-registry update check.
+printf '{\n  "name": "oh-my-claudecode",\n  "version": "4.14.6"\n}\n' > "$OMC_DIR/package.json"
 cp "$OMC/agents/code-reviewer.md" "$OMC/agents/critic.md" "$OMC_DIR/agents/"
 cat > "$OMC_DIR/.claude-plugin/plugin.json" <<'JSON'
 {
@@ -118,8 +123,20 @@ cat > "$OMC_DIR/.claude-plugin/plugin.json" <<'JSON'
 JSON
 cat > "$OMC_DIR/hooks/hooks.json" <<'JSON'
 {
-  "description": "OMC orchestration hooks (vendored slice — UserPromptSubmit keyword-detector only)",
+  "description": "OMC orchestration hooks (vendored slice — keyword-detector + session-start update check)",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/session-start.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",

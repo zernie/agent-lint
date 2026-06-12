@@ -16,11 +16,14 @@
  * you can't record egress where you can't confine. External users import from the
  * package: `from "vigiles/run-hook"` + `from "vigiles/harness-assert"`.
  */
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { runHook } from "../../dist/run-hook.js";
 import { sandboxAvailable } from "../../dist/sandbox.js";
-import { assertNoEgress } from "../../dist/harness-assert.js";
+import { assertNoEgress, assertEgressOnly } from "../../dist/harness-assert.js";
 
 if (!sandboxAvailable()) {
   console.log(
@@ -57,20 +60,35 @@ check("oh-my-claudecode keyword-detector makes zero egress", () => {
   assertNoEgress(r); // …and reach out to nothing
 });
 
-// 2. The positive case: an attempt IS recorded (and blocked).
-check("a hook that tries the network is recorded and blocked", () => {
+// 2. A REAL finding: OMC's session-start hook update-checks the npm registry on
+// every session start. Record it (a Node fetch, via the proxy) and prove it
+// phones the npm registry and NOTHING else — while the netns blocks it.
+check("session-start update-checks ONLY the npm registry", () => {
+  const ws = mkdtempSync(join(tmpdir(), "omc-ws-")); // a workspace anchor
+  writeFileSync(join(ws, ".omc-workspace"), "");
   const r = runHook(
-    "curl -s -m 5 -o /dev/null https://registry.npmjs.org/ ; true",
-    { hook_event_name: "PreToolUse", tool_name: "Bash" },
-    { recordEgress: true, timeoutMs: 30000 },
+    `node "${ROOT}/scripts/run.cjs" "${ROOT}/scripts/session-start.mjs"`,
+    { hook_event_name: "SessionStart", source: "startup" },
+    {
+      recordEgress: true,
+      cwd: ws,
+      env: {
+        CLAUDE_PLUGIN_ROOT: ROOT,
+        OMC_STATE_DIR: mkdtempSync(join(tmpdir(), "omc-state-")),
+      },
+      timeoutMs: 30000,
+    },
   );
   const hit = r.egress.find((e) => e.host === "registry.npmjs.org");
   if (!hit) {
     throw new Error(
-      `expected the registry attempt recorded; got ${JSON.stringify(r.egress)}`,
+      `expected the update check recorded; got ${JSON.stringify(r.egress)}`,
     );
   }
-  console.log(`      (recorded ${hit.host}:${hit.port}, blocked)`);
+  assertEgressOnly(r, ["registry.npmjs.org"]);
+  console.log(
+    `      (recorded ${hit.host}:${hit.port} — its update check — and blocked it)`,
+  );
 });
 
 console.log(failed === 0 ? `\n${2} passed.` : `\n${failed} failed.`);

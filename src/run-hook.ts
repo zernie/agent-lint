@@ -296,6 +296,9 @@ const EGRESS_WRAPPER = [
   'while [ ! -s "$VIG_EGRESS_PORT" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i+1)); done',
   'export HTTP_PROXY="http://127.0.0.1:$(cat "$VIG_EGRESS_PORT")"',
   'export HTTPS_PROXY="$HTTP_PROXY" http_proxy="$HTTP_PROXY" https_proxy="$HTTP_PROXY"',
+  // Node's fetch (undici) ignores the proxy env unless this is set — without it a
+  // hook that uses fetch() (e.g. an update check) would bypass the recorder.
+  "export NODE_USE_ENV_PROXY=1",
   'sh -c "$VIG_HOOK_CMD"',
   "code=$?",
   'kill "$EPID" 2>/dev/null',
