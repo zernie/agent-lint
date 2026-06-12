@@ -14,6 +14,12 @@
 > `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
 > model) discover and run `*.harness.mjs` / `*.eval.mjs`.
 
+> **Just want to see it?** `npm run demo:plugin` runs vigiles against a real,
+> popular third-party plugin (oh-my-claudecode) and narrates, in plain language,
+> what it ships, whether a hook works, and what it phones home to — including a
+> real finding (it pings the npm registry on every session start, which we
+> record and block). See [`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs).
+
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md —
 is code, and code should be tested. vigiles gives you four layers, lowest cost
 first:

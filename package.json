@@ -54,7 +54,8 @@
     "test:eval": "npm run build && node dist/cli.js eval",
     "test:vitest": "npm run build && vitest run --project runners",
     "test:jest": "npm run build && jest",
-    "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json"
+    "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json",
+    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
