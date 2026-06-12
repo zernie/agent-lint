@@ -214,6 +214,35 @@ export function parseRequestLog(ndjson: string): ModelRequest[] {
   return out;
 }
 
+/** A network egress attempt a confined hook made — recorded, then blocked. */
+export interface EgressAttempt {
+  readonly host: string;
+  readonly port: number;
+  /** ms epoch when the attempt was recorded. */
+  readonly ts: number;
+}
+
+/**
+ * Parse the egress recorder's ndjson log into {@link EgressAttempt}s. Pure, so
+ * the record-shape and the malformed-line tolerance are unit-tested without a
+ * sandbox. A line missing host/port is skipped (a partially-flushed final line).
+ */
+export function parseEgressLog(ndjson: string): EgressAttempt[] {
+  const out: EgressAttempt[] = [];
+  for (const line of ndjson.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const o = JSON.parse(line) as Partial<EgressAttempt>;
+      if (typeof o.host === "string" && typeof o.port === "number") {
+        out.push({ host: o.host, port: o.port, ts: Number(o.ts) || 0 });
+      }
+    } catch {
+      /* a partially-written final line — skip */
+    }
+  }
+  return out;
+}
+
 /** The raw output of a sandboxed run: exit code, captured stdout, and requests. */
 export interface SandboxRunOut {
   readonly code: number;

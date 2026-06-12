@@ -6,7 +6,9 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 
+import { assertNoEgress } from "./harness-assert.js";
 import {
   runHook,
   runHookWith,
@@ -209,6 +211,11 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
     /sandbox|bwrap/,
   );
 
+  // recordEgress also forces confinement (the recorder lives in the netns)
+  used = "";
+  runHookWith("x", {}, { recordEgress: true }, deps(true));
+  assert.equal(used, "sandbox");
+
   // untrusted but explicit opt-out → direct (you vouch for it / outer container)
   used = "";
   runHookWith("x", {}, { trusted: false, sandbox: false }, deps(true));
@@ -247,5 +254,56 @@ test.skipIf(!sandboxAvailable())(
     } finally {
       delete process.env.VIG_FAKE_SECRET;
     }
+  },
+);
+
+// --- recordEgress: record + block a hook's network (needs real bwrap) -------
+
+test.skipIf(!sandboxAvailable())(
+  "recordEgress: a hook's network attempt is recorded AND blocked",
+  () => {
+    // curl honors HTTP(S)_PROXY → the recorder captures the target and refuses,
+    // so the request never actually leaves the netns (curl errors, exit ≠ 0).
+    const r = runHook(
+      "curl -s -m 5 -o /dev/null https://registry.npmjs.org/ ; true",
+      { hook_event_name: "PreToolUse", tool_name: "Bash" },
+      { recordEgress: true, timeoutMs: 30000 },
+    );
+    assert.ok(
+      r.egress.some((e) => e.host === "registry.npmjs.org" && e.port === 443),
+      `expected the registry attempt to be recorded; got ${JSON.stringify(r.egress)}`,
+    );
+  },
+);
+
+test.skipIf(!sandboxAvailable())(
+  "dogfood: the real oh-my-claudecode keyword-detector hook phones home to nothing",
+  () => {
+    // Run a REAL third-party plugin hook (vendored, pinned) under recordEgress
+    // and assert it makes zero network egress — the kind of supply-chain check
+    // this capability exists for.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
+      {
+        hook_event_name: "UserPromptSubmit",
+        prompt: "please ultrawork on this",
+      },
+      {
+        recordEgress: true,
+        env: { CLAUDE_PLUGIN_ROOT: root },
+        timeoutMs: 30000,
+      },
+    );
+    // it still does its job (injects routing) …
+    assert.match(
+      r.json?.hookSpecificOutput?.additionalContext ?? "",
+      /ULTRAWORK/,
+    );
+    // … and it reached out to nothing.
+    assertNoEgress(r);
   },
 );

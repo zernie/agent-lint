@@ -71,7 +71,13 @@ assertHookBlocked(r); // exit 2 / decision:"block" / permissionDecision:"deny"
 ```
 
 Testing a hook you didn't write (a vendored third-party script)? Mark it
-`{ trusted: false }` and it runs confined under bubblewrap by default.
+`{ trusted: false }` and it runs confined under bubblewrap by default (read-only
+host, cleared env, no network egress). Add `{ recordEgress: true }` to also
+**record** what it tries to reach — `r.egress` plus `assertNoEgress(r)` /
+`assertEgressOnly(r, [...])` — the supply-chain check for "what does this skill
+phone home to / install from?". Be precise about the boundaries: see
+[`docs/sandboxing.md`](../../docs/sandboxing.md) (it blocks destruction and
+egress, but does NOT isolate reads of host files, and only under bwrap).
 
 **Deterministic (`runHarnessTest`)** — load the real plugin, drive a scripted
 mock model, assert the hook fired (or the context landed):

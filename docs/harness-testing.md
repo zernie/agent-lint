@@ -761,7 +761,7 @@ everything around it is covered, so the statement/line/function gate holds at
 - [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
-- **The oh-my-claudecode walkthrough** — one real plugin, every tier: [`oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs) (runHook on a real `keyword-detector` hook) · [`oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs) (fired _and_ landed) · [`oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs) (skill trigger-rate).
+- **The oh-my-claudecode walkthrough** — one real plugin, every tier: [`oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs) (runHook on a real `keyword-detector` hook) · [`oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs) (fired _and_ landed) · [`oh-my-claudecode-egress.harness.mjs`](../examples/harness/oh-my-claudecode-egress.harness.mjs) (record + block network egress) · [`oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs) (skill trigger-rate).
 - [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
 - [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
@@ -816,6 +816,7 @@ parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-div
 
 ## See also
 
+- [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO/`rm -rf`, network deny-all vs `recordEgress`, the tiers and limits.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier + file (and why the CLI examples are `.mjs`).
 - [`research/harness-testing.md`](../research/harness-testing.md) — the deterministic + eval design rationale + real-plugin coverage.
 - [`research/benchmarks-runtime-gates.md`](../research/benchmarks-runtime-gates.md) — findings from running this harness in anger.

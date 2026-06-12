@@ -1,0 +1,103 @@
+# Sandboxing — what's isolated, what's recorded (honestly)
+
+Testing a hook or a third-party plugin means **executing its code with your
+privileges**. vigiles confines that under [bubblewrap](https://github.com/containers/bubblewrap)
+(`bwrap`) — but it's important to be precise about what that does and doesn't
+protect, so you don't trust a boundary that isn't there.
+
+## Tiers (graceful degradation, no Docker)
+
+The sandbox protects the **host** from untrusted code. So the real question is
+"is the host already disposable?" — and the answer differs by environment:
+
+| Tier                    | Mechanism                                                                    | When                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **A — bubblewrap**      | a fresh user/net/pid/mount namespace: no egress, read-only host, cleared env | a dev machine where unprivileged user namespaces work                          |
+| **B — outer container** | `sandbox: false`, trusting an already-ephemeral host                         | CI / cloud agents (the runner is thrown away — the inner sandbox is redundant) |
+| **D — refuse**          | run nothing                                                                  | untrusted code, no confinement available, host not disposable                  |
+
+bwrap is the only one that actually confines; Docker/podman-rootless rely on the
+**same** unprivileged-user-namespace primitive, so they're not a way around its
+absence. The honest non-Docker alternative for hosts where user namespaces are
+hard-disabled is [Landlock](https://docs.kernel.org/userspace-api/landlock.html)
+(unprivileged FS, and network from kernel 6.7) — a future tier, not shipped.
+
+> **`sandboxAvailable()` probes real capability, not just the binary.** `bwrap
+--version` succeeding doesn't mean this host can create namespaces (many CI
+> runners disable unprivileged user namespaces). We probe an actual `bwrap
+--unshare-all … true`, so we never claim confinement we can't deliver. On
+> Ubuntu 24.04 runners, unblock it with `sysctl -w
+kernel.apparmor_restrict_unprivileged_userns=0` (see `.github/workflows/ci.yml`).
+
+## Filesystem (IO) — how good is it against `rm -rf`?
+
+**Against destruction: strong.** Under bwrap the host root is mounted
+`--ro-bind / /` (read-only) and only a throwaway work dir is writable. So
+`rm -rf /`, `rm -rf ~`, `rm -rf /etc` all fail with `EROFS` — the worst a hook can
+delete is its own disposable scratch dir.
+
+**Be honest about two gaps:**
+
+1. **Reading is NOT isolated.** The whole host `/` is mounted read-only, so a
+   hook can `cat /home/you/.ssh/id_rsa` or `cat /home/you/.aws/credentials`.
+   Environment secrets are cleared (`--clearenv`, so `ANTHROPIC_API_KEY` isn't
+   visible), but **secrets on disk are readable**. What saves you is that egress
+   is blocked — it can read but can't send. (A future `strictFs` mode would bind
+   a minimal rootfs instead of all of `/`, at the cost of compatibility.)
+2. **Only Tier A.** With `sandbox: false` / trusted-inline, the hook runs with
+   **full host access** — `rm -rf ~` really deletes your home. That's by design
+   (it's code you wrote), but it means the protection above applies only to
+   _confined_ runs.
+
+## Network — block, and (optionally) record
+
+**Default: deny-all, and it's a real wall.** Under bwrap the net namespace has
+loopback only and no external route, so nothing a hook does reaches the network.
+The scripted mock is co-launched _inside_ the namespace, so it stays reachable
+while real egress is blocked.
+
+**`recordEgress` — record what it tried to reach, while still blocking it.** A
+deny-all wall tells you nothing about _what_ a hook wanted. For the supply-chain
+question — "what does this skill phone home to / which registry would its install
+hit?" — turn on recording:
+
+```ts
+import { runHook } from "vigiles/run-hook";
+import { assertNoEgress, assertEgressOnly } from "vigiles/harness-assert";
+
+const r = runHook(thirdPartyHookCmd, event, { recordEgress: true });
+// r.egress → [{ host: "registry.npmjs.org", port: 443, ts }]   (recorded)
+assertNoEgress(r); // a hook that should phone home to nothing
+// or: assertEgressOnly(r, ["registry.npmjs.org", /\.pypi\.org$/]);
+```
+
+`recordEgress` confines the hook (it needs the namespace) and runs a recording
+proxy on the sandbox loopback; `HTTP(S)_PROXY` points proxy-honoring tools (npm,
+pip, curl, fetch) at it. The proxy **records each `host:port` and refuses it** —
+so the attempt is captured and nothing leaves.
+
+**Honest limits of `recordEgress`:**
+
+- It records what **proxy-honoring** tools attempt. Raw-socket egress bypasses
+  the proxy — but the netns still **blocks** it hard, so it can't get out; it
+  just won't appear in the record. _The block is the boundary; the record is
+  best-effort observability over it._
+- It still **blocks**. So a skill that needs a _real_ `npm install` to succeed
+  won't work in this mode — that's the **allowlisted real-egress** mode
+  ([`pasta`](https://passt.top/)/`slirp4netns` gateway + allowlist + logging),
+  which is designed but **not yet shipped** — see
+  [`research/sandbox-network.md`](../research/sandbox-network.md).
+
+## Dogfood
+
+The egress recorder runs against a **real, vendored** third-party hook in the
+gate: `src/run-hook.test.ts` confines `oh-my-claudecode`'s `keyword-detector`
+hook under `recordEgress` and asserts it phones home to nothing
+(`assertNoEgress`) — while still doing its job. A second test proves the positive
+case (a `curl` is recorded and blocked). Both skip where bwrap can't confine.
+
+## See also
+
+- [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
+- [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
+- [`research/sandbox-network.md`](../research/sandbox-network.md) — the allowlisted real-egress design.
