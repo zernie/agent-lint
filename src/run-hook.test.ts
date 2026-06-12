@@ -25,6 +25,7 @@ import {
   type HookSpawnResult,
 } from "./run-hook.js";
 import { sandboxAvailable } from "./sandbox.js";
+import { egressAvailable } from "./egress.js";
 
 test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   assert.deepEqual(parseHookOutput('{"decision":"block","reason":"no"}'), {
@@ -165,6 +166,7 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
   let used = "";
   const deps = (available: boolean): RunHookDeps => ({
     available,
+    egressAvailable: available,
     direct: () => {
       used = "direct";
       return spawnRes({ stdout: '{"decision":"approve"}' });
@@ -172,6 +174,10 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
     sandboxed: () => {
       used = "sandbox";
       return spawnRes({ status: 2 });
+    },
+    egress: () => {
+      used = "egress";
+      return spawnRes();
     },
   });
 
@@ -197,12 +203,17 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
   let used = "";
   const deps = (available: boolean): RunHookDeps => ({
     available,
+    egressAvailable: available,
     direct: () => {
       used = "direct";
       return spawnRes();
     },
     sandboxed: () => {
       used = "sandbox";
+      return spawnRes();
+    },
+    egress: () => {
+      used = "egress";
       return spawnRes();
     },
   });
@@ -233,11 +244,60 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
   assert.equal(used, "direct");
 });
 
+test("runHookWith routes egress:{allow} to the egress seam, refuses when unavailable", () => {
+  let used = "";
+  const deps = (egressAvailable: boolean): RunHookDeps => ({
+    available: true,
+    egressAvailable,
+    direct: () => {
+      used = "direct";
+      return spawnRes();
+    },
+    sandboxed: () => {
+      used = "sandbox";
+      return spawnRes();
+    },
+    egress: () => {
+      used = "egress";
+      return spawnRes({
+        egress: [{ host: "registry.npmjs.org", port: 0, ts: 1, allowed: true }],
+        egressDropped: { packets: 0, bytes: 0 },
+      });
+    },
+  });
+
+  // egress mode + tooling available → the egress seam, surfacing egress + dropped
+  const r = runHookWith(
+    "x",
+    {},
+    { egress: { allow: ["registry.npmjs.org"] } },
+    deps(true),
+  );
+  assert.equal(used, "egress");
+  assert.equal(r.egress[0]?.host, "registry.npmjs.org");
+  assert.equal(r.egress[0]?.allowed, true);
+  assert.deepEqual(r.egressDropped, { packets: 0, bytes: 0 });
+
+  // egress mode + no tooling → refuse (it can't fall back to an unconfined run)
+  assert.throws(
+    () =>
+      runHookWith(
+        "x",
+        {},
+        { egress: { allow: ["registry.npmjs.org"] } },
+        deps(false),
+      ),
+    /egress|slirp4netns|nft/,
+  );
+});
+
 test("runHookWith maps a signal kill to exit 1", () => {
   const deps: RunHookDeps = {
     available: true,
+    egressAvailable: true,
     direct: () => spawnRes({ status: null, signal: "SIGKILL" }),
     sandboxed: () => spawnRes(),
+    egress: () => spawnRes(),
   };
   assert.equal(runHookWith("x", {}, {}, deps).exitCode, 1);
 });
@@ -355,5 +415,75 @@ test.skipIf(!sandboxAvailable())(
     );
     assert.ok(r.filesWritten.length > 0, "it writes its state cache");
     assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
+  },
+);
+
+// --- egress: { allow } — allowlisted REAL egress (needs bwrap+slirp4netns+nft) -
+
+const egressOk = egressAvailable(sandboxAvailable());
+
+test.skipIf(!egressOk)(
+  "egress allowlist: reaches an allowed host, drops everything else at the packet layer",
+  () => {
+    // A hook that hits BOTH an allowlisted host and a non-allowlisted one. The
+    // allowlisted one is reached (and recorded); the other is dropped — and so is
+    // a raw socket, proving the boundary is the packet layer, not a proxy env var.
+    const cmd = [
+      "curl -s -m 12 -o /dev/null https://example.com/ || true",
+      "curl -s -m 6 -o /dev/null https://1.1.1.1/ || true",
+      'timeout 5 bash -c "exec 3<>/dev/tcp/9.9.9.9/443" 2>/dev/null || true',
+    ].join("; ");
+    const r = runHook(
+      cmd,
+      { hook_event_name: "PreToolUse" },
+      { egress: { allow: ["example.com"] }, timeoutMs: 30000 },
+    );
+    // the allowlisted host was actually reached, and is recorded as allowed
+    const reached = r.egress.find((e) => e.host === "example.com");
+    assert.ok(
+      reached?.allowed && (reached.packets ?? 0) > 0,
+      `expected example.com to be reached; got ${JSON.stringify(r.egress)}`,
+    );
+    // everything off the allowlist (1.1.1.1 + the raw 9.9.9.9 socket) was dropped
+    assert.ok(
+      (r.egressDropped?.packets ?? 0) > 0,
+      `expected off-allowlist traffic to be dropped; got ${JSON.stringify(r.egressDropped)}`,
+    );
+  },
+);
+
+test.skipIf(!egressOk)(
+  "dogfood: oh-my-claudecode's session-start reaches the npm registry and NOTHING else",
+  () => {
+    // The recordEgress dogfood proves OMC's SessionStart update-check phones the
+    // npm registry; this proves the SAME thing through the allowlist path — the
+    // fetch actually SUCCEEDS to registry.npmjs.org (allowed), and the drop
+    // counter stays 0 (it reached nowhere off the allowlist).
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
+    writeFileSync(join(ws, ".omc-workspace"), "");
+    const state = mkdtempSync(join(tmpdir(), "omc-state-"));
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/session-start.mjs"`,
+      { hook_event_name: "SessionStart", source: "startup" },
+      {
+        egress: { allow: ["registry.npmjs.org"] },
+        cwd: ws,
+        env: { CLAUDE_PLUGIN_ROOT: root, OMC_STATE_DIR: state },
+        timeoutMs: 40000,
+      },
+    );
+    assert.ok(
+      r.egress.some((e) => e.host === "registry.npmjs.org" && e.allowed),
+      `expected the update check to reach the npm registry; got ${JSON.stringify(r.egress)}`,
+    );
+    assert.equal(
+      r.egressDropped?.packets ?? 0,
+      0,
+      `expected nothing off the allowlist; dropped ${JSON.stringify(r.egressDropped)}`,
+    );
   },
 );

@@ -2,7 +2,8 @@
 
 ## Where we are
 
-Two egress modes ship today (`src/run-hook.ts`, `src/sandbox.ts`):
+Three egress modes ship today (`src/run-hook.ts`, `src/sandbox.ts`,
+`src/egress.ts`):
 
 - **deny-all** (default under bwrap): the net namespace has loopback only and no
   external route. A real wall — nothing leaves. Tested in `src/sandbox.test.ts`.
@@ -11,10 +12,19 @@ Two egress modes ship today (`src/run-hook.ts`, `src/sandbox.ts`):
   blocks it**. Records intent over the wall; the wall still holds. Tested
   end-to-end in `src/run-hook.test.ts` (incl. the dogfood against a real
   oh-my-claudecode hook).
+- **`egress: { allow }`** (NEW): allowlisted real egress — `slirp4netns
+--configure` gives the netns a controlled route, an in-netns `nft` `policy drop`
+  chain accepts only the allowlist's resolved IPs (per-host `counter`s) and
+  `log`+`drop`s the rest. The install **succeeds** to the allowlist and a raw
+  socket off it is **dropped** (the boundary is the packet layer, not a proxy).
+  Pure seams in `src/egress.ts` (ruleset/counter/argv), orchestration in
+  `src/egress-entry.ts`, tested end-to-end in `src/run-hook.test.ts` (incl. the
+  OMC session-start dogfood: reaches `registry.npmjs.org`, drops nothing else).
 
-Both **block**. Neither lets a real `npm install` / `pip install` succeed — which
-is exactly the case a user wants to test ("does this skill install cleanly, and
-only from the registries I expect?"). That's the gap this doc designs.
+The first two **block** — neither lets a real `npm install` / `pip install`
+succeed. `egress: { allow }` closes that: install traffic reaches the allowlist
+and only the allowlist. The remaining gap is naming the _dropped_ hosts and
+pinning rotating DNS — the resolver layer below.
 
 ## The goal: allowlisted real egress + recording
 
@@ -87,12 +97,24 @@ tap0`, and slirp sets up `tap0` (10.0.2.0/24, route, DNS) **inside** the netns
 
 1. ~~Spike the bwrap-netns ↔ pasta/slirp4netns handoff in isolation (shell), prove
    a child can reach an allowlisted host and be logged.~~ **Done** via
-   `slirp4netns --configure` — see `research/spikes/sandbox-network-allowlist.sh`
-   and the experiment note above. (Used `unshare` to create the netns; the
-   remaining integration step is the **bwrap** handoff — getting bwrap's child PID
-   so `slirp4netns` can attach before the child runs, e.g. via a sync/info fd.)
-2. Wrap it behind `egress: { allow }`, parse the `nft` counters/log into
-   `r.egress` (`allowed` flag), reuse `assertEgressOnly`.
-3. Gate the integration test on tool availability (like the bwrap tests).
-4. A separate `strictFs` (minimal-rootfs bind) closes the read-exposure gap noted
+   `slirp4netns --configure` — see `research/spikes/sandbox-network-allowlist.sh`.
+   The **bwrap** handoff (the spike used `unshare`) is also solved: bwrap
+   `--info-fd` reports the child PID, `slirp4netns --configure --ready-fd N`
+   attaches, and the in-netns wrapper blocks on a netready file until the tap is
+   up — `src/egress-entry.ts`. The in-netns `nft` needs `--cap-add CAP_NET_ADMIN`.
+2. ~~Wrap it behind `egress: { allow }`, parse the `nft` counters into `r.egress`
+   (`allowed` flag).~~ **Done** — `src/egress.ts` (`buildEgressNft`,
+   `parseNftCounters`, `countersToResult`, `buildEgressBwrapArgv`), surfaced as
+   `RunHookOptions.egress` → `r.egress` (allowed hosts) + `r.egressDropped`.
+3. ~~Gate the integration test on tool availability (like the bwrap tests).~~
+   **Done** — `egressAvailable(...)` gates the two `src/run-hook.test.ts` cases
+   (the synthetic allow/drop/raw-socket proof + the OMC session-start dogfood).
+4. **Next — resolver-pinned dynamic allowlist.** The shipped allowlist resolves to
+   IPs at launch, so it can't follow DNS rotation or **name the dropped hosts**. A
+   tiny DNS resolver in the netns (resolv.conf → `127.0.0.1`) that forwards
+   queries, logs every name, and `nft add element`s an allowlisted answer's IPs
+   just-in-time would do both: pin rotating hosts AND give `r.egress` a named,
+   `allowed`-flagged entry per attempt (allowed _and_ dropped). The packet-layer
+   `nft` wall stays the boundary; the resolver is the naming + pinning layer.
+5. A separate `strictFs` (minimal-rootfs bind) closes the read-exposure gap noted
    in [`docs/sandboxing.md`](../docs/sandboxing.md).

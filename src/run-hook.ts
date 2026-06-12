@@ -42,6 +42,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  buildEgressNft,
+  buildEgressBwrapArgv,
+  resolveAllow,
+  parseResolvers,
+  parseNftCounters,
+  countersToResult,
+  egressAvailable,
+  type EgressFiles,
+} from "./egress.js";
+import {
   decideSandbox,
   sandboxAvailable,
   bwrapArgs,
@@ -140,6 +150,20 @@ export interface RunHookOptions {
    * best-effort observability over it.
    */
   readonly recordEgress?: boolean;
+  /**
+   * Allowlisted egress: let the hook actually reach the network, but ONLY the
+   * listed hosts, with the boundary at the **packet layer** (an `nft` allowlist
+   * inside the sandbox netns, fed by `slirp4netns`) — so a raw socket to an
+   * off-list host is dropped too, which a `recordEgress`/`HTTP_PROXY` allowlist
+   * cannot guarantee. Use it to test a hook/skill whose setup needs a real
+   * `npm install` from a registry you expect, and nothing else. Implies
+   * confinement (it needs the netns), and **refuses** if bubblewrap + slirp4netns
+   * + nft aren't available. The hosts are resolved to IPs at launch; results land
+   * in {@link HookRunResult.egress} (the allowlisted hosts that were reached, with
+   * `allowed: true`) and {@link HookRunResult.egressDropped} (how much off-list
+   * traffic was blocked). See `docs/sandboxing.md`.
+   */
+  readonly egress?: { readonly allow: readonly string[] };
 }
 
 export interface HookRunResult {
@@ -154,10 +178,18 @@ export interface HookRunResult {
    */
   readonly blocked: boolean;
   /**
-   * Network egress the hook attempted, recorded then blocked. Empty unless
-   * {@link RunHookOptions.recordEgress} was set (and the run was confined).
+   * Network egress the hook attempted. With {@link RunHookOptions.recordEgress}:
+   * every (blocked) attempt the proxy saw. With {@link RunHookOptions.egress}: the
+   * allowlisted hosts that were actually reached (`allowed: true`, with packet
+   * counts). Empty otherwise.
    */
   readonly egress: readonly EgressAttempt[];
+  /**
+   * Allowlisted-egress mode only: the aggregate off-allowlist traffic the
+   * packet-layer wall dropped. `packets === 0` means the hook stayed entirely
+   * within the allowlist. Undefined when {@link RunHookOptions.egress} was unset.
+   */
+  readonly egressDropped?: { readonly packets: number; readonly bytes: number };
   /**
    * Files the hook wrote to its work dir (relative paths), recorded on confined
    * runs — what a hook touched on disk. Empty on a direct (unconfined) run.
@@ -210,6 +242,8 @@ export interface HookSpawnResult {
   readonly stderr: string;
   /** Egress attempts captured by the in-sandbox recorder (recordEgress only). */
   readonly egress?: readonly EgressAttempt[];
+  /** Off-allowlist traffic the packet-layer wall dropped (egress mode only). */
+  readonly egressDropped?: { readonly packets: number; readonly bytes: number };
   /** Files the hook wrote to its work dir (confined runs). */
   readonly filesWritten?: readonly string[];
 }
@@ -225,10 +259,14 @@ export type HookSpawner = (
 export interface RunHookDeps {
   /** Whether bubblewrap confinement is available (Linux + bwrap). */
   readonly available: boolean;
+  /** Whether allowlisted egress is available (bwrap + slirp4netns + nft). */
+  readonly egressAvailable: boolean;
   /** Run the command directly (unconfined). */
   readonly direct: HookSpawner;
   /** Run the command confined under bubblewrap. */
   readonly sandboxed: HookSpawner;
+  /** Run the command confined with an allowlisted-egress netns. */
+  readonly egress: HookSpawner;
 }
 
 /**
@@ -244,6 +282,55 @@ export function runHookWith(
   opts: RunHookOptions,
   deps: RunHookDeps,
 ): HookRunResult {
+  // Allowlisted egress is its own confined path (bwrap netns + slirp4netns + nft);
+  // it can't run unconfined, so it refuses outright when the tooling is absent
+  // rather than falling back to a direct run that would ignore the allowlist.
+  const res = opts.egress
+    ? runEgress(command, input, opts, deps)
+    : runConfinedOrDirect(command, input, opts, deps);
+  const exitCode = res.status ?? (res.signal ? 1 : 0);
+  const stdout = res.stdout ?? "";
+  const stderr = res.stderr ?? "";
+  const json = parseHookOutput(stdout);
+  const { blocked, decision: dec } = decideHook(exitCode, json);
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    json,
+    blocked,
+    egress: res.egress ?? [],
+    egressDropped: res.egressDropped,
+    filesWritten: res.filesWritten ?? [],
+    decision: dec,
+  };
+}
+
+/** The allowlisted-egress branch: confine-with-netns, or refuse if unavailable. */
+function runEgress(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+  deps: RunHookDeps,
+): HookSpawnResult {
+  if (!deps.egressAvailable) {
+    throw new Error(
+      "refusing to run egress: { allow } without the allowlist sandbox: it " +
+        "needs Linux + bubblewrap (bwrap) + slirp4netns + nft — install them to " +
+        "run with a packet-layer egress allowlist, or use recordEgress to record " +
+        "and block instead",
+    );
+  }
+  return deps.egress(command, input, opts);
+}
+
+/** The default branch: pick direct vs. confined via the safe-by-default policy. */
+function runConfinedOrDirect(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+  deps: RunHookDeps,
+): HookSpawnResult {
   // Confinement follows provenance: a trusted hook (the default) runs directly;
   // marking a hook untrusted defaults it to "auto" (confine-or-refuse), so
   // foreign code is never run unconfined by accident. An explicit `sandbox`
@@ -260,25 +347,9 @@ export function runHookWith(
     available: deps.available,
   });
   if (decision.action === "throw") throw new Error(decision.reason);
-  const res =
-    decision.action === "sandbox"
-      ? deps.sandboxed(command, input, opts)
-      : deps.direct(command, input, opts);
-  const exitCode = res.status ?? (res.signal ? 1 : 0);
-  const stdout = res.stdout ?? "";
-  const stderr = res.stderr ?? "";
-  const json = parseHookOutput(stdout);
-  const { blocked, decision: dec } = decideHook(exitCode, json);
-  return {
-    exitCode,
-    stdout,
-    stderr,
-    json,
-    blocked,
-    egress: res.egress ?? [],
-    filesWritten: res.filesWritten ?? [],
-    decision: dec,
-  };
+  return decision.action === "sandbox"
+    ? deps.sandboxed(command, input, opts)
+    : deps.direct(command, input, opts);
 }
 
 /** Run the hook command directly through a shell (the default, unconfined). */
@@ -433,10 +504,130 @@ function sandboxedSpawn(
   }
 }
 
+function egressEntry(): string {
+  return (
+    [
+      join(__dirname, "egress-entry.js"),
+      join(__dirname, "..", "dist", "egress-entry.js"),
+    ].find((p) => existsSync(p)) ?? join(__dirname, "egress-entry.js")
+  );
+}
+
+// Runs INSIDE the bwrap netns: block until the parent has attached slirp4netns
+// (the netready file), load the nft allowlist, run the hook with the event on its
+// stdin, then dump the nft counters to a bound file BEFORE exiting — the netns
+// (and its counters) die with this process, so the read-back must happen here.
+const EGRESS_ALLOW_WRAPPER = [
+  "i=0",
+  'while [ ! -s "$VIG_NETREADY" ] && [ "$i" -lt 400 ]; do sleep 0.05; i=$((i+1)); done',
+  'nft -f "$VIG_NFT" > "$VIG_IODIR/nfterr" 2>&1',
+  'sh -c "$VIG_HOOK" < "$VIG_EVENT"',
+  "code=$?",
+  'nft list chain inet vig output > "$VIG_COUNTERS" 2>/dev/null',
+  'exit "$code"',
+].join("\n");
+
+interface EgressOrchestratorResult {
+  status: number | null;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
+  counters: string;
+}
+
+/** Read the orchestrator's result file, or a failed-run default if it's absent. */
+function readEgressResult(resultFile: string): EgressOrchestratorResult {
+  return existsSync(resultFile)
+    ? (JSON.parse(
+        readFileSync(resultFile, "utf-8"),
+      ) as EgressOrchestratorResult)
+    : { status: 1, signal: null, stdout: "", stderr: "", counters: "" };
+}
+
+function egressSpawn(
+  command: string,
+  input: HookInput,
+  opts: RunHookOptions,
+): HookSpawnResult {
+  const ioDir = mkdtempSync(join(tmpdir(), "vigiles-hook-egr-"));
+  const home = join(ioDir, "home");
+  mkdirSync(home);
+  const work = opts.cwd ?? join(ioDir, "work");
+  mkdirSync(work, { recursive: true });
+  try {
+    // Resolve the allowlist to IPs and the system resolvers, then generate the
+    // nft ruleset (pure helpers in src/egress.ts) — the packet-layer wall.
+    const files: EgressFiles = {
+      ioDir,
+      netready: join(ioDir, "netready"),
+      nft: join(ioDir, "rules.nft"),
+      event: join(ioDir, "event.json"),
+      counters: join(ioDir, "counters.txt"),
+    };
+    const allow = resolveAllow(opts.egress?.allow ?? []);
+    const resolvers = parseResolvers(
+      existsSync("/etc/resolv.conf")
+        ? readFileSync("/etc/resolv.conf", "utf-8")
+        : "",
+    );
+    writeFileSync(files.nft, buildEgressNft({ allow, resolvers }));
+    writeFileSync(files.event, JSON.stringify(input));
+
+    const bwrapArgv = buildEgressBwrapArgv({
+      base: bwrapArgs({
+        cwd: work,
+        ioDir,
+        home,
+        path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+      }),
+      setenv: setenvArgs(opts.env ?? {}),
+      files,
+      command,
+      wrapper: EGRESS_ALLOW_WRAPPER,
+    });
+    const configFile = join(ioDir, "config.json");
+    const resultFile = join(ioDir, "result.json");
+    writeFileSync(
+      configFile,
+      JSON.stringify({
+        bwrapArgv,
+        slirpArgs: ["--configure", "--disable-host-loopback"],
+        infoFile: join(ioDir, "info.json"),
+        readyFile: join(ioDir, "ready"),
+        netreadyFile: files.netready,
+        countersFile: files.counters,
+        resultFile,
+        timeoutMs: opts.timeoutMs ?? 30000,
+      }),
+    );
+    spawnSync("node", [egressEntry(), configFile], {
+      encoding: "utf-8",
+      timeout: (opts.timeoutMs ?? 30000) + 20000,
+    });
+    const result = readEgressResult(resultFile);
+    const { egress, egressDropped } = countersToResult(
+      parseNftCounters(result.counters),
+      Date.now(),
+    );
+    return {
+      status: result.status,
+      signal: result.signal,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      egress,
+      egressDropped,
+    };
+  } finally {
+    rmSync(ioDir, { recursive: true, force: true });
+  }
+}
+
 const REAL_DEPS: RunHookDeps = {
   available: sandboxAvailable(),
+  egressAvailable: egressAvailable(sandboxAvailable()),
   direct: directSpawn,
   sandboxed: sandboxedSpawn,
+  egress: egressSpawn,
 };
 /* v8 ignore stop */
 

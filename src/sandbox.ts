@@ -220,6 +220,16 @@ export interface EgressAttempt {
   readonly port: number;
   /** ms epoch when the attempt was recorded. */
   readonly ts: number;
+  /**
+   * Allowlist mode (`egress: { allow }`) only: whether this host was on the
+   * allowlist (and so reachable). Undefined for the `recordEgress` proxy, where
+   * every attempt is blocked.
+   */
+  readonly allowed?: boolean;
+  /** Allowlist mode: packets the nftables counter recorded for this host. */
+  readonly packets?: number;
+  /** Allowlist mode: bytes the nftables counter recorded for this host. */
+  readonly bytes?: number;
 }
 
 /**
