@@ -29,6 +29,8 @@ interface PluginCase {
   readonly minSkills: number;
   readonly expectAgents: boolean;
   readonly expectCommands: boolean;
+  /** Declares an MCP server (`.mcp.json` / `mcpServers`) — flagged, never wired. */
+  readonly expectMcp: boolean;
   /** Intra-plugin file refs knowingly absent in the snapshot (e.g. a partial vendor). */
   readonly knownDangling: readonly string[];
 }
@@ -41,6 +43,7 @@ const PLUGINS: readonly PluginCase[] = [
     minSkills: 1,
     expectAgents: false,
     expectCommands: false,
+    expectMcp: false,
     // the vendored slice omits skills/using-superpowers/, which SessionStart reads
     knownDangling: ["skills/using-superpowers/SKILL.md"],
   },
@@ -51,6 +54,20 @@ const PLUGINS: readonly PluginCase[] = [
     minSkills: 1,
     expectAgents: true,
     expectCommands: true,
+    expectMcp: false,
+    knownDangling: [],
+  },
+  {
+    // The all-surfaces example for docs/harness-testing.md: one plugin that ships
+    // hooks + skills + agents + an MCP server. Sliced (see its SOURCE), so the
+    // loader sees a coherent plugin with no spurious dangling refs.
+    label: "Yeachan-Heo/oh-my-claudecode",
+    dir: "oh-my-claudecode@deee3a4",
+    expectHooks: true,
+    minSkills: 1,
+    expectAgents: true,
+    expectCommands: false,
+    expectMcp: true,
     knownDangling: [],
   },
 ];
@@ -82,11 +99,13 @@ for (const p of PLUGINS) {
       "should not be an empty machine",
     );
 
-    // 2. hooks presence matches, and ${CLAUDE_PLUGIN_ROOT} fully resolved
+    // 2. hooks presence matches, and the documented ${CLAUDE_PLUGIN_ROOT}
+    //    placeholder was expanded (the unbraced $CLAUDE_PLUGIN_ROOT shell-var
+    //    form some plugins use is resolved at runtime, not by the loader).
     assert.equal(Boolean(loaded.settings.hooks), p.expectHooks);
     assert.ok(
-      !JSON.stringify(loaded.settings).includes("CLAUDE_PLUGIN_ROOT"),
-      "no unresolved ${CLAUDE_PLUGIN_ROOT}",
+      !JSON.stringify(loaded.settings).includes("${CLAUDE_PLUGIN_ROOT}"),
+      "no unresolved ${CLAUDE_PLUGIN_ROOT} placeholder",
     );
 
     // 3. skills materialized into the sandbox
@@ -101,6 +120,7 @@ for (const p of PLUGINS) {
       hasWarning(loaded.warnings, "slash-command file"),
       p.expectCommands,
     );
+    assert.equal(hasWarning(loaded.warnings, "MCP server"), p.expectMcp);
 
     // 5. dangling-ref detector is accurate: exactly the known set, nothing spurious
     assert.equal(danglingCount(loaded.warnings), p.knownDangling.length);

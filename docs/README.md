@@ -4,6 +4,10 @@ How-to and reference docs for using vigiles. (The thinking _behind_ vigiles —
 design docs, benchmarks, landscape — lives in [`../research/`](../research/README.md).)
 New here? Start with the [README](../README.md).
 
+## Verify your instruction files (pillar 1)
+
+- [`verifying-instruction-files.md`](verifying-instruction-files.md) — the full guide: the markdown→typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references + marks, and the before/after tables.
+
 ## Adoption ladder (pick your commitment level)
 
 - [`markdown-mode.md`](markdown-mode.md) — Level 0/1: inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML frontmatter, no TypeScript.
@@ -12,6 +16,11 @@ New here? Start with the [README](../README.md).
 
 ## Reference
 
+- **Library entry points** (grouped by concern, so a future non-Claude-Code harness can sit beside the current one):
+  - `vigiles/linting` — Pillar 1: the spec builders + compiler (`claude`, `enforce`, `guidance`, `file`, `cmd`, `symbol`, …).
+  - `vigiles/testing` — Pillar 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
+  - `vigiles/claude-code` — the Claude Code-specific adapter (`loadPlugin`, `scriptModel`, the mock).
+  - The granular paths (`vigiles/spec`, `vigiles/run-hook`, `vigiles/harness-test`, …) keep working.
 - [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `audit` validation rules.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
@@ -22,6 +31,7 @@ New here? Start with the [README](../README.md).
 
 - [`harness-testing.md`](harness-testing.md) — the full guide: the four layers (verify-refs / hook-unit / deterministic / eval), `pluginDir` native skill testing, action/sequence assertions, runner-agnostic usage, the CLI fallback.
 - [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
+- [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, network deny-all vs `recordEgress`, tiers and limits.
 
 ## Skills & agents
 

@@ -53,6 +53,19 @@ jobs:
           npm i -g @anthropic-ai/claude-code
           sudo apt-get update && sudo apt-get install -y bubblewrap
 
+      - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
+        # ubuntu-latest (24.04) ships `kernel.apparmor_restrict_unprivileged_userns=1`,
+        # which blocks unconfined bubblewrap from creating the namespaces it needs —
+        # so `bwrap --unshare-all` fails (EPERM) even though the binary is installed.
+        # Disable that restriction so the sandbox confinement tests actually RUN and
+        # PASS here (genuine verification), instead of `sandboxAvailable()` correctly
+        # detecting it can't confine and skipping them. Best-effort: `|| true` so a
+        # future runner without this knob doesn't fail the job (the probe then skips).
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          # Sanity-check that bwrap can now actually namespace:
+          bwrap --unshare-all --ro-bind / / true && echo "bwrap confinement: OK" || echo "bwrap confinement: STILL BLOCKED (tests will skip)"
+
       - name: Build
         run: npm run build
 

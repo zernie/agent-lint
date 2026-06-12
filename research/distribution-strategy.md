@@ -223,6 +223,8 @@ README and docs were inverted to lead with markdown mode (see `docs/markdown-mod
 
 ## Update: runnable 60-second demo shipped (`npm run demo`)
 
+> **Status (2026-06-12): pulled from the README, parked as not-yet-polished.** The script still exists and runs, but the README callout was removed pending a tightened, reliably-passing demo (and a recorded GIF/asciinema) — tracked as **#14** in [`feature-ideas.md`](feature-ideas.md). The analysis below stands; only the README surfacing is on hold.
+
 The "value visible in the first 30 seconds, output is the product" artifact that proposal **A** asked for now exists — but built to dodge the trap that got A _reconsidered_ (heuristic backtick-parsing has a low hit rate and high false positives). `examples/demo/` is a **curated, deterministic** demo, not a prose scanner: an instruction file whose references are explicit marks against real sources, two of which lie. `npm run demo` →
 
 ```text

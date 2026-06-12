@@ -1,0 +1,45 @@
+Vendored snapshot — DO NOT EDIT BY HAND.
+
+Upstream:  https://github.com/Yeachan-Heo/oh-my-claudecode
+Commit:    deee3a446dadc9bfea31cdc8b19b00b16718082e
+Fetched:   2026-06-12
+License:   MIT (see ./LICENSE) — © 2025 Yeachan Heo
+
+Why this is here:
+  A pinned, offline fixture for the harness-testing walkthrough in
+  docs/harness-testing.md. oh-my-claudecode is a popular (~36k★) Claude Code
+  plugin that ships ALL FOUR harness surfaces in one plugin — hooks, skills,
+  agents (subagents), and an MCP server — so a single example can walk every
+  tier (unit → deterministic → eval) against one real plugin.
+
+Included — the harness-relevant SLICE only, NOT the whole repo (upstream is
+~117 MB / 5.7k files: a large dist/, src/, and bridge/ we do not need):
+  .claude-plugin/plugin.json   — manifest, TRIMMED: the `skills` array is
+                                  reduced to the two vendored skills and the
+                                  `commands` key is dropped (commands/ not
+                                  vendored) so the loader sees a coherent plugin
+                                  with no spurious dangling refs.
+  .mcp.json                    — the MCP server declaration (the 4th surface).
+                                  Parsed/flagged by the loader, never executed.
+  package.json                 — MINIMAL (name + version only): session-start reads
+                                  package.json#version to decide whether to run its
+                                  update check; without it that path is skipped.
+  hooks/hooks.json             — TRIMMED to the two hooks whose script chains we
+                                  vendored (SessionStart→session-start,
+                                  UserPromptSubmit→keyword-detector). The upstream
+                                  file wires ~26 scripts across 11 events.
+  scripts/run.cjs              — the hook entrypoint wrapper (node builtins only).
+  scripts/keyword-detector.mjs — the UserPromptSubmit hook: detects a "magic
+                                  keyword" and injects skill-routing context.
+                                  Deterministic + side-effect-free for the keyword
+                                  path. The hook the unit/deterministic tiers run.
+  scripts/session-start.mjs    — the SessionStart hook: on a real workspace it
+                                  fetch()es registry.npmjs.org for an UPDATE CHECK.
+                                  The egress dogfood runs it under recordEgress and
+                                  asserts it phones the npm registry and nowhere
+                                  else (a real supply-chain property of the plugin).
+  scripts/lib/{atomic-write,config-dir,state-root,stdin,model-routing-override-message}.mjs
+  skills/{ask,verify}/SKILL.md — two representative skills.
+  agents/{code-reviewer,critic}.md — two representative subagents.
+
+Refresh: tools/refresh-vendor.sh (human-run; bumps the pinned commit).

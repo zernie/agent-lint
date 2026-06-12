@@ -16,6 +16,8 @@ import {
   bwrapArgs,
   setenvArgs,
   parseRequestLog,
+  parseEgressLog,
+  diffTrees,
 } from "./sandbox.js";
 import {
   runHarnessTest,
@@ -131,6 +133,38 @@ test("parseRequestLog: parses ndjson, skips blank and partial lines", () => {
   assert.equal(reqs[0]?.system, "s1");
   assert.equal(reqs[1]?.system, "s2");
   assert.deepEqual(parseRequestLog(""), []);
+});
+
+test("parseEgressLog: parses host/port, skips blank/partial/invalid lines", () => {
+  const ndjson =
+    JSON.stringify({ host: "registry.npmjs.org", port: 443, ts: 1 }) +
+    "\n\n" +
+    JSON.stringify({ host: "evil.example", port: 80, ts: 2 }) +
+    "\n" +
+    JSON.stringify({ host: "no-port" }) + // missing port → skipped
+    "\n" +
+    JSON.stringify({ port: 22 }) + // missing host → skipped
+    "\n" +
+    '{"host":"partial' + // half-written final line → skipped
+    "\n";
+  const out = parseEgressLog(ndjson);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0], { host: "registry.npmjs.org", port: 443, ts: 1 });
+  assert.equal(out[1]?.host, "evil.example");
+  // a record without ts defaults to 0
+  assert.equal(parseEgressLog('{"host":"h","port":7}')[0]?.ts, 0);
+  assert.deepEqual(parseEgressLog(""), []);
+});
+
+test("diffTrees: new + changed files, sorted; unchanged + removed skipped", () => {
+  const before = { "keep.txt": "10:1", "edit.txt": "5:1", "gone.txt": "3:1" };
+  const after = {
+    "keep.txt": "10:1", // unchanged → skipped
+    "edit.txt": "5:2", // mtime changed → written
+    "new/a.json": "2:9", // new → written
+  };
+  assert.deepEqual(diffTrees(before, after), ["edit.txt", "new/a.json"]);
+  assert.deepEqual(diffTrees({}, {}), []);
 });
 
 // --- end-to-end confinement (needs a real bwrap + claude) ------------------

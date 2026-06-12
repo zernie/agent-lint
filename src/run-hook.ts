@@ -28,7 +28,16 @@
  * logic here, then assert it fires in the assembled machine there.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,8 +46,13 @@ import {
   sandboxAvailable,
   bwrapArgs,
   setenvArgs,
+  parseEgressLog,
+  diffTrees,
   type SandboxMode,
+  type EgressAttempt,
 } from "./sandbox.js";
+
+export type { EgressAttempt };
 
 /** A hook event payload (the JSON Claude Code writes to the hook's stdin). */
 export interface HookInput {
@@ -83,15 +97,40 @@ export interface RunHookOptions {
   /** Per-run timeout ms. Default 10000. */
   readonly timeoutMs?: number;
   /**
-   * Confine the hook under bubblewrap (Linux). Default `false` — run directly,
-   * since the command is normally one YOU wrote in the test. Pass `"auto"` or
-   * `"strict"` when unit-testing a hook command you DON'T fully trust (a vendored
-   * third-party hook script): it runs in a no-egress namespace with a cleared
-   * environment (your `opts.env` is added back), or **refuses** if no bwrap is
-   * available rather than running it unconfined. macOS/Windows have no bwrap, so
-   * `"auto"`/`"strict"` throw there — see `src/sandbox.ts`.
+   * Provenance of the hook command. `true` (default) means YOU authored it — the
+   * usual case at this tier, a command written inline in the test — so it runs
+   * directly. `false` marks it foreign (a vendored third-party hook script),
+   * which makes confinement the DEFAULT: with no explicit `sandbox`, an untrusted
+   * hook behaves as `sandbox: "auto"` — confined under bubblewrap, or refused if
+   * none is available — so foreign code is never run unconfined by accident. This
+   * mirrors the harness tier, where trust follows `plugin`/`pluginDir`
+   * provenance (`specTrusted` in `src/sandbox.ts`); the unit tier takes a raw
+   * command string with no provenance signal, so you declare it here.
+   */
+  readonly trusted?: boolean;
+  /**
+   * Confine the hook under bubblewrap (Linux). When unset, the mode follows
+   * {@link RunHookOptions.trusted}: a trusted hook runs directly (`false`), an
+   * untrusted one is confined-or-refused (`"auto"`). Set it explicitly to
+   * override: `"auto"`/`"strict"` force confinement (a no-egress namespace with a
+   * cleared environment — your `opts.env` is added back — or a **refusal** if no
+   * bwrap is available), and `false` is the opt-out that runs even untrusted code
+   * unconfined. macOS/Windows have no bwrap, so `"auto"`/`"strict"` throw there —
+   * see `src/sandbox.ts`.
    */
   readonly sandbox?: SandboxMode;
+  /**
+   * Record the hook's network egress. Implies confinement (the recorder lives in
+   * the sandbox netns, so this forces a sandboxed run and refuses if no sandbox is
+   * available). A recording proxy on loopback captures every `host:port` a
+   * proxy-honoring tool (npm/pip/curl/fetch) tries to reach — surfaced as
+   * {@link HookRunResult.egress} — while the netns still **blocks** it (nothing
+   * actually leaves). Use it to test what a hook/skill phones home to, or which
+   * registry an install would hit. Raw-socket egress is blocked but not recorded
+   * (it never reaches the proxy) — the block is the boundary, the record is
+   * best-effort observability over it.
+   */
+  readonly recordEgress?: boolean;
 }
 
 export interface HookRunResult {
@@ -105,6 +144,17 @@ export interface HookRunResult {
    * `permissionDecision:"deny"` all set `blocked = true`.
    */
   readonly blocked: boolean;
+  /**
+   * Network egress the hook attempted, recorded then blocked. Empty unless
+   * {@link RunHookOptions.recordEgress} was set (and the run was confined).
+   */
+  readonly egress: readonly EgressAttempt[];
+  /**
+   * Files the hook wrote to its work dir (relative paths), recorded on confined
+   * runs — what a hook touched on disk. Empty on a direct (unconfined) run.
+   * Assert over it with `assertNoWrite` / `assertWroteOnly`.
+   */
+  readonly filesWritten: readonly string[];
   /**
    * The decision the hook expressed, preferring the structured
    * `permissionDecision` ("allow"|"deny"|"ask") then legacy `decision`
@@ -149,6 +199,10 @@ export interface HookSpawnResult {
   readonly signal: string | null;
   readonly stdout: string;
   readonly stderr: string;
+  /** Egress attempts captured by the in-sandbox recorder (recordEgress only). */
+  readonly egress?: readonly EgressAttempt[];
+  /** Files the hook wrote to its work dir (confined runs). */
+  readonly filesWritten?: readonly string[];
 }
 
 /** Spawn a hook (command + piped event) — the injectable seam over the real spawn. */
@@ -181,9 +235,19 @@ export function runHookWith(
   opts: RunHookOptions,
   deps: RunHookDeps,
 ): HookRunResult {
+  // Confinement follows provenance: a trusted hook (the default) runs directly;
+  // marking a hook untrusted defaults it to "auto" (confine-or-refuse), so
+  // foreign code is never run unconfined by accident. An explicit `sandbox`
+  // overrides the default either way. The trust fed to decideSandbox stays
+  // `false` at this tier — a raw command has no provenance, so an explicit
+  // "auto"/"strict" here is always a request to *confine*, not "trusted→direct".
+  // recordEgress needs the netns recorder, so it forces confinement too.
+  const mode: SandboxMode =
+    opts.sandbox ??
+    (opts.trusted === false || opts.recordEgress ? "auto" : false);
   const decision = decideSandbox({
     trusted: false,
-    mode: opts.sandbox ?? false,
+    mode,
     available: deps.available,
   });
   if (decision.action === "throw") throw new Error(decision.reason);
@@ -196,7 +260,16 @@ export function runHookWith(
   const stderr = res.stderr ?? "";
   const json = parseHookOutput(stdout);
   const { blocked, decision: dec } = decideHook(exitCode, json);
-  return { exitCode, stdout, stderr, json, blocked, decision: dec };
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    json,
+    blocked,
+    egress: res.egress ?? [],
+    filesWritten: res.filesWritten ?? [],
+    decision: dec,
+  };
 }
 
 /** Run the hook command directly through a shell (the default, unconfined). */
@@ -223,7 +296,56 @@ function directSpawn(
 
 /* v8 ignore start -- spawns real bwrap; exercised by the bwrap-gated integration
    test (skipped without bwrap). The decision logic is runHookWith (unit-tested
-   with fakes); the confinement argv is bwrapArgs/setenvArgs (unit-tested). */
+   with fakes); the confinement argv is bwrapArgs/setenvArgs and the egress log
+   parse is parseEgressLog (all unit-tested). */
+
+// When recordEgress is on: co-launch the recorder on loopback, point HTTP(S)_PROXY
+// at it, run the hook, then stop it. Paths come in via env (no shell escaping).
+const EGRESS_WRAPPER = [
+  'node "$VIG_EGRESS_ENTRY" "$VIG_EGRESS_LOG" "$VIG_EGRESS_PORT" &',
+  "EPID=$!",
+  "i=0",
+  'while [ ! -s "$VIG_EGRESS_PORT" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i+1)); done',
+  'export HTTP_PROXY="http://127.0.0.1:$(cat "$VIG_EGRESS_PORT")"',
+  'export HTTPS_PROXY="$HTTP_PROXY" http_proxy="$HTTP_PROXY" https_proxy="$HTTP_PROXY"',
+  // Node's fetch (undici) ignores the proxy env unless this is set — without it a
+  // hook that uses fetch() (e.g. an update check) would bypass the recorder.
+  "export NODE_USE_ENV_PROXY=1",
+  'sh -c "$VIG_HOOK_CMD"',
+  "code=$?",
+  'kill "$EPID" 2>/dev/null',
+  'exit "$code"',
+].join("\n");
+
+function egressProxyEntry(): string {
+  return (
+    [
+      join(__dirname, "egress-proxy.js"),
+      join(__dirname, "..", "dist", "egress-proxy.js"),
+    ].find((p) => existsSync(p)) ?? join(__dirname, "egress-proxy.js")
+  );
+}
+
+/** Map every file under `dir` to a content signature (size:mtime), recursively. */
+function snapshotTree(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (d: string, rel: string): void => {
+    for (const name of readdirSync(d)) {
+      const full = join(d, name);
+      const r = rel ? `${rel}/${name}` : name;
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full, r);
+      else out[r] = `${String(st.size)}:${String(st.mtimeMs)}`;
+    }
+  };
+  try {
+    walk(dir, "");
+  } catch {
+    /* dir removed mid-walk — best effort */
+  }
+  return out;
+}
+
 function sandboxedSpawn(
   command: string,
   input: HookInput,
@@ -232,34 +354,70 @@ function sandboxedSpawn(
   const ioDir = mkdtempSync(join(tmpdir(), "vigiles-hook-sbx-"));
   const home = join(ioDir, "home");
   mkdirSync(home);
-  // The hook gets a confined writable work dir: the caller's cwd if given, else
-  // the throwaway IO dir (so a hook that writes a marker still works).
-  const cwd = opts.cwd ?? ioDir;
+  // The hook's confined writable work dir: the caller's cwd if given, else a
+  // dedicated `work/` under the IO dir (kept separate from the egress log/home so
+  // those don't pollute the filesWritten diff).
+  const work = opts.cwd ?? join(ioDir, "work");
+  mkdirSync(work, { recursive: true });
   try {
-    const args = [
+    const baseArgs = [
       ...bwrapArgs({
-        cwd,
+        cwd: work,
         ioDir,
         home,
         path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
       }),
       ...setenvArgs(opts.env ?? {}),
-      "sh",
-      "-c",
-      command,
     ];
-    const res = spawnSync("bwrap", args, {
-      cwd,
+    const spawnOpts = {
+      cwd: work,
       env: process.env,
       input: JSON.stringify(input),
-      encoding: "utf-8",
+      encoding: "utf-8" as const,
       timeout: opts.timeoutMs ?? 10000,
-    });
+    };
+    const before = snapshotTree(work);
+    let res;
+    let egress: readonly EgressAttempt[] = [];
+    if (opts.recordEgress) {
+      const egressLog = join(ioDir, "egress.ndjson");
+      const portFile = join(ioDir, "egress.port");
+      writeFileSync(egressLog, "");
+      res = spawnSync(
+        "bwrap",
+        [
+          ...baseArgs,
+          "--setenv",
+          "VIG_EGRESS_ENTRY",
+          egressProxyEntry(),
+          "--setenv",
+          "VIG_EGRESS_LOG",
+          egressLog,
+          "--setenv",
+          "VIG_EGRESS_PORT",
+          portFile,
+          "--setenv",
+          "VIG_HOOK_CMD",
+          command,
+          "sh",
+          "-c",
+          EGRESS_WRAPPER,
+        ],
+        spawnOpts,
+      );
+      egress = parseEgressLog(
+        existsSync(egressLog) ? readFileSync(egressLog, "utf-8") : "",
+      );
+    } else {
+      res = spawnSync("bwrap", [...baseArgs, "sh", "-c", command], spawnOpts);
+    }
     return {
       status: res.status,
       signal: res.signal,
       stdout: res.stdout ?? "",
       stderr: res.stderr ?? "",
+      egress,
+      filesWritten: diffTrees(before, snapshotTree(work)),
     };
   } finally {
     rmSync(ioDir, { recursive: true, force: true });
@@ -277,8 +435,9 @@ const REAL_DEPS: RunHookDeps = {
  * Run a hook command, piping `input` as JSON to its stdin, and report the exit
  * code + parsed decision. Synchronous (so it can be used inside an eval's
  * `measure` too). `command` is run through a shell, so the same command string a
- * plugin ships (with args / env refs) works verbatim. Pass `sandbox: "auto"` to
- * confine a hook you don't trust (see {@link RunHookOptions.sandbox}).
+ * plugin ships (with args / env refs) works verbatim. Mark a hook you didn't
+ * write with `trusted: false` and it is confined by default (or pass `sandbox:
+ * "auto"` directly) — see {@link RunHookOptions.trusted}.
  */
 export function runHook(
   command: string,

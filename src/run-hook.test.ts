@@ -6,7 +6,15 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 
+import {
+  assertNoEgress,
+  assertEgressOnly,
+  assertWroteOnly,
+} from "./harness-assert.js";
 import {
   runHook,
   runHookWith,
@@ -185,6 +193,46 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
   );
 });
 
+test("runHookWith: trusted:false confines by default, refuses without bwrap", () => {
+  let used = "";
+  const deps = (available: boolean): RunHookDeps => ({
+    available,
+    direct: () => {
+      used = "direct";
+      return spawnRes();
+    },
+    sandboxed: () => {
+      used = "sandbox";
+      return spawnRes();
+    },
+  });
+
+  // untrusted + no explicit sandbox + available → confined by default
+  runHookWith("x", {}, { trusted: false }, deps(true));
+  assert.equal(used, "sandbox");
+
+  // untrusted + no explicit sandbox + unavailable → refuse, not run unconfined
+  assert.throws(
+    () => runHookWith("x", {}, { trusted: false }, deps(false)),
+    /sandbox|bwrap/,
+  );
+
+  // recordEgress also forces confinement (the recorder lives in the netns)
+  used = "";
+  runHookWith("x", {}, { recordEgress: true }, deps(true));
+  assert.equal(used, "sandbox");
+
+  // untrusted but explicit opt-out → direct (you vouch for it / outer container)
+  used = "";
+  runHookWith("x", {}, { trusted: false, sandbox: false }, deps(true));
+  assert.equal(used, "direct");
+
+  // trusted (default) → direct even where a sandbox is available
+  used = "";
+  runHookWith("x", {}, {}, deps(true));
+  assert.equal(used, "direct");
+});
+
 test("runHookWith maps a signal kill to exit 1", () => {
   const deps: RunHookDeps = {
     available: true,
@@ -212,5 +260,100 @@ test.skipIf(!sandboxAvailable())(
     } finally {
       delete process.env.VIG_FAKE_SECRET;
     }
+  },
+);
+
+// --- recordEgress: record + block a hook's network (needs real bwrap) -------
+
+// Capturing Node's global fetch() needs NODE_USE_ENV_PROXY, which only takes
+// effect on Node 22+. Proxy-honoring tools (curl/npm/pip) work on every version;
+// this gate is only for the fetch-based session-start test below.
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+
+test.skipIf(!sandboxAvailable() || nodeMajor < 22)(
+  "dogfood: oh-my-claudecode's session-start hook update-checks ONLY the npm registry",
+  () => {
+    // A REAL, useful finding about a popular plugin: OMC's SessionStart hook
+    // fetch()es registry.npmjs.org for an update check on every session start.
+    // recordEgress captures it (Node fetch via NODE_USE_ENV_PROXY) and blocks it;
+    // assertEgressOnly proves it phones the npm registry and nowhere else.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    // session-start only runs its full logic in a real workspace (a .git /
+    // .omc-workspace marker), so give it a throwaway one as the confined cwd.
+    const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
+    writeFileSync(join(ws, ".omc-workspace"), "");
+    const state = mkdtempSync(join(tmpdir(), "omc-state-"));
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/session-start.mjs"`,
+      { hook_event_name: "SessionStart", source: "startup" },
+      {
+        recordEgress: true,
+        cwd: ws,
+        env: { CLAUDE_PLUGIN_ROOT: root, OMC_STATE_DIR: state },
+        timeoutMs: 30000,
+      },
+    );
+    assert.ok(
+      r.egress.some((e) => e.host === "registry.npmjs.org"),
+      `expected the update check to reach the npm registry; got ${JSON.stringify(r.egress)}`,
+    );
+    assertEgressOnly(r, ["registry.npmjs.org"]); // …and nowhere else
+  },
+);
+
+test.skipIf(!sandboxAvailable())(
+  "dogfood: the real oh-my-claudecode keyword-detector hook phones home to nothing",
+  () => {
+    // Run a REAL third-party plugin hook (vendored, pinned) under recordEgress
+    // and assert it makes zero network egress — the kind of supply-chain check
+    // this capability exists for.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
+      {
+        hook_event_name: "UserPromptSubmit",
+        prompt: "please ultrawork on this",
+      },
+      {
+        recordEgress: true,
+        env: { CLAUDE_PLUGIN_ROOT: root },
+        timeoutMs: 30000,
+      },
+    );
+    // it still does its job (injects routing) …
+    assert.match(
+      r.json?.hookSpecificOutput?.additionalContext ?? "",
+      /ULTRAWORK/,
+    );
+    // … and it reached out to nothing.
+    assertNoEgress(r);
+  },
+);
+
+test.skipIf(!sandboxAvailable())(
+  "dogfood: oh-my-claudecode keyword-detector writes ONLY its own state cache",
+  () => {
+    // Confine the real hook and record what it touches on disk: it should write
+    // its keyword-state cache under .omc/ and nothing else.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
+      {
+        hook_event_name: "UserPromptSubmit",
+        prompt: "please ultrawork on this",
+      },
+      { sandbox: "auto", env: { CLAUDE_PLUGIN_ROOT: root }, timeoutMs: 30000 },
+    );
+    assert.ok(r.filesWritten.length > 0, "it writes its state cache");
+    assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
   },
 );
