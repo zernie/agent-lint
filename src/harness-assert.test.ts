@@ -23,6 +23,8 @@ import {
   assertNoEgress,
   assertEgressOnly,
   egressHosts,
+  assertNoWrite,
+  assertWroteOnly,
   assertAgentOk,
   assertAgentErr,
   assertAgentResult,
@@ -60,6 +62,7 @@ function fakeHook(blocked: boolean): HookRunResult {
     json: null,
     blocked,
     egress: [],
+    filesWritten: [],
     decision: blocked ? "deny" : undefined,
   };
 }
@@ -317,6 +320,27 @@ test("assertNoEgress / assertEgressOnly / egressHosts (recordEgress results)", (
   });
   assert.doesNotThrow(() => {
     assertEgressOnly(reached, ["registry.npmjs.org:443", "evil.example:80"]);
+  });
+});
+
+test("assertNoWrite / assertWroteOnly (confined run file writes)", () => {
+  const r = { filesWritten: [".omc/state/x.json", "out.txt"] };
+  // no-write: by substring and by regex
+  assert.doesNotThrow(() => {
+    assertNoWrite(r, ".env");
+  });
+  assert.throws(() => {
+    assertNoWrite(r, "out.txt");
+  }, /out\.txt/);
+  assert.throws(() => {
+    assertNoWrite(r, /\.json$/);
+  }, /x\.json/);
+  // wrote-only: every file must match an allowed pattern; offenders are named
+  assert.throws(() => {
+    assertWroteOnly(r, [/^\.omc\//]);
+  }, /out\.txt/);
+  assert.doesNotThrow(() => {
+    assertWroteOnly(r, [/^\.omc\//, "out.txt"]);
   });
 });
 

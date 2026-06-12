@@ -10,7 +10,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 
-import { assertNoEgress, assertEgressOnly } from "./harness-assert.js";
+import {
+  assertNoEgress,
+  assertEgressOnly,
+  assertWroteOnly,
+} from "./harness-assert.js";
 import {
   runHook,
   runHookWith,
@@ -329,5 +333,27 @@ test.skipIf(!sandboxAvailable())(
     );
     // … and it reached out to nothing.
     assertNoEgress(r);
+  },
+);
+
+test.skipIf(!sandboxAvailable())(
+  "dogfood: oh-my-claudecode keyword-detector writes ONLY its own state cache",
+  () => {
+    // Confine the real hook and record what it touches on disk: it should write
+    // its keyword-state cache under .omc/ and nothing else.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    const r = runHook(
+      `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
+      {
+        hook_event_name: "UserPromptSubmit",
+        prompt: "please ultrawork on this",
+      },
+      { sandbox: "auto", env: { CLAUDE_PLUGIN_ROOT: root }, timeoutMs: 30000 },
+    );
+    assert.ok(r.filesWritten.length > 0, "it writes its state cache");
+    assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
   },
 );

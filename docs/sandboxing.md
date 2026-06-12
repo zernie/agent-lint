@@ -49,6 +49,23 @@ delete is its own disposable scratch dir.
    (it's code you wrote), but it means the protection above applies only to
    _confined_ runs.
 
+**Record what it wrote.** A confined `runHook` also reports the files the hook
+touched in its work dir (`r.filesWritten`, relative paths) — so you can assert a
+hook stayed in its lane:
+
+```ts
+import { assertWroteOnly, assertNoWrite } from "vigiles/harness-assert";
+
+const r = runHook(thirdPartyHookCmd, event, { trusted: false });
+// r.filesWritten → [".omc/state/ultrawork-state.json"]
+assertWroteOnly(r, [/^\.omc\//]); // only its own state cache
+assertNoWrite(r, /\.(env|pem|key)$/); // never a secret-shaped file
+```
+
+Dogfood: `src/run-hook.test.ts` confines oh-my-claudecode's `keyword-detector`
+and asserts it writes **only** under `.omc/` — its keyword-state cache, nothing
+else.
+
 ## Network — block, and (optionally) record
 
 **Default: deny-all, and it's a real wall.** Under bwrap the net namespace has

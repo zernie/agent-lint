@@ -35,6 +35,8 @@ import {
   writeFileSync,
   readFileSync,
   existsSync,
+  readdirSync,
+  statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,6 +47,7 @@ import {
   bwrapArgs,
   setenvArgs,
   parseEgressLog,
+  diffTrees,
   type SandboxMode,
   type EgressAttempt,
 } from "./sandbox.js";
@@ -147,6 +150,12 @@ export interface HookRunResult {
    */
   readonly egress: readonly EgressAttempt[];
   /**
+   * Files the hook wrote to its work dir (relative paths), recorded on confined
+   * runs — what a hook touched on disk. Empty on a direct (unconfined) run.
+   * Assert over it with `assertNoWrite` / `assertWroteOnly`.
+   */
+  readonly filesWritten: readonly string[];
+  /**
    * The decision the hook expressed, preferring the structured
    * `permissionDecision` ("allow"|"deny"|"ask") then legacy `decision`
    * ("approve"|"block"), else undefined.
@@ -192,6 +201,8 @@ export interface HookSpawnResult {
   readonly stderr: string;
   /** Egress attempts captured by the in-sandbox recorder (recordEgress only). */
   readonly egress?: readonly EgressAttempt[];
+  /** Files the hook wrote to its work dir (confined runs). */
+  readonly filesWritten?: readonly string[];
 }
 
 /** Spawn a hook (command + piped event) — the injectable seam over the real spawn. */
@@ -256,6 +267,7 @@ export function runHookWith(
     json,
     blocked,
     egress: res.egress ?? [],
+    filesWritten: res.filesWritten ?? [],
     decision: dec,
   };
 }
@@ -314,6 +326,26 @@ function egressProxyEntry(): string {
   );
 }
 
+/** Map every file under `dir` to a content signature (size:mtime), recursively. */
+function snapshotTree(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (d: string, rel: string): void => {
+    for (const name of readdirSync(d)) {
+      const full = join(d, name);
+      const r = rel ? `${rel}/${name}` : name;
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full, r);
+      else out[r] = `${String(st.size)}:${String(st.mtimeMs)}`;
+    }
+  };
+  try {
+    walk(dir, "");
+  } catch {
+    /* dir removed mid-walk — best effort */
+  }
+  return out;
+}
+
 function sandboxedSpawn(
   command: string,
   input: HookInput,
@@ -322,13 +354,15 @@ function sandboxedSpawn(
   const ioDir = mkdtempSync(join(tmpdir(), "vigiles-hook-sbx-"));
   const home = join(ioDir, "home");
   mkdirSync(home);
-  // The hook gets a confined writable work dir: the caller's cwd if given, else
-  // the throwaway IO dir (so a hook that writes a marker still works).
-  const cwd = opts.cwd ?? ioDir;
+  // The hook's confined writable work dir: the caller's cwd if given, else a
+  // dedicated `work/` under the IO dir (kept separate from the egress log/home so
+  // those don't pollute the filesWritten diff).
+  const work = opts.cwd ?? join(ioDir, "work");
+  mkdirSync(work, { recursive: true });
   try {
     const baseArgs = [
       ...bwrapArgs({
-        cwd,
+        cwd: work,
         ioDir,
         home,
         path: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
@@ -336,56 +370,54 @@ function sandboxedSpawn(
       ...setenvArgs(opts.env ?? {}),
     ];
     const spawnOpts = {
-      cwd,
+      cwd: work,
       env: process.env,
       input: JSON.stringify(input),
       encoding: "utf-8" as const,
       timeout: opts.timeoutMs ?? 10000,
     };
+    const before = snapshotTree(work);
+    let res;
+    let egress: readonly EgressAttempt[] = [];
     if (opts.recordEgress) {
       const egressLog = join(ioDir, "egress.ndjson");
       const portFile = join(ioDir, "egress.port");
       writeFileSync(egressLog, "");
-      const args = [
-        ...baseArgs,
-        "--setenv",
-        "VIG_EGRESS_ENTRY",
-        egressProxyEntry(),
-        "--setenv",
-        "VIG_EGRESS_LOG",
-        egressLog,
-        "--setenv",
-        "VIG_EGRESS_PORT",
-        portFile,
-        "--setenv",
-        "VIG_HOOK_CMD",
-        command,
-        "sh",
-        "-c",
-        EGRESS_WRAPPER,
-      ];
-      const res = spawnSync("bwrap", args, spawnOpts);
-      const egress = parseEgressLog(
+      res = spawnSync(
+        "bwrap",
+        [
+          ...baseArgs,
+          "--setenv",
+          "VIG_EGRESS_ENTRY",
+          egressProxyEntry(),
+          "--setenv",
+          "VIG_EGRESS_LOG",
+          egressLog,
+          "--setenv",
+          "VIG_EGRESS_PORT",
+          portFile,
+          "--setenv",
+          "VIG_HOOK_CMD",
+          command,
+          "sh",
+          "-c",
+          EGRESS_WRAPPER,
+        ],
+        spawnOpts,
+      );
+      egress = parseEgressLog(
         existsSync(egressLog) ? readFileSync(egressLog, "utf-8") : "",
       );
-      return {
-        status: res.status,
-        signal: res.signal,
-        stdout: res.stdout ?? "",
-        stderr: res.stderr ?? "",
-        egress,
-      };
+    } else {
+      res = spawnSync("bwrap", [...baseArgs, "sh", "-c", command], spawnOpts);
     }
-    const res = spawnSync(
-      "bwrap",
-      [...baseArgs, "sh", "-c", command],
-      spawnOpts,
-    );
     return {
       status: res.status,
       signal: res.signal,
       stdout: res.stdout ?? "",
       stderr: res.stderr ?? "",
+      egress,
+      filesWritten: diffTrees(before, snapshotTree(work)),
     };
   } finally {
     rmSync(ioDir, { recursive: true, force: true });
