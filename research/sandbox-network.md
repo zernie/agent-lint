@@ -61,19 +61,38 @@ Surface: `runHook(cmd, ev, { egress: { allow: ["registry.npmjs.org", …] } })` 
 
 On the dev box (userns works; `bwrap`, `slirp4netns`, `pasta` installed):
 
-- `pasta --config-net -- <cmd>` did **not** trivially give a child net access +
-  a parseable connection log in a first pass — it needs more careful netns
-  handoff (pasta managing the netns vs. bwrap creating it). Needs a focused spike.
+- **First pass (failed):** `pasta --config-net -- <cmd>` did **not** trivially
+  give a child net access + a parseable connection log — it needs more careful
+  netns handoff (pasta managing the netns vs. bwrap creating it).
+- **Second pass (works) — `research/spikes/sandbox-network-allowlist.sh`.** The
+  handoff that failed with `pasta --config-net` works with **`slirp4netns
+--configure`**: create the netns with `unshare --user --map-root-user --net`,
+  hand the child PID to `slirp4netns --configure --disable-host-loopback $PID
+tap0`, and slirp sets up `tap0` (10.0.2.0/24, route, DNS) **inside** the netns
+  itself — no manual `ip` needed. The spike proves all three doubted claims, end
+  to end on a real network:
+  1. **Real egress:** an allowlisted host returns a genuine `http_code=200`.
+  2. **Unbypassable allowlist:** `nft` runs inside the mapped-root userns netns
+     (it owns `CAP_NET_ADMIN` over its own netns); a `policy drop` output chain
+     with per-IP `accept` rules blocks a non-allowlisted host (`curl rc=28`) **and
+     a raw `bash /dev/tcp` socket** (`rc=124`) — the property an `HTTP_PROXY`
+     allowlist cannot give, because the boundary is the packet layer, not env vars.
+  3. **Readable record:** per-rule `counter`s read both allowed (`packets 1`) and
+     denied (`vig-drop … packets 11`) traffic out of the netns.
 - The deny-all wall and the `recordEgress` proxy both work and are tested; they
   were the right first increment (real value, fully verifiable) before the
   gateway plumbing.
 
 ## Plan
 
-1. Spike the bwrap-netns ↔ pasta/slirp4netns handoff in isolation (shell), prove
-   a child can reach an allowlisted host and be logged.
-2. Wrap it behind `egress: { allow }`, parse the log into `r.egress`
-   (`allowed` flag), reuse `assertEgressOnly`.
+1. ~~Spike the bwrap-netns ↔ pasta/slirp4netns handoff in isolation (shell), prove
+   a child can reach an allowlisted host and be logged.~~ **Done** via
+   `slirp4netns --configure` — see `research/spikes/sandbox-network-allowlist.sh`
+   and the experiment note above. (Used `unshare` to create the netns; the
+   remaining integration step is the **bwrap** handoff — getting bwrap's child PID
+   so `slirp4netns` can attach before the child runs, e.g. via a sync/info fd.)
+2. Wrap it behind `egress: { allow }`, parse the `nft` counters/log into
+   `r.egress` (`allowed` flag), reuse `assertEgressOnly`.
 3. Gate the integration test on tool availability (like the bwrap tests).
 4. A separate `strictFs` (minimal-rootfs bind) closes the read-exposure gap noted
    in [`docs/sandboxing.md`](../docs/sandboxing.md).
