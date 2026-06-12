@@ -31,7 +31,7 @@ New here? Start with the [README](../README.md).
 
 - [`harness-testing.md`](harness-testing.md) — the full guide: the four layers (verify-refs / hook-unit / deterministic / eval), `pluginDir` native skill testing, action/sequence assertions, runner-agnostic usage, the CLI fallback.
 - [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
-- [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, network deny-all vs `recordEgress`, tiers and limits.
+- [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), tiers and limits.
 
 ## Skills & agents
 

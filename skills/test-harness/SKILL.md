@@ -75,7 +75,11 @@ Testing a hook you didn't write (a vendored third-party script)? Mark it
 host, cleared env, no network egress). Add `{ recordEgress: true }` to also
 **record** what it tries to reach — `r.egress` plus `assertNoEgress(r)` /
 `assertEgressOnly(r, [...])` — the supply-chain check for "what does this skill
-phone home to / install from?". Be precise about the boundaries: see
+phone home to / install from?". When the hook's setup needs a _real_ install,
+`{ egress: { allow: ["registry.npmjs.org"] } }` lets it reach only that
+allowlist (a packet-layer `nft` wall, so a raw socket off-list is dropped too) →
+`r.egress` (allowed hosts) + `r.egressDropped`. Be precise about the boundaries:
+see
 [`docs/sandboxing.md`](../../docs/sandboxing.md) (it blocks destruction and
 egress, but does NOT isolate reads of host files, and only under bwrap).
 
