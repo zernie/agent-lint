@@ -18,6 +18,14 @@ This doc covers layers 2–4. The library is plain async functions returning
 data, so it runs in **any** test runner — node:test, vitest, jest, mocha — and
 ships a zero-dependency CLI fallback (`vigiles test` / `vigiles eval`).
 
+**The design bet is deterministic and cheap.** Layers 1–3 never call a model or
+need an API key — they're meant to run on every commit for free, and they're
+where most of your harness can actually be pinned down. This is the opposite of
+eval-only frameworks like [promptfoo](https://github.com/promptfoo/promptfoo),
+where every run hits a real model **by design** (and bills accordingly). The
+paid real-model tier (layer 4) is here too, but you reach for it only when the
+question genuinely needs a real model — not to answer "does my hook block this?"
+
 ## Unit-test a hook (no `claude`, every event)
 
 A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
@@ -249,6 +257,30 @@ await runEval({
   }),
 });
 ```
+
+### Did the injected context land? (`modelRequests`)
+
+Some hooks exist to add text to the model's context — a `SessionStart` hook that
+injects project rules, for example. But a hook can exit `0`, look perfectly
+healthy, and still inject **nothing**: it printed the JSON in a shape Claude Code
+doesn't read, or it only works on the author's platform. The hook _ran_ — the
+context never _landed_.
+
+So don't check that the hook ran. Check what the model actually received.
+`trace.modelRequests` is the real request sent to the model (its system prompt
+and messages), and `assertRequestContains` asserts your text is in it:
+
+```ts
+import { assertRequestContains } from "vigiles/harness-assert";
+
+assertRequestContains(r, "You have superpowers"); // the injected context is really there
+```
+
+This is a real bug vigiles caught: `obra/superpowers` puts `additionalContext` at
+the **top level** of its hook output, but Claude Code only reads the **nested**
+field (`hookSpecificOutput.additionalContext`). The hook fired and exited clean,
+so every "did it run?" check passed — yet the context never reached the model.
+Only inspecting the request showed it was missing.
 
 ### Dogfooding real third-party plugins (and the sandbox boundary)
 
@@ -580,6 +612,52 @@ everything around it is covered, so the statement/line/function gate holds at
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
 - [`examples/harness/skill-trigger-rate.eval.mjs`](../examples/harness/skill-trigger-rate.eval.mjs) — does a skill's description _fire_ across varied prompts? (`measureTriggerRate`)
 - [`bench/evals/refs-hook.eval.mjs`](../bench/evals/refs-hook.eval.mjs) — the refs-hook A/B (benchmark #4).
+
+## What's covered today — surface × tier
+
+The whole harness surface and how far each tier reaches today:
+
+| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
+| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
+| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
+| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
+| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
+| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
+| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
+| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
+| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
+| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
+
+✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
+
+## How this compares to promptfoo
+
+[promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
+and it's excellent at what it does. vigiles isn't a competing eval framework: it
+tests **the harness** (your hooks / settings / CLAUDE.md / skills as they ship),
+and it's built to be **deterministic and cheap** where promptfoo is
+real-model-only. The core difference is cost by construction: every promptfoo run
+is a real model call by design, while vigiles answers most harness questions —
+does this hook block? is it wired in? does the skill resolve? — with **no model
+and no API key at all**, paying for a real model only at the eval tier, only when
+the question needs one.
+
+| Question you're asking                                  | vigiles                               | promptfoo                      |
+| ------------------------------------------------------- | ------------------------------------- | ------------------------------ |
+| Does my hook block/allow? Is it wired in?               | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
+| Unit under test                                         | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
+| Loads the **real shipped** plugin.json/hooks/CLAUDE.md? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
+| Is an A/B gap real, not noise? (significance / pass^k)  | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
+| Regression vs a committed baseline                      | ✅ `assertNoRegression`               | ✗                              |
+| Run an untrusted harness **confined**                   | ✅ bubblewrap, safe-by-default        | ✗                              |
+| Dataset / red-team / assertion library / web UI         | ✗ (not our game)                      | ✅✅ deep, mature              |
+
+Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
+the harness cheaply and safely.** The full analysis (and why we don't chase
+parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
 
 ## See also
 

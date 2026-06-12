@@ -21,7 +21,7 @@
 
 <p align="center">
   <b>Two pillars →</b>
-  &nbsp;<a href="#what-changes-with-vigiles">① Verify your instruction files</a>
+  &nbsp;<a href="#verify-your-instruction-files">① Verify your instruction files</a>
   &nbsp;·&nbsp;
   <a href="#test-your-claude-code-harness">② Test your Claude Code harness</a>
 </p>
@@ -31,25 +31,34 @@
 <details>
 <summary><b>Contents</b></summary>
 
+[**Two pillars — pick one or both**](#two-pillars--pick-one-or-both)
+
 **Pillar 1 — verify your instruction files** · references your CLAUDE.md makes that a linter, the filesystem, and package.json can prove
 
-- Three adoption levels: [inline comments](#level-0--inline-comments-30-seconds-no-new-files) → [YAML frontmatter](#level-1--yaml-frontmatter-editor-autocomplete-still-no-typescript) → [typed spec](#level-2--typed-spec-compiler-grade-guarantees)
+- Two adoption levels: [markdown](#markdown-mode--no-new-files-no-typescript) → [typed spec](#typed-spec--compiler-grade-guarantees)
 - [What changes with vigiles](#what-changes-with-vigiles)
 - [Quick start](#quick-start)
 - [Three rule types](#three-rule-types) — `enforce` / `guidance` / `guard`
 - [Verified references](#verified-references) — `file` / `cmd` / `symbol` / `ref`
 
-**Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · eval whether your hooks, skills, and CLAUDE.md actually change what the agent does
-
-- [Level 1 — unit-test a hook (no AI)](#level-1--test-a-hook-by-itself-no-ai-milliseconds)
-- [Level 2 — does it fire in a real session?](#level-2--does-it-fire-in-a-real-session-free-scripted-ai)
-- [Level 3 — does it change behaviour?](#level-3--does-it-change-what-claude-does-real-ai-occasional)
-- [Test skills for real + assert on actions](#test-your-skills-for-real--and-assert-on-what-claude-did)
-- [Run them in CI](#run-them-in-ci)
+**Pillar 2 — [test your Claude Code harness](#test-your-claude-code-harness)** · deterministic, no-API-key tests that your hooks and skills actually fire — full guide in [docs/harness-testing.md](docs/harness-testing.md)
 
 **More** — [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
 
 </details>
+
+## Two pillars — pick one or both
+
+`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them — and it's usually trusted on hope. vigiles makes it verifiable, in two pillars of equal weight. Adopt either on its own, or both:
+
+|       | Pillar                                                              | What it does                                                                                                                                                                 |
+| ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **①** | [**Verify your instruction files**](#verify-your-instruction-files) | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent.                 |
+| **②** | [**Test your harness**](#test-your-claude-code-harness)             | Your hooks and skills are code — vigiles tests that they actually fire, **deterministically and for free** (no model, no API key) before you ever pay for a real-model eval. |
+
+They share the thesis but not a dependency: verify your instructions without ever writing a harness test, or test your harness without a single `.spec.ts`. Pick the pillar that hurts today.
+
+## Verify your instruction files
 
 Your CLAUDE.md lies to your agent. Here's the fix.
 
@@ -77,11 +86,9 @@ Reads fine. Four things are wrong:
 
 The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
 
-> **See it in 60 seconds:** `npm run demo` runs `vigiles audit` against a deliberately-broken instruction file and catches a renamed symbol and a missing MCP tool (_"did you mean `purge`?"_), while the truthful references pass silently. [examples/demo →](examples/demo)
+Two levels, both independently useful: start in **markdown** (no new files), step up to a **typed spec** when you want compiler-grade guarantees.
 
-Three levels. Each is independently useful; adopt as far up as you like.
-
-### Level 0 — inline comments (30 seconds, no new files)
+### Markdown mode — no new files, no TypeScript
 
 Add a comment to your existing CLAUDE.md and audit it:
 
@@ -93,27 +100,11 @@ Add a comment to your existing CLAUDE.md and audit it:
 npx vigiles audit CLAUDE.md
 ```
 
-Each rule is checked against your real linter config — typos get closest-match suggestions, disabled rules are flagged. Zero install commitment, zero new files.
+Each rule is checked against your real linter config — typos get closest-match suggestions, disabled rules are flagged. `vigiles audit` enforces them in CI. Zero install commitment, zero new files.
 
-### Level 1 — YAML frontmatter (editor autocomplete, still no TypeScript)
+> **Want editor autocomplete?** Promote the rules into a `vigiles:` YAML frontmatter block and run `npx vigiles generate-schema` — your editor's YAML language server then autocompletes rule names and red-squiggles typos at edit time, still with no TypeScript. Same enforcement, nicer authoring. [Markdown mode →](docs/markdown-mode.md)
 
-Promote your rules into a `vigiles:` block at the top of the file:
-
-```yaml
----
-# yaml-language-server: $schema=./.vigiles/schema.json
-vigiles:
-  enforce:
-    - rule: "@typescript-eslint/no-explicit-any"
-      why: "Use unknown and narrow with type guards."
-    - rule: eslint/no-console
-      why: "Route output through logger.ts"
----
-```
-
-`npx vigiles generate-schema` emits a JSON Schema from your project's _actual_ enabled rules, so your editor's built-in YAML language server (VS Code, JetBrains, neovim) autocompletes rule names and red-squiggles typos — at edit time, with no TypeScript in the project. `vigiles audit` enforces the same rules in CI. [Markdown mode →](docs/markdown-mode.md)
-
-### Level 2 — typed spec (compiler-grade guarantees)
+### Typed spec — compiler-grade guarantees
 
 When you want the strongest guarantees, compile a typed spec. Every linter rule reference is verified against your real config, every file path against the filesystem, every npm script against package.json. Stale references become compile errors — caught at edit time, not when the agent silently ignores you.
 
@@ -192,7 +183,7 @@ Everything vigiles compiles and audits is **deterministic** — same input, same
 
 ## Quick Start
 
-The fastest path is markdown mode — add a marker to your existing CLAUDE.md and audit it, no install or new files (see [Level 0 / Level 1](#level-0--inline-comments-30-seconds-no-new-files) above and [docs/markdown-mode.md](docs/markdown-mode.md)). When you want compiler-grade guarantees, scaffold a typed spec:
+The fastest path is markdown mode — add a marker to your existing CLAUDE.md and audit it, no install or new files (see [markdown mode](#markdown-mode--no-new-files-no-typescript) above and [docs/markdown-mode.md](docs/markdown-mode.md)). When you want compiler-grade guarantees, scaffold a typed spec:
 
 ```bash
 npx vigiles init
@@ -250,40 +241,27 @@ There's a small family of inline **marks** that `audit` checks, each binding a r
 - `` `vigiles:symbol file#name` `` — the named file actually **defines** that symbol (function, class, method, constant), parsed with [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and CSS**. Rename it and `audit` fails; in markdown mode the `refs-hook` **forces the mark**, blocking edits that leave a code reference bare. [Details →](research/symbol-verification.md)
 - `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its server. `audit` reads `.mcp.json`, starts the server, lists its tools, and flags a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
-**Typo-safe at authoring time, too.** `vigiles generate-types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor; `generate-schema` gives Level 1 frontmatter the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](docs/linter-support.md#generate-types)
+**Typo-safe at authoring time, too.** `vigiles generate-types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](docs/linter-support.md#generate-types)
 
 ## Test your Claude Code harness
 
-You wrote hooks, a skill, a CLAUDE.md rule — how do you know they work, beyond
-running Claude and eyeballing it? vigiles ships a library to **test the harness
-itself**, at three levels, cheapest first. It's plain async functions, so it
-drops into **node:test / vitest / jest**, or a zero-setup `vigiles test`.
+Verifying references proves your instructions are _true_ — but the hooks and
+skills that enforce them still have to **actually fire**. A hook can be wired
+wrong, a skill's description can fail to trigger, injected context can never reach
+the model — all silently, all passing a naive "did it run?" check. So vigiles's
+second pillar **tests the harness itself**, as the assembled machine it ships as.
 
-Here's the whole surface and how far each tier reaches today — the rest of this
-section walks the tiers left to right:
+It's a small library of plain async functions (drops into node:test / vitest /
+jest, or a zero-setup `vigiles test`), with three tiers, cheapest first. The
+design bet is **deterministic and cheap**: the first two tiers never call a model
+or need an API key, so they run on every commit for free — the opposite of
+eval-only frameworks like promptfoo, where every run hits a real model **by
+design**. You only reach for the paid real-model tier when the question genuinely
+needs it.
 
-| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
-| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
-| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
-| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
-| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
-| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
-| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
-| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
-| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
-| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
-
-✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](research/harness-testing-coverage-matrix.md).
-
-### Level 1 — test a hook by itself (no AI, milliseconds)
-
-A hook is just a process that's handed a "Claude is about to do X" event and
-answers block/allow. Hand it a fake event and check the answer — no `claude`, no
-model, and **every** event type is reachable (incl. Edit/Write, PreCompact,
-SessionEnd):
+- **Unit-test a hook** — `runHook` hands a hook a fake event and checks block/allow. No `claude`, no model, milliseconds, reaches **every** event type.
+- **Deterministic harness test** — `runHarnessTest` runs the **real** `claude` against a **scripted mock model**, so your hooks fire for real with no API key and the same result every time.
+- **Eval** — `runEval` runs the real model A/B (change on vs off) and reports the gap as **mean ± se**, with a Welch-t-test [significance gate](docs/harness-testing.md#significance--is-the-gap-real), regression baselines, and cost/latency/token tracking.
 
 ```typescript
 import { runHook } from "vigiles/run-hook";
@@ -296,226 +274,10 @@ const r = runHook(guardCommand, {
 assert(r.blocked); // exit 2 / decision:"block" / permissionDecision:"deny"
 ```
 
-Unit-testing a hook you don't trust (a vendored third-party script)? Pass
-`sandbox: "auto"` to confine it under bubblewrap — no network egress, a cleared
-environment so it can't read your `ANTHROPIC_API_KEY` (the env _you_ pass is
-added back) — or it refuses rather than running it unconfined.
-
-The same shape governs **MCP tools** — the dominant real MCP test — with no
-server running, because the hook only sees the tool _name_:
-
-```typescript
-// block the destructive github-MCP tool; read-only ones pass
-runHook(guard, {
-  hook_event_name: "PreToolUse",
-  tool_name: "mcp__github__merge_pull_request",
-  tool_input: { pull_number: 42 },
-}).blocked; // true
-```
-
-### Level 2 — does it fire in a real session? (free, scripted "AI")
-
-Right logic ≠ wired in correctly. `runHarnessTest` runs the **real** `claude`
-against a **scripted mock model** you control — your hooks fire for real, the
-agent's turns are fixed, no API key, same result every time. Covers the
-governance shapes: SessionStart, Stop, UserPromptSubmit, and Bash **and
-Edit/Write** Pre/PostToolUse.
-
-```typescript
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-
-const r = await runHarnessTest({
-  settings: {
-    hooks: {
-      Stop: [
-        { hooks: [{ type: "command", command: "test -f DONE || exit 2" }] },
-      ],
-    },
-  },
-  model: scriptModel([
-    { text: "I'm done" }, // tries to stop → blocked (no DONE)
-    { tool: "Bash", input: { command: "touch DONE" } },
-    { text: "now done" },
-  ]),
-});
-assert(JSON.parse(r.stdout).num_turns > 1); // the Stop hook forced more work
-```
-
-### Level 3 — does it change what Claude does? (real AI, occasional)
-
-`runEval` runs the **real** model N times with your change **on vs off** and
-reports the gap as **mean ± se** — so you can tell signal from noise instead of
-eyeballing two averages:
-
-```typescript
-import { runEval, formatEvalReport } from "vigiles/eval";
-
-const report = await runEval({
-  arms: { off: {}, on: { settings: { hooks: { PostToolUse: [refsHook] } } } },
-  task: "Document chargeCard in SKILL.md, referencing it by name.",
-  measure: (ctx) => ({
-    marked: ctx.sh("grep -c vigiles:symbol SKILL.md") !== "0",
-  }),
-  trials: 6,
-  cache: "readwrite", // replay past runs — editing `measure` re-scores for free
-});
-console.log(formatEvalReport(report));
-// off  marked=0.00   on  marked=0.50±0.20 pass^k=0   ($0.07 · 1.2s/run · 4.1k tok)
-```
-
-Turn that gap into a CI gate with one line:
-
-```typescript
-assertSignificant(report, { baseline: "off", arm: "on", metric: "marked" });
-```
-
-It runs a Welch t-test and passes only if the difference clears the noise floor —
-and the noise floor is **measured from the runs' own spread**, not a number you
-guessed. The rest is there so the gate is cheap to run:
-
-- **Concurrent** — trials run in parallel, and `maxCostUsd` caps the spend.
-- **Tracked** — every run reports cost, latency, and token usage.
-- **Cached** — editing your `measure` re-scores past runs for free (record/replay).
-
-**Catch regressions over time, too.** Commit a baseline once
-(`writeBaseline(".vigiles/eval-baseline.json", [report])`), then in CI
-`assertNoRegression(report, readBaseline(path))` fails only when an arm×metric
-moves _significantly in the bad direction_ vs. that baseline — jest snapshots for
-agent behaviour, with a real noise floor (`diffToJUnit` emits it for CI).
-
-Same tier, different question: **`measureTriggerRate`** measures how reliably a
-skill's _description fires_ across varied prompts — the #1 skill-authoring pain.
-
-### Test your skills for real — and assert on what Claude _did_
-
-Install a plugin the way Claude actually does (`pluginDir` → `--plugin-dir`) so
-its **skills genuinely activate**, then assert on the agent's _actions_, not a
-stdout grep:
-
-```typescript
-import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
-
-const r = await runHarnessTest({
-  pluginDir: "./my-plugin",
-  transcript: true, // populate r.toolCalls
-  allowedTools: ["Read", "Write", "Bash", "Skill"],
-  model: scriptModel([
-    { tool: "Skill", input: { skill: "my-plugin:greet" } },
-    { text: "ok" },
-  ]),
-});
-assertSkillResolved(r, "my-plugin:greet"); // the skill fired, no error
-assertToolNotUsed(r, /^mcp__github__merge/); // the safety negative: the scary tool was never called
-```
-
-`assertToolNotUsed` is how you test a safety rule **honestly** — _proving_ the
-dangerous tool was never used, which "the file looks unchanged" can't. It works
-on **real third-party plugins** too: the suite confirms real `obra/superpowers`
-and `wshobson/agents` skills resolve this way, with no markers injected.
-
-### Did the injected context actually reach the model?
-
-Some hooks exist to add text to the model's context — a `SessionStart` hook that
-injects project rules, for example. But a hook can exit `0`, look perfectly
-healthy, and still inject **nothing**: it printed the JSON in a shape Claude Code
-doesn't read, or it only works on the author's platform. The hook _ran_ — the
-context never _landed_.
-
-So don't check that the hook ran. Check what the model actually received.
-`trace.modelRequests` is the real request sent to the model (its system prompt and
-messages), and `assertRequestContains` asserts your text is in it:
-
-```typescript
-import { assertRequestContains } from "vigiles/harness-assert";
-
-assertRequestContains(r, "You have superpowers"); // the injected context is really there
-```
-
-This is a real bug we caught: `obra/superpowers` puts `additionalContext` at the
-**top level** of its hook output, but Claude Code only reads the **nested** field
-(`hookSpecificOutput.additionalContext`). The hook fired and exited clean, so
-every "did it run?" check passed — yet the context never reached the model. Only
-inspecting the request showed it was missing.
-
-### Running an untrusted plugin? It's confined by default
-
-Testing a third-party plugin means executing **its** hooks. `runHarnessTest` is
-safe by default: code you wrote (inline `settings`/`files`) runs directly, but an
-external `plugin` / `pluginDir` is **confined under bubblewrap** — a network
-namespace with **no egress** (a malicious hook can't phone home), a read-only
-filesystem, and a **cleared environment** (your `ANTHROPIC_API_KEY` and other
-secrets aren't even visible). If no sandbox is available the run **refuses**
-rather than executing unconfined:
-
-```typescript
-runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // confined, or refuses
-runHarnessTest({ pluginDir: "./audited", model, sandbox: false }); // you vouch for it → direct
-```
-
-Confinement is **Linux-only** (bubblewrap); on macOS / Windows an untrusted run
-refuses unless you pass `sandbox: false`. The suite dogfoods it on real
-`obra/superpowers` — its `SessionStart` hook runs in a no-egress sandbox, and the
-test proves egress is blocked while the scripted mock stays reachable.
-
-### Run them in CI
-
-`vigiles test` runs `*.harness.mjs` files (free, no key); `vigiles eval` runs
-`*.eval.mjs` files (real model). Point a test at a whole plugin (or `"./"` for
-your repo) to load **what ships** — hooks (with `${CLAUDE_PLUGIN_ROOT}`
-resolved), CLAUDE.md, skills, subagents, commands — and `loadPlugin().warnings`
-flags anything only a real model can drive, so you never silently test an empty
-machine.
-
-```bash
-npx vigiles test examples/harness/policy-gate.harness.mjs
-npx vigiles eval --trials=6 examples/harness/skill-outcome.eval.mjs
-```
-
-### Tested against real-world skills
-
-These aren't toy fixtures — vigiles dogfoods its loader against **actual shipped
-plugins** (vendored as commit-pinned snapshots, so they run offline and key-free,
-with each upstream `LICENSE` + `SOURCE` kept alongside):
-
-- [`real-superpowers.harness.mjs`](examples/harness/real-superpowers.harness.mjs)
-  — [`obra/superpowers`](https://github.com/obra/superpowers) (MIT): the
-  `hooks/hooks.json` convention + `${CLAUDE_PLUGIN_ROOT}` expansion, and the
-  `SessionStart` skill that resolves with no markers injected. This is the dogfood
-  that caught superpowers' top-level `additionalContext` never reaching the model.
-- [`real-wshobson.harness.mjs`](examples/harness/real-wshobson.harness.mjs) —
-  [`wshobson/agents`](https://github.com/wshobson/agents) (MIT): the dominant
-  marketplace shape — subagents + commands + skills with **no hooks** — which the
-  loader must materialize and warn about rather than silently pass as an empty
-  machine.
-
-**CI runs all of this on every push.** `src/vendor.test.ts` runs the same loader
-invariants over both plugins as a conformance suite inside `npm run coverage`, and
-a dedicated job runs the deterministic harness tests (`vigiles test`) — with
-`bubblewrap` installed so the sandbox confinement test executes for real, not
-skipped.
-
-### How this compares to promptfoo
-
-[promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
-and it's excellent at what it does. vigiles isn't a competing eval framework: it
-tests **the harness** (your hooks / settings / CLAUDE.md / skills as they ship),
-and it's built to be **cheap and safe** where promptfoo is real-model-only.
-
-| Question you're asking                                  | vigiles                               | promptfoo                      |
-| ------------------------------------------------------- | ------------------------------------- | ------------------------------ |
-| Does my hook block/allow? Is it wired in?               | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
-| Unit under test                                         | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
-| Loads the **real shipped** plugin.json/hooks/CLAUDE.md? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
-| Is an A/B gap real, not noise? (significance / pass^k)  | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
-| Regression vs a committed baseline                      | ✅ `assertNoRegression`               | ✗                              |
-| Run an untrusted harness **confined**                   | ✅ bubblewrap, safe-by-default        | ✗                              |
-| Dataset / red-team / assertion library / web UI         | ✗ (not our game)                      | ✅✅ deep, mature              |
-
-Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
-the harness cheaply and safely.** The full analysis (and why we don't chase
-parity) is in [`research/promptfoo-deep-dive.md`](research/promptfoo-deep-dive.md).
-
-[Full guide → `docs/harness-testing.md`](docs/harness-testing.md) · [benchmarks](research/benchmarks-runtime-gates.md).
+**[Full guide → `docs/harness-testing.md`](docs/harness-testing.md)** — the tier
+walkthrough, testing skills for real, "fired ≠ landed" (`trace.modelRequests`),
+the safe-by-default sandbox for untrusted plugins, the surface × tier coverage
+matrix, and how it compares to promptfoo. Also: [benchmarks](research/benchmarks-runtime-gates.md).
 
 ## CLI & CI
 
