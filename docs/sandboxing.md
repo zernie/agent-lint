@@ -134,9 +134,12 @@ so the attempt is captured and nothing leaves.
   **Node 22+** (on older Node a `fetch()` is still blocked, just not recorded).
 - It still **blocks**. So a skill that needs a _real_ `npm install` to succeed
   won't work in this mode — that's the **allowlisted real-egress** mode
-  ([`pasta`](https://passt.top/)/`slirp4netns` gateway + allowlist + logging),
-  which is designed but **not yet shipped** — see
-  [`research/sandbox-network.md`](../research/sandbox-network.md).
+  (`slirp4netns` gateway + `nft` allowlist + logging), which is designed and
+  **proven feasible in a spike** (`slirp4netns --configure` + in-netns nftables —
+  a non-allowlisted host _and_ a raw socket are both dropped, with readable
+  counters) but **not yet shipped** as an `egress: { allow }` option — see
+  [`research/sandbox-network.md`](../research/sandbox-network.md) and
+  [`research/spikes/sandbox-network-allowlist.sh`](../research/spikes/sandbox-network-allowlist.sh).
 
 ## Dogfood — a real finding about a real plugin
 
