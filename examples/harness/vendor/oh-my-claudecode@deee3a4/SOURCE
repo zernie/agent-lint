@@ -21,21 +21,24 @@ Included — the harness-relevant SLICE only, NOT the whole repo (upstream is
                                   with no spurious dangling refs.
   .mcp.json                    — the MCP server declaration (the 4th surface).
                                   Parsed/flagged by the loader, never executed.
-  hooks/hooks.json             — TRIMMED to the single UserPromptSubmit hook
-                                  whose script chain we vendored (keyword-detector).
-                                  The upstream file wires ~26 scripts across 11
-                                  events; we keep only the one that runs cleanly
-                                  in isolation so the deterministic tier executes
-                                  a REAL hook without dragging in dist/.
+  package.json                 — MINIMAL (name + version only): session-start reads
+                                  package.json#version to decide whether to run its
+                                  update check; without it that path is skipped.
+  hooks/hooks.json             — TRIMMED to the two hooks whose script chains we
+                                  vendored (SessionStart→session-start,
+                                  UserPromptSubmit→keyword-detector). The upstream
+                                  file wires ~26 scripts across 11 events.
   scripts/run.cjs              — the hook entrypoint wrapper (node builtins only).
   scripts/keyword-detector.mjs — the UserPromptSubmit hook: detects a "magic
-                                  keyword" in the prompt and injects skill-routing
-                                  additionalContext. Deterministic and
-                                  side-effect-free for the keyword path — verified
-                                  before vendoring — so it is the one upstream hook
-                                  this dogfood actually EXECUTES (unit + deterministic
-                                  tiers). Its closed lib dependency set:
-  scripts/lib/{atomic-write,config-dir,state-root,stdin}.mjs
+                                  keyword" and injects skill-routing context.
+                                  Deterministic + side-effect-free for the keyword
+                                  path. The hook the unit/deterministic tiers run.
+  scripts/session-start.mjs    — the SessionStart hook: on a real workspace it
+                                  fetch()es registry.npmjs.org for an UPDATE CHECK.
+                                  The egress dogfood runs it under recordEgress and
+                                  asserts it phones the npm registry and nowhere
+                                  else (a real supply-chain property of the plugin).
+  scripts/lib/{atomic-write,config-dir,state-root,stdin,model-routing-override-message}.mjs
   skills/{ask,verify}/SKILL.md — two representative skills.
   agents/{code-reviewer,critic}.md — two representative subagents.
 

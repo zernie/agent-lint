@@ -1,6 +1,18 @@
 {
-  "description": "OMC orchestration hooks (vendored slice — UserPromptSubmit keyword-detector only)",
+  "description": "OMC orchestration hooks (vendored slice — keyword-detector + session-start update check)",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/scripts/run.cjs \"$CLAUDE_PLUGIN_ROOT\"/scripts/session-start.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",

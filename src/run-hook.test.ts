@@ -7,8 +7,10 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtempSync, writeFileSync } from "node:fs";
 
-import { assertNoEgress } from "./harness-assert.js";
+import { assertNoEgress, assertEgressOnly } from "./harness-assert.js";
 import {
   runHook,
   runHookWith,
@@ -260,19 +262,36 @@ test.skipIf(!sandboxAvailable())(
 // --- recordEgress: record + block a hook's network (needs real bwrap) -------
 
 test.skipIf(!sandboxAvailable())(
-  "recordEgress: a hook's network attempt is recorded AND blocked",
+  "dogfood: oh-my-claudecode's session-start hook update-checks ONLY the npm registry",
   () => {
-    // curl honors HTTP(S)_PROXY → the recorder captures the target and refuses,
-    // so the request never actually leaves the netns (curl errors, exit ≠ 0).
+    // A REAL, useful finding about a popular plugin: OMC's SessionStart hook
+    // fetch()es registry.npmjs.org for an update check on every session start.
+    // recordEgress captures it (Node fetch via NODE_USE_ENV_PROXY) and blocks it;
+    // assertEgressOnly proves it phones the npm registry and nowhere else.
+    const root = join(
+      process.cwd(),
+      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+    );
+    // session-start only runs its full logic in a real workspace (a .git /
+    // .omc-workspace marker), so give it a throwaway one as the confined cwd.
+    const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
+    writeFileSync(join(ws, ".omc-workspace"), "");
+    const state = mkdtempSync(join(tmpdir(), "omc-state-"));
     const r = runHook(
-      "curl -s -m 5 -o /dev/null https://registry.npmjs.org/ ; true",
-      { hook_event_name: "PreToolUse", tool_name: "Bash" },
-      { recordEgress: true, timeoutMs: 30000 },
+      `node "${root}/scripts/run.cjs" "${root}/scripts/session-start.mjs"`,
+      { hook_event_name: "SessionStart", source: "startup" },
+      {
+        recordEgress: true,
+        cwd: ws,
+        env: { CLAUDE_PLUGIN_ROOT: root, OMC_STATE_DIR: state },
+        timeoutMs: 30000,
+      },
     );
     assert.ok(
-      r.egress.some((e) => e.host === "registry.npmjs.org" && e.port === 443),
-      `expected the registry attempt to be recorded; got ${JSON.stringify(r.egress)}`,
+      r.egress.some((e) => e.host === "registry.npmjs.org"),
+      `expected the update check to reach the npm registry; got ${JSON.stringify(r.egress)}`,
     );
+    assertEgressOnly(r, ["registry.npmjs.org"]); // …and nowhere else
   },
 );
 
