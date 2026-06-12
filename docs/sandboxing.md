@@ -82,6 +82,9 @@ so the attempt is captured and nothing leaves.
   the proxy — but the netns still **blocks** it hard, so it can't get out; it
   just won't appear in the record. _The block is the boundary; the record is
   best-effort observability over it._
+- `curl` / `npm` / `pip` honor the proxy on every Node version; capturing
+  Node's own **`fetch()`** needs `NODE_USE_ENV_PROXY`, which only takes effect on
+  **Node 22+** (on older Node a `fetch()` is still blocked, just not recorded).
 - It still **blocks**. So a skill that needs a _real_ `npm install` to succeed
   won't work in this mode — that's the **allowlisted real-egress** mode
   ([`pasta`](https://passt.top/)/`slirp4netns` gateway + allowlist + logging),
