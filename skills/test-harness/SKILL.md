@@ -60,8 +60,7 @@ Pick one concrete thing to pin down — a specific `PreToolUse` hook, a specific
 **Unit (`runHook`)** — hand a hook a synthesized event, assert the decision:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
-import { assertHookBlocked } from "vigiles/harness-assert";
+import { runHook, assertHookBlocked } from "vigiles/testing";
 
 const r = runHook(hookCommand, {
   hook_event_name: "PreToolUse",
@@ -78,8 +77,12 @@ Testing a hook you didn't write (a vendored third-party script)? Mark it
 mock model, assert the hook fired (or the context landed):
 
 ```ts
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-import { assertHookFired, assertRequestContains } from "vigiles/harness-assert";
+import {
+  runHarnessTest,
+  scriptModel,
+  assertHookFired,
+  assertRequestContains,
+} from "vigiles/testing";
 
 const r = await runHarnessTest({
   pluginDir: "./", // or { settings: { hooks: {...} } }
@@ -94,8 +97,7 @@ assertRequestContains(r, "expected injected text"); // did it actually land?
 gate on significance, not eyeballing:
 
 ```ts
-import { runEval } from "vigiles/eval";
-import { assertSignificant } from "vigiles/harness-assert";
+import { runEval, assertSignificant } from "vigiles/testing";
 
 const report = await runEval({
   arms: { off: {}, on: { pluginDir: "./" } },

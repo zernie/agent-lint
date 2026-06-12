@@ -9,6 +9,9 @@
   "types": "./dist/spec.d.ts",
   "exports": {
     ".": "./dist/spec.js",
+    "./linting": "./dist/linting.js",
+    "./testing": "./dist/testing.js",
+    "./claude-code": "./dist/claude-code.js",
     "./spec": "./dist/spec.js",
     "./compile": "./dist/compile.js",
     "./linters": "./dist/linters.js",
