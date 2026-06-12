@@ -22,8 +22,8 @@ ships a zero-dependency CLI fallback (`vigiles test` / `vigiles eval`).
 
 A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
 back an exit code (`2` = block) and an optional JSON decision on stdout.
-`runHook` exercises exactly that contract — no `claude` binary, no model, no
-sandbox — so a hook's logic is testable in milliseconds, in any runner:
+`runHook` exercises exactly that contract — no `claude` binary, no model — so a
+hook's logic is testable in milliseconds, in any runner:
 
 ```ts
 import { runHook } from "vigiles/run-hook";
@@ -53,6 +53,17 @@ testable.
 What it does **not** prove: that the hook is _wired in_ (settings point at it,
 `${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
 both: unit-test the logic here, then assert it fires in the assembled machine.
+
+**Unit-testing a hook you don't trust?** Pass `sandbox: "auto"` (or `"strict"`)
+to confine a third-party hook command under bubblewrap — a no-egress namespace
+with a cleared environment (so the hook can't read your `ANTHROPIC_API_KEY`),
+while the env _you_ pass in `opts.env` is added back. It refuses rather than
+running unconfined where no sandbox is available (Linux + bwrap only). Same
+safe-by-default policy as `runHarnessTest`'s plugin confinement (`src/sandbox.ts`):
+
+```ts
+runHook(vendoredHookCmd, event, { sandbox: "auto", env: { GUARD: guardPath } });
+```
 
 ## Test the whole machine, not one hook
 
@@ -421,6 +432,44 @@ const c = compareArms(report, "vanilla", "gated", "marked");
 For 0/1 metrics this is the t approximation to the two-proportion test — close at
 eval trial counts. An insignificant gap means **raise `trials`** until the noise
 floor drops below it.
+
+### Regression gating — did this PR make the harness worse?
+
+Significance compares two _arms_ in one run; **regression gating** compares one
+run against a **committed baseline** — "jest snapshots for agent behaviour, with a
+real noise floor". Record a baseline once, commit it, then fail CI when any
+arm×metric moves _significantly in the bad direction_ vs. that baseline (a bare
+pass-rate can't tell a real regression from sampling noise — the same Welch test
+can, current vs. baseline):
+
+```ts
+import {
+  writeBaseline,
+  readBaseline,
+  assertNoRegression,
+  diffToJUnit,
+  diffReports,
+} from "vigiles/harness-assert";
+
+const report = await runEval({
+  /* … */
+});
+
+// Record once (commit .vigiles/eval-baseline.json):
+writeBaseline(".vigiles/eval-baseline.json", [report]);
+
+// In CI thereafter — throws on a significant regression:
+const baseline = readBaseline(".vigiles/eval-baseline.json");
+if (baseline) {
+  assertNoRegression(report, baseline, { lowerIsBetter: ["cost"] });
+  // or emit JUnit for your CI: diffToJUnit(diffReports(baseline, [report]))
+}
+```
+
+Higher is better by default; list `lowerIsBetter` metrics (cost/latency) to flip
+them. A new arm/metric absent from the baseline is skipped (not a regression).
+`diffToJUnit` renders one `<testcase>` per metric with a `<failure>` per
+regression, so eval regressions show up alongside unit-test failures.
 
 ### Cost, caching, concurrency
 

@@ -9,10 +9,14 @@ import assert from "node:assert/strict";
 
 import {
   runHook,
+  runHookWith,
   parseHookOutput,
   decideHook,
   type HookOutput,
+  type RunHookDeps,
+  type HookSpawnResult,
 } from "./run-hook.js";
+import { sandboxAvailable } from "./sandbox.js";
 
 test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   assert.deepEqual(parseHookOutput('{"decision":"block","reason":"no"}'), {
@@ -138,3 +142,75 @@ test("runHook: governs MCP tools by name (no server needed)", () => {
   });
   assert.equal(read.blocked, false, "read-only github-MCP tool is allowed");
 });
+
+// --- the sandbox seam (runHookWith with fake spawners) ---------------------
+
+const spawnRes = (o: Partial<HookSpawnResult> = {}): HookSpawnResult => ({
+  status: 0,
+  signal: null,
+  stdout: "",
+  stderr: "",
+  ...o,
+});
+
+test("runHookWith routes direct vs sandbox by policy, refuses when unavailable", () => {
+  let used = "";
+  const deps = (available: boolean): RunHookDeps => ({
+    available,
+    direct: () => {
+      used = "direct";
+      return spawnRes({ stdout: '{"decision":"approve"}' });
+    },
+    sandboxed: () => {
+      used = "sandbox";
+      return spawnRes({ status: 2 });
+    },
+  });
+
+  // default (no sandbox) → direct, regardless of availability
+  const r1 = runHookWith("x", { hook_event_name: "Stop" }, {}, deps(true));
+  assert.equal(used, "direct");
+  assert.equal(r1.decision, "approve");
+
+  // sandbox:"auto" + available → confined
+  used = "";
+  const r2 = runHookWith("x", {}, { sandbox: "auto" }, deps(true));
+  assert.equal(used, "sandbox");
+  assert.equal(r2.blocked, true); // exit 2
+
+  // sandbox:"auto" + unavailable → refuse rather than run unconfined
+  assert.throws(
+    () => runHookWith("x", {}, { sandbox: "auto" }, deps(false)),
+    /sandbox|bwrap/,
+  );
+});
+
+test("runHookWith maps a signal kill to exit 1", () => {
+  const deps: RunHookDeps = {
+    available: true,
+    direct: () => spawnRes({ status: null, signal: "SIGKILL" }),
+    sandboxed: () => spawnRes(),
+  };
+  assert.equal(runHookWith("x", {}, {}, deps).exitCode, 1);
+});
+
+// --- real bwrap confinement (skipped where bwrap is absent) ----------------
+
+test.skipIf(!sandboxAvailable())(
+  "sandbox: clears host env but adds opts.env back, runs confined",
+  () => {
+    process.env.VIG_FAKE_SECRET = "leaked";
+    try {
+      // $VIG_FAKE_SECRET must be empty under --clearenv; $GUARD is added back.
+      const r = runHook(
+        'printf "%s|%s" "$VIG_FAKE_SECRET" "$GUARD"',
+        { hook_event_name: "Stop" },
+        { sandbox: "auto", env: { GUARD: "ok" } },
+      );
+      assert.equal(r.exitCode, 0);
+      assert.equal(r.stdout, "|ok");
+    } finally {
+      delete process.env.VIG_FAKE_SECRET;
+    }
+  },
+);

@@ -13,6 +13,8 @@ import {
   assertSignificant,
   reliable,
   assertReliable,
+  assertNoRegression,
+  toBaselineFile,
   assertCreated,
   assertNotCreated,
   assertServedTurns,
@@ -591,5 +593,39 @@ test("assertToolCalls: custom invariant — every Edit preceded by a Read", () =
   );
   assert.throws(() => {
     assertToolCalls(fakeResult([], [call("Edit")]), everyEditAfterRead);
+  });
+});
+
+test("assertNoRegression gates on a significant drop vs baseline", () => {
+  const stat = (mean: number, se: number, n: number) => ({
+    mean,
+    std: se * Math.sqrt(n),
+    se,
+    n,
+    passK: mean >= 1 ? 1 : 0,
+  });
+  const mk = (caught: number): EvalReport => ({
+    name: "demo",
+    trials: 20,
+    totalCostUsd: 0,
+    aborted: false,
+    arms: {
+      gated: {
+        runs: 20,
+        metrics: { caught },
+        stats: { caught: stat(caught, 0.03, 20) },
+        usage: NO_USAGE,
+      },
+    },
+  });
+  const baseline = toBaselineFile([mk(0.9)]);
+
+  // a clear drop throws (single report)
+  assert.throws(() => {
+    assertNoRegression(mk(0.3), baseline);
+  }, /regression vs baseline/);
+  // holding steady passes (array form)
+  assert.doesNotThrow(() => {
+    assertNoRegression([mk(0.9)], baseline);
   });
 });

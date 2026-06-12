@@ -169,6 +169,17 @@ export function bwrapArgs(opts: {
   ];
 }
 
+/**
+ * `--setenv K V` pairs to add back specific variables after `--clearenv` — e.g.
+ * a hook's configured env (the `GUARD=path` a plugin's command relies on), which
+ * `bwrapArgs`' `--clearenv` would otherwise drop. Pure, so it's unit-tested.
+ */
+export function setenvArgs(env: Record<string, string>): string[] {
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(env)) out.push("--setenv", k, v);
+  return out;
+}
+
 /** Parse the in-sandbox mock's ndjson request log into {@link ModelRequest}s. */
 export function parseRequestLog(ndjson: string): ModelRequest[] {
   const out: ModelRequest[] = [];
