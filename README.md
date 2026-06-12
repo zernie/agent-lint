@@ -296,17 +296,18 @@ npx vigiles eval        # Run *.eval.mjs real-model harness evals (--trials=N)
 Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
 
 <details>
-<summary><b>The 7 skills</b></summary>
+<summary><b>The 8 skills</b></summary>
 
-| Skill                  | What it does                                                            |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step                    |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                  |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                     |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry        |
-| `enforce-rules-format` | Validate all rules have enforcement classification                      |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                |
+| Skill                  | What it does                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs                           |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step                                              |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                                            |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                                               |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry                                  |
+| `enforce-rules-format` | Validate all rules have enforcement classification                                                |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                                          |
+| `test-harness`         | Test a Claude Code harness — pick the tier (unit / deterministic / eval) and write a passing test |
 
 </details>
 
