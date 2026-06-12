@@ -108,15 +108,15 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/harness-test.test.ts":
       "Harness-test suite (node:test, skips without claude)",
     "src/sandbox.ts":
-      "Safe-by-default confinement: decideSandbox is the pure policy (untrusted plugin code never runs unconfined unless sandbox:false), runSandboxed co-launches the mock + claude inside one bubblewrap network namespace (loopback-only — mock reachable, egress blocked); specTrusted/bwrapArgs/parseRequestLog are the pure, tested seams",
+      "Safe-by-default confinement: decideSandbox is the pure policy (untrusted plugin code never runs unconfined unless sandbox:false), runSandboxed co-launches the mock + claude inside one bubblewrap network namespace (loopback-only — mock reachable, egress blocked); specTrusted/bwrapArgs/setenvArgs/parseRequestLog are the pure, tested seams (setenvArgs adds a hook's configured env back after --clearenv, reused by the unit-tier sandbox in run-hook.ts)",
     "src/sandbox.test.ts":
       "Sandbox test suite: pure policy/trust/args/log-parse coverage + a gated end-to-end test proving a sandboxed run blocks network egress while the in-sandbox mock stays reachable (skips without bwrap/claude)",
     "src/mock-entry.ts":
       "In-sandbox mock entry: run as a subprocess inside the bwrap netns so the scripted mock lives on the isolated loopback; streams captured requests to a file the parent reads back for trace.modelRequests",
     "src/run-hook.ts":
-      "Hook unit tier: runHook pipes a synthesized event JSON to a hook process (no claude, no model) and reports exit code + normalized block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event (Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop); parseHookOutput/decideHook are the pure, testable decision logic",
+      'Hook unit tier: runHook pipes a synthesized event JSON to a hook process (no claude, no model) and reports exit code + normalized block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event (Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop); parseHookOutput/decideHook are the pure, testable decision logic; opt-in sandbox: "auto"/"strict" confines an untrusted hook command under bubblewrap (reusing sandbox.ts) via the injectable runHookWith seam (direct/sandboxed/refuse all unit-tested with fakes)',
     "src/run-hook.test.ts":
-      "Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions",
+      "Hook unit-tier test suite (node:test): pure decision logic + real shell hooks across exit codes, stdin event passthrough, env injection, JSON permission decisions, runHookWith sandbox routing (fake spawners) + a gated bwrap confinement test (host env cleared, opts.env added back)",
     "src/eval.ts":
       "Harness eval API: runEval drives the real claude CLI across arms x trials and aggregates mean ± se (variance) + cost/latency/token usage; bounded concurrency (runPool) + rate-limit backoff + maxCostUsd budget cap; record/replay cache (cache:readwrite) replays runs so editing measure re-scores for free; measureTriggerRate measures how reliably a skill's description FIRES across varied prompts (the #1 skill-authoring pain) — the empirical half of testing your harness (generalizes bench/)",
     "src/eval.test.ts":
@@ -220,8 +220,14 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Synthesis: the conceptual boundary of reference verification — proxy-vs-judgment gap, prose undecidability (active mark vs passive symbol-table sweep), the doc-format landscape (explicit-link = marking; identity-based = the real fix), and the delegate/ignore/own rule for existing tools (Sphinx etc.)",
     "research/harness-testing.md":
       "Testing the Claude Code harness — the three-tier design (unit runHook + deterministic runHarnessTest + real-model runEval), the assembled-machine plugin loader, and a coverage assessment against real plugins (protect-mcp, obra/superpowers, block-no-verify, wshobson agents/skills)",
+    "src/eval-baseline.ts":
+      "Eval regression gating (Phase C): record a run's EvalReports to a committed .vigiles/eval-baseline.json, then flag any arm×metric that moved SIGNIFICANTLY in the bad direction vs that baseline — reusing welchTTest from stats.ts (current vs baseline), so sampling noise doesn't trip the gate. Pure diff/serialize/JUnit (toBaselineFile/parseBaselineFile/diffReports/formatBaselineDiff/diffToJUnit) + the readBaseline/writeBaseline fs helpers; behind assertNoRegression",
+    "src/eval-baseline.test.ts":
+      "Eval-baseline test suite (node:test): baseline round-trip + version/shape validation, regression vs improvement vs unchanged classification, lowerIsBetter direction flip, skip of absent arms/metrics/reports, console + JUnit formatting (counts, failure element, xml escaping), readBaseline null + writeBaseline round-trip",
     "research/eval-api-landscape.md":
       "Eval-API landscape: the LLM/agent eval field (promptfoo, DeepEval, Braintrust, Inspect, LangSmith, OpenAI Evals) summarized then scored against our eval API — strengths (harness A/B arms, pass^k, se/std, unified Trace predicates), gaps (cost/concurrency/caching, significance testing, regression gating), and the B→A→C roadmap (defer D)",
+    "research/promptfoo-deep-dive.md":
+      "promptfoo deep dive: what it is in 2026 (eval + red-team + guardrails + agent-skills), the agentic update that makes the old scorecard stale (Tier 0/1/2 SDK providers incl. anthropic:claude-agent-sdk, trajectory:* + cost/latency assertions), the one axis that still separates us (harness-arm A/B loaded as it ships + the two sub-model tiers + significance/pass^k), and the recommendation (interop bridge via ProviderFunction/AgentRunner, lead with the cheaper tiers + regression gating, ship a vigiles Agent Skill, correct the stale claims)",
     "research/skill-authoring-pains.md":
       "Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references",
     "docs/harness-testing.md":

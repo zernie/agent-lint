@@ -14,6 +14,7 @@ import {
   specTrusted,
   sandboxAvailable,
   bwrapArgs,
+  setenvArgs,
   parseRequestLog,
 } from "./sandbox.js";
 import {
@@ -103,6 +104,18 @@ test("bwrapArgs: isolated net, cleared env, ro root, writable work + io + home",
   assert.ok(joined.includes("--setenv PATH /usr/bin:/bin")); // PATH set back
   assert.ok(joined.includes("--chdir /work"));
   assert.ok(args.includes("--die-with-parent"));
+});
+
+test("setenvArgs: one --setenv pair per var, empty for none", () => {
+  assert.deepEqual(setenvArgs({ GUARD: "/x", FOO: "bar" }), [
+    "--setenv",
+    "GUARD",
+    "/x",
+    "--setenv",
+    "FOO",
+    "bar",
+  ]);
+  assert.deepEqual(setenvArgs({}), []);
 });
 
 test("parseRequestLog: parses ndjson, skips blank and partial lines", () => {

@@ -29,11 +29,19 @@ matter for harness evals.
 
 ### promptfoo
 
-Config-first (YAML) prompt/provider matrix runner with a CLI and local web view.
-Strong: zero-SaaS, CI-friendly, concurrency, result caching, assertion library
-(`contains`, `llm-rubric`, `javascript`), red-team add-on. Weak for us: the matrix
-is prompts×providers, not _harness arms_; no statistical spread/significance; no
-agent-trajectory/tool assertions; reliability is pass-rate, not pass^k.
+Config-first (YAML) runner with a CLI and local web view. Strong: zero-SaaS,
+CI-friendly, concurrency, result caching, a deep assertion library
+(`contains`, `llm-rubric`, `g-eval`, ROUGE/BLEU, schema, `javascript`/`python`),
+a first-class **red-team** pillar, and — the part that dates the rest of this
+section — **agentic support**: tiered SDK providers (`anthropic:claude-agent-sdk`,
+`openai:codex-sdk`, a Tier-0 baseline LLM control), **`trajectory:*` assertions**
+(e.g. `trajectory:step-count` over a command pattern), and `cost`/`latency`
+assertions. Weak for us — and this is now the _only_ gap, narrower than the rest of
+this doc implies: the matrix is prompts×**providers**, not _harness arms loaded as
+they ship_ (it configures the SDK from YAML, not a real `plugin.json`/`hooks.json`/
+`settings.json`/`CLAUDE.md`); it has no sub-model tiers (no `runHook`/mock-model
+analog — every run is a real-model call); and reliability is pass-rate with no
+se/significance/pass^k. See `research/promptfoo-deep-dive.md` for the full zoom-in.
 
 ### DeepEval
 
@@ -84,20 +92,20 @@ Out of scope: explicitly the thing vigiles does _not_ do.
 
 ## Scorecard
 
-| Dimension                                                 | vigiles                | promptfoo        | DeepEval   | Braintrust | Inspect          |
-| --------------------------------------------------------- | ---------------------- | ---------------- | ---------- | ---------- | ---------------- |
-| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix) | ✗          | partial    | partial          |
-| pass^k reliability (τ-bench)                              | **✓**                  | ✗                | ✗          | ✗          | partial (epochs) |
-| Statistical spread (std/se)                               | **✓**                  | ✗                | ✗          | partial    | ✓ (stderr)       |
-| Significance test (CI / p-value)                          | ✗                      | ✗                | ✗          | partial    | partial          |
-| Tool / trajectory assertions                              | **✓ strong**           | partial          | ✓          | ✓          | ✓                |
-| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                | **✓✓**     | ✓          | ✓                |
-| Dataset / scenario primitive                              | ✗                      | ✓✓               | ✓✓         | ✓✓         | ✓✓               |
-| Cost / latency / token metrics                            | ✗                      | ✓                | ✓          | ✓          | ✓                |
-| Concurrency                                               | ✗ (sequential + sleep) | ✓                | ✓          | ✓          | ✓                |
-| Caching / record-replay                                   | ✗ (eval tier)          | ✓                | partial    | ✓          | partial          |
-| Persisted reports / regression gating                     | ✗ (console string)     | ✓                | partial    | ✓✓         | ✓                |
-| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)          | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+| Dimension                                                 | vigiles                | promptfoo          | DeepEval   | Braintrust | Inspect          |
+| --------------------------------------------------------- | ---------------------- | ------------------ | ---------- | ---------- | ---------------- |
+| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix)   | ✗          | partial    | partial          |
+| pass^k reliability (τ-bench)                              | **✓**                  | ✗                  | ✗          | ✗          | partial (epochs) |
+| Statistical spread (std/se)                               | **✓**                  | ✗                  | ✗          | partial    | ✓ (stderr)       |
+| Significance test (CI / p-value)                          | ✗                      | ✗                  | ✗          | partial    | partial          |
+| Tool / trajectory assertions                              | **✓ strong**           | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
+| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                  | **✓✓**     | ✓          | ✓                |
+| Dataset / scenario primitive                              | ✗                      | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
+| Cost / latency / token metrics                            | ✗                      | ✓                  | ✓          | ✓          | ✓                |
+| Concurrency                                               | ✗ (sequential + sleep) | ✓                  | ✓          | ✓          | ✓                |
+| Caching / record-replay                                   | ✗ (eval tier)          | ✓                  | partial    | ✓          | partial          |
+| Persisted reports / regression gating                     | ✗ (console string)     | ✓                  | partial    | ✓✓         | ✓                |
+| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
 
 (Profiles reflect the ecosystem as understood mid-2026; treat specific competitor
 features as directional, not contractual. The `vigiles` column is the state **at
@@ -161,12 +169,42 @@ Four coherent theses of "world-class," each a different bet:
 - **D — Scenarios & scorers.** A dataset/scenario primitive unifying `runEval` /
   `measureTriggerRate`, plus a reusable scorer library (trajectory-vs-reference,
   multi-criteria/pairwise judge). Parity with DeepEval/promptfoo; biggest refactor.
+- **E — promptfoo interop (distribution, not a feature race). [PUNTED — see
+  amendment below].** The adoption bet:
+  do what they can't (harness-arm A/B loaded as it ships + the no-model/no-key
+  cheaper tiers + significance/pass^k) but ship _inside_ their ecosystem so we ride
+  their reach. Two thin bridges over seams both sides already expose:
+  - **vigiles-as-a-promptfoo-provider** — a `file://vigiles-provider.js`
+    (`ProviderFunction → ProviderResponse`) that takes a harness _arm_ (a plugin
+    path / settings), resolves it via `src/plugin-loader.ts`, drives the real
+    `claude` CLI, and returns the trajectory + tool calls + cost. A user then A/Bs
+    the harness (`vigiles:plugin=./x` vs `off`) **inside** promptfoo and gets their
+    dataset/scenario primitive, assertion library, red-team, web UI, and JUnit/CI
+    output for free — i.e. it borrows most of D instead of building it.
+  - **promptfoo-as-an-`AgentRunner`** — wrap a promptfoo invocation as the
+    injectable `AgentRunner` (`src/eval.ts`) so a vigiles eval can reuse their
+    providers/assertions under _our_ statistics + pass^k.
+  - **a vigiles Agent Skill** — copy promptfoo's own move (a Claude Code
+    marketplace plugin that teaches an agent to author the configs); aimed at the
+    funnel in `research/distribution-strategy.md`.
+    See `research/promptfoo-deep-dive.md` for the full case.
 
 **Decision (2026-06-10): pursue B → A → C; defer D.** B builds the seed/cache
 plumbing A's paired design and C's iteration lean on; C's regression gate _is_ A's
 significance machinery pointed at a committed baseline. D is the largest surface
 change and is deferred unless DeepEval-parity becomes an explicit goal. First
 reviewable unit: **B1 (cost capture) + B2 (record/replay cache)**.
+
+**Amendment (2026-06-11): E was scoped, then PUNTED; refocus on cost + sandbox.**
+E (promptfoo interop) was added as a distribution track on the reasoning that the
+binding constraint is adoption, not capability. On reflection it's punted: the
+eval-runner space is promptfoo's, and trying to ride or match it (interop bridges,
+or the dataset/red-team parity of D) is the wrong fight. The durable edge is that
+promptfoo is **real-model only → expensive**, while our cheaper tiers need no model
+and no key, and we can sandbox untrusted harnesses safely. So the active sequence
+is **C now**, then invest in **cost (cheap tiers) + sandboxing** as the moat. Both
+D and E stay deferred (D unless DeepEval/promptfoo parity becomes an explicit goal;
+E unless real inbound demand appears). See Status for the full rationale.
 
 Discipline carried from the rest of the repo: every pure module
 (`stats.ts`, cache key/restore, usage parse, JUnit render) is fully unit-tested;
@@ -207,5 +245,33 @@ holds.
   validated on known-answer synthetic distributions, not yet against a real
   `bench/` finding. Re-run one real comparison through `compareArms` when a key is
   available, to confirm the verdict matches what we concluded by hand.
-- **Next:** Phase C (regression gating) — JSON/JUnit output + a committed baseline
-  whose gate is a _significant negative delta_ (reuses `compareArms`).
+- **Phase C — regression gating — core DONE (2026-06-11).** `src/eval-baseline.ts`:
+  record a run's `EvalReport`s to a committed baseline (`toBaselineFile` /
+  `writeBaseline`), then `diffReports` flags any arm×metric that moved
+  _significantly in the bad direction_ vs. baseline — reusing `welchTTest` (current
+  vs. baseline), so a bare pass-rate's noise can't trip it; `lowerIsBetter` flips
+  cost/latency. JSON (`parseBaselineFile`/`readBaseline`) + JUnit (`diffToJUnit`)
+  output; the throwing gate is `assertNoRegression` in `harness-assert.ts`. Pure
+  core fully unit-tested (`src/eval-baseline.test.ts`) at the 100% include gate.
+  **Deferred follow-ups:** SARIF output, the GitHub PR comparison comment via
+  `src/action.ts`, and trend history — none yet tied to a concrete need.
+- **Phase E (promptfoo interop) — PUNTED (2026-06-11).** Decision: do _not_ chase
+  eval-framework parity or build the interop bridges. The eval-runner space is
+  promptfoo's (broad adoption, mature assertion/dataset/red-team surface), and our
+  edge there isn't features — it's **cost and safety**. promptfoo is real-model
+  only, so it's _structurally_ expensive (corroborated by a user report that running
+  it is costly); our differentiators are the **no-model / no-key cheaper tiers**
+  (`runHook`, `runHarnessTest`) + caching, and **sandboxing**. So the strategy is
+  not "ship inside promptfoo" but "be the cheap, safe, deterministic way to test a
+  harness." Keep the deep-dive (`research/promptfoo-deep-dive.md`) as analysis;
+  revisit E only if inbound demand for it appears.
+- **Where the moat actually is (the refocus):**
+  1. **Cost** — lead with the cheap tiers. The recurring objection to evals is
+     "real model → real cost + slow"; our answer is that most harness questions
+     (does the hook block? is it wired in?) need **no model and no API key** at
+     all. That is a structural advantage promptfoo cannot cheaply copy.
+  2. **Sandboxing** — be excellent at running _untrusted_ harnesses safely. The
+     deterministic tier already confines under bubblewrap (`src/sandbox.ts`,
+     safe-by-default); the open work is extending that boundary to the **unit tier**
+     (`runHook` runs hooks with full `env`, no sandbox) and the **eval tier**, and
+     beyond Linux (`sandbox-exec` / docker). Tracked as `feature-ideas.md` #13.
