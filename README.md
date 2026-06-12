@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <strong>Test &amp; verify your Claude Code harness.</strong><br />
-  vigiles <strong>verifies the references</strong> your instruction files make — linter rules, file paths, scripts, code symbols — and <strong>evals</strong> whether your hooks, skills, and CLAUDE.md actually change what the agent does.
+  <strong>The missing linting + testing layer for agentic coding.</strong><br />
+  vigiles <strong>lints</strong> the references your instruction files make — linter rules, file paths, scripts, code symbols — and <strong>tests</strong> whether your hooks, skills, and CLAUDE.md actually change what the agent does.
 </p>
 
 <p align="center">
@@ -49,7 +49,7 @@
 
 ## Two pillars — pick one or both
 
-`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them — and it's usually trusted on hope. vigiles makes it verifiable, in two pillars of equal weight. Adopt either on its own, or both:
+`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them — and it's usually trusted on hope. vigiles is the **missing linting + testing layer for agentic coding**: it **lints** your instruction files and **tests** your harness. Two pillars of equal weight — adopt either on its own, or both:
 
 |       | Pillar                                                              | What it does                                                                                                                                                                 |
 | ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -136,15 +136,7 @@ export default claude({
 });
 ```
 
-```bash
-$ npx vigiles compile
-
-✓ CLAUDE.md.spec.ts → CLAUDE.md
-  2 rules (1 linter-verified, 1 guidance)
-  ~180 tokens
-```
-
-At this level the spec is the source of truth and CLAUDE.md is a build artifact. The agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
+`npx vigiles compile` turns that into CLAUDE.md (with an integrity hash). The spec is the source of truth and CLAUDE.md is a build artifact: the agent edits the spec — hooks auto-compile, types catch typos in the editor, CI catches drift.
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
@@ -159,25 +151,12 @@ Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedb
 | **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
 | **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
 | **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
-| **Spec edits**                      | N/A                          | PostToolUse hook auto-compiles to markdown                     |
-| **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                        |
+| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types            |
 | **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
 | **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
 | **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
 
-<details>
-<summary><b>Codex</b> (same compile-time checks, no hooks)</summary>
-
-|                               | Without vigiles                  | With vigiles                                            |
-| ----------------------------- | -------------------------------- | ------------------------------------------------------- |
-| **Instructions**              | Hand-written AGENTS.md           | Compiled from `.spec.ts`                                |
-| **Linter rule references**    | Trust-based                      | Verified at compile time                                |
-| **File paths / commands**     | Rot silently                     | Checked at compile time                                 |
-| **Direct edits to AGENTS.md** | Undetected                       | CI catches hash mismatch                                |
-| **Hooks / auto-compile**      | Not available (no plugin system) | Not available — run `vigiles compile` manually or in CI |
-| **CI**                        | Nothing to verify                | Same `vigiles audit` pipeline as Claude                 |
-
-</details>
+**Codex / AGENTS.md** gets the same compile-time checks and the same `vigiles audit` CI pipeline — just no hooks (no plugin system), so you run `vigiles compile` manually or in CI.
 
 Everything vigiles compiles and audits is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](docs/comparison.md)
 
@@ -191,7 +170,7 @@ npx vigiles init
 
 The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI.
 
-Start with `guidance()` rules (zero config). When you're ready, run `/strengthen` to find rules that can be upgraded to compile-verified `enforce()`. Already have a hand-written CLAUDE.md? The wizard detects it and offers migration. Flags (`--strict`, `--target=AGENTS.md`, `--no-gha`) and non-interactive agent usage are in the [CLI reference](docs/cli.md) and [agent setup guide](docs/agent-setup.md).
+Start with `guidance()` rules (zero config) and run `/strengthen` later to upgrade them to compile-verified `enforce()`. Flags, migration of an existing CLAUDE.md, and non-interactive agent usage are in the [CLI reference](docs/cli.md) and [agent setup guide](docs/agent-setup.md).
 
 ## Three Rule Types
 
@@ -207,13 +186,9 @@ Start with `guidance()` rules (zero config). When you're ready, run `/strengthen
 
 Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [Full linter support details →](docs/linter-support.md)
 
-**`guidance()`** — prose advice. No mechanical enforcement, but not untracked: guidance rules participate in the monotonicity proof system. Once a rule exists, it can be strengthened ( `guidance` → `enforce` ) but never weakened or removed without an explicit allowlist. This prevents silent erosion of conventions over time.
+**`guidance()`** — e.g. `guidance("Google unfamiliar APIs first.")` — prose advice with no mechanical enforcement, but not untracked: guidance rules join the monotonicity proof system, so a rule can be strengthened (`guidance` → `enforce`) but never silently weakened or removed without an explicit allowlist.
 
-```typescript
-"research-first": guidance("Google unfamiliar APIs first."),
-```
-
-**`guard()`** — reactive: runs a command when watched files change (e.g. `*.spec.ts` → `npx vigiles compile`). One declaration emits hooks for every supported system (Claude Code PostToolUse, husky pre-commit, etc.) — no copy-pasting the same trigger across `.claude/settings.json`, `.husky/`, and CI. Same monotonicity guarantees as `enforce()`. [Full spec format →](docs/spec-format.md)
+**`guard()`** — reactive: runs a command when watched files change (e.g. `*.spec.ts` → `npx vigiles compile`). One declaration emits the hook for every supported system (Claude Code PostToolUse, husky pre-commit, CI) — no copy-pasting the trigger across each. [Full spec format →](docs/spec-format.md)
 
 ## Verified References
 
