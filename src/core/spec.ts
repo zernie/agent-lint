@@ -99,6 +99,11 @@ export type StrictCmd = [keyof KnownNpmScripts] extends [never]
 
 // ---------------------------------------------------------------------------
 // Claude Code tool types (for hook validation)
+//
+// The typed mirror of the Claude Code dialect (src/core/dialect.ts:
+// claudeCodeDialect). These literal unions are the authoring-time surface; the
+// compiler verifies tool contracts against the injected HarnessDialect's
+// runtime catalog, so a second harness swaps the dialect, not these types.
 // ---------------------------------------------------------------------------
 
 export type ClaudeTool =

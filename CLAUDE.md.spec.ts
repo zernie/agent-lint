@@ -50,6 +50,12 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Compiler: spec → markdown with SHA-256 hash, linter verification, reference validation; compileClaude/compileSkill/compileAgent (subagents: frontmatter + verified tool contract + body marks + result-contract Output section) + compileRailway/validateRailway (orchestrator command over flat workers; delegate-target resolution + bounded recovery)",
     "src/core/linters.ts":
       "Cross-referencing engine (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar)",
+    "src/core/dialect.ts":
+      "HarnessDialect — the format/dialect PORT (hexagonal format axis): the harness-specific vocabulary the compiler needs (built-in subagent tool catalog, never-available tools, MCP tool shape, hook events, instruction targets, plugin-root token), behind one interface instead of literals hard-coded in compile.ts. claudeCodeDialect is the reference impl + defaultDialect; a second harness adds a sibling HarnessDialect and injects it via compileAgent(spec, { dialect }). See research/code-adapter-architecture.md",
+    "src/core/dialect.test.ts":
+      "Dialect-port test suite (vitest): defaultDialect is Claude Code, compileAgent verifies the tool contract against the default dialect (built-in ok, typo → did-you-mean), and an INJECTED dialect swaps the catalog (the Codex-prep seam — a tool valid under the alt dialect is flagged under CC)",
+    "src/adapters/claude-code/dialect.ts":
+      "The Claude Code adapter's HarnessDialect surface: re-exports claudeCodeDialect (canonical def lives in core/dialect.ts as the compiler default) so vigiles/claude-code owns its dialect symmetrically; a Codex adapter defines its own",
     "src/core/cedar.test.ts":
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/core/generate-types.ts":

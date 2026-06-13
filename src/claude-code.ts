@@ -7,3 +7,4 @@
  */
 export * from "./adapters/claude-code/plugin-loader.js";
 export * from "./adapters/claude-code/mock-model.js";
+export * from "./adapters/claude-code/dialect.js";

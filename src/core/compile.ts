@@ -28,6 +28,8 @@ import type {
 
 import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
 import type { LinterCheckResult } from "./linters.js";
+import { defaultDialect } from "./dialect.js";
+import type { HarnessDialect } from "./dialect.js";
 
 // ---------------------------------------------------------------------------
 // Hash utilities
@@ -816,42 +818,15 @@ export function compileSkill(
 // Compile a subagent spec → agents/<name>.md
 // ---------------------------------------------------------------------------
 
-// The tool contract a subagent may declare — the rails it runs on. Anything
-// else must be an MCP tool (mcp__server__tool), else it's a typo / nonexistent
-// tool the dispatched worker could never call.
-const KNOWN_AGENT_TOOLS = [
-  "Read",
-  "Write",
-  "Edit",
-  "Bash",
-  "Grep",
-  "Glob",
-  "WebSearch",
-  "WebFetch",
-  "NotebookEdit",
-  "TodoWrite",
-  "Task",
-  "Skill",
-] as const;
-
-const MCP_TOOL_RE = /^mcp__[a-z0-9_-]+__[a-z0-9_-]+$/i;
-
-// Tools the platform never exposes to a subagent, whatever the list says — so a
-// subagent listing one is a guaranteed-dead reference only a compiler catches.
-const NEVER_AVAILABLE_TOOLS = new Set([
-  "Agent",
-  "AskUserQuestion",
-  "EnterPlanMode",
-  "ExitPlanMode",
-  "ScheduleWakeup",
-  "WaitForMcpServers",
-]);
+// The subagent tool catalog (built-in / never-available / MCP shape) is the
+// harness's format-axis vocabulary — it lives in the HarnessDialect port
+// (src/core/dialect.ts), injected here, never hard-coded for one harness.
 
 /** Closest known tool by edit distance (≤ 3), for a "did you mean" hint. */
-function closestTool(tool: string): string | null {
+function closestTool(tool: string, dialect: HarnessDialect): string | null {
   let best: string | null = null;
   let bestDistance = Infinity;
-  for (const known of KNOWN_AGENT_TOOLS) {
+  for (const known of dialect.builtinAgentTools) {
     const d = editDistance(tool.toLowerCase(), known.toLowerCase());
     if (d < bestDistance) {
       bestDistance = d;
@@ -862,23 +837,27 @@ function closestTool(tool: string): string | null {
 }
 
 /** Verify a subagent's allowed-tools contract — the rails are real tools. */
-function validateAgentTools(tools: readonly string[]): CompileError[] {
+function validateAgentTools(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): CompileError[] {
+  const never = new Set(dialect.neverAvailableTools);
   const errors: CompileError[] = [];
   for (const tool of tools) {
-    if (NEVER_AVAILABLE_TOOLS.has(tool)) {
+    if (never.has(tool)) {
       errors.push({
         type: "unknown-tool",
         message: `Tool "${tool}" is never available to a subagent — remove it from the tools list.`,
       });
       continue;
     }
-    if ((KNOWN_AGENT_TOOLS as readonly string[]).includes(tool)) continue;
-    if (MCP_TOOL_RE.test(tool)) continue;
-    const near = closestTool(tool);
+    if (dialect.builtinAgentTools.includes(tool)) continue;
+    if (dialect.mcpToolPattern.test(tool)) continue;
+    const near = closestTool(tool, dialect);
     const hint = near ? ` Did you mean "${near}"?` : "";
     errors.push({
       type: "unknown-tool",
-      message: `Unknown tool "${tool}" in agent tools — use a built-in tool (${KNOWN_AGENT_TOOLS.join(", ")}) or an MCP tool (mcp__server__tool).${hint}`,
+      message: `Unknown tool "${tool}" in agent tools — use a built-in tool (${dialect.builtinAgentTools.join(", ")}) or an MCP tool (mcp__server__tool).${hint}`,
     });
   }
   return errors;
@@ -983,10 +962,15 @@ export interface CompileAgentResult {
  */
 export function compileAgent(
   spec: AgentSpec,
-  options: { basePath?: string; specFile?: string } = {},
+  options: {
+    basePath?: string;
+    specFile?: string;
+    dialect?: HarnessDialect;
+  } = {},
 ): CompileAgentResult {
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "agent.md.spec.ts";
+  const dialect = options.dialect ?? defaultDialect;
   const errors: CompileError[] = [];
 
   if (!specFile.endsWith(".spec.ts")) {
@@ -1001,7 +985,7 @@ export function compileAgent(
     });
   }
 
-  if (spec.tools) errors.push(...validateAgentTools(spec.tools));
+  if (spec.tools) errors.push(...validateAgentTools(spec.tools, dialect));
   if (Array.isArray(spec.body)) {
     errors.push(...validateRefs(spec.body, basePath));
   }
