@@ -363,6 +363,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Architectural linting belongs in ast-grep/Dependency Cruiser/Steiger. Per-file code rules belong in ESLint/Ruff/Clippy. vigiles owns: spec compilation, linter cross-referencing, type generation, stale reference detection, and proof-based spec evolution.",
     ),
 
+    "compose-with-sync-tools": guidance(
+      "vigiles is the author+verify layer, not the fan-out layer. Stay composable with the top rule-sync/interop tools instead of reimplementing them: **Ruler** (intellectronica/ruler, the leading single-source→many-agent distributor), **rulesync**, and the **AGENTS.md** cross-tool standard. The division of labour: vigiles owns truth (a typed spec compiled to a verified CLAUDE.md/AGENTS.md whose references are real and enabled); those tools own reach (distributing that canonical file to Cursor/Cline/Windsurf/Copilot/etc.). Concretely: (1) keep emitting the canonical formats they consume — CLAUDE.md and standard AGENTS.md — and never break that contract; (2) be able to verify references in the files they generate (lint-after-the-fact for their outputs). Do NOT add native multi-format emitters (`.mdc`, `.clinerules`, …) — compose, don't absorb the per-agent format-maintenance burden. See `research/sync-landscape-analysis.md` and `research/standards-conformance.md`.",
+    ),
+
     "smooth-adoption": guidance(
       "`npx vigiles init && npx skills add zernie/vigiles` must work on first run with zero config. The wizard auto-detects the project, creates specs, generates types, compiles, and wires CI. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time. Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md`.",
     ),

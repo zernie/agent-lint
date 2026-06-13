@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:3bb39c6fdc77e65c compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:296edf26818d0fdf compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -224,6 +224,10 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 ### Dont Reimplement Linters
 
 **Guidance only** — Architectural linting belongs in ast-grep/Dependency Cruiser/Steiger. Per-file code rules belong in ESLint/Ruff/Clippy. vigiles owns: spec compilation, linter cross-referencing, type generation, stale reference detection, and proof-based spec evolution.
+
+### Compose With Sync Tools
+
+**Guidance only** — vigiles is the author+verify layer, not the fan-out layer. Stay composable with the top rule-sync/interop tools instead of reimplementing them: **Ruler** (intellectronica/ruler, the leading single-source→many-agent distributor), **rulesync**, and the **AGENTS.md** cross-tool standard. The division of labour: vigiles owns truth (a typed spec compiled to a verified CLAUDE.md/AGENTS.md whose references are real and enabled); those tools own reach (distributing that canonical file to Cursor/Cline/Windsurf/Copilot/etc.). Concretely: (1) keep emitting the canonical formats they consume — CLAUDE.md and standard AGENTS.md — and never break that contract; (2) be able to verify references in the files they generate (lint-after-the-fact for their outputs). Do NOT add native multi-format emitters (`.mdc`, `.clinerules`, …) — compose, don't absorb the per-agent format-maintenance burden. See `research/sync-landscape-analysis.md` and `research/standards-conformance.md`.
 
 ### Smooth Adoption
 
