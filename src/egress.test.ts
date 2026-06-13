@@ -46,6 +46,17 @@ test("parseResolvers reads nameservers, falls back to 8.8.8.8", () => {
   assert.deepEqual(parseResolvers("search lan\n"), ["8.8.8.8"]);
 });
 
+test("parseResolvers drops loopback stubs (netns can't reach 127.0.0.53)", () => {
+  // GitHub runners' systemd-resolved stub → no routable resolver → public fallback
+  assert.deepEqual(parseResolvers("nameserver 127.0.0.53\n"), ["8.8.8.8"]);
+  assert.deepEqual(parseResolvers("nameserver ::1\n"), ["8.8.8.8"]);
+  // a routable resolver alongside the stub is kept; the stub is dropped
+  assert.deepEqual(
+    parseResolvers("nameserver 127.0.0.53\nnameserver 9.9.9.9\n"),
+    ["9.9.9.9"],
+  );
+});
+
 test("buildEgressNft: policy drop, DNS allow, per-host v4/v6 rules, log+drop tail", () => {
   const nft = buildEgressNft({
     allow: [
@@ -117,7 +128,12 @@ test("buildEgressBwrapArgv: caps, info-fd, VIG_* env, and the sh -c wrapper tail
     },
     command: "my-hook",
     wrapper: "WRAP",
+    resolvConf: "/io/resolv.conf",
   });
+  // the generated resolv.conf is bound over the host's (loopback-stub) one …
+  const rb = argv.indexOf("/io/resolv.conf");
+  assert.ok(rb > 0 && argv[rb - 1] === "--ro-bind");
+  assert.equal(argv[rb + 1], "/etc/resolv.conf");
   // the in-netns wrapper needs CAP_NET_ADMIN to load nft …
   assert.ok(argv.includes("--cap-add") && argv.includes("CAP_NET_ADMIN"));
   // … the orchestrator learns the child PID via the info fd …
