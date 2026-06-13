@@ -262,6 +262,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Research: the 2026 AI-code-review wave (CodeRabbit/Greptile/Semgrep Assistant; layered review = LLM tier on deterministic tier) — verdict: extend `enforce()` to AI-linter catalogs; prototype (don't trust) a measured `judge()` rule kind gated by its own eval/significance machinery; reject becoming an AI reviewer",
     "research/strategic-synthesis-2026-06.md":
       "Synthesis of the four 2026-06-13 deep researches: all four converge on extend-don't-pivot, with one unclaimed wedge — the observed-≟-declared contract binding. Ranked bet list (Tier 1 ship-now rides / Tier 2 the conformance-attestation category / Tier 3 rejected pivots) + the one positioning pivot worth taking (lead with 'conformance/attestation for the agent harness')",
+    "research/divergent-bets.md":
+      "Divergent strategic bets (beyond extend-the-pillars), triaged with founder reactions: strong = plugin/skill leaderboard + harness cost/ROI optimizer; explore = sell-to-vendors, compliance/attestation, CI-for-model-upgrades; roadmap = self-improving harness (evolve+proofs); open = compiler-not-linter + vigiles-as-MCP-oracle; watch = SDK bet; killed = one-source-many-backends; parked = measure-model×harness",
     "docs/harness-testing.md":
       "Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback",
     "docs/testing-matrix.md":
