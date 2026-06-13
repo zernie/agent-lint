@@ -29,6 +29,7 @@ import type {
 import { ruleSeverity, ruleOptions } from "./types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
+import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
   compileClaude,
@@ -2465,12 +2466,19 @@ async function main(): Promise<void> {
       break;
 
     case "scan": {
-      const dir = restArgs[0] ?? ".";
-      const report = scanPlugin(dir);
-      if (args.includes("--json")) {
-        console.log(JSON.stringify(report, null, 2));
+      const dirs = restArgs.length > 0 ? restArgs : ["."];
+      const json = args.includes("--json");
+      if (dirs.length > 1) {
+        // Multiple targets → rank them (the leaderboard engine).
+        const scores = rankPlugins(dirs);
+        console.log(
+          json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
+        );
       } else {
-        console.log(formatScanReport(report));
+        const report = scanPlugin(dirs[0]);
+        console.log(
+          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+        );
       }
       break;
     }

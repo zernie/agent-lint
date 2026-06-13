@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:d422dcdb36437c0c compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:12551aedac8d342f compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -43,6 +43,8 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/cli.ts` — CLI: init, compile, audit, test, eval, scan (primary commands + generate-types plumbing)
 - `src/scan.ts` — `vigiles scan <dir>` — deterministic, no-model report of what a plugin/repo ships and what's broken: per-skill description + user-invoked, per-agent tool contract (incl. the no-tools-line inherits-all footgun), hook scripts resolved across braced/unbraced ${CLAUDE_PLUGIN_ROOT} (ok/missing/unresolved), command + MCP detection, untested-surface count, loader warnings. Re-aims loadPlugin + parseAgentTools + findUntestedSurfaces; the deterministic substrate under the leaderboard (research/divergent-bets.md) + harness-aware scan (research/agent-supply-chain-security.md)
 - `src/scan.test.ts` — Scan test suite (vitest): skill description/user-invoked flags, agent tool-contract incl. inherits-all, hook resolution ok/missing/unresolved across $CLAUDE_PLUGIN_ROOT forms, command + MCP detection, report formatting
+- `src/leaderboard.ts` — Plugin health leaderboard (the no-model half of research/divergent-bets.md #9): scoreReport turns a ScanReport into a 0–100 structural-health score + A–F grade from concrete facts (missing hook -15, no-description skill -10, agent-without-tool-contract -5, untested surface -3); deliberately ignores the loader's free-text warnings (doc-mention false positives) so the ranking is defensible. rankPlugins scans+scores+sorts a set; `vigiles scan <dir...>` (≥2 dirs) renders it. Behavioural columns (trigger-rate/egress/safety) need a model and stack on top
+- `src/leaderboard.test.ts` — Leaderboard test suite (vitest): pure scoreReport penalty weights + clamp + empty-machine=0, rankPlugins ordering (healthy above broken) over tmp fixtures, formatLeaderboard rendering
 - `src/run-scripts.ts` — Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.mjs` / `*.eval.mjs`, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)
 - `src/run-scripts.test.ts` — Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting
 - `src/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption
