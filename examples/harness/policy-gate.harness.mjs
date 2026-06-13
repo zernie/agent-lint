@@ -23,7 +23,7 @@ import {
   runHarnessTest,
   scriptModel,
   claudeAvailable,
-} from "../../dist/harness-test.js";
+} from "../../dist/adapters/claude-code/harness-test.js";
 
 if (!claudeAvailable()) {
   console.log("skip: `claude` CLI not found");

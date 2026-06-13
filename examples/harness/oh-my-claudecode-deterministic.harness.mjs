@@ -30,7 +30,7 @@ import {
   runHarnessTest,
   scriptModel,
   claudeAvailable,
-} from "../../dist/harness-test.js";
+} from "../../dist/adapters/claude-code/harness-test.js";
 import { assertRequestContains } from "../../dist/harness-assert.js";
 
 if (!claudeAvailable()) {

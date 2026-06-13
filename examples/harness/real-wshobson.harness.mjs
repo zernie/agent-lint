@@ -13,7 +13,7 @@
  * `node examples/harness/real-wshobson.harness.mjs`.
  */
 import { fileURLToPath } from "node:url";
-import { loadPlugin } from "../../dist/plugin-loader.js";
+import { loadPlugin } from "../../dist/adapters/claude-code/plugin-loader.js";
 
 const dir = fileURLToPath(
   new URL("./vendor/wshobson-accessibility@cf6059d", import.meta.url),

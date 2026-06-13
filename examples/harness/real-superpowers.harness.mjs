@@ -20,7 +20,7 @@
  * CI for free. Run: `node examples/harness/real-superpowers.harness.mjs`.
  */
 import { fileURLToPath } from "node:url";
-import { loadPlugin } from "../../dist/plugin-loader.js";
+import { loadPlugin } from "../../dist/adapters/claude-code/plugin-loader.js";
 
 const dir = fileURLToPath(
   new URL("./vendor/superpowers@6fd4507", import.meta.url),

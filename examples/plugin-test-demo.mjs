@@ -13,9 +13,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 
-import { loadPlugin } from "../dist/plugin-loader.js";
-import { runHook } from "../dist/run-hook.js";
-import { sandboxAvailable } from "../dist/sandbox.js";
+import { loadPlugin } from "../dist/adapters/claude-code/plugin-loader.js";
+import { runHook } from "../dist/adapters/claude-code/run-hook.js";
+import { sandboxAvailable } from "../dist/adapters/claude-code/sandbox.js";
 
 const ROOT = fileURLToPath(
   new URL("./harness/vendor/oh-my-claudecode@deee3a4", import.meta.url),
