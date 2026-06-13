@@ -95,7 +95,7 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 104 project files. */
+  /** 106 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -114,6 +114,8 @@ declare module "vigiles/generated" {
     | "src/compile-generator.test.ts"
     | "src/compile-generator.ts"
     | "src/compile.ts"
+    | "src/compose.test.ts"
+    | "src/compose.ts"
     | "src/coverage.test.ts"
     | "src/coverage.ts"
     | "src/doc-refs.test.ts"
@@ -290,6 +292,8 @@ declare module "vigiles/spec" {
       | "src/compile-generator.test.ts"
       | "src/compile-generator.ts"
       | "src/compile.ts"
+      | "src/compose.test.ts"
+      | "src/compose.ts"
       | "src/coverage.test.ts"
       | "src/coverage.ts"
       | "src/doc-refs.test.ts"

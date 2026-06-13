@@ -246,6 +246,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals",
     "research/sync-landscape-analysis.md":
       "Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals",
+    "research/code-adapter-architecture.md":
+      'Harness adapter architecture: the plan to decouple vigiles from Claude Code behind ports so a second harness (Codex likely) sits beside it without touching the core. Thin hexagonal — two coupling axes (format/dialect vs runtime/transport), import-named adapter selection (vigiles/claude-code vs vigiles/testing) not a config key, the ports to extract when adapter #2 lands, and the step-by-step Codex recipe. The boundary is enforced now by eslint-plugin-boundaries (verify-core ⊄ cc-harness) and dogfooded via enforce("boundaries/dependencies")',
     "research/sync-tool-compatibility.md":
       "Sync-tool compatibility requirements: the verified mid-2026 formats of Ruler (.ruler/ concat + AGENTS.md precedence), rulesync (.rulesync/rules/*.md frontmatter + import), and AGENTS.md (unstructured, AAIF-governed), then the file-ownership topology (vigiles upstream into the source slot vs downstream verify) and the ranked requirements with current state — most MET (AGENTS.md target, foreign-frontmatter coexistence), the one GAP (integrity-hash collision) shipped as src/compose.ts. Grounds the compose-with-sync-tools rule",
     "research/distribution-strategy.md":
@@ -286,6 +288,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Research: do code-defined agent SDKs lack a deterministic harness-test tier? Verdict NO — the no-API-key mock-model tier is already first-party in the top SDKs (Pydantic AI TestModel/FunctionModel, Vercel MockLanguageModelV3, LangGraph FakeListChatModel, LlamaIndex MockLLM), so a blanket pillar-2 retarget is unwarranted; the one residual (deterministic guardrail/tool-contract enforcement testing of the assembled agent) maps to the existing agent-runtime.ts rail — idea-borrow with a one-day OpenAI-Agents-SDK probe, not a port",
     "docs/harness-testing.md":
       "Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback",
+    "docs/harnesses.md":
+      "User-facing harness-adapter guide: which harness vigiles targets (Claude Code now, Codex likely next) and how a consumer picks one — by importing vigiles/claude-code beside the harness-agnostic vigiles/testing core, not a config key; the CLI auto-detects. Covers the two coupling axes (format/dialect vs runtime/transport) and how the boundary is kept honest (eslint-plugin-boundaries + enforce())",
     "docs/testing-matrix.md":
       "Testing matrix: every harness-testing use case mapped to its test tier (unit / cross-runner / type / integration-CI) and file, plus why the CLI examples are .mjs and the API is TypeScript",
     "docs/agent-workflows.md":
@@ -355,6 +359,11 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "cognitive-complexity": enforce(
       "sonarjs/cognitive-complexity",
       "Keep functions under 15 cognitive complexity. Split complex logic into helpers.",
+    ),
+
+    "core-not-adapter": enforce(
+      "boundaries/dependencies",
+      "Hexagonal boundary: the reference-verification domain (verify-core) must not import the Claude Code harness/transport adapter (cc-harness). The core stays harness-agnostic so a future vigiles/<other-harness> (e.g. Codex) can sit beside the Claude Code one. Dogfoods enforce() over eslint-plugin-boundaries. See research/code-adapter-architecture.md.",
     ),
 
     "never-skip-tests": guidance(

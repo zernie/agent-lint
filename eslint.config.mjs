@@ -2,7 +2,20 @@ import eslint from "@eslint/js";
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import sonarjs from "eslint-plugin-sonarjs";
+import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
+
+// Hexagonal boundary (see research/code-adapter-architecture.md). Two element
+// types are classified by path; the application/barrel layer (cli, scan, the
+// testing/integration/unit barrels, action) is intentionally left unclassified
+// — it's the composition root, allowed to wire adapter to core. The invariant:
+// the reference-verification DOMAIN must never import the Claude Code
+// harness/transport ADAPTER, so the core stays harness-agnostic for a future
+// `vigiles/<other-harness>`. Holds today with zero violations.
+const VERIFY_CORE =
+  "src/{spec,compile,compile-generator,linters,generate-types,generate-schema,integrity,hash,types,proofs,evolve,symbols,refs,doc-refs,frontmatter,inline,coverage,session,sidecar,orphans,compose,validate,mcp}.ts";
+const CC_HARNESS =
+  "src/{harness-test,mock-model,mock-entry,plugin-loader,run-hook,eval,eval-cache,eval-baseline,sandbox,egress,egress-entry,egress-proxy,agent-runtime,agent-result,skill-runtime,skill-driver,judge,stats,run-scripts}.ts";
 
 export default [
   {
@@ -61,6 +74,37 @@ export default [
       "sonarjs/no-identical-expressions": "error",
       "sonarjs/no-nested-conditional": "warn",
       "sonarjs/nested-control-flow": ["warn", { maximumNestingLevel: 3 }],
+    },
+  },
+  // Architectural boundary: core ⊄ adapter (eslint-plugin-boundaries).
+  {
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts"],
+    plugins: { boundaries },
+    settings: {
+      // NodeNext: imports use `.js` specifiers that resolve to `.ts` — the
+      // typescript resolver maps them so boundaries can classify each dependency.
+      "import/resolver": { typescript: { alwaysTryTypes: true } },
+      "boundaries/elements": [
+        { type: "cc-harness", mode: "full", pattern: CC_HARNESS },
+        { type: "verify-core", mode: "full", pattern: VERIFY_CORE },
+      ],
+    },
+    rules: {
+      "boundaries/dependencies": [
+        "error",
+        {
+          default: "allow",
+          rules: [
+            {
+              from: { type: "verify-core" },
+              disallow: { to: { type: "cc-harness" } },
+              message:
+                "Hexagonal boundary: the reference-verification domain (${file.type}) must not import the Claude Code harness/transport adapter (${dependency.type}). Keep the core harness-agnostic — depend through a port, or move this module into the application layer. See research/code-adapter-architecture.md.",
+            },
+          ],
+        },
+      ],
     },
   },
   // Test files: relax promise, assertion, and complexity rules
