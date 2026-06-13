@@ -155,6 +155,10 @@ harness` bet).
 
 ## See also
 
+- `research/harness-landscape.md` — the mid-2026 research backing the Codex
+  recipe: confirmed Codex facts (TOML config, AGENTS.md, SKILL.md, hooks **with
+  veto**, Responses-API mock), the port-by-port extraction verdict (both deferred
+  seams now extractable), and the ranked next-adapter shortlist.
 - `docs/harnesses.md` — the user-facing how-to (which import, what's supported).
 - `research/sync-tool-compatibility.md` — the _format-axis_ composition with
   Ruler/rulesync (a different kind of "other tool").
