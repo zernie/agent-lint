@@ -62,18 +62,28 @@ The seam already exists: `src/claude-code.ts` re-exports the Claude-Code-specifi
 pieces and is documented as "the adapter, so a future `vigiles/<other-harness>`
 can sit beside it."
 
-## The ports (extract with adapter #2, not before)
+## The ports
 
-Promote these implicit shapes to named interfaces **when Codex lands**, shaped by
-two real implementations rather than one plus imagination:
+Extraction status, by axis:
 
-- **Transport axis:** `PluginLoader` (→ `LoadedPlugin`, already exists),
-  `HookProtocol` (event names + stdin-event encode / stdout-decision decode —
-  today scattered across `run-hook.ts` + `harness-test.ts`), `ModelMock` +
-  `AgentProcess` (the spawn target + the SSE shape).
-- **Format axis:** `DocDialect` (frontmatter keys, `tools:` syntax, the
-  `${…_PLUGIN_ROOT}` token, the layout globs in `scan.ts`), `ToolCatalog` (the
-  `ClaudeTool` union → an injected set).
+- **Format axis — `HarnessDialect` (DONE).** `src/core/dialect.ts` defines the
+  interface: the built-in subagent tool catalog, never-available tools, the MCP
+  tool shape, hook events, instruction targets, and the plugin-root token. The
+  CC values that were hard-coded literals in `compile.ts`
+  (`KNOWN_AGENT_TOOLS`/`NEVER_AVAILABLE_TOOLS`/`MCP_TOOL_RE`) now live in
+  `claudeCodeDialect` (the `defaultDialect`); `compileAgent(spec, { dialect })`
+  takes an injected one. `src/core/dialect.test.ts` proves a second dialect swaps
+  the catalog. A Codex adapter defines `codexDialect` and injects it — no core
+  edit. **Remaining format-axis work:** the instruction-file/skill/agent
+  frontmatter _renderers_ in `compile.ts`/`compile-generator.ts` still emit the
+  CC shape directly; fold those behind the dialect too when AGENTS.md/Codex
+  output diverges.
+- **Transport axis (NEXT, interfaces not yet extracted):** `PluginLoader` (→
+  `LoadedPlugin`, already the agnostic shape), `HookProtocol` (event names +
+  stdin-event encode / stdout-decision decode — today scattered across
+  `run-hook.ts` + `harness-test.ts`), `ModelMock` + `AgentProcess` (the spawn
+  target + the SSE shape). These live in `src/adapters/claude-code/` already;
+  promoting them to interfaces is the work that lands with the Codex transport.
 
 `LoadedPlugin`, `Trace`, and `EvalArm.settings: unknown` are already the agnostic
 shapes — they stay in `vigiles/testing`; the adapter just produces them.
@@ -81,23 +91,19 @@ shapes — they stay in `vigiles/testing`; the adapter just produces them.
 ## Enforcing the boundary: eslint-plugin-boundaries (done)
 
 The hexagon is only real if something stops the core from importing the adapter.
-We classify modules into two element types by path and forbid the inward-pointing
-edge (`eslint.config.mjs`, rule `boundaries/dependencies`):
+After the reshape the two element types are whole directories
+(`eslint.config.mjs`, rule `boundaries/dependencies`):
 
-- **`verify-core`** — the pure reference-verification domain: `spec`, `compile`,
-  `compile-generator`, `linters`, `generate-types/schema`, `integrity`, `hash`,
-  `types`, `proofs`, `evolve`, `symbols`, `refs`, `doc-refs`, `frontmatter`,
-  `inline`, `coverage`, `session`, `sidecar`, `orphans`, `compose`, `validate`,
-  `mcp`.
-- **`cc-harness`** — the Claude Code transport/harness adapter: `harness-test`,
-  `mock-model`/`mock-entry`, `plugin-loader`, `run-hook`, `eval`/`eval-cache`/
-  `eval-baseline`, `sandbox`/`egress*`, `agent-runtime`/`agent-result`,
-  `skill-runtime`/`skill-driver`, `judge`, `stats`, `run-scripts`.
+- **`verify-core`** = `src/core/**` — the pure reference-verification domain
+  (spec, compile, linters, dialect, proofs, …).
+- **`cc-harness`** = `src/adapters/claude-code/**` — the Claude Code transport /
+  harness adapter (harness-test, run-hook, eval, mock-model, plugin-loader,
+  sandbox/egress, agent-/skill-runtime, judge, stats, …).
 
-The application/composition-root layer (`cli`, `scan`, the `testing`/
-`integration`/`unit`/`e2e` barrels, `action`, `harness-assert`) is deliberately
-**unclassified** — it's allowed to wire adapter to core, so the rule doesn't
-false-positive on it.
+The application/composition-root layer at `src/` root (`cli`, `scan`, the
+`testing`/`integration`/`unit`/`e2e` barrels, `action`, `harness-assert`) is
+deliberately **unclassified** — it's allowed to wire adapter to core, so the
+rule doesn't false-positive on it.
 
 **Rule:** `verify-core` may not import `cc-harness`. **Direction:** the adapter
 depends on the core (allowed); the core never depends on the adapter (forbidden)
