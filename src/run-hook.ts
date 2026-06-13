@@ -654,15 +654,19 @@ export function egressRoutes(): boolean {
   if (egressRoutesMemo !== undefined) return egressRoutesMemo;
   if (!egressAvailable(sandboxAvailable())) return (egressRoutesMemo = false);
   try {
-    // /proc/net/dev lists one row per interface after two header rows; no `ip`
-    // binary needed (it isn't on the sandbox PATH). >1 interface ⇒ a non-loopback
-    // device (the slirp/pasta tap) attached ⇒ egress can route. Only `lo` ⇒ can't.
+    // The only reliable signal is the egress path itself: try to reach an
+    // allowlisted host and check a packet actually got out. Filesystem probes
+    // (/proc/net/dev) and `ip` are unreliable here — bwrap may bind the host
+    // /proc (so /proc/net shows host interfaces, a false positive) and `ip` isn't
+    // on the sandbox PATH. A real reach is namespace-accurate by construction.
     const r = egressSpawn(
-      "cat /proc/net/dev 2>/dev/null | tail -n +3 | wc -l",
+      "curl -s -m 8 -o /dev/null https://example.com/ || true",
       { hook_event_name: "PreToolUse" },
-      { egress: { allow: ["example.com"] }, timeoutMs: 15000 },
+      { egress: { allow: ["example.com"] }, timeoutMs: 20000 },
     );
-    egressRoutesMemo = Number(r.stdout.trim()) > 1;
+    egressRoutesMemo = (r.egress ?? []).some(
+      (e) => e.host === "example.com" && (e.packets ?? 0) > 0,
+    );
   } catch {
     egressRoutesMemo = false;
   }

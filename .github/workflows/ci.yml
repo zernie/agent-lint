@@ -69,26 +69,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Diagnose egress path (slirp4netns NAT) — informational, never fails
-        # The two egress-allow e2e tests emit zero packets on the hosted runner
-        # while passing locally. Capture WHY before fixing: tool versions, the tun
-        # device slirp needs, userns sysctls, and a live probe through the real
-        # egress path printing the IN-NETNS resolv.conf / getent / curl / `ip addr`
-        # so we can see whether slirp attached (tap0 up), DNS resolved, or NAT routed.
-        run: |
-          set +e
-          echo "== tools =="
-          for b in bwrap slirp4netns nft; do printf "%s: " "$b"; command -v "$b" && "$b" --version 2>&1 | head -1; done
-          echo "== /dev/net/tun (slirp's tap needs it) =="; ls -l /dev/net/tun 2>&1
-          echo "== userns sysctls =="
-          sysctl kernel.apparmor_restrict_unprivileged_userns 2>&1
-          sysctl kernel.unprivileged_userns_clone 2>&1
-          echo "== host /etc/resolv.conf =="; cat /etc/resolv.conf
-          echo "== live egress probe through the real runHook path =="
-          node -e 'const {runHook}=require("./dist/run-hook.js"); const r=runHook("echo IN-NETNS; echo --resolv--; cat /etc/resolv.conf; echo --getent--; getent ahosts example.com || echo getent-FAILED; echo --curl--; (curl -sS -m 12 -o /dev/null https://example.com/ && echo curl-OK) || echo curl-FAILED; echo --ip--; ip -o addr 2>/dev/null || echo no-ip", {hook_event_name:"PreToolUse"}, {egress:{allow:["example.com"]}, timeoutMs:30000}); console.log("exitCode:", r.exitCode); console.log("---hook stdout---\n"+r.stdout); console.log("---hook stderr---\n"+r.stderr); console.log("egress:", JSON.stringify(r.egress)); console.log("egressDropped:", JSON.stringify(r.egressDropped));'
-          echo "== end diagnostic =="
-          exit 0
-
       - name: Run tests + 100% coverage gate (harness-testing pillar)
         run: npm run coverage
 
@@ -151,3 +131,15 @@ jobs:
 
       - name: Run deterministic harness tests
         run: node dist/cli.js test
+
+  # Dogfood the per-level CI action: the e2e tier (allowlisted real egress) with
+  # pasta set up. Tests self-skip via egressRoutes() where the runner can't route
+  # (so this is green today); once the slirp4netns→pasta connector swap lands they
+  # run for real here. Not required for merge while the connector is being proven.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/harness-tier
+        with:
+          tier: e2e
