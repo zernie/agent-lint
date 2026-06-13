@@ -252,6 +252,16 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "promptfoo deep dive: what it is in 2026 (eval + red-team + guardrails + agent-skills), the agentic update that makes the old scorecard stale (Tier 0/1/2 SDK providers incl. anthropic:claude-agent-sdk, trajectory:\\* + cost/latency assertions), the one axis that still separates us (harness-arm A/B loaded as it ships + the two sub-model tiers + significance/pass^k), and the recommendation (interop bridge via ProviderFunction/AgentRunner, lead with the cheaper tiers + regression gating, ship a vigiles Agent Skill, correct the stale claims)",
     "research/skill-authoring-pains.md":
       "Research: pains authoring agent skills (triggering, drift, testing, distribution) + strategic note on documentation-vs-procedure split and verifying SKILL.md references",
+    "research/agent-supply-chain-security.md":
+      "Research: agent/plugin/MCP supply-chain security (2026 incidents, OWASP Agentic Skills Top 10) — re-examines the 'delegate, don't build' punt; verdict: build a thin harness-aware `vigiles scan` (observed egress + tool-contract drift + ref integrity) as a pillar-2 feature, delegate static scans, reject the security-vendor pivot",
+    "research/standards-conformance.md":
+      "Research: cross-tool agent-config standardization (AGENTS.md, SKILL.md, MCP, ACP) — verdict: extend pillar 1 to be format-neutral (verify AGENTS.md/SKILL.md/MCP refs) and lead the 'valid is not true' cross-referencing wedge; reject the generic-linter (agnix-lane) pivot",
+    "research/runtime-guardrails-observability.md":
+      "Research: production-runtime guardrails + observability (NeMo/Lakera/Guardrails AI; OTel-GenAI conventions) — verdict: mostly stay out (never in the request path), take one surgical bridge — emit OTel-GenAI spans from the test tiers + `verify-trace`/`compile --policy` (Cedar) as emit/verify-only contract bridges",
+    "research/ai-native-linting.md":
+      "Research: the 2026 AI-code-review wave (CodeRabbit/Greptile/Semgrep Assistant; layered review = LLM tier on deterministic tier) — verdict: extend `enforce()` to AI-linter catalogs; prototype (don't trust) a measured `judge()` rule kind gated by its own eval/significance machinery; reject becoming an AI reviewer",
+    "research/strategic-synthesis-2026-06.md":
+      "Synthesis of the four 2026-06-13 deep researches: all four converge on extend-don't-pivot, with one unclaimed wedge — the observed-≟-declared contract binding. Ranked bet list (Tier 1 ship-now rides / Tier 2 the conformance-attestation category / Tier 3 rejected pivots) + the one positioning pivot worth taking (lead with 'conformance/attestation for the agent harness')",
     "docs/harness-testing.md":
       "Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback",
     "docs/testing-matrix.md":
