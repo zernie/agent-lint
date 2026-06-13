@@ -43,14 +43,23 @@ forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surfa
 count, and the loader's dangling-ref / surface warnings. `--json` for CI.
 
 ```bash
-npx vigiles scan ./some-plugin          # human-readable report
+npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
+npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
 ```
+
+Pass **more than one directory** and `scan` switches to a **ranked health
+leaderboard** — a deterministic structural-health score (0–100 + A–F) per
+plugin, worst issues first. Weights: a missing hook script −15 (won't run), a
+skill with no usable description −10 (can't trigger), an agent with no `tools:`
+contract −5 (inherits everything), an untested surface −3. Scoring deliberately
+ignores the loader's free-text warnings (they include doc-mention false
+positives), so the ranking stays defensible.
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
 harness-aware supply-chain audit (see `research/divergent-bets.md`,
-`research/agent-supply-chain-security.md`); behavioural checks that need to _run_
-the plugin (observed egress, real trigger-rate) build on top.
+`research/agent-supply-chain-security.md`); behavioural columns that need to
+_run_ the plugin (observed egress, real trigger-rate, safety) build on top.
 
 ## GitHub Action
 
