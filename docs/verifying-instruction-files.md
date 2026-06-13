@@ -111,8 +111,8 @@ import { claude, file, cmd, symbol, ref, instructions } from "vigiles/spec";
 export default claude({
   sections: {
     architecture: instructions`
-      Core engine in ${file("src/compile.ts")}.
-      Compile specs with ${symbol("src/compile.ts", "compileClaude")}.
+      Core engine in ${file("src/core/compile.ts")}.
+      Compile specs with ${symbol("src/core/compile.ts", "compileClaude")}.
       Run ${cmd("npm test")} to verify.
       See ${ref("skills/strengthen/SKILL.md")} for the strengthen skill.
     `,
