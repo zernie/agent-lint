@@ -21,8 +21,8 @@ import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { runHook } from "../../dist/run-hook.js";
-import { sandboxAvailable } from "../../dist/sandbox.js";
+import { runHook } from "../../dist/adapters/claude-code/run-hook.js";
+import { sandboxAvailable } from "../../dist/adapters/claude-code/sandbox.js";
 import { assertNoEgress, assertEgressOnly } from "../../dist/harness-assert.js";
 
 if (!sandboxAvailable()) {
