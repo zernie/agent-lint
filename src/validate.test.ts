@@ -426,6 +426,7 @@ describe("loadConfig", () => {
       "require-skill-spec": "warn",
       integrity: "warn",
       coverage: false,
+      "untested-surface": "warn",
     });
   });
 

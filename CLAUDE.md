@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:54c74c8164a4c66c compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:bdd15215456262a9 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -66,6 +66,9 @@ Core modules: `src/spec.ts` (types + builders), `src/compile.ts` (compiler), `sr
 - `src/hash.ts` — Shared SHA256Hash branded type and assertNever exhaustive check helper
 - `src/orphans.ts` — Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references
 - `src/orphans.test.ts` — Orphan-docs detector test suite (node:test)
+- `src/test-coverage.ts` — Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). User-invoked (disable-model-invocation) skills exempt by default; vigiles:ignore-test opts a surface out. Warning-by-default, surfaced by vigiles audit
+- `src/test-coverage.test.ts` — Untested-surface detector test suite (vitest): colocation + content-reference coverage, user-invoked exemption (+ includeUserInvokedSkills override), vigiles:ignore-test opt-out, agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath
+- `docs/rules/untested-surface.md` — Rule doc: untested-surface — config, severity, options, the two coverage detectors, exemptions, why
 - `src/doc-refs.ts` — Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out
 - `src/doc-refs.test.ts` — Doc-refs validator test suite (node:test)
 - `src/symbols.ts` — Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback

@@ -61,6 +61,7 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "require-skill-spec": "warn",
   integrity: "warn",
   coverage: false,
+  "untested-surface": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

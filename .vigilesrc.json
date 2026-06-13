@@ -3,6 +3,7 @@
     "require-spec": "error",
     "require-skill-spec": "warn",
     "integrity": "warn",
-    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
+    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }],
+    "untested-surface": "warn"
   }
 }

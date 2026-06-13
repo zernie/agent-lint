@@ -92,6 +92,12 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/orphans.ts":
       "Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references",
     "src/orphans.test.ts": "Orphan-docs detector test suite (node:test)",
+    "src/test-coverage.ts":
+      "Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). User-invoked (disable-model-invocation) skills exempt by default; vigiles:ignore-test opts a surface out. Warning-by-default, surfaced by vigiles audit",
+    "src/test-coverage.test.ts":
+      "Untested-surface detector test suite (vitest): colocation + content-reference coverage, user-invoked exemption (+ includeUserInvokedSkills override), vigiles:ignore-test opt-out, agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath",
+    "docs/rules/untested-surface.md":
+      "Rule doc: untested-surface — config, severity, options, the two coverage detectors, exemptions, why",
     "src/doc-refs.ts":
       "Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
     "src/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",

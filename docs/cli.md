@@ -70,6 +70,7 @@ The plugin provides two hooks:
 | [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                              |
 | [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                         |
 | [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                    |
+| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                    |
 
 Configure in `.vigilesrc.json`:
 
