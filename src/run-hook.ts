@@ -572,6 +572,13 @@ function egressSpawn(
     );
     writeFileSync(files.nft, buildEgressNft({ allow, resolvers }));
     writeFileSync(files.event, JSON.stringify(input));
+    // The in-netns resolv.conf: only the routable resolvers (the host's may be a
+    // 127.0.0.53 stub the netns can't reach). Bound over /etc/resolv.conf below.
+    const resolvConf = join(ioDir, "resolv.conf");
+    writeFileSync(
+      resolvConf,
+      resolvers.map((r) => `nameserver ${r}`).join("\n") + "\n",
+    );
 
     const bwrapArgv = buildEgressBwrapArgv({
       base: bwrapArgs({
@@ -584,6 +591,7 @@ function egressSpawn(
       files,
       command,
       wrapper: EGRESS_ALLOW_WRAPPER,
+      resolvConf,
     });
     const configFile = join(ioDir, "config.json");
     const resultFile = join(ioDir, "result.json");

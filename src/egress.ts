@@ -128,12 +128,26 @@ export function resolveAllow(
   });
 }
 
-/** First nameserver in a resolv.conf body, or 8.8.8.8 if none is declared. */
+/** A loopback nameserver (127.0.0.0/8 or ::1) — e.g. systemd-resolved's
+ * 127.0.0.53 stub. Unreachable from inside the slirp4netns netns (which runs
+ * with `--disable-host-loopback`), so it must never be used as the in-netns
+ * resolver. GitHub-hosted runners ship exactly this stub, which is why the
+ * egress tests saw zero packets there. */
+function isLoopbackResolver(ip: string): boolean {
+  return ip === "::1" || /^127\./.test(ip);
+}
+
+/**
+ * Nameservers usable from INSIDE the egress netns. Parses a resolv.conf body but
+ * drops loopback stubs (see {@link isLoopbackResolver}) — they can't be reached
+ * across the namespace — and falls back to a public resolver (8.8.8.8, which
+ * slirp4netns NATs out) when nothing routable remains.
+ */
 export function parseResolvers(resolvConf: string): string[] {
   const out: string[] = [];
   for (const line of resolvConf.split("\n")) {
     const m = /^\s*nameserver\s+(\S+)/.exec(line);
-    if (m) out.push(m[1]);
+    if (m && !isLoopbackResolver(m[1])) out.push(m[1]);
   }
   return out.length > 0 ? out : ["8.8.8.8"];
 }
@@ -214,9 +228,18 @@ export function buildEgressBwrapArgv(opts: {
   files: EgressFiles;
   command: string;
   wrapper: string;
+  /** Host path to the generated resolv.conf bound over /etc/resolv.conf in-netns,
+   * so the hook resolves via the routable resolvers, not the host's loopback stub. */
+  resolvConf: string;
 }): string[] {
   return [
     ...opts.base,
+    // Override the host's /etc/resolv.conf (often a 127.0.0.53 stub) with one
+    // listing only netns-routable resolvers — placed after `base` so it shadows
+    // the `--ro-bind / /` copy.
+    "--ro-bind",
+    opts.resolvConf,
+    "/etc/resolv.conf",
     "--cap-add",
     "CAP_NET_ADMIN",
     ...opts.setenv,
