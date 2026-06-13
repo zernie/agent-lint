@@ -18,6 +18,8 @@ Authoring-time feedback comes two ways: \`generate-types\` emits a \`.d.ts\` so 
 
 Second pillar — testing the harness. Beyond verifying instruction files, vigiles tests the harness itself (hooks, settings, skills) as an assembled machine, not one hook at a time: \`runHarnessTest\`/\`runEval\` take a \`plugin\` path that loads the real harness (hooks with \`\${CLAUDE_PLUGIN_ROOT}\` resolved, CLAUDE.md, skills) from \`.claude-plugin/plugin.json\` or \`.claude/settings.json\` (\`src/adapters/claude-code/plugin-loader.ts\`), so you test what ships. Three tiers, lowest cost first: \`runHook\` pipes a synthesized event JSON straight to a hook process (no \`claude\`, no model) and checks the block/allow decision — the cheap base of the pyramid, and the only tier that reaches every event incl. Edit/Write, PreCompact, Notification, SessionEnd, SubagentStop (\`src/adapters/claude-code/run-hook.ts\`); \`runHarnessTest\` runs the real \`claude\` CLI against a scripted mock model for deterministic, key-free checks that a hook is wired into the assembled machine and fires (\`src/adapters/claude-code/harness-test.ts\`, \`src/adapters/claude-code/mock-model.ts\`); and \`runEval\` drives the real model across A/B arms × trials, aggregating mean ± se so a gap can be read for significance (\`src/adapters/claude-code/eval.ts\`). The loader materializes hooks, CLAUDE.md, skills, subagents and commands, and flags via \`loadPlugin().warnings\` any surface only a real model can drive — so loading a whole plugin never silently tests an empty machine. The API is runner-agnostic (node:test, vitest, jest) via plain async functions plus helpers/matchers in \`src/harness-assert.ts\` and an optional LLM-as-judge in \`src/adapters/claude-code/judge.ts\`; a zero-dep CLI fallback runs them as \`vigiles test\` (\`*.harness.mjs\`) and \`vigiles eval\` (\`*.eval.mjs\`), with canonical examples under \`examples/harness/\`. Unlike reference verification (bounded by undecidability), this pillar has no ceiling: a test measures reality, so there is nothing to game. See \`docs/harness-testing.md\` and \`research/harness-testing.md\`.
 
+Multi-harness by design (a hard requirement). vigiles targets Claude Code today but the core is harness-agnostic: every Claude-Code-specific fact lives behind one of five injectable ports — \`HarnessDialect\`/\`PluginLayout\`/\`HarnessRuntime\`/\`HookProtocol\`/\`ModelMock\` — bundled per harness as a \`HarnessAdapter\`. Adding a harness (Codex likely next, then OpenCode/Crush/Gemini) is writing one adapter object and registering it; the boundary rule (core ⊄ adapter) keeps the core untouched. Third-party adapters are a first-class, supported extension point: \`vigiles/adapter\` exports the five ports plus a conformance kit, documented in \`docs/authoring-an-adapter.md\`. Backwards compatibility is non-negotiable — Claude Code stays the default everywhere (the CLI auto-detects; the library selects by import), so adding adapters never breaks existing consumers. See \`docs/harnesses.md\` and \`research/harness-landscape.md\`.
+
 vigiles does NOT do architectural linting. Use ast-grep, Dependency Cruiser, Steiger, or eslint-plugin-boundaries for that. vigiles can reference their rules via \`enforce()\`.`,
 
     architecture: `Three rule types in specs:
@@ -68,6 +70,26 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "claudeCodeRuntime — the HarnessRuntime port's Claude Code impl (spawn `claude`, reach the mock via ANTHROPIC_BASE_URL + dummy ANTHROPIC_API_KEY) + mockModelEnv, the pure env-builder the runners use (the testable seam of the otherwise v8-ignored real-subprocess path); harness-test, eval and sandbox read the binary + env from here",
     "src/adapters/claude-code/runtime.test.ts":
       "Runtime-port test suite (vitest): claudeCodeRuntime values, mockModelEnv layers mock URL + dummy key over the base env, and an alternate runtime maps the URL onto its own env var (OPENAI_BASE_URL) — the Codex transport seam",
+    "src/core/hook-protocol.ts":
+      "HookProtocol — the hook-wire PORT (transport axis): how a harness signals a hook block/deny (block exit code + deny decision values + event env vars). Thin by design — CC and Codex hooks are near-identical at the wire level (the finding); decideHook reads the block code + deny values from it. claudeCodeHookProtocol is the impl",
+    "src/adapters/claude-code/hook-protocol.ts":
+      "claudeCodeHookProtocol — the HookProtocol impl: blocks via exit 2 or permissionDecision:deny / decision:block",
+    "src/core/model-mock.ts":
+      "ModelMock — the model-mock PORT (transport axis): the mock model's wire format (anthropic-messages vs openai-responses) + the turn-consuming endpoint + optional count-tokens endpoint. startMock reads the endpoints from it; the SSE renderer stays per-harness. claudeCodeModelMock is the impl",
+    "src/adapters/claude-code/model-mock.ts":
+      "claudeCodeModelMock — the ModelMock impl: anthropic-messages SSE at /v1/messages (+ count_tokens). A Codex codexModelMock sets openai-responses + /v1/responses",
+    "src/core/adapter.ts":
+      "HarnessAdapter — the bundle that makes a harness a single addable unit: groups the five ports (dialect/layout/runtime/hookProtocol/modelMock) + a detect(root) predicate. Adding a harness = writing one object; the library stays import-named, the bundle is what the CLI auto-detects and the conformance kit checks. See docs/authoring-an-adapter.md",
+    "src/adapters/claude-code/adapter.ts":
+      "claudeCodeAdapter — the Claude Code HarnessAdapter: the five CC ports bundled + a detect that recognizes a .claude-plugin/ manifest, .claude/settings.json, or CLAUDE.md. The reference adapter a second harness mirrors",
+    "src/adapters/claude-code/adapter.test.ts":
+      "Adapter-bundle test suite (vitest): claudeCodeAdapter bundles all five ports, passes the conformance kit, the kit catches a broken adapter, detect recognizes a CLAUDE.md / .claude-plugin repo (and not an empty dir), detectAdapter falls back to Claude Code, getAdapter looks up by name",
+    "src/adapter.ts":
+      "`vigiles/adapter` — the harness-adapter authoring kit (the documented small lib third parties use to build their own adapter): re-exports the five port interfaces + HarnessAdapter + the conformance kit + the registry. See docs/authoring-an-adapter.md",
+    "src/adapter-registry.ts":
+      "Adapter registry (composition root): ADAPTERS list + detectAdapter(root) (first adapter whose detect matches, else Claude Code — backwards-compatible) + getAdapter(name). The CLI auto-detects through this; the library selects by import",
+    "src/adapter-conformance.ts":
+      "Adapter conformance kit: checkAdapterConformance/assertAdapterConformance — the reusable check every HarnessAdapter runs (each port populated + a behavioural invariant: the dialect accepts its own built-in tool through compileAgent). Third-party adapter authors drop assertAdapterConformance in their tests",
     "src/core/cedar.test.ts":
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/core/generate-types.ts":
@@ -320,6 +342,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Harness-testing guide: three layers (verify refs / deterministic / eval), test the whole machine via plugin:, runner-agnostic usage (node:test/vitest/jest) + matchers, variance, LLM-judge, CLI fallback",
     "docs/harnesses.md":
       "User-facing harness-adapter guide: which harness vigiles targets (Claude Code now, Codex likely next) and how a consumer picks one — by importing vigiles/claude-code beside the harness-agnostic vigiles/testing core, not a config key; the CLI auto-detects. Covers the two coupling axes (format/dialect vs runtime/transport) and how the boundary is kept honest (eslint-plugin-boundaries + enforce())",
+    "docs/authoring-an-adapter.md":
+      "Third-party adapter authoring guide: the documented small lib (vigiles/adapter) for teaching vigiles a new harness — the five ports to implement, a worked myHarnessAdapter skeleton, validating with assertAdapterConformance, wiring it (library by import, CLI by registry), and what's still behaviour-not-descriptor (renderers/decision-decode/mock HTTP server). Linked from the root README (custom adapters welcome)",
     "docs/testing-matrix.md":
       "Testing matrix: every harness-testing use case mapped to its test tier (unit / cross-runner / type / integration-CI) and file, plus why the CLI examples are .mjs and the API is TypeScript",
     "docs/agent-workflows.md":

@@ -29,6 +29,7 @@ import type {
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
+import { detectAdapter } from "./adapter-registry.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
@@ -258,6 +259,7 @@ function compileAgentToFile(spec: AgentSpec, specPath: string): boolean {
   const { markdown, errors } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
+    dialect: detectAdapter(process.cwd()).dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
@@ -2475,7 +2477,9 @@ async function main(): Promise<void> {
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
       } else {
-        const report = scanPlugin(dirs[0]);
+        const adapter = detectAdapter(resolve(dirs[0]));
+        const report = scanPlugin(dirs[0], adapter.layout);
+        if (!json) console.log(`Detected harness: ${adapter.name}\n`);
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );
