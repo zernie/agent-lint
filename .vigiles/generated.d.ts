@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 13 npm scripts from package.json. */
+  /** 14 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -89,9 +89,10 @@ declare module "vigiles/generated" {
     | "test:eval"
     | "test:vitest"
     | "test:jest"
-    | "test:types";
+    | "test:types"
+    | "demo:plugin";
 
-  /** 89 project files. */
+  /** 96 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -114,6 +115,10 @@ declare module "vigiles/generated" {
     | "src/coverage.ts"
     | "src/doc-refs.test.ts"
     | "src/doc-refs.ts"
+    | "src/egress-entry.ts"
+    | "src/egress-proxy.ts"
+    | "src/egress.test.ts"
+    | "src/egress.ts"
     | "src/eval-baseline.test.ts"
     | "src/eval-baseline.ts"
     | "src/eval-cache.test.ts"
@@ -169,12 +174,15 @@ declare module "vigiles/generated" {
     | "src/skill-runtime.ts"
     | "src/skill-test.test.ts"
     | "src/skill-test.ts"
+    | "src/skills-dogfood.test.ts"
     | "src/spec.test.ts"
     | "src/spec.ts"
     | "src/stats.test.ts"
     | "src/stats.ts"
     | "src/symbols.test.ts"
     | "src/symbols.ts"
+    | "src/test-coverage.test.ts"
+    | "src/test-coverage.ts"
     | "src/test-utils.ts"
     | "src/testing.ts"
     | "src/types.ts"
@@ -275,6 +283,10 @@ declare module "vigiles/spec" {
       | "src/coverage.ts"
       | "src/doc-refs.test.ts"
       | "src/doc-refs.ts"
+      | "src/egress-entry.ts"
+      | "src/egress-proxy.ts"
+      | "src/egress.test.ts"
+      | "src/egress.ts"
       | "src/eval-baseline.test.ts"
       | "src/eval-baseline.ts"
       | "src/eval-cache.test.ts"
@@ -330,12 +342,15 @@ declare module "vigiles/spec" {
       | "src/skill-runtime.ts"
       | "src/skill-test.test.ts"
       | "src/skill-test.ts"
+      | "src/skills-dogfood.test.ts"
       | "src/spec.test.ts"
       | "src/spec.ts"
       | "src/stats.test.ts"
       | "src/stats.ts"
       | "src/symbols.test.ts"
       | "src/symbols.ts"
+      | "src/test-coverage.test.ts"
+      | "src/test-coverage.ts"
       | "src/test-utils.ts"
       | "src/testing.ts"
       | "src/types.ts"
@@ -358,6 +373,7 @@ declare module "vigiles/spec" {
       | "test:eval"
       | "test:vitest"
       | "test:jest"
-      | "test:types";
+      | "test:types"
+      | "demo:plugin";
   }
 }
