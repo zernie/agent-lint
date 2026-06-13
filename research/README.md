@@ -4,6 +4,10 @@ The thinking behind vigiles: design docs, landscape analyses, benchmark findings
 and parked ideas. Grouped by theme; each is one click away. (User-facing
 how-to docs live in [`../docs/`](../docs/README.md).)
 
+> **Building something? Start at [`roadmap.md`](roadmap.md)** — the single
+> consolidated, ranked view of what ships next (Now / Next / Later / Backlog /
+> Rejected), each item linking the doc below that holds its rationale.
+
 ## Positioning & landscape
 
 - [`landscape-mid-2026.md`](landscape-mid-2026.md) — the mid-2026 frame: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI. The positioning vigiles sits in.
@@ -22,7 +26,10 @@ how-to docs live in [`../docs/`](../docs/README.md).)
 **Pillar 2 — test the harness.**
 
 - [`harness-testing.md`](harness-testing.md) — the three-tier design (unit `runHook` / deterministic `runHarnessTest` / eval `runEval`) + the plugin loader. Start here.
-- [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md) — **the living roadmap**: every plugin surface × tier, what's shipped vs. what's next, the spikes, and the parked ideas. The session centerpiece.
+- [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md) — the **pillar-2 surface detail**: every plugin surface × tier, what's shipped vs. next, the spikes, the parked ideas. (The cross-pillar ranking now lives in [`roadmap.md`](roadmap.md).)
+- [`eval-api-landscape.md`](eval-api-landscape.md) — the eval-API field scored against ours; the B→A→C roadmap (shipped) and the D/E punts.
+- [`promptfoo-deep-dive.md`](promptfoo-deep-dive.md) — promptfoo in 2026; the one axis that still separates us (harness-arm A/B + cheap sub-model tiers + significance).
+- [`skill-eval-landscape.md`](skill-eval-landscape.md) — AWS skill-eval scored against our pillar; trigger precision + the token-compression use case.
 - [`benchmarks-runtime-gates.md`](benchmarks-runtime-gates.md) — the evals run in anger: runtime gates are a no-op/net-negative; verifying the map beats policing the route.
 - [`testing-nondeterministic-ai.md`](testing-nondeterministic-ai.md) — prior art on testing non-deterministic AI/agent tools (DeepEval, Braintrust, τ-bench, pass^k, procedure-aware eval) and the `Trace` + predicate model it implies.
 
@@ -60,3 +67,18 @@ how-to docs live in [`../docs/`](../docs/README.md).)
 - [`architecture-platform.md`](architecture-platform.md) — architecture-aware agent platform (FSD/DDD/hexagonal presets).
 - [`ai-code-quality.md`](ai-code-quality.md) — AI code-quality patterns.
 - [`code-search-for-agents.md`](code-search-for-agents.md) — code-search approaches (grep vs embeddings vs AST-grep).
+
+## Strategy & bets (2026-06)
+
+The four same-day deep researches into adjacent markets, their synthesis, the
+divergent-bets triage, and the SDK probe. Ranked into action in [`roadmap.md`](roadmap.md).
+
+- [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) — **read first**: all four researches converge on extend-don't-pivot, with one unclaimed wedge (observed-≟-declared). Ranked Tier-1/2/3 bets + the positioning pivot.
+- [`divergent-bets.md`](divergent-bets.md) — bolder directions triaged with founder reactions (leaderboard + cost-optimizer = strong; SDK = no; compiler-not-linter = killed).
+- [`agent-supply-chain-security.md`](agent-supply-chain-security.md) — plugin/MCP supply-chain security; build a thin harness-aware `scan`, reject the security-vendor pivot.
+- [`standards-conformance.md`](standards-conformance.md) — AGENTS.md/SKILL.md/MCP standardization; extend pillar 1 to be format-neutral, reject the generic-linter pivot.
+- [`runtime-guardrails-observability.md`](runtime-guardrails-observability.md) — guardrails + OTel-GenAI; stay out of the request path, take the OTel-emit / verify-trace / Cedar-codegen bridges.
+- [`ai-native-linting.md`](ai-native-linting.md) — the AI-reviewer wave; extend `enforce()` to AI-linter catalogs, prototype a falsifiable `judge()` rule, reject becoming a reviewer.
+- [`sdk-harness-testing.md`](sdk-harness-testing.md) — do code-defined agent SDKs lack a deterministic test tier? No — first-party SDK mocks already cover it.
+- [`sandbox-network.md`](sandbox-network.md) — the resolver-pinned dynamic-allowlist layer for sandbox egress.
+- [`egress-sandbox-tooling.md`](egress-sandbox-tooling.md) — build-vs-adopt for the rootless egress connector: **swap slirp4netns → pasta (passt)** (Podman's default; doesn't need the tun tap-attach that fails on GH-hosted runners); nsjail/firejail/gVisor/Landlock assessed and rejected; how others pass egress tests in CI.

@@ -157,7 +157,7 @@ npx vigiles test        # Run *.harness.mjs deterministic harness tests (no API 
 npx vigiles eval        # Run *.eval.mjs real-model harness evals (--trials=N)
 ```
 
-`vigiles audit` enforces four rules — `require-spec`, `require-skill-spec`, `integrity`, `coverage` — configurable in `.vigilesrc.json`. The GitHub Action runs `audit` by default; the Claude Code plugin (`npx skills add zernie/vigiles`) adds the Pre/PostToolUse hooks that block direct `.md` edits and auto-compile specs. [Full CLI, Action, plugin & validation reference →](docs/cli.md)
+`vigiles audit` enforces five rules — `require-spec`, `require-skill-spec`, `integrity`, `coverage`, `untested-surface` — configurable in `.vigilesrc.json`. The GitHub Action runs `audit` by default; the Claude Code plugin (`npx skills add zernie/vigiles`) adds the Pre/PostToolUse hooks that block direct `.md` edits and auto-compile specs. [Full CLI, Action, plugin & validation reference →](docs/cli.md)
 
 ## Skills
 

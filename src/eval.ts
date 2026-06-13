@@ -703,6 +703,14 @@ export interface TriggerRateSpec {
   readonly pluginDir: string;
   /** The varied prompts to test the trigger against. */
   readonly prompts: readonly string[];
+  /**
+   * Optional *irrelevant* prompts the skill should **not** fire on — the
+   * precision side of triggering. Firing on these is a false positive (a skill
+   * whose description is too broad and hijacks unrelated work). When given, the
+   * report adds {@link TriggerRateReport.falsePositiveRate} and
+   * {@link TriggerRateReport.precision}; `prompts` alone measures recall only.
+   */
+  readonly irrelevantPrompts?: readonly string[];
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
   /** Trials per prompt. Default 1. */
@@ -727,62 +735,121 @@ export interface PromptTriggerStat {
 }
 
 export interface TriggerRateReport {
-  /** Overall fraction of runs in which the behaviour fired (0..1). */
+  /** Overall fraction of relevant runs in which the behaviour fired (recall, 0..1). */
   readonly rate: number;
-  /** Total runs (prompts × trials). */
+  /** Total relevant runs (prompts × trials). */
   readonly n: number;
   readonly perPrompt: readonly PromptTriggerStat[];
+  /**
+   * Fraction of *irrelevant* runs that wrongly fired (lower is better). Present
+   * only when {@link TriggerRateSpec.irrelevantPrompts} was given.
+   */
+  readonly falsePositiveRate?: number;
+  /**
+   * `relevantFired / (relevantFired + irrelevantFired)` — of all firings, the
+   * share on the right prompts. Present only when irrelevant prompts were given
+   * AND something fired (undefined when nothing fired at all). Pairs with `rate`
+   * (recall) to catch a skill that fires on everything _or_ nothing.
+   */
+  readonly precision?: number;
+  /** Per-prompt stats for the irrelevant set. Present with irrelevant prompts. */
+  readonly perIrrelevant?: readonly PromptTriggerStat[];
 }
 
-/**
- * Trigger-rate orchestration — every prompt × trial via `runner`, the `fired`
- * predicate evaluated per run and aggregated into an overall + per-prompt rate.
- * Exported with an injectable `runner` so the loop is unit-testable without a
- * model; `measureTriggerRate` is this with the real agent runner.
- */
-export async function measureTriggerRateWith(
-  spec: TriggerRateSpec,
-  runner: AgentRunner,
-): Promise<TriggerRateReport> {
-  const trials = spec.trials ?? 1;
-  const model = spec.model ?? "haiku";
-  const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"];
-  const timeoutMs = spec.timeoutMs ?? 240000;
-  const spacing = (spec.spacingSec ?? 4) * 1000;
+/** The per-run knobs a trigger set shares (everything but the prompt list). */
+interface TriggerRunConfig {
+  readonly trials: number;
+  readonly model: string;
+  readonly tools: readonly string[];
+  readonly timeoutMs: number;
+  readonly spacing: number;
+  readonly pluginDir: string;
+  readonly fired: (trace: Trace) => boolean;
+}
 
+/** Run one prompt set × trials through `runner`, aggregating fired counts. */
+async function runTriggerSet(
+  prompts: readonly string[],
+  cfg: TriggerRunConfig,
+  runner: AgentRunner,
+): Promise<{ perPrompt: PromptTriggerStat[]; fired: number; n: number }> {
   const perPrompt: PromptTriggerStat[] = [];
   let firedTotal = 0;
   let n = 0;
-  for (const prompt of spec.prompts) {
+  for (const prompt of prompts) {
     let fired = 0;
-    for (let t = 0; t < trials; t++) {
+    for (let t = 0; t < cfg.trials; t++) {
       const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
       try {
         const out = await runner({
           task: prompt,
           cwd,
-          model,
-          tools,
+          model: cfg.model,
+          tools: cfg.tools,
           hasSettings: false,
-          pluginDir: spec.pluginDir,
-          timeoutMs,
+          pluginDir: cfg.pluginDir,
+          timeoutMs: cfg.timeoutMs,
         });
-        if (spec.fired(makeContext(cwd, out))) fired++;
+        if (cfg.fired(makeContext(cwd, out))) fired++;
       } finally {
         rmSync(cwd, { recursive: true, force: true });
-        await sleep(spacing);
+        await sleep(cfg.spacing);
       }
     }
     perPrompt.push({
       prompt,
       fired,
-      trials,
-      rate: trials > 0 ? fired / trials : 0,
+      trials: cfg.trials,
+      rate: cfg.trials > 0 ? fired / cfg.trials : 0,
     });
     firedTotal += fired;
-    n += trials;
+    n += cfg.trials;
   }
-  return { rate: n > 0 ? firedTotal / n : 0, n, perPrompt };
+  return { perPrompt, fired: firedTotal, n };
+}
+
+/**
+ * Trigger-rate orchestration — every prompt × trial via `runner`, the `fired`
+ * predicate evaluated per run and aggregated into an overall + per-prompt rate.
+ * With `irrelevantPrompts`, also runs the precision side (firing there is a false
+ * positive) and adds `falsePositiveRate` + `precision`. Exported with an
+ * injectable `runner` so the loop is unit-testable without a model;
+ * `measureTriggerRate` is this with the real agent runner.
+ */
+export async function measureTriggerRateWith(
+  spec: TriggerRateSpec,
+  runner: AgentRunner,
+): Promise<TriggerRateReport> {
+  const cfg: TriggerRunConfig = {
+    trials: spec.trials ?? 1,
+    model: spec.model ?? "haiku",
+    tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
+    timeoutMs: spec.timeoutMs ?? 240000,
+    spacing: (spec.spacingSec ?? 4) * 1000,
+    pluginDir: spec.pluginDir,
+    fired: spec.fired,
+  };
+
+  const relevant = await runTriggerSet(spec.prompts, cfg, runner);
+  const base: TriggerRateReport = {
+    rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
+    n: relevant.n,
+    perPrompt: relevant.perPrompt,
+  };
+  if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
+
+  const irrelevant = await runTriggerSet(
+    spec.irrelevantPrompts ?? [],
+    cfg,
+    runner,
+  );
+  const fires = relevant.fired + irrelevant.fired;
+  return {
+    ...base,
+    falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
+    precision: fires > 0 ? relevant.fired / fires : undefined,
+    perIrrelevant: irrelevant.perPrompt,
+  };
 }
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureTriggerRateWith */
@@ -803,6 +870,19 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
   const lines = [`trigger-rate: ${pct}% (${String(report.n)} runs)`];
   for (const p of report.perPrompt) {
     lines.push(`  ${p.rate.toFixed(2)}  ${p.prompt.slice(0, 60)}`);
+  }
+  if (report.falsePositiveRate !== undefined) {
+    const fpr = (report.falsePositiveRate * 100).toFixed(0);
+    const prec =
+      report.precision === undefined
+        ? "n/a"
+        : `${(report.precision * 100).toFixed(0)}%`;
+    lines.push(`false-positive: ${fpr}%  precision: ${prec}`);
+    for (const p of report.perIrrelevant ?? []) {
+      lines.push(
+        `  ${p.rate.toFixed(2)}  [irrelevant] ${p.prompt.slice(0, 48)}`,
+      );
+    }
   }
   return lines.join("\n");
 }

@@ -80,6 +80,22 @@ export interface OrphansConfig {
   exclude?: readonly string[];
 }
 
+/** Options for the untested-surface check. */
+export interface TestCoverageConfig {
+  /** Scan skills. Default true. */
+  skills?: boolean;
+  /** Scan subagents. Default true. */
+  agents?: boolean;
+  /** Scan hook scripts referenced from plugin.json / settings.json. Default true. */
+  hooks?: boolean;
+  /** Require a test for user-invoked (disable-model-invocation) skills. Default false. */
+  includeUserInvokedSkills?: boolean;
+  /** Globs of test files that count as coverage. */
+  testGlobs?: readonly string[];
+  /** Extra ignore globs. */
+  exclude?: readonly string[];
+}
+
 export interface RulesConfig {
   /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
   "require-spec"?: RuleSeverity;
@@ -89,6 +105,8 @@ export interface RulesConfig {
   integrity?: RuleSeverity;
   /** Enforce minimum spec coverage thresholds. Default: false. ESLint-style: ["warn", { scripts: 50 }]. */
   coverage?: RuleWithOptions<CoverageThresholds>;
+  /** Flag skills/agents/hooks with no test or eval. Default: "warn". */
+  "untested-surface"?: RuleWithOptions<TestCoverageConfig>;
 }
 
 // ---------------------------------------------------------------------------
