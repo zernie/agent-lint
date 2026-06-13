@@ -17,8 +17,14 @@ export interface PluginLayout {
   readonly manifestPath: string;
   /** Convention path for a standalone hooks file, e.g. `hooks/hooks.json`. */
   readonly hooksConventionPath: string;
-  /** Repo settings carrying hooks, e.g. `.claude/settings.json`. */
+  /** Repo settings carrying hooks, e.g. `.claude/settings.json` or `.codex/config.toml`. */
   readonly settingsPath: string;
+  /**
+   * How the settings file is encoded — `"json"` (Claude Code's settings.json) or
+   * `"toml"` (Codex's `config.toml` `[hooks]`). The loader dispatches a parser on
+   * it, so a TOML-configured harness's hooks aren't silently read as zero.
+   */
+  readonly settingsFormat: "json" | "toml";
   /** Top-level instruction file, e.g. `CLAUDE.md`. */
   readonly instructionFile: string;
   /** Surface dirs materialized into the sandbox, e.g. skills/agents/commands. */

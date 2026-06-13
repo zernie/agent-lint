@@ -21,11 +21,13 @@ export const claudeCodeAdapter: HarnessAdapter = {
   runtime: claudeCodeRuntime,
   hookProtocol: claudeCodeHookProtocol,
   modelMock: claudeCodeModelMock,
-  detect(root: string): boolean {
-    return [
-      claudeCodeLayout.manifestPath,
-      claudeCodeLayout.settingsPath,
-      claudeCodeLayout.instructionFile,
-    ].some((rel) => existsSync(join(root, rel)));
+  detect(root: string): number {
+    // Most specific signal wins: a plugin manifest (3) > repo settings (2) >
+    // a bare CLAUDE.md (1, weak — many tools also read it / AGENTS.md).
+    const has = (rel: string): boolean => existsSync(join(root, rel));
+    if (has(claudeCodeLayout.manifestPath)) return 3;
+    if (has(claudeCodeLayout.settingsPath)) return 2;
+    if (has(claudeCodeLayout.instructionFile)) return 1;
+    return 0;
   },
 };

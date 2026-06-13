@@ -6,9 +6,15 @@ import { join } from "node:path";
 import { claudeCodeAdapter } from "./adapter.js";
 import {
   assertAdapterConformance,
+  assertAdapterLoadsHooks,
   checkAdapterConformance,
 } from "../../adapter-conformance.js";
-import { detectAdapter, getAdapter } from "../../adapter-registry.js";
+import {
+  detectAdapter,
+  detectAdapterResult,
+  resolveAdapter,
+  getAdapter,
+} from "../../adapter-registry.js";
 import type { HarnessAdapter } from "../../core/adapter.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
@@ -25,6 +31,10 @@ test("claudeCodeAdapter passes the conformance kit", () => {
   assertAdapterConformance(claudeCodeAdapter); // throws on failure
 });
 
+test("claudeCodeAdapter passes behavioural settings-load conformance", () => {
+  assertAdapterLoadsHooks(claudeCodeAdapter); // round-trips a real settings file
+});
+
 test("conformance kit catches a broken adapter", () => {
   const broken: HarnessAdapter = {
     ...claudeCodeAdapter,
@@ -37,34 +47,43 @@ test("conformance kit catches a broken adapter", () => {
   assert.ok(r.failures.some((m) => m.includes("builtinAgentTools")));
 });
 
-test("detect: a CLAUDE.md repo is recognized; an empty dir is not", () => {
+test("detect: specificity score — empty 0, CLAUDE.md 1, manifest 3", () => {
   const dir = makeTmpDir("adapter-detect");
   try {
-    assert.equal(claudeCodeAdapter.detect(dir), false);
+    assert.equal(claudeCodeAdapter.detect(dir), 0);
     writeFileSync(join(dir, "CLAUDE.md"), "# rules\n");
-    assert.equal(claudeCodeAdapter.detect(dir), true);
-  } finally {
-    cleanupTmpDir(dir);
-  }
-});
-
-test("detect: a .claude-plugin manifest is recognized", () => {
-  const dir = makeTmpDir("adapter-detect2");
-  try {
+    assert.equal(claudeCodeAdapter.detect(dir), 1); // weak signal
     mkdirSync(join(dir, ".claude-plugin"));
     writeFileSync(join(dir, ".claude-plugin", "plugin.json"), "{}");
-    assert.equal(claudeCodeAdapter.detect(dir), true);
+    assert.equal(claudeCodeAdapter.detect(dir), 3); // strong signal wins
   } finally {
     cleanupTmpDir(dir);
   }
 });
 
-test("detectAdapter falls back to Claude Code for an unmarked repo", () => {
+test("detectAdapterResult falls back to Claude Code for an unmarked repo", () => {
   const dir = makeTmpDir("adapter-registry");
   try {
-    assert.equal(detectAdapter(dir).name, "claude-code");
+    const r = detectAdapterResult(dir);
+    assert.equal(r.adapter.name, "claude-code");
+    assert.equal(r.fallback, true);
+    assert.deepEqual(r.ambiguousWith, []);
     writeFileSync(join(dir, "CLAUDE.md"), "# rules\n");
+    const r2 = detectAdapterResult(dir);
+    assert.equal(r2.adapter.name, "claude-code");
+    assert.equal(r2.fallback, false);
     assert.equal(detectAdapter(dir).name, "claude-code");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveAdapter: --harness override wins, unknown throws", () => {
+  const dir = makeTmpDir("adapter-resolve");
+  try {
+    assert.equal(resolveAdapter(dir).name, "claude-code"); // auto-detect
+    assert.equal(resolveAdapter(dir, "claude-code"), claudeCodeAdapter);
+    assert.throws(() => resolveAdapter(dir, "codex"), /Unknown harness/);
   } finally {
     cleanupTmpDir(dir);
   }

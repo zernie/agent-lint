@@ -60,6 +60,7 @@ const layout: PluginLayout = {
   manifestPath: ".myagent/config.json",
   hooksConventionPath: "hooks/hooks.json",
   settingsPath: ".myagent/settings.json",
+  settingsFormat: "json", // or "toml" (e.g. Codex's config.toml [hooks])
   instructionFile: "AGENTS.md",
   surfaceDirs: ["skills", "agents"],
   materializeRoot: ".myagent",
@@ -97,23 +98,35 @@ export const myHarnessAdapter: HarnessAdapter = {
   runtime,
   hookProtocol,
   modelMock,
-  detect: (root) => existsSync(join(root, ".myagent")),
+  // detect returns a *specificity score* (0 = not this harness; higher wins).
+  // A strong signal (your own config dir) should outscore a weak one (a shared
+  // AGENTS.md), so the registry picks the right adapter for a repo that looks
+  // like several.
+  detect: (root) => (existsSync(join(root, ".myagent")) ? 2 : 0),
 };
 ```
 
 ## Validate it
 
-Drop the conformance check in your test suite — it verifies every port is
-populated **and** that your dialect actually drives the compiler (its own
-built-in tools pass the subagent tool-contract check):
+Drop the conformance checks in your test suite. `assertAdapterConformance`
+verifies every port is populated, the cross-port invariants hold (names agree,
+`instructionFile` is a declared target, the plugin-root tokens match), **and**
+that your dialect drives the compiler. `assertAdapterLoadsHooks` is the
+behavioural one — it round-trips a real settings file through your `layout`, so
+a layout that points at the right file in the wrong format (the JSON-vs-TOML
+trap) fails loudly instead of silently running zero hooks:
 
 ```ts
 import { test } from "vitest";
-import { assertAdapterConformance } from "vigiles/adapter";
+import {
+  assertAdapterConformance,
+  assertAdapterLoadsHooks,
+} from "vigiles/adapter";
 import { myHarnessAdapter } from "./my-harness-adapter.js";
 
 test("my adapter conforms", () => {
-  assertAdapterConformance(myHarnessAdapter); // throws with a list of gaps
+  assertAdapterConformance(myHarnessAdapter); // ports + invariants + compiler
+  assertAdapterLoadsHooks(myHarnessAdapter); // settings-format round-trip
 });
 ```
 
@@ -123,8 +136,10 @@ test("my adapter conforms", () => {
   `compileAgent(spec, { dialect: myHarnessAdapter.dialect })`,
   `loadPlugin(path, myHarnessAdapter.layout)`.
 - **CLI auto-detection:** add it to the registry (`src/adapter-registry.ts`
-  `ADAPTERS`) so `vigiles compile|scan|audit` detect it from a repo's layout.
-  Claude Code stays the default, so nothing existing breaks.
+  `ADAPTERS`) so `vigiles compile|scan|audit` detect it from a repo's layout
+  (highest `detect` specificity wins). Claude Code stays the default, so nothing
+  existing breaks. Users force a harness with `--harness <name>` when a repo
+  matches more than one.
 
 ## What's not a descriptor (yet)
 

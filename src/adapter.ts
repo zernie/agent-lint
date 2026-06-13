@@ -25,11 +25,15 @@ export type { ModelMock } from "./core/model-mock.js";
 export {
   checkAdapterConformance,
   assertAdapterConformance,
+  assertAdapterLoadsHooks,
   type ConformanceResult,
 } from "./adapter-conformance.js";
 export {
   ADAPTERS,
   defaultAdapter,
   detectAdapter,
+  detectAdapterResult,
+  resolveAdapter,
   getAdapter,
+  type DetectResult,
 } from "./adapter-registry.js";
