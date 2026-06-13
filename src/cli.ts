@@ -28,6 +28,7 @@ import type {
 } from "./types.js";
 import { ruleSeverity, ruleOptions } from "./types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import { scanPlugin, formatScanReport } from "./scan.js";
 
 import {
   compileClaude,
@@ -2462,6 +2463,17 @@ async function main(): Promise<void> {
     case "eval":
       handleRunScripts("eval", args, restArgs);
       break;
+
+    case "scan": {
+      const dir = restArgs[0] ?? ".";
+      const report = scanPlugin(dir);
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(formatScanReport(report));
+      }
+      break;
+    }
 
     // --- Plumbing ---
 
