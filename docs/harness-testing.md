@@ -26,7 +26,9 @@ first:
 
 1. **Verify the references** (static, free) — `vigiles audit` checks that the
    linter rules, files, scripts, and symbols your instruction files cite are
-   real. See [Verify your instruction files](../README.md#verify-your-instruction-files)
+   real, and flags any skill / hook / subagent that ships with **no test** (the
+   [`untested-surface`](rules/untested-surface.md) rule). See
+   [Verify your instruction files](../README.md#verify-your-instruction-files)
    and [linter support](linter-support.md) for how rules resolve across the 7
    catalogs.
 2. **Unit-test a hook** (`runHook`, no `claude`) — given this event JSON, does my
@@ -70,6 +72,8 @@ question genuinely needs a real model — not to answer "does my hook block this
   - [LLM-as-judge for subjective outcomes](#llm-as-judge-for-subjective-outcomes)
 - [CLI fallback (no runner, CI-friendly)](#cli-fallback-no-runner-ci-friendly)
 - [Coverage](#coverage)
+  - [Coverage of your harness surfaces](#coverage-of-your-harness-surfaces)
+  - [vigiles's own coverage](#vigiless-own-coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
 - [How this compares to promptfoo](#how-this-compares-to-promptfoo)
@@ -749,6 +753,35 @@ deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 
 ## Coverage
 
+Two different things wear the word "coverage" here. Keep them apart: **your
+harness's** test coverage (do your skills/hooks/subagents each have a test?) and
+**vigiles's own** code coverage.
+
+### Coverage of your harness surfaces
+
+A harness grows surfaces faster than tests — a new skill, hook, or subagent
+lands and nothing tells you it shipped untested. `vigiles audit` closes that gap
+with the [`untested-surface`](rules/untested-surface.md) rule: it reports any
+skill, subagent, or hook that has **no test or eval**. A surface counts as
+covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention
+the warning suggests) **or** any test — including a `*.test.ts` — references it
+by path (`skills/foo`, `hooks/x.sh`) or namespace (`plugin:foo`). It's
+warning-by-default (a nudge; set it to `"error"` to fail CI), and user-invoked
+(`disable-model-invocation`) skills are exempt because they can't auto-trigger —
+flip `includeUserInvokedSkills` to demand an outcome test for them.
+
+Beneath that gate sits a free, model-free **conformance floor**: load your own
+plugin and assert every skill resolves with a usable `description` — the surface
+the model triggers on, so a skill that won't load can never fire. `loadPlugin`
+plus a name/description check needs no `claude` and no key, so it runs on every
+commit, well under the (paid) trigger-rate eval. vigiles dogfoods exactly this
+on its own skills in
+[`src/skills-dogfood.test.ts`](../src/skills-dogfood.test.ts) — the gate that
+caught a real shipped skill missing its frontmatter `name`, and a hook whose
+script had drifted out of `${CLAUDE_PLUGIN_ROOT}/hooks/`.
+
+### vigiles's own coverage
+
 The suite runs under **vitest** (`npm test` → `vitest run`); `npm run coverage`
 adds V8 coverage and prints per-file line/branch/function %:
 
@@ -780,19 +813,19 @@ everything around it is covered, so the statement/line/function gate holds at
 
 The whole harness surface and how far each tier reaches today:
 
-| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
-| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
-| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
-| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
-| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
-| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
-| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
-| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
-| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
-| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
+| Surface                                                       | Unit / static                    | Integration (no API key)    | Eval (real model) |
+| ------------------------------------------------------------- | -------------------------------- | --------------------------- | ----------------- |
+| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                         | ✅ fires                    | ✅                |
+| Hooks — Edit / Write                                          | ✅ logic                         | ✅ fires                    | ✅                |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                         | — (mock can't trigger)      | 🟡                |
+| CLAUDE.md / instructions                                      | ✅ refs                          | 🟡 present, not behaviour   | ✅ behaviour      |
+| Skills                                                        | ✅ loads + description · 🟡 refs | ✅ resolves via `pluginDir` | ✅ activation     |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs           | 🟡 rail not live-armed      | ✅ via Task       |
+| Slash commands (`commands/`)                                  | 🟡 refs                          | 🟡 needs prompt capture     | ✅ via `/cmd`     |
+| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`)     | 🔴                          | 🔴                |
+| settings.json                                                 | 🟡 assert merged                 | ✅ applied                  | ✅                |
+| Hook context injection (does it _land_?)                      | — n/a                            | ✅ `trace.modelRequests`    | ✅                |
+| Untrusted plugin execution                                    | ✅ confined (`runHook`)          | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
 
