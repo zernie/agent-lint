@@ -132,12 +132,18 @@ jobs:
       - name: Run deterministic harness tests
         run: node dist/cli.js test
 
-  # Dogfood the per-level CI action: the e2e tier (allowlisted real egress) with
-  # pasta set up. Tests self-skip via egressRoutes() where the runner can't route
-  # (so this is green today); once the slirp4netns→pasta connector swap lands they
-  # run for real here. Not required for merge while the connector is being proven.
+  # Dogfood the per-level CI action for the e2e tier (allowlisted REAL egress).
+  # The egress connector needs /dev/net/tun + privilege to open the tap and
+  # configure the netns — the non-root host runner can't, which is why slirp4netns
+  # "fails" there (only `lo`). So this job runs as ROOT in a privileged container,
+  # where slirp4netns attaches exactly as it does on a root dev box and the egress
+  # tests run FOR REAL. Tests still self-skip via egressRoutes() if egress can't
+  # route, so the job never fails red. See research/egress-sandbox-tooling.md.
   e2e:
     runs-on: ubuntu-latest
+    container:
+      image: node:20-bookworm
+      options: --privileged --device /dev/net/tun
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/harness-tier

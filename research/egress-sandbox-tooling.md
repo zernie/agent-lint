@@ -260,3 +260,36 @@ embeddable for our per-child assertion.
 - firejail/nsjail network filtering root requirement —
   [firejail#1085](https://github.com/netblue30/firejail/issues/1085),
   [firejail#403](https://github.com/netblue30/firejail/issues/403)
+
+## Field findings (2026-06-13) — privilege, not connector, is the wall
+
+Tried to "just swap to pasta." Captured the real errors instead, and they
+reframe the problem:
+
+- **As root** (our dev container is uid 0): pasta refuses — `Don't run as root.
+Changing to nobody...` then `Couldn't open user namespace .../ns/user:
+Permission denied`. It self-drops to `nobody`, which can't enter the bwrap
+  child's user namespace.
+- **As non-root** (a created `tester` user, mirroring a CI runner): the
+  privilege-drop is gone, but pasta's _attach-to-existing-netns_ path is flaky —
+  intermittent `Couldn't switch to pasta namespaces: No child processes` (ECHILD,
+  likely PID-namespace reaping in the nested container), and in native create
+  mode: **`Failed to open() /dev/net/tun: Permission denied` → Failed to set up
+  tap device**.
+
+The last one is the key: **both slirp4netns and pasta need `/dev/net/tun` +
+privilege** to bring up the tap and configure the netns. Our **local e2e passes
+only because the dev box is root**; GitHub's hosted `test` job runs **non-root**,
+so the connector can't open tun there — _that_ is why slirp4netns "fails" on the
+runner (the netns ends up with only `lo`), not a slirp-vs-pasta difference.
+
+**Conclusion:** the connector choice is a red herring for CI. The fix for "e2e
+runs in CI" is to give the connector the privilege it needs — run the e2e job as
+**root in a privileged container** (`container: { image: node:20-bookworm,
+options: --privileged --device /dev/net/tun }`), where the already-working
+slirp4netns path attaches exactly as it does on a root dev box. That's what
+`.github/workflows/ci.yml`'s `e2e` job now does. pasta stays as an experimental,
+opt-in connector (`VIGILES_EGRESS_CONNECTOR=pasta`) for rootless environments
+that don't restrict tun; its attach-path needs more work (likely an inverted
+topology where pasta creates the namespace and runs bwrap _inside_ it, rather
+than attaching to a bwrap-created netns) before it's the rootless default.

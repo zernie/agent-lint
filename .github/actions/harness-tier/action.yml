@@ -30,27 +30,31 @@ runs:
 
     # integration + e2e run real hooks under bubblewrap and drive the claude CLI
     # against a scripted mock model (no API key). Ubuntu 24.04 locks unprivileged
-    # user namespaces behind AppArmor; unlock so bwrap can create them.
+    # user namespaces behind AppArmor; unlock so bwrap can create them. `sudo` is
+    # absent in container jobs (already root), present on host runners (non-root) —
+    # so resolve it once and reuse.
     - name: Set up bubblewrap + claude CLI
       if: ${{ inputs.tier == 'integration' || inputs.tier == 'e2e' }}
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y bubblewrap
+        SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+        $SUDO apt-get update
+        $SUDO apt-get install -y bubblewrap
         npm i -g @anthropic-ai/claude-code
-        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        $SUDO sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-    # e2e exercises allowlisted REAL egress. pasta (passt) is the routable rootless
-    # connector (Podman's default; doesn't need the slirp4netns tap-attach that
-    # fails on hosted runners — see research/egress-sandbox-tooling.md); slirp4netns
-    # is the fallback, nftables is the allowlist wall. Tests that still can't route
-    # self-skip via egressRoutes() rather than fail.
-    - name: Set up rootless egress (pasta / slirp4netns / nft)
+    # e2e exercises allowlisted REAL egress. The connector (slirp4netns by default;
+    # pasta is experimental) needs /dev/net/tun + privilege — which is why the e2e
+    # CI job runs as root in a privileged container (see research/egress-sandbox-
+    # tooling.md). nftables is the allowlist wall. Tests still self-skip via
+    # egressRoutes() rather than fail where egress can't route.
+    - name: Set up rootless egress (slirp4netns / pasta / nft)
       if: ${{ inputs.tier == 'e2e' }}
       shell: bash
       run: |
-        sudo apt-get install -y passt slirp4netns nftables \
-          || sudo apt-get install -y slirp4netns nftables
+        SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+        $SUDO apt-get install -y slirp4netns nftables iproute2 passt \
+          || $SUDO apt-get install -y slirp4netns nftables iproute2
 
     - name: Run the ${{ inputs.tier }} tier
       shell: bash
