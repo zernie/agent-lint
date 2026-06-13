@@ -38,6 +38,9 @@
     "!dist/**/*.test.d.ts",
     "action.yml",
     ".claude-plugin",
+    "hooks",
+    "skills",
+    "!skills/**/*.spec.ts",
     "README.md",
     "LICENSE"
   ],
