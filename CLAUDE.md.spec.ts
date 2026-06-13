@@ -100,6 +100,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/orphans.ts":
       "Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references",
     "src/orphans.test.ts": "Orphan-docs detector test suite (node:test)",
+    "src/compose.ts":
+      "Sync-tool compatibility detector: detectSyncTools/composeCollisions — pure filesystem check that vigiles stays composable with Ruler (.ruler/, ruler.toml) and rulesync (.rulesync/) instead of fighting them for CLAUDE.md/AGENTS.md. Reports the file-ownership collision (a vigiles compile target the tool also regenerates → stales the integrity hash) with the source-slot redirect that fixes it (Topology A: compile upstream, let the tool distribute). Same deterministic-detector shape as orphans.ts/test-coverage.ts; the operational half of research/sync-tool-compatibility.md",
+    "src/compose.test.ts":
+      "Sync-tool detector test suite (node:test): ruler/rulesync detection (dir + ruler.toml keys), source-slot paths, CLAUDE.md/AGENTS.md collision incl. path-qualified target match by filename, no-tool and non-overlapping no-collision, both-tools-present",
     "src/test-coverage.ts":
       "Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). User-invoked (disable-model-invocation) skills exempt by default; vigiles:ignore-test opts a surface out. Warning-by-default, surfaced by vigiles audit",
     "src/test-coverage.test.ts":
@@ -242,6 +246,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Mid-2026 landscape: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI — deep dives and next-step proposals",
     "research/sync-landscape-analysis.md":
       "Rule-sync landscape analysis: per-tool breakdown, what's worth absorbing, block() and domain-preset proposals",
+    "research/sync-tool-compatibility.md":
+      "Sync-tool compatibility requirements: the verified mid-2026 formats of Ruler (.ruler/ concat + AGENTS.md precedence), rulesync (.rulesync/rules/*.md frontmatter + import), and AGENTS.md (unstructured, AAIF-governed), then the file-ownership topology (vigiles upstream into the source slot vs downstream verify) and the ranked requirements with current state — most MET (AGENTS.md target, foreign-frontmatter coexistence), the one GAP (integrity-hash collision) shipped as src/compose.ts. Grounds the compose-with-sync-tools rule",
     "research/distribution-strategy.md":
       "Why nobody uses vigiles yet: funnel diagnosis + scan demo proposal as highest-leverage intervention",
     "research/reference-verification-limits.md":
