@@ -81,3 +81,4 @@ divergent-bets triage, and the SDK probe. Ranked into action in [`roadmap.md`](r
 - [`ai-native-linting.md`](ai-native-linting.md) — the AI-reviewer wave; extend `enforce()` to AI-linter catalogs, prototype a falsifiable `judge()` rule, reject becoming a reviewer.
 - [`sdk-harness-testing.md`](sdk-harness-testing.md) — do code-defined agent SDKs lack a deterministic test tier? No — first-party SDK mocks already cover it.
 - [`sandbox-network.md`](sandbox-network.md) — the resolver-pinned dynamic-allowlist layer for sandbox egress.
+- [`egress-sandbox-tooling.md`](egress-sandbox-tooling.md) — build-vs-adopt for the rootless egress connector: **swap slirp4netns → pasta (passt)** (Podman's default; doesn't need the tun tap-attach that fails on GH-hosted runners); nsjail/firejail/gVisor/Landlock assessed and rejected; how others pass egress tests in CI.
