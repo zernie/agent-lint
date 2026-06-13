@@ -32,6 +32,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { claudeCodeRuntime } from "./runtime.js";
+
 import { type ModelTurn, type ModelRequest } from "./mock-model.js";
 
 /**
@@ -289,9 +291,10 @@ const WRAPPER = [
   "MOCKPID=$!",
   "i=0",
   'while [ ! -s "$VIG_PORT" ] && [ "$i" -lt 200 ]; do sleep 0.05; i=$((i+1)); done',
-  'export ANTHROPIC_BASE_URL="http://127.0.0.1:$(cat "$VIG_PORT")"',
-  "export ANTHROPIC_API_KEY=sk-vigiles-mock",
-  'claude "$@"',
+  // base-URL / API-key vars + the agent binary come from the runtime port.
+  `export ${claudeCodeRuntime.modelBaseUrlEnv}="http://127.0.0.1:$(cat "$VIG_PORT")"`,
+  `export ${claudeCodeRuntime.modelApiKeyEnv}=${claudeCodeRuntime.mockApiKey}`,
+  `${claudeCodeRuntime.agentBinary} "$@"`,
   "code=$?",
   'kill "$MOCKPID" 2>/dev/null',
   'exit "$code"',

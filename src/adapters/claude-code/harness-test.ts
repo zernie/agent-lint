@@ -40,6 +40,8 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
+import { claudeCodeRuntime, mockModelEnv } from "./runtime.js";
+
 import { startMock, type ModelTurn, type ModelRequest } from "./mock-model.js";
 import { resolveHarness } from "./plugin-loader.js";
 import {
@@ -343,10 +345,14 @@ export function buildClaudeArgs(
 /* v8 ignore start -- spawns the real claude CLI + filesystem; exercised by the
    claude-backed suite, excluded from the deterministic coverage gate (the parse
    helpers above carry the testable logic). */
-/** Whether the `claude` CLI is available — harness tests need it. */
+/** Whether the agent CLI is available — harness tests need it. */
 export function claudeAvailable(): boolean {
   try {
-    return spawnSync("claude", ["--version"], { stdio: "ignore" }).status === 0;
+    return (
+      spawnSync(claudeCodeRuntime.agentBinary, ["--version"], {
+        stdio: "ignore",
+      }).status === 0
+    );
   } catch {
     return false;
   }
@@ -384,14 +390,11 @@ function spawnClaude(
   timeoutMs: number,
 ): Promise<RunOut> {
   return new Promise((resolvePromise) => {
-    const child = spawn("claude", args, {
+    const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd,
-      env: {
-        ...process.env,
-        ANTHROPIC_BASE_URL: baseUrl,
-        // Any value works — the mock ignores auth; this avoids needing a real key.
-        ANTHROPIC_API_KEY: "sk-vigiles-mock",
-      },
+      // Any key works — the mock ignores auth; mockModelEnv points the client at
+      // the mock's URL and supplies a dummy key, both from the runtime port.
+      env: mockModelEnv(claudeCodeRuntime, baseUrl),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
