@@ -600,6 +600,15 @@ function egressSpawn(
       JSON.stringify({
         bwrapArgv,
         slirpArgs: ["--configure", "--disable-host-loopback"],
+        // --config-net brings up the interface + host-derived routes in the
+        // target netns. The connector is slirp4netns by default (proven local);
+        // set VIGILES_EGRESS_CONNECTOR=pasta to use pasta (passt), which routes
+        // on hosted runners where slirp4netns's tap-attach fails.
+        pastaArgs: ["--config-net"],
+        connector:
+          process.env.VIGILES_EGRESS_CONNECTOR === "pasta"
+            ? "pasta"
+            : "slirp4netns",
         infoFile: join(ioDir, "info.json"),
         readyFile: join(ioDir, "ready"),
         netreadyFile: files.netready,

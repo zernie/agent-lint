@@ -1,19 +1,20 @@
 /**
- * `vigiles/e2e` — the **real-model / real-egress** tier (the top of the pyramid).
+ * `vigiles/e2e` — the **deterministic** end-to-end tier (real sandbox + real
+ * network, but a definite pass/fail).
  *
  * Re-exports everything in [`vigiles/integration`](./integration.ts) and adds the
- * runners that need a real model or real network: `runEval` / `measureTriggerRate`
- * (drive the real model across arms × trials, aggregate mean ± se / pass^k), the
- * `judge` LLM grader, and — by re-export — `runHook` used with `egress: { allow }`
- * (allowlisted real outbound). Capability contract: needs **a model / API auth
- * and/or real network**, and (for egress) a routable sandbox. A `*.e2e.test.ts`
- * imports from here.
+ * real-egress capability: `egressRoutes()` (probe whether allowlisted egress can
+ * actually route) and — by re-export — `runHook` used with `egress: { allow }`
+ * (allowlisted real outbound). Capability contract: needs a **routable rootless
+ * sandbox + real network**, and each test self-skips via `egressRoutes()` where
+ * that's unavailable. Still a **verification** tier — you assert pass/fail.
+ *
+ * NOT here: **evals** (`runEval` / `measureTriggerRate` / `judge`). Those are a
+ * different axis — **non-deterministic measurement** (real model, mean ± se), run
+ * via `vigiles eval` on `*.eval.mjs`. Import them from
+ * [`vigiles/eval`](./eval.ts) + [`vigiles/judge`](./judge.ts), not from here.
  */
-// Note: egress: { allow } is an option on `runHook` (re-exported here via the
-// integration→unit chain) — a test that uses it is e2e, and importing runHook
-// from this path declares that.
 export * from "./integration.js";
-export * from "./eval.js";
-export * from "./judge.js";
-// The real-egress capability probe + the egress-using runHook live at this tier.
+// The real-egress capability probe (the egress-using runHook is already re-exported
+// via the integration→unit chain).
 export { egressRoutes } from "./run-hook.js";

@@ -22,7 +22,7 @@
  * test; the testable logic (ruleset, counter parse) lives in `src/egress.ts`.
  */
 /* v8 ignore start */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   openSync,
   closeSync,
@@ -36,6 +36,10 @@ interface EgressConfig {
   readonly bwrapArgv: string[];
   /** Base slirp4netns args; the child PID and `tap0` are appended at runtime. */
   readonly slirpArgs: string[];
+  /** Base pasta (passt) args; the child PID is appended at runtime. */
+  readonly pastaArgs: string[];
+  /** Which rootless egress connector to use: "pasta" or "slirp4netns" (default). */
+  readonly connector: "pasta" | "slirp4netns";
   readonly infoFile: string;
   readonly readyFile: string;
   readonly netreadyFile: string;
@@ -46,6 +50,11 @@ interface EgressConfig {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
+
+/** Is a binary on PATH? (probe via `--version`; ENOENT sets `.error`.) */
+function hasBinary(name: string): boolean {
+  return !spawnSync(name, ["--version"], { stdio: "ignore" }).error;
+}
 
 /** Poll a file until it has content (the info / ready fd targets), or time out. */
 async function waitForFile(path: string, timeoutMs: number): Promise<boolean> {
@@ -77,7 +86,7 @@ async function main(): Promise<void> {
   bwrap.stdout?.on("data", (d: Buffer) => (stdout += d.toString()));
   bwrap.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
 
-  let slirp: ReturnType<typeof spawn> | undefined;
+  let connector: ReturnType<typeof spawn> | undefined;
   const timer = setTimeout(() => bwrap.kill("SIGKILL"), cfg.timeoutMs);
 
   const exit = new Promise<{ status: number | null; signal: string | null }>(
@@ -88,28 +97,42 @@ async function main(): Promise<void> {
     },
   );
 
-  // Learn the child PID, attach slirp4netns to its netns, release the wrapper.
+  // Learn the child PID, attach a rootless egress connector to its netns, release
+  // the wrapper. Prefer pasta (passt): it routes on hosted runners where
+  // slirp4netns's tap-attach silently fails (the netns ends up with only `lo`).
+  // Fall back to slirp4netns where pasta isn't installed. nft (the allowlist wall)
+  // matches on destination, not interface name, so it's connector-agnostic. See
+  // research/egress-sandbox-tooling.md.
   if (await waitForFile(cfg.infoFile, 5_000)) {
     const info = readFileSync(cfg.infoFile, "utf-8");
     const m = /"child-pid":\s*(\d+)/.exec(info);
     if (m) {
-      const readyFd = openSync(cfg.readyFile, "w");
-      slirp = spawn(
-        "slirp4netns",
-        [...cfg.slirpArgs, "--ready-fd", "4", m[1], "tap0"],
-        { stdio: ["ignore", "ignore", "ignore", "ignore", readyFd] },
-      );
-      closeSync(readyFd);
-      // slirp writes "1" to the ready fd once tap0 is configured; fall back to a
-      // short sleep if it never signals (older builds).
-      if (!(await waitForFile(cfg.readyFile, 4_000))) await sleep(800);
+      if (cfg.connector === "pasta" && hasBinary("pasta")) {
+        // pasta configures the netns then forks to background; no ready-fd, so
+        // give it a moment to bring the interface + routes up.
+        connector = spawn("pasta", [...cfg.pastaArgs, m[1]], {
+          stdio: "ignore",
+        });
+        await sleep(800);
+      } else {
+        const readyFd = openSync(cfg.readyFile, "w");
+        connector = spawn(
+          "slirp4netns",
+          [...cfg.slirpArgs, "--ready-fd", "4", m[1], "tap0"],
+          { stdio: ["ignore", "ignore", "ignore", "ignore", readyFd] },
+        );
+        closeSync(readyFd);
+        // slirp writes "1" to the ready fd once tap0 is configured; fall back to a
+        // short sleep if it never signals (older builds).
+        if (!(await waitForFile(cfg.readyFile, 4_000))) await sleep(800);
+      }
     }
   }
   writeFileSync(cfg.netreadyFile, "1");
 
   const { status, signal } = await exit;
   clearTimeout(timer);
-  slirp?.kill("SIGKILL");
+  connector?.kill("SIGKILL");
 
   const counters = existsSync(cfg.countersFile)
     ? readFileSync(cfg.countersFile, "utf-8")
