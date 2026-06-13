@@ -154,6 +154,7 @@ custom endpoint (a closed, hosted agent), the mock-backed test tiers don't apply
 
 ## See also
 
+- [`docs/adapter-api.md`](adapter-api.md) — the full **API reference**: every port field (with Claude Code + Codex example values), the conformance functions, and the registry API.
 - [`docs/harnesses.md`](harnesses.md) — how a consumer _selects_ a harness.
 - [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md) — the port design + the boundary.
 - [`research/harness-landscape.md`](../research/harness-landscape.md) — concrete port values for Codex and 14 other harnesses.

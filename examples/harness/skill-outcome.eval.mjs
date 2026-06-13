@@ -26,7 +26,10 @@
  * `pluginDir: "/path/to/a/whole/plugin"` instead — that installs it natively via
  * `claude --plugin-dir`. See `src/harness-test.test.ts` and the coverage matrix.
  */
-import { runEval, formatEvalReport } from "../../dist/adapters/claude-code/eval.js";
+import {
+  runEval,
+  formatEvalReport,
+} from "../../dist/adapters/claude-code/eval.js";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 

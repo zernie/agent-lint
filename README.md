@@ -189,7 +189,7 @@ vigiles composes with other tools rather than replacing them: architectural lint
 
 - **The two pillar guides:** [verifying instruction files](docs/verifying-instruction-files.md) (Pillar 1) · [testing your harness](docs/harness-testing.md) (Pillar 2).
 - **[Harnesses](docs/harnesses.md)** — which harness vigiles targets (Claude Code now, Codex likely next) and how you select one.
-- **[Build your own adapter](docs/authoring-an-adapter.md)** — vigiles ships a Claude Code adapter; teaching it a new harness (Codex, Gemini, OpenCode, or your own) is writing one object against five small ports. Custom adapters are welcome and supported.
+- **[Build your own adapter](docs/authoring-an-adapter.md)** — vigiles ships a Claude Code adapter; teaching it a new harness (Codex, Gemini, OpenCode, or your own) is writing one object against five small ports. Custom adapters are welcome and supported. ([API reference](docs/adapter-api.md))
 - **[docs/](docs/README.md)** — the full how-to & reference index: adoption ladder, CLI, linter support, skills/agents.
 - **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
 
