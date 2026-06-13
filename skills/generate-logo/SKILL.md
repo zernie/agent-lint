@@ -1,4 +1,5 @@
 ---
+name: generate-logo
 description: Generate or iterate on the vigiles logo using ImageRouter API
 ---
 

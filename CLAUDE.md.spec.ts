@@ -141,6 +141,8 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills/agents/commands materialization, surface + empty-machine + MCP warnings, settings merge, in-repo dogfood",
     "src/vendor.test.ts":
       "Conformance suite over REAL vendored plugins under examples/harness/vendor/: model-free, in-gate, table-driven loadPlugin invariants (loads a surface, ${CLAUDE_PLUGIN_ROOT} resolves, skills materialize, surface + dangling-ref warnings accurate) — grounded in reality (pinned by SHA, offline, no API key), the shape that caught the superpowers partial-vendor",
+    "src/skills-dogfood.test.ts":
+      "Dogfood conformance over vigiles's OWN shipped skills (.claude-plugin/): loadPlugin materializes every skills/<name>/SKILL.md and each has a name + non-empty description (the trigger surface) — the free, model-free floor under the paid trigger-rate eval (a skill that won't load can never fire). Caught a real bug (generate-logo had no frontmatter name). Trigger/precision itself is the eval tier (examples/harness/dogfood/), needs model auth",
     "src/harness-assert.ts":
       "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed and assertAgentOk/Err/Result (test a subagent's railway outcome via parseAgentResult — the testing-framework payoff of the result contract), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend",
     "src/harness-assert.test.ts":
@@ -182,6 +184,10 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
       "Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md",
     "examples/harness/skill-trigger-rate.eval.mjs":
       "Canonical trigger-rate eval (measureTriggerRate): does a skill's description actually FIRE across varied prompts? — installs a real pinned plugin via pluginDir and reuses the skillResolved predicate",
+    "examples/harness/dogfood/test-harness.trigger.eval.mjs":
+      "Dogfood trigger eval — vigiles's OWN test-harness skill: fires on harness-testing requests (recall) AND stays quiet on unrelated coding (precision via irrelevantPrompts), gated by assertTriggerRate({ min, maxFalsePositive }). One of only 2 model-invocable vigiles skills; the other 7 are disable-model-invocation (user-invoked), covered by the free load gate in src/skills-dogfood.test.ts. Write-don't-run without model auth",
+    "examples/harness/dogfood/generate-logo.trigger.eval.mjs":
+      "Dogfood trigger eval — vigiles's OWN generate-logo skill (the 2nd model-invocable one): a NARROW skill, so the risk is recall collapse not over-firing; checks both recall + precision against logo vs nearby-asset prompts",
     "examples/harness/skill-compression.eval.mjs":
       "Worked eval verifying a token-compression claim (e.g. Caveman telegraphic style): two arms (verbose/caveman) over one task, measure outputTokens (the optimization target) AND correct (the fact that must survive) — proves the saving is real AND didn't regress behaviour. The on-brand framing for the compression-tool cluster: vigiles measures the claim + the blast radius, it doesn't compress",
     "examples/harness/plugin-cohesion.harness.mjs":
