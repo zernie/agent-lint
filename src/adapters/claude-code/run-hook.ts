@@ -41,6 +41,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { HookProtocol } from "../../core/hook-protocol.js";
+import { claudeCodeHookProtocol } from "./hook-protocol.js";
 import {
   buildEgressNft,
   buildEgressBwrapArgv,
@@ -227,10 +229,13 @@ export function parseHookOutput(stdout: string): HookOutput | null {
 export function decideHook(
   exitCode: number,
   json: HookOutput | null,
+  protocol: HookProtocol = claudeCodeHookProtocol,
 ): { blocked: boolean; decision: HookRunResult["decision"] } {
   const permission = json?.hookSpecificOutput?.permissionDecision;
   const decision = permission ?? json?.decision;
-  const blocked = exitCode === 2 || decision === "block" || decision === "deny";
+  const blocked =
+    exitCode === protocol.blockExitCode ||
+    (decision !== undefined && protocol.denyDecisionValues.includes(decision));
   return { blocked, decision };
 }
 

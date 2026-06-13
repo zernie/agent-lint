@@ -10,3 +10,6 @@ export * from "./adapters/claude-code/mock-model.js";
 export * from "./adapters/claude-code/dialect.js";
 export * from "./adapters/claude-code/layout.js";
 export * from "./adapters/claude-code/runtime.js";
+export * from "./adapters/claude-code/hook-protocol.js";
+export * from "./adapters/claude-code/model-mock.js";
+export * from "./adapters/claude-code/adapter.js";
