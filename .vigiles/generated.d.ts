@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 14 npm scripts from package.json. */
+  /** 17 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -84,7 +84,10 @@ declare module "vigiles/generated" {
     | "fmt"
     | "fmt:check"
     | "demo"
+    | "test:unit"
+    | "test:integration"
     | "test:e2e"
+    | "test:cli-e2e"
     | "test:harness"
     | "test:eval"
     | "test:vitest"
@@ -92,7 +95,7 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 103 project files. */
+  /** 104 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -161,6 +164,7 @@ declare module "vigiles/generated" {
     | "src/railway.test.ts"
     | "src/refs.test.ts"
     | "src/refs.ts"
+    | "src/run-hook.e2e.test.ts"
     | "src/run-hook.test.ts"
     | "src/run-hook.ts"
     | "src/run-scripts.test.ts"
@@ -336,6 +340,7 @@ declare module "vigiles/spec" {
       | "src/railway.test.ts"
       | "src/refs.test.ts"
       | "src/refs.ts"
+      | "src/run-hook.e2e.test.ts"
       | "src/run-hook.test.ts"
       | "src/run-hook.ts"
       | "src/run-scripts.test.ts"
@@ -382,7 +387,10 @@ declare module "vigiles/spec" {
       | "fmt"
       | "fmt:check"
       | "demo"
+      | "test:unit"
+      | "test:integration"
       | "test:e2e"
+      | "test:cli-e2e"
       | "test:harness"
       | "test:eval"
       | "test:vitest"

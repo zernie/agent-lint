@@ -15,3 +15,5 @@
 export * from "./integration.js";
 export * from "./eval.js";
 export * from "./judge.js";
+// The real-egress capability probe + the egress-using runHook live at this tier.
+export { egressRoutes } from "./run-hook.js";

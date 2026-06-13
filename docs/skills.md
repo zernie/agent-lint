@@ -180,7 +180,7 @@ to assert on. Real community skills (pr-review-loop, TDD, subagent-driven) are
 ported and tested this way in `src/community-skills.ts` — proof the generator
 form covers the deep tail.
 
-**Live E2E** (`test/e2e`, `npm run test:e2e`): drives the _real_ `claude` CLI
+**Live E2E** (`test/e2e`, `npm run test:cli-e2e`): drives the _real_ `claude` CLI
 against a scripted mock Anthropic endpoint (`ANTHROPIC_BASE_URL`), asserting the
 tool-use loop and Stop-hook enforcement with no real model.
 
