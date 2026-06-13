@@ -109,7 +109,11 @@ async function main(): Promise<void> {
     if (m) {
       if (cfg.connector === "pasta" && hasBinary("pasta")) {
         // pasta configures the netns then forks to background; no ready-fd, so
-        // give it a moment to bring the interface + routes up.
+        // give it a moment to bring the interface + routes up. (Experimental:
+        // pasta's attach-to-existing-netns path is fragile in nested-namespace
+        // sandboxes — see research/egress-sandbox-tooling.md. The connector
+        // defaults to slirp4netns; both need /dev/net/tun + privilege, which is
+        // why the e2e CI job runs privileged.)
         connector = spawn("pasta", [...cfg.pastaArgs, m[1]], {
           stdio: "ignore",
         });
