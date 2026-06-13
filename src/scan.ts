@@ -15,8 +15,8 @@
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
-import { loadPlugin } from "./plugin-loader.js";
-import { parseAgentTools } from "./agent-runtime.js";
+import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
+import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
 // ---------------------------------------------------------------------------

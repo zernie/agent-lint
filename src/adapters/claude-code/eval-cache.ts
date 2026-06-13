@@ -25,7 +25,7 @@ import {
 } from "node:fs";
 import { join, relative, resolve, dirname } from "node:path";
 
-import { sha256short, type SHA256Hash } from "./hash.js";
+import { sha256short, type SHA256Hash } from "../../core/hash.js";
 import type { RunOut } from "./eval.js";
 
 /** Cache behaviour: never touch the cache / read-only / read-and-write. */

@@ -18,7 +18,7 @@ import {
 // __dirname is dist/ at runtime; the fixture server lives at the repo root.
 const server: McpServerConfig = {
   command: process.execPath, // node
-  args: [join(__dirname, "../examples/harness/fixture-mcp-server.mjs")],
+  args: [join(__dirname, "../../examples/harness/fixture-mcp-server.mjs")],
 };
 
 test("listMcpTools: handshakes a real stdio MCP server and lists its tools", async () => {

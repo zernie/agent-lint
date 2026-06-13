@@ -4,5 +4,5 @@
  * concern-named import. The granular paths (`vigiles/spec`, `vigiles/compile`)
  * keep working; this just groups them so the import name matches the pillar.
  */
-export * from "./spec.js";
-export * from "./compile.js";
+export * from "./core/spec.js";
+export * from "./core/compile.js";

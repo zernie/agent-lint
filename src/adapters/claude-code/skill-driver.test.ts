@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { cmd, file, project } from "./spec.js";
+import { cmd, file, project } from "../../core/spec.js";
 import {
   driveSkill,
   act,

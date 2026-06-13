@@ -88,9 +88,9 @@ describe("guidance()", () => {
 
 describe("reference helpers", () => {
   it("file() creates a file ref", () => {
-    const r = file("src/validate.ts");
+    const r = file("src/core/validate.ts");
     assert.equal(r._ref, "file");
-    assert.equal(r.path, "src/validate.ts");
+    assert.equal(r.path, "src/core/validate.ts");
   });
 
   it("cmd() creates a cmd ref", () => {
@@ -179,12 +179,12 @@ describe("compileClaude()", () => {
 
   it("includes key files section", () => {
     const spec = claude({
-      keyFiles: { "src/spec.ts": "Spec system" },
+      keyFiles: { "src/core/spec.ts": "Spec system" },
       rules: {},
     });
     const { markdown } = compileClaude(spec, { basePath: process.cwd() });
     assert.ok(markdown.includes("## Key Files"));
-    assert.ok(markdown.includes("`src/spec.ts` — Spec system"));
+    assert.ok(markdown.includes("`src/core/spec.ts` — Spec system"));
   });
 
   it("reports errors for missing key files", () => {
@@ -210,7 +210,7 @@ describe("compileClaude()", () => {
   it("symbol() renders `file#symbol` and verifies the named file defines it", () => {
     const ok = claude({
       sections: {
-        u: instructions`Use ${symbol("src/symbols.ts", "definedSymbols")}.`,
+        u: instructions`Use ${symbol("src/core/symbols.ts", "definedSymbols")}.`,
       },
       rules: {},
     });
@@ -218,12 +218,12 @@ describe("compileClaude()", () => {
     assert.equal(okRes.errors.length, 0);
     assert.match(
       okRes.markdown,
-      /`vigiles:symbol src\/symbols\.ts#definedSymbols`/,
+      /`vigiles:symbol src\/core\/symbols\.ts#definedSymbols`/,
     );
 
     const bad = claude({
       sections: {
-        u: instructions`Use ${symbol("src/symbols.ts", "noSuchSymbol")}.`,
+        u: instructions`Use ${symbol("src/core/symbols.ts", "noSuchSymbol")}.`,
       },
       rules: {},
     });
@@ -628,14 +628,14 @@ describe("sections with refs", () => {
   it("compiles sections with file() refs and validates them", () => {
     const spec = claude({
       sections: {
-        architecture: instructions`Core engine in ${file("src/spec.ts")}.`,
+        architecture: instructions`Core engine in ${file("src/core/spec.ts")}.`,
       },
       rules: {},
     });
     const { markdown, errors } = compileClaude(spec, {
       basePath: process.cwd(),
     });
-    assert.ok(markdown.includes("`src/spec.ts`"));
+    assert.ok(markdown.includes("`src/core/spec.ts`"));
     assert.equal(errors.length, 0);
   });
 
@@ -676,8 +676,8 @@ describe("generateTypes()", () => {
 
   it("discovers project files", () => {
     const result = generateTypes({ basePath: process.cwd() });
-    assert.ok(result.files.includes("src/spec.ts"));
-    assert.ok(result.files.includes("src/compile.ts"));
+    assert.ok(result.files.includes("src/core/spec.ts"));
+    assert.ok(result.files.includes("src/core/compile.ts"));
   });
 
   it("generates valid .d.ts content", () => {
@@ -1107,7 +1107,7 @@ describe("type exports", () => {
     // Verify the types exist and are usable at runtime (type-only check
     // happens at tsc time, but we can verify the imports resolve).
     void ("eslint/no-console" as StrictLinterRule);
-    void ("src/spec.ts" as StrictFile);
+    void ("src/core/spec.ts" as StrictFile);
     void ("npm run build" as StrictCmd);
     assert.ok(true, "strict types are importable");
   });
@@ -1420,7 +1420,7 @@ describe("compile → hash → verify → adopt roundtrip", () => {
   it("full lifecycle works end-to-end", () => {
     const spec = claude({
       commands: { "npm test": "Run tests" },
-      keyFiles: { "src/spec.ts": "Spec system" },
+      keyFiles: { "src/core/spec.ts": "Spec system" },
       sections: { about: "A test project." },
       rules: {
         "no-console": enforce("eslint/no-console", "Use logger."),

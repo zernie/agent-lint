@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 import { scoreReport, rankPlugins, formatLeaderboard } from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function report(over: Partial<ScanReport> = {}): ScanReport {
   return {

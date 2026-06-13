@@ -14,7 +14,7 @@
  * runtime. This module is the mechanics — fully testable without a live model.
  */
 
-import type { Gate } from "./spec.js";
+import type { Gate } from "../../core/spec.js";
 import {
   runGate,
   type RuntimeGate,

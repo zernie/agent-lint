@@ -10,6 +10,6 @@
  * imports from here.
  */
 export * from "./unit.js";
-export * from "./harness-test.js";
-export * from "./mock-model.js";
-export * from "./plugin-loader.js";
+export * from "./adapters/claude-code/harness-test.js";
+export * from "./adapters/claude-code/mock-model.js";
+export * from "./adapters/claude-code/plugin-loader.js";
