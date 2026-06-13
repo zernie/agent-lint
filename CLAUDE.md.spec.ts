@@ -62,6 +62,12 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "claudeCodeLayout — the PluginLayout port's Claude Code reference impl (.claude-plugin/plugin.json, .claude/settings.json, skills/agents/commands surfaces, ${CLAUDE_PLUGIN_ROOT}); loadPlugin defaults to it",
     "src/adapters/claude-code/layout.test.ts":
       "Layout-port test suite (vitest): claudeCodeLayout is the loadPlugin default; an alternate Codex-shaped PluginLayout (AGENTS.md, prompts/ surface, .codex/ settings, ${CODEX_PLUGIN_ROOT}) loads through the SAME loadPlugin — and the default CC layout sees none of it (the swap seam a second harness plugs into)",
+    "src/core/runtime.ts":
+      "HarnessRuntime — the runtime/transport PORT (transport axis): the facts the test tiers need to drive a harness (the agent binary to spawn + the env a no-key mock is reached through: base-URL var, API-key var, dummy key), behind one interface instead of `claude`/ANTHROPIC_* literals in harness-test/eval/sandbox. A Codex adapter supplies its own HarnessRuntime",
+    "src/adapters/claude-code/runtime.ts":
+      "claudeCodeRuntime — the HarnessRuntime port's Claude Code impl (spawn `claude`, reach the mock via ANTHROPIC_BASE_URL + dummy ANTHROPIC_API_KEY) + mockModelEnv, the pure env-builder the runners use (the testable seam of the otherwise v8-ignored real-subprocess path); harness-test, eval and sandbox read the binary + env from here",
+    "src/adapters/claude-code/runtime.test.ts":
+      "Runtime-port test suite (vitest): claudeCodeRuntime values, mockModelEnv layers mock URL + dummy key over the base env, and an alternate runtime maps the URL onto its own env var (OPENAI_BASE_URL) — the Codex transport seam",
     "src/core/cedar.test.ts":
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/core/generate-types.ts":

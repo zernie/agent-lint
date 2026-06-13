@@ -8,3 +8,5 @@
 export * from "./adapters/claude-code/plugin-loader.js";
 export * from "./adapters/claude-code/mock-model.js";
 export * from "./adapters/claude-code/dialect.js";
+export * from "./adapters/claude-code/layout.js";
+export * from "./adapters/claude-code/runtime.js";

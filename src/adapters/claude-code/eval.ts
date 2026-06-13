@@ -34,6 +34,7 @@ import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
 import { resolveHarness } from "./plugin-loader.js";
+import { claudeCodeRuntime } from "./runtime.js";
 import {
   parseToolCalls,
   parseResultEvent,
@@ -258,7 +259,7 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
       "--allowedTools",
       ...a.tools,
     ];
-    const child = spawn("claude", args, {
+    const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],

@@ -78,12 +78,23 @@ Extraction status, by axis:
   frontmatter _renderers_ in `compile.ts`/`compile-generator.ts` still emit the
   CC shape directly; fold those behind the dialect too when AGENTS.md/Codex
   output diverges.
-- **Transport axis (NEXT, interfaces not yet extracted):** `PluginLoader` (→
-  `LoadedPlugin`, already the agnostic shape), `HookProtocol` (event names +
-  stdin-event encode / stdout-decision decode — today scattered across
-  `run-hook.ts` + `harness-test.ts`), `ModelMock` + `AgentProcess` (the spawn
-  target + the SSE shape). These live in `src/adapters/claude-code/` already;
-  promoting them to interfaces is the work that lands with the Codex transport.
+- **Layout axis — `PluginLayout` (DONE).** `src/core/layout.ts` defines where a
+  harness's instruction file / skills / agents / commands / hooks / settings live
+  on disk + the plugin-root token; `loadPlugin(path, layout = claudeCodeLayout)`
+  reads every path/token/surface from the descriptor instead of hard-coding
+  Claude Code's `.claude-plugin/` / `.claude/` conventions.
+  `src/adapters/claude-code/layout.test.ts` loads a Codex-shaped plugin through
+  the same loader. A Codex adapter supplies `codexLayout` — same loader, no fork.
+- **Transport axis — `HarnessRuntime` (DONE).** `src/core/runtime.ts` defines the
+  agent binary to spawn + the env a no-key mock is reached through (base-URL var,
+  API-key var, dummy key). `harness-test.ts`, `eval.ts` and `sandbox.ts` read
+  `claudeCodeRuntime.agentBinary` / `mockModelEnv(...)` instead of the `claude` /
+  `ANTHROPIC_*` literals; `runtime.test.ts` proves an alternate runtime maps the
+  URL onto its own env var. **Remaining transport work:** the hook event protocol
+  (`run-hook.ts` field names + `decideHook` decision decode) and the Anthropic
+  SSE mock (`mock-model.ts`) are still CC-shaped — promote them to `HookProtocol`
+  / `ModelMock` interfaces when the Codex transport (a different hook JSON + model
+  API) actually lands, shaped by two real implementations.
 
 `LoadedPlugin`, `Trace`, and `EvalArm.settings: unknown` are already the agnostic
 shapes — they stay in `vigiles/testing`; the adapter just produces them.
@@ -122,21 +133,25 @@ rules.
 ## Adding a harness (the Codex path)
 
 When a second harness is real, the additive recipe (core untouched — the
-Open/Closed payoff of ports):
+Open/Closed payoff of ports). Three of the ports now exist, so the first steps
+are "implement these interfaces":
 
-1. Add `src/adapters/codex/` (or flat `codex-*.ts`) implementing the transport
-   ports — a `CodexProcess` spawn + its mock — and the format dialect
-   (`AGENTS.md`, Codex's `tools` shape).
-2. Add a `vigiles/codex` subpath export beside `vigiles/claude-code`.
-3. Classify the new modules as a `codex-harness` element in
+1. Add `src/adapters/codex/` implementing the ports as value objects:
+   `codexDialect: HarnessDialect` (Codex's tool catalog / `AGENTS.md` target),
+   `codexLayout: PluginLayout` (`.codex/` conventions), `codexRuntime:
+HarnessRuntime` (spawn `codex`, its model env). Pass them in:
+   `compileAgent(spec, { dialect: codexDialect })`, `loadPlugin(path,
+codexLayout)`, and a Codex runner reading `codexRuntime`.
+2. Promote the still-CC-shaped seams to ports as you go — the SKILL.md/agent
+   frontmatter renderers (`compile.ts`), the hook protocol (`run-hook.ts`), the
+   model mock (`mock-model.ts`) — shaped now by two real implementations.
+3. Add a `vigiles/codex` subpath export beside `vigiles/claude-code`.
+4. Classify `src/adapters/codex/**` as a `codex-harness` element in
    `eslint.config.mjs`; the same `verify-core` ⊄ adapter rule applies unchanged.
-4. Teach the CLI auto-detector to recognize the Codex layout.
-5. Cross-harness eval falls out for free: `runEval` arms can be different
+5. Teach the CLI auto-detector to recognize the Codex layout.
+6. Cross-harness eval falls out for free: `runEval` arms can be different
    harnesses, because `Trace` is already unified (the parked `measure-model ×
 harness` bet).
-
-Until then, this is the spec the extraction builds against — moving files before
-a second consumer exists is how you get the wrong abstraction.
 
 ## See also
 
