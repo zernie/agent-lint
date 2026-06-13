@@ -18,7 +18,10 @@
  * package: `from "vigiles/harness-test"` and `from "vigiles/harness-assert"`.
  */
 import { fileURLToPath } from "node:url";
-import { scriptModel, claudeAvailable } from "../../dist/adapters/claude-code/harness-test.js";
+import {
+  scriptModel,
+  claudeAvailable,
+} from "../../dist/adapters/claude-code/harness-test.js";
 import { withHarness, assertCreated } from "../../dist/harness-assert.js";
 
 if (!claudeAvailable()) {
