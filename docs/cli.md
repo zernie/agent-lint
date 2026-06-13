@@ -13,6 +13,7 @@ npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec ru
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.mjs deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.mjs real-model harness evals (--trials=N)
+npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -29,6 +30,27 @@ npx vigiles generate-schema --check # Verify schema.json is up to date
 
 Works the same for humans and agents — fully non-interactive. See the
 [agent setup guide](agent-setup.md) and [agent workflows](agent-workflows.md).
+
+### `scan [dir]`
+
+Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
+of what it ships and what's structurally broken — **no model, no API key**. It
+re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
+`findUntestedSurfaces`): per-skill description presence + user-invoked flag,
+per-agent tool contract (and the "no `tools:` line → inherits every tool"
+footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
+forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
+count, and the loader's dangling-ref / surface warnings. `--json` for CI.
+
+```bash
+npx vigiles scan ./some-plugin          # human-readable report
+npx vigiles scan ./some-plugin --json   # structured, for pipelines
+```
+
+This is the deterministic substrate for the plugin/skill leaderboard and the
+harness-aware supply-chain audit (see `research/divergent-bets.md`,
+`research/agent-supply-chain-security.md`); behavioural checks that need to _run_
+the plugin (observed egress, real trigger-rate) build on top.
 
 ## GitHub Action
 
