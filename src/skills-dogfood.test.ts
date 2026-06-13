@@ -19,7 +19,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadPlugin } from "./plugin-loader.js";
@@ -67,6 +67,30 @@ test("vigiles plugin: loadPlugin materializes every shipped skill", () => {
     !JSON.stringify(loaded.settings).includes("${CLAUDE_PLUGIN_ROOT}"),
     "no unresolved ${CLAUDE_PLUGIN_ROOT} placeholder",
   );
+});
+
+test("vigiles plugin: every hook command's ${CLAUDE_PLUGIN_ROOT} script exists", () => {
+  // The bug this guards: a hook command resolves a script at
+  // ${CLAUDE_PLUGIN_ROOT}/hooks/x.sh, but the script lives elsewhere (e.g. under
+  // .claude-plugin/) — so the hook silently never runs once installed. Component
+  // dirs (hooks/, skills/, …) must sit at the plugin ROOT, not inside
+  // .claude-plugin/ (Claude Code plugins-reference). Parse the real manifest and
+  // assert every referenced script is actually there. `loadPlugin`'s dangling-ref
+  // scan does NOT cover plugin.json command paths, so this is the precise check.
+  const manifest = readFileSync(
+    join(ROOT, ".claude-plugin/plugin.json"),
+    "utf-8",
+  );
+  const refs = [
+    ...manifest.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+?)["\s]/g),
+  ].map((m) => m[1]);
+  assert.ok(refs.length > 0, "expected the plugin to declare hook scripts");
+  for (const rel of refs) {
+    assert.ok(
+      existsSync(join(ROOT, rel)),
+      `plugin.json references \${CLAUDE_PLUGIN_ROOT}/${rel} but ${rel} does not exist at the plugin root`,
+    );
+  }
 });
 
 test("vigiles plugin: every skill has a name and a non-empty description", () => {
