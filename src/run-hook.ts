@@ -637,6 +637,37 @@ const REAL_DEPS: RunHookDeps = {
   sandboxed: sandboxedSpawn,
   egress: egressSpawn,
 };
+
+/**
+ * Whether allowlisted egress can ACTUALLY route here — not just whether the tools
+ * exist. On GitHub-hosted runners bwrap+slirp4netns+nft are all present, yet
+ * slirp4netns fails to attach `tap0`: the netns has only `lo`, so nothing leaves
+ * and the egress assertions can't be exercised. Run a trivial hook in the egress
+ * sandbox and check a non-loopback interface came up; memoized (the capability is
+ * fixed per run). Gates the egress e2e tests so they run for real where egress
+ * works and SKIP — honestly — where it provably can't, instead of failing red.
+ * (slirp4netns → pasta is the fix that makes it route in CI too; see
+ * research/egress-sandbox-tooling.md.)
+ */
+let egressRoutesMemo: boolean | undefined;
+export function egressRoutes(): boolean {
+  if (egressRoutesMemo !== undefined) return egressRoutesMemo;
+  if (!egressAvailable(sandboxAvailable())) return (egressRoutesMemo = false);
+  try {
+    // /proc/net/dev lists one row per interface after two header rows; no `ip`
+    // binary needed (it isn't on the sandbox PATH). >1 interface ⇒ a non-loopback
+    // device (the slirp/pasta tap) attached ⇒ egress can route. Only `lo` ⇒ can't.
+    const r = egressSpawn(
+      "cat /proc/net/dev 2>/dev/null | tail -n +3 | wc -l",
+      { hook_event_name: "PreToolUse" },
+      { egress: { allow: ["example.com"] }, timeoutMs: 15000 },
+    );
+    egressRoutesMemo = Number(r.stdout.trim()) > 1;
+  } catch {
+    egressRoutesMemo = false;
+  }
+  return egressRoutesMemo;
+}
 /* v8 ignore stop */
 
 /**
