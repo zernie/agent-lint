@@ -18,7 +18,7 @@
  * bad JSON, or a shape that doesn't match the declared schema).
  */
 
-import type { OutputContract, OutputFieldType } from "./spec.js";
+import type { OutputContract, OutputFieldType } from "../../core/spec.js";
 
 /** The outcome of parsing a worker's result block. */
 export type ParsedAgentResult<

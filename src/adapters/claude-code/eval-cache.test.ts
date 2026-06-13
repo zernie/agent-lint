@@ -15,7 +15,7 @@ import {
   restoreDir,
   type CacheKeyInput,
 } from "./eval-cache.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 const baseKey: CacheKeyInput = {
   task: "do it",

@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { loadPlugin } from "./plugin-loader.js";
 
 // __dirname is dist/ at runtime; the plugin manifest lives at the repo root.
-const ROOT = join(__dirname, "..");
+const ROOT = join(__dirname, "..", "..", "..");
 
 /** name + description from a SKILL.md YAML frontmatter block (the trigger surface). */
 function parseFrontmatter(md: string): {

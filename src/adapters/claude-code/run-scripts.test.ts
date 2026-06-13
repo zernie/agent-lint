@@ -13,7 +13,7 @@ import {
   runScripts,
   formatScriptSummary,
 } from "./run-scripts.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 test("discoverScripts expands the default glob, deduped and sorted", () => {
   const dir = makeTmpDir("run-scripts");

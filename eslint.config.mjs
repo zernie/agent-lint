@@ -5,17 +5,16 @@ import sonarjs from "eslint-plugin-sonarjs";
 import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 
-// Hexagonal boundary (see research/code-adapter-architecture.md). Two element
-// types are classified by path; the application/barrel layer (cli, scan, the
-// testing/integration/unit barrels, action) is intentionally left unclassified
-// — it's the composition root, allowed to wire adapter to core. The invariant:
-// the reference-verification DOMAIN must never import the Claude Code
-// harness/transport ADAPTER, so the core stays harness-agnostic for a future
-// `vigiles/<other-harness>`. Holds today with zero violations.
-const VERIFY_CORE =
-  "src/{spec,compile,compile-generator,linters,generate-types,generate-schema,integrity,hash,types,proofs,evolve,symbols,refs,doc-refs,frontmatter,inline,coverage,session,sidecar,orphans,compose,validate,mcp}.ts";
-const CC_HARNESS =
-  "src/{harness-test,mock-model,mock-entry,plugin-loader,run-hook,eval,eval-cache,eval-baseline,sandbox,egress,egress-entry,egress-proxy,agent-runtime,agent-result,skill-runtime,skill-driver,judge,stats,run-scripts}.ts";
+// Hexagonal boundary (see research/code-adapter-architecture.md). After the
+// reshape the two element types are whole directories: the reference-verification
+// DOMAIN lives in src/core/, the Claude Code harness/transport ADAPTER in
+// src/adapters/claude-code/. The application/barrel layer (cli, scan, the
+// testing/integration/unit barrels, action) stays at src/ root, unclassified —
+// it's the composition root, allowed to wire adapter to core. The invariant: the
+// domain must never import the adapter, so the core stays harness-agnostic for a
+// future src/adapters/<other-harness>. Holds today with zero violations.
+const VERIFY_CORE = "src/core/**/*.ts";
+const CC_HARNESS = "src/adapters/claude-code/**/*.ts";
 
 export default [
   {

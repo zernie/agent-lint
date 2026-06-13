@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
 
-import { runHook, egressRoutes } from "./e2e.js";
+import { runHook, egressRoutes } from "../../e2e.js";
 
 const egressOk = egressRoutes();
 

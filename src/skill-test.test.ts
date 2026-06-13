@@ -5,8 +5,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { cmd } from "./spec.js";
-import { act, checkpoint, finish, type SkillProgram } from "./skill-driver.js";
+import { cmd } from "./core/spec.js";
+import {
+  act,
+  checkpoint,
+  finish,
+  type SkillProgram,
+} from "./adapters/claude-code/skill-driver.js";
 import { runSkill, scriptModel } from "./skill-test.js";
 
 // A branching skill: classify, then run the matching gate, then a result gate.

@@ -19,14 +19,14 @@ import {
 } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
-import { generateTypes } from "./generate-types.js";
-import { validate, loadConfig } from "./validate.js";
+import { generateTypes } from "./core/generate-types.js";
+import { validate, loadConfig } from "./core/validate.js";
 import type {
   VigilesConfig,
   CoverageThresholds,
   TestCoverageConfig,
-} from "./types.js";
-import { ruleSeverity, ruleOptions } from "./types.js";
+} from "./core/types.js";
+import { ruleSeverity, ruleOptions } from "./core/types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
@@ -40,22 +40,22 @@ import {
   addHash,
   validateFileRef,
   validateCommandRef,
-} from "./compile.js";
-import type { CompileError } from "./compile.js";
-import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./spec.js";
-import { findSimilarRules } from "./proofs.js";
-import { parseInlineRules } from "./inline.js";
-import { parseFrontmatterRules } from "./frontmatter.js";
-import { generateSchema } from "./generate-schema.js";
-import { compileGeneratorSkill } from "./compile-generator.js";
+} from "./core/compile.js";
+import type { CompileError } from "./core/compile.js";
+import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./core/spec.js";
+import { findSimilarRules } from "./core/proofs.js";
+import { parseInlineRules } from "./core/inline.js";
+import { parseFrontmatterRules } from "./core/frontmatter.js";
+import { generateSchema } from "./core/generate-schema.js";
+import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import {
   evaluatePreToolUse,
   setActiveAgent,
   clearActiveAgent,
-} from "./agent-runtime.js";
-import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
-import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./mcp.js";
+} from "./adapters/claude-code/agent-runtime.js";
+import { verifySymbolRefs, unmarkedCodeRefs } from "./core/refs.js";
+import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./core/mcp.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -63,18 +63,18 @@ import {
   clearActiveSkill,
   evaluateStopHook,
   gateLabel,
-} from "./skill-runtime.js";
-import { checkLinterRule } from "./linters.js";
-import { claudeAvailable } from "./harness-test.js";
+} from "./adapters/claude-code/skill-runtime.js";
+import { checkLinterRule } from "./core/linters.js";
+import { claudeAvailable } from "./adapters/claude-code/harness-test.js";
 import {
   discoverScripts,
   runScripts,
   formatScriptSummary,
-} from "./run-scripts.js";
-import { checkIntegrity } from "./integrity.js";
-import { computeScriptCoverage } from "./coverage.js";
-import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
-import { findDocRefs, formatDocRefReport } from "./doc-refs.js";
+} from "./adapters/claude-code/run-scripts.js";
+import { checkIntegrity } from "./core/integrity.js";
+import { computeScriptCoverage } from "./core/coverage.js";
+import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
+import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -420,7 +420,7 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
 
 function validateSpecs(
   filePaths: string[],
-  rulesConfig?: import("./types.js").RulesConfig,
+  rulesConfig?: import("./core/types.js").RulesConfig,
   silent = false,
 ): boolean {
   let allValid = true;

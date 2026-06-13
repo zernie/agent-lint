@@ -12,8 +12,13 @@
  *
  * These are exercised in community-skills.test.ts with a scripted model.
  */
-import { act, checkpoint, finish, type SkillProgram } from "./skill-driver.js";
-import { cmd } from "./spec.js";
+import {
+  act,
+  checkpoint,
+  finish,
+  type SkillProgram,
+} from "./adapters/claude-code/skill-driver.js";
+import { cmd } from "./core/spec.js";
 
 /** COLLECT → BATCH → FIX rounds; ceiling 7; exit when no actionable feedback. */
 export const prReviewLoop: SkillProgram = function* () {

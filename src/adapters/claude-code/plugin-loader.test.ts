@@ -9,7 +9,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadPlugin, resolveHarness } from "./plugin-loader.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 function makePlugin(): string {
   const root = makeTmpDir("plugin");

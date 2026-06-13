@@ -8,8 +8,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { agent } from "./spec.js";
-import { compileAgent } from "./compile.js";
+import { agent } from "../../core/spec.js";
+import { compileAgent } from "../../core/compile.js";
 import {
   parseAgentTools,
   decidePreToolUse,
@@ -18,7 +18,7 @@ import {
   clearActiveAgent,
   evaluatePreToolUse,
 } from "./agent-runtime.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 import { runHook } from "./run-hook.js";
 import { writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -268,7 +268,7 @@ test("the rail the hook enforces is exactly the declared contract (round-trip)",
 // Requires the build (npm test / coverage build it first), like src/cli.test.ts.
 // ---------------------------------------------------------------------------
 
-const CLI = resolve(__dirname, "..", "dist", "cli.js");
+const CLI = resolve(__dirname, "..", "..", "..", "dist", "cli.js");
 
 /** Set up a temp project with a compiled agent and mark it active. */
 function projectWithActiveAgent(tools: string[]): string {
@@ -370,7 +370,7 @@ test("agent-hook CLI allows on a malformed/empty event (no tool name)", () => {
 
 const REAL_AGENT = join(
   __dirname,
-  "../examples/harness/vendor/wshobson-accessibility@cf6059d/agents/ui-visual-validator.md",
+  "../../../examples/harness/vendor/wshobson-accessibility@cf6059d/agents/ui-visual-validator.md",
 );
 
 test("real vendored subagent ships no tools: line — the rail correctly reports it inherits all", () => {

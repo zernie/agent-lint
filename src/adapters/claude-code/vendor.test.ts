@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { loadPlugin } from "./plugin-loader.js";
 
 // __dirname is dist/ at runtime; the vendored plugins live at the repo root.
-const VENDOR = "../examples/harness/vendor";
+const VENDOR = "../../../examples/harness/vendor";
 
 interface PluginCase {
   readonly label: string;

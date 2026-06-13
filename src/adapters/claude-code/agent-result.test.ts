@@ -8,7 +8,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { parseAgentResult } from "./agent-result.js";
-import { result } from "./spec.js";
+import { result } from "../../core/spec.js";
 
 const okBlock = (json: string) => "Done.\n\n```vigiles:ok\n" + json + "\n```\n";
 const errBlock = (json: string) =>

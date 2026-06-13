@@ -6,8 +6,8 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { skill, step, input, cmd, file } from "./spec.js";
-import { compileSkill } from "./compile.js";
+import { skill, step, input, cmd, file } from "../../core/spec.js";
+import { compileSkill } from "../../core/compile.js";
 
 const opts = { specFile: "SKILL.md.spec.ts" };
 
@@ -140,7 +140,7 @@ test("a script-runner gate verifies the referenced script file exists", () => {
     skill({
       name: "x",
       description: "...",
-      steps: [step("run it", { gate: cmd("python src/compile.ts") })],
+      steps: [step("run it", { gate: cmd("python src/core/compile.ts") })],
     }),
     opts,
   );

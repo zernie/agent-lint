@@ -20,7 +20,7 @@ import {
   type BaselineFile,
 } from "./eval-baseline.js";
 import type { EvalReport, MetricStat, ArmReport } from "./eval.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 /** Build a MetricStat (passK derived from mean for convenience). */
 function stat(mean: number, se: number, n: number): MetricStat {

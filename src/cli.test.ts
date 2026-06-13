@@ -853,7 +853,7 @@ describe("CLI: multi-target compile", () => {
     // Create a spec with multiple targets
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${resolve(process.cwd(), "src/spec.js")}";
+      `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
 export default claude({
   target: ["CLAUDE.md", "AGENTS.md"],
   rules: {
