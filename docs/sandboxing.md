@@ -29,6 +29,36 @@ hard-disabled is [Landlock](https://docs.kernel.org/userspace-api/landlock.html)
 > Ubuntu 24.04 runners, unblock it with `sysctl -w
 kernel.apparmor_restrict_unprivileged_userns=0` (see `.github/workflows/ci.yml`).
 
+## Why confinement is opt-in, not always-on
+
+The default is: _untrusted_ code is confined (a `plugin`/`pluginDir`, or `runHook`
+with `trusted: false`), code you authored runs direct. Forcing the sandbox on
+_everything_ is tempting — "why not always be safe?" — but it's the wrong default
+for four concrete reasons, each load-bearing:
+
+1. **It isn't always available.** Confinement is Linux + working unprivileged user
+   namespaces only, and `sandboxAvailable()` probes the real capability (many CI
+   runners ship `bwrap` but disable userns). Force it everywhere and a hook _you
+   wrote_ turns red on every Mac and every hardened runner — `decideSandbox`
+   returns `throw`, not a run. The unit tier is meant to run **anywhere**.
+2. **The sandbox is deliberately hostile.** No egress, `--clearenv` (every host
+   var dropped), a fresh empty `$HOME`, a read-only `/`. Exactly right for foreign
+   code — but a hook you wrote that legitimately needs an env var, the network, or
+   to write outside its work dir now fails for reasons unrelated to its logic, and
+   you have to claw each var back via `setenvArgs`.
+3. **Trust follows provenance.** Inline code you authored is trusted; foreign
+   `plugin`/`pluginDir` is not — committing it to your repo is the same trust
+   decision as taking on a dependency. You already made the call when you vendored
+   it; the sandbox earns its keep on the code you _haven't_ audited.
+4. **Cost.** A direct `spawnSync` is milliseconds — the whole point of the unit
+   tier. The confined path stands up an IO dir, a fresh HOME, before/after tree
+   snapshots, and a `bwrap` spawn. Paid on every _trusted_ hook, that defeats the
+   cheap base of the pyramid.
+
+`sandbox: "strict"` forces confinement even for trusted code when you _do_ want it
+(belt-and-suspenders on inline code). It's just not the default, because as a
+default it mostly punishes the code you trust on the platforms where it can't run.
+
 ## Filesystem (IO) — how good is it against `rm -rf`?
 
 **Against destruction: strong.** Under bwrap the host root is mounted
@@ -103,10 +133,51 @@ so the attempt is captured and nothing leaves.
   Node's own **`fetch()`** needs `NODE_USE_ENV_PROXY`, which only takes effect on
   **Node 22+** (on older Node a `fetch()` is still blocked, just not recorded).
 - It still **blocks**. So a skill that needs a _real_ `npm install` to succeed
-  won't work in this mode — that's the **allowlisted real-egress** mode
-  ([`pasta`](https://passt.top/)/`slirp4netns` gateway + allowlist + logging),
-  which is designed but **not yet shipped** — see
-  [`research/sandbox-network.md`](../research/sandbox-network.md).
+  won't work in this mode — that's `egress: { allow }`, below.
+
+## Network — allowlisted real egress (`egress: { allow }`)
+
+**Let it actually reach the network, but only the hosts you list.** When the
+question is "does this skill install cleanly, and _only_ from the registries I
+expect?", a wall (record or not) can't answer it — the install has to succeed.
+`egress: { allow }` lets traffic out to an allowlist and **drops the rest at the
+packet layer**:
+
+```ts
+import { runHook } from "vigiles/run-hook";
+
+const r = runHook(installHookCmd, event, {
+  egress: { allow: ["registry.npmjs.org"] },
+});
+// r.egress       → [{ host: "registry.npmjs.org", allowed: true, packets, bytes }]
+// r.egressDropped → { packets: 0, bytes: 0 }   // nothing reached off the allowlist
+```
+
+How it works (proven in `research/spikes/sandbox-network-allowlist.sh`):
+[`slirp4netns`](https://github.com/rootless-containers/slirp4netns) `--configure`
+attaches a tap to the bwrap netns (rootless egress via a userspace TCP/IP stack);
+an `nft` ruleset **inside** the netns is a `policy drop` output chain that accepts
+only the allowlist's resolved IPs (plus loopback + DNS) and `log`+`drop`s the
+rest; the per-rule `counter`s read back what was reached and what was dropped.
+
+**Why the boundary is `nft`, not a proxy.** A `recordEgress`/`HTTP_PROXY`
+allowlist only constrains tools that _honor the proxy_ — a raw socket ignores the
+env and goes straight out. The `nft` wall is at the packet layer, so a raw
+`bash /dev/tcp` to an off-list host is **dropped too**. Needs Linux + bubblewrap +
+`slirp4netns` + `nft`; it **refuses** (rather than running unconfined) if they're
+absent.
+
+**Honest limits:**
+
+- The allowlist is **resolved to IPs at launch**. A host whose DNS rotates
+  outside the run's window could hand the hook an IP that wasn't pre-resolved (and
+  so gets dropped). The dynamic, resolver-pinned set — a DNS resolver in the netns
+  that authorizes each answer's IPs just-in-time — is the next layer (see
+  [`research/sandbox-network.md`](../research/sandbox-network.md)).
+- The record **names the allowlisted hosts that were reached** and **counts** how
+  much off-list traffic was dropped, but does not yet **name the dropped hosts**
+  (that needs the in-netns DNS-query log). `r.egressDropped.packets > 0` tells you
+  the hook tried to leave the allowlist; the DNS-log layer will say where to.
 
 ## Dogfood — a real finding about a real plugin
 
@@ -124,8 +195,15 @@ in the gate (`src/run-hook.test.ts`, skips where bwrap can't confine):
 That second one isn't a toy curl — it's a genuine supply-chain/privacy property
 of a popular plugin, asserted from its actual code.
 
+The same `session-start` hook is dogfooded a second time under `egress: { allow:
+["registry.npmjs.org"] }`: this time the update-check `fetch()` **succeeds** to
+the registry (`r.egress` records it `allowed: true`) and `r.egressDropped.packets`
+stays `0` — proving, through the allowlist path, that it reaches the npm registry
+**and nothing else**.
+
 ## See also
 
 - [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
 - [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
-- [`research/sandbox-network.md`](../research/sandbox-network.md) — the allowlisted real-egress design.
+- [`src/egress.ts`](../src/egress.ts) — the `egress: { allow }` allowlist: ruleset builder, counter parser, the pure seams.
+- [`research/sandbox-network.md`](../research/sandbox-network.md) — the allowlisted-egress design + the next (resolver-pinned) layer.

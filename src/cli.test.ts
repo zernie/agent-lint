@@ -991,7 +991,7 @@ describe("plugin hook: pre-edit.sh", () => {
   });
 
   it("should be executable with valid bash syntax", () => {
-    const hookPath = resolve(process.cwd(), ".claude-plugin/hooks/pre-edit.sh");
+    const hookPath = resolve(process.cwd(), "hooks/pre-edit.sh");
     assert.ok(existsSync(hookPath));
     execSync(`bash -n ${hookPath}`, { stdio: "pipe" });
   });
@@ -1000,7 +1000,7 @@ describe("plugin hook: pre-edit.sh", () => {
     const input = JSON.stringify({
       tool_input: { file_path: join(tmpDir, "src/app.ts") },
     });
-    const hookPath = resolve(process.cwd(), ".claude-plugin/hooks/pre-edit.sh");
+    const hookPath = resolve(process.cwd(), "hooks/pre-edit.sh");
     execSync(`echo '${input}' | bash ${hookPath}`, {
       cwd: tmpDir,
       encoding: "utf-8",
@@ -1018,7 +1018,7 @@ describe("plugin hook: pre-edit.sh", () => {
       "<!-- vigiles:sha256:abc123 compiled from CLAUDE.md.spec.ts -->\n# CLAUDE.md\n",
     );
     const input = JSON.stringify({ tool_input: { file_path: mdPath } });
-    const hookPath = resolve(process.cwd(), ".claude-plugin/hooks/pre-edit.sh");
+    const hookPath = resolve(process.cwd(), "hooks/pre-edit.sh");
     try {
       execSync(`echo '${input}' | bash ${hookPath}`, {
         cwd: tmpDir,
@@ -1049,7 +1049,7 @@ describe("plugin hook: pre-edit.sh", () => {
     const mdPath = join(tmpDir, "HANDWRITTEN.md");
     writeFileSync(mdPath, "# Hand-written\n\nNo vigiles hash.\n");
     const input = JSON.stringify({ tool_input: { file_path: mdPath } });
-    const hookPath = resolve(process.cwd(), ".claude-plugin/hooks/pre-edit.sh");
+    const hookPath = resolve(process.cwd(), "hooks/pre-edit.sh");
     execSync(`echo '${input}' | bash ${hookPath}`, {
       cwd: tmpDir,
       encoding: "utf-8",
@@ -1066,10 +1066,7 @@ describe("plugin hook: pre-edit.sh", () => {
 
 describe("plugin hook: post-edit.sh", () => {
   it("should be executable", () => {
-    const hookPath = resolve(
-      process.cwd(),
-      ".claude-plugin/hooks/post-edit.sh",
-    );
+    const hookPath = resolve(process.cwd(), "hooks/post-edit.sh");
     assert.ok(existsSync(hookPath));
     // Check it's parseable bash
     try {
@@ -1080,10 +1077,7 @@ describe("plugin hook: post-edit.sh", () => {
   });
 
   it("should exit cleanly with empty input", () => {
-    const hookPath = resolve(
-      process.cwd(),
-      ".claude-plugin/hooks/post-edit.sh",
-    );
+    const hookPath = resolve(process.cwd(), "hooks/post-edit.sh");
     try {
       execSync(`echo '{}' | bash ${hookPath}`, {
         cwd: process.cwd(),
@@ -1098,10 +1092,7 @@ describe("plugin hook: post-edit.sh", () => {
   it("should match linter config files for type regeneration", () => {
     // Test the case pattern matching by running a dry-run variant:
     // Override npx to just echo, check the routing logic works.
-    const hookPath = resolve(
-      process.cwd(),
-      ".claude-plugin/hooks/post-edit.sh",
-    );
+    const hookPath = resolve(process.cwd(), "hooks/post-edit.sh");
 
     const configFiles = [
       "eslint.config.mjs",
@@ -1136,10 +1127,7 @@ describe("plugin hook: post-edit.sh", () => {
   });
 
   it("should match .spec.ts files for compilation", () => {
-    const hookPath = resolve(
-      process.cwd(),
-      ".claude-plugin/hooks/post-edit.sh",
-    );
+    const hookPath = resolve(process.cwd(), "hooks/post-edit.sh");
     const input = JSON.stringify({
       tool_input: { file_path: "/tmp/CLAUDE.md.spec.ts" },
     });
@@ -1158,10 +1146,7 @@ describe("plugin hook: post-edit.sh", () => {
   });
 
   it("should not trigger for unrelated files", () => {
-    const hookPath = resolve(
-      process.cwd(),
-      ".claude-plugin/hooks/post-edit.sh",
-    );
+    const hookPath = resolve(process.cwd(), "hooks/post-edit.sh");
     const input = JSON.stringify({
       tool_input: { file_path: "/tmp/src/app.ts" },
     });

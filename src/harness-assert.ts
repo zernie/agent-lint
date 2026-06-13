@@ -704,17 +704,36 @@ export function assertNoRegression(
 }
 
 /**
- * Assert a skill/behaviour triggered on at least `min` (0..1) of its runs — the
- * reliability gate for a skill's *activation* (does its description fire on the
- * task), over a {@link TriggerRateReport} from `measureTriggerRate`.
+ * Assert a skill/behaviour triggered reliably — the gate for a skill's
+ * *activation*, over a {@link TriggerRateReport} from `measureTriggerRate`.
+ * `min` gates recall (fires when it should). With irrelevant prompts measured,
+ * `maxFalsePositive` gates the precision side (does NOT fire when it shouldn't)
+ * and `minPrecision` gates `firedRight / firedTotal` — so a too-broad
+ * description that hijacks unrelated work fails, not just a too-narrow one.
  */
 export function assertTriggerRate(
   report: TriggerRateReport,
-  opts: { min: number },
+  opts: { min?: number; maxFalsePositive?: number; minPrecision?: number },
 ): void {
-  if (report.rate < opts.min) {
+  if (opts.min !== undefined && report.rate < opts.min) {
     fail(
       `expected a trigger rate ≥ ${String(opts.min)}, got ${report.rate.toFixed(2)} (${String(report.n)} runs)`,
+    );
+  }
+  if (
+    opts.maxFalsePositive !== undefined &&
+    (report.falsePositiveRate ?? 0) > opts.maxFalsePositive
+  ) {
+    fail(
+      `expected a false-positive rate ≤ ${String(opts.maxFalsePositive)}, got ${(report.falsePositiveRate ?? 0).toFixed(2)}`,
+    );
+  }
+  if (
+    opts.minPrecision !== undefined &&
+    (report.precision ?? 0) < opts.minPrecision
+  ) {
+    fail(
+      `expected precision ≥ ${String(opts.minPrecision)}, got ${report.precision === undefined ? "n/a (nothing fired)" : report.precision.toFixed(2)}`,
     );
   }
 }

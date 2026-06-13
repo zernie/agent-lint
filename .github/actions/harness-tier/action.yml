@@ -1,0 +1,61 @@
+name: "vigiles harness tier"
+description: >
+  Run one vigiles test tier with exactly the capabilities it needs. unit needs
+  nothing; integration adds bubblewrap + the claude CLI (no API key);
+  e2e additionally sets up rootless egress (pasta/slirp4netns + nftables). Mirrors
+  the tiered import paths vigiles/unit · /integration · /e2e and the vitest
+  projects. Usage from any repo:
+  `- uses: zernie/vigiles/.github/actions/harness-tier@main` with `tier: e2e`.
+
+inputs:
+  tier:
+    description: "Which tier to run: unit | integration | e2e."
+    required: true
+  node-version:
+    description: "Node.js version."
+    required: false
+    default: "20"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: "npm"
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    # integration + e2e run real hooks under bubblewrap and drive the claude CLI
+    # against a scripted mock model (no API key). Ubuntu 24.04 locks unprivileged
+    # user namespaces behind AppArmor; unlock so bwrap can create them. `sudo` is
+    # absent in container jobs (already root), present on host runners (non-root) —
+    # so resolve it once and reuse.
+    - name: Set up bubblewrap + claude CLI
+      if: ${{ inputs.tier == 'integration' || inputs.tier == 'e2e' }}
+      shell: bash
+      run: |
+        SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+        $SUDO apt-get update
+        $SUDO apt-get install -y bubblewrap
+        npm i -g @anthropic-ai/claude-code
+        $SUDO sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+    # e2e exercises allowlisted REAL egress. The connector (slirp4netns by default;
+    # pasta is experimental) needs /dev/net/tun + privilege — which is why the e2e
+    # CI job runs as root in a privileged container (see research/egress-sandbox-
+    # tooling.md). nftables is the allowlist wall. Tests still self-skip via
+    # egressRoutes() rather than fail where egress can't route.
+    - name: Set up rootless egress (slirp4netns / pasta / nft)
+      if: ${{ inputs.tier == 'e2e' }}
+      shell: bash
+      run: |
+        SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+        $SUDO apt-get install -y slirp4netns nftables iproute2 passt \
+          || $SUDO apt-get install -y slirp4netns nftables iproute2
+
+    - name: Run the ${{ inputs.tier }} tier
+      shell: bash
+      run: npm run test:${{ inputs.tier }}

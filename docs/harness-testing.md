@@ -20,31 +20,39 @@
 > real finding (it pings the npm registry on every session start, which we
 > record and block). See [`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs).
 
-`Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md —
-is code, and code should be tested. vigiles gives you four layers, lowest cost
-first:
+`Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md — is
+code, and code should be tested. vigiles gives the harness **clear levels**, and a
+test's level is legible three ways at once — its **import path**, its **file
+suffix**, and its **CI job** — so you can't accidentally hide a network e2e test
+inside the unit gate. Pick the cheapest level that answers your question:
 
-1. **Verify the references** (static, free) — `vigiles audit` checks that the
-   linter rules, files, scripts, and symbols your instruction files cite are
-   real. See the [main README](../README.md).
-2. **Unit-test a hook** (`runHook`, no `claude`) — given this event JSON, does my
-   hook block or allow? Milliseconds, no CLI, reaches **every** event.
-3. **Deterministic harness tests** (`runHarnessTest`, no API key) — is the hook
-   _wired into the assembled machine_ and does it fire there?
-4. **Evals** (`runEval`, real model) — does this harness change actually _move
-   what the agent does_?
+| Level                 | Answers                                                  | Import                | File                    | Runner               | Needs                      |
+| --------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | -------------------------- |
+| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles audit`      | nothing                    |
+| **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                    |
+| **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | `claude` + bwrap, no key   |
+| **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network |
+| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/eval`        | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)       |
 
-This doc covers layers 2–4. The library is plain async functions returning
-data, so it runs in **any** test runner — node:test, vitest, jest, mocha — and
-ships a zero-dependency CLI fallback (`vigiles test` / `vigiles eval`).
+**refs + unit + integration + e2e are deterministic verification** — you assert
+pass/fail, they run on every commit. **eval is a different axis: non-deterministic
+measurement** — you read a mean ± se across trials, run it occasionally on a keyed
+job, and never gate a single run (see [Two pillars or three?](#two-pillars-or-three-where-eval-sits)).
 
-**The design bet is deterministic and cheap.** Layers 1–3 never call a model or
-need an API key — they're meant to run on every commit for free, and they're
-where most of your harness can actually be pinned down. This is the opposite of
-eval-only frameworks like [promptfoo](https://github.com/promptfoo/promptfoo),
-where every run hits a real model **by design** (and bills accordingly). The
-paid real-model tier (layer 4) is here too, but you reach for it only when the
-question genuinely needs a real model — not to answer "does my hook block this?"
+The import path **is** the capability contract: `vigiles/unit` exposes nothing
+that needs a model, bubblewrap, or the network; higher tiers re-export the lower
+ones (dependencies point downward only), so an e2e test reuses unit predicates but
+a unit test physically can't reach egress. Run any level's CI with one reusable
+action — `- uses: zernie/vigiles/.github/actions/harness-tier@main` with
+`tier: unit | integration | e2e` (see [Per-level CI](#per-level-ci-the-reusable-action)).
+
+**The design bet is deterministic and cheap.** refs/unit/integration/e2e never
+need an API key — they run on every commit for free, and they're where most of
+your harness can be pinned down. This is the opposite of eval-only frameworks like
+[promptfoo](https://github.com/promptfoo/promptfoo), where every run hits a real
+model **by design** (and bills accordingly). The paid real-model **eval** axis is
+here too, but you reach for it only when the question genuinely needs a real model
+— not to answer "does my hook block this?"
 
 ## Contents
 
@@ -67,7 +75,11 @@ question genuinely needs a real model — not to answer "does my hook block this
   - [Trigger rate — does the skill _fire_?](#trigger-rate--does-the-skill-fire)
   - [LLM-as-judge for subjective outcomes](#llm-as-judge-for-subjective-outcomes)
 - [CLI fallback (no runner, CI-friendly)](#cli-fallback-no-runner-ci-friendly)
+- [Per-level CI (the reusable action)](#per-level-ci-the-reusable-action)
+- [Two pillars or three? (where eval sits)](#two-pillars-or-three-where-eval-sits)
 - [Coverage](#coverage)
+  - [Coverage of your harness surfaces](#coverage-of-your-harness-surfaces)
+  - [vigiles's own coverage](#vigiless-own-coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
 - [How this compares to promptfoo](#how-this-compares-to-promptfoo)
@@ -745,7 +757,91 @@ vigiles eval --trials=6      # discover & run *.eval.mjs (forwards VIGILES_TRIAL
 `vigiles test` needs only the `claude` CLI (no API key) — so it runs the
 deterministic tier in CI at zero cost. See the repo's `harness` CI job.
 
+## Per-level CI (the reusable action)
+
+Each level needs different capabilities set up, and that setup is the annoying part
+to get right (bubblewrap, the Ubuntu-24.04 userns sysctl, the rootless egress
+connector). vigiles ships a **composite action** that encapsulates it — drop it
+into any workflow and run a level in one step:
+
+```yaml
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: zernie/vigiles/.github/actions/harness-tier@main
+        with: { tier: unit } # nothing extra to install
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: zernie/vigiles/.github/actions/harness-tier@main
+        with: { tier: e2e } # sets up bwrap + pasta/slirp4netns + nft for you
+```
+
+`tier: integration` adds bubblewrap + the `claude` CLI (no key); `tier: e2e`
+additionally sets up the rootless egress connector. vigiles **dogfoods** this in
+its own [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). The action runs
+`npm run test:<tier>` (the per-tier vitest projects), so a consumer wires per-level
+CI without re-deriving the capability setup. The **eval** axis is separate (a real
+model / API key) — run it on a keyed job with `npm run test:eval`, not on every PR.
+
+> **Note (egress on hosted runners):** the e2e egress tests self-skip on
+> GitHub-hosted runners where slirp4netns can't attach (they run for real
+> locally / on capable runners). Switching the connector to **pasta** is in
+> progress — see [`research/egress-sandbox-tooling.md`](../research/egress-sandbox-tooling.md).
+
+## Two pillars or three? (where eval sits)
+
+vigiles has **two pillars** — (1) verify the references, (2) test the harness —
+and **eval stays inside pillar 2**, as its non-deterministic top axis. A _pillar_
+is a distinct concern: "the references are real" vs "the harness behaves." Eval
+isn't a third concern — it's the deepest way of answering the **same** pillar-2
+question ("does the harness behave?"), just with different epistemics: it
+**measures** (mean ± se, significance, pass^k) where unit/integration/e2e
+**assert** (pass/fail). So in the docs it's drawn as a clearly distinct _axis_
+(non-deterministic, keyed, read-don't-gate) — but not a separate pillar, because
+splitting it would imply eval delivers a different value than "test the harness,"
+which it doesn't.
+
+The one future where eval graduates to a third pillar: if vigiles builds the
+**self-improving harness** (auto-tune skills/hooks by measured evolution — see
+[`research/divergent-bets.md`](../research/divergent-bets.md) #7), eval stops being
+"a way to test" and becomes "a way to _optimize_" — a genuinely distinct concern
+worth its own pillar. Until then: two pillars, four levels (refs · unit ·
+integration · e2e) + the eval axis.
+
 ## Coverage
+
+Two different things wear the word "coverage" here. Keep them apart: **your
+harness's** test coverage (do your skills/hooks/subagents each have a test?) and
+**vigiles's own** code coverage.
+
+### Coverage of your harness surfaces
+
+A harness grows surfaces faster than tests — a new skill, hook, or subagent
+lands and nothing tells you it shipped untested. `vigiles audit` closes that gap
+with the [`untested-surface`](rules/untested-surface.md) rule: it reports any
+skill, subagent, or hook that has **no test or eval**. A surface counts as
+covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention
+the warning suggests) **or** any test — including a `*.test.ts` — references it
+by path (`skills/foo`, `hooks/x.sh`) or namespace (`plugin:foo`). It's
+warning-by-default (a nudge; set it to `"error"` to fail CI), and user-invoked
+(`disable-model-invocation`) skills are exempt because they can't auto-trigger —
+flip `includeUserInvokedSkills` to demand an outcome test for them.
+
+Beneath that gate sits a free, model-free **conformance floor**: load your own
+plugin and assert every skill resolves with a usable `description` — the surface
+the model triggers on, so a skill that won't load can never fire. `loadPlugin`
+plus a name/description check needs no `claude` and no key, so it runs on every
+commit, well under the (paid) trigger-rate eval. vigiles dogfoods exactly this
+on its own skills in
+[`src/skills-dogfood.test.ts`](../src/skills-dogfood.test.ts) — the gate that
+caught a real shipped skill missing its frontmatter `name`, and a hook whose
+script had drifted out of `${CLAUDE_PLUGIN_ROOT}/hooks/`.
+
+### vigiles's own coverage
 
 The suite runs under **vitest** (`npm test` → `vitest run`); `npm run coverage`
 adds V8 coverage and prints per-file line/branch/function %:
@@ -778,19 +874,19 @@ everything around it is covered, so the statement/line/function gate holds at
 
 The whole harness surface and how far each tier reaches today:
 
-| Surface                                                       | Unit / static                | Integration (no API key)    | Eval (real model) |
-| ------------------------------------------------------------- | ---------------------------- | --------------------------- | ----------------- |
-| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — Edit / Write                                          | ✅ logic                     | ✅ fires                    | ✅                |
-| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                     | — (mock can't trigger)      | 🟡                |
-| CLAUDE.md / instructions                                      | ✅ refs                      | 🟡 present, not behaviour   | ✅ behaviour      |
-| Skills                                                        | 🟡 refs                      | ✅ resolves via `pluginDir` | ✅ activation     |
-| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs       | 🟡 rail not live-armed      | ✅ via Task       |
-| Slash commands (`commands/`)                                  | 🟡 refs                      | 🟡 needs prompt capture     | ✅ via `/cmd`     |
-| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
-| settings.json                                                 | 🟡 assert merged             | ✅ applied                  | ✅                |
-| Hook context injection (does it _land_?)                      | — n/a                        | ✅ `trace.modelRequests`    | ✅                |
-| Untrusted plugin execution                                    | ✅ confined (`runHook`)      | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
+| Surface                                                       | Unit / static                    | Integration (no API key)    | Eval (real model) |
+| ------------------------------------------------------------- | -------------------------------- | --------------------------- | ----------------- |
+| Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                         | ✅ fires                    | ✅                |
+| Hooks — Edit / Write                                          | ✅ logic                         | ✅ fires                    | ✅                |
+| Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                         | — (mock can't trigger)      | 🟡                |
+| CLAUDE.md / instructions                                      | ✅ refs                          | 🟡 present, not behaviour   | ✅ behaviour      |
+| Skills                                                        | ✅ loads + description · 🟡 refs | ✅ resolves via `pluginDir` | ✅ activation     |
+| Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs           | 🟡 rail not live-armed      | ✅ via Task       |
+| Slash commands (`commands/`)                                  | 🟡 refs                          | 🟡 needs prompt capture     | ✅ via `/cmd`     |
+| MCP servers                                                   | ✅ tool refs (`vigiles:mcp`)     | 🔴                          | 🔴                |
+| settings.json                                                 | 🟡 assert merged                 | ✅ applied                  | ✅                |
+| Hook context injection (does it _land_?)                      | — n/a                            | ✅ `trace.modelRequests`    | ✅                |
+| Untrusted plugin execution                                    | ✅ confined (`runHook`)          | ✅ confined (bwrap, Linux)  | 🟡 outer sandbox  |
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
 
@@ -822,7 +918,7 @@ parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-div
 
 ## See also
 
-- [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO/`rm -rf`, network deny-all vs `recordEgress`, the tiers and limits.
+- [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO/`rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), the tiers and limits.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier + file (and why the CLI examples are `.mjs`).
 - [`research/harness-testing.md`](../research/harness-testing.md) — the deterministic + eval design rationale + real-plugin coverage.
 - [`research/benchmarks-runtime-gates.md`](../research/benchmarks-runtime-gates.md) — findings from running this harness in anger.

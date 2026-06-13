@@ -21,8 +21,15 @@ import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./generate-types.js";
 import { validate, loadConfig } from "./validate.js";
-import type { VigilesConfig, CoverageThresholds } from "./types.js";
+import type {
+  VigilesConfig,
+  CoverageThresholds,
+  TestCoverageConfig,
+} from "./types.js";
 import { ruleSeverity, ruleOptions } from "./types.js";
+import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import { scanPlugin, formatScanReport } from "./scan.js";
+import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
   compileClaude,
@@ -598,6 +605,8 @@ interface AuditReport {
   integrityErrors: number;
   coverageErrors: number;
   orphanCount: number;
+  untestedSurfaces: number;
+  untestedErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -690,6 +699,7 @@ function auditExitCode(report: AuditReport): 0 | 1 | 2 {
     report.frontmatterErrors > 0 ||
     report.integrityErrors > 0 ||
     report.coverageErrors > 0 ||
+    report.untestedErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1064,6 +1074,11 @@ async function audit(
     }
   }
 
+  // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
+  // eval. Warning by default (a nudge, exit 0); set rules.untested-surface to
+  // "error" to gate CI. See src/test-coverage.ts and docs/rules/untested-surface.md.
+  const untested = checkUntestedSurfaces(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1097,6 +1112,8 @@ async function audit(
     integrityErrors,
     coverageErrors,
     orphanCount: orphanReport.orphans.length,
+    untestedSurfaces: untested.untested,
+    untestedErrors: untested.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -1126,6 +1143,8 @@ function printAuditSummary(report: AuditReport): void {
     parts.push(`${String(report.duplicatePairs)} duplicates`);
   if (report.orphanCount > 0)
     parts.push(`${String(report.orphanCount)} orphan docs`);
+  if (report.untestedSurfaces > 0)
+    parts.push(`${String(report.untestedSurfaces)} untested surfaces`);
   if (report.docRefErrors > 0)
     parts.push(`${String(report.docRefErrors)} broken doc refs`);
   if (report.symbolRefErrors > 0)
@@ -1743,6 +1762,44 @@ function checkIntegrityForFiles(
   }
 
   return severity === "error" ? errorCount : 0;
+}
+
+/**
+ * Apply the `untested-surface` rule: find skills/agents/hooks with no test or
+ * eval (see src/test-coverage.ts). Returns the raw untested count plus the
+ * severity-gated error count — "warn" prints but never fails CI (errors=0),
+ * "error" fails (exit 2), mirroring the integrity check.
+ */
+function checkUntestedSurfaces(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { untested: number; errors: number } {
+  const severity = ruleSeverity(config?.rules["untested-surface"]);
+  if (!severity) return { untested: 0, errors: 0 };
+
+  const opts = ruleOptions<TestCoverageConfig>(
+    config?.rules["untested-surface"],
+  );
+  const report = findUntestedSurfaces({ basePath: process.cwd(), ...opts });
+
+  if (!silent) {
+    console.log("\nUntested surfaces:\n");
+    for (const line of formatUntestedReport(report).split("\n")) {
+      console.log(`  ${line}`);
+    }
+    for (const s of report.untested) {
+      ghAnnotate(
+        severity === "error" ? "error" : "warning",
+        `${s.kind} ${s.path} ships without a test or eval`,
+        s.path,
+      );
+    }
+  }
+
+  return {
+    untested: report.untested.length,
+    errors: severity === "error" ? report.untested.length : 0,
+  };
 }
 
 /**
@@ -2407,6 +2464,24 @@ async function main(): Promise<void> {
     case "eval":
       handleRunScripts("eval", args, restArgs);
       break;
+
+    case "scan": {
+      const dirs = restArgs.length > 0 ? restArgs : ["."];
+      const json = args.includes("--json");
+      if (dirs.length > 1) {
+        // Multiple targets → rank them (the leaderboard engine).
+        const scores = rankPlugins(dirs);
+        console.log(
+          json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
+        );
+      } else {
+        const report = scanPlugin(dirs[0]);
+        console.log(
+          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+        );
+      }
+      break;
+    }
 
     // --- Plumbing ---
 

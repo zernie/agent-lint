@@ -1,25 +1,54 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
-// Vitest is the primary runner. Two projects:
-//  - `unit`    — the TypeScript source suites (`src/**/*.test.ts`), run directly
-//                (esbuild), with `.js` import specifiers resolved to their `.ts`
-//                source so NodeNext-style imports work without a build step.
-//  - `runners` — the cross-runner constraint: the same `vigilesMatchers` register
-//                and pass under vitest, loaded from the built `dist` the way a
-//                user would (`npm run test:vitest`). Proves runner-agnosticism.
+// Vitest is the primary runner. Test tiers are encoded in the FILENAME so the
+// capability level is legible and routed to its own project (mirrors the tiered
+// import paths vigiles/unit · /integration · /e2e):
+//   - `unit`        — `src/**/*.test.ts` MINUS the suffixed tiers: pure, no caps.
+//   - `integration` — `src/**/*.integration.test.ts`: needs bwrap, no network.
+//   - `e2e`         — `src/**/*.e2e.test.ts`: needs real egress / model / network
+//                     (each test gates itself + skips honestly where unavailable).
+//   - `runners`     — the cross-runner matcher constraint, loaded from `dist`.
+// `vitest run` runs them all (e2e self-skips where it can't route); the per-tier
+// `npm run test:unit|test:integration|test:e2e` scripts run one project for the
+// per-level CI jobs.
+const sourceTier = {
+  // `.js` import specifiers resolve to their `.ts` source so NodeNext imports
+  // work without a build step; suites can scan 7 catalogs / spawn the CLI.
+  resolve: { extensionAlias: { ".js": [".ts", ".js"] } },
+  test: { testTimeout: 60000, hookTimeout: 60000 },
+};
+
 export default defineConfig({
   test: {
     projects: [
       {
+        ...sourceTier,
         test: {
+          ...sourceTier.test,
           name: "unit",
           include: ["src/**/*.test.ts"],
-          // node:test had no per-test timeout; some suites scan all 7 linter
-          // catalogs or spawn the built CLI and legitimately take several seconds.
-          testTimeout: 60000,
-          hookTimeout: 60000,
+          exclude: [
+            ...configDefaults.exclude,
+            "src/**/*.integration.test.ts",
+            "src/**/*.e2e.test.ts",
+          ],
         },
-        resolve: { extensionAlias: { ".js": [".ts", ".js"] } },
+      },
+      {
+        ...sourceTier,
+        test: {
+          ...sourceTier.test,
+          name: "integration",
+          include: ["src/**/*.integration.test.ts"],
+        },
+      },
+      {
+        ...sourceTier,
+        test: {
+          ...sourceTier.test,
+          name: "e2e",
+          include: ["src/**/*.e2e.test.ts"],
+        },
       },
       {
         test: {
@@ -44,6 +73,7 @@ export default defineConfig({
         "src/plugin-loader.ts",
         "src/judge.ts",
         "src/sandbox.ts",
+        "src/egress.ts",
       ],
       // 100% lines/functions/statements. Branches floor at 90: the remainder
       // are defensive fallbacks that can't be hit deterministically — `?? ""` on

@@ -26,6 +26,8 @@ the file that proves it. Two kinds of coverage:
 | Plugin loader — empty-machine + MCP + dangling-intra-plugin-ref warnings                                                                                                                                       | unit                     | `src/plugin-loader.test.ts`                                                 |
 | Plugin loader — in-repo dogfood                                                                                                                                                                                | unit                     | `src/plugin-loader.test.ts`                                                 |
 | Vendored **real-plugin** conformance (`loadPlugin` invariants, pinned + offline)                                                                                                                               | unit                     | `src/vendor.test.ts`                                                        |
+| Dogfood conformance over vigiles's **own** skills (every `SKILL.md` loads + has `name` + non-empty `description`; hook scripts resolve at the plugin root)                                                     | unit                     | `src/skills-dogfood.test.ts`                                                |
+| Untested-surface detector (`untested-surface` rule: colocation + content-reference coverage, user-invoked exemption, `vigiles:ignore-test` opt-out, hook-script discovery)                                     | unit                     | `src/test-coverage.test.ts`                                                 |
 | `resolveHarness` — merge / passthrough / undefined                                                                                                                                                             | unit                     | `src/plugin-loader.test.ts`                                                 |
 | Eval aggregation (mean / std / se / n / pass^k) + report formatting                                                                                                                                            | unit                     | `src/eval.test.ts`                                                          |
 | Eval usage capture + aggregation (`parseUsage` / `aggregateUsage`, cost/latency/tokens)                                                                                                                        | unit                     | `src/eval.test.ts`                                                          |
@@ -43,6 +45,7 @@ the file that proves it. Two kinds of coverage:
 | `withHarness` (auto-cleanup wrapper)                                                                                                                                                                           | integration (CI)         | `examples/harness/plugin-cohesion.harness.mjs`                              |
 | `runEval` end-to-end, incl. `plugin` arm                                                                                                                                                                       | integration (real model) | `bench/evals/refs-hook.eval.mjs`, `examples/harness/skill-outcome.eval.mjs` |
 | `measureTriggerRate` end-to-end (skill activation via `pluginDir`)                                                                                                                                             | integration (real model) | `examples/harness/skill-trigger-rate.eval.mjs`                              |
+| Dogfood trigger-rate on vigiles's **own** model-invocable skills (recall + precision via `irrelevantPrompts`)                                                                                                  | integration (real model) | `examples/harness/dogfood/{test-harness,generate-logo}.trigger.eval.mjs`    |
 | `judge()` model call                                                                                                                                                                                           | integration (real model) | (parsing is unit-tested; the spawn is not)                                  |
 
 ## Surface coverage — which plugin surface is reachable at which tier
@@ -66,6 +69,13 @@ tiers, because some only do anything under a real model:
 whole plugin" test never silently runs an empty machine (e.g. a subagents-only
 plugin like wshobson/agents `tdd-workflows`, which ships 2 agents + 4 commands
 and **no** hooks).
+
+Below the three runtime tiers sits a **static, model-free floor** the table
+doesn't have a column for: skills load and resolve with a usable `description`
+(`src/skills-dogfood.test.ts`), and `vigiles audit`'s
+[`untested-surface`](rules/untested-surface.md) rule flags any skill/hook/subagent
+that ships with no test or eval at all — the "is there even a test?" check that
+precedes "does the test pass?".
 
 The **subagent tool-contract rail** (`agent-hook`) makes the `agents/` Hook-unit
 cell `✅`: the generated `PreToolUse` hook that enforces an agent's declared

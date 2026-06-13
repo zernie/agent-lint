@@ -1,0 +1,292 @@
+/**
+ * Untested-surface detection: the third gap detector, alongside orphan-docs.
+ *
+ * Stale-ref detection catches specs pointing at files that vanished.
+ * Orphan-docs catches docs nothing references. This catches harness *surfaces*
+ * — skills, subagents, and hooks — that ship without a test or eval. A surface
+ * with no test is a probabilistic-compliance gap hiding in the deterministic
+ * layer: nothing measures whether it still does what it claims.
+ *
+ * Two detectors decide "tested", OR'd, so a test placed ANYWHERE counts:
+ *   1. colocation — a `*.{harness,eval}.mjs` next to the surface (the zero-config
+ *      convention the warning suggests): `skills/foo/*.eval.mjs`,
+ *      `agents/bar.harness.mjs`, `hooks/pre-edit.harness.mjs`.
+ *   2. content-reference — any discovered test (incl. `*.test.ts`) that names the
+ *      surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
+ *      (`vigiles:foo`). Not bare-name — too fuzzy.
+ *
+ * Warning-by-default (a nudge, not a gate). User-invoked skills
+ * (`disable-model-invocation: true`) can't auto-trigger, so they're exempt by
+ * default; flip `includeUserInvokedSkills` to demand an outcome test for them.
+ * Per-surface opt-out: a `vigiles:ignore-test` marker in the surface file.
+ */
+
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { globSync } from "glob";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type SurfaceKind = "skill" | "agent" | "hook";
+
+export interface Surface {
+  readonly kind: SurfaceKind;
+  /** Repo-relative path to the surface file (SKILL.md / agent .md / hook script). */
+  readonly path: string;
+  /** Stable name: skill dir, agent basename, or hook script basename. */
+  readonly name: string;
+  /** Substrings a test may reference to "cover" this surface (path / namespace). */
+  readonly tokens: readonly string[];
+  /** True for skills with `disable-model-invocation: true`. */
+  readonly userInvoked: boolean;
+}
+
+export interface UntestedReport {
+  /** Total surfaces considered (after exemptions). */
+  readonly total: number;
+  readonly covered: readonly Surface[];
+  readonly untested: readonly Surface[];
+  /** Surfaces skipped (user-invoked skills, `vigiles:ignore-test`). */
+  readonly exempt: number;
+}
+
+export interface TestCoverageOptions {
+  /** Repository root. Defaults to `process.cwd()`. */
+  readonly basePath?: string;
+  /** Scan skills under `skills/` and `.claude/skills/`. Default true. */
+  readonly skills?: boolean;
+  /** Scan subagents under `agents/` and `.claude/agents/`. Default true. */
+  readonly agents?: boolean;
+  /** Scan hook scripts referenced from plugin.json / settings.json. Default true. */
+  readonly hooks?: boolean;
+  /** Require a test for user-invoked (disable-model-invocation) skills. Default false. */
+  readonly includeUserInvokedSkills?: boolean;
+  /** Globs of test files that count as coverage. */
+  readonly testGlobs?: readonly string[];
+  /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */
+  readonly exclude?: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TEST_GLOBS = [
+  "**/*.harness.mjs",
+  "**/*.eval.mjs",
+  "**/*.test.ts",
+  "**/*.test.mts",
+  "**/*.test.cts",
+  "**/*.test.js",
+  "**/*.test.mjs",
+  "**/*.test.cjs",
+] as const;
+
+const DEFAULT_IGNORE = [
+  "node_modules/**",
+  "dist/**",
+  ".vigiles/**",
+  ".git/**",
+] as const;
+
+const IGNORE_MARKER = "vigiles:ignore-test";
+
+const SCRIPT_RE = /[\w./${}@-]+\.(?:sh|mjs|cjs|js|ts|py|rb)/g;
+
+function read(path: string): string {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return "";
+  }
+}
+
+/** A SKILL.md is user-invoked when its frontmatter sets disable-model-invocation. */
+function isUserInvoked(content: string): boolean {
+  return /^\s*disable-model-invocation:\s*true\s*$/m.test(content);
+}
+
+function discoverSkills(basePath: string, ignore: string[]): Surface[] {
+  const out: Surface[] = [];
+  const found = globSync(["skills/*/SKILL.md", ".claude/skills/*/SKILL.md"], {
+    cwd: basePath,
+    ignore,
+  });
+  for (const path of found.sort()) {
+    const name = basename(dirname(path));
+    const content = read(join(basePath, path));
+    if (content.includes(IGNORE_MARKER)) continue;
+    out.push({
+      kind: "skill",
+      path,
+      name,
+      tokens: [`skills/${name}`, `:${name}`],
+      userInvoked: isUserInvoked(content),
+    });
+  }
+  return out;
+}
+
+function discoverAgents(basePath: string, ignore: string[]): Surface[] {
+  const out: Surface[] = [];
+  const found = globSync(["agents/*.md", ".claude/agents/*.md"], {
+    cwd: basePath,
+    ignore,
+  });
+  for (const path of found.sort()) {
+    if (path.endsWith(".spec.ts")) continue;
+    const content = read(join(basePath, path));
+    if (content.includes(IGNORE_MARKER)) continue;
+    const name = basename(path, ".md");
+    const dir = dirname(path);
+    out.push({
+      kind: "agent",
+      path,
+      name,
+      tokens: [`${dir}/${name}`],
+      userInvoked: false,
+    });
+  }
+  return out;
+}
+
+/** Hook-script paths referenced from a manifest's `hooks` block (file hooks only). */
+function hookScripts(basePath: string, manifest: string): string[] {
+  if (!existsSync(join(basePath, manifest))) return [];
+  let hooks: unknown;
+  try {
+    hooks = (JSON.parse(read(join(basePath, manifest))) as { hooks?: unknown })
+      .hooks;
+  } catch {
+    return [];
+  }
+  if (hooks === undefined) return [];
+  const text = JSON.stringify(hooks);
+  const scripts = new Set<string>();
+  for (const m of text.matchAll(SCRIPT_RE)) {
+    const rel = m[0]
+      .replace("${CLAUDE_PLUGIN_ROOT}/", "")
+      .replace(/^\$\{CLAUDE_PLUGIN_ROOT\}/, "")
+      .replace(/^\.\//, "");
+    if (existsSync(join(basePath, rel))) scripts.add(rel);
+  }
+  return [...scripts];
+}
+
+function discoverHooks(basePath: string): Surface[] {
+  const scripts = new Set<string>();
+  for (const m of [
+    ".claude-plugin/plugin.json",
+    ".claude/settings.json",
+    ".claude/settings.local.json",
+  ]) {
+    for (const s of hookScripts(basePath, m)) scripts.add(s);
+  }
+  return [...scripts].sort().map((path) => ({
+    kind: "hook" as const,
+    path,
+    name: basename(path).replace(/\.[^.]+$/, ""),
+    tokens: [path],
+    userInvoked: false,
+  }));
+}
+
+interface TestFile {
+  readonly path: string;
+  readonly content: string;
+}
+
+function discoverTests(
+  basePath: string,
+  globs: readonly string[],
+  ignore: string[],
+): TestFile[] {
+  const found = globSync([...globs], { cwd: basePath, ignore });
+  return found.map((path) => ({ path, content: read(join(basePath, path)) }));
+}
+
+/** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
+function isColocated(surface: Surface, testPath: string): boolean {
+  if (surface.kind === "skill") {
+    return testPath.startsWith(`${dirname(surface.path)}/`);
+  }
+  return (
+    dirname(testPath) === dirname(surface.path) &&
+    basename(testPath).startsWith(`${surface.name}.`)
+  );
+}
+
+function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
+  for (const t of tests) {
+    if (t.path === surface.path) continue;
+    if (isColocated(surface, t.path)) return true;
+    if (surface.tokens.some((tok) => t.content.includes(tok))) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Find harness surfaces (skills / agents / hooks) that no test or eval covers.
+ * A surface is covered by a colocated `*.{harness,eval}.mjs` OR any discovered
+ * test that references its path/namespace. User-invoked skills are exempt unless
+ * `includeUserInvokedSkills` is set; any surface with a `vigiles:ignore-test`
+ * marker is exempt.
+ */
+export function findUntestedSurfaces(
+  options: TestCoverageOptions = {},
+): UntestedReport {
+  const basePath = options.basePath ?? process.cwd();
+  const ignore = [...DEFAULT_IGNORE, ...(options.exclude ?? [])];
+  const globs = options.testGlobs ?? DEFAULT_TEST_GLOBS;
+
+  const surfaces: Surface[] = [];
+  if (options.skills !== false)
+    surfaces.push(...discoverSkills(basePath, ignore));
+  if (options.agents !== false)
+    surfaces.push(...discoverAgents(basePath, ignore));
+  if (options.hooks !== false) surfaces.push(...discoverHooks(basePath));
+
+  const considered = surfaces.filter(
+    (s) =>
+      !s.userInvoked || s.kind !== "skill" || options.includeUserInvokedSkills,
+  );
+  const exempt = surfaces.length - considered.length;
+
+  const tests = discoverTests(basePath, globs, ignore);
+  const covered: Surface[] = [];
+  const untested: Surface[] = [];
+  for (const s of considered) {
+    (isCovered(s, tests) ? covered : untested).push(s);
+  }
+
+  return { total: considered.length, covered, untested, exempt };
+}
+
+/** Suggested colocated test path for an untested surface (shown in the warning). */
+export function suggestedTestPath(surface: Surface): string {
+  if (surface.kind === "skill") {
+    return `${dirname(surface.path)}/${surface.name}.eval.mjs`;
+  }
+  return `${dirname(surface.path)}/${surface.name}.harness.mjs`;
+}
+
+/** Format an untested-surface report as human-readable text. */
+export function formatUntestedReport(report: UntestedReport): string {
+  if (report.untested.length === 0) {
+    const tail = report.exempt > 0 ? ` (${String(report.exempt)} exempt)` : "";
+    return `✓ all ${String(report.total)} surface(s) have a test or eval${tail}`;
+  }
+  const lines = [
+    `⚠ ${String(report.untested.length)} surface(s) with no test or eval:`,
+  ];
+  for (const s of report.untested) {
+    lines.push(`    ${s.kind} ${s.path} — add e.g. ${suggestedTestPath(s)}`);
+  }
+  return lines.join("\n");
+}

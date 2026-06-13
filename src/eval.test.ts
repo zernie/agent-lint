@@ -232,6 +232,67 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
 });
 
+test("measureTriggerRateWith adds precision when irrelevant prompts are given", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+  // fires whenever the task mentions "fire"
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("fire") ? skillStream : plain,
+    });
+
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      prompts: ["fire one", "fire two"], // both should fire → recall 1.0
+      irrelevantPrompts: ["calm down", "fire wrongly"], // one wrongly fires
+      fired: (t) => usedTool(t, "Skill"),
+      spacingSec: 0,
+    },
+    runner,
+  );
+
+  assert.equal(report.rate, 1); // recall: both relevant fired
+  assert.equal(report.n, 2);
+  assert.equal(report.falsePositiveRate, 0.5); // 1 of 2 irrelevant fired
+  assert.ok(Math.abs((report.precision ?? 0) - 2 / 3) < 1e-9); // 2 right / 3 fired
+  assert.equal(report.perIrrelevant?.length, 2);
+  const out = formatTriggerRateReport(report);
+  assert.ok(out.includes("false-positive: 50%"));
+  assert.ok(out.includes("precision: 67%"));
+  assert.ok(out.includes("[irrelevant]"));
+});
+
+test("measureTriggerRateWith: precision is undefined when nothing fires at all", async () => {
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: plain });
+
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      prompts: ["quiet"],
+      irrelevantPrompts: ["silent"],
+      fired: (t) => usedTool(t, "Skill"),
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.rate, 0);
+  assert.equal(report.falsePositiveRate, 0);
+  assert.equal(report.precision, undefined);
+  assert.ok(formatTriggerRateReport(report).includes("precision: n/a"));
+});
+
 test("parseUsage pulls cost/latency/tokens from the result event", () => {
   const stdout = JSON.stringify({
     type: "result",
@@ -456,6 +517,42 @@ test("assertTriggerRate gates on the minimum rate", () => {
   assert.throws(() => {
     assertTriggerRate(report, { min: 0.8 });
   });
+});
+
+test("assertTriggerRate gates precision: false-positive rate and minPrecision", () => {
+  const report = {
+    rate: 1,
+    n: 2,
+    perPrompt: [],
+    falsePositiveRate: 0.5,
+    precision: 0.667,
+    perIrrelevant: [],
+  };
+  // within both thresholds → ok
+  assert.doesNotThrow(() => {
+    assertTriggerRate(report, { maxFalsePositive: 0.5, minPrecision: 0.6 });
+  });
+  // too many false positives → throws
+  assert.throws(() => {
+    assertTriggerRate(report, { maxFalsePositive: 0.2 });
+  }, /false-positive/);
+  // precision too low → throws
+  assert.throws(() => {
+    assertTriggerRate(report, { minPrecision: 0.9 });
+  }, /precision/);
+  // precision undefined (nothing fired) reads as n/a and fails a minPrecision gate
+  assert.throws(() => {
+    assertTriggerRate(
+      {
+        rate: 0,
+        n: 2,
+        perPrompt: [],
+        falsePositiveRate: 0,
+        precision: undefined,
+      },
+      { minPrecision: 0.5 },
+    );
+  }, /n\/a/);
 });
 
 const NO_USAGE = {

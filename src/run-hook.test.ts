@@ -165,6 +165,7 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
   let used = "";
   const deps = (available: boolean): RunHookDeps => ({
     available,
+    egressAvailable: available,
     direct: () => {
       used = "direct";
       return spawnRes({ stdout: '{"decision":"approve"}' });
@@ -172,6 +173,10 @@ test("runHookWith routes direct vs sandbox by policy, refuses when unavailable",
     sandboxed: () => {
       used = "sandbox";
       return spawnRes({ status: 2 });
+    },
+    egress: () => {
+      used = "egress";
+      return spawnRes();
     },
   });
 
@@ -197,12 +202,17 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
   let used = "";
   const deps = (available: boolean): RunHookDeps => ({
     available,
+    egressAvailable: available,
     direct: () => {
       used = "direct";
       return spawnRes();
     },
     sandboxed: () => {
       used = "sandbox";
+      return spawnRes();
+    },
+    egress: () => {
+      used = "egress";
       return spawnRes();
     },
   });
@@ -233,11 +243,60 @@ test("runHookWith: trusted:false confines by default, refuses without bwrap", ()
   assert.equal(used, "direct");
 });
 
+test("runHookWith routes egress:{allow} to the egress seam, refuses when unavailable", () => {
+  let used = "";
+  const deps = (egressAvailable: boolean): RunHookDeps => ({
+    available: true,
+    egressAvailable,
+    direct: () => {
+      used = "direct";
+      return spawnRes();
+    },
+    sandboxed: () => {
+      used = "sandbox";
+      return spawnRes();
+    },
+    egress: () => {
+      used = "egress";
+      return spawnRes({
+        egress: [{ host: "registry.npmjs.org", port: 0, ts: 1, allowed: true }],
+        egressDropped: { packets: 0, bytes: 0 },
+      });
+    },
+  });
+
+  // egress mode + tooling available → the egress seam, surfacing egress + dropped
+  const r = runHookWith(
+    "x",
+    {},
+    { egress: { allow: ["registry.npmjs.org"] } },
+    deps(true),
+  );
+  assert.equal(used, "egress");
+  assert.equal(r.egress[0]?.host, "registry.npmjs.org");
+  assert.equal(r.egress[0]?.allowed, true);
+  assert.deepEqual(r.egressDropped, { packets: 0, bytes: 0 });
+
+  // egress mode + no tooling → refuse (it can't fall back to an unconfined run)
+  assert.throws(
+    () =>
+      runHookWith(
+        "x",
+        {},
+        { egress: { allow: ["registry.npmjs.org"] } },
+        deps(false),
+      ),
+    /egress|slirp4netns|nft/,
+  );
+});
+
 test("runHookWith maps a signal kill to exit 1", () => {
   const deps: RunHookDeps = {
     available: true,
+    egressAvailable: true,
     direct: () => spawnRes({ status: null, signal: "SIGKILL" }),
     sandboxed: () => spawnRes(),
+    egress: () => spawnRes(),
   };
   assert.equal(runHookWith("x", {}, {}, deps).exitCode, 1);
 });

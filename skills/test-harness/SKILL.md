@@ -16,13 +16,13 @@ tier only when the question actually requires a real model.
 
 Match what you're testing to the cheapest tier that can answer it:
 
-| What you're testing                                                                                                                    | Tier              | Cost                                             | API                                                                |
-| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
-| "Does this hook block/allow event X?" — pure hook logic, **every** event type (incl. Edit/Write, PreCompact, SessionEnd, SubagentStop) | **Unit**          | free, milliseconds, no `claude`                  | `runHook`                                                          |
-| "Is the hook actually **wired into** the assembled plugin and does it fire in a real session?"                                         | **Deterministic** | free, no API key (real `claude` + scripted mock) | `runHarnessTest` + `scriptModel`                                   |
-| "Did the injected context (a SessionStart hook, a `/command`) actually **reach the model**?"                                           | **Deterministic** | free, no API key                                 | `runHarnessTest` → `trace.modelRequests` / `assertRequestContains` |
-| "Does this skill's **description trigger** across varied prompts?"                                                                     | **Eval**          | **paid** (real model)                            | `measureTriggerRate`                                               |
-| "Does this harness change **move what the agent does**?" (A/B, signal vs noise)                                                        | **Eval**          | **paid** (real model)                            | `runEval` + `assertSignificant`                                    |
+| What you're testing                                                                                                                    | Tier              | Cost                                             | API                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| "Does this hook block/allow event X?" — pure hook logic, **every** event type (incl. Edit/Write, PreCompact, SessionEnd, SubagentStop) | **Unit**          | free, milliseconds, no `claude`                  | `runHook`                                                                                     |
+| "Is the hook actually **wired into** the assembled plugin and does it fire in a real session?"                                         | **Deterministic** | free, no API key (real `claude` + scripted mock) | `runHarnessTest` + `scriptModel`                                                              |
+| "Did the injected context (a SessionStart hook, a `/command`) actually **reach the model**?"                                           | **Deterministic** | free, no API key                                 | `runHarnessTest` → `trace.modelRequests` / `assertRequestContains`                            |
+| "Does this skill's **description trigger** when it should (recall) **and stay quiet** when it shouldn't (precision)?"                  | **Eval**          | **paid** (real model)                            | `measureTriggerRate` (+ `irrelevantPrompts`) → `assertTriggerRate({ min, maxFalsePositive })` |
+| "Does this harness change **move what the agent does**?" (A/B, signal vs noise)                                                        | **Eval**          | **paid** (real model)                            | `runEval` + `assertSignificant`                                                               |
 
 Most harness questions — block/allow, wired-in, context-landed — never need a
 model. Only "does the model trigger / behave differently" needs the eval tier.
@@ -75,7 +75,11 @@ Testing a hook you didn't write (a vendored third-party script)? Mark it
 host, cleared env, no network egress). Add `{ recordEgress: true }` to also
 **record** what it tries to reach — `r.egress` plus `assertNoEgress(r)` /
 `assertEgressOnly(r, [...])` — the supply-chain check for "what does this skill
-phone home to / install from?". Be precise about the boundaries: see
+phone home to / install from?". When the hook's setup needs a _real_ install,
+`{ egress: { allow: ["registry.npmjs.org"] } }` lets it reach only that
+allowlist (a packet-layer `nft` wall, so a raw socket off-list is dropped too) →
+`r.egress` (allowed hosts) + `r.egressDropped`. Be precise about the boundaries:
+see
 [`docs/sandboxing.md`](../../docs/sandboxing.md) (it blocks destruction and
 egress, but does NOT isolate reads of host files, and only under bwrap).
 
