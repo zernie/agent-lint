@@ -29,7 +29,11 @@ import type {
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
-import { detectAdapter } from "./adapter-registry.js";
+import {
+  detectAdapter,
+  detectAdapterResult,
+  resolveAdapter,
+} from "./adapter-registry.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
@@ -2477,9 +2481,24 @@ async function main(): Promise<void> {
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
       } else {
-        const adapter = detectAdapter(resolve(dirs[0]));
+        const root = resolve(dirs[0]);
+        const harnessFlag = args
+          .find((a) => a.startsWith("--harness="))
+          ?.slice("--harness=".length);
+        const det = detectAdapterResult(root);
+        const adapter = harnessFlag
+          ? resolveAdapter(root, harnessFlag)
+          : det.adapter;
         const report = scanPlugin(dirs[0], adapter.layout);
-        if (!json) console.log(`Detected harness: ${adapter.name}\n`);
+        if (!json) {
+          console.log(`Detected harness: ${adapter.name}`);
+          if (!harnessFlag && det.ambiguousWith.length > 0) {
+            console.log(
+              `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
+            );
+          }
+          console.log("");
+        }
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );

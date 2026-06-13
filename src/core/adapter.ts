@@ -32,8 +32,12 @@ export interface HarnessAdapter {
   /** Transport axis: the mock model's wire format + endpoints. */
   readonly modelMock: ModelMock;
   /**
-   * Whether a repo at `root` looks like it targets this harness — used by the
-   * CLI to auto-detect which adapter to use (the library selects by import).
+   * How strongly a repo at `root` looks like it targets this harness — the CLI
+   * uses it to auto-detect which adapter to use (the library selects by import).
+   * Returns a **specificity score**: 0 = not this harness; higher = a more
+   * specific match. The registry picks the highest scorer, so a strong signal
+   * (a `.claude-plugin/` manifest) beats a weak one (a bare `CLAUDE.md`, or an
+   * `AGENTS.md` that many harnesses share) regardless of registration order.
    */
-  detect(root: string): boolean;
+  detect(root: string): number;
 }

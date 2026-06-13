@@ -59,7 +59,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/adapters/claude-code/dialect.ts":
       "The Claude Code adapter's HarnessDialect surface: re-exports claudeCodeDialect (canonical def lives in core/dialect.ts as the compiler default) so vigiles/claude-code owns its dialect symmetrically; a Codex adapter defines its own",
     "src/core/layout.ts":
-      "PluginLayout — the plugin/repo LAYOUT port (filesystem half of the format axis): where a harness's instruction file / skills / agents / commands / hooks / settings live on disk + the plugin-root token, behind one interface so loadPlugin reads them from a descriptor instead of hard-coding Claude Code's .claude-plugin//.claude/ conventions. A Codex adapter supplies its own PluginLayout and reuses the same loader",
+      "PluginLayout — the plugin/repo LAYOUT port (filesystem half of the format axis): where a harness's instruction file / skills / agents / commands / hooks / settings live on disk + the plugin-root token + the settingsFormat (json|toml), behind one interface so loadPlugin reads them from a descriptor instead of hard-coding Claude Code's .claude-plugin//.claude/ JSON conventions. A Codex adapter supplies its own PluginLayout (TOML config.toml [hooks]) and reuses the same loader",
     "src/adapters/claude-code/layout.ts":
       "claudeCodeLayout — the PluginLayout port's Claude Code reference impl (.claude-plugin/plugin.json, .claude/settings.json, skills/agents/commands surfaces, ${CLAUDE_PLUGIN_ROOT}); loadPlugin defaults to it",
     "src/adapters/claude-code/layout.test.ts":
@@ -87,9 +87,9 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/adapter.ts":
       "`vigiles/adapter` — the harness-adapter authoring kit (the documented small lib third parties use to build their own adapter): re-exports the five port interfaces + HarnessAdapter + the conformance kit + the registry. See docs/authoring-an-adapter.md",
     "src/adapter-registry.ts":
-      "Adapter registry (composition root): ADAPTERS list + detectAdapter(root) (first adapter whose detect matches, else Claude Code — backwards-compatible) + getAdapter(name). The CLI auto-detects through this; the library selects by import",
+      "Adapter registry (composition root): ADAPTERS + detectAdapterResult/detectAdapter (highest detect() specificity wins, reports ambiguousWith for a repo that matches several, else Claude Code — backwards-compatible) + resolveAdapter(root, harness?) honouring a --harness override + getAdapter(name). The CLI auto-detects through this (scan prints the harness + an ambiguity warning); the library selects by import",
     "src/adapter-conformance.ts":
-      "Adapter conformance kit: checkAdapterConformance/assertAdapterConformance — the reusable check every HarnessAdapter runs (each port populated + a behavioural invariant: the dialect accepts its own built-in tool through compileAgent). Third-party adapter authors drop assertAdapterConformance in their tests",
+      "Adapter conformance kit: checkAdapterConformance/assertAdapterConformance (each port populated + cross-port invariants — port names agree, instructionFile is a declared target, plugin-root tokens match — + the dialect accepts its own built-in tool through compileAgent) and assertAdapterLoadsHooks (the behavioural settings round-trip that catches the JSON-vs-TOML layout trap). Third-party adapter authors drop both in their tests",
     "src/core/cedar.test.ts":
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/core/generate-types.ts":

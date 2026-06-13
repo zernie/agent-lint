@@ -153,6 +153,41 @@ codexLayout)`, and a Codex runner reading `codexRuntime`.
    harnesses, because `Trace` is already unified (the parked `measure-model ×
 harness` bet).
 
+## Adapter-readiness gaps (what adding adapter #2 exposes)
+
+The kit makes a harness _declarable_ (five descriptors + `HarnessAdapter`); the
+gaps are in the _behaviour_ the descriptors front. Triaged into "fixed now"
+(concrete from the Codex research, testable without the binary) and "deferred to
+the Codex build" (shape needs the real second implementation — fixing them
+speculatively is the wrong-abstraction trap).
+
+**Fixed:**
+
+- **Settings-format axis** — `PluginLayout.settingsFormat: "json" | "toml"`;
+  `loadPlugin` parses Codex's `config.toml` `[hooks]` (`@iarna/toml`) instead of
+  silently reading zero hooks. Behaviourally covered by `assertAdapterLoadsHooks`.
+- **Detect specificity + `--harness` override** — `detect(root)` returns a
+  specificity score (manifest 3 > settings 2 > bare CLAUDE.md 1), the registry
+  picks the highest and reports `ambiguousWith` (a CLAUDE.md + AGENTS.md repo),
+  and `resolveAdapter(root, harness?)` honours an explicit `--harness`.
+- **Deeper conformance** — cross-port invariants (port names agree,
+  `instructionFile` ∈ `instructionTargets`, plugin-root tokens match) +
+  `assertAdapterLoadsHooks` (the settings round-trip that catches the JSON-vs-TOML
+  trap). Conformance is no longer purely structural.
+
+**Deferred to the Codex adapter build** (need the second impl to shape right):
+
+- **`HarnessRuntime.wireMock`** — Codex points at a mock via a `[model_providers]`
+  config block, not one env var; the right return shape (`{ env?, configFiles? }`)
+  is a guess until a real Codex mock is wired.
+- **`ModelMock` SSE renderer** — the OpenAI Responses event sequence + request
+  parser is a large piece, partly untestable here (no `codex` binary); the
+  descriptor names the wire format, the renderer is built with the adapter.
+- **Instruction/skill renderers** — `compile.ts` still emits structured CLAUDE.md;
+  fold behind the dialect once AGENTS.md/Codex output actually diverges.
+- **Config-based surfaces** — Codex subagents are a `[agents]` TOML table, not an
+  `agents/` dir; `surfaceDirs` materialization is dir-shaped.
+
 ## See also
 
 - `research/harness-landscape.md` — the mid-2026 research backing the Codex

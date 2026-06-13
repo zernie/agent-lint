@@ -22,6 +22,8 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, relative } from "node:path";
 
+import { parse as parseToml } from "@iarna/toml";
+
 import type { PluginLayout } from "../../core/layout.js";
 import { claudeCodeLayout } from "./layout.js";
 
@@ -57,6 +59,21 @@ function readHooksFile(path: string): unknown {
 }
 
 /**
+ * Read the `.hooks` field of a settings file in the layout's format — JSON
+ * (Claude Code's settings.json) or TOML (Codex's `config.toml` `[hooks]`). A
+ * TOML harness's hooks would otherwise be read as zero by the JSON path.
+ */
+function readSettingsHooks(path: string, format: "json" | "toml"): unknown {
+  if (format === "json") return readHooksFile(path);
+  try {
+    return (parseToml(readFileSync(path, "utf-8")) as Record<string, unknown>)
+      .hooks;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Read the hooks block, handling the real-world plugin layouts:
  *   1. inline `hooks` object in .claude-plugin/plugin.json,
  *   2. a `hooks` *string* in plugin.json pointing at a hooks JSON file,
@@ -75,7 +92,8 @@ function readHooks(root: string, layout: PluginLayout): unknown {
   if (existsSync(conventionPath)) return readHooksFile(conventionPath);
 
   const settingsPath = join(root, layout.settingsPath);
-  if (existsSync(settingsPath)) return readHooksFile(settingsPath);
+  if (existsSync(settingsPath))
+    return readSettingsHooks(settingsPath, layout.settingsFormat);
 
   return undefined;
 }

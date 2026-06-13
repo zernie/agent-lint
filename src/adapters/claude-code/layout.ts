@@ -10,6 +10,7 @@ export const claudeCodeLayout: PluginLayout = {
   manifestPath: ".claude-plugin/plugin.json",
   hooksConventionPath: "hooks/hooks.json",
   settingsPath: ".claude/settings.json",
+  settingsFormat: "json",
   instructionFile: "CLAUDE.md",
   surfaceDirs: ["skills", "agents", "commands"],
   materializeRoot: ".claude",
