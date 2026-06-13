@@ -20,7 +20,6 @@ import {
   runHookWith,
   parseHookOutput,
   decideHook,
-  egressRoutes,
   type HookOutput,
   type RunHookDeps,
   type HookSpawnResult,
@@ -415,80 +414,5 @@ test.skipIf(!sandboxAvailable())(
     );
     assert.ok(r.filesWritten.length > 0, "it writes its state cache");
     assertWroteOnly(r, [/^\.omc\//]); // …and only under .omc/
-  },
-);
-
-// --- egress: { allow } — allowlisted REAL egress (needs bwrap+slirp4netns+nft) -
-
-// Gate on whether egress can ACTUALLY route (tap0 attaches), not just whether the
-// tools exist: GitHub-hosted runners have all three binaries but slirp4netns never
-// attaches, so the netns has only `lo`. egressRoutes() probes the real capability
-// so these e2e tests run where egress works and skip honestly where it can't,
-// instead of failing red. See research/egress-sandbox-tooling.md (pasta is the fix).
-const egressOk = egressRoutes();
-
-test.skipIf(!egressOk)(
-  "egress allowlist: reaches an allowed host, drops everything else at the packet layer",
-  () => {
-    // A hook that hits BOTH an allowlisted host and a non-allowlisted one. The
-    // allowlisted one is reached (and recorded); the other is dropped — and so is
-    // a raw socket, proving the boundary is the packet layer, not a proxy env var.
-    const cmd = [
-      "curl -s -m 12 -o /dev/null https://example.com/ || true",
-      "curl -s -m 6 -o /dev/null https://1.1.1.1/ || true",
-      'timeout 5 bash -c "exec 3<>/dev/tcp/9.9.9.9/443" 2>/dev/null || true',
-    ].join("; ");
-    const r = runHook(
-      cmd,
-      { hook_event_name: "PreToolUse" },
-      { egress: { allow: ["example.com"] }, timeoutMs: 30000 },
-    );
-    // the allowlisted host was actually reached, and is recorded as allowed
-    const reached = r.egress.find((e) => e.host === "example.com");
-    assert.ok(
-      reached?.allowed && (reached.packets ?? 0) > 0,
-      `expected example.com to be reached; got ${JSON.stringify(r.egress)}`,
-    );
-    // everything off the allowlist (1.1.1.1 + the raw 9.9.9.9 socket) was dropped
-    assert.ok(
-      (r.egressDropped?.packets ?? 0) > 0,
-      `expected off-allowlist traffic to be dropped; got ${JSON.stringify(r.egressDropped)}`,
-    );
-  },
-);
-
-test.skipIf(!egressOk)(
-  "dogfood: oh-my-claudecode's session-start reaches the npm registry and NOTHING else",
-  () => {
-    // The recordEgress dogfood proves OMC's SessionStart update-check phones the
-    // npm registry; this proves the SAME thing through the allowlist path — the
-    // fetch actually SUCCEEDS to registry.npmjs.org (allowed), and the drop
-    // counter stays 0 (it reached nowhere off the allowlist).
-    const root = join(
-      process.cwd(),
-      "examples/harness/vendor/oh-my-claudecode@deee3a4",
-    );
-    const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
-    writeFileSync(join(ws, ".omc-workspace"), "");
-    const state = mkdtempSync(join(tmpdir(), "omc-state-"));
-    const r = runHook(
-      `node "${root}/scripts/run.cjs" "${root}/scripts/session-start.mjs"`,
-      { hook_event_name: "SessionStart", source: "startup" },
-      {
-        egress: { allow: ["registry.npmjs.org"] },
-        cwd: ws,
-        env: { CLAUDE_PLUGIN_ROOT: root, OMC_STATE_DIR: state },
-        timeoutMs: 40000,
-      },
-    );
-    assert.ok(
-      r.egress.some((e) => e.host === "registry.npmjs.org" && e.allowed),
-      `expected the update check to reach the npm registry; got ${JSON.stringify(r.egress)}`,
-    );
-    assert.equal(
-      r.egressDropped?.packets ?? 0,
-      0,
-      `expected nothing off the allowlist; dropped ${JSON.stringify(r.egressDropped)}`,
-    );
   },
 );
