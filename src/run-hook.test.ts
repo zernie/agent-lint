@@ -20,12 +20,12 @@ import {
   runHookWith,
   parseHookOutput,
   decideHook,
+  egressRoutes,
   type HookOutput,
   type RunHookDeps,
   type HookSpawnResult,
 } from "./run-hook.js";
 import { sandboxAvailable } from "./sandbox.js";
-import { egressAvailable } from "./egress.js";
 
 test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   assert.deepEqual(parseHookOutput('{"decision":"block","reason":"no"}'), {
@@ -420,7 +420,12 @@ test.skipIf(!sandboxAvailable())(
 
 // --- egress: { allow } — allowlisted REAL egress (needs bwrap+slirp4netns+nft) -
 
-const egressOk = egressAvailable(sandboxAvailable());
+// Gate on whether egress can ACTUALLY route (tap0 attaches), not just whether the
+// tools exist: GitHub-hosted runners have all three binaries but slirp4netns never
+// attaches, so the netns has only `lo`. egressRoutes() probes the real capability
+// so these e2e tests run where egress works and skip honestly where it can't,
+// instead of failing red. See research/egress-sandbox-tooling.md (pasta is the fix).
+const egressOk = egressRoutes();
 
 test.skipIf(!egressOk)(
   "egress allowlist: reaches an allowed host, drops everything else at the packet layer",
