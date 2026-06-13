@@ -11,19 +11,19 @@
 
 ## Triage table
 
-| #   | Idea                                       | Founder reaction                | Status        |
-| --- | ------------------------------------------ | ------------------------------- | ------------- |
-| 9   | Plugin/skill leaderboard (data/media)      | wow                             | **strong**    |
-| 10  | Harness cost/ROI optimizer                 | wow                             | **strong**    |
-| 3   | Sell to harness vendors (B2B)              | interesting                     | explore       |
-| 4   | Compliance/attestation buyer               | cool                            | explore       |
-| 8   | CI for model upgrades                      | cool                            | explore       |
-| 7   | Self-improving harness (evolve+proofs)     | cool but hard                   | **roadmap**   |
-| 1   | Compiler-not-linter (generate, not verify) | "don't get" → clarified         | open (decide) |
-| 5   | vigiles-as-MCP oracle                      | "non-deterministic?" → resolved | open (decide) |
-| 6   | SDK bet (harness-as-code)                  | "don't get how" → clarified     | watch         |
-| 2   | One typed source → every tool's format     | no                              | killed        |
-| 11  | Contrarian: measure model × harness        | (no reaction)                   | parked        |
+| #   | Idea                                       | Founder reaction        | Status                   |
+| --- | ------------------------------------------ | ----------------------- | ------------------------ |
+| 9   | Plugin/skill leaderboard (data/media)      | wow                     | **strong**               |
+| 10  | Harness cost/ROI optimizer                 | wow                     | **strong**               |
+| 3   | Sell to harness vendors (B2B)              | interesting             | explore                  |
+| 4   | Compliance/attestation buyer               | cool                    | explore                  |
+| 8   | CI for model upgrades                      | cool                    | explore                  |
+| 7   | Self-improving harness (evolve+proofs)     | cool but hard           | **roadmap**              |
+| 1   | Compiler-not-linter (generate, not verify) | "seems useless"         | **killed**               |
+| 5   | vigiles-as-MCP oracle                      | "don't get the benefit" | demoted → fold into scan |
+| 6   | SDK bet (harness-as-code)                  | "do research" → done    | **no** (gap closed)      |
+| 2   | One typed source → every tool's format     | no                      | killed                   |
+| 11  | Contrarian: measure model × harness        | (no reaction)           | parked                   |
 
 ## Strong (the "wow"s)
 
@@ -115,38 +115,47 @@
   `assertSignificant`, capped by `maxCostUsd`. Prove the loop on one knob before
   generalizing.
 
-## Open — need a founder call
+## Resolved this round
 
-### 1. Compiler-not-linter (generate the skeleton, don't verify it)
+### 5. vigiles-as-MCP oracle — DEMOTED (fold into `scan`)
 
-- **Clarified.** Stop hand-writing the rule list; vigiles _generates_ the
-  Rules/Commands/Key-Files sections from the real eslint config + package.json +
-  file tree. The CLAUDE.md becomes a build output; stale references become
-  impossible because the reference _is_ the source. Human writes only judgment
-  prose; vigiles owns the verifiable skeleton. Kills the rule-sync category (no
-  hand-written rules → nothing to sync).
-- **Open question.** Is "generated instruction skeleton" the product reframe, or a
-  feature of the existing compiler? The spec already half-does this.
+- **Resolved framing.** The check stays 100% deterministic regardless of caller;
+  MCP is just a delivery channel. **Oracle, not gate** — an agent _asks_ "is this
+  safe / are these refs real?" and gets a deterministic answer; a _hook_ enforces.
+- **Disposition.** Not a standalone bet. For anything that's a file edit, a
+  PreToolUse hook enforces without the agent's cooperation (strictly better). The
+  only additive slice is an agent **vetting external code before trusting it**
+  (no edit to hook yet) — which is just `scan` (#9-family) exposed as an MCP tool.
+  So: if/when `scan` ships, offer it as both a CLI and an MCP tool surface; don't
+  pursue "MCP oracle" as its own line.
 
-### 5. vigiles-as-MCP oracle (not gate)
+### 6. SDK bet (harness-as-code) — NO (the gap is largely closed)
 
-- **Resolved.** The check stays 100% deterministic regardless of caller; MCP is a
-  delivery channel. Framing: **oracle, not gate** — an agent _asks_ "is this safe
-  / are these refs real?" and gets a deterministic answer; a _hook_ enforces.
-  Don't let the agent's probabilistic _reaction_ pose as enforcement.
-- **Open question.** Worth shipping an MCP server surface for `scan`/`audit`/
-  reference-check, to distribute through the MCP ecosystem instead of npm?
-
-### 6. SDK bet (harness-as-code) — watch
-
-- **Clarified.** If agents migrate from config-files to the Claude Agent SDK
-  (tools/hooks/subagents as TS code), retarget both pillars at SDK objects: an
-  adapter drives an SDK agent instead of the `claude` CLI; branded types prove
-  tool/hook contracts at build time.
-- **Verdict.** Lower conviction — a hedge that only pays off if SDK adoption
-  overtakes config-files. Watch adoption; don't build yet.
+- **Researched:** [sdk-harness-testing](sdk-harness-testing.md). Premise (a)
+  holds — serious agents _are_ built in SDK code in 2026 (LangGraph ~34.5M
+  monthly downloads, real enterprise deployments). But premise (b) **fails**: the
+  deterministic, no-API-key mock-model test tier — the literal core of vigiles's
+  middle tier — is already **first-party** in the top SDKs: Pydantic AI
+  (`TestModel`/`FunctionModel`/`Agent.override`/`capture_run_messages`/
+  `ALLOW_MODEL_REQUESTS=False`), Vercel AI SDK (`MockLanguageModelV3`),
+  LangGraph/LangChain (`FakeListChatModel`), LlamaIndex (`MockLLM`). No greenfield
+  gap to port pillar 2 into.
+- **The one residual (idea-borrow, not a port).** Every SDK mock stops at the
+  _model_ boundary; deterministic **guardrail / tool-contract enforcement**
+  testing of the assembled agent is under-served — which maps onto vigiles's
+  existing `src/agent-runtime.ts` "declared ≠ enforced" rail. Treat as borrowed
+  insight, not a strategic port. **Smallest probe:** a one-day contract-enforcement
+  test for the OpenAI Agents SDK using its own model double, to test the water
+  before any bet.
 
 ## Killed
+
+### 1. Compiler-not-linter (generate the skeleton)
+
+- Founder: **seems useless.** The part vigiles _could_ generate (the rule /
+  script / file-index skeleton) is the small part; the judgment prose people
+  actually want help with is exactly what can't be generated. Not worth a reframe,
+  and no more than the existing compiler already does. Dead.
 
 ### 2. One typed source → every tool's format
 
