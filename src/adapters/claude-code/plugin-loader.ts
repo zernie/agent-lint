@@ -22,6 +22,9 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, relative } from "node:path";
 
+import type { PluginLayout } from "../../core/layout.js";
+import { claudeCodeLayout } from "./layout.js";
+
 export interface LoadedPlugin {
   /** A `.claude/settings.json`-shaped object with hooks resolved. */
   readonly settings: { hooks?: unknown };
@@ -60,18 +63,18 @@ function readHooksFile(path: string): unknown {
  *   3. the `hooks/hooks.json` convention (e.g. obra/superpowers) — auto-discovered,
  *   4. a plain repo's `.claude/settings.json`.
  */
-function readHooks(root: string): unknown {
+function readHooks(root: string, layout: PluginLayout): unknown {
   // A malformed plugin.json must not crash the loader — fall through to the
   // other layouts (safeReadJson returns null on a parse error).
-  const m = safeReadJson(join(root, ".claude-plugin", "plugin.json"));
+  const m = safeReadJson(join(root, layout.manifestPath));
   if (m) {
     if (typeof m.hooks === "string") return readHooksFile(join(root, m.hooks));
     if (m.hooks !== undefined) return m.hooks;
   }
-  const conventionPath = join(root, "hooks", "hooks.json");
+  const conventionPath = join(root, layout.hooksConventionPath);
   if (existsSync(conventionPath)) return readHooksFile(conventionPath);
 
-  const settingsPath = join(root, ".claude", "settings.json");
+  const settingsPath = join(root, layout.settingsPath);
   if (existsSync(settingsPath)) return readHooksFile(settingsPath);
 
   return undefined;
@@ -98,34 +101,37 @@ function readTree(dir: string, base: string): Record<string, string> {
  * sandbox, and `warnings` for surfaces the deterministic tier can't drive. Merge
  * `settings` with any inline settings and spread `files` into the fixture.
  */
-export function loadPlugin(pluginPath: string): LoadedPlugin {
+export function loadPlugin(
+  pluginPath: string,
+  layout: PluginLayout = claudeCodeLayout,
+): LoadedPlugin {
   const root = resolve(pluginPath);
-  const hooks = readHooks(root);
-  // Expand ${CLAUDE_PLUGIN_ROOT} to the real absolute path so the actual hook
+  const hooks = readHooks(root, layout);
+  // Expand the plugin-root token to the real absolute path so the actual hook
   // scripts execute — we test the shipped wiring, not a reimplementation.
   const resolvedHooks = hooks
     ? (JSON.parse(
-        JSON.stringify(hooks).replaceAll("${CLAUDE_PLUGIN_ROOT}", root),
+        JSON.stringify(hooks).replaceAll(layout.pluginRootToken, root),
       ) as unknown)
     : undefined;
 
   const files: Record<string, string> = {};
-  const claudeMd = join(root, "CLAUDE.md");
-  if (existsSync(claudeMd)) {
-    files["CLAUDE.md"] = readFileSync(claudeMd, "utf-8");
+  const instructions = join(root, layout.instructionFile);
+  if (existsSync(instructions)) {
+    files[layout.instructionFile] = readFileSync(instructions, "utf-8");
   }
-  // Materialize each project-level surface under .claude/<surface>/ so the
+  // Materialize each project-level surface under the materialize root so the
   // assembled context is present in the sandbox (best-effort — headless
   // activation of plugin skills/subagents/commands is not guaranteed; the body
   // is present for the agent to read either way). Counting what we materialize
   // also lets us warn about surfaces the deterministic tier can't drive.
   const counts: Record<string, number> = {};
-  for (const surface of ["skills", "agents", "commands"]) {
+  for (const surface of layout.surfaceDirs) {
     const dir = join(root, surface);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
     const tree = readTree(dir, root);
     for (const [rel, content] of Object.entries(tree)) {
-      files[join(".claude", rel)] = content;
+      files[join(layout.materializeRoot, rel)] = content;
     }
     counts[surface] = Object.keys(tree).length;
   }
@@ -133,7 +139,7 @@ export function loadPlugin(pluginPath: string): LoadedPlugin {
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
     files,
-    warnings: pluginWarnings(root, counts, resolvedHooks, files),
+    warnings: pluginWarnings(root, counts, resolvedHooks, files, layout),
   };
 }
 
@@ -149,6 +155,7 @@ function pluginWarnings(
   counts: Record<string, number>,
   hooks: unknown,
   files: Record<string, string>,
+  layout: PluginLayout,
 ): string[] {
   const warnings: string[] = [];
   if (counts.agents) {
@@ -161,12 +168,12 @@ function pluginWarnings(
       `plugin defines ${String(counts.commands)} slash-command file(s) under commands/ — slash-command invocation needs a real model; test at the eval tier.`,
     );
   }
-  if (hasMcp(root)) {
+  if (hasMcp(root, layout)) {
     warnings.push(
       `plugin declares MCP server(s) (mcpServers / .mcp.json) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
     );
   }
-  const dangling = danglingRefs(root);
+  const dangling = danglingRefs(root, layout);
   if (dangling.length) {
     const shown = dangling.slice(0, 5).join(", ");
     const more =
@@ -184,18 +191,23 @@ function pluginWarnings(
 }
 
 /** Whether the plugin declares any MCP servers (manifest field or .mcp.json). */
-function hasMcp(root: string): boolean {
-  if (existsSync(join(root, ".mcp.json"))) return true;
+function hasMcp(root: string, layout: PluginLayout): boolean {
+  if (existsSync(join(root, layout.mcpConfigFile))) return true;
   return (
-    safeReadJson(join(root, ".claude-plugin", "plugin.json"))?.mcpServers !==
+    safeReadJson(join(root, layout.manifestPath))?.[layout.mcpManifestKey] !==
     undefined
   );
 }
 
 // A plugin-relative path reference to a file under a standard surface dir, with a
 // known extension — e.g. a hook script that `cat`s `skills/using-superpowers/SKILL.md`.
-const INTRA_REF_RE =
-  /(?:skills|hooks|commands|agents)\/[A-Za-z0-9._/-]+\.(?:md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json)/g;
+const INTRA_REF_EXTS = "md|sh|cmd|mjs|cjs|js|ts|py|rb|txt|json";
+function intraRefRe(layout: PluginLayout): RegExp {
+  return new RegExp(
+    `(?:${layout.intraRefDirs.join("|")})/[A-Za-z0-9._/-]+\\.(?:${INTRA_REF_EXTS})`,
+    "g",
+  );
+}
 
 /**
  * Intra-plugin file references that don't resolve — the partial-vendor / broken-
@@ -206,14 +218,15 @@ const INTRA_REF_RE =
  * and report the ones missing on disk. A static check that would have caught a
  * bug the dogfood hit twice. Best-effort: a warning, not an error.
  */
-function danglingRefs(root: string): string[] {
+function danglingRefs(root: string, layout: PluginLayout): string[] {
   const missing = new Set<string>();
   const seen = new Set<string>();
-  for (const surface of ["hooks", "skills", "agents", "commands"]) {
+  const re = intraRefRe(layout);
+  for (const surface of layout.intraRefDirs) {
     const dir = join(root, surface);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
     for (const content of Object.values(readTree(dir, root))) {
-      for (const m of content.matchAll(INTRA_REF_RE)) {
+      for (const m of content.matchAll(re)) {
         const ref = m[0];
         if (seen.has(ref)) continue;
         seen.add(ref);
