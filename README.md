@@ -186,6 +186,7 @@ vigiles composes with other tools rather than replacing them: architectural lint
 ## Documentation
 
 - **The two pillar guides:** [verifying instruction files](docs/verifying-instruction-files.md) (Pillar 1) · [testing your harness](docs/harness-testing.md) (Pillar 2).
+- **[Harnesses](docs/harnesses.md)** — which harness vigiles targets (Claude Code now, Codex likely next) and how you select one.
 - **[docs/](docs/README.md)** — the full how-to & reference index: adoption ladder, CLI, linter support, skills/agents.
 - **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
 

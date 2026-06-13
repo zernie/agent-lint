@@ -1,0 +1,91 @@
+# Harnesses — which one vigiles targets, and how to pick
+
+An agent is **Model + Harness**. The _harness_ is the machine around the model:
+the CLI that runs it, the hook protocol, the plugin/skill/subagent layout, the
+instruction-file dialect. vigiles is built so the **core is harness-agnostic**
+and the harness-specific pieces live behind a swappable **adapter**.
+
+> **Supported today: Claude Code.** Codex (`AGENTS.md` + its own runtime) is the
+> likely next adapter. The architecture is already split so adding one doesn't
+> touch the core — see [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
+
+## You pick the harness by which subpath you import
+
+The adapter is selected at **author time, by your import** — not by a setting in
+a config file. Two surfaces:
+
+```ts
+// Core — harness-agnostic. The stable API you write tests/evals against.
+import { runHarnessTest, runEval, assertHookBlocked } from "vigiles/testing";
+
+// Adapter — the Claude Code-specific pieces, named explicitly.
+import { loadPlugin, scriptModel } from "vigiles/claude-code";
+```
+
+`vigiles/testing` is the part that never changes when the harness changes:
+`runHarnessTest`, `runEval`, `runHook`, the `Trace` predicates, the assertions.
+`vigiles/claude-code` is the adapter: the plugin/repo loader that reads real
+Claude Code layouts (`.claude-plugin/plugin.json`, `.claude/settings.json`,
+`${CLAUDE_PLUGIN_ROOT}`, `skills/`, `agents/`) and the scriptable Anthropic
+Messages mock you point `claude` at.
+
+When a second harness lands, it sits **beside** the first — same core, a new
+adapter import:
+
+```ts
+import { loadPlugin } from "vigiles/codex"; // hypothetical — not shipped yet
+```
+
+Nothing in `vigiles/testing` changes. Unused adapters tree-shake out; there's no
+runtime registry and no "harness not found" surprise.
+
+### Why import, not a `harness:` config key
+
+- You're already writing code (`.spec.ts`, `*.harness.mjs`) — naming the adapter
+  is one more import, and the types flow through.
+- The bundle only carries the adapter you import (each drags in its own spawn /
+  SSE / sandbox machinery).
+- A config string is a runtime lookup; an import is checked when you write it.
+
+## The CLI is the exception — it auto-detects
+
+The programmatic API names the adapter by import. The **CLI cannot** — so
+`vigiles compile`, `vigiles scan`, and `vigiles audit` **detect** the harness
+from what's in the repo (a `.claude-plugin/`, an `AGENTS.md`, …) and keep working
+with zero config. A `vigiles.config` override is the planned escape hatch if
+detection is ever ambiguous.
+
+## What's actually harness-specific (the two axes)
+
+Not everything labelled "Claude Code" is coupled the same way. There are two
+independent axes, and a new harness might share one but not the other:
+
+| Axis                    | What it covers                                                                                                                               | Example difference for Codex                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Format / dialect**    | the instruction-file format and plugin layout: `CLAUDE.md` vs `AGENTS.md`, `SKILL.md` frontmatter, the `tools:` contract, `${…_PLUGIN_ROOT}` | emits/verifies `AGENTS.md` instead of `CLAUDE.md` |
+| **Runtime / transport** | the binary that runs the model, the hook event protocol, the model mock                                                                      | spawns `codex` with a different hook JSON shape   |
+
+The reference-verification engine (does this linter rule exist and is it enabled,
+does this path/script/symbol resolve) is **the same across harnesses** — only the
+format it reads/writes and the runtime it drives differ.
+
+## How this is kept honest
+
+The core staying harness-agnostic isn't a convention you have to remember — it's
+enforced. `eslint-plugin-boundaries` classifies modules into `verify-core` (the
+domain) and `cc-harness` (the Claude Code adapter) and **forbids the core from
+importing the adapter** (`eslint.config.mjs`, rule `boundaries/dependencies`).
+The dependency only points one way: adapter → core, never core → adapter — the
+inward rule that defines a hexagon.
+
+And because vigiles verifies references rather than reimplementing linters, it
+**dogfoods** that rule: `CLAUDE.md.spec.ts` carries
+`enforce("boundaries/dependencies")`, so `vigiles compile` checks the boundary
+rule is present and enabled. The architecture invariant is a verified reference,
+not a comment.
+
+## See also
+
+- [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md) — the design: the two axes, the ports to extract when adapter #2 lands, and the step-by-step Codex recipe.
+- [`docs/harness-testing.md`](harness-testing.md) — the three test tiers that ride on `vigiles/testing`.
+- [`research/sync-tool-compatibility.md`](../research/sync-tool-compatibility.md) — composing with _format-axis_ tools (Ruler, rulesync) that distribute the file vigiles authors.
