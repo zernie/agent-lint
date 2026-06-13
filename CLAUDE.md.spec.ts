@@ -56,6 +56,12 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Dialect-port test suite (vitest): defaultDialect is Claude Code, compileAgent verifies the tool contract against the default dialect (built-in ok, typo → did-you-mean), and an INJECTED dialect swaps the catalog (the Codex-prep seam — a tool valid under the alt dialect is flagged under CC)",
     "src/adapters/claude-code/dialect.ts":
       "The Claude Code adapter's HarnessDialect surface: re-exports claudeCodeDialect (canonical def lives in core/dialect.ts as the compiler default) so vigiles/claude-code owns its dialect symmetrically; a Codex adapter defines its own",
+    "src/core/layout.ts":
+      "PluginLayout — the plugin/repo LAYOUT port (filesystem half of the format axis): where a harness's instruction file / skills / agents / commands / hooks / settings live on disk + the plugin-root token, behind one interface so loadPlugin reads them from a descriptor instead of hard-coding Claude Code's .claude-plugin//.claude/ conventions. A Codex adapter supplies its own PluginLayout and reuses the same loader",
+    "src/adapters/claude-code/layout.ts":
+      "claudeCodeLayout — the PluginLayout port's Claude Code reference impl (.claude-plugin/plugin.json, .claude/settings.json, skills/agents/commands surfaces, ${CLAUDE_PLUGIN_ROOT}); loadPlugin defaults to it",
+    "src/adapters/claude-code/layout.test.ts":
+      "Layout-port test suite (vitest): claudeCodeLayout is the loadPlugin default; an alternate Codex-shaped PluginLayout (AGENTS.md, prompts/ surface, .codex/ settings, ${CODEX_PLUGIN_ROOT}) loads through the SAME loadPlugin — and the default CC layout sees none of it (the swap seam a second harness plugs into)",
     "src/core/cedar.test.ts":
       "Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback",
     "src/core/generate-types.ts":
@@ -169,7 +175,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/adapters/claude-code/stats.test.ts":
       "Stats test suite (node:test): incomplete-beta vs known closed forms, p-values vs t-table critical values, Welch significant/noise/deterministic cases",
     "src/adapters/claude-code/plugin-loader.ts":
-      "Plugin/repo harness loader: loadPlugin reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with ${CLAUDE_PLUGIN_ROOT} resolved, plus CLAUDE.md + skills + agents + commands materialized; .warnings flags surfaces the deterministic tier can't drive (subagents/commands/MCP, an empty machine, or dangling intra-plugin file refs e.g. a partial vendor) so a plugin load never silently tests nothing; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine",
+      "Plugin/repo harness loader: loadPlugin(path, layout = claudeCodeLayout) reads real hooks (inline plugin.json, a hooks string path, the hooks/hooks.json convention e.g. obra/superpowers, or .claude/settings.json) with the plugin-root token resolved, plus the instruction file + skills + agents + commands materialized — all layout literals come from the injected PluginLayout port (src/core/layout.ts), so a Codex adapter reuses this loader with its own layout; .warnings flags surfaces the deterministic tier can't drive (subagents/commands/MCP, an empty machine, or dangling intra-plugin file refs e.g. a partial vendor) so a plugin load never silently tests nothing; resolveHarness layers inline settings/files on top so a test/eval runs the assembled machine",
     "src/adapters/claude-code/plugin-loader.test.ts":
       "Plugin-loader test suite (node:test): CLAUDE_PLUGIN_ROOT resolution, CLAUDE.md/skills/agents/commands materialization, surface + empty-machine + MCP warnings, settings merge, in-repo dogfood",
     "src/adapters/claude-code/vendor.test.ts":
