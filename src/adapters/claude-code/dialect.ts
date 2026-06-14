@@ -45,7 +45,12 @@ export const claudeCodeDialect: HarnessDialect = {
     "PostSession",
     "Notification",
   ],
-  instructionTargets: ["CLAUDE.md", "AGENTS.md"],
+  // Claude Code natively reads CLAUDE.md only — it does NOT auto-load AGENTS.md
+  // (anthropics/claude-code#34235 is open; AGENTS.md works solely via an
+  // `@AGENTS.md` import inside CLAUDE.md or a symlink). AGENTS.md is the
+  // cross-tool standard (Codex's native target), not a CC dialect fact; vigiles's
+  // tool-agnostic recognition of it lives in validate.ts's INSTRUCTION_FILES.
+  instructionTargets: ["CLAUDE.md"],
   pluginRootToken: "${CLAUDE_PLUGIN_ROOT}",
 };
 
