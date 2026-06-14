@@ -600,6 +600,43 @@ describe("validatePaths", () => {
     assert.notEqual(fileResults[0].result, null);
     assert.equal(fileResults[0].result?.enforced, 1);
   });
+
+  it("dedupes a symlinked mirror — validates the real file once (req 7)", () => {
+    // CLAUDE.md (real) + AGENTS.md → CLAUDE.md, both passed. The mirror is
+    // recognized and skipped with a 'mirror' reason, not double-validated.
+    const real = join(tmpDir, "CLAUDE.md");
+    const link = join(tmpDir, "AGENTS.md");
+    writeFileSync(real, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(real, link);
+
+    const { fileResults, valid } = validatePaths([real, link], {
+      rules: { "require-spec": false },
+    });
+    assert.equal(valid, true);
+    assert.equal(fileResults[0].skipped, false); // real validated
+    assert.equal(fileResults[1].skipped, true); // mirror skipped
+    assert.match(fileResults[1].reason ?? "", /mirror of/);
+  });
+
+  it("real file still validates when the symlink is listed first (no shadowing)", () => {
+    // Symlink first: it must NOT record itself as canonical and shadow the real
+    // file that follows — the real CLAUDE.md must still be validated.
+    const real = join(tmpDir, "CLAUDE2.md");
+    const link = join(tmpDir, "AGENTS2.md");
+    writeFileSync(real, "### Rule\n**Enforced by:** `x`\n");
+    symlinkSync(real, link);
+
+    const { fileResults, valid } = validatePaths([link, real], {
+      rules: { "require-spec": false },
+    });
+    assert.equal(valid, true);
+    // The symlink (listed first) is skipped by default but must NOT shadow the
+    // real file — exactly one file is validated, and it's the real one.
+    const validated = fileResults.filter((r) => !r.skipped);
+    assert.equal(validated.length, 1);
+    assert.equal(validated[0].path, real);
+    assert.equal(validated[0].result?.enforced, 1);
+  });
 });
 
 // ---------------------------------------------------------------------------

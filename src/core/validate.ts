@@ -1,4 +1,4 @@
-import { readFileSync, lstatSync, existsSync } from "node:fs";
+import { readFileSync, lstatSync, existsSync, realpathSync } from "node:fs";
 import { globSync } from "glob";
 import { resolve, basename as pathBasename } from "node:path";
 import { cosmiconfigSync } from "cosmiconfig";
@@ -361,8 +361,32 @@ export function validatePaths(
 ): ValidatePathsResult {
   const fileResults: FileResult[] = [];
   let allValid = true;
+  // Maps a real (symlink-resolved) path → the first path validated for it, so a
+  // symlinked/synced CLAUDE.md⇄AGENTS.md mirror is validated ONCE on the real
+  // file instead of double-firing require-spec on the mirror's name (sync-tool-
+  // compatibility.md req 7). Recorded only on a successful validation, so a
+  // symlink seen first (and skipped) never shadows its real target.
+  const seenReal = new Map<string, string>();
 
   for (const filePath of paths) {
+    let real: string;
+    try {
+      real = realpathSync(filePath);
+    } catch {
+      real = resolve(filePath);
+    }
+
+    const prior = seenReal.get(real);
+    if (prior !== undefined) {
+      fileResults.push({
+        path: filePath,
+        skipped: true,
+        reason: `mirror of ${prior} (same file via symlink/sync) — validated once`,
+        result: null,
+      });
+      continue;
+    }
+
     const { content, skipped, reason } = readInstructionFile(filePath, {
       followSymlinks,
     });
@@ -378,10 +402,16 @@ export function validatePaths(
       continue;
     }
 
+    // Attribute require-spec/integrity to the REAL file when this path is a
+    // symlink, so a symlinked AGENTS.md resolves to CLAUDE.md's spec rather than
+    // a nonexistent AGENTS.md.spec.ts. Non-symlinks keep the original path
+    // verbatim (behaviour-preserving).
+    const attributePath = real !== resolve(filePath) ? real : filePath;
+    seenReal.set(real, filePath);
     const result = validate(content, {
       ruleMarkers,
       rules: rulesConfig,
-      filePath,
+      filePath: attributePath,
     });
     fileResults.push({ path: filePath, skipped: false, reason: null, result });
     if (!result.valid) allValid = false;

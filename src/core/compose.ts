@@ -16,7 +16,13 @@
  * audit` can warn before the integrity guarantee is lost.
  */
 
-import { existsSync, statSync } from "node:fs";
+import {
+  existsSync,
+  statSync,
+  lstatSync,
+  realpathSync,
+  readFileSync,
+} from "node:fs";
 import { resolve, join } from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +52,18 @@ export interface ComposeCollision {
   readonly target: string;
   /** The source slot to compile into instead. */
   readonly redirectTo: string;
+  readonly reason: string;
+}
+
+/** CLAUDE.md and AGENTS.md recognized as one artifact (symlinked or synced). */
+export interface InstructionMirror {
+  /** The two instruction filenames that mirror each other. */
+  readonly files: readonly [string, string];
+  /** How they're kept identical: a symlink, or byte-identical synced content. */
+  readonly kind: "symlink" | "identical-content";
+  /** For `kind: "symlink"`, which filename is the link and which is the real file. */
+  readonly link?: string;
+  readonly realTarget?: string;
   readonly reason: string;
 }
 
@@ -103,6 +121,56 @@ export function detectSyncTools(root: string): DetectedSyncTool[] {
 function targetName(target: string): string {
   const parts = target.split(/[\\/]/);
   return parts[parts.length - 1];
+}
+
+/**
+ * Detect whether `CLAUDE.md` and `AGENTS.md` at `root` are ONE artifact, not two
+ * — a symlink in either direction (`ln -s CLAUDE.md AGENTS.md`) or byte-identical
+ * content (a sync tool keeping them in lockstep). Claude Code reads CLAUDE.md
+ * only ([anthropics/claude-code#34235]); users bridge to the AGENTS.md tools this
+ * way (see `research/sync-tool-compatibility.md` requirement 7). When mirrored,
+ * vigiles must treat them as the same file — hash + `require-spec` run once on the
+ * real one, and the mirror is never flagged as a second, spec-less instruction
+ * file. Returns null when one is absent, or both exist but genuinely differ.
+ */
+export function detectInstructionMirror(
+  root: string,
+): InstructionMirror | null {
+  const claude = join(root, "CLAUDE.md");
+  const agents = join(root, "AGENTS.md");
+  if (!existsSync(claude) || !existsSync(agents)) return null;
+
+  // Symlink either direction (or both → a third file) resolves to one realpath.
+  try {
+    if (realpathSync(claude) === realpathSync(agents)) {
+      const claudeIsLink = lstatSync(claude).isSymbolicLink();
+      const link = claudeIsLink ? "CLAUDE.md" : "AGENTS.md";
+      const realTarget = claudeIsLink ? "AGENTS.md" : "CLAUDE.md";
+      return {
+        files: ["CLAUDE.md", "AGENTS.md"],
+        kind: "symlink",
+        link,
+        realTarget,
+        reason: `${link} is a symlink resolving to the same file as ${realTarget} — one instruction artifact bridged to the AGENTS.md tools; verify and hash the real file once, never flag the mirror as spec-less.`,
+      };
+    }
+  } catch {
+    /* realpath failed (race / broken link) → fall through to content compare */
+  }
+
+  // Byte-identical content: kept in sync by rulesync/Ruler rather than symlinked.
+  try {
+    if (readFileSync(claude).equals(readFileSync(agents))) {
+      return {
+        files: ["CLAUDE.md", "AGENTS.md"],
+        kind: "identical-content",
+        reason: `CLAUDE.md and AGENTS.md are byte-identical — kept in sync (rulesync/Ruler); treat as one artifact and stamp the integrity hash only on the compile source slot.`,
+      };
+    }
+  } catch {
+    /* unreadable → not a detectable mirror */
+  }
+  return null;
 }
 
 /**
