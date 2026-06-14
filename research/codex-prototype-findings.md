@@ -4,9 +4,10 @@
 > validate the harness-adapter architecture against a real second harness; it is
 > **now SHIPPED** — registered in `ADAPTERS` (the CLI auto-detects a Codex repo)
 > and exported as `vigiles/codex`. **Pillar 2 (harness testing) is full and proven
-> against the real `codex` binary; pillar 1 (compile) renderers are still partial**
-> (they emit the Claude-Code shape until the format-axis renderers land). This doc
-> records how the bet was validated and what remains. Built from
+> against the real `codex` binary; pillar 1 (compile) is format-correct for the
+> surfaces that map** — AGENTS.md + minimal SKILL.md, CC output byte-identical
+> (subagents are a deliberate boundary, not a gap — see below). This doc records
+> how the bet was validated and what remains. Built from
 > `research/harness-landscape.md`.
 
 ## UPDATE (2026-06-14): the transport tier is now PROVEN against real codex ✅
@@ -97,17 +98,37 @@ Building it surfaced real, specific limitations — each maps to a deferred item
    **cross-adapter** (`codex → claude-code`). It should move to a shared/core
    location so adapters don't depend on each other. (New finding — not previously
    logged.)
+6. **[CLOSED] Instruction-file + SKILL.md renderers are now dialect-correct for
+   Codex.** `compileClaude` is format-neutral (plain markdown, no frontmatter =
+   the AGENTS.md shape; the h1 target comes from the dialect), and `compileSkill`
+   now reads `dialect.skillFrontmatter`: under Codex's `"minimal"` profile it
+   emits ONLY `name` + `description`, dropping the CC-only keys
+   (disable-model-invocation / argument-hint). CC output stays byte-for-byte
+   identical (the dogfood integrity hash is unchanged). The CLI passes the
+   detected adapter's dialect into `compileSkill`, so a Codex repo compiles
+   Codex-shaped skills.
+
+## Non-goal: compiling vigiles subagents to Codex
+
+Deliberately NOT implemented (a model mismatch, not a missing renderer). vigiles's
+`agent()` is a **verified tool contract** rendered to a Claude-Code-shaped subagent
+markdown file. A Codex "subagent" is an `[agents.<name>]` **TOML concurrency table**
+(`max_threads` / `max_depth`) — a runtime-orchestration knob, not a tool contract.
+The two models don't map, so `compileAgent` does not emit a TOML `[agents]` block,
+and there is no plan to add one. The Codex dialect still **verifies** an `agent()`'s
+tool contract against its built-in catalog; only the OUTPUT renderer is CC-only.
+(Comment at `compileAgent` in `src/core/compile.ts`.)
 
 ## What this means
 
 The bet held end-to-end: the **format/layout half** was one object set (no core
 changes), and the **transport half** — once we stopped assuming the binary was
 unavailable — was built and proven against real `codex` (gaps 1–2 closed). On that
-basis Codex is now **registered + exported** (`vigiles/codex`). The only work left
-is the format-axis polish that keeps pillar-1 `compile` honest for Codex output:
-extend the layout port for TOML manifest/MCP + config-surfaces (gaps 3–4), move
-`loadPlugin` to a shared location (gap 5), and add the instruction/skill renderers
-behind the dialect.
+basis Codex is now **registered + exported** (`vigiles/codex`). The instruction-file
+and SKILL.md renderers are now dialect-correct (gap 6, closed). The remaining
+format-axis polish: extend the layout port for TOML manifest/MCP + config-surfaces
+(gaps 3–4) and move `loadPlugin` to a shared location (gap 5). Compiling subagents
+to Codex is a non-goal (above), not on this list.
 
 The boundary holds for the prototype too: `src/adapters/codex/**` is a
 `codex-harness` element in `eslint.config.mjs`, and `verify-core` may import

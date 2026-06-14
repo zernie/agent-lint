@@ -52,6 +52,9 @@ export const claudeCodeDialect: HarnessDialect = {
   // tool-agnostic recognition of it lives in validate.ts's INSTRUCTION_FILES.
   instructionTargets: ["CLAUDE.md"],
   pluginRootToken: "${CLAUDE_PLUGIN_ROOT}",
+  // Claude Code reads the full SKILL.md frontmatter set (description,
+  // disable-model-invocation, argument-hint, …).
+  skillFrontmatter: "claude-code",
 };
 
 export type { HarnessDialect } from "../../core/dialect.js";

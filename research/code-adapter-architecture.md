@@ -194,12 +194,18 @@ env_key,requires_openai_auth,…}` flag set (proven), exported as
   `codexMockArgs`/`codexMockEnv` from the codex runtime — not the env-var route
   the prototype guessed (that finding is now corrected).
 
-**Still deferred** (genuinely needs the divergent output / surface shape):
+**Also done — the format-axis renderers:** `compileClaude` is format-neutral
+(plain markdown = the AGENTS.md shape) and `compileSkill` reads
+`dialect.skillFrontmatter` (Codex `"minimal"` = `name`/`description` only; CC
+unchanged, byte-identical dogfood hash). Subagents are a **deliberate non-goal**:
+a Codex subagent is an `[agents.<name>]` TOML concurrency table, not a
+tool-contract file, so vigiles's `agent()` isn't compiled to it (still verified).
 
-- **Instruction/skill renderers** — `compile.ts` still emits structured CLAUDE.md;
-  fold behind the dialect once AGENTS.md/Codex output actually diverges.
-- **Config-based surfaces** — Codex subagents are a `[agents]` TOML table, not an
-  `agents/` dir; `surfaceDirs` materialization is dir-shaped.
+**Still deferred** (loader/layout, not compile):
+
+- **Config-based surfaces + TOML manifest/MCP read** — `surfaceDirs` is dir-shaped
+  and the manifest/MCP read is JSON-shaped, so Codex's `[mcp_servers]`/`[agents]`
+  config tables aren't read. (`research/codex-prototype-findings.md` #3–#4.)
 
 ## See also
 

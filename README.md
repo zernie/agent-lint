@@ -51,7 +51,7 @@ An agent runs real commands in your repo — it can delete the wrong files, leak
 
 They share the thesis but not a dependency: verify your instructions without ever writing a harness test, or test your harness without a single `.spec.ts`. Pick the pillar that hurts today.
 
-**Supported harnesses: Claude Code and Codex.** Both ride the same harness-agnostic core behind a thin five-port adapter. Claude Code is full (verify + test). **Codex** ships as [`vigiles/codex`](docs/harnesses.md): pillar-2 harness testing works against the real `codex` binary (keyless, no API key) — `runHarnessTest({ adapter: codexAdapter })` — while pillar-1 instruction compile is partial (it still emits the Claude-Code shape; the format-axis renderers are in progress). Adding another harness (Gemini, OpenCode, or your own) is writing one object against five small ports — **[custom adapters are welcome](docs/authoring-an-adapter.md)**.
+**Supported harnesses: Claude Code and Codex.** Both ride the same harness-agnostic core behind a thin five-port adapter. **Codex** ships as [`vigiles/codex`](docs/harnesses.md): it verifies references, compiles Codex-shaped instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs pillar-2 harness tests against the real `codex` binary, keyless — `runHarnessTest({ adapter: codexAdapter })`. (Subagents are the one thing it doesn't compile, by design: a Codex subagent is a concurrency-config entry, not a tool-contract file — a model mismatch, not a gap.) Adding another harness (Gemini, OpenCode, or your own) is writing one object against five small ports — **[custom adapters are welcome](docs/authoring-an-adapter.md)**.
 
 ## Verify your instruction files
 

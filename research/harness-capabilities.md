@@ -30,18 +30,23 @@ decision, not a backlog item, unless this doc says otherwise.
 
 | Capability           | Claude Code                                  | Codex                                          | vigiles stance                                                                 |
 | -------------------- | -------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
-| Instruction file     | `CLAUDE.md`                                  | `AGENTS.md` (+`CLAUDE.md` fallback)            | **Verify** both (dialect `instructionTargets`); compile renderer is CC-shaped¹ |
-| Skills               | `skills/<n>/SKILL.md` (YAML frontmatter)     | `SKILL.md` (name/description)                  | **Verify** (loader + refs); trigger-rate is pillar 2 (CC only today)           |
-| Subagents            | `agents/<n>.md` (YAML frontmatter, `tools:`) | `[agents]` **TOML table** in config            | **Verify** for CC (dir); Codex config-table surfaces **not captured yet**²     |
+| Instruction file     | `CLAUDE.md`                                  | `AGENTS.md` (+`CLAUDE.md` fallback)            | **Verify + compile** — renderer is format-neutral (AGENTS.md = plain markdown) |
+| Skills               | `skills/<n>/SKILL.md` (YAML frontmatter)     | `SKILL.md` (name/description)                  | **Verify + compile** — minimal SKILL.md via `dialect.skillFrontmatter`¹        |
+| Subagents            | `agents/<n>.md` (YAML frontmatter, `tools:`) | `[agents]` **TOML table** in config            | **Verify** (tool contract); **not compiled** to Codex by design²               |
 | Slash commands       | `commands/<n>.md`                            | commands (config)                              | **Verify** (detected by loader/scan); not deeply modelled                      |
 | MCP servers          | `.mcp.json` / manifest `mcpServers` (JSON)   | `[mcp_servers]` **TOML table**                 | **Verify** refs for CC (JSON); Codex TOML MCP read **not wired yet**²          |
 | Plugin manifest      | `.claude-plugin/plugin.json` (JSON)          | `config.toml` (no separate JSON manifest)      | **Verify**; layout port reads both, manifest read still JSON-shaped²           |
 | Tool contract syntax | `tools:` built-in catalog + `mcp__*`         | shell/apply_patch/update_plan/web_search + MCP | **Verify** via the injected dialect (per-harness catalog)                      |
 | Plugin-root token    | `${CLAUDE_PLUGIN_ROOT}`                      | `${PLUGIN_ROOT}`                               | **Verify** (resolved by the loader from the layout port)                       |
 
-¹ Codex `compile` output is currently CC-shaped — the instruction/skill renderers
-behind the dialect are the deferred format-axis work.
-² Deferred gaps tracked in `research/codex-prototype-findings.md` (#3–#5).
+¹ `compileSkill` reads `dialect.skillFrontmatter`: Codex's `"minimal"` profile
+emits only `name`/`description`; CC's `"claude-code"` keeps the full set
+(disable-model-invocation / argument-hint). CC output is byte-identical.
+² **Deliberate boundary, not a gap:** a Codex subagent is an `[agents.<name>]`
+TOML concurrency table (`max_threads`/`max_depth`), not a tool-contract file —
+vigiles's `agent()` doesn't map onto it, so it isn't compiled to Codex (still
+verified). Remaining loader gaps (TOML manifest/MCP read, surfaces, shared loader)
+tracked in `research/codex-prototype-findings.md` (#3–#5).
 
 ## B. Runtime / transport (pillar-2 territory)
 

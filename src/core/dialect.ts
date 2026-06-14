@@ -18,6 +18,12 @@
  * vocabulary: the concrete dialects live in the adapters, only this interface
  * lives in the core. That is the format axis of the hexagonal boundary.
  */
+/**
+ * Which SKILL.md frontmatter keys a harness understands — see
+ * `HarnessDialect.skillFrontmatter`.
+ */
+export type SkillFrontmatterProfile = "claude-code" | "minimal";
+
 export interface HarnessDialect {
   /** Stable identifier, e.g. "claude-code". */
   readonly name: string;
@@ -33,4 +39,13 @@ export interface HarnessDialect {
   readonly instructionTargets: readonly string[];
   /** The env token expanded to the plugin root in hook commands. */
   readonly pluginRootToken: string;
+  /**
+   * Which SKILL.md frontmatter keys this harness understands — the profile the
+   * compiler renders under:
+   * - `"claude-code"` — the full Claude Code set (name, description, plus the
+   *   CC-only keys: disable-model-invocation, argument-hint, …).
+   * - `"minimal"` — name + description ONLY (the cross-tool SKILL.md shape Codex
+   *   and OpenCode read; CC-only keys are omitted because they'd be inert noise).
+   */
+  readonly skillFrontmatter: SkillFrontmatterProfile;
 }
