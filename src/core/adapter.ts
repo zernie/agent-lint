@@ -17,6 +17,7 @@ import type { PluginLayout } from "./layout.js";
 import type { HarnessRuntime } from "./runtime.js";
 import type { HookProtocol } from "./hook-protocol.js";
 import type { ModelMock } from "./model-mock.js";
+import type { HarnessTestDriver } from "./harness-driver.js";
 
 /**
  * Which vigiles pillars/tiers a harness can drive — the capability matrix made
@@ -68,6 +69,14 @@ export interface HarnessAdapter {
   /** Transport axis: the mock model's wire format + endpoints. Present iff
    *  `capabilities.harnessTesting`. */
   readonly modelMock?: ModelMock;
+  /**
+   * Pillar-2 deterministic-runner driver: how `runHarnessTest` builds this
+   * harness's argv, starts its scripted mock, and parses its stdout. Present iff
+   * `capabilities.harnessTesting` (it composes the runtime + modelMock into the
+   * one seam the runner dispatches through). Carried on the bundle so the runner
+   * never imports a sibling adapter to find it.
+   */
+  readonly harnessTestDriver?: HarnessTestDriver;
   /**
    * How strongly a repo at `root` looks like it targets this harness — the CLI
    * uses it to auto-detect which adapter to use (the library selects by import).

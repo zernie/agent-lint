@@ -20,15 +20,12 @@ import http from "node:http";
 import type { ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
-/** One scripted assistant turn: a final text answer, or a tool call. */
-export interface ModelTurn {
-  /** Final text answer (stops the turn). */
-  readonly text?: string;
-  /** A tool to invoke, e.g. "Bash" | "Write" | "Edit". */
-  readonly tool?: string;
-  /** The tool input, e.g. `{ file_path, content }` or `{ command }`. */
-  readonly input?: Record<string, unknown>;
-}
+// The trace shapes are defined in core (`src/core/harness-driver.ts`) so the
+// harness-agnostic runner + every adapter can reference them without a
+// cross-adapter import. Re-exported here so `vigiles/claude-code` and the
+// granular `vigiles/mock-model` path keep exporting `ModelTurn`/`ModelRequest`.
+import type { ModelTurn, ModelRequest } from "../../core/harness-driver.js";
+export type { ModelTurn, ModelRequest } from "../../core/harness-driver.js";
 
 /** Build a scripted model from an ordered list of turns. */
 export function scriptModel(turns: readonly ModelTurn[]): ModelTurn[] {
@@ -39,22 +36,6 @@ export interface TurnInfo {
   readonly n: number;
   readonly stream: boolean;
   readonly hasToolResult: boolean;
-}
-
-/**
- * One `/v1/messages` request the mock received, flattened to text for
- * assertions. This is the seam that lets a harness test prove what reached the
- * model — a SessionStart hook's injected `additionalContext`, or a slash
- * command's expansion — not just that a hook fired.
- */
-export interface ModelRequest {
-  /** The system prompt, flattened to text (string or text-block array). */
-  readonly system: string;
-  /** The conversation messages, each flattened to `{ role, text }`. */
-  readonly messages: readonly {
-    readonly role: string;
-    readonly text: string;
-  }[];
 }
 
 export interface MockHandle {

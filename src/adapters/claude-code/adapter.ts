@@ -13,6 +13,7 @@ import { claudeCodeLayout } from "./layout.js";
 import { claudeCodeRuntime } from "./runtime.js";
 import { claudeCodeHookProtocol } from "./hook-protocol.js";
 import { claudeCodeModelMock } from "./model-mock.js";
+import { claudeCodeDriver } from "./harness-test.js";
 
 export const claudeCodeAdapter: HarnessAdapter = {
   name: "claude-code",
@@ -28,6 +29,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
   runtime: claudeCodeRuntime,
   hookProtocol: claudeCodeHookProtocol,
   modelMock: claudeCodeModelMock,
+  harnessTestDriver: claudeCodeDriver,
   detect(root: string): number {
     // Most specific signal wins: a plugin manifest (3) > repo settings (2) >
     // a bare CLAUDE.md (1, weak — many tools also read it / AGENTS.md).

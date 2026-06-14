@@ -17,7 +17,7 @@ import {
   parseResponsesRequest,
   startCodexMock,
 } from "./mock-model.js";
-import { codexMockArgs, codexMockEnv } from "./runtime.js";
+import { codexMockArgs, codexMockEnv, codexRuntime } from "./runtime.js";
 
 const EVENT_ORDER = [
   "response.created",
@@ -107,6 +107,19 @@ test("parseResponsesRequest: extracts last user prompt, model, tool names", () =
   expect(r.prompt).toBe("final prompt");
   expect(r.model).toBe("gpt-5-codex");
   expect(r.toolNames).toEqual(["shell", "apply_patch"]);
+});
+
+test("codexRuntime.wireMock surfaces the keyless flag recipe + dummy-key env", () => {
+  const wired = codexRuntime.wireMock("http://127.0.0.1:7777");
+  // args = the proven -c model_providers.mock.* flag array (not an env var).
+  expect(wired.args).toEqual(codexMockArgs("http://127.0.0.1:7777"));
+  expect(wired.args).toContain("model_provider=mock");
+  expect(
+    wired.args.some((a) => a.includes('base_url="http://127.0.0.1:7777/v1"')),
+  ).toBe(true);
+  // env = the dummy key codex reads model_providers.mock.env_key through.
+  expect(wired.env).toEqual(codexMockEnv());
+  expect(wired.env.MOCK_KEY).toBe("dummy-key");
 });
 
 test("parseResponsesRequest: tolerates malformed JSON", () => {

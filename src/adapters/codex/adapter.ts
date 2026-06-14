@@ -19,6 +19,7 @@ import { codexLayout } from "./layout.js";
 import { codexRuntime } from "./runtime.js";
 import { codexHookProtocol } from "./hook-protocol.js";
 import { codexModelMock } from "./model-mock.js";
+import { codexDriver } from "./driver.js";
 
 export const codexAdapter: HarnessAdapter = {
   name: "codex",
@@ -34,6 +35,7 @@ export const codexAdapter: HarnessAdapter = {
   runtime: codexRuntime,
   hookProtocol: codexHookProtocol,
   modelMock: codexModelMock,
+  harnessTestDriver: codexDriver,
   detect(root: string): number {
     // A `.codex/config.toml` is a strong signal; a bare AGENTS.md is weak (many
     // harnesses read it). (Unused while unregistered — kept for symmetry.)

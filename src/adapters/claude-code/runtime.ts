@@ -12,6 +12,23 @@ export const claudeCodeRuntime: HarnessRuntime = {
   modelBaseUrlEnv: "ANTHROPIC_BASE_URL",
   modelApiKeyEnv: "ANTHROPIC_API_KEY",
   mockApiKey: "sk-vigiles-mock",
+  /**
+   * Claude Code reaches the mock purely through env (no argv flags): the
+   * base-URL var + a dummy key. The returned `env` is the overlay the runner
+   * layers over `process.env`, so the spawn env is identical to `mockModelEnv`.
+   */
+  wireMock(baseUrl: string): {
+    readonly args: readonly string[];
+    readonly env: Record<string, string>;
+  } {
+    return {
+      args: [],
+      env: {
+        [claudeCodeRuntime.modelBaseUrlEnv]: baseUrl,
+        [claudeCodeRuntime.modelApiKeyEnv]: claudeCodeRuntime.mockApiKey,
+      },
+    };
+  },
 };
 
 /**
