@@ -123,6 +123,14 @@ is the case that splits the matrix mid-row: mockable (so pillar 2 is reachable)
 but with in-process plugin hooks instead of shell processes (so the `runHook`
 unit tier doesn't apply — `shellHooks:false`, no `hookProtocol`).
 
+**Full capability inventory.** This matrix is the brief version. The exhaustive
+record of every harness-specific capability (CC vs Codex) — and, per capability,
+whether vigiles _verifies_ it, _tests_ it, or **records-only** (acknowledged but
+deliberately not supported) — is in
+[`research/harness-capabilities.md`](../research/harness-capabilities.md). Testing
+every special capability is an explicit non-goal; that doc is the answer of record
+for "does vigiles do X for harness Y?".
+
 ## How this is kept honest
 
 The core staying harness-agnostic isn't a convention you have to remember — it's
