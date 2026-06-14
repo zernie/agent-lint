@@ -6,7 +6,7 @@ every reference your CLAUDE.md / AGENTS.md makes is real: each linter rule exist
 code symbol actually exists in the file that defines it. Stale references can't
 silently mislead the agent.
 
-The [README](../README.md#verify-your-instruction-files) has the 30-second pitch;
+The [README](../README.md) has the 30-second pitch;
 this is the full guide.
 
 ## Two on-ramps: markdown, then typed spec
@@ -141,6 +141,44 @@ reference to its real source:
 editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
 language server. Both have `--check` CI freshness modes.
 [How it works →](linter-support.md#generate-types)
+
+## The marking nudge — what happens on every file save
+
+Verification only works on references that are _marked_ (`enforce()`, `file()`,
+`cmd()`, a `vigiles:symbol` span, or an inline `<!-- vigiles:enforce -->`). The
+agent could just write a reference as plain prose, which nothing can verify. So
+the plugin ships a **PostToolUse hook that nudges the agent to mark references,
+in the loop**, the moment it edits an instruction file. The flow, from save:
+
+1. **The agent edits** `CLAUDE.md` / `AGENTS.md` / `SKILL.md`.
+2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles refs-hook`) and scans the
+   saved file for **unmarked linter-rule references** — a slash-scoped name with
+   no file extension, like `` `eslint/no-console` `` — and for `vigiles:symbol`
+   marks whose target is missing. (It's deliberately narrow: bare identifiers like
+   `` `runHook` `` and file paths are **not** flagged — too noisy.)
+3. **It reacts by the `unmarked-refs` severity** (`.vigilesrc.json`):
+   - **`"warn"` (default) → a non-blocking nudge.** The hook injects a message
+     into the agent's context — _"these references aren't verifiable; express
+     them as marks, or `<!-- vigiles:ignore -->` if it's prose"_ — and the agent,
+     **still editing that file**, can fix them on the spot. Nothing is blocked.
+   - **`"error"` → block.** The edit is rejected (exit 2) until the references
+     are marked or ignored.
+   - **`false` → off.**
+4. **The deterministic backstop:** on commit (a git pre-commit hook) and in CI,
+   `vigiles audit` / `vigiles refs` re-run the same check — the unbypassable
+   floor that catches anything the in-loop nudge didn't.
+
+**What it deliberately does not do:** it can't force a _plaintext_ reference
+(no backticks, pure prose) to become a mark — distinguishing a load-bearing
+reference from ordinary prose is undecidable (see
+[`research/reference-verification-limits.md`](../research/reference-verification-limits.md)).
+It catches the high-signal, low-noise case (a backticked linter-rule name); bare
+identifiers, paths, and prose are left to the shipped instructions, not the hook.
+
+**Harness note:** the in-loop nudge is a hook, so it works on **Claude Code and
+Codex**. A harness without hooks doesn't get the per-save nudge — it falls back
+to the always-loaded instructions plus the `vigiles audit` CI floor. See the
+[`unmarked-refs` rule](rules/unmarked-refs.md).
 
 ## What changes with vigiles
 

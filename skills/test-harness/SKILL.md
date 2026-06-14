@@ -125,12 +125,17 @@ In a runner (node:test / vitest / jest) the tests are plain async functions. Or
 use the zero-setup CLI, which discovers and runs the files:
 
 ```bash
-npx vigiles test                 # *.harness.mjs — deterministic, no API key (CI-safe)
-npx vigiles eval --trials=6      # *.eval.mjs — real model (local / nightly, not CI)
+npx vigiles test                 # *.harness.{mjs,ts} — unit + deterministic, no API key
+npx vigiles eval --trials=6      # *.eval.{mjs,ts} — real model (local / nightly, not CI)
 ```
 
-Keep unit + deterministic tests in CI (they're free); run evals locally or on a
-schedule where model auth exists.
+Unit-tier `runHook` tests need no `claude` and **always run** — write and run them
+even with no `claude` installed. A tier that genuinely can't run reports a loud
+`⊘ SKIPPED` (tallied separately, never a fake `✓`); a standalone script emits one
+via `skip(reason)` from `vigiles/testing`. A skip passes by default, but in a CI
+job that asserts the capability is present, run **`vigiles test --no-skip`** so a
+skipped tier fails — a green-with-skips is untested surface. Keep unit +
+deterministic tests in CI (free); run evals locally or on a schedule with auth.
 
 ## When the user didn't say what to test
 

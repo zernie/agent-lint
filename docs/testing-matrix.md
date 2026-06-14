@@ -101,30 +101,66 @@ deterministic examples (`*.harness.mjs`) run with **no API key** (real `claude` 
 scripted mock model), so they're CI-affordable; the evals (`*.eval.mjs`) cost
 real model calls and run manually / in a keyed job.
 
-## Why are the CLI examples `.mjs` (JavaScript), not TypeScript?
+## JavaScript or TypeScript? Both.
 
-The **API is fully TypeScript** — `src/*.ts`, shipped with `.d.ts`, and its own
-suites (`src/*.test.ts`) and the type smokes (`test/types/*.ts`) are TypeScript.
-TypeScript is a first-class consumer path: write your harness tests in a `.ts`
-file under your runner (node:test / vitest / jest) and the `vigiles/vitest` /
-`vigiles/jest` entries give you typed matchers.
+`vigiles test` / `vigiles eval` accept harness/eval scripts in **either
+language** — the glob is `*.harness.*` / `*.eval.*` over `.mjs` `.cjs` `.js`
+`.mts` `.cts` `.ts` (`src/adapters/claude-code/run-scripts.ts`). A JavaScript
+file runs as a plain `node <file>`; a TypeScript file is run through **`tsx`**
+when it's installed, else **Node's native type stripping** (Node ≥ 22.6), with an
+actionable error if neither is available. So you can author your own tests in TS
+and get types end-to-end, or in JS for zero setup.
 
-The files under `examples/harness/` are `.mjs` on purpose, for one reason: the
-zero-dependency CLI fallback. `vigiles test` / `vigiles eval` discover these
-files and run each as a plain `node <file>` child process — **no build step, no
-TS loader** (`tsx`/`ts-node`), no config. That keeps the fallback dependency-free
-and CI-affordable, which is the whole point of that tier (run the deterministic
-harness in CI with nothing but Node + the `claude` binary). A `.ts` example would
-force a transpile step into the runner and undercut that.
+The **API itself is fully TypeScript** — `src/*.ts`, shipped with `.d.ts`; the
+whole unit suite (`src/*.test.ts`) and the type smokes (`test/types/*.ts`) are
+TypeScript, so the project dogfoods the typed path. Under a runner (vitest /
+jest) the `vigiles/vitest` / `vigiles/jest` entries add typed matchers.
 
-So the split is deliberate:
+The canonical examples under `examples/harness/` stay **`.mjs` on purpose** —
+not because TS is unsupported, but because they're the **lowest-common-denominator
+demos**: they must run with nothing but Node (no `tsx`, no loader, no build) so a
+copy-paste into any repo Just Works and the CLI-fallback tier stays
+dependency-free. Your own scripts are under no such constraint — reach for `.ts`
+whenever you want types.
 
-- **Bare CLI tier** → `.mjs`, runnable by `node` / `vigiles test` with zero deps.
+- **Zero-dep CLI tier** → `.mjs` (or `.ts` if you have `tsx`/Node ≥ 22.6), via `vigiles test`.
 - **Runner tier** → `.ts`, full types via `vigiles/vitest` / `vigiles/jest`.
 
 If you want a typed worked example, the type smokes in
 [`test/types/`](../test/types/) show the API used from `.ts` with the matcher
 types applied.
+
+## Running the tiers in CI
+
+CI runs **every tier except evals** — not one at a time, and not all crammed into
+one job. Each tier runs where it's cheapest, so a fast unit failure surfaces
+before the slow, privileged ones.
+
+| Tier                     | Run it with                                   | This repo's CI job           | Needs                         |
+| ------------------------ | --------------------------------------------- | ---------------------------- | ----------------------------- |
+| Unit (+ coverage gate)   | `npm test` / `npm run coverage`               | `test`                       | nothing (model-free)          |
+| Reference verification   | `vigiles audit` (+ the Action via `uses: ./`) | `check`                      | nothing                       |
+| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)         | `harness`                    | the real `claude` CLI, no key |
+| e2e (allowlisted egress) | `npm run test:e2e`                            | `e2e` (privileged container) | bubblewrap + slirp4netns      |
+| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)       | **manual — not in CI**       | model auth ($)                |
+
+**Best practice** (what this maps to): keep the model-free tiers (unit /
+reference / deterministic) on every push and PR so feedback is fast and free;
+isolate the slow or privileged tiers (real-egress e2e) in their own jobs; and run
+the paid **eval** tier on demand, not on every commit — its non-determinism and
+cost make it a release/regression gate, not a per-push check. The per-tier
+`npm run test:unit | test:integration | test:e2e` scripts exist for exactly this
+split (see [`vitest.config.mjs`](../vitest.config.mjs)).
+
+**Skips are loud, never a silent green.** `vigiles test` classifies each script
+pass / skip / fail. A unit-tier `runHook` test needs no `claude` and always runs;
+a tier that can't run (deterministic with no `claude`, e2e with no bubblewrap)
+reports a loud `⊘ SKIPPED`, tallied separately as "N skipped" — it never counts
+as a `✓ passed`. A skip passes by default (capabilities differ per job — this
+repo runs the egress tier under `e2e`, not `harness`), but in a CI job that
+**asserts** the capability is present, add **`vigiles test --no-skip`** so a
+skipped tier **fails**: a green-with-skips is itself untested surface. A standalone
+script emits a skip with `skip(reason)` from `vigiles/testing`.
 
 ## See also
 

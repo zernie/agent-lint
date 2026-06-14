@@ -22,12 +22,9 @@ import {
   scriptModel,
   claudeAvailable,
 } from "../../dist/adapters/claude-code/harness-test.js";
-import { withHarness, assertCreated } from "../../dist/harness-assert.js";
+import { withHarness, assertCreated, skip } from "../../dist/harness-assert.js";
 
-if (!claudeAvailable()) {
-  console.log("skip: `claude` CLI not found");
-  process.exit(0);
-}
+if (!claudeAvailable()) skip("`claude` CLI not found");
 
 const plugin = fileURLToPath(new URL("./fixture-plugin", import.meta.url));
 

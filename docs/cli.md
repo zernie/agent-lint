@@ -11,8 +11,8 @@ npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by
 npx vigiles compile [files...]      # Compile .spec.ts → .md
 npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
-npx vigiles test [files...]         # Run *.harness.mjs deterministic harness tests (no API key)
-npx vigiles eval [files...]         # Run *.eval.mjs real-model harness evals (--trials=N)
+npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
+npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
@@ -20,16 +20,36 @@ npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter 
 npx vigiles generate-schema --check # Verify schema.json is up to date
 ```
 
+`vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
+**pass / skip / fail** — a tier that can't run (e.g. deterministic with no
+`claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
+Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
+default; in a CI job that **asserts** the capability is present, add `--no-skip`
+so a skipped tier **fails** (a green-with-skips is untested surface).
+
+By default `init` sets up **both pillars**: it scaffolds a typed spec + types
+(Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), wires CI as a
+`zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none
+exists), and installs the Claude Code plugin.
+
+**Interactive vs non-interactive:** run in a terminal (a TTY), `init` prompts for
+which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
+(no TTY) — or with `--yes` — it skips the prompts and applies the defaults. So
+"set up vigiles" from a Claude Code / Codex prompt Just Works without hanging.
+
 ### `init` flags
 
-| Flag                 | Effect                                                |
-| -------------------- | ----------------------------------------------------- |
-| `--strict`           | Sets require-spec and require-skill-spec to `"error"` |
-| `--target=AGENTS.md` | Creates AGENTS.md spec instead of CLAUDE.md           |
-| `--no-gha`           | Skip adding CI step to GHA workflow                   |
+| Flag                           | Effect                                                 |
+| ------------------------------ | ------------------------------------------------------ |
+| `--yes`, `-y`                  | Skip prompts; use defaults (both pillars, CI, plugin)  |
+| `--pillars=both\|verify\|test` | Which pillars to set up (default `both`)               |
+| `--no-gha`                     | Skip wiring CI                                         |
+| `--no-plugin`                  | Skip installing the Claude Code plugin                 |
+| `--strict`                     | Set `require-spec` / `require-skill-spec` to `"error"` |
+| `--target=AGENTS.md`           | Create a bare spec for one file (Pillar 1 only)        |
 
-Works the same for humans and agents — fully non-interactive. See the
-[agent setup guide](agent-setup.md) and [agent workflows](agent-workflows.md).
+See the [agent setup guide](agent-setup.md) and
+[agent workflows](agent-workflows.md).
 
 ### `scan [dir]`
 
@@ -63,12 +83,89 @@ _run_ the plugin (observed egress, real trigger-rate, safety) build on top.
 
 ## GitHub Action
 
+The Action is a **composite action over the published `npx vigiles` CLI** — it
+runs the exact artifact you'd run locally, so there's no separate bundle to drift.
+Every input maps to a real CLI flag.
+
+### Quick start
+
 ```yaml
-- uses: zernie/vigiles@main # runs `audit` by default
-- uses: zernie/vigiles@main
-  with:
-    command: compile # compile specs in CI
+name: vigiles
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read # all the Action needs; it only reads files and emits annotations
+
+jobs:
+  vigiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1 # runs `audit` by default
 ```
+
+That's the whole thing — `audit` verifies that every linter rule, file path,
+script, and symbol your `CLAUDE.md` / `AGENTS.md` cites is real and enabled, checks
+the integrity hashes, and reports coverage. Failures appear inline as GitHub
+annotations and fail the job.
+
+### Compile specs in CI
+
+```yaml
+- uses: zernie/vigiles@v1
+  with:
+    command: compile # spec.ts → markdown; fails if a reference is stale
+    paths: CLAUDE.md.spec.ts # optional; auto-discovers when omitted
+```
+
+### Inputs
+
+| Input               | Default   | Description                                                                                 |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `command`           | `audit`   | `audit` (verify references + integrity + coverage) or `compile` (specs → markdown).         |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `audit`, `.spec.ts` for `compile`. Auto-discovers.  |
+| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
+| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
+| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
+| `working-directory` | `.`       | Directory to run vigiles in.                                                                |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
+
+### Output channels
+
+Beyond the `valid` step output, the Action reports **three** ways:
+
+1. **Inline annotations** — failures appear on the diff (`::error`).
+2. **Job summary** — a markdown result block on the run page (`$GITHUB_STEP_SUMMARY`).
+3. **Sticky PR comment** — on `pull_request` events, one comment that is _updated in place_ each run (found by a hidden marker, never duplicated). Requires `pull-requests: write`; set `comment: false` to disable.
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write # needed for the sticky PR comment
+
+# ...
+- id: vigiles
+  uses: zernie/vigiles@v1
+- run: echo "passed=${{ steps.vigiles.outputs.valid }}"
+```
+
+The `valid` output is `'true'` if vigiles passed (exit 0), `'false'` otherwise.
+Exit codes (also reflected in `valid`): **0** clean · **1** warnings · **2** hard errors.
+On a fork PR (read-only token) the comment step degrades to a warning — the job still passes/fails on the result.
+
+### Versioning
+
+Pin to the **floating major tag** `@v1` for automatic patch/minor updates (the
+release pipeline keeps `v1` pointed at the latest `1.x`). Pin a full tag
+(`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
+unreleased `HEAD` — use it only to test upcoming changes.
 
 To verify generated types are fresh in CI:
 
@@ -93,15 +190,16 @@ The plugin provides two hooks:
 
 ## Validation rules
 
-`vigiles audit` validates instruction files with four rules:
+`vigiles audit` validates instruction files; the refs-hook nudges marking on edit:
 
-| Rule                                                | Default  | What it checks                                                               |
-| --------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                              |
-| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                         |
-| [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                    |
-| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                    |
+| Rule                                                | Default  | What it checks                                                                  |
+| --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
+| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                                 |
+| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
+| [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                       |
+| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                       |
+| [`unmarked-refs`](rules/unmarked-refs.md)           | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
 
 Configure in `.vigilesrc.json`:
 

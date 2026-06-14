@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { langForFile, fileDefinesSymbol } from "./symbols.js";
+import type { RuleSeverity } from "./types.js";
 
 const FENCE = /^\s*```/;
 const SPAN = /`([^`\n]+)`/g;
@@ -116,35 +117,34 @@ export function verifySymbolRefs(
 // Enforcement: force code references to carry the file-qualified mark
 // ---------------------------------------------------------------------------
 
-const PATH_LIKE = /[/\\]|\.[A-Za-z0-9]+$/; // a path or a bare filename
-const PLAIN_ID = /^[A-Za-z_]\w*$/;
-const SCOPED = /^[A-Za-z_]\w*(?:#|::)[\w?!]+$/;
+const HAS_EXT = /\.[A-Za-z0-9]+$/; // a file extension → a path/filename, not a rule
+// A linter-rule reference: a slash-scoped `linter/rule` (optionally `@scoped`)
+// with NO file extension — `eslint/no-console`, `@typescript-eslint/no-x`,
+// `boundaries/dependencies`. Deliberately NOT a path (`src/x.ts`) or a bare
+// identifier (`runHook`): those are excluded.
+const RULE_SHAPED = /^@?[a-z][\w-]*(?:\/[\w-]+)+$/;
 const IGNORE_FILE = /<!--\s*vigiles:ignore-file\s*-->/;
 const IGNORE_LINE = /<!--\s*vigiles:ignore\s*-->/;
 
 /**
- * Whether a span looks like a *code reference* that ought to carry a
- * file-qualified mark — a scoped name, or an identifier that isn't a bare
- * lowercase prose word. A function-call form `` `foo(args)` `` is treated as a
- * reference to its callee `foo`. Paths/filenames are excluded (they are `file`
- * refs).
+ * Whether a span is a **linter-rule reference** that ought to be marked
+ * (`enforce()` / inline `<!-- vigiles:enforce -->`) so the audit can verify the
+ * rule exists AND is enabled. High-signal only: a slash-scoped name with no file
+ * extension. A function-call form `` `foo(args)` `` is reduced to its callee.
+ *
+ * Deliberately NOT flagged (too noisy / undecidable): bare identifiers
+ * (`runHook`, `MAX_RETRIES` — usually API prose, mark opt-in via an explicit
+ * `vigiles:symbol`) and file paths (`src/x.ts`, `docs/y.md` — file refs).
  */
 export function isCodeShaped(text: string): boolean {
   const callee = text.replace(/\s*\([^)]*\)\s*$/, ""); // `foo(args)` → `foo`
-  if (SCOPED.test(callee)) return true;
-  if (!PLAIN_ID.test(callee)) return false;
-  const hasUnderscore = callee.includes("_");
-  const hasCamel = /[a-z][A-Z]/.test(callee);
-  const isPascal = /^[A-Z][a-z]/.test(callee);
-  const isScreaming = /^[A-Z][A-Z0-9_]+$/.test(callee);
-  return hasUnderscore || hasCamel || isPascal || isScreaming;
+  return RULE_SHAPED.test(callee) && !HAS_EXT.test(callee);
 }
 
 /**
- * Code-shaped inline references that are NOT yet marked — the spans the
- * enforcement hook makes the agent mark as `` `vigiles:symbol path.ext#symbol` ``
- * or opt out of with `<!-- vigiles:ignore -->` (or `<!-- vigiles:ignore-file -->`
- * for the whole file).
+ * Unmarked linter-rule references — the spans the refs-hook nudges the agent to
+ * mark with `enforce()` / `<!-- vigiles:enforce ... -->` (or opt out of with
+ * `<!-- vigiles:ignore -->` / `<!-- vigiles:ignore-file -->`).
  */
 export function unmarkedCodeRefs(markdown: string): Span[] {
   if (IGNORE_FILE.test(markdown)) return [];
@@ -152,7 +152,44 @@ export function unmarkedCodeRefs(markdown: string): Span[] {
   return inlineSpans(markdown).filter((span) => {
     if (IGNORE_LINE.test(lines[span.line - 1] ?? "")) return false;
     if (SYMBOL_MARK.test(span.text)) return false; // already a vigiles:symbol mark
-    if (PATH_LIKE.test(span.text)) return false; // a path/filename → file ref
     return isCodeShaped(span.text);
   });
+}
+
+/**
+ * The reference issues in an instruction file, as one human-readable line each:
+ * a `vigiles:symbol` mark whose symbol is missing, plus every unmarked
+ * code-shaped span that ought to be a mark. The shared detector behind both the
+ * `vigiles refs` CLI and the PostToolUse refs-hook.
+ */
+export function collectRefIssues(markdown: string, basePath: string): string[] {
+  const out: string[] = [];
+  for (const b of verifySymbolRefs(markdown, basePath)) {
+    out.push(`line ${String(b.line)}: ${b.reason}`);
+  }
+  for (const u of unmarkedCodeRefs(markdown)) {
+    out.push(
+      `line ${String(u.line)}: \`${u.text}\` is an unmarked linter-rule ` +
+        `reference — mark it as \`enforce("${u.text}")\` (typed spec) or ` +
+        `\`<!-- vigiles:enforce ${u.text} -->\` (markdown) so audit can verify ` +
+        `it exists and is enabled, or add <!-- vigiles:ignore --> if it is prose`,
+    );
+  }
+  return out;
+}
+
+/** What the refs-hook should do given the issue count and configured severity. */
+export type RefsHookAction = "ok" | "nudge" | "block";
+
+/**
+ * Map detected issues + the `unmarked-refs` rule severity to a hook action:
+ * no issues or `false` → ok, `"error"` → block (exit 2), anything else
+ * (`"warn"`, the default) → a non-blocking nudge.
+ */
+export function refsHookAction(
+  issueCount: number,
+  severity: RuleSeverity,
+): RefsHookAction {
+  if (issueCount === 0 || severity === false) return "ok";
+  return severity === "error" ? "block" : "nudge";
 }

@@ -31,12 +31,9 @@ import {
   scriptModel,
   claudeAvailable,
 } from "../../dist/adapters/claude-code/harness-test.js";
-import { assertRequestContains } from "../../dist/harness-assert.js";
+import { assertRequestContains, skip } from "../../dist/harness-assert.js";
 
-if (!claudeAvailable()) {
-  console.log("skip: `claude` CLI not found");
-  process.exit(0);
-}
+if (!claudeAvailable()) skip("`claude` CLI not found");
 
 const ROOT = fileURLToPath(
   new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
