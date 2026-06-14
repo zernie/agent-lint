@@ -1,9 +1,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
-import { detectSyncTools, composeCollisions } from "./compose.js";
+import {
+  detectSyncTools,
+  composeCollisions,
+  detectInstructionMirror,
+} from "./compose.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
 function withRepo(fn: (dir: string) => void): void {
@@ -106,5 +110,43 @@ test("composeCollisions: both tools each collide on AGENTS.md", () => {
       "ruler",
       "rulesync",
     ]);
+  });
+});
+
+test("detectInstructionMirror: symlinked AGENTS.md -> CLAUDE.md is one artifact", () => {
+  withRepo((dir) => {
+    writeFileSync(join(dir, "CLAUDE.md"), "# Rules\n");
+    symlinkSync(join(dir, "CLAUDE.md"), join(dir, "AGENTS.md"));
+    const mirror = detectInstructionMirror(dir);
+    assert.ok(mirror, "expected a mirror");
+    assert.equal(mirror.kind, "symlink");
+    assert.equal(mirror.link, "AGENTS.md");
+    assert.equal(mirror.realTarget, "CLAUDE.md");
+  });
+});
+
+test("detectInstructionMirror: byte-identical CLAUDE.md/AGENTS.md is a synced mirror", () => {
+  withRepo((dir) => {
+    const body = "# Rules\n\nsynced content\n";
+    writeFileSync(join(dir, "CLAUDE.md"), body);
+    writeFileSync(join(dir, "AGENTS.md"), body);
+    const mirror = detectInstructionMirror(dir);
+    assert.ok(mirror, "expected a mirror");
+    assert.equal(mirror.kind, "identical-content");
+  });
+});
+
+test("detectInstructionMirror: distinct content is NOT a mirror", () => {
+  withRepo((dir) => {
+    writeFileSync(join(dir, "CLAUDE.md"), "# Claude rules\n");
+    writeFileSync(join(dir, "AGENTS.md"), "# Different agents rules\n");
+    assert.equal(detectInstructionMirror(dir), null);
+  });
+});
+
+test("detectInstructionMirror: null when AGENTS.md is absent", () => {
+  withRepo((dir) => {
+    writeFileSync(join(dir, "CLAUDE.md"), "# Rules\n");
+    assert.equal(detectInstructionMirror(dir), null);
   });
 });
