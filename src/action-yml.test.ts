@@ -85,4 +85,21 @@ describe("action.yml — production-grade GitHub Action contract", () => {
       "must run npx vigiles@<version>",
     );
   });
+
+  it("writes a job summary and posts a sticky PR comment", () => {
+    for (const input of ["comment", "github-token"]) {
+      assert.ok(action.inputs[input], `missing input: ${input}`);
+    }
+    assert.ok(raw.includes("$GITHUB_STEP_SUMMARY"), "must write a job summary");
+    assert.ok(
+      raw.includes("<!-- vigiles-action -->"),
+      "must use a marker for a sticky (update-in-place) comment",
+    );
+    assert.ok(
+      raw.includes("pull_request"),
+      "comment must be gated to pull_request events",
+    );
+    // Update-or-create: both API calls present.
+    assert.ok(raw.includes("-X PATCH") && raw.includes("-X POST"));
+  });
 });

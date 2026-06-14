@@ -157,8 +157,8 @@ matrix, and how it compares to promptfoo. Also: [benchmarks](research/benchmarks
 npx vigiles init        # Scaffold a spec (full setup wizard)
 npx vigiles compile     # Compile .spec.ts → .md
 npx vigiles audit       # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
-npx vigiles test        # Run *.harness.mjs deterministic harness tests (no API key)
-npx vigiles eval        # Run *.eval.mjs real-model harness evals (--trials=N)
+npx vigiles test        # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
+npx vigiles eval        # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 ```
 
 Drop it into CI with the GitHub Action — a composite action over the same CLI, so it runs the artifact you'd run locally:

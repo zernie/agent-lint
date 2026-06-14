@@ -95,6 +95,10 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
+    # pull-requests: write lets the dogfooded action post its sticky PR comment.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 

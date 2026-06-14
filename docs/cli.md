@@ -11,8 +11,8 @@ npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by
 npx vigiles compile [files...]      # Compile .spec.ts → .md
 npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
-npx vigiles test [files...]         # Run *.harness.mjs deterministic harness tests (no API key)
-npx vigiles eval [files...]         # Run *.eval.mjs real-model harness evals (--trials=N)
+npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
+npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
@@ -114,20 +114,31 @@ annotations and fail the job.
 | `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
 | `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
 | `working-directory` | `.`       | Directory to run vigiles in.                                                                |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
 
-### Output
+### Output channels
 
-| Output  | Description                                               |
-| ------- | --------------------------------------------------------- |
-| `valid` | `'true'` if vigiles passed (exit 0), `'false'` otherwise. |
+Beyond the `valid` step output, the Action reports **three** ways:
+
+1. **Inline annotations** — failures appear on the diff (`::error`).
+2. **Job summary** — a markdown result block on the run page (`$GITHUB_STEP_SUMMARY`).
+3. **Sticky PR comment** — on `pull_request` events, one comment that is _updated in place_ each run (found by a hidden marker, never duplicated). Requires `pull-requests: write`; set `comment: false` to disable.
 
 ```yaml
+permissions:
+  contents: read
+  pull-requests: write # needed for the sticky PR comment
+
+# ...
 - id: vigiles
   uses: zernie/vigiles@v1
 - run: echo "passed=${{ steps.vigiles.outputs.valid }}"
 ```
 
+The `valid` output is `'true'` if vigiles passed (exit 0), `'false'` otherwise.
 Exit codes (also reflected in `valid`): **0** clean · **1** warnings · **2** hard errors.
+On a fork PR (read-only token) the comment step degrades to a warning — the job still passes/fails on the result.
 
 ### Versioning
 

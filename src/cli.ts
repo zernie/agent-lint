@@ -77,6 +77,7 @@ import {
   discoverScripts,
   runScripts,
   formatScriptSummary,
+  scriptGlob,
 } from "./adapters/claude-code/run-scripts.js";
 import { checkIntegrity } from "./core/integrity.js";
 import { computeScriptCoverage } from "./core/coverage.js";
@@ -2038,7 +2039,8 @@ function handleRunScripts(
   restArgs: string[],
 ): void {
   const cwd = process.cwd();
-  const defaultGlob = kind === "test" ? "**/*.harness.mjs" : "**/*.eval.mjs";
+  // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
+  const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
 
   if (kind === "test" && !claudeAvailable()) {
     console.log(

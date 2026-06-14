@@ -95,10 +95,11 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 146 project files. */
+  /** 147 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
+    | "src/action-yml.test.ts"
     | "src/adapter-conformance.ts"
     | "src/adapter-registry.ts"
     | "src/adapter.ts"
@@ -317,6 +318,7 @@ declare module "vigiles/spec" {
     files: 
       | "src/action-gate.test.ts"
       | "src/action-gate.ts"
+      | "src/action-yml.test.ts"
       | "src/adapter-conformance.ts"
       | "src/adapter-registry.ts"
       | "src/adapter.ts"
