@@ -15,9 +15,26 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { globSync } from "glob";
 
+export type ScriptStatus = "pass" | "skip" | "fail";
+
 export interface ScriptRunResult {
   readonly file: string;
   readonly code: number;
+  readonly status: ScriptStatus;
+}
+
+/**
+ * Exit code a harness/eval script uses to report itself SKIPPED (e.g. the
+ * deterministic tier when `claude` isn't installed) — the autotools convention.
+ * The runner surfaces it as a loud `⊘ SKIPPED` instead of a silent `✓`, and a
+ * skip never fails the run. Scripts call `skip()` (vigiles/testing) to emit it.
+ */
+export const SKIP_EXIT_CODE = 77;
+
+function statusForCode(code: number): ScriptStatus {
+  if (code === 0) return "pass";
+  if (code === SKIP_EXIT_CODE) return "skip";
+  return "fail";
 }
 
 /** Filename extensions accepted for harness/eval scripts (JS and TS). */
@@ -111,7 +128,7 @@ export function runScripts(
       argv = interpreterArgs(file, caps);
     } catch (e) {
       console.error(`✗ ${file}: ${(e as Error).message}`);
-      results.push({ file, code: 1 });
+      results.push({ file, code: 1, status: "fail" });
       continue;
     }
     const res = spawnSync("node", argv, {
@@ -119,25 +136,38 @@ export function runScripts(
       stdio: "inherit",
       env: { ...process.env, ...env },
     });
-    results.push({ file, code: res.status ?? 1 });
+    const code = res.status ?? 1;
+    results.push({ file, code, status: statusForCode(code) });
   }
   return results;
 }
 
-/** Format a one-line-per-file run summary with a pass/fail tally. */
+/** Whether any script FAILED (a skip is not a failure). */
+export function anyFailed(results: readonly ScriptRunResult[]): boolean {
+  return results.some((r) => r.status === "fail");
+}
+
+const MARK: Record<ScriptStatus, string> = {
+  pass: "✓",
+  skip: "⊘",
+  fail: "✗",
+};
+
+/** One line per file + an explicit pass/skip/fail tally. Skips are SHOWN, never
+ * folded into "passed" — a `⊘ SKIPPED` is loud, not a silent green. */
 export function formatScriptSummary(
   results: readonly ScriptRunResult[],
 ): string {
-  const lines = results.map(
-    (r) =>
-      `  ${r.code === 0 ? "✓" : "✗"} ${r.file}` +
-      (r.code === 0 ? "" : ` (exit ${String(r.code)})`),
-  );
-  const failed = results.filter((r) => r.code !== 0).length;
-  lines.push(
-    failed === 0
-      ? `\n${String(results.length)} passed.`
-      : `\n${String(failed)}/${String(results.length)} failed.`,
-  );
+  const lines = results.map((r) => {
+    if (r.status === "skip") return `  ⊘ ${r.file} — SKIPPED`;
+    if (r.status === "fail") return `  ✗ ${r.file} (exit ${String(r.code)})`;
+    return `  ${MARK.pass} ${r.file}`;
+  });
+  const n = (s: ScriptStatus): number =>
+    results.filter((r) => r.status === s).length;
+  const parts = [`${String(n("pass"))} passed`];
+  if (n("skip") > 0) parts.push(`${String(n("skip"))} skipped`);
+  if (n("fail") > 0) parts.push(`${String(n("fail"))} failed`);
+  lines.push(`\n${parts.join(", ")}.`);
   return lines.join("\n");
 }

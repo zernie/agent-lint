@@ -16,12 +16,9 @@ import {
   scriptModel,
   claudeAvailable,
 } from "../../dist/adapters/claude-code/harness-test.js";
-import { requestContains } from "../../dist/harness-assert.js";
+import { requestContains, skip } from "../../dist/harness-assert.js";
 
-if (!claudeAvailable()) {
-  console.log("skip: `claude` CLI not found");
-  process.exit(0);
-}
+if (!claudeAvailable()) skip("`claude` CLI not found");
 
 const CLI = new URL("../../dist/cli.js", import.meta.url).pathname;
 

@@ -24,11 +24,9 @@ import {
   scriptModel,
   claudeAvailable,
 } from "../../dist/adapters/claude-code/harness-test.js";
+import { skip } from "../../dist/harness-assert.js";
 
-if (!claudeAvailable()) {
-  console.log("skip: `claude` CLI not found");
-  process.exit(0);
-}
+if (!claudeAvailable()) skip("`claude` CLI not found");
 
 /** Minimal sequential test runner: ✓/✗ per case, non-zero exit on any failure. */
 async function run(cases) {
