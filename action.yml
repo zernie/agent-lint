@@ -30,6 +30,14 @@ inputs:
     description: "Directory to run vigiles in."
     required: false
     default: "."
+  comment:
+    description: "On pull_request events, post/update a sticky PR comment with the result ('true' or 'false'). Requires `pull-requests: write`."
+    required: false
+    default: "true"
+  github-token:
+    description: "Token used to post the PR comment. Defaults to the workflow token."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   valid:
@@ -51,6 +59,8 @@ runs:
         VIGILES_MAX_RULES: ${{ inputs.max-rules }}
         VIGILES_CATALOG_ONLY: ${{ inputs.catalog-only }}
         VIGILES_ACTION_PATH: ${{ github.action_path }}
+        VIGILES_COMMENT: ${{ inputs.comment }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
 
@@ -86,16 +96,66 @@ runs:
 
         echo "vigiles: ${runner[*]} ${args[*]}"
 
+        # Run, streaming to the log AND capturing for the summary/comment.
+        out="$(mktemp)"
         set +e
-        GITHUB_ACTIONS=true "${runner[@]}" "${args[@]}"
-        status=$?
+        GITHUB_ACTIONS=true "${runner[@]}" "${args[@]}" 2>&1 | tee "$out"
+        status="${PIPESTATUS[0]}"
         set -e
 
         if [[ "$status" -eq 0 ]]; then
           echo "valid=true" >> "$GITHUB_OUTPUT"
+          headline="✅ \`vigiles ${cmd}\` passed"
         else
           echo "valid=false" >> "$GITHUB_OUTPUT"
+          headline="❌ \`vigiles ${cmd}\` failed (exit ${status})"
           echo "::error::vigiles ${cmd} failed (exit ${status})"
+        fi
+
+        # Build a markdown report (cap the log tail so a huge run stays sane).
+        report="$(mktemp)"
+        {
+          echo "## vigiles"
+          echo
+          echo "$headline"
+          echo
+          echo '<details><summary>Output</summary>'
+          echo
+          echo '```'
+          tail -c 60000 "$out"
+          echo '```'
+          echo
+          echo '</details>'
+        } > "$report"
+
+        # Job summary (always, when available) — the modern run-page output.
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        # Sticky PR comment (pull_request events only, best-effort): find the
+        # prior vigiles comment by marker and update it in place, else create.
+        marker="<!-- vigiles-action -->"
+        if [[ "${VIGILES_COMMENT:-true}" == "true" \
+              && "${GITHUB_EVENT_NAME:-}" == "pull_request" \
+              && -n "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+          pr="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH:-/dev/null}")"
+          if [[ -n "$pr" ]]; then
+            body="$(printf '%s\n%s\n' "$marker" "$(cat "$report")")"
+            repo="${GITHUB_REPOSITORY}"
+            cid="$(gh api "repos/${repo}/issues/${pr}/comments" --paginate \
+              --jq "map(select(.body | startswith(\"${marker}\"))) | .[0].id // empty" \
+              2>/dev/null || true)"
+            if [[ -n "$cid" ]]; then
+              gh api -X PATCH "repos/${repo}/issues/comments/${cid}" -f body="$body" >/dev/null \
+                && echo "Updated PR comment #${cid}" \
+                || echo "::warning::could not update PR comment (need pull-requests: write?)"
+            else
+              gh api -X POST "repos/${repo}/issues/${pr}/comments" -f body="$body" >/dev/null \
+                && echo "Posted PR comment" \
+                || echo "::warning::could not post PR comment (need pull-requests: write?)"
+            fi
+          fi
         fi
 
         exit "$status"

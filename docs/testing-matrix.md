@@ -101,25 +101,29 @@ deterministic examples (`*.harness.mjs`) run with **no API key** (real `claude` 
 scripted mock model), so they're CI-affordable; the evals (`*.eval.mjs`) cost
 real model calls and run manually / in a keyed job.
 
-## Why are the CLI examples `.mjs` (JavaScript), not TypeScript?
+## JavaScript or TypeScript? Both.
 
-The **API is fully TypeScript** — `src/*.ts`, shipped with `.d.ts`, and its own
-suites (`src/*.test.ts`) and the type smokes (`test/types/*.ts`) are TypeScript.
-TypeScript is a first-class consumer path: write your harness tests in a `.ts`
-file under your runner (node:test / vitest / jest) and the `vigiles/vitest` /
-`vigiles/jest` entries give you typed matchers.
+`vigiles test` / `vigiles eval` accept harness/eval scripts in **either
+language** — the glob is `*.harness.*` / `*.eval.*` over `.mjs` `.cjs` `.js`
+`.mts` `.cts` `.ts` (`src/adapters/claude-code/run-scripts.ts`). A JavaScript
+file runs as a plain `node <file>`; a TypeScript file is run through **`tsx`**
+when it's installed, else **Node's native type stripping** (Node ≥ 22.6), with an
+actionable error if neither is available. So you can author your own tests in TS
+and get types end-to-end, or in JS for zero setup.
 
-The files under `examples/harness/` are `.mjs` on purpose, for one reason: the
-zero-dependency CLI fallback. `vigiles test` / `vigiles eval` discover these
-files and run each as a plain `node <file>` child process — **no build step, no
-TS loader** (`tsx`/`ts-node`), no config. That keeps the fallback dependency-free
-and CI-affordable, which is the whole point of that tier (run the deterministic
-harness in CI with nothing but Node + the `claude` binary). A `.ts` example would
-force a transpile step into the runner and undercut that.
+The **API itself is fully TypeScript** — `src/*.ts`, shipped with `.d.ts`; the
+whole unit suite (`src/*.test.ts`) and the type smokes (`test/types/*.ts`) are
+TypeScript, so the project dogfoods the typed path. Under a runner (vitest /
+jest) the `vigiles/vitest` / `vigiles/jest` entries add typed matchers.
 
-So the split is deliberate:
+The canonical examples under `examples/harness/` stay **`.mjs` on purpose** —
+not because TS is unsupported, but because they're the **lowest-common-denominator
+demos**: they must run with nothing but Node (no `tsx`, no loader, no build) so a
+copy-paste into any repo Just Works and the CLI-fallback tier stays
+dependency-free. Your own scripts are under no such constraint — reach for `.ts`
+whenever you want types.
 
-- **Bare CLI tier** → `.mjs`, runnable by `node` / `vigiles test` with zero deps.
+- **Zero-dep CLI tier** → `.mjs` (or `.ts` if you have `tsx`/Node ≥ 22.6), via `vigiles test`.
 - **Runner tier** → `.ts`, full types via `vigiles/vitest` / `vigiles/jest`.
 
 If you want a typed worked example, the type smokes in
