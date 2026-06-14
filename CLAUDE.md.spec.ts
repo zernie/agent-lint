@@ -121,7 +121,9 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/core/generate-schema.ts":
       "JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names",
     "src/cli.ts":
-      "CLI: init, compile, audit, test, eval, scan (primary commands + generate-types plumbing)",
+      "CLI: init, compile, audit, test, eval, scan (primary commands + generate-types plumbing). `init` is the onboarding wizard — interactive at a TTY, non-interactive for agents/CI (or --yes); sets up BOTH pillars by default (spec+types, a vigiles.harness.mjs starter, a zernie/vigiles@v1 workflow, the plugin), scoped via --pillars",
+    "src/setup-plan.ts":
+      "Pure `vigiles init` decision logic (parseSetupArgs/shouldPrompt/resolvePlan): turns CLI flags + whether a human's at a TTY into a SetupPlan {verify,test,gha,plugin,strict}. Interactive when a human runs it, non-interactive (defaults: both pillars) for agents/CI/piped — so 'set up vigiles' from a Claude Code/Codex prompt never hangs. Unit-tested in src/setup-plan.test.ts; the IO (prompts, scaffolds, workflow) stays in cli.ts",
     "src/scan.ts":
       "`vigiles scan <dir>` — deterministic, no-model report of what a plugin/repo ships and what's broken: per-skill description + user-invoked, per-agent tool contract (incl. the no-tools-line inherits-all footgun), hook scripts resolved across braced/unbraced ${CLAUDE_PLUGIN_ROOT} (ok/missing/unresolved), command + MCP detection, untested-surface count, loader warnings. Re-aims loadPlugin + parseAgentTools + findUntestedSurfaces; the deterministic substrate under the leaderboard (research/divergent-bets.md) + harness-aware scan (research/agent-supply-chain-security.md)",
     "src/scan.test.ts":
@@ -131,7 +133,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/leaderboard.test.ts":
       "Leaderboard test suite (vitest): pure scoreReport penalty weights + clamp + empty-machine=0, rankPlugins ordering (healthy above broken) over tmp fixtures, formatLeaderboard rendering",
     "src/adapters/claude-code/run-scripts.ts":
-      "Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.mjs` / `*.eval.mjs`, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)",
+      "Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.*` / `*.eval.*` (JS+TS), run each as a child node process, classify each result pass/skip/fail (exit 0 / SKIP_EXIT_CODE 77 / else) and tally them SEPARATELY — a `⊘ SKIPPED` is loud, never folded into 'passed', and a skip never fails the run (anyFailed). NO blanket claude-gate: unit-tier runHook tests run without `claude`; a tier that needs it self-reports SKIPPED via `skip()`",
     "src/adapters/claude-code/run-scripts.test.ts":
       "Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting",
     "src/core/inline.ts":
@@ -139,7 +141,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/core/frontmatter.ts":
       "Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)",
     "src/core/frontmatter.test.ts": "Frontmatter parser test suite (node:test)",
-    "src/action.ts": "GitHub Action wrapper",
+    "action.yml":
+      "GitHub Action — a composite action over the published `npx vigiles` CLI (NOT a node20 entry pointing at an uncommitted dist/): maps every input to a real CLI flag, sets the `valid` output via $GITHUB_OUTPUT, and supports `version: local` so the repo dogfoods it via `uses: ./`. See docs/cli.md and the `prod-grade-gha-cli` rule.",
+    "src/cli-flags.ts":
+      "Shared CLI flag → config bridge (applyConfigFlags): --max-rules / --catalog-only override the loaded config so every GitHub Action input maps to a real CLI flag. Pure, unit-tested in src/cli-flags.test.ts.",
     "src/core/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/core/agent.test.ts":
       "Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip",
@@ -182,6 +187,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Untested-surface detector test suite (vitest): colocation + content-reference coverage, user-invoked exemption (+ includeUserInvokedSkills override), vigiles:ignore-test opt-out, agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath",
     "docs/rules/untested-surface.md":
       "Rule doc: untested-surface — config, severity, options, the two coverage detectors, exemptions, why",
+    "docs/rules/unmarked-refs.md":
+      "Rule doc: unmarked-refs — the PostToolUse refs-hook that nudges the agent to MARK code-shaped references in instruction files (warn → non-blocking nudge, error → block, false → off); what it checks, opt-outs, where it runs, and the undecidable plaintext floor",
     "src/core/doc-refs.ts":
       "Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
     "src/core/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",
@@ -189,7 +196,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
     "src/core/symbols.test.ts": "Symbol extractor test suite (node:test)",
     "src/core/refs.ts":
-      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs enforcement for the refs-hook",
+      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md",
     "src/core/refs.test.ts":
       "Symbol reference verification test suite (node:test)",
     "src/adapters/claude-code/mock-model.ts":
@@ -274,6 +281,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Canonical hook unit-tier example (runHook): test a hook's logic in isolation with no claude CLI — the cheap base of the pyramid; runs in CI for free",
     "examples/harness/policy-gate.harness.mjs":
       "Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)",
+    "examples/harness/refs-nudge.harness.mjs":
+      "Real-claude dogfood of the refs-hook (deterministic tier, no API key): the mock model Writes a CLAUDE.md naming an unmarked linter rule, the PostToolUse refs-hook fires, and requestContains asserts the non-blocking nudge reached the model's context — proves the hook fires in an actual session, not just the runHook unit tier",
     "examples/harness/skill-outcome.eval.mjs":
       "Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md",
     "examples/harness/skill-trigger-rate.eval.mjs":
@@ -454,6 +463,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "All tests must pass. If a test requires a CLI tool (pylint, rubocop, ruff, clippy), install the tool, don't skip the test.",
     ),
 
+    "no-silent-skips": guidance(
+      "A skip must be LOUD, never a silent green. When a test/script genuinely can't run (e.g. the deterministic tier with no `claude`), it must report `⊘ SKIPPED` (its own status, tallied separately as 'N skipped'), not exit 0 and masquerade as a `✓ passed`. `vigiles test`/`vigiles eval` classify each script pass/skip/fail by exit code (0 / `SKIP_EXIT_CODE` 77 / else); scripts call `skip(reason)` (`vigiles/testing`) to emit it. By default a skip does NOT fail the run — tiers need different capabilities (claude, bubblewrap, model auth) that aren't all present everywhere, so failing-by-default would make the command red in any partial environment (this repo's own non-privileged `harness` job legitimately skips the egress tier and runs it under `e2e`). But where you ASSERT the capability is present (a CI job), pass `vigiles test --no-skip`: a skipped tier is untested surface and FAILS — a green-with-skips is itself a hidden gap. Equally important — DON'T over-skip: there is no blanket `claude`-gate, so unit-tier `runHook` tests (which need no model) always run; only the tiers that truly need a capability skip, and they say so. The corollary of never-skip-tests: if you can't make it pass, surface WHY, don't hide it.",
+    ),
+
     "zero-config-by-default": guidance(
       "`vigiles compile` should work with just a .spec.ts file. Config exists only for overrides (maxRules, maxTokens).",
     ),
@@ -467,7 +480,11 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     ),
 
     "smooth-adoption": guidance(
-      "`npx vigiles init && npx skills add zernie/vigiles` must work on first run with zero config. The wizard auto-detects the project, creates specs, generates types, compiles, and wires CI. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time. Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md`.",
+      "`npx vigiles init` must work on first run with zero config and set up BOTH pillars by default: a typed spec + types (pillar 1), a vigiles.harness.mjs starter (pillar 2), a `zernie/vigiles@v1` CI workflow (created when none exists), and the Claude Code plugin. Onboarding is interactive at a TTY (asks which pillars / CI / plugin) and NON-INTERACTIVE for agents, CI, or piped input (or with `--yes`) — so 'set up vigiles' from a Claude Code / Codex prompt Just Works without hanging on a prompt; `--pillars=verify|test|both` scopes it. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time (`--strict`). Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md` and `docs/agent-setup.md`.",
+    ),
+
+    "great-agent-flow": guidance(
+      "The end-to-end experience when an AGENT is handed a short prompt like 'install vigiles and test my skills' must be GREAT — discoverable from the README front door and frictionless, because for many users the agent IS the installer. Concretely: (1) install is one non-interactive command an agent runs without hanging — `npx vigiles init` auto-detects a non-TTY and applies defaults (both pillars); (2) `init` installs the model-invocable `test-harness` skill, so a follow-up 'test my skills' FIRES that skill (it picks the tier and writes the test) rather than leaving the agent to flail; (3) the README must make the skill-testing path explicit and high-signal — name `measureTriggerRate` (does a skill's description actually fire? recall + precision), not just hook examples, and surface the `test-harness` skill where the task lives, not buried in a list. The README is the agent's front door: an agent reading it for 'install + test skills' must find a clear, actionable path. Dogfood it — `test-harness` and `generate-logo` are the two model-invocable skills, covered by trigger-rate evals (`examples/harness/dogfood/`). See `docs/agent-setup.md`, `docs/harness-testing.md`, and `research/skill-authoring-pains.md`.",
     ),
 
     "format-before-commit": guidance(
@@ -496,6 +513,14 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
 
     "ts-essentials": guidance(
       "Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.",
+    ),
+
+    "prod-grade-gha-cli": guidance(
+      "The CLI and the GitHub Action are production-grade, first-class surfaces — for most users CI is how vigiles actually runs — and must be kept that way, not treated as afterthoughts. The CLI is the single source of truth: every Action input maps to a real CLI flag (no config-file-only knobs the Action can't reach), commands emit GitHub annotations under `GITHUB_ACTIONS`, and exit codes are stable and documented (0 clean / 1 warn / 2 error). The Action wraps that CLI and must actually work as a published `uses: zernie/vigiles@v1` reference — a composite action over the published `npx vigiles` CLI, so it reuses the same tested artifact rather than a `node20` entry pointing at an uncommitted `dist/`. It must declare its `outputs:` and set them via `$GITHUB_OUTPUT` (never the deprecated `::set-output`), pin to a stable floating major-version tag (`v1`) maintained by the release pipeline, and ship a full copy-paste workflow in the docs (runs-on, checkout, setup-node, `permissions:`, every input + the `valid` output, and `@v1`-vs-`@main`-vs-pinned-SHA versioning guidance). The Action surfaces results three complementary ways: inline GitHub annotations, a job summary (`$GITHUB_STEP_SUMMARY`), and an automatic STICKY pull-request comment (found by marker and updated in place — never a new comment per run; gated to `pull_request` events with `pull-requests: write`, best-effort so a fork PR without write access degrades to a warning, not a failure). Both surfaces are dogfooded in this repo's own CI (the Action via `uses: ./`, including the PR comment) and covered by tests, so a regression in the shipped entry points is caught here. See `docs/cli.md`.",
+    ),
+
+    "dual-language-tests": guidance(
+      "Harness/eval test SCRIPTS must run whether authored in JavaScript (`.mjs` / `.cjs` / `.js`) or TypeScript (`.ts` / `.mts` / `.cts`) — neither language is second-class. `vigiles test` / `vigiles eval` discover both (the `*.harness.*` / `*.eval.*` glob in `src/adapters/claude-code/run-scripts.ts`) and run a TypeScript script through `tsx` when installed, else Node's native type stripping (Node >= 22.6), failing with an actionable message when neither is available. The typed `vigiles/testing` API and the zero-setup CLI scripts are two on-ramps to the same tiers. vigiles's OWN unit test suite, by contrast, is uniformly TypeScript (every `src/**/*.test.ts`, run by vitest), so the project dogfoods the typed path; the `.mjs` files under `examples/harness/` stay JavaScript on purpose as the copy-paste CLI-fallback demos (see `docs/testing-matrix.md`).",
     ),
 
     "no-orphan-docs": enforce(

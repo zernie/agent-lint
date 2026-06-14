@@ -1,25 +1,161 @@
 name: "vigiles"
-description: "Compile typed specs to instruction files and verify integrity"
+description: "Verify the references in your agent instruction files (CLAUDE.md/AGENTS.md) and compile typed specs — in CI."
+author: "zernie"
 branding:
   icon: "check-circle"
   color: "orange"
 
 inputs:
   command:
-    description: "Command to run: 'compile' or 'audit' (default: audit)"
+    description: "Which vigiles command to run: 'audit' (verify references + integrity + coverage) or 'compile' (specs → markdown)."
     required: false
     default: "audit"
   paths:
-    description: "Comma-separated paths to .spec.ts files (compile) or .md files (audit). Auto-discovers by default."
+    description: "Comma- or space-separated paths to operate on (.md files for audit, .spec.ts files for compile). Auto-discovers when empty."
     required: false
+    default: ""
+  version:
+    description: "Version of the vigiles npm package to run (e.g. '1', '1.2.3', 'latest'). Use 'local' to run the action's own checkout — for dogfooding via `uses: ./` in this repo's CI."
+    required: false
+    default: "latest"
   max-rules:
-    description: "Maximum number of rules per spec file"
+    description: "Maximum number of rules per spec file (maps to the CLI's --max-rules)."
     required: false
+    default: ""
   catalog-only:
-    description: "Only check that linter rules exist, skip config-enabled checks (true/false)"
+    description: "Only check that linter rules exist; skip config-enabled checks (maps to the CLI's --catalog-only). 'true' or 'false'."
     required: false
     default: "false"
+  working-directory:
+    description: "Directory to run vigiles in."
+    required: false
+    default: "."
+  comment:
+    description: "On pull_request events, post/update a sticky PR comment with the result ('true' or 'false'). Requires `pull-requests: write`."
+    required: false
+    default: "true"
+  github-token:
+    description: "Token used to post the PR comment. Defaults to the workflow token."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  valid:
+    description: "'true' if vigiles passed (exit 0), 'false' otherwise."
+    value: ${{ steps.vigiles.outputs.valid }}
 
 runs:
-  using: "node20"
-  main: "dist/action.js"
+  using: "composite"
+  steps:
+    - id: vigiles
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        # Inputs are passed through the environment (never interpolated into
+        # the script body) so a value can't break out of the command line.
+        VIGILES_COMMAND: ${{ inputs.command }}
+        VIGILES_PATHS: ${{ inputs.paths }}
+        VIGILES_VERSION: ${{ inputs.version }}
+        VIGILES_MAX_RULES: ${{ inputs.max-rules }}
+        VIGILES_CATALOG_ONLY: ${{ inputs.catalog-only }}
+        VIGILES_ACTION_PATH: ${{ github.action_path }}
+        VIGILES_COMMENT: ${{ inputs.comment }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        cmd="${VIGILES_COMMAND:-audit}"
+        args=("$cmd")
+
+        # paths: split on commas and whitespace into positional args.
+        paths="${VIGILES_PATHS:-}"
+        if [[ -n "${paths// /}" ]]; then
+          IFS=', ' read -r -a _paths <<< "$paths"
+          args+=("${_paths[@]}")
+        fi
+
+        max_rules="${VIGILES_MAX_RULES:-}"
+        if [[ -n "${max_rules// /}" ]]; then
+          args+=("--max-rules=${max_rules}")
+        fi
+
+        if [[ "${VIGILES_CATALOG_ONLY:-false}" == "true" ]]; then
+          args+=("--catalog-only")
+        fi
+
+        # Resolve the runner. 'local' runs the action's own build (CI
+        # dogfood via `uses: ./`); any other value runs the published npm
+        # package at that version, so the Action reuses the same tested
+        # artifact users get from `npx vigiles`.
+        version="${VIGILES_VERSION:-latest}"
+        if [[ "$version" == "local" ]]; then
+          runner=(node "${VIGILES_ACTION_PATH}/dist/cli.js")
+        else
+          runner=(npx --yes "vigiles@${version}")
+        fi
+
+        echo "vigiles: ${runner[*]} ${args[*]}"
+
+        # Run, streaming to the log AND capturing for the summary/comment.
+        out="$(mktemp)"
+        set +e
+        GITHUB_ACTIONS=true "${runner[@]}" "${args[@]}" 2>&1 | tee "$out"
+        status="${PIPESTATUS[0]}"
+        set -e
+
+        if [[ "$status" -eq 0 ]]; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          headline="✅ \`vigiles ${cmd}\` passed"
+        else
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          headline="❌ \`vigiles ${cmd}\` failed (exit ${status})"
+          echo "::error::vigiles ${cmd} failed (exit ${status})"
+        fi
+
+        # Build a markdown report (cap the log tail so a huge run stays sane).
+        report="$(mktemp)"
+        {
+          echo "## vigiles"
+          echo
+          echo "$headline"
+          echo
+          echo '<details><summary>Output</summary>'
+          echo
+          echo '```'
+          tail -c 60000 "$out"
+          echo '```'
+          echo
+          echo '</details>'
+        } > "$report"
+
+        # Job summary (always, when available) — the modern run-page output.
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        # Sticky PR comment (pull_request events only, best-effort): find the
+        # prior vigiles comment by marker and update it in place, else create.
+        marker="<!-- vigiles-action -->"
+        if [[ "${VIGILES_COMMENT:-true}" == "true" \
+              && "${GITHUB_EVENT_NAME:-}" == "pull_request" \
+              && -n "${GH_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+          pr="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH:-/dev/null}")"
+          if [[ -n "$pr" ]]; then
+            body="$(printf '%s\n%s\n' "$marker" "$(cat "$report")")"
+            repo="${GITHUB_REPOSITORY}"
+            cid="$(gh api "repos/${repo}/issues/${pr}/comments" --paginate \
+              --jq "map(select(.body | startswith(\"${marker}\"))) | .[0].id // empty" \
+              2>/dev/null || true)"
+            if [[ -n "$cid" ]]; then
+              gh api -X PATCH "repos/${repo}/issues/comments/${cid}" -f body="$body" >/dev/null \
+                && echo "Updated PR comment #${cid}" \
+                || echo "::warning::could not update PR comment (need pull-requests: write?)"
+            else
+              gh api -X POST "repos/${repo}/issues/${pr}/comments" -f body="$body" >/dev/null \
+                && echo "Posted PR comment" \
+                || echo "::warning::could not post PR comment (need pull-requests: write?)"
+            fi
+          fi
+        fi
+
+        exit "$status"

@@ -86,6 +86,22 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+/**
+ * Mark the current `*.harness.*` / `*.eval.*` SCRIPT as SKIPPED and exit, so
+ * `vigiles test` / `vigiles eval` report a loud `⊘ SKIPPED` instead of a silent
+ * `✓` — e.g. the deterministic tier when the `claude` CLI isn't installed. A skip
+ * never fails the run. Exit 77 is the runner's `SKIP_EXIT_CODE` (run-scripts.ts).
+ *
+ * For standalone CLI-fallback scripts only — inside a runner (vitest / jest /
+ * node:test) use that runner's own skip, not a process exit.
+ */
+/* v8 ignore start -- process.exit can't be exercised in-process (tested via a child in cli.test.ts / run-scripts.test.ts) */
+export function skip(reason?: string): never {
+  console.log(`SKIPPED${reason ? `: ${reason}` : ""}`);
+  process.exit(77);
+}
+/* v8 ignore stop */
+
 /** Assert the sandbox contains `path` (a hook/agent side-effect file). */
 export function assertCreated(r: HarnessTestResult, path: string): void {
   if (r.file(path) === null) fail(`expected the run to create ${path}`);

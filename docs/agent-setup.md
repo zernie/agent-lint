@@ -20,10 +20,19 @@ The `skills add` command requires user action — an agent can't install plugins
 ### Step 1: Run the wizard
 
 ```bash
-npx vigiles init
+npx vigiles init        # or `npx vigiles init --yes` to be explicit
 ```
 
-This works non-interactively. It auto-detects the project, creates a spec, generates types, compiles, and adds a CI step. No prompts.
+`init` auto-detects a non-TTY (an agent / CI / piped input) and runs
+**non-interactively** — no prompts, no hanging. So a user prompt as simple as
+_"set up vigiles in this repo"_ works: the agent runs `npx vigiles init` and gets
+sensible defaults. With the defaults it sets up **both pillars** — a typed spec +
+types (Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), a
+`zernie/vigiles@v1` CI workflow (`.github/workflows/vigiles.yml`), and the plugin.
+
+Scope it with flags when needed: `--pillars=verify|test|both`, `--no-gha`,
+`--no-plugin`, `--strict`. (A human running it in a terminal gets interactive
+prompts instead.)
 
 ### Step 2: Install hooks directly
 

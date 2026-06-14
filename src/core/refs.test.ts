@@ -14,6 +14,8 @@ import {
   symbolRefs,
   verifySymbolRefs,
   unmarkedCodeRefs,
+  collectRefIssues,
+  refsHookAction,
 } from "./refs.js";
 
 test("inlineSpans skips fenced code blocks (R1)", () => {
@@ -105,24 +107,56 @@ test("cross-language: resolves a Ruby vigiles:symbol mark", () => {
   }
 });
 
-test("unmarkedCodeRefs flags bare code refs incl. foo(args), not marks/prose/paths", () => {
+test("unmarkedCodeRefs flags linter-rule names, NOT identifiers/paths/prose", () => {
   const md =
-    "Use `parseConfig` and `MAX_RETRIES`.\n" + // code-shaped, unmarked → flagged
-    "Call `chargeCard(token, amount)`.\n" + // function-call form → flagged (callee)
-    "Marked `vigiles:symbol src/config.ts#chargeCard`.\n" + // a mark → ok
-    "Prose `name` and `high`. A path `src/config.ts`.\n" + // not flagged
-    "Ignored `legacyThing`. <!-- vigiles:ignore -->\n"; // opted out
+    "Enforce `eslint/no-console` and `@typescript-eslint/no-explicit-any`.\n" + // rule-shaped → flagged
+    "API `runHook`, `MAX_RETRIES`, `chargeCard(token, amount)`, prose `name`.\n" + // bare identifiers → NOT
+    "Paths `src/config.ts`, `docs/guide.md`.\n" + // paths (have extensions) → NOT
+    "Ignored `ruff/E501`. <!-- vigiles:ignore -->\n"; // rule-shaped but opted out
   const flagged = unmarkedCodeRefs(md)
     .map((s) => s.text)
     .sort();
   assert.deepEqual(flagged, [
-    "MAX_RETRIES",
-    "chargeCard(token, amount)",
-    "parseConfig",
+    "@typescript-eslint/no-explicit-any",
+    "eslint/no-console",
   ]);
 });
 
 test("vigiles:ignore-file opts the whole file out", () => {
-  const md = "<!-- vigiles:ignore-file -->\nUse `parseConfig` freely.\n";
+  const md =
+    "<!-- vigiles:ignore-file -->\nEnforce `eslint/no-console` freely.\n";
   assert.equal(unmarkedCodeRefs(md).length, 0);
+});
+
+test("collectRefIssues lists unmarked rule refs with enforce() guidance", () => {
+  const issues = collectRefIssues("Enforce `eslint/no-console` here.\n", ".");
+  assert.equal(issues.length, 1);
+  assert.match(
+    issues[0] ?? "",
+    /`eslint\/no-console` is an unmarked linter-rule/,
+  );
+  assert.match(issues[0] ?? "", /enforce\("eslint\/no-console"\)/);
+});
+
+test("collectRefIssues is empty for identifiers, paths, prose, and ignored spans", () => {
+  assert.deepEqual(
+    collectRefIssues("Call `runHook` before commit.\n", "."),
+    [],
+  );
+  assert.deepEqual(
+    collectRefIssues("See `src/config.ts` and `docs/x.md`.\n", "."),
+    [],
+  );
+  assert.deepEqual(
+    collectRefIssues("Use `eslint/no-console`. <!-- vigiles:ignore -->\n", "."),
+    [],
+  );
+});
+
+test("refsHookAction maps issue-count + severity to ok/nudge/block", () => {
+  assert.equal(refsHookAction(0, "warn"), "ok"); // nothing to say
+  assert.equal(refsHookAction(0, "error"), "ok");
+  assert.equal(refsHookAction(3, false), "ok"); // rule off
+  assert.equal(refsHookAction(3, "warn"), "nudge"); // default
+  assert.equal(refsHookAction(1, "error"), "block"); // opt-in
 });

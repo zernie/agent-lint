@@ -95,6 +95,10 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
+    # pull-requests: write lets the dogfooded action post its sticky PR comment.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +113,26 @@ jobs:
 
       - name: Audit compiled files
         run: node dist/cli.js audit
+
+      # Dogfood the shipped GitHub Action itself (composite over the CLI),
+      # running the repo's own build via `version: local`. Catches a
+      # regression in the action contract that calling the CLI directly
+      # would miss. See the `prod-grade-gha-cli` rule.
+      - name: Dogfood the vigiles GitHub Action
+        id: vigiles-action
+        uses: ./
+        with:
+          command: audit
+          version: local
+
+      - name: Assert the action reported success
+        run: |
+          got="${{ steps.vigiles-action.outputs.valid }}"
+          if [ "$got" != "true" ]; then
+            echo "expected the vigiles action output valid=true, got '$got'"
+            exit 1
+          fi
+          echo "vigiles action output: valid=$got"
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic

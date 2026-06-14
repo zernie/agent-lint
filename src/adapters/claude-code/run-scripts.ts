@@ -1,21 +1,85 @@
 /**
  * vigiles — run harness-test / eval script files via the CLI.
  *
- * `vigiles test` and `vigiles eval` discover `*.harness.mjs` / `*.eval.mjs`
+ * `vigiles test` and `vigiles eval` discover `*.harness.*` / `*.eval.*`
  * scripts and run each as a child `node` process, so the two-tier
  * harness-testing API (`src/harness-test.ts`, `src/eval.ts`) works as a CI
- * command, not just `node x.mjs`. The scripts stay plain Node modules (they
- * import from the built `dist/`), so they also run standalone — the CLI just
- * discovers, runs, and aggregates exit codes.
+ * command, not just `node x.mjs`. Scripts may be authored in **JavaScript**
+ * (`.mjs` / `.cjs` / `.js`) **or TypeScript** (`.ts` / `.mts` / `.cts`) — a TS
+ * script is run through `tsx` when installed, else Node's built-in type
+ * stripping (Node >= 22.6). The scripts import from the built `dist/`, so they
+ * also run standalone — the CLI just discovers, runs, and aggregates exit codes.
  */
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { globSync } from "glob";
 
+export type ScriptStatus = "pass" | "skip" | "fail";
+
 export interface ScriptRunResult {
   readonly file: string;
   readonly code: number;
+  readonly status: ScriptStatus;
+}
+
+/**
+ * Exit code a harness/eval script uses to report itself SKIPPED (e.g. the
+ * deterministic tier when `claude` isn't installed) — the autotools convention.
+ * The runner surfaces it as a loud `⊘ SKIPPED` instead of a silent `✓`, and a
+ * skip never fails the run. Scripts call `skip()` (vigiles/testing) to emit it.
+ */
+export const SKIP_EXIT_CODE = 77;
+
+function statusForCode(code: number): ScriptStatus {
+  if (code === 0) return "pass";
+  if (code === SKIP_EXIT_CODE) return "skip";
+  return "fail";
+}
+
+/** Filename extensions accepted for harness/eval scripts (JS and TS). */
+export const SCRIPT_EXTS = ["mjs", "cjs", "js", "mts", "cts", "ts"] as const;
+
+/** Glob suffix matching every accepted script extension, e.g. `harness`. */
+export function scriptGlob(kind: "harness" | "eval"): string {
+  return `**/*.${kind}.{${SCRIPT_EXTS.join(",")}}`;
+}
+
+const TS_EXT = /\.(?:m|c)?ts$/;
+
+/** Node runtime capabilities that decide how a TypeScript script is run. */
+export interface NodeCaps {
+  /** `tsx` is installed locally (the preferred, version-agnostic TS loader). */
+  readonly tsx: boolean;
+  /** Node supports `--experimental-strip-types` (>= 22.6). */
+  readonly stripTypes: boolean;
+}
+
+/**
+ * The `node` argv (after the binary) to run a single script. Plain JS runs
+ * directly; a TypeScript script picks `tsx` when available, else Node's native
+ * type stripping. Throws a clear, actionable error when neither is available.
+ * Pure — exported for testing.
+ */
+export function interpreterArgs(file: string, caps: NodeCaps): string[] {
+  if (!TS_EXT.test(file)) return [file];
+  if (caps.tsx) return ["--import", "tsx", file];
+  if (caps.stripTypes) return ["--experimental-strip-types", file];
+  throw new Error(
+    `Cannot run TypeScript test script "${file}": install tsx ` +
+      `(npm i -D tsx) or use Node >= 22.6, or author it as a .mjs file.`,
+  );
+}
+
+/** Detect TS-running capabilities for a project root. */
+export function detectNodeCaps(cwd: string): NodeCaps {
+  const tsx =
+    existsSync(resolve(cwd, "node_modules/tsx/package.json")) ||
+    existsSync(resolve(cwd, "node_modules/.bin/tsx"));
+  const stripTypes = process.allowedNodeEnvironmentFlags.has(
+    "--experimental-strip-types",
+  );
+  return { tsx, stripTypes };
 }
 
 /**
@@ -56,32 +120,54 @@ export function runScripts(
   cwd: string,
   env: NodeJS.ProcessEnv = {},
 ): ScriptRunResult[] {
+  const caps = detectNodeCaps(cwd);
   const results: ScriptRunResult[] = [];
   for (const file of files) {
-    const res = spawnSync("node", [file], {
+    let argv: string[];
+    try {
+      argv = interpreterArgs(file, caps);
+    } catch (e) {
+      console.error(`✗ ${file}: ${(e as Error).message}`);
+      results.push({ file, code: 1, status: "fail" });
+      continue;
+    }
+    const res = spawnSync("node", argv, {
       cwd,
       stdio: "inherit",
       env: { ...process.env, ...env },
     });
-    results.push({ file, code: res.status ?? 1 });
+    const code = res.status ?? 1;
+    results.push({ file, code, status: statusForCode(code) });
   }
   return results;
 }
 
-/** Format a one-line-per-file run summary with a pass/fail tally. */
+/** Whether any script FAILED (a skip is not a failure). */
+export function anyFailed(results: readonly ScriptRunResult[]): boolean {
+  return results.some((r) => r.status === "fail");
+}
+
+const MARK: Record<ScriptStatus, string> = {
+  pass: "✓",
+  skip: "⊘",
+  fail: "✗",
+};
+
+/** One line per file + an explicit pass/skip/fail tally. Skips are SHOWN, never
+ * folded into "passed" — a `⊘ SKIPPED` is loud, not a silent green. */
 export function formatScriptSummary(
   results: readonly ScriptRunResult[],
 ): string {
-  const lines = results.map(
-    (r) =>
-      `  ${r.code === 0 ? "✓" : "✗"} ${r.file}` +
-      (r.code === 0 ? "" : ` (exit ${String(r.code)})`),
-  );
-  const failed = results.filter((r) => r.code !== 0).length;
-  lines.push(
-    failed === 0
-      ? `\n${String(results.length)} passed.`
-      : `\n${String(failed)}/${String(results.length)} failed.`,
-  );
+  const lines = results.map((r) => {
+    if (r.status === "skip") return `  ⊘ ${r.file} — SKIPPED`;
+    if (r.status === "fail") return `  ✗ ${r.file} (exit ${String(r.code)})`;
+    return `  ${MARK.pass} ${r.file}`;
+  });
+  const n = (s: ScriptStatus): number =>
+    results.filter((r) => r.status === s).length;
+  const parts = [`${String(n("pass"))} passed`];
+  if (n("skip") > 0) parts.push(`${String(n("skip"))} skipped`);
+  if (n("fail") > 0) parts.push(`${String(n("fail"))} failed`);
+  lines.push(`\n${parts.join(", ")}.`);
   return lines.join("\n");
 }

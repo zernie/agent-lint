@@ -427,6 +427,7 @@ describe("loadConfig", () => {
       integrity: "warn",
       coverage: false,
       "untested-surface": "warn",
+      "unmarked-refs": "warn",
     });
   });
 
