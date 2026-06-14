@@ -16,6 +16,7 @@ import globals from "globals";
 const VERIFY_CORE = "src/core/**/*.ts";
 const CC_HARNESS = "src/adapters/claude-code/**/*.ts";
 const CODEX_HARNESS = "src/adapters/codex/**/*.ts";
+const OPENCODE_HARNESS = "src/adapters/opencode/**/*.ts";
 
 export default [
   {
@@ -88,6 +89,7 @@ export default [
       "boundaries/elements": [
         { type: "cc-harness", mode: "full", pattern: CC_HARNESS },
         { type: "codex-harness", mode: "full", pattern: CODEX_HARNESS },
+        { type: "opencode-harness", mode: "full", pattern: OPENCODE_HARNESS },
         { type: "verify-core", mode: "full", pattern: VERIFY_CORE },
       ],
     },
@@ -99,7 +101,11 @@ export default [
           rules: [
             {
               from: { type: "verify-core" },
-              disallow: { to: { type: ["cc-harness", "codex-harness"] } },
+              disallow: {
+                to: {
+                  type: ["cc-harness", "codex-harness", "opencode-harness"],
+                },
+              },
               message:
                 "Hexagonal boundary: the reference-verification domain (${file.type}) must not import a harness/transport adapter (${dependency.type}). Keep the core harness-agnostic — depend through a port, or move this module into the application layer. See research/code-adapter-architecture.md.",
             },
