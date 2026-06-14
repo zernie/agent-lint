@@ -84,11 +84,13 @@ Building it surfaced real, specific limitations — each maps to a deferred item
    installed. RESOLVED: `codex` installs here + in CI, and
    `src/adapters/codex/mock-model.ts` serves the Responses SSE that real
    `codex exec` completes a turn against (gated test). Built against live traffic.
-3. **The layout port is still JSON-shaped for manifest + MCP.** Codex has no JSON
-   manifest (`config.toml` carries everything) and its MCP servers live in a
-   `[mcp_servers]` TOML table — but `loadPlugin`'s manifest read and `hasMcp` are
-   JSON-only, so MCP detection silently misses Codex. (`settingsFormat` fixed the
-   _hooks_ read; manifest/MCP want the same treatment.)
+3. **[CLOSED] The layout port was JSON-shaped for manifest + MCP.** Was:
+   `loadPlugin`'s manifest read and `hasMcp` were JSON-only, so Codex's
+   `[mcp_servers]` TOML table was silently missed. RESOLVED: a format-aware
+   `safeReadManifest(root, layout)` reads the manifest in the layout's
+   `settingsFormat` (JSON or TOML); both the hooks-manifest read and `hasMcp` route
+   through it, so Codex's TOML `[mcp_servers]` is detected (gated test in
+   codex.test.ts). CC output unchanged (same key/file → identical warning).
 4. **Config-defined surfaces aren't captured.** `surfaceDirs` is dir-based;
    Codex subagents are a `[agents]` TOML table (config, not a directory), and the
    skills dir is ambiguous (`.agents/skills` vs `~/.codex/skills`). (Deferred gap #7.)

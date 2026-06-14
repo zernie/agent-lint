@@ -59,6 +59,27 @@ function readHooksFile(path: string): unknown {
 }
 
 /**
+ * Parse the layout's manifest in its declared `settingsFormat` — JSON (Claude
+ * Code's plugin.json) or TOML (Codex's `config.toml`). A TOML harness's manifest
+ * (hooks, `[mcp_servers]`) would otherwise read as empty through the JSON path.
+ * Behaviour-identical to `safeReadJson` when the format is JSON.
+ */
+function safeReadManifest(
+  root: string,
+  layout: PluginLayout,
+): Record<string, unknown> | null {
+  const path = join(root, layout.manifestPath);
+  if (layout.settingsFormat === "toml") {
+    try {
+      return parseToml(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return safeReadJson(path);
+}
+
+/**
  * Read the `.hooks` field of a settings file in the layout's format — JSON
  * (Claude Code's settings.json) or TOML (Codex's `config.toml` `[hooks]`). A
  * TOML harness's hooks would otherwise be read as zero by the JSON path.
@@ -81,9 +102,10 @@ function readSettingsHooks(path: string, format: "json" | "toml"): unknown {
  *   4. a plain repo's `.claude/settings.json`.
  */
 function readHooks(root: string, layout: PluginLayout): unknown {
-  // A malformed plugin.json must not crash the loader — fall through to the
-  // other layouts (safeReadJson returns null on a parse error).
-  const m = safeReadJson(join(root, layout.manifestPath));
+  // A malformed manifest must not crash the loader — fall through to the
+  // other layouts (safeReadManifest returns null on a parse error). Format-aware
+  // so a Codex `config.toml` manifest's `[hooks]` is read, not skipped.
+  const m = safeReadManifest(root, layout);
   if (m) {
     if (typeof m.hooks === "string") return readHooksFile(join(root, m.hooks));
     if (m.hooks !== undefined) return m.hooks;
@@ -188,7 +210,7 @@ function pluginWarnings(
   }
   if (hasMcp(root, layout)) {
     warnings.push(
-      `plugin declares MCP server(s) (mcpServers / .mcp.json) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
+      `plugin declares MCP server(s) (${layout.mcpManifestKey} / ${layout.mcpConfigFile}) — the loader does not wire MCP; bring the server up yourself if your test needs it.`,
     );
   }
   const dangling = danglingRefs(root, layout);
@@ -208,13 +230,12 @@ function pluginWarnings(
   return warnings;
 }
 
-/** Whether the plugin declares any MCP servers (manifest field or .mcp.json). */
+/** Whether the plugin declares any MCP servers (manifest key or standalone file).
+ *  Format-aware: reads the layout's `mcpManifestKey` from a JSON OR TOML manifest,
+ *  so Codex's `[mcp_servers]` TOML table is detected, not silently missed. */
 function hasMcp(root: string, layout: PluginLayout): boolean {
   if (existsSync(join(root, layout.mcpConfigFile))) return true;
-  return (
-    safeReadJson(join(root, layout.manifestPath))?.[layout.mcpManifestKey] !==
-    undefined
-  );
+  return safeReadManifest(root, layout)?.[layout.mcpManifestKey] !== undefined;
 }
 
 // A plugin-relative path reference to a file under a standard surface dir, with a

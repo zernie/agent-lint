@@ -201,11 +201,14 @@ unchanged, byte-identical dogfood hash). Subagents are a **deliberate non-goal**
 a Codex subagent is an `[agents.<name>]` TOML concurrency table, not a
 tool-contract file, so vigiles's `agent()` isn't compiled to it (still verified).
 
-**Still deferred** (loader/layout, not compile):
+**Also done — format-aware manifest/MCP read:** `safeReadManifest` reads the
+manifest in the layout's `settingsFormat`, so Codex's TOML `[mcp_servers]` is
+detected (was JSON-only). CC unchanged.
 
-- **Config-based surfaces + TOML manifest/MCP read** — `surfaceDirs` is dir-shaped
-  and the manifest/MCP read is JSON-shaped, so Codex's `[mcp_servers]`/`[agents]`
-  config tables aren't read. (`research/codex-prototype-findings.md` #3–#4.)
+**Remaining (tidiness, not function):** the generic `loadPlugin` physically lives
+in the CC adapter, so non-CC adapters import it cross-adapter; it wants relocating
+to a shared spot. (`research/codex-prototype-findings.md` #5. Codex's `[agents]`
+config-table subagents are intentionally not materialized — a non-goal, above.)
 
 ## See also
 
