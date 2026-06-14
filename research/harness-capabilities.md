@@ -45,8 +45,9 @@ emits only `name`/`description`; CC's `"claude-code"` keeps the full set
 ² **Deliberate boundary, not a gap:** a Codex subagent is an `[agents.<name>]`
 TOML concurrency table (`max_threads`/`max_depth`), not a tool-contract file —
 vigiles's `agent()` doesn't map onto it, so it isn't compiled to Codex (still
-verified). The remaining loader item is tidiness, not function: the generic
-`loadPlugin` physically lives in the CC adapter (`research/codex-prototype-findings.md` #5).
+verified). The generic loader now lives at the composition root
+(`src/plugin-loader.ts`, layout-injected), so no adapter imports a sibling — there is
+no remaining functional Codex gap.
 
 ## B. Runtime / transport (pillar-2 territory)
 

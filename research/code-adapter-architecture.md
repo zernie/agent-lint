@@ -205,10 +205,15 @@ tool-contract file, so vigiles's `agent()` isn't compiled to it (still verified)
 manifest in the layout's `settingsFormat`, so Codex's TOML `[mcp_servers]` is
 detected (was JSON-only). CC unchanged.
 
-**Remaining (tidiness, not function):** the generic `loadPlugin` physically lives
-in the CC adapter, so non-CC adapters import it cross-adapter; it wants relocating
-to a shared spot. (`research/codex-prototype-findings.md` #5. Codex's `[agents]`
-config-table subagents are intentionally not materialized — a non-goal, above.)
+**Also done — the shared loader relocated:** the generic `loadPlugin`/`resolveHarness`
+moved to the composition root (`src/plugin-loader.ts`, layout-injected, zero adapter
+imports); the CC adapter keeps a thin default-supplying wrapper. **No adapter imports a
+sibling adapter anymore.** (Codex's `[agents]` config-table subagents are intentionally
+not materialized — a non-goal, above.)
+
+**Remaining: nothing functional.** Codex is verify + compile (instructions/skills) +
+pillar-2-testable + MCP-detected, with no cross-adapter coupling. Subagent compilation
+is a deliberate non-goal (model mismatch), not a TODO.
 
 ## See also
 

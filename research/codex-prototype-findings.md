@@ -94,12 +94,14 @@ Building it surfaced real, specific limitations — each maps to a deferred item
 4. **Config-defined surfaces aren't captured.** `surfaceDirs` is dir-based;
    Codex subagents are a `[agents]` TOML table (config, not a directory), and the
    skills dir is ambiguous (`.agents/skills` vs `~/.codex/skills`). (Deferred gap #7.)
-5. **The generic loader lives in the CC adapter.** `loadPlugin` is layout-driven
-   and harness-agnostic in spirit, but physically sits in
-   `src/adapters/claude-code/plugin-loader.ts`, so the Codex prototype imports it
-   **cross-adapter** (`codex → claude-code`). It should move to a shared/core
-   location so adapters don't depend on each other. (New finding — not previously
-   logged.)
+5. **[CLOSED] The generic loader lived in the CC adapter.** Was: `loadPlugin`
+   sat in `src/adapters/claude-code/plugin-loader.ts`, so codex/opencode imported
+   it **cross-adapter**. RESOLVED: the generic `loadPlugin`/`resolveHarness` moved
+   to the composition root (`src/plugin-loader.ts`, layout required, zero adapter
+   imports); the CC adapter keeps a thin wrapper that supplies `claudeCodeLayout`
+   as the default (so `vigiles/claude-code` + `vigiles/plugin-loader` are
+   unchanged). codex/opencode/conformance import the generic and pass their own
+   layout — **no adapter imports a sibling adapter anymore.**
 6. **[CLOSED] Instruction-file + SKILL.md renderers are now dialect-correct for
    Codex.** `compileClaude` is format-neutral (plain markdown, no frontmatter =
    the AGENTS.md shape; the h1 target comes from the dialect), and `compileSkill`

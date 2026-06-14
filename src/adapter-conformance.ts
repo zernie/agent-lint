@@ -13,7 +13,7 @@ import { join, dirname } from "node:path";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { compileAgent } from "./core/compile.js";
 import { agent } from "./core/spec.js";
-import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
+import { loadPlugin } from "./plugin-loader.js";
 
 export interface ConformanceResult {
   readonly ok: boolean;
