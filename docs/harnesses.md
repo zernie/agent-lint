@@ -88,20 +88,28 @@ Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocke
 | Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                       |
 | -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------ |
 | **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                       |
-| **Codex**                  | ✅       | ✅ Responses SSE¹      | ✅ veto (exit 2)         | 🧪 prototype (`src/adapters/codex/`) — format+layout proven  |
-| **OpenCode**               | ✅       | ✅ openai-compat¹      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false` |
+| **Codex**                  | ✅       | ✅ Responses SSE¹      | ✅ veto (exit 2)         | 🧪 prototype (`src/adapters/codex/`) — transport **proven**² |
+| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false` |
 | **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                            |
 | **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                   |
 
-¹ **What's still blocked on shipping the mockable tier:** the prototypes declare
-`harnessTesting: true` but the **transport renderers are not built** — Codex needs
-the OpenAI Responses SSE renderer + a `wireMock` op, OpenCode needs the
-openai-compat (Chat Completions) renderer, and neither binary is installed here.
-The **format + layout** axes are proven (conformance + real-fixture loaders); the
-**runtime/model-mock** half is the open work, deliberately shaped against the real
-binary rather than guessed (see
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
-and [`research/opencode-prototype-findings.md`](../research/opencode-prototype-findings.md)).
+¹ Codex's mockable tier is **built and proven**: `@openai/codex` installs with no
+API key (here and in CI), and `src/adapters/codex/mock-model.ts` serves the OpenAI
+**Responses** SSE that real `codex exec` completes a turn against — the request
+shape + event sequence captured from live codex traffic, not guessed.
+
+² **What remains before Codex flips from 🧪 prototype to ✅ shipped:** register it
+in `ADAPTERS` + export `vigiles/codex` (a deliberate auto-detect change), plus the
+still-deferred _format_-axis pieces (instruction/skill renderers behind the
+dialect; config-table `[agents]` surfaces). The _transport_ half — the blocker
+that mattered — is done.
+
+³ OpenCode's mockable tier is **declared but not yet built**: it needs the
+openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't
+wired here yet (see
+[`research/opencode-prototype-findings.md`](../research/opencode-prototype-findings.md)).
+The codex path is the proof the same work generalizes (see
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)).
 
 The takeaway: **everyone converges on pillar 1** (AGENTS.md is becoming universal),
 so the discriminator is pillar 2 — and there, _mockability_ is the gate. OpenCode

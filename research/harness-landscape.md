@@ -6,12 +6,17 @@
 > harnesses exist and which is the best adapter after Codex. Companion to
 > `research/code-adapter-architecture.md` (the port design).
 
-## Headline: both deferred seams are now unblocked
+## Headline: both deferred seams are now unblocked — and the model mock is BUILT
 
 The two seams `code-adapter-architecture.md` held back — the **hook protocol**
 (`run-hook.ts`) and the **model mock** (`mock-model.ts`) — were deferred on a
 "don't design an interface against one implementation" rule. **Codex now
-provides the concrete second implementation for both**, so they're extractable:
+provides the concrete second implementation for both**, so they're extractable.
+**Update (2026-06-14):** the model-mock seam is no longer just _extractable_ — the
+Codex OpenAI-**Responses** SSE renderer is **built and proven against the real
+`codex` binary** (installs with no API key, here and in CI):
+`src/adapters/codex/mock-model.ts` + a gated test that drives real `codex exec`
+through a complete turn. See `research/codex-prototype-findings.md` (UPDATE).
 
 - **Hook protocol:** Codex shipped a real hooks system that is a **near-1:1
   analog of Claude Code's** — same event names, JSON-on-stdin + env vars, and

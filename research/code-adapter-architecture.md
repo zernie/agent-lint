@@ -178,14 +178,24 @@ speculatively is the wrong-abstraction trap).
   `assertAdapterLoadsHooks` (the settings round-trip that catches the JSON-vs-TOML
   trap). Conformance is no longer purely structural.
 
-**Deferred to the Codex adapter build** (need the second impl to shape right):
+**Built + PROVEN against the real `codex` binary** (was deferred; the binary
+installs here and in CI — `@openai/codex`, no API key — so these were shaped
+against reality, not guessed; see `research/codex-prototype-findings.md`):
 
-- **`HarnessRuntime.wireMock`** — Codex points at a mock via a `[model_providers]`
-  config block, not one env var; the right return shape (`{ env?, configFiles? }`)
-  is a guess until a real Codex mock is wired.
-- **`ModelMock` SSE renderer** — the OpenAI Responses event sequence + request
-  parser is a large piece, partly untestable here (no `codex` binary); the
-  descriptor names the wire format, the renderer is built with the adapter.
+- **`ModelMock` SSE renderer** — DONE. `src/adapters/codex/mock-model.ts`
+  (`renderResponsesSSE`/`parseResponsesRequest`/`startCodexMock`) serves the
+  OpenAI **Responses** event sequence; a gated test drives real `codex exec`
+  against it and asserts the turn completes (the scripted reply is printed). The
+  exact `POST /v1/responses` request shape + the 9-event SSE sequence are captured
+  from live codex traffic, not assumed.
+- **`HarnessRuntime.wireMock`** — DONE as a recipe. Pointing codex at the mock is
+  the keyless `-c model_provider=mock -c model_providers.mock.{base_url,wire_api,
+env_key,requires_openai_auth,…}` flag set (proven), exported as
+  `codexMockArgs`/`codexMockEnv` from the codex runtime — not the env-var route
+  the prototype guessed (that finding is now corrected).
+
+**Still deferred** (genuinely needs the divergent output / surface shape):
+
 - **Instruction/skill renderers** — `compile.ts` still emits structured CLAUDE.md;
   fold behind the dialect once AGENTS.md/Codex output actually diverges.
 - **Config-based surfaces** — Codex subagents are a `[agents]` TOML table, not an
