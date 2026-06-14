@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:56a08f4e5cec1e58 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:ed0cab6c9a0f4a4a compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -81,7 +81,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 - `src/core/cedar.test.ts` — Cedar policy resolution tests — filesystem-based @id() lookup with filename fallback
 - `src/core/generate-types.ts` — Type generator: scans linters/package.json/filesystem → emits .d.ts
 - `src/core/generate-schema.ts` — JSON Schema generator: emits .vigiles/schema.json from real linter config so YAML LSP autocompletes frontmatter rule names
-- `src/cli.ts` — CLI: init, compile, audit, test, eval, scan (primary commands + generate-types plumbing)
+- `src/cli.ts` — CLI: init, compile, audit, test, eval, scan (primary commands + generate-types plumbing). `init` is the onboarding wizard — interactive at a TTY, non-interactive for agents/CI (or --yes); sets up BOTH pillars by default (spec+types, a vigiles.harness.mjs starter, a zernie/vigiles@v1 workflow, the plugin), scoped via --pillars
+- `src/setup-plan.ts` — Pure `vigiles init` decision logic (parseSetupArgs/shouldPrompt/resolvePlan): turns CLI flags + whether a human's at a TTY into a SetupPlan {verify,test,gha,plugin,strict}. Interactive when a human runs it, non-interactive (defaults: both pillars) for agents/CI/piped — so 'set up vigiles' from a Claude Code/Codex prompt never hangs. Unit-tested in src/setup-plan.test.ts; the IO (prompts, scaffolds, workflow) stays in cli.ts
 - `src/scan.ts` — `vigiles scan <dir>` — deterministic, no-model report of what a plugin/repo ships and what's broken: per-skill description + user-invoked, per-agent tool contract (incl. the no-tools-line inherits-all footgun), hook scripts resolved across braced/unbraced ${CLAUDE_PLUGIN_ROOT} (ok/missing/unresolved), command + MCP detection, untested-surface count, loader warnings. Re-aims loadPlugin + parseAgentTools + findUntestedSurfaces; the deterministic substrate under the leaderboard (research/divergent-bets.md) + harness-aware scan (research/agent-supply-chain-security.md)
 - `src/scan.test.ts` — Scan test suite (vitest): skill description/user-invoked flags, agent tool-contract incl. inherits-all, hook resolution ok/missing/unresolved across $CLAUDE_PLUGIN_ROOT forms, command + MCP detection, report formatting
 - `src/leaderboard.ts` — Plugin health leaderboard (the no-model half of research/divergent-bets.md #9): scoreReport turns a ScanReport into a 0–100 structural-health score + A–F grade from concrete facts (missing hook -15, no-description skill -10, agent-without-tool-contract -5, untested surface -3); deliberately ignores the loader's free-text warnings (doc-mention false positives) so the ranking is defensible. rankPlugins scans+scores+sorts a set; `vigiles scan <dir...>` (≥2 dirs) renders it. Behavioural columns (trigger-rate/egress/safety) need a model and stack on top
@@ -290,7 +291,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 
 ### Smooth Adoption
 
-**Guidance only** — `npx vigiles init && npx skills add zernie/vigiles` must work on first run with zero config. The wizard auto-detects the project, creates specs, generates types, compiles, and wires CI. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time. Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md`.
+**Guidance only** — `npx vigiles init` must work on first run with zero config and set up BOTH pillars by default: a typed spec + types (pillar 1), a vigiles.harness.mjs starter (pillar 2), a `zernie/vigiles@v1` CI workflow (created when none exists), and the Claude Code plugin. Onboarding is interactive at a TTY (asks which pillars / CI / plugin) and NON-INTERACTIVE for agents, CI, or piped input (or with `--yes`) — so 'set up vigiles' from a Claude Code / Codex prompt Just Works without hanging on a prompt; `--pillars=verify|test|both` scopes it. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time (`--strict`). Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md` and `docs/agent-setup.md`.
 
 ### Format Before Commit
 

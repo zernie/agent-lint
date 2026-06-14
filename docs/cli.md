@@ -20,16 +20,29 @@ npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter 
 npx vigiles generate-schema --check # Verify schema.json is up to date
 ```
 
+By default `init` sets up **both pillars**: it scaffolds a typed spec + types
+(Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), wires CI as a
+`zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none
+exists), and installs the Claude Code plugin.
+
+**Interactive vs non-interactive:** run in a terminal (a TTY), `init` prompts for
+which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
+(no TTY) — or with `--yes` — it skips the prompts and applies the defaults. So
+"set up vigiles" from a Claude Code / Codex prompt Just Works without hanging.
+
 ### `init` flags
 
-| Flag                 | Effect                                                |
-| -------------------- | ----------------------------------------------------- |
-| `--strict`           | Sets require-spec and require-skill-spec to `"error"` |
-| `--target=AGENTS.md` | Creates AGENTS.md spec instead of CLAUDE.md           |
-| `--no-gha`           | Skip adding CI step to GHA workflow                   |
+| Flag                           | Effect                                                 |
+| ------------------------------ | ------------------------------------------------------ |
+| `--yes`, `-y`                  | Skip prompts; use defaults (both pillars, CI, plugin)  |
+| `--pillars=both\|verify\|test` | Which pillars to set up (default `both`)               |
+| `--no-gha`                     | Skip wiring CI                                         |
+| `--no-plugin`                  | Skip installing the Claude Code plugin                 |
+| `--strict`                     | Set `require-spec` / `require-skill-spec` to `"error"` |
+| `--target=AGENTS.md`           | Create a bare spec for one file (Pillar 1 only)        |
 
-Works the same for humans and agents — fully non-interactive. See the
-[agent setup guide](agent-setup.md) and [agent workflows](agent-workflows.md).
+See the [agent setup guide](agent-setup.md) and
+[agent workflows](agent-workflows.md).
 
 ### `scan [dir]`
 

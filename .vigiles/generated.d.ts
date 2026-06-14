@@ -95,7 +95,7 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 147 project files. */
+  /** 150 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -133,6 +133,7 @@ declare module "vigiles/generated" {
     | "src/adapters/claude-code/model-mock.ts"
     | "src/adapters/claude-code/plugin-loader.test.ts"
     | "src/adapters/claude-code/plugin-loader.ts"
+    | "src/adapters/claude-code/refs-hook.test.ts"
     | "src/adapters/claude-code/run-hook.e2e.test.ts"
     | "src/adapters/claude-code/run-hook.test.ts"
     | "src/adapters/claude-code/run-hook.ts"
@@ -237,6 +238,8 @@ declare module "vigiles/generated" {
     | "src/plugin-loader.ts"
     | "src/scan.test.ts"
     | "src/scan.ts"
+    | "src/setup-plan.test.ts"
+    | "src/setup-plan.ts"
     | "src/skill-test.test.ts"
     | "src/skill-test.ts"
     | "src/test-coverage.test.ts"
@@ -352,6 +355,7 @@ declare module "vigiles/spec" {
       | "src/adapters/claude-code/model-mock.ts"
       | "src/adapters/claude-code/plugin-loader.test.ts"
       | "src/adapters/claude-code/plugin-loader.ts"
+      | "src/adapters/claude-code/refs-hook.test.ts"
       | "src/adapters/claude-code/run-hook.e2e.test.ts"
       | "src/adapters/claude-code/run-hook.test.ts"
       | "src/adapters/claude-code/run-hook.ts"
@@ -456,6 +460,8 @@ declare module "vigiles/spec" {
       | "src/plugin-loader.ts"
       | "src/scan.test.ts"
       | "src/scan.ts"
+      | "src/setup-plan.test.ts"
+      | "src/setup-plan.ts"
       | "src/skill-test.test.ts"
       | "src/skill-test.ts"
       | "src/test-coverage.test.ts"
