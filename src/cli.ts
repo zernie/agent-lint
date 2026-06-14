@@ -2187,7 +2187,19 @@ function handleRunScripts(
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
   console.log("\n" + formatScriptSummary(results));
+
   if (anyFailed(results)) process.exit(1);
+
+  // `--no-skip`: in a context that ASSERTS the capability is present (a CI job),
+  // a skipped tier is untested surface — fail loudly instead of passing green.
+  if (args.includes("--no-skip") && results.some((r) => r.status === "skip")) {
+    const n = results.filter((r) => r.status === "skip").length;
+    console.log(
+      `\n✗ --no-skip: ${String(n)} tier(s) SKIPPED — untested surface here. ` +
+        "Install the missing capability (e.g. the `claude` CLI) or scope the run.",
+    );
+    process.exit(1);
+  }
 }
 
 function printUsage(command: string | undefined): void {

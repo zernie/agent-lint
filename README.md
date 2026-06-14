@@ -100,6 +100,16 @@ hijacking unrelated ones (precision). **[Full guide →](docs/harness-testing.md
 
 ## Quick start
 
+> **Paste into Claude Code or Codex:**
+>
+> > Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
+> > references and show me what's stale, then write and run a harness test for one
+> > of my hooks or skills. Use good defaults (both pillars, non-interactive), but
+> > **ask me first** whether to gate it in CI, whether to add a real-model eval,
+> > and whether to enforce strictly (`--strict`).
+
+Or do it yourself:
+
 ```bash
 npx vigiles init   # sets up BOTH pillars: spec + harness test + CI + plugin
 ```

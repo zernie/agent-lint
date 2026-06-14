@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:a9c70ecf40d23042 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:00a9ac9f9e51a832 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -279,7 +279,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 
 ### No Silent Skips
 
-**Guidance only** — A skip must be LOUD, never a silent green. When a test/script genuinely can't run (e.g. the deterministic tier with no `claude`), it must report `⊘ SKIPPED` (its own status, tallied separately as 'N skipped'), not exit 0 and masquerade as a `✓ passed`. `vigiles test`/`vigiles eval` classify each script pass/skip/fail by exit code (0 / `SKIP_EXIT_CODE` 77 / else) and a skip never fails the run; scripts call `skip(reason)` (`vigiles/testing`) to emit it. Equally important — DON'T over-skip: there is no blanket `claude`-gate, so unit-tier `runHook` tests (which need no model) always run; only the tiers that truly need a capability skip, and they say so. The corollary of never-skip-tests: if you can't make it pass, surface WHY, don't hide it.
+**Guidance only** — A skip must be LOUD, never a silent green. When a test/script genuinely can't run (e.g. the deterministic tier with no `claude`), it must report `⊘ SKIPPED` (its own status, tallied separately as 'N skipped'), not exit 0 and masquerade as a `✓ passed`. `vigiles test`/`vigiles eval` classify each script pass/skip/fail by exit code (0 / `SKIP_EXIT_CODE` 77 / else); scripts call `skip(reason)` (`vigiles/testing`) to emit it. By default a skip does NOT fail the run — tiers need different capabilities (claude, bubblewrap, model auth) that aren't all present everywhere, so failing-by-default would make the command red in any partial environment (this repo's own non-privileged `harness` job legitimately skips the egress tier and runs it under `e2e`). But where you ASSERT the capability is present (a CI job), pass `vigiles test --no-skip`: a skipped tier is untested surface and FAILS — a green-with-skips is itself a hidden gap. Equally important — DON'T over-skip: there is no blanket `claude`-gate, so unit-tier `runHook` tests (which need no model) always run; only the tiers that truly need a capability skip, and they say so. The corollary of never-skip-tests: if you can't make it pass, surface WHY, don't hide it.
 
 ### Zero Config By Default
 
