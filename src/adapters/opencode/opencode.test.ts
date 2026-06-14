@@ -22,9 +22,9 @@ import {
 import { ADAPTERS, getAdapter } from "../../adapter-registry.js";
 import { compileAgent } from "../../core/compile.js";
 import { agent } from "../../core/spec.js";
-// The generic, layout-driven loader physically lives in the CC adapter; the
-// OpenCode prototype reuses it with opencodeLayout.
-import { loadPlugin } from "../claude-code/plugin-loader.js";
+// The generic, layout-driven loader lives at the composition root; the OpenCode
+// prototype reuses it with opencodeLayout (no cross-adapter import).
+import { loadPlugin } from "../../plugin-loader.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 test("opencodeAdapter passes the conformance kit (a shellHooks:false adapter with no hookProtocol)", () => {
