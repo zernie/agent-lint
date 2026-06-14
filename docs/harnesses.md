@@ -69,6 +69,46 @@ The reference-verification engine (does this linter rule exist and is it enabled
 does this path/script/symbol resolve) is **the same across harnesses** — only the
 format it reads/writes and the runtime it drives differ.
 
+## Adapter capability matrix
+
+Not every harness can reach every tier, and pretending otherwise produces fake
+adapters that hang or no-op. Each adapter therefore declares an
+`AdapterCapabilities` descriptor (`src/core/adapter.ts`), and the conformance kit
+**requires a transport port only for the capability the adapter claims** — so a
+reference-only harness is a first-class adapter, not a broken one.
+
+| Capability                            | Descriptor flag                         | Needs ports             | What it unlocks                                          |
+| ------------------------------------- | --------------------------------------- | ----------------------- | -------------------------------------------------------- |
+| **Pillar 1** — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `audit` — verify refs, tools, paths |
+| **Pillar 2** — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model)  |
+| **Shell-hook tier**                   | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)       |
+
+Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
+
+| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                       |
+| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------ |
+| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                       |
+| **Codex**                  | ✅       | ✅ Responses SSE¹      | ✅ veto (exit 2)         | 🧪 prototype (`src/adapters/codex/`) — format+layout proven  |
+| **OpenCode**               | ✅       | ✅ openai-compat¹      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false` |
+| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                            |
+| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                   |
+
+¹ **What's still blocked on shipping the mockable tier:** the prototypes declare
+`harnessTesting: true` but the **transport renderers are not built** — Codex needs
+the OpenAI Responses SSE renderer + a `wireMock` op, OpenCode needs the
+openai-compat (Chat Completions) renderer, and neither binary is installed here.
+The **format + layout** axes are proven (conformance + real-fixture loaders); the
+**runtime/model-mock** half is the open work, deliberately shaped against the real
+binary rather than guessed (see
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
+and [`research/opencode-prototype-findings.md`](../research/opencode-prototype-findings.md)).
+
+The takeaway: **everyone converges on pillar 1** (AGENTS.md is becoming universal),
+so the discriminator is pillar 2 — and there, _mockability_ is the gate. OpenCode
+is the case that splits the matrix mid-row: mockable (so pillar 2 is reachable)
+but with in-process plugin hooks instead of shell processes (so the `runHook`
+unit tier doesn't apply — `shellHooks:false`, no `hookProtocol`).
+
 ## How this is kept honest
 
 The core staying harness-agnostic isn't a convention you have to remember — it's

@@ -111,6 +111,31 @@ writes `CLAUDE.md` from `.ruler/`. They clobber each other every run.
    vigiles verifies MCP references (`vigiles:mcp`) but must not emit a competing
    `.mcp.json`. _State: **MET** by omission — vigiles emits none._
 
+7. **Symlinked / synced instruction files are ONE artifact, not two.** Claude
+   Code reads `CLAUDE.md` only — it does **not** natively load `AGENTS.md`
+   ([anthropics/claude-code#34235](https://github.com/anthropics/claude-code/issues/34235)).
+   The two operator-side patterns that make a single source serve both CC and the
+   AGENTS.md tools are (a) a **symlink** (`ln -s CLAUDE.md AGENTS.md`, or the
+   reverse) and (b) a **sync tool** keeping the two byte-identical (rulesync
+   `targets`, Ruler distribution). vigiles must treat these as the same file, not
+   two competing targets:
+   - **Follow the symlink** when reading/compiling/validating — resolve to the
+     real path so the integrity hash and `require-spec` check run once on the real
+     artifact, and a symlinked `AGENTS.md` is never flagged as a second,
+     spec-less instruction file. (`validate.ts` already recognizes both
+     CLAUDE.md and AGENTS.md as instruction files via `INSTRUCTION_FILES`; the
+     symlink case must not double-fire `require-spec`.)
+   - **Don't stamp two hashes.** When the same content is synced/symlinked to both
+     names, only the compile _source_ slot carries the integrity hash (requirement
+     3's topology); the mirror is a distributed copy vigiles verifies, not owns.
+   - **Detect the pairing.** `compose.ts` should recognize a CLAUDE.md⇄AGENTS.md
+     symlink (or a rulesync `targets: [claudecode, …]` that emits both) and report
+     it as an intentional mirror, not a collision.
+     _State: **GAP (new).** The dialect now correctly models CC-reads-CLAUDE.md-only
+     (`claudeCodeDialect.instructionTargets = ["CLAUDE.md"]`); the symlink-follow on
+     read and the mirror-detection in `compose.ts` are the open work. Tracked here
+     and in the **Compose With Sync Tools** rule._
+
 ## What we are explicitly NOT building
 
 - **Native multi-format emitters** (`.mdc`, `.clinerules`, Gemini, …). Ruler and
