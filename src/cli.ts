@@ -88,6 +88,7 @@ import {
   discoverScripts,
   runScripts,
   formatScriptSummary,
+  anyFailed,
   scriptGlob,
 } from "./adapters/claude-code/run-scripts.js";
 import { checkIntegrity } from "./core/integrity.js";
@@ -2164,17 +2165,19 @@ function handleRunScripts(
   // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
 
-  if (kind === "test" && !claudeAvailable()) {
-    console.log(
-      "vigiles test: `claude` CLI not found — skipping harness tests.",
-    );
-    return;
-  }
-
   const files = discoverScripts(restArgs, defaultGlob, cwd);
   if (files.length === 0) {
     console.log(`No ${defaultGlob} files found.`);
     return;
+  }
+
+  // No blanket skip: unit-tier (runHook) tests need no `claude`, so always run.
+  // A script whose tier DOES need `claude` self-reports `⊘ SKIPPED` (exit 77) —
+  // loud, never a silent green. Just flag up front that some may skip.
+  if (kind === "test" && !claudeAvailable()) {
+    console.log(
+      "ℹ `claude` CLI not found — unit-tier tests run; tests that need it report SKIPPED.\n",
+    );
   }
 
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
@@ -2184,7 +2187,7 @@ function handleRunScripts(
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
   console.log("\n" + formatScriptSummary(results));
-  if (results.some((r) => r.code !== 0)) process.exit(1);
+  if (anyFailed(results)) process.exit(1);
 }
 
 function printUsage(command: string | undefined): void {

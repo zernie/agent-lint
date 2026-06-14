@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:60de3d597b04e863 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:a9c70ecf40d23042 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -87,7 +87,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 - `src/scan.test.ts` — Scan test suite (vitest): skill description/user-invoked flags, agent tool-contract incl. inherits-all, hook resolution ok/missing/unresolved across $CLAUDE_PLUGIN_ROOT forms, command + MCP detection, report formatting
 - `src/leaderboard.ts` — Plugin health leaderboard (the no-model half of research/divergent-bets.md #9): scoreReport turns a ScanReport into a 0–100 structural-health score + A–F grade from concrete facts (missing hook -15, no-description skill -10, agent-without-tool-contract -5, untested surface -3); deliberately ignores the loader's free-text warnings (doc-mention false positives) so the ranking is defensible. rankPlugins scans+scores+sorts a set; `vigiles scan <dir...>` (≥2 dirs) renders it. Behavioural columns (trigger-rate/egress/safety) need a model and stack on top
 - `src/leaderboard.test.ts` — Leaderboard test suite (vitest): pure scoreReport penalty weights + clamp + empty-machine=0, rankPlugins ordering (healthy above broken) over tmp fixtures, formatLeaderboard rendering
-- `src/adapters/claude-code/run-scripts.ts` — Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.mjs` / `*.eval.mjs`, run each as a child node process, aggregate exit codes (CI command, not just `node x.mjs`)
+- `src/adapters/claude-code/run-scripts.ts` — Script runner for `vigiles test` / `vigiles eval`: discover `*.harness.*` / `*.eval.*` (JS+TS), run each as a child node process, classify each result pass/skip/fail (exit 0 / SKIP_EXIT_CODE 77 / else) and tally them SEPARATELY — a `⊘ SKIPPED` is loud, never folded into 'passed', and a skip never fails the run (anyFailed). NO blanket claude-gate: unit-tier runHook tests run without `claude`; a tier that needs it self-reports SKIPPED via `skip()`
 - `src/adapters/claude-code/run-scripts.test.ts` — Script-runner test suite (node:test): discovery, exit-code aggregation, env forwarding, summary formatting
 - `src/core/inline.ts` — Inline-mode parser: `<!-- vigiles:enforce ... -->` comments in markdown for gradual adoption
 - `src/core/frontmatter.ts` — Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)
@@ -276,6 +276,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 ### Never Skip Tests
 
 **Guidance only** — All tests must pass. If a test requires a CLI tool (pylint, rubocop, ruff, clippy), install the tool, don't skip the test.
+
+### No Silent Skips
+
+**Guidance only** — A skip must be LOUD, never a silent green. When a test/script genuinely can't run (e.g. the deterministic tier with no `claude`), it must report `⊘ SKIPPED` (its own status, tallied separately as 'N skipped'), not exit 0 and masquerade as a `✓ passed`. `vigiles test`/`vigiles eval` classify each script pass/skip/fail by exit code (0 / `SKIP_EXIT_CODE` 77 / else) and a skip never fails the run; scripts call `skip(reason)` (`vigiles/testing`) to emit it. Equally important — DON'T over-skip: there is no blanket `claude`-gate, so unit-tier `runHook` tests (which need no model) always run; only the tiers that truly need a capability skip, and they say so. The corollary of never-skip-tests: if you can't make it pass, surface WHY, don't hide it.
 
 ### Zero Config By Default
 

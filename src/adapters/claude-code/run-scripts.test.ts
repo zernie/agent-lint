@@ -12,6 +12,7 @@ import {
   discoverScripts,
   runScripts,
   formatScriptSummary,
+  anyFailed,
   interpreterArgs,
   detectNodeCaps,
   scriptGlob,
@@ -140,18 +141,48 @@ test("runScripts surfaces an error code for an unrunnable TS script", () => {
   }
 });
 
-test("formatScriptSummary marks pass/fail and tallies failures", () => {
+test("formatScriptSummary tallies pass/skip/fail; skips are loud, not a pass", () => {
   const pass = formatScriptSummary([
-    { file: "a.mjs", code: 0 },
-    { file: "b.mjs", code: 0 },
+    { file: "a.mjs", code: 0, status: "pass" },
+    { file: "b.mjs", code: 0, status: "pass" },
   ]);
   assert.match(pass, /✓ a\.mjs/);
   assert.match(pass, /2 passed\./);
 
-  const fail = formatScriptSummary([
-    { file: "a.mjs", code: 0 },
-    { file: "b.mjs", code: 2 },
+  const mixed = formatScriptSummary([
+    { file: "a.mjs", code: 0, status: "pass" },
+    { file: "b.mjs", code: 77, status: "skip" },
+    { file: "c.mjs", code: 2, status: "fail" },
   ]);
-  assert.match(fail, /✗ b\.mjs \(exit 2\)/);
-  assert.match(fail, /1\/2 failed\./);
+  assert.match(mixed, /⊘ b\.mjs — SKIPPED/); // shown, not silent
+  assert.match(mixed, /✗ c\.mjs \(exit 2\)/);
+  assert.match(mixed, /1 passed, 1 skipped, 1 failed\./);
+});
+
+test("anyFailed: a skip never counts as a failure", () => {
+  assert.equal(
+    anyFailed([
+      { file: "a.mjs", code: 0, status: "pass" },
+      { file: "b.mjs", code: 77, status: "skip" },
+    ]),
+    false,
+  );
+  assert.equal(anyFailed([{ file: "c.mjs", code: 2, status: "fail" }]), true);
+});
+
+test("runScripts classifies exit 77 as skip, 0 as pass, else fail", () => {
+  const dir = makeTmpDir("run-scripts");
+  try {
+    writeFileSync(join(dir, "ok.mjs"), "process.exit(0);\n");
+    writeFileSync(join(dir, "skip.mjs"), "process.exit(77);\n");
+    writeFileSync(join(dir, "bad.mjs"), "process.exit(1);\n");
+    const r = runScripts(["ok.mjs", "skip.mjs", "bad.mjs"], dir);
+    assert.deepEqual(
+      r.map((x) => x.status),
+      ["pass", "skip", "fail"],
+    );
+    assert.equal(anyFailed(r), true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
 });
