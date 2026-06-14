@@ -34,3 +34,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release
+
+      - name: Update floating major-version tag for the Action
+        # Marketplace consumers pin `uses: zernie/vigiles@v1`. Point that
+        # floating tag at the newest released vX.Y.Z so @v1 always tracks the
+        # latest compatible release. Idempotent: a no-op when already current.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          if [ -z "$latest" ]; then
+            echo "No version tags yet — skipping major-tag update."
+            exit 0
+          fi
+          major="${latest%%.*}"   # v1.2.3 -> v1
+          if [ "$(git rev-parse -q --verify "refs/tags/$major" || true)" = "$(git rev-parse "$latest")" ]; then
+            echo "$major already points at $latest — nothing to do."
+            exit 0
+          fi
+          echo "Pointing $major at $latest"
+          git tag -f "$major" "$latest"
+          git push origin -f "refs/tags/$major"

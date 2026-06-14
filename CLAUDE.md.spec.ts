@@ -139,7 +139,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
     "src/core/frontmatter.ts":
       "Frontmatter-mode parser: `vigiles: enforce:` YAML frontmatter rules in markdown (Level 1 adoption)",
     "src/core/frontmatter.test.ts": "Frontmatter parser test suite (node:test)",
-    "src/action.ts": "GitHub Action wrapper",
+    "action.yml":
+      "GitHub Action — a composite action over the published `npx vigiles` CLI (NOT a node20 entry pointing at an uncommitted dist/): maps every input to a real CLI flag, sets the `valid` output via $GITHUB_OUTPUT, and supports `version: local` so the repo dogfoods it via `uses: ./`. See docs/cli.md and the `prod-grade-gha-cli` rule.",
+    "src/cli-flags.ts":
+      "Shared CLI flag → config bridge (applyConfigFlags): --max-rules / --catalog-only override the loaded config so every GitHub Action input maps to a real CLI flag. Pure, unit-tested in src/cli-flags.test.ts.",
     "src/core/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/core/agent.test.ts":
       "Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip",

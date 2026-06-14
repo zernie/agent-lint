@@ -1,25 +1,101 @@
 name: "vigiles"
-description: "Compile typed specs to instruction files and verify integrity"
+description: "Verify the references in your agent instruction files (CLAUDE.md/AGENTS.md) and compile typed specs — in CI."
+author: "zernie"
 branding:
   icon: "check-circle"
   color: "orange"
 
 inputs:
   command:
-    description: "Command to run: 'compile' or 'audit' (default: audit)"
+    description: "Which vigiles command to run: 'audit' (verify references + integrity + coverage) or 'compile' (specs → markdown)."
     required: false
     default: "audit"
   paths:
-    description: "Comma-separated paths to .spec.ts files (compile) or .md files (audit). Auto-discovers by default."
+    description: "Comma- or space-separated paths to operate on (.md files for audit, .spec.ts files for compile). Auto-discovers when empty."
     required: false
+    default: ""
+  version:
+    description: "Version of the vigiles npm package to run (e.g. '1', '1.2.3', 'latest'). Use 'local' to run the action's own checkout — for dogfooding via `uses: ./` in this repo's CI."
+    required: false
+    default: "latest"
   max-rules:
-    description: "Maximum number of rules per spec file"
+    description: "Maximum number of rules per spec file (maps to the CLI's --max-rules)."
     required: false
+    default: ""
   catalog-only:
-    description: "Only check that linter rules exist, skip config-enabled checks (true/false)"
+    description: "Only check that linter rules exist; skip config-enabled checks (maps to the CLI's --catalog-only). 'true' or 'false'."
     required: false
     default: "false"
+  working-directory:
+    description: "Directory to run vigiles in."
+    required: false
+    default: "."
+
+outputs:
+  valid:
+    description: "'true' if vigiles passed (exit 0), 'false' otherwise."
+    value: ${{ steps.vigiles.outputs.valid }}
 
 runs:
-  using: "node20"
-  main: "dist/action.js"
+  using: "composite"
+  steps:
+    - id: vigiles
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        # Inputs are passed through the environment (never interpolated into
+        # the script body) so a value can't break out of the command line.
+        VIGILES_COMMAND: ${{ inputs.command }}
+        VIGILES_PATHS: ${{ inputs.paths }}
+        VIGILES_VERSION: ${{ inputs.version }}
+        VIGILES_MAX_RULES: ${{ inputs.max-rules }}
+        VIGILES_CATALOG_ONLY: ${{ inputs.catalog-only }}
+        VIGILES_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+
+        cmd="${VIGILES_COMMAND:-audit}"
+        args=("$cmd")
+
+        # paths: split on commas and whitespace into positional args.
+        paths="${VIGILES_PATHS:-}"
+        if [[ -n "${paths// /}" ]]; then
+          IFS=', ' read -r -a _paths <<< "$paths"
+          args+=("${_paths[@]}")
+        fi
+
+        max_rules="${VIGILES_MAX_RULES:-}"
+        if [[ -n "${max_rules// /}" ]]; then
+          args+=("--max-rules=${max_rules}")
+        fi
+
+        if [[ "${VIGILES_CATALOG_ONLY:-false}" == "true" ]]; then
+          args+=("--catalog-only")
+        fi
+
+        # Resolve the runner. 'local' runs the action's own build (CI
+        # dogfood via `uses: ./`); any other value runs the published npm
+        # package at that version, so the Action reuses the same tested
+        # artifact users get from `npx vigiles`.
+        version="${VIGILES_VERSION:-latest}"
+        if [[ "$version" == "local" ]]; then
+          runner=(node "${VIGILES_ACTION_PATH}/dist/cli.js")
+        else
+          runner=(npx --yes "vigiles@${version}")
+        fi
+
+        echo "vigiles: ${runner[*]} ${args[*]}"
+
+        set +e
+        GITHUB_ACTIONS=true "${runner[@]}" "${args[@]}"
+        status=$?
+        set -e
+
+        if [[ "$status" -eq 0 ]]; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          echo "::error::vigiles ${cmd} failed (exit ${status})"
+        fi
+
+        exit "$status"

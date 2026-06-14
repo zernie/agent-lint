@@ -21,6 +21,7 @@ import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import { validate, loadConfig } from "./core/validate.js";
+import { applyConfigFlags } from "./cli-flags.js";
 import type {
   VigilesConfig,
   CoverageThresholds,
@@ -2419,7 +2420,9 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
   const restArgs = args.slice(1).filter((a) => !a.startsWith("--"));
-  const config = loadConfig();
+  // Shared flags (--max-rules, --catalog-only) override the loaded config so
+  // every GitHub Action input maps to a real CLI flag. See src/cli-flags.ts.
+  const config = applyConfigFlags(loadConfig(), args);
 
   switch (command) {
     // --- Primary commands ---
