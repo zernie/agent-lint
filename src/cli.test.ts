@@ -59,7 +59,7 @@ describe("CLI: vigiles init", () => {
   });
 
   it("should create CLAUDE.md.spec.ts by default", () => {
-    const { stdout, exitCode } = run("init", tmpDir);
+    const { stdout, exitCode } = run("init --no-plugin", tmpDir);
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("Created CLAUDE.md.spec.ts"));
     assert.ok(existsSync(join(tmpDir, "CLAUDE.md.spec.ts")));
@@ -67,7 +67,7 @@ describe("CLI: vigiles init", () => {
 
   it("should not overwrite existing spec", () => {
     // Already created in previous test
-    const { stdout } = run("init", tmpDir);
+    const { stdout } = run("init --no-plugin", tmpDir);
     assert.ok(stdout.includes("already exists"));
   });
 
@@ -913,7 +913,7 @@ describe("CLI: vigiles init (full setup)", () => {
   });
 
   it("should create spec, generate types, and compile", () => {
-    const { stdout, exitCode } = run("init", tmpDir);
+    const { stdout, exitCode } = run("init --no-plugin", tmpDir);
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("Created CLAUDE.md.spec.ts"));
     assert.ok(stdout.includes("Setup complete"));
@@ -946,7 +946,7 @@ describe("CLI: vigiles init auto-detection", () => {
 
   it("should detect existing CLAUDE.md and suggest migration", () => {
     writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
-    const { stdout } = run("init", tmpDir);
+    const { stdout } = run("init --no-plugin", tmpDir);
     assert.ok(stdout.includes("without a spec") || stdout.includes("migrate"));
   });
 
@@ -957,7 +957,7 @@ describe("CLI: vigiles init auto-detection", () => {
       JSON.stringify({ name: "test", scripts: {} }),
     );
     writeFileSync(join(dir, ".cursorrules"), "Use TypeScript.\n");
-    const { stdout } = run("init", dir);
+    const { stdout } = run("init --no-plugin", dir);
     assert.ok(stdout.includes("Cursor") || stdout.includes("Non-markdown"));
     rmSync(dir, { recursive: true, force: true });
   });
@@ -969,9 +969,65 @@ describe("CLI: vigiles init auto-detection", () => {
       JSON.stringify({ name: "test", scripts: {} }),
     );
     mkdirSync(join(dir, ".claude"), { recursive: true });
-    const { stdout } = run("init", dir);
+    const { stdout } = run("init --no-plugin", dir);
     assert.ok(stdout.includes("Claude Code"));
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("CLI: vigiles init — both pillars + workflow", () => {
+  function freshProject(): string {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-init-pillars-"));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "demo", scripts: {} }),
+    );
+    return dir;
+  }
+
+  it("default (--no-plugin): scaffolds Pillar 2 + a v1-Action workflow", () => {
+    const dir = freshProject();
+    try {
+      const { stdout } = run("init --no-plugin", dir);
+      assert.match(stdout, /pillars: verify \+ test/);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
+      assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
+      const wf = join(dir, ".github/workflows/vigiles.yml");
+      assert.ok(existsSync(wf), "workflow");
+      const yaml = readFileSync(wf, "utf-8");
+      assert.match(yaml, /uses: zernie\/vigiles@v1/);
+      assert.match(yaml, /npx vigiles test/); // the harness job
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--pillars=test: only the harness starter, no spec/workflow", () => {
+    const dir = freshProject();
+    try {
+      const { stdout } = run("init --pillars=test --no-plugin --no-gha", dir);
+      assert.match(stdout, /pillars: test/);
+      assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
+      assert.ok(!existsSync(join(dir, "CLAUDE.md.spec.ts")), "no spec");
+      assert.ok(
+        !existsSync(join(dir, ".github/workflows/vigiles.yml")),
+        "no workflow",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--pillars=verify: spec only, no harness", () => {
+    const dir = freshProject();
+    try {
+      const { stdout } = run("init --pillars=verify --no-plugin --no-gha", dir);
+      assert.match(stdout, /pillars: verify/);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
+      assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1180,7 +1236,7 @@ describe("E2E: fixture project adoption", () => {
   });
 
   it("setup detects existing hand-written CLAUDE.md", () => {
-    const { stdout } = run("init", workDir);
+    const { stdout } = run("init --no-plugin", workDir);
     // Should detect CLAUDE.md without spec and suggest migration
     assert.ok(
       stdout.includes("without a spec") || stdout.includes("migrate"),
