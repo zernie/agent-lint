@@ -105,9 +105,9 @@ driven by `dialect.skillFrontmatter`), with Claude Code output byte-identical
 (the dogfood integrity hash is the guardrail). **Subagents are a deliberate
 boundary, not a gap:** a Codex subagent is an `[agents.<name>]` TOML concurrency
 table (`max_threads`/`max_depth`), not a tool-contract file — vigiles's `agent()`
-doesn't map onto it, so it isn't compiled to Codex (it's still _verified_). One
-residual loader gap remains: Codex's `[mcp_servers]` is TOML, but the manifest/MCP
-read is still JSON-shaped (`research/codex-prototype-findings.md` #3).
+doesn't map onto it, so it isn't compiled to Codex (it's still _verified_). The
+loader reads Codex's TOML manifest format-aware, so its `[mcp_servers]` table is
+detected like CC's JSON `mcpServers`.
 
 ² Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
 `.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Pillar

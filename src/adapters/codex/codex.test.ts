@@ -87,3 +87,28 @@ test("the loader reads a real Codex-shaped plugin through codexLayout", () => {
     cleanupTmpDir(dir);
   }
 });
+
+test("the loader detects Codex MCP servers from the TOML [mcp_servers] table", () => {
+  const dir = makeTmpDir("codex-mcp");
+  try {
+    writeFileSync(join(dir, "AGENTS.md"), "# rules\n");
+    mkdirSync(join(dir, ".codex"));
+    // Codex MCP lives in config.toml as a [mcp_servers.<id>] TOML table — the
+    // JSON-only manifest read used to miss this; the format-aware read finds it.
+    writeFileSync(
+      join(dir, ".codex", "config.toml"),
+      '[mcp_servers.docs]\ncommand = "docs-server"\nargs = ["--stdio"]\n',
+    );
+    const loaded = loadPlugin(dir, codexLayout);
+    assert.ok(
+      loaded.warnings.some((w) => w.includes("MCP server")),
+      "expected an MCP warning from the TOML [mcp_servers] table",
+    );
+    assert.ok(
+      loaded.warnings.some((w) => w.includes("mcp_servers")),
+      "warning should name the Codex manifest key",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
