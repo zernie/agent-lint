@@ -49,7 +49,7 @@ An agent runs real commands in your repo — it can delete the wrong files, leak
 | **①** | [**Verify your instruction files**](#verify-your-instruction-files) | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent.                 |
 | **②** | [**Test your harness**](#test-your-harness)                         | Your hooks and skills are code — vigiles tests that they actually fire, **deterministically and for free** (no model, no API key) before you ever pay for a real-model eval. |
 
-They share the thesis but not a dependency: verify your instructions without ever writing a harness test, or test your harness without a single `.spec.ts`. Pick the pillar that hurts today.
+They share a thesis, not a dependency: neither pillar is a prerequisite for the other, so adopting one is never gated on setting up the other. Pick the one that hurts today.
 
 **Supported harnesses: Claude Code and Codex.** Both ride the same harness-agnostic core behind a thin five-port adapter. **Codex** ships as [`vigiles/codex`](docs/harnesses.md): it verifies references, compiles Codex-shaped instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs pillar-2 harness tests against the real `codex` binary, keyless — `runHarnessTest({ adapter: codexAdapter })`. (Subagents are the one thing it doesn't compile, by design: a Codex subagent is a concurrency-config entry, not a tool-contract file — a model mismatch, not a gap.) Adding another harness (Gemini, OpenCode, or your own) is writing one object against five small ports — **[custom adapters are welcome](docs/authoring-an-adapter.md)**.
 
@@ -120,6 +120,8 @@ second pillar **tests the harness itself**, as the assembled machine it ships as
 > **Set it up — paste this into Claude Code:**
 >
 > > Install vigiles and use its `test-harness` skill to write and run a harness test for this project. If I didn't say what to test, pick something real from my hooks / skills / settings, choose the cheapest tier (unit / deterministic / eval), write the test, and run it. Use good defaults, but **ask me** whether to gate it in CI and whether to add a real-model eval.
+
+Or skip the prompt: `npx skills add zernie/vigiles` installs the `test-harness` skill (and the edit-blocking hooks); prefer code? `npm i -D vigiles` and import from `vigiles/testing` (below).
 
 It's a small library of plain async functions (drops into node:test / vitest /
 jest, or a zero-setup `vigiles test`), with three tiers, cheapest first. The
