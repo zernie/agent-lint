@@ -170,15 +170,16 @@ The plugin provides two hooks:
 
 ## Validation rules
 
-`vigiles audit` validates instruction files with four rules:
+`vigiles audit` validates instruction files; the refs-hook nudges marking on edit:
 
-| Rule                                                | Default  | What it checks                                                               |
-| --------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                              |
-| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                         |
-| [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                    |
-| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                    |
+| Rule                                                | Default  | What it checks                                                                  |
+| --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
+| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                                 |
+| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
+| [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                       |
+| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                       |
+| [`unmarked-refs`](rules/unmarked-refs.md)           | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
 
 Configure in `.vigilesrc.json`:
 

@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { langForFile, fileDefinesSymbol } from "./symbols.js";
+import type { RuleSeverity } from "./types.js";
 
 const FENCE = /^\s*```/;
 const SPAN = /`([^`\n]+)`/g;
@@ -155,4 +156,42 @@ export function unmarkedCodeRefs(markdown: string): Span[] {
     if (PATH_LIKE.test(span.text)) return false; // a path/filename → file ref
     return isCodeShaped(span.text);
   });
+}
+
+/**
+ * The reference issues in an instruction file, as one human-readable line each:
+ * a `vigiles:symbol` mark whose symbol is missing, plus every unmarked
+ * code-shaped span that ought to be a mark. The shared detector behind both the
+ * `vigiles refs` CLI and the PostToolUse refs-hook.
+ */
+export function collectRefIssues(markdown: string, basePath: string): string[] {
+  const out: string[] = [];
+  for (const b of verifySymbolRefs(markdown, basePath)) {
+    out.push(`line ${String(b.line)}: ${b.reason}`);
+  }
+  for (const u of unmarkedCodeRefs(markdown)) {
+    const callee = u.text.replace(/\s*\([^)]*\)\s*$/, "");
+    out.push(
+      `line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
+        `mark it as \`vigiles:symbol path/to/file.ext#${callee}\` or add ` +
+        `<!-- vigiles:ignore --> if it is prose`,
+    );
+  }
+  return out;
+}
+
+/** What the refs-hook should do given the issue count and configured severity. */
+export type RefsHookAction = "ok" | "nudge" | "block";
+
+/**
+ * Map detected issues + the `unmarked-refs` rule severity to a hook action:
+ * no issues or `false` → ok, `"error"` → block (exit 2), anything else
+ * (`"warn"`, the default) → a non-blocking nudge.
+ */
+export function refsHookAction(
+  issueCount: number,
+  severity: RuleSeverity,
+): RefsHookAction {
+  if (issueCount === 0 || severity === false) return "ok";
+  return severity === "error" ? "block" : "nudge";
 }

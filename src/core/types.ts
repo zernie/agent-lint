@@ -109,6 +109,14 @@ export interface RulesConfig {
   coverage?: RuleWithOptions<CoverageThresholds>;
   /** Flag skills/agents/hooks with no test or eval. Default: "warn". */
   "untested-surface"?: RuleWithOptions<TestCoverageConfig>;
+  /**
+   * Nudge (or block) when an instruction file has code-shaped references that
+   * aren't expressed as vigiles marks (so the audit can't verify them), or a
+   * `vigiles:symbol` mark that points at a missing symbol. Drives the
+   * PostToolUse refs-hook: "warn" (default) → a non-blocking nudge, "error" →
+   * block the edit, false → off.
+   */
+  "unmarked-refs"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------
