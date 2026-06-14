@@ -36,11 +36,15 @@ wire_api,env_key,requires_openai_auth,request_max_retries,stream_max_retries}`
 
 Codex is now **shipped**: `codexAdapter` is registered in `ADAPTERS` (CLI
 auto-detect) and exported as `vigiles/codex`. The hard, previously-blocking
-transport half is done and proven. What remains is purely the format-axis polish
-(gaps #3–#5 below): the instruction/skill renderers behind the dialect, TOML
-manifest/MCP reads, and relocating the shared loader — so pillar-1 `compile`
-output for a Codex repo is CC-shaped until then. The rest of this doc is the
-original prototype verdict, kept for the record.
+transport half is done and proven. **The pillar-2 runner is now adapter-driven**:
+`runHarnessTest(spec, { adapter: codexAdapter })` drives real `codex exec` through
+the public API (a per-harness `HarnessTestDriver` behind the `wireMock` runtime
+seam; CC stays the default, byte-identical), verified by a gated real-codex test.
+What remains is purely the format-axis polish (gaps #3–#5 below): the
+instruction/skill renderers behind the dialect, TOML manifest/MCP reads, and
+relocating the shared loader — so pillar-1 `compile` output for a Codex repo is
+CC-shaped until then. `runEval` follows the same driver seam (not yet done). The
+rest of this doc is the original prototype verdict, kept for the record.
 
 ## Verdict: the format + layout axes generalize with ZERO core changes ✅
 
