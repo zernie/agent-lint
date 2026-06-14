@@ -1,21 +1,66 @@
 /**
  * codexRuntime — EXPERIMENTAL, internal-only. A prototype `HarnessRuntime` for
- * Codex: spawn `codex`, reach a mock via the OpenAI base-URL env.
+ * Codex: spawn `codex`, and point it at a no-key mock.
  *
- * Finding (research/codex-prototype-findings.md): the port's single
- * `modelBaseUrlEnv` FITS Codex only via the built-in-provider override
- * (`OPENAI_BASE_URL`), which the docs call "messy". The clean Codex path is a
- * `[model_providers.mock]` block written to `config.toml` — i.e. "point at the
- * mock" wants to be an *operation* (env var OR config-file write), the deferred
- * `wireMock` gap. The env-var route works enough to prototype; the richer op is
- * the real fix when the Codex transport tier is built.
+ * PROVEN wiring (validated against real codex-cli 0.139.0): the clean keyless
+ * route is NOT the built-in `OPENAI_BASE_URL` override the prototype guessed
+ * (the docs called that "messy") — it is a `[model_providers.mock]` provider
+ * defined inline via `-c` flags on `codex exec`. `codexMockArgs(baseUrl)`
+ * returns that flag array (the `wireMock` recipe as data) and `codexMockEnv()`
+ * returns the dummy-key env codex reads through it. So "point at the mock" is a
+ * flag-based *operation* here, not a single env var.
+ *
+ * The `HarnessRuntime` port still requires `modelBaseUrlEnv`/`modelApiKeyEnv`
+ * (the env-var transport axis), so we keep valid values for conformance — but
+ * codex's real wiring is the flag-based recipe below, not those env vars.
  */
 import type { HarnessRuntime } from "../../core/runtime.js";
 
 export const codexRuntime: HarnessRuntime = {
   name: "codex",
   agentBinary: "codex",
+  // Kept non-empty for HarnessRuntime conformance (the env-var transport axis).
+  // Codex's PROVEN keyless wiring is the flag-based codexMockArgs recipe, not
+  // this built-in-provider override.
   modelBaseUrlEnv: "OPENAI_BASE_URL",
-  modelApiKeyEnv: "OPENAI_API_KEY",
-  mockApiKey: "sk-mock",
+  modelApiKeyEnv: "MOCK_KEY",
+  mockApiKey: "dummy-key",
 };
+
+/**
+ * The PROVEN `-c` flag array that points `codex exec` at a mock served at
+ * `baseUrl` (e.g. `http://127.0.0.1:PORT`) over the Responses wire API, keyless.
+ * Defines a `[model_providers.mock]` provider inline and selects it as the
+ * active model provider. `baseUrl` is suffixed with `/v1` (codex appends
+ * `/responses`). Combine with `codexMockEnv()` and the `codex exec` flags
+ * `--ignore-user-config --skip-git-repo-check --ephemeral
+ * --dangerously-bypass-approvals-and-sandbox -c model="gpt-5-codex"`.
+ */
+export function codexMockArgs(baseUrl: string): string[] {
+  return [
+    "-c",
+    "model_provider=mock",
+    "-c",
+    'model_providers.mock.name="mock"',
+    "-c",
+    `model_providers.mock.base_url="${baseUrl}/v1"`,
+    "-c",
+    'model_providers.mock.wire_api="responses"',
+    "-c",
+    'model_providers.mock.env_key="MOCK_KEY"',
+    "-c",
+    "model_providers.mock.requires_openai_auth=false",
+    "-c",
+    "model_providers.mock.request_max_retries=0",
+    "-c",
+    "model_providers.mock.stream_max_retries=0",
+  ];
+}
+
+/**
+ * The dummy-key env codex reads `model_providers.mock.env_key` through. Codex
+ * sends `Authorization: Bearer dummy-key`; the mock ignores it.
+ */
+export function codexMockEnv(): Record<string, string> {
+  return { MOCK_KEY: "dummy-key" };
+}
