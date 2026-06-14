@@ -279,6 +279,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Canonical hook unit-tier example (runHook): test a hook's logic in isolation with no claude CLI — the cheap base of the pyramid; runs in CI for free",
     "examples/harness/policy-gate.harness.mjs":
       "Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)",
+    "examples/harness/refs-nudge.harness.mjs":
+      "Real-claude dogfood of the refs-hook (deterministic tier, no API key): the mock model Writes a CLAUDE.md naming an unmarked linter rule, the PostToolUse refs-hook fires, and requestContains asserts the non-blocking nudge reached the model's context — proves the hook fires in an actual session, not just the runHook unit tier",
     "examples/harness/skill-outcome.eval.mjs":
       "Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md",
     "examples/harness/skill-trigger-rate.eval.mjs":

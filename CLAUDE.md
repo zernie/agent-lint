@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:01ffab79e05788cf compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:56a08f4e5cec1e58 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -166,6 +166,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 - `examples/railway/ship-pr.md.spec.ts` — Dogfood: a railway() over five flat agent() workers (planner→implementer→reviewer, bounded fixer recovery, reporter error track), each with a result() contract. Compiles via the real `vigiles compile` to ship-pr.md (orchestrator command) + one .md per agent (with vigiles:ok/err Output contracts); every delegate() target is resolved against the sibling agent specs at compile time
 - `examples/harness/hook-unit.harness.mjs` — Canonical hook unit-tier example (runHook): test a hook's logic in isolation with no claude CLI — the cheap base of the pyramid; runs in CI for free
 - `examples/harness/policy-gate.harness.mjs` — Canonical deterministic harness test (runHarnessTest): a PreToolUse Bash policy gate (block-no-verify shape) + a SessionStart setup hook (obra/superpowers shape)
+- `examples/harness/refs-nudge.harness.mjs` — Real-claude dogfood of the refs-hook (deterministic tier, no API key): the mock model Writes a CLAUDE.md naming an unmarked linter rule, the PostToolUse refs-hook fires, and requestContains asserts the non-blocking nudge reached the model's context — proves the hook fires in an actual session, not just the runHook unit tier
 - `examples/harness/skill-outcome.eval.mjs` — Canonical skill-outcome eval (runEval): does a skill change the agent's output? — the question you ask of any SKILL.md
 - `examples/harness/skill-trigger-rate.eval.mjs` — Canonical trigger-rate eval (measureTriggerRate): does a skill's description actually FIRE across varied prompts? — installs a real pinned plugin via pluginDir and reuses the skillResolved predicate
 - `examples/harness/dogfood/test-harness.trigger.eval.mjs` — Dogfood trigger eval — vigiles's OWN test-harness skill: fires on harness-testing requests (recall) AND stays quiet on unrelated coding (precision via irrelevantPrompts), gated by assertTriggerRate({ min, maxFalsePositive }). One of only 2 model-invocable vigiles skills; the other 7 are disable-model-invocation (user-invoked), covered by the free load gate in src/adapters/claude-code/skills-dogfood.test.ts. Write-don't-run without model auth
