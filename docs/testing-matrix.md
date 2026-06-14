@@ -152,6 +152,16 @@ cost make it a release/regression gate, not a per-push check. The per-tier
 `npm run test:unit | test:integration | test:e2e` scripts exist for exactly this
 split (see [`vitest.config.mjs`](../vitest.config.mjs)).
 
+**Skips are loud, never a silent green.** `vigiles test` classifies each script
+pass / skip / fail. A unit-tier `runHook` test needs no `claude` and always runs;
+a tier that can't run (deterministic with no `claude`, e2e with no bubblewrap)
+reports a loud `⊘ SKIPPED`, tallied separately as "N skipped" — it never counts
+as a `✓ passed`. A skip passes by default (capabilities differ per job — this
+repo runs the egress tier under `e2e`, not `harness`), but in a CI job that
+**asserts** the capability is present, add **`vigiles test --no-skip`** so a
+skipped tier **fails**: a green-with-skips is itself untested surface. A standalone
+script emits a skip with `skip(reason)` from `vigiles/testing`.
+
 ## See also
 
 - [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md) — the **whole potential surface** of harness testing (unit / integration / e2e + sandboxing), marking what's shipped vs. what we should build.
