@@ -6,7 +6,6 @@
  * bwrap + claude and skips otherwise, the same pattern as the claude-backed suite.
  */
 import { test } from "vitest";
-import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
@@ -175,56 +174,10 @@ test("diffTrees: new + changed files, sorted; unchanged + removed skipped", () =
 
 const sandboxRunnable = sandboxAvailable() && claudeAvailable();
 
-/**
- * Whether a bwrap netns can actually serve loopback. `sandboxAvailable()` only
- * proves bwrap *runs*; some CI runners hand you bwrap but an `--unshare-all`
- * netns where loopback never comes up (the userns/netns limitation in
- * research/egress-sandbox-tooling.md). In that state the in-sandbox mock (on
- * 127.0.0.1 inside the netns) is unreachable, so these e2e tests would hard-fail
- * on the environment, not a defect. Probe the exact condition the real path
- * needs — a loopback connect inside an `--unshare-all` netns — and self-skip if
- * it can't, the same discipline the egress e2e tests use. Faithful, not masking:
- * if loopback genuinely can't run here, the e2e cannot run, period; the sandbox
- * *logic* (decideSandbox/bwrapArgs/parseRequestLog) is covered by the pure tests
- * above regardless.
- */
-function bwrapLoopbackWorks(): boolean {
-  if (!sandboxRunnable) return false;
-  try {
-    const probe =
-      "const net=require('net');" +
-      "const s=net.createServer(c=>c.end()).listen(0,'127.0.0.1',()=>{" +
-      "net.connect(s.address().port,'127.0.0.1')" +
-      ".on('connect',()=>process.exit(0)).on('error',()=>process.exit(3))});" +
-      "setTimeout(()=>process.exit(4),4000)";
-    const r = spawnSync(
-      "bwrap",
-      [
-        "--unshare-all",
-        "--ro-bind",
-        "/",
-        "/",
-        "--dev",
-        "/dev",
-        "--proc",
-        "/proc",
-        process.execPath,
-        "-e",
-        probe,
-      ],
-      { timeout: 15000, stdio: "ignore" },
-    );
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-}
-const sandboxNetRunnable = bwrapLoopbackWorks();
-
 // The security property, proven through the real stack: a sandboxed run's Bash
 // can reach the in-sandbox mock (so turns are served + requests captured) but
 // CANNOT reach the external network — egress is blocked by the netns.
-test.skipIf(!sandboxNetRunnable)(
+test.skipIf(!sandboxRunnable)(
   "a sandboxed run blocks network egress while the mock stays reachable",
   async () => {
     const probe =
@@ -241,6 +194,11 @@ test.skipIf(!sandboxNetRunnable)(
       timeoutMs: 120000,
     });
     try {
+      if (r.turns < 1 || r.modelRequests.length < 1) {
+        console.error(
+          `[SANDBOX-DIAG egress] exitCode=${String(r.exitCode)} turns=${String(r.turns)} modelRequests=${String(r.modelRequests.length)} NET=${String(r.file("NET"))}\n--- stderr(tail) ---\n${r.stderr.slice(-3000)}\n--- stdout(tail) ---\n${r.stdout.slice(-1500)}`,
+        );
+      }
       // mock was reachable inside the netns → turns served + requests relayed out
       assert.ok(r.turns >= 1, "expected the in-sandbox mock to serve a turn");
       assert.ok(
@@ -263,7 +221,7 @@ test.skipIf(!sandboxNetRunnable)(
 // trace.modelRequests proves injected context actually REACHES the model — a
 // SessionStart hook (emitting Claude Code's nested form) under the sandbox, and
 // we find its additionalContext in the model's request. "fired" AND "landed".
-test.skipIf(!sandboxNetRunnable)(
+test.skipIf(!sandboxRunnable)(
   "a SessionStart hook's injected context reaches the model (trace.modelRequests)",
   async () => {
     const marker = "VIGILES_CTX_MARKER_42";
@@ -285,6 +243,11 @@ test.skipIf(!sandboxNetRunnable)(
       timeoutMs: 120000,
     });
     try {
+      if (r.turns < 1 || r.modelRequests.length < 1) {
+        console.error(
+          `[SANDBOX-DIAG ctx] exitCode=${String(r.exitCode)} turns=${String(r.turns)} modelRequests=${String(r.modelRequests.length)} hooks=${JSON.stringify(r.hooks)}\n--- stderr(tail) ---\n${r.stderr.slice(-3000)}\n--- stdout(tail) ---\n${r.stdout.slice(-1500)}`,
+        );
+      }
       assertHookFired(r, "SessionStart");
       assertRequestContains(r, marker); // the injected context landed in the model's request
     } finally {
@@ -301,7 +264,7 @@ test.skipIf(!sandboxNetRunnable)(
 // Code — reading the *nested* form — does NOT inject; so trace.modelRequests
 // shows the context did NOT reach the model. That "fired ≠ landed" gap is exactly
 // what modelRequests exists to surface, proven against real third-party code.)
-test.skipIf(!sandboxNetRunnable)(
+test.skipIf(!sandboxRunnable)(
   "dogfood: superpowers' SessionStart runs confined and its real output is captured",
   async () => {
     const superpowers = join(
