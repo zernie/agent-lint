@@ -5,12 +5,14 @@ the CLI that runs it, the hook protocol, the plugin/skill/subagent layout, the
 instruction-file dialect. vigiles is built so the **core is harness-agnostic**
 and the harness-specific pieces live behind a swappable **adapter**.
 
-> **Supported today: Claude Code (full) and Codex.** Codex (`vigiles/codex`) ships
-> with a **proven pillar-2** transport (harness testing/evals against the real
-> `codex` binary via an OpenAI-Responses mock) and is auto-detected by the CLI;
-> its pillar-1 _compile renderers_ are still partial (they emit the Claude-Code
-> shape until the format-axis renderers land). Adding a harness doesn't touch the
-> core — see [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
+> **Supported today: Claude Code and Codex.** Codex (`vigiles/codex`) is
+> auto-detected by the CLI, **verifies** references, **compiles** Codex-shaped
+> instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs **pillar-2**
+> harness tests against the real `codex` binary (keyless, OpenAI-Responses mock) via
+> `runHarnessTest({ adapter: codexAdapter })`. Subagents are a deliberate boundary
+> (a Codex subagent is concurrency config, not a tool-contract file — see the
+> matrix below). Adding a harness doesn't touch the core — see
+> [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
 
 ## You pick the harness by which subpath you import
 
@@ -88,20 +90,24 @@ reference-only harness is a first-class adapter, not a broken one.
 
 Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
 
-| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                              |
-| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------------- |
-| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                              |
-| **Codex**                  | 🚧¹      | ✅ Responses SSE       | ✅ veto (exit 2)         | ✅ **shipped** (`vigiles/codex`) — pillar 2 full; pillar 1 partial² |
-| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false`        |
-| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                                   |
-| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                          |
+| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                                         |
+| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------------------------ |
+| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                                         |
+| **Codex**                  | ✅¹      | ✅ Responses SSE       | ✅ veto (exit 2)         | ✅ **shipped** (`vigiles/codex`) — pillars 1 & 2² (subagents differ by design) |
+| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false`                   |
+| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                                              |
+| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                                     |
 
-¹ Codex **pillar 1 is partial (🚧)**: references are verified and the `AGENTS.md`
-target resolves, but the instruction/skill _renderers_ still emit the Claude-Code
-shape (and config-table `[agents]` surfaces aren't captured) until the format-axis
-renderers land. So the CLI auto-detects a Codex repo, but `compile` output for it
-may be CC-shaped for now — the deliberately-accepted caveat of shipping pillar 2
-first.
+¹ Codex **pillar 1 is format-correct for the surfaces that map**: references are
+verified against the Codex dialect, and `compile` emits Codex-shaped output —
+`AGENTS.md` (plain markdown) and minimal `SKILL.md` (`name`/`description` only,
+driven by `dialect.skillFrontmatter`), with Claude Code output byte-identical
+(the dogfood integrity hash is the guardrail). **Subagents are a deliberate
+boundary, not a gap:** a Codex subagent is an `[agents.<name>]` TOML concurrency
+table (`max_threads`/`max_depth`), not a tool-contract file — vigiles's `agent()`
+doesn't map onto it, so it isn't compiled to Codex (it's still _verified_). One
+residual loader gap remains: Codex's `[mcp_servers]` is TOML, but the manifest/MCP
+read is still JSON-shaped (`research/codex-prototype-findings.md` #3).
 
 ² Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
 `.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Pillar
@@ -111,8 +117,8 @@ codexAdapter })` drives real `codex exec` against the OpenAI **Responses** mock
 per-harness `HarnessTestDriver` (argv + mock + parse) behind the `wireMock` runtime
 seam, with Claude Code as the default and its behaviour byte-identical. A gated
 `harness-test.test.ts` runs the real-codex turn (request shape + SSE captured from
-live traffic, not guessed). Pillar 1 is partial per ¹; `runEval` follows the same
-driver seam (the documented follow-on).
+live traffic, not guessed). Pillar 1 is format-correct per ¹; `runEval` follows the
+same driver seam (the documented follow-on).
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't

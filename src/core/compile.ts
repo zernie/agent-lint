@@ -28,7 +28,7 @@ import type {
 
 import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
 import type { LinterCheckResult } from "./linters.js";
-import type { HarnessDialect } from "./dialect.js";
+import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
 
 // vigiles's default compile target when a spec names none and no dialect is
 // injected — a product convention (vigiles emits CLAUDE.md by default), not a
@@ -523,6 +523,12 @@ function compileRulesSection(
  * Returns the compiled markdown, validation errors, and linter check results.
  * The markdown is generated even if there are errors (with warnings).
  */
+// The instruction-file renderer is format-neutral: it emits plain markdown (h1
+// from the dialect's instructionTargets, prose/Key-Files/Commands/Rules sections,
+// and the trailing integrity-hash comment). That is exactly the AGENTS.md shape
+// (no frontmatter), so Codex/OpenCode reuse it unchanged — only the h1 target
+// differs, which already comes from the injected dialect. Nothing here is
+// CC-only, so there is no per-dialect branch to gate.
 export function compileClaude(
   spec: ClaudeSpec,
   options: CompileClaudeOptions = {},
@@ -706,22 +712,37 @@ function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
   return refs;
 }
 
-/** Build the SKILL.md YAML frontmatter block. */
-function renderSkillFrontmatter(spec: SkillSpec): string {
+/**
+ * Build the SKILL.md YAML frontmatter block under the harness's frontmatter
+ * profile. The `"minimal"` profile (Codex/OpenCode) emits ONLY name +
+ * description; `"claude-code"` adds the CC-only keys (disable-model-invocation,
+ * argument-hint). Default is `"claude-code"` so callers that pass no dialect get
+ * byte-identical output to before.
+ */
+function renderSkillFrontmatter(
+  spec: SkillSpec,
+  profile: SkillFrontmatterProfile = "claude-code",
+): string {
   const fm = [
     "---",
     "",
     `name: ${spec.name}`,
     `description: ${spec.description}`,
   ];
-  if (spec.disableModelInvocation !== undefined) {
-    fm.push(`disable-model-invocation: ${String(spec.disableModelInvocation)}`);
+  // The CC-only keys below are inert in a minimal (Codex/OpenCode) SKILL.md, so
+  // they're omitted entirely under that profile.
+  if (profile === "claude-code") {
+    if (spec.disableModelInvocation !== undefined) {
+      fm.push(
+        `disable-model-invocation: ${String(spec.disableModelInvocation)}`,
+      );
+    }
+    const argHint =
+      spec.inputs && spec.inputs.length > 0
+        ? renderArgumentHint(spec.inputs)
+        : spec.argumentHint;
+    if (argHint) fm.push(`argument-hint: ${argHint}`);
   }
-  const argHint =
-    spec.inputs && spec.inputs.length > 0
-      ? renderArgumentHint(spec.inputs)
-      : spec.argumentHint;
-  if (argHint) fm.push(`argument-hint: ${argHint}`);
   fm.push("", "---");
   return fm.join("\n");
 }
@@ -784,10 +805,18 @@ export interface CompileSkillResult {
  */
 export function compileSkill(
   spec: SkillSpec,
-  options: { basePath?: string; specFile?: string } = {},
+  options: {
+    basePath?: string;
+    specFile?: string;
+    /** The harness dialect — selects the SKILL.md frontmatter profile. Omitting
+     *  it defaults to the Claude Code profile, so existing callers are unchanged. */
+    dialect?: HarnessDialect;
+  } = {},
 ): CompileSkillResult {
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "SKILL.md.spec.ts";
+  const profile: SkillFrontmatterProfile =
+    options.dialect?.skillFrontmatter ?? "claude-code";
   const errors: CompileError[] = [];
 
   // Verify spec file naming
@@ -817,7 +846,7 @@ export function compileSkill(
   );
 
   const content =
-    renderSkillFrontmatter(spec) + "\n\n" + sections.trim() + "\n";
+    renderSkillFrontmatter(spec, profile) + "\n\n" + sections.trim() + "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 
@@ -828,6 +857,15 @@ export function compileSkill(
 // The subagent tool catalog (built-in / never-available / MCP shape) is the
 // harness's format-axis vocabulary — it lives in the HarnessDialect port
 // (src/core/dialect.ts), injected here, never hard-coded for one harness.
+//
+// SCOPE: compileAgent renders vigiles's agent() — a VERIFIED TOOL CONTRACT — to
+// a Claude-Code-shaped subagent markdown file. Compiling that to Codex is a
+// deliberate NON-GOAL, not a missing renderer: a Codex "subagent" is an
+// [agents.<name>] TOML concurrency table (max_threads / max_depth), which is a
+// runtime-orchestration knob, NOT a tool contract. The two models don't map, so
+// vigiles does not emit a TOML [agents] block. The Codex dialect still verifies
+// an agent()'s tool contract (its built-in catalog) — only the OUTPUT renderer
+// is CC-only here. See research/codex-prototype-findings.md (gaps).
 
 /** Closest known tool by edit distance (≤ 3), for a "did you mean" hint. */
 function closestTool(tool: string, dialect: HarnessDialect): string | null {

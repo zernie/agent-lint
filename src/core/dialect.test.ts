@@ -55,6 +55,7 @@ test("an injected dialect swaps the catalog — Codex-prep seam", () => {
     hookEvents: [],
     instructionTargets: ["AGENTS.md"],
     pluginRootToken: "${CODEX_PLUGIN_ROOT}",
+    skillFrontmatter: "minimal",
   };
   const a = agent({
     name: "worker",

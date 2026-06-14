@@ -29,4 +29,7 @@ export const codexDialect: HarnessDialect = {
   ],
   instructionTargets: ["AGENTS.md"],
   pluginRootToken: "${PLUGIN_ROOT}",
+  // Codex SKILL.md frontmatter is name + description ONLY — the CC-only keys
+  // (disable-model-invocation, argument-hint, …) are not part of its format.
+  skillFrontmatter: "minimal",
 };

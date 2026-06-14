@@ -39,6 +39,7 @@ import {
 import { generateTypes } from "./generate-types.js";
 import { checkLinterRule } from "./linters.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
+import { codexDialect } from "../adapters/codex/dialect.js";
 
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -318,6 +319,39 @@ describe("compileSkill()", () => {
     const { markdown } = compileSkill(spec);
     assert.ok(markdown.includes("disable-model-invocation: true"));
     assert.ok(markdown.includes("argument-hint: <some arg>"));
+  });
+
+  it("claude-code dialect frontmatter is unchanged (default == claudeCodeDialect)", () => {
+    const spec = skill({
+      name: "my-skill",
+      description: "My skill desc",
+      disableModelInvocation: true,
+      argumentHint: "<some arg>",
+      body: "Instructions here.",
+    });
+    // No dialect (default) and the explicit CC dialect must be byte-identical —
+    // the full CC frontmatter set, exactly as before.
+    const def = compileSkill(spec).markdown;
+    const cc = compileSkill(spec, { dialect: claudeCodeDialect }).markdown;
+    assert.equal(def, cc);
+    assert.ok(cc.includes("disable-model-invocation: true"));
+    assert.ok(cc.includes("argument-hint: <some arg>"));
+  });
+
+  it("codex (minimal) dialect emits ONLY name + description frontmatter", () => {
+    const spec = skill({
+      name: "my-skill",
+      description: "My skill desc",
+      disableModelInvocation: true,
+      argumentHint: "<some arg>",
+      body: "Instructions here.",
+    });
+    const { markdown } = compileSkill(spec, { dialect: codexDialect });
+    assert.ok(markdown.includes("name: my-skill"));
+    assert.ok(markdown.includes("description: My skill desc"));
+    // The CC-only keys must be ABSENT under the minimal profile.
+    assert.ok(!markdown.includes("disable-model-invocation"));
+    assert.ok(!markdown.includes("argument-hint"));
   });
 });
 

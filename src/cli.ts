@@ -248,6 +248,9 @@ function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
   const { markdown, errors } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
+    // Pick the SKILL.md frontmatter profile from the detected harness — a Codex
+    // repo gets a minimal (name + description) SKILL.md; CC gets the full set.
+    dialect: detectAdapter(process.cwd()).dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
