@@ -38,58 +38,63 @@ adapter; [custom adapters welcome](docs/authoring-an-adapter.md).
 
 ## ① Verify — your CLAUDE.md lies to your agent
 
-Hand-written instruction files rot silently:
+Your CLAUDE.md says _"enforce `eslint/no-console`."_ But it was switched off
+months ago — and the agent trusts the claim. (Same story for the file path it
+cites that got renamed, and the script that was deleted.)
 
-```markdown
-Never use `any` — the `@typescript-eslint/no-explicit-any` rule catches it.
-See `src/utils/type-helpers.ts` for project utilities.
-Run `npm run typecheck` before submitting.
+**Without vigiles:** nobody checks. The agent acts on fiction.
+
+**With vigiles:** `npx vigiles audit` resolves every reference against reality —
+
+```text
+CLAUDE.md (inline mode):
+  ✗ line 1: Rule "eslint/no-console" exists but is disabled in eslint config
+  ✓ line 2: eslint/eqeqeq
+  ✗ line 3: Rule "no-consoel" not found in eslint. Did you mean: "eslint/no-console"?
 ```
 
-Reads fine. But the rule was disabled months ago, `type-helpers.ts` was renamed,
-and `npm run typecheck` no longer exists — and the agent trusts every stale claim.
-vigiles verifies each reference (the linter rule exists **and is enabled**;
-paths, scripts, and code symbols are real) and flags a typo with a closest-match
-suggestion.
-
-Start in **markdown mode** — one comment, no new files:
+It resolves rule names across **7 linter catalogs** — the rule exists **and is
+enabled** — and checks file paths, scripts, and code symbols the same way. Start
+with one comment, no new files:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
 ```
 
-```bash
-npx vigiles audit CLAUDE.md
-```
-
-Step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade guarantees)
-when you want it. **[Full guide →](docs/verifying-instruction-files.md)**
+Step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade) when you
+want it. **[Full guide →](docs/verifying-instruction-files.md)**
 
 ## ② Test — does your harness actually fire?
 
 A hook can be wired wrong, a skill's description can fail to trigger, injected
-context can never reach the model — all silently, all passing a naive "did it
-run?" check. vigiles tests the assembled harness across three tiers, cheapest
-first. The first two need **no model and no API key**, so they run on every commit
-for free (the opposite of eval-only frameworks):
+context can never reach the model — silently, all passing a naive "did it run?"
+check.
 
-- **Unit** (`runHook`) — a hook's block/allow on a fake event; every event type, milliseconds.
-- **Deterministic** (`runHarnessTest`) — the real agent CLI against a scripted mock model; same result every time.
-- **Eval** (`runEval`) — the real model A/B, reported as mean ± se with a significance gate.
+**Without vigiles:** you assume your `--no-verify` guard blocks. You don't know.
+
+**With vigiles:** a deterministic test proves it — no model, no API key,
+milliseconds:
 
 ```typescript
 import { runHook } from "vigiles/testing";
 
-const r = runHook(guardCommand, {
+const r = runHook(guard, {
   hook_event_name: "PreToolUse",
   tool_name: "Bash",
   tool_input: { command: "git commit --no-verify" },
 });
-assert(r.blocked); // exit 2 / decision:"block" / permissionDecision:"deny"
+assert(r.blocked); // a red ✗ here means your hook silently lets it through
 ```
 
-**[Full guide →](docs/harness-testing.md)** — testing skills for real, the
-safe-by-default sandbox, the coverage matrix, and how it compares to promptfoo.
+```text
+  ✓ guard blocks --no-verify and allows a clean commit
+
+2 passed.
+```
+
+Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
+(the real agent CLI against a scripted mock model), **`runEval`** (the real model
+A/B with a significance gate). **[Full guide →](docs/harness-testing.md)**
 
 ## Quick start
 
