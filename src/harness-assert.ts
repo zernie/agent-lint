@@ -95,10 +95,12 @@ function fail(message: string): never {
  * For standalone CLI-fallback scripts only — inside a runner (vitest / jest /
  * node:test) use that runner's own skip, not a process exit.
  */
+/* v8 ignore start -- process.exit can't be exercised in-process (tested via a child in cli.test.ts / run-scripts.test.ts) */
 export function skip(reason?: string): never {
   console.log(`SKIPPED${reason ? `: ${reason}` : ""}`);
   process.exit(77);
 }
+/* v8 ignore stop */
 
 /** Assert the sandbox contains `path` (a hook/agent side-effect file). */
 export function assertCreated(r: HarnessTestResult, path: string): void {
