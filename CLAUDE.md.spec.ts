@@ -84,6 +84,12 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "claudeCodeAdapter — the Claude Code HarnessAdapter: the five CC ports bundled + a detect that recognizes a .claude-plugin/ manifest, .claude/settings.json, or CLAUDE.md. The reference adapter a second harness mirrors",
     "src/adapters/claude-code/adapter.test.ts":
       "Adapter-bundle test suite (vitest): claudeCodeAdapter bundles all five ports, passes the conformance kit, the kit catches a broken adapter, detect recognizes a CLAUDE.md / .claude-plugin repo (and not an empty dir), detectAdapter falls back to Claude Code, getAdapter looks up by name",
+    "src/adapters/codex/adapter.ts":
+      "codexAdapter — an EXPERIMENTAL, internal-only prototype HarnessAdapter for OpenAI Codex (the five Codex ports in src/adapters/codex/{dialect,layout,runtime,hook-protocol,model-mock}.ts). Built to VALIDATE the kit generalizes; deliberately NOT registered in ADAPTERS, NOT exported from vigiles/*, so the CLI never auto-detects it. See research/codex-prototype-findings.md",
+    "src/adapters/codex/codex.test.ts":
+      "Codex prototype validation (vitest): codexAdapter passes assertAdapterConformance + assertAdapterLoadsHooks (TOML config.toml [hooks] round-trip), the compiler verifies a subagent contract under codexDialect (shell ok, Read flagged), loadPlugin reads a real Codex-shaped plugin via codexLayout (AGENTS.md + skills + ${PLUGIN_ROOT} TOML hooks), and it asserts the prototype is NOT in the public registry — proves the format+layout axes generalize with zero core changes",
+    "research/codex-prototype-findings.md":
+      "Codex prototype findings: the internal non-shipped src/adapters/codex/ adapter that validates the architecture — verdict (format + layout axes generalize to Codex with ZERO core changes; HookProtocol came out identical), and the 5 gaps it concretely exposed (runtime wireMock half-shaped, ModelMock renderer pending + no codex binary, layout manifest/MCP still JSON-shaped, config-defined subagents uncaptured, the generic loadPlugin lives in the CC adapter so adapters cross-import). Grounds what shipping Codex actually needs",
     "src/adapter.ts":
       "`vigiles/adapter` — the harness-adapter authoring kit (the documented small lib third parties use to build their own adapter): re-exports the five port interfaces + HarnessAdapter + the conformance kit + the registry. See docs/authoring-an-adapter.md",
     "src/adapter-registry.ts":

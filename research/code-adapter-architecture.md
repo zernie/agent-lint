@@ -190,6 +190,10 @@ speculatively is the wrong-abstraction trap).
 
 ## See also
 
+- `research/codex-prototype-findings.md` — an internal, non-shipped Codex adapter
+  (`src/adapters/codex/`) built to **validate** this architecture: it passes the
+  conformance kit + drives the real compiler/loader against Codex fixtures (format
+  - layout axes proven, zero core changes), and the gaps it exposed.
 - `research/harness-landscape.md` — the mid-2026 research backing the Codex
   recipe: confirmed Codex facts (TOML config, AGENTS.md, SKILL.md, hooks **with
   veto**, Responses-API mock), the port-by-port extraction verdict (both deferred
