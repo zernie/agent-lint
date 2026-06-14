@@ -130,6 +130,28 @@ If you want a typed worked example, the type smokes in
 [`test/types/`](../test/types/) show the API used from `.ts` with the matcher
 types applied.
 
+## Running the tiers in CI
+
+CI runs **every tier except evals** — not one at a time, and not all crammed into
+one job. Each tier runs where it's cheapest, so a fast unit failure surfaces
+before the slow, privileged ones.
+
+| Tier                     | Run it with                                   | This repo's CI job           | Needs                         |
+| ------------------------ | --------------------------------------------- | ---------------------------- | ----------------------------- |
+| Unit (+ coverage gate)   | `npm test` / `npm run coverage`               | `test`                       | nothing (model-free)          |
+| Reference verification   | `vigiles audit` (+ the Action via `uses: ./`) | `check`                      | nothing                       |
+| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)         | `harness`                    | the real `claude` CLI, no key |
+| e2e (allowlisted egress) | `npm run test:e2e`                            | `e2e` (privileged container) | bubblewrap + slirp4netns      |
+| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)       | **manual — not in CI**       | model auth ($)                |
+
+**Best practice** (what this maps to): keep the model-free tiers (unit /
+reference / deterministic) on every push and PR so feedback is fast and free;
+isolate the slow or privileged tiers (real-egress e2e) in their own jobs; and run
+the paid **eval** tier on demand, not on every commit — its non-determinism and
+cost make it a release/regression gate, not a per-push check. The per-tier
+`npm run test:unit | test:integration | test:e2e` scripts exist for exactly this
+split (see [`vitest.config.mjs`](../vitest.config.mjs)).
+
 ## See also
 
 - [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md) — the **whole potential surface** of harness testing (unit / integration / e2e + sandboxing), marking what's shipped vs. what we should build.
