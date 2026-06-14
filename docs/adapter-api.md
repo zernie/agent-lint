@@ -118,20 +118,34 @@ module; this descriptor names the wire facts the bundle and tooling read.)
 
 ### `HarnessAdapter`
 
-The bundle. `name` + the five ports + a `detect`.
+The bundle. `name` + a `capabilities` descriptor + the ports + a `detect`. The
+two pillar-1 ports (`dialect`, `layout`) are always required; the transport ports
+are **optional and gated by `capabilities`** — present iff the matching capability
+is declared, so a reference-only or code-module-hook harness isn't forced to ship
+a fake transport (the conformance kit enforces this both ways).
 
 ```ts
+interface AdapterCapabilities {
+  readonly referenceVerification: true; // pillar 1 — always
+  readonly harnessTesting: boolean; // pillar 2 — needs runtime + modelMock
+  readonly shellHooks: boolean; // shell-process hooks — needs hookProtocol
+}
+
 interface HarnessAdapter {
   readonly name: string;
-  readonly dialect: HarnessDialect;
-  readonly layout: PluginLayout;
-  readonly runtime: HarnessRuntime;
-  readonly hookProtocol: HookProtocol;
-  readonly modelMock: ModelMock;
+  readonly capabilities: AdapterCapabilities;
+  readonly dialect: HarnessDialect; // always
+  readonly layout: PluginLayout; // always
+  readonly runtime?: HarnessRuntime; // iff capabilities.harnessTesting
+  readonly hookProtocol?: HookProtocol; // iff capabilities.shellHooks
+  readonly modelMock?: ModelMock; // iff capabilities.harnessTesting
   /** Specificity score: 0 = not this harness; higher = a more specific match. */
   detect(root: string): number;
 }
 ```
+
+`assertHarnessTestable(adapter)` is the guard the pillar-2 runners call to refuse
+a non-`harnessTesting` adapter up front (returning its narrowed `runtime`+`modelMock`).
 
 **`detect` contract.** Return `0` when `root` is not this harness; otherwise a
 positive **specificity** — a strong signal (a private config dir / manifest)

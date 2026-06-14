@@ -1,10 +1,12 @@
 # Codex prototype — does the adapter kit actually generalize?
 
-> An **internal, non-shipped** Codex adapter (`src/adapters/codex/`) built to
-> validate the harness-adapter architecture against a real second harness. It is
-> NOT registered (`ADAPTERS`), NOT exported (`vigiles/*`), and the CLI never
-> auto-detects it — it exists only to be run through the conformance kit and the
-> real compiler + loader (`src/adapters/codex/codex.test.ts`). Built from
+> Started as an internal, non-shipped Codex adapter (`src/adapters/codex/`) to
+> validate the harness-adapter architecture against a real second harness; it is
+> **now SHIPPED** — registered in `ADAPTERS` (the CLI auto-detects a Codex repo)
+> and exported as `vigiles/codex`. **Pillar 2 (harness testing) is full and proven
+> against the real `codex` binary; pillar 1 (compile) renderers are still partial**
+> (they emit the Claude-Code shape until the format-axis renderers land). This doc
+> records how the bet was validated and what remains. Built from
 > `research/harness-landscape.md`.
 
 ## UPDATE (2026-06-14): the transport tier is now PROVEN against real codex ✅
@@ -32,11 +34,13 @@ wire_api,env_key,requires_openai_auth,request_max_retries,stream_max_retries}`
   `codexMockArgs`/`codexMockEnv`. This **corrects** the prototype's guess that the
   `OPENAI_BASE_URL` env var was the path.
 
-What's left to **ship** Codex is now small and non-transport: register
-`codexAdapter` + export `vigiles/codex` (a deliberate auto-detect change), and the
-still-deferred format-axis pieces (gaps #3–#5 below remain). The hard, previously-
-blocking transport half is done. The rest of this doc is the original prototype
-verdict, kept for the record.
+Codex is now **shipped**: `codexAdapter` is registered in `ADAPTERS` (CLI
+auto-detect) and exported as `vigiles/codex`. The hard, previously-blocking
+transport half is done and proven. What remains is purely the format-axis polish
+(gaps #3–#5 below): the instruction/skill renderers behind the dialect, TOML
+manifest/MCP reads, and relocating the shared loader — so pillar-1 `compile`
+output for a Codex repo is CC-shaped until then. The rest of this doc is the
+original prototype verdict, kept for the record.
 
 ## Verdict: the format + layout axes generalize with ZERO core changes ✅
 
@@ -94,11 +98,12 @@ Building it surfaced real, specific limitations — each maps to a deferred item
 
 The bet held end-to-end: the **format/layout half** was one object set (no core
 changes), and the **transport half** — once we stopped assuming the binary was
-unavailable — was built and proven against real `codex` (gaps 1–2 closed). What
-remains to ship Codex is now bounded and non-transport: extend the layout port for
-TOML manifest/MCP + config-surfaces (gaps 3–4), move `loadPlugin` to a shared
-location (gap 5), the format-axis instruction/skill renderers, then register
-`codexAdapter` + add a `vigiles/codex` export (a deliberate auto-detect change).
+unavailable — was built and proven against real `codex` (gaps 1–2 closed). On that
+basis Codex is now **registered + exported** (`vigiles/codex`). The only work left
+is the format-axis polish that keeps pillar-1 `compile` honest for Codex output:
+extend the layout port for TOML manifest/MCP + config-surfaces (gaps 3–4), move
+`loadPlugin` to a shared location (gap 5), and add the instruction/skill renderers
+behind the dialect.
 
 The boundary holds for the prototype too: `src/adapters/codex/**` is a
 `codex-harness` element in `eslint.config.mjs`, and `verify-core` may import

@@ -130,7 +130,11 @@ test("resolveAdapter: --harness override wins, unknown throws", () => {
   try {
     assert.equal(resolveAdapter(dir).name, "claude-code"); // auto-detect
     assert.equal(resolveAdapter(dir, "claude-code"), claudeCodeAdapter);
-    assert.throws(() => resolveAdapter(dir, "codex"), /Unknown harness/);
+    assert.equal(resolveAdapter(dir, "codex").name, "codex"); // registered override
+    assert.throws(
+      () => resolveAdapter(dir, "no-such-harness"),
+      /Unknown harness/,
+    );
   } finally {
     cleanupTmpDir(dir);
   }

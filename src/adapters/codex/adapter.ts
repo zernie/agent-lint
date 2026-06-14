@@ -1,13 +1,14 @@
 /**
- * codexAdapter — EXPERIMENTAL, internal-only prototype `HarnessAdapter`. Bundles
- * the five Codex ports + a `detect`. It exists to PROVE the kit generalizes: it
- * passes `assertAdapterConformance` / `assertAdapterLoadsHooks` and drives the
- * compiler + loader against real Codex-shaped fixtures (see codex.test.ts).
+ * codexAdapter — the OpenAI Codex `HarnessAdapter`. Bundles the five Codex ports
+ * + a `detect`. SHIPPED: registered in `src/adapter-registry.ts` (the CLI
+ * auto-detects a `.codex/config.toml` or `AGENTS.md` repo) and exported as
+ * `vigiles/codex`. It passes `assertAdapterConformance`/`assertAdapterLoadsHooks`,
+ * drives the compiler + loader against real Codex fixtures (codex.test.ts), and
+ * its transport (`mock-model.ts`) is proven against the real `codex` binary.
  *
- * It is deliberately NOT registered in `src/adapter-registry.ts` and NOT exported
- * from any `vigiles/*` subpath, so the CLI never auto-detects Codex and consumers
- * can't import it. Promote it (register + `vigiles/codex` export + the deferred
- * transport renderers) only when Codex support actually ships.
+ * Caveat — pillar 1 (compile) is partial: the instruction/skill *renderers* still
+ * emit the Claude-Code shape until the format-axis renderers land
+ * (`research/code-adapter-architecture.md`). Pillar 2 (harness testing) is full.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";

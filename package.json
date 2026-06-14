@@ -15,6 +15,7 @@
     "./linting": "./dist/linting.js",
     "./testing": "./dist/testing.js",
     "./claude-code": "./dist/claude-code.js",
+    "./codex": "./dist/codex.js",
     "./adapter": "./dist/adapter.js",
     "./spec": "./dist/core/spec.js",
     "./compile": "./dist/core/compile.js",

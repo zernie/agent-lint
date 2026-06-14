@@ -1,9 +1,9 @@
 /**
- * Codex prototype validation — proves the harness-adapter kit generalizes beyond
- * Claude Code WITHOUT shipping Codex support. codexAdapter is internal-only (not
- * registered, not exported); this suite drives it through the conformance kit and
- * the real compiler + loader against Codex-shaped fixtures (AGENTS.md, TOML
- * config.toml `[hooks]`, `${PLUGIN_ROOT}`). Findings → research/codex-prototype-findings.md.
+ * Codex adapter validation — proves the harness-adapter kit generalizes beyond
+ * Claude Code. codexAdapter is SHIPPED (registered in the registry, exported as
+ * `vigiles/codex`); this suite drives it through the conformance kit and the real
+ * compiler + loader against Codex-shaped fixtures (AGENTS.md, TOML config.toml
+ * `[hooks]`, `${PLUGIN_ROOT}`). Findings → research/codex-prototype-findings.md.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
@@ -35,9 +35,9 @@ test("codexAdapter passes behavioural settings-load conformance (TOML round-trip
   assertAdapterLoadsHooks(codexAdapter);
 });
 
-test("the Codex prototype is internal-only — not in the public registry", () => {
-  assert.equal(getAdapter("codex"), undefined);
-  assert.ok(!ADAPTERS.some((a) => a.name === "codex"));
+test("codex is SHIPPED — registered in the public adapter registry", () => {
+  assert.equal(getAdapter("codex"), codexAdapter);
+  assert.ok(ADAPTERS.some((a) => a.name === "codex"));
 });
 
 test("the compiler verifies a subagent tool contract under codexDialect", () => {
