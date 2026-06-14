@@ -19,16 +19,21 @@ import {
 } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
-import { generateTypes } from "./generate-types.js";
-import { validate, loadConfig } from "./validate.js";
+import { generateTypes } from "./core/generate-types.js";
+import { validate, loadConfig } from "./core/validate.js";
 import type {
   VigilesConfig,
   CoverageThresholds,
   TestCoverageConfig,
-} from "./types.js";
-import { ruleSeverity, ruleOptions } from "./types.js";
+} from "./core/types.js";
+import { ruleSeverity, ruleOptions } from "./core/types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
+import {
+  detectAdapter,
+  detectAdapterResult,
+  resolveAdapter,
+} from "./adapter-registry.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
@@ -40,22 +45,23 @@ import {
   addHash,
   validateFileRef,
   validateCommandRef,
-} from "./compile.js";
-import type { CompileError } from "./compile.js";
-import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./spec.js";
-import { findSimilarRules } from "./proofs.js";
-import { parseInlineRules } from "./inline.js";
-import { parseFrontmatterRules } from "./frontmatter.js";
-import { generateSchema } from "./generate-schema.js";
-import { compileGeneratorSkill } from "./compile-generator.js";
+} from "./core/compile.js";
+import type { CompileError } from "./core/compile.js";
+import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./core/spec.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import { findSimilarRules } from "./core/proofs.js";
+import { parseInlineRules } from "./core/inline.js";
+import { parseFrontmatterRules } from "./core/frontmatter.js";
+import { generateSchema } from "./core/generate-schema.js";
+import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import {
   evaluatePreToolUse,
   setActiveAgent,
   clearActiveAgent,
-} from "./agent-runtime.js";
-import { verifySymbolRefs, unmarkedCodeRefs } from "./refs.js";
-import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./mcp.js";
+} from "./adapters/claude-code/agent-runtime.js";
+import { verifySymbolRefs, unmarkedCodeRefs } from "./core/refs.js";
+import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./core/mcp.js";
 import {
   parseSkillGates,
   runSkillGates,
@@ -63,18 +69,18 @@ import {
   clearActiveSkill,
   evaluateStopHook,
   gateLabel,
-} from "./skill-runtime.js";
-import { checkLinterRule } from "./linters.js";
-import { claudeAvailable } from "./harness-test.js";
+} from "./adapters/claude-code/skill-runtime.js";
+import { checkLinterRule } from "./core/linters.js";
+import { claudeAvailable } from "./adapters/claude-code/harness-test.js";
 import {
   discoverScripts,
   runScripts,
   formatScriptSummary,
-} from "./run-scripts.js";
-import { checkIntegrity } from "./integrity.js";
-import { computeScriptCoverage } from "./coverage.js";
-import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
-import { findDocRefs, formatDocRefReport } from "./doc-refs.js";
+} from "./adapters/claude-code/run-scripts.js";
+import { checkIntegrity } from "./core/integrity.js";
+import { computeScriptCoverage } from "./core/coverage.js";
+import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
+import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -203,6 +209,7 @@ function compileClaudeToFile(
   const { markdown, errors, linterResults, targets } = compileClaude(spec, {
     basePath,
     specFile: specPath,
+    dialect: claudeCodeDialect,
     maxRules: config.maxRules,
     maxTokens: config.maxTokens,
     maxSectionLines: config.maxSectionLines,
@@ -241,6 +248,9 @@ function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
   const { markdown, errors } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
+    // Pick the SKILL.md frontmatter profile from the detected harness — a Codex
+    // repo gets a minimal (name + description) SKILL.md; CC gets the full set.
+    dialect: detectAdapter(process.cwd()).dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
@@ -258,6 +268,7 @@ function compileAgentToFile(spec: AgentSpec, specPath: string): boolean {
   const { markdown, errors } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
+    dialect: detectAdapter(process.cwd()).dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
@@ -420,7 +431,7 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
 
 function validateSpecs(
   filePaths: string[],
-  rulesConfig?: import("./types.js").RulesConfig,
+  rulesConfig?: import("./core/types.js").RulesConfig,
   silent = false,
 ): boolean {
   let allValid = true;
@@ -2475,7 +2486,24 @@ async function main(): Promise<void> {
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
       } else {
-        const report = scanPlugin(dirs[0]);
+        const root = resolve(dirs[0]);
+        const harnessFlag = args
+          .find((a) => a.startsWith("--harness="))
+          ?.slice("--harness=".length);
+        const det = detectAdapterResult(root);
+        const adapter = harnessFlag
+          ? resolveAdapter(root, harnessFlag)
+          : det.adapter;
+        const report = scanPlugin(dirs[0], adapter.layout);
+        if (!json) {
+          console.log(`Detected harness: ${adapter.name}`);
+          if (!harnessFlag && det.ambiguousWith.length > 0) {
+            console.log(
+              `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
+            );
+          }
+          console.log("");
+        }
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );

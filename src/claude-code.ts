@@ -5,5 +5,11 @@
  * `vigiles/testing` on purpose — the test API above is the stable surface; this
  * is the adapter, so a future `vigiles/<other-harness>` can sit beside it.
  */
-export * from "./plugin-loader.js";
-export * from "./mock-model.js";
+export * from "./adapters/claude-code/plugin-loader.js";
+export * from "./adapters/claude-code/mock-model.js";
+export * from "./adapters/claude-code/dialect.js";
+export * from "./adapters/claude-code/layout.js";
+export * from "./adapters/claude-code/runtime.js";
+export * from "./adapters/claude-code/hook-protocol.js";
+export * from "./adapters/claude-code/model-mock.js";
+export * from "./adapters/claude-code/adapter.js";

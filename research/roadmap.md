@@ -37,6 +37,11 @@
 - **AGENTS.md + SKILL.md as first-class verified inputs** — the engine is already
   format-agnostic; rides the 60k-repo / 32-tool wave.
   [standards-conformance](standards-conformance.md) · [synthesis T1#1](strategic-synthesis-2026-06.md)
+- **Wire `composeCollisions` into `vigiles audit`** — warn when a compile target
+  is a file Ruler/rulesync regenerates (stales the integrity hash); suggest the
+  source-slot redirect. Detector shipped (`src/compose.ts`); CLI wiring + a
+  `compile --into <dir>` flag are the remaining steps.
+  [sync-tool-compatibility](sync-tool-compatibility.md)
 - **"Valid is not true" positioning** — one comparison row vs structural linters
   (agnix); pure messaging, no build. [standards-conformance](standards-conformance.md)
 - **`scan` → observed-egress column** — boot each hook under `recordEgress`, list

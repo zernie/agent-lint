@@ -18,7 +18,7 @@
 import {
   measureTriggerRate,
   formatTriggerRateReport,
-} from "../../../dist/eval.js";
+} from "../../../dist/adapters/claude-code/eval.js";
 import {
   skillResolved,
   assertTriggerRate,

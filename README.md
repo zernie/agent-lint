@@ -23,7 +23,7 @@
   <b>Two pillars →</b>
   &nbsp;<a href="#verify-your-instruction-files">① Verify your instruction files</a>
   &nbsp;·&nbsp;
-  <a href="#test-your-claude-code-harness">② Test your Claude Code harness</a>
+  <a href="#test-your-harness">② Test your harness</a>
 </p>
 
 ---
@@ -33,7 +33,7 @@
 
 - [**Two pillars — pick one or both**](#two-pillars--pick-one-or-both)
 - **Pillar 1** — [verify your instruction files](#verify-your-instruction-files) · full guide: [docs/verifying-instruction-files.md](docs/verifying-instruction-files.md)
-- **Pillar 2** — [test your Claude Code harness](#test-your-claude-code-harness) · full guide: [docs/harness-testing.md](docs/harness-testing.md)
+- **Pillar 2** — [test your harness](#test-your-harness) · full guide: [docs/harness-testing.md](docs/harness-testing.md)
 - [Quick start](#quick-start) · [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
 
 </details>
@@ -47,9 +47,11 @@ An agent runs real commands in your repo — it can delete the wrong files, leak
 |       | Pillar                                                              | What it does                                                                                                                                                                 |
 | ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **①** | [**Verify your instruction files**](#verify-your-instruction-files) | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent.                 |
-| **②** | [**Test your harness**](#test-your-claude-code-harness)             | Your hooks and skills are code — vigiles tests that they actually fire, **deterministically and for free** (no model, no API key) before you ever pay for a real-model eval. |
+| **②** | [**Test your harness**](#test-your-harness)                         | Your hooks and skills are code — vigiles tests that they actually fire, **deterministically and for free** (no model, no API key) before you ever pay for a real-model eval. |
 
 They share the thesis but not a dependency: verify your instructions without ever writing a harness test, or test your harness without a single `.spec.ts`. Pick the pillar that hurts today.
+
+**Supported harnesses: Claude Code and Codex.** Both ride the same harness-agnostic core behind a thin five-port adapter. **Codex** ships as [`vigiles/codex`](docs/harnesses.md): it verifies references, compiles Codex-shaped instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs pillar-2 harness tests against the real `codex` binary, keyless — `runHarnessTest({ adapter: codexAdapter })`. (Subagents are the one thing it doesn't compile, by design: a Codex subagent is a concurrency-config entry, not a tool-contract file — a model mismatch, not a gap.) Adding another harness (Gemini, OpenCode, or your own) is writing one object against five small ports — **[custom adapters are welcome](docs/authoring-an-adapter.md)**.
 
 ## Verify your instruction files
 
@@ -107,7 +109,7 @@ The wizard auto-detects your project, creates a spec, scans your linters, compil
 
 Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
-## Test your Claude Code harness
+## Test your harness
 
 Verifying references proves your instructions are _true_ — but the hooks and
 skills that enforce them still have to **actually fire**. A hook can be wired
@@ -128,7 +130,7 @@ design**. You only reach for the paid real-model tier when the question genuinel
 needs it.
 
 - **Unit-test a hook** — `runHook` hands a hook a fake event and checks block/allow. No `claude`, no model, milliseconds, reaches **every** event type.
-- **Deterministic harness test** — `runHarnessTest` runs the **real** `claude` against a **scripted mock model**, so your hooks fire for real with no API key and the same result every time.
+- **Deterministic harness test** — `runHarnessTest` runs the **real** agent CLI (`claude`, or `codex` via `{ adapter: codexAdapter }`) against a **scripted mock model**, so your hooks fire for real with no API key and the same result every time.
 - **Eval** — `runEval` runs the real model A/B (change on vs off) and reports the gap as **mean ± se**, with a Welch-t-test [significance gate](docs/harness-testing.md#significance--is-the-gap-real), regression baselines, and cost/latency/token tracking.
 
 ```typescript
@@ -166,16 +168,16 @@ Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills
 <details>
 <summary><b>The 8 skills</b></summary>
 
-| Skill                  | What it does                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs                           |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step                                              |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                                            |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                                               |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry                                  |
-| `enforce-rules-format` | Validate all rules have enforcement classification                                                |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                                          |
-| `test-harness`         | Test a Claude Code harness — pick the tier (unit / deterministic / eval) and write a passing test |
+| Skill                  | What it does                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs               |
+| `edit-spec`            | Edit a spec file — guided workflow with compile step                                  |
+| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                                |
+| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                                   |
+| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry                      |
+| `enforce-rules-format` | Validate all rules have enforcement classification                                    |
+| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                              |
+| `test-harness`         | Test a harness — pick the tier (unit / deterministic / eval) and write a passing test |
 
 </details>
 
@@ -186,6 +188,8 @@ vigiles composes with other tools rather than replacing them: architectural lint
 ## Documentation
 
 - **The two pillar guides:** [verifying instruction files](docs/verifying-instruction-files.md) (Pillar 1) · [testing your harness](docs/harness-testing.md) (Pillar 2).
+- **[Harnesses](docs/harnesses.md)** — which harnesses vigiles targets (Claude Code, and Codex via `vigiles/codex`) and how you select one.
+- **[Build your own adapter](docs/authoring-an-adapter.md)** — vigiles ships **Claude Code and Codex** adapters; teaching it another harness (Gemini, OpenCode, or your own) is writing one object against five small ports. Custom adapters are welcome and supported. ([API reference](docs/adapter-api.md))
 - **[docs/](docs/README.md)** — the full how-to & reference index: adoption ladder, CLI, linter support, skills/agents.
 - **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
 
