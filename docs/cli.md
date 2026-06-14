@@ -20,6 +20,13 @@ npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter 
 npx vigiles generate-schema --check # Verify schema.json is up to date
 ```
 
+`vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
+**pass / skip / fail** — a tier that can't run (e.g. deterministic with no
+`claude`) reports a loud `⊘ SKIPPED`, tallied separately, never a fake green.
+Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
+default; in a CI job that **asserts** the capability is present, add `--no-skip`
+so a skipped tier **fails** (a green-with-skips is untested surface).
+
 By default `init` sets up **both pillars**: it scaffolds a typed spec + types
 (Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), wires CI as a
 `zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none

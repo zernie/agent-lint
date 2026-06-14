@@ -1031,6 +1031,27 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
   });
 });
 
+describe("CLI: vigiles test — skips are loud and gateable", () => {
+  it("reports SKIPPED + passes by default; --no-skip fails on a skip", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-test-skip-"));
+    try {
+      writeFileSync(join(dir, "s.harness.mjs"), "process.exit(77);\n"); // skip
+      writeFileSync(join(dir, "p.harness.mjs"), "process.exit(0);\n"); // pass
+
+      const def = run("test s.harness.mjs p.harness.mjs", dir);
+      assert.equal(def.exitCode, 0); // a skip doesn't fail
+      assert.match(def.stdout, /⊘ s\.harness\.mjs — SKIPPED/); // loud, shown
+      assert.match(def.stdout, /1 passed, 1 skipped/); // tallied separately
+
+      const strict = run("test --no-skip s.harness.mjs p.harness.mjs", dir);
+      assert.equal(strict.exitCode, 1); // a skip is untested surface here
+      assert.match(strict.stdout, /SKIPPED — untested surface/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Pre-edit hook (blocks compiled file edits)
 // ---------------------------------------------------------------------------
