@@ -28,8 +28,12 @@ import type {
 
 import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
 import type { LinterCheckResult } from "./linters.js";
-import { defaultDialect } from "./dialect.js";
 import type { HarnessDialect } from "./dialect.js";
+
+// vigiles's default compile target when a spec names none and no dialect is
+// injected — a product convention (vigiles emits CLAUDE.md by default), not a
+// harness dialect. When a dialect IS injected its instructionTargets win.
+const DEFAULT_TARGET = "CLAUDE.md";
 
 // ---------------------------------------------------------------------------
 // Hash utilities
@@ -306,6 +310,8 @@ export interface CompileClaudeResult {
 export interface CompileClaudeOptions {
   basePath?: string;
   specFile?: string;
+  /** Injected harness dialect; its instructionTargets[0] is the default target. */
+  dialect?: HarnessDialect;
   /** Maximum number of rules allowed. Compilation fails if exceeded. */
   maxRules?: number;
   /** Maximum estimated tokens for compiled output. */
@@ -521,7 +527,8 @@ export function compileClaude(
   spec: ClaudeSpec,
   options: CompileClaudeOptions = {},
 ): CompileClaudeResult {
-  const targets = spec.target ?? defaultDialect.instructionTargets[0];
+  const targets =
+    spec.target ?? options.dialect?.instructionTargets[0] ?? DEFAULT_TARGET;
   const target = Array.isArray(targets) ? targets[0] : targets;
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? `${target}.spec.ts`;
@@ -965,12 +972,14 @@ export function compileAgent(
   options: {
     basePath?: string;
     specFile?: string;
-    dialect?: HarnessDialect;
-  } = {},
+    /** The harness dialect to verify the tool contract against (required — the
+     *  core defines no default dialect; the adapter/composition root injects it). */
+    dialect: HarnessDialect;
+  },
 ): CompileAgentResult {
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? "agent.md.spec.ts";
-  const dialect = options.dialect ?? defaultDialect;
+  const dialect = options.dialect;
   const errors: CompileError[] = [];
 
   if (!specFile.endsWith(".spec.ts")) {
@@ -1162,6 +1171,7 @@ export function adoptDiff(
   filePath: string,
   spec: ClaudeSpec | SkillSpec | AgentSpec,
   basePath: string,
+  dialect: HarnessDialect,
 ): AdoptResult {
   const fullPath = resolve(basePath, filePath);
   const currentContent = existsSync(fullPath)
@@ -1173,13 +1183,21 @@ export function adoptDiff(
   // Compile the spec to get what it WOULD produce
   let compiledContent: string | null = null;
   if (spec._specType === "claude") {
-    const { markdown } = compileClaude(spec, { basePath, specFile: filePath });
+    const { markdown } = compileClaude(spec, {
+      basePath,
+      specFile: filePath,
+      dialect,
+    });
     compiledContent = markdown;
   } else if (spec._specType === "skill") {
     const { markdown } = compileSkill(spec, { basePath, specFile: filePath });
     compiledContent = markdown;
   } else if (spec._specType === "agent") {
-    const { markdown } = compileAgent(spec, { basePath, specFile: filePath });
+    const { markdown } = compileAgent(spec, {
+      basePath,
+      specFile: filePath,
+      dialect,
+    });
     compiledContent = markdown;
   }
 

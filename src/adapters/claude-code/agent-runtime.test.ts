@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 
 import { agent } from "../../core/spec.js";
 import { compileAgent } from "../../core/compile.js";
+import { claudeCodeDialect } from "./dialect.js";
 import {
   parseAgentTools,
   decidePreToolUse,
@@ -35,7 +36,7 @@ test("parseAgentTools reads the tools list from compiled frontmatter", () => {
       tools: ["Read", "Grep", "Bash"],
       body: "b",
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(parseAgentTools(markdown), ["Read", "Grep", "Bash"]);
 });
@@ -43,7 +44,7 @@ test("parseAgentTools reads the tools list from compiled frontmatter", () => {
 test("parseAgentTools returns null when no tools: line (inherit-all)", () => {
   const { markdown } = compileAgent(
     agent({ name: "a", description: "d", body: "b" }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(parseAgentTools(markdown), null);
 });
@@ -178,7 +179,11 @@ test("evaluatePreToolUse blocks an out-of-contract tool for the active agent", (
         tools: ["Read", "Grep"], // no Write/Edit/Bash
         body: "b",
       }),
-      { basePath: dir, specFile: "agents/reviewer.md.spec.ts" },
+      {
+        basePath: dir,
+        specFile: "agents/reviewer.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
     );
     writeFileSync(join(dir, "reviewer.md"), markdown);
     setActiveAgent(dir, "reviewer.md");
@@ -216,7 +221,11 @@ test("evaluatePreToolUse allows everything for an inherit-all agent", () => {
   try {
     const { markdown } = compileAgent(
       agent({ name: "open", description: "d", body: "b" }), // no tools: line
-      { basePath: dir, specFile: "agents/open.md.spec.ts" },
+      {
+        basePath: dir,
+        specFile: "agents/open.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
     );
     writeFileSync(join(dir, "open.md"), markdown);
     setActiveAgent(dir, "open.md");
@@ -244,7 +253,10 @@ test("the rail the hook enforces is exactly the declared contract (round-trip)",
       tools: declared,
       body: "b",
     }),
-    { specFile: "agents/ui-visual-validator.md.spec.ts" },
+    {
+      specFile: "agents/ui-visual-validator.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
   );
 
   const enforced = parseAgentTools(markdown);
@@ -280,7 +292,11 @@ function projectWithActiveAgent(tools: string[]): string {
       tools,
       body: "b",
     }),
-    { basePath: dir, specFile: "agents/reader.md.spec.ts" },
+    {
+      basePath: dir,
+      specFile: "agents/reader.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
   );
   writeFileSync(join(dir, "reader.md"), markdown);
   setActiveAgent(dir, "reader.md");
@@ -402,7 +418,10 @@ test("the spec form ADDS the rail the real subagent omits, and it parses + enfor
       tools: ["Read", "Grep", "Glob", "Bash"], // the rail the original omits
       body: "You are an experienced UI visual validation expert.",
     }),
-    { specFile: "agents/ui-visual-validator.md.spec.ts" },
+    {
+      specFile: "agents/ui-visual-validator.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
   );
   assert.deepEqual(errors, []);
 
