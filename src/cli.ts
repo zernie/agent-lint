@@ -48,6 +48,7 @@ import {
 } from "./core/compile.js";
 import type { CompileError } from "./core/compile.js";
 import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./core/spec.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { findSimilarRules } from "./core/proofs.js";
 import { parseInlineRules } from "./core/inline.js";
 import { parseFrontmatterRules } from "./core/frontmatter.js";
@@ -208,6 +209,7 @@ function compileClaudeToFile(
   const { markdown, errors, linterResults, targets } = compileClaude(spec, {
     basePath,
     specFile: specPath,
+    dialect: claudeCodeDialect,
     maxRules: config.maxRules,
     maxTokens: config.maxTokens,
     maxSectionLines: config.maxSectionLines,

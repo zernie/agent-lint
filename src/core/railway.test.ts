@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 
 import { agent, result, railway, delegate } from "./spec.js";
 import { compileAgent, compileRailway, validateRailway } from "./compile.js";
+import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 
 // --- result() contract on an agent -----------------------------------------
 
@@ -24,7 +25,7 @@ test("compileAgent renders the result contract as an Output contract section", (
         { reason: "string", retryable: "boolean" },
       ),
     }),
-    { specFile: "agents/coder.md.spec.ts" },
+    { specFile: "agents/coder.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
   assert.match(markdown, /## Output contract/);
@@ -37,7 +38,7 @@ test("compileAgent renders the result contract as an Output contract section", (
 test("an agent without a result contract has no Output contract section", () => {
   const { markdown } = compileAgent(
     agent({ name: "a", description: "d", body: "b" }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.doesNotMatch(markdown, /## Output contract/);
 });
@@ -50,7 +51,7 @@ test("an empty contract track renders as {}", () => {
       body: "b",
       output: result({}, { reason: "string" }),
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.match(markdown, /```vigiles:ok\n\{\}\n```/);
 });

@@ -66,15 +66,18 @@ can sit beside it."
 
 Extraction status, by axis:
 
-- **Format axis — `HarnessDialect` (DONE).** `src/core/dialect.ts` defines the
-  interface: the built-in subagent tool catalog, never-available tools, the MCP
-  tool shape, hook events, instruction targets, and the plugin-root token. The
+- **Format axis — `HarnessDialect` (DONE).** `src/core/dialect.ts` defines **only
+  the interface**: the built-in subagent tool catalog, never-available tools, the
+  MCP tool shape, hook events, instruction targets, and the plugin-root token. The
   CC values that were hard-coded literals in `compile.ts`
   (`KNOWN_AGENT_TOOLS`/`NEVER_AVAILABLE_TOOLS`/`MCP_TOOL_RE`) now live in
-  `claudeCodeDialect` (the `defaultDialect`); `compileAgent(spec, { dialect })`
-  takes an injected one. `src/core/dialect.test.ts` proves a second dialect swaps
-  the catalog. A Codex adapter defines `codexDialect` and injects it — no core
-  edit. **Remaining format-axis work:** the instruction-file/skill/agent
+  `claudeCodeDialect` — **defined in the adapter** (`src/adapters/claude-code/dialect.ts`),
+  symmetric with the other four ports, so the core defines no concrete dialect and
+  has no `defaultDialect`. `compileAgent(spec, { dialect })` **requires** an injected
+  dialect (the CLI/composition root supplies `claudeCodeDialect`; the conformance
+  kit supplies the adapter-under-test's). `src/core/dialect.test.ts` proves a second
+  dialect swaps the catalog. A Codex adapter defines `codexDialect` and injects it —
+  no core edit. **Remaining format-axis work:** the instruction-file/skill/agent
   frontmatter _renderers_ in `compile.ts`/`compile-generator.ts` still emit the
   CC shape directly; fold those behind the dialect too when AGENTS.md/Codex
   output diverges.

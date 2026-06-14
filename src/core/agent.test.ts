@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { agent, instructions, file, cmd, enforce, guidance } from "./spec.js";
 import { compileAgent, adoptDiff } from "./compile.js";
+import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
 test("agent() sets the spec type", () => {
@@ -28,7 +29,7 @@ test("compileAgent renders frontmatter (name/description/model/tools) + hash", (
       tools: ["Read", "Grep", "Bash"],
       body: "You are a careful code reviewer.",
     }),
-    { specFile: "agents/reviewer.md.spec.ts" },
+    { specFile: "agents/reviewer.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
   assert.match(markdown, /^<!-- vigiles:sha256:[a-f0-9]+ compiled from/);
@@ -42,7 +43,7 @@ test("compileAgent renders frontmatter (name/description/model/tools) + hash", (
 test("compileAgent: minimal agent omits model/tools and has no rules section", () => {
   const { markdown, errors } = compileAgent(
     agent({ name: "echo", description: "Echo things.", body: "Just echo." }),
-    { specFile: "agents/echo.md.spec.ts" },
+    { specFile: "agents/echo.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
   assert.doesNotMatch(markdown, /\nmodel:/);
@@ -58,7 +59,7 @@ test("compileAgent accepts built-in and MCP tools, flags unknown with a hint", (
       tools: ["Read", "Task", "Skill", "mcp__github__issue_write"],
       body: "b",
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(ok.errors, []);
 
@@ -70,7 +71,7 @@ test("compileAgent accepts built-in and MCP tools, flags unknown with a hint", (
       tools: ["Reed", "xyzzy123"],
       body: "b",
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(bad.errors.length, 2);
   const reed = bad.errors.find((e) => e.message.includes('"Reed"'));
@@ -88,7 +89,7 @@ test("compileAgent flags tools that are never available to a subagent", () => {
       tools: ["Read", "Agent", "ExitPlanMode"], // last two never reach a subagent
       body: "b",
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.equal(errors.length, 2);
   assert.ok(
@@ -106,7 +107,7 @@ test("compileAgent verifies body references against the filesystem", () => {
         description: "d",
         body: instructions`Read ${file("real.ts")}.`,
       }),
-      { basePath: dir, specFile: "a.md.spec.ts" },
+      { basePath: dir, specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
     );
     assert.deepEqual(ok.errors, []);
 
@@ -116,7 +117,7 @@ test("compileAgent verifies body references against the filesystem", () => {
         description: "d",
         body: instructions`Read ${file("missing.ts")} and run ${cmd("npm run nope")}.`,
       }),
-      { basePath: dir, specFile: "a.md.spec.ts" },
+      { basePath: dir, specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
     );
     assert.ok(stale.errors.some((e) => e.type === "stale-file"));
   } finally {
@@ -137,7 +138,7 @@ test("compileAgent renders a Rules section the worker must follow", () => {
         "research-first": guidance("Check the docs before guessing."),
       },
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
   assert.match(markdown, /## Rules/);
@@ -154,11 +155,13 @@ test("compileAgent renders a Rules section the worker must follow", () => {
 test("compileAgent flags a bad spec filename", () => {
   const notSpec = compileAgent(agent({ name: "a", description: "d" }), {
     specFile: "agents/reviewer.md",
+    dialect: claudeCodeDialect,
   });
   assert.ok(notSpec.errors.some((e) => e.type === "spec-name-mismatch"));
 
   const notMd = compileAgent(agent({ name: "a", description: "d" }), {
     specFile: "reviewer.spec.ts",
+    dialect: claudeCodeDialect,
   });
   assert.ok(notMd.errors.some((e) => e.type === "spec-name-mismatch"));
 });
@@ -191,6 +194,7 @@ test("dogfood: a real OSS subagent as a spec, with the tool rail it shipped WITH
 
   const { markdown, errors } = compileAgent(reviewer, {
     specFile: "agents/ui-visual-validator.md.spec.ts",
+    dialect: claudeCodeDialect,
   });
 
   assert.deepEqual(errors, []); // real content compiles clean; tools verified
@@ -213,7 +217,7 @@ test("compileAgent rejects a section that clashes with the rules field", () => {
       description: "d",
       sections: { rules: "this should be the rules field" },
     }),
-    { specFile: "a.md.spec.ts" },
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.ok(errors.some((e) => e.type === "reserved-section-key"));
 });
@@ -229,7 +233,7 @@ test("compileAgent verifies refs inside sections", () => {
           Workflow: instructions`First read ${file("missing.ts")}.`, // stale file
         },
       }),
-      { basePath: dir, specFile: "a.md.spec.ts" },
+      { basePath: dir, specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
     );
     assert.ok(errors.some((e) => e.type === "stale-file"));
   } finally {
@@ -249,9 +253,10 @@ test("adoptDiff round-trips a compiled agent (valid hash, no changes)", () => {
     const { markdown } = compileAgent(spec, {
       basePath: dir,
       specFile: "agents/reviewer.md.spec.ts",
+      dialect: claudeCodeDialect,
     });
     writeFileSync(join(dir, "agents-reviewer.md"), markdown);
-    const res = adoptDiff("agents-reviewer.md", spec, dir);
+    const res = adoptDiff("agents-reviewer.md", spec, dir, claudeCodeDialect);
     assert.equal(res.changed, false);
     assert.equal(res.hasHash, true);
   } finally {

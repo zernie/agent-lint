@@ -1,3 +1,5 @@
+import type { HarnessDialect } from "./dialect.js";
+
 /** A parsed rule from a markdown instruction file. */
 export interface ParsedRule {
   title: string;
@@ -165,6 +167,9 @@ export interface ValidateOptions {
   ruleMarkers?: MarkerType[];
   rules?: RulesConfig;
   filePath?: string;
+  /** Injected harness dialect; its instructionTargets define recognized
+   *  instruction filenames. Omitted → the validator's built-in default set. */
+  dialect?: HarnessDialect;
 }
 
 /** Options for validatePaths(). */

@@ -5,7 +5,6 @@ import { cosmiconfigSync } from "cosmiconfig";
 
 import { hasInlineRules } from "./inline.js";
 import { hasFrontmatterRules } from "./frontmatter.js";
-import { defaultDialect } from "./dialect.js";
 
 import type {
   ParsedRule,
@@ -55,10 +54,13 @@ const VALID_MARKERS: readonly MarkerType[] = ["headings", "checkboxes"];
 // Default config
 // ---------------------------------------------------------------------------
 
-// The default instruction file to validate. Sourced from the default harness
-// dialect (Claude Code) rather than a duplicated literal, so the instruction-
-// filename truth lives in exactly one place (src/core/dialect.ts).
-const DEFAULT_FILES: string[] = [defaultDialect.instructionTargets[0]];
+// The instruction filenames vigiles recognizes when no dialect is injected — a
+// validator-level default, not a harness dialect (the concrete dialects live in
+// the adapters; an injected ValidateOptions.dialect overrides this).
+const INSTRUCTION_FILES: readonly string[] = ["CLAUDE.md", "AGENTS.md"];
+
+// The default instruction file to validate when no config names one.
+const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
   "require-spec": "warn",
@@ -200,7 +202,7 @@ export function parseRules(
 
 export function validate(
   content: string,
-  { ruleMarkers, rules: rulesConfig, filePath }: ValidateOptions = {},
+  { ruleMarkers, rules: rulesConfig, filePath, dialect }: ValidateOptions = {},
 ): ValidationResult {
   const activeRules = rulesConfig ?? DEFAULT_RULES;
   const parsedRules = parseRules(content, { ruleMarkers });
@@ -223,7 +225,8 @@ export function validate(
 
   if (filePath) {
     const basename = pathBasename(filePath);
-    const isInstruction = defaultDialect.instructionTargets.includes(basename);
+    const recognized = dialect?.instructionTargets ?? INSTRUCTION_FILES;
+    const isInstruction = recognized.includes(basename);
     const isSkill = basename === "SKILL.md";
 
     // --- require-spec (CLAUDE.md / AGENTS.md) ---

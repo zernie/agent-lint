@@ -38,6 +38,7 @@ import {
 
 import { generateTypes } from "./generate-types.js";
 import { checkLinterRule } from "./linters.js";
+import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -1049,7 +1050,7 @@ describe("adoptDiff()", () => {
       });
       writeFileSync(join(tmpDir, "CLAUDE.md"), markdown);
 
-      const result = adoptDiff("CLAUDE.md", spec, tmpDir);
+      const result = adoptDiff("CLAUDE.md", spec, tmpDir, claudeCodeDialect);
       assert.equal(result.hasHash, true);
       assert.equal(result.valid, true);
       assert.equal(result.changed, false);
@@ -1074,7 +1075,7 @@ describe("adoptDiff()", () => {
         markdown + "\n### Hand-written rule\nSome extra content.\n";
       writeFileSync(join(tmpDir, "CLAUDE.md"), tampered);
 
-      const result = adoptDiff("CLAUDE.md", spec, tmpDir);
+      const result = adoptDiff("CLAUDE.md", spec, tmpDir, claudeCodeDialect);
       assert.equal(result.hasHash, true);
       assert.equal(result.valid, false);
       assert.equal(result.changed, true);
@@ -1090,7 +1091,7 @@ describe("adoptDiff()", () => {
     mkdirSync(tmpDir, { recursive: true });
     try {
       writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
-      const result = adoptDiff("CLAUDE.md", spec, tmpDir);
+      const result = adoptDiff("CLAUDE.md", spec, tmpDir, claudeCodeDialect);
       assert.equal(result.hasHash, false);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
@@ -1452,7 +1453,12 @@ describe("compile → hash → verify → adopt roundtrip", () => {
       assert.equal(hashResult.specFile, "CLAUDE.md.spec.ts");
 
       // Step 4: Adopt shows no changes
-      const adoptResult = adoptDiff("CLAUDE.md", spec, tmpDir);
+      const adoptResult = adoptDiff(
+        "CLAUDE.md",
+        spec,
+        tmpDir,
+        claudeCodeDialect,
+      );
       assert.equal(adoptResult.valid, true);
       assert.equal(adoptResult.changed, false);
 
@@ -1468,7 +1474,12 @@ describe("compile → hash → verify → adopt roundtrip", () => {
       assert.equal(hashResult2.valid, false);
 
       // Step 7: Adopt detects the change
-      const adoptResult2 = adoptDiff("CLAUDE.md", spec, tmpDir);
+      const adoptResult2 = adoptDiff(
+        "CLAUDE.md",
+        spec,
+        tmpDir,
+        claudeCodeDialect,
+      );
       assert.equal(adoptResult2.valid, false);
       assert.equal(adoptResult2.changed, true);
       assert.ok(adoptResult2.addedLines.some((l) => l.includes("VERY nice")));
