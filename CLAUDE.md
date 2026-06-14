@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:ed0cab6c9a0f4a4a compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:60de3d597b04e863 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -292,6 +292,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 ### Smooth Adoption
 
 **Guidance only** — `npx vigiles init` must work on first run with zero config and set up BOTH pillars by default: a typed spec + types (pillar 1), a vigiles.harness.mjs starter (pillar 2), a `zernie/vigiles@v1` CI workflow (created when none exists), and the Claude Code plugin. Onboarding is interactive at a TTY (asks which pillars / CI / plugin) and NON-INTERACTIVE for agents, CI, or piped input (or with `--yes`) — so 'set up vigiles' from a Claude Code / Codex prompt Just Works without hanging on a prompt; `--pillars=verify|test|both` scopes it. After install the agent edits specs automatically — no workflow change required. Start permissive (guidance rules, `require-spec: false` available), tighten over time (`--strict`). Hesitant adopters can use inline mode (`<!-- vigiles:enforce ... -->` comments) without a .spec.ts — see `docs/inline-mode.md`. See `research/adoption-strategy.md` and `docs/agent-setup.md`.
+
+### Great Agent Flow
+
+**Guidance only** — The end-to-end experience when an AGENT is handed a short prompt like 'install vigiles and test my skills' must be GREAT — discoverable from the README front door and frictionless, because for many users the agent IS the installer. Concretely: (1) install is one non-interactive command an agent runs without hanging — `npx vigiles init` auto-detects a non-TTY and applies defaults (both pillars); (2) `init` installs the model-invocable `test-harness` skill, so a follow-up 'test my skills' FIRES that skill (it picks the tier and writes the test) rather than leaving the agent to flail; (3) the README must make the skill-testing path explicit and high-signal — name `measureTriggerRate` (does a skill's description actually fire? recall + precision), not just hook examples, and surface the `test-harness` skill where the task lives, not buried in a list. The README is the agent's front door: an agent reading it for 'install + test skills' must find a clear, actionable path. Dogfood it — `test-harness` and `generate-logo` are the two model-invocable skills, covered by trigger-rate evals (`examples/harness/dogfood/`). See `docs/agent-setup.md`, `docs/harness-testing.md`, and `research/skill-authoring-pains.md`.
 
 ### Format Before Commit
 
