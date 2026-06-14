@@ -19,73 +19,40 @@
   <a href="https://github.com/zernie/vigiles/blob/main/LICENSE"><img src="https://img.shields.io/github/license/zernie/vigiles" alt="License" /></a>
 </p>
 
-<p align="center">
-  <b>Two pillars →</b>
-  &nbsp;<a href="#verify-your-instruction-files">① Verify your instruction files</a>
-  &nbsp;·&nbsp;
-  <a href="#test-your-harness">② Test your harness</a>
-</p>
-
 ---
 
-<details>
-<summary><b>Contents</b></summary>
+`Agent = Model + Harness`. You'd never ship an app without a linter and a test
+suite — yet an AI agent steering your repo is trusted on vibes. vigiles is the
+deterministic layer for the harness: it **lints** the references your instruction
+files make and **tests** that your hooks and skills actually fire. Two independent
+pillars — adopt either, or both:
 
-- [**Two pillars — pick one or both**](#two-pillars--pick-one-or-both)
-- **Pillar 1** — [verify your instruction files](#verify-your-instruction-files) · full guide: [docs/verifying-instruction-files.md](docs/verifying-instruction-files.md)
-- **Pillar 2** — [test your harness](#test-your-harness) · full guide: [docs/harness-testing.md](docs/harness-testing.md)
-- [Quick start](#quick-start) · [CLI & CI](#cli--ci) · [Skills](#skills) · [Related tools](#related-tools)
+|       | Pillar                            | What it does                                                                                                                                                                                                |
+| ----- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **①** | **Verify your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md) |
+| **②** | **Test your harness**             | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key) before you pay for an eval. → [guide](docs/harness-testing.md)                     |
 
-</details>
+Neither pillar depends on the other — pick the one that hurts today. **Works with
+Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) behind a five-port
+adapter; [custom adapters welcome](docs/authoring-an-adapter.md).
 
-## Two pillars — pick one or both
+## ① Verify — your CLAUDE.md lies to your agent
 
-An agent runs real commands in your repo — it can delete the wrong files, leak a secret, or burn tokens looping on a stale instruction nobody checked. You'd never ship an app without a linter and a test suite. An AI agent steering your codebase is no different — so why is its harness trusted on vibes?
-
-`Agent = Model + Harness`. Your harness is everything that steers a run — the **instructions** you write _and_ the **hooks, skills, and settings** that enforce them. vigiles is the **missing linting + testing layer for agentic coding**: it **lints** your instruction files and **tests** your harness. Two pillars of equal weight — adopt either on its own, or both:
-
-|       | Pillar                                                              | What it does                                                                                                                                                                 |
-| ----- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **①** | [**Verify your instruction files**](#verify-your-instruction-files) | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent.                 |
-| **②** | [**Test your harness**](#test-your-harness)                         | Your hooks and skills are code — vigiles tests that they actually fire, **deterministically and for free** (no model, no API key) before you ever pay for a real-model eval. |
-
-They share a thesis, not a dependency: neither pillar is a prerequisite for the other, so adopting one is never gated on setting up the other. Pick the one that hurts today.
-
-**Supported harnesses: Claude Code and Codex.** Both ride the same harness-agnostic core behind a thin five-port adapter. **Codex** ships as [`vigiles/codex`](docs/harnesses.md): it verifies references, compiles Codex-shaped instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs pillar-2 harness tests against the real `codex` binary, keyless — `runHarnessTest({ adapter: codexAdapter })`. (Subagents are the one thing it doesn't compile, by design: a Codex subagent is a concurrency-config entry, not a tool-contract file — a model mismatch, not a gap.) Adding another harness (Gemini, OpenCode, or your own) is writing one object against five small ports — **[custom adapters are welcome](docs/authoring-an-adapter.md)**.
-
-## Verify your instruction files
-
-Your CLAUDE.md lies to your agent. Here's the fix.
-
-Hand-written CLAUDE.md files rot silently. Here's what a typical one looks like:
+Hand-written instruction files rot silently:
 
 ```markdown
-## Code Style
-
-Never use `any` — the `@typescript-eslint/no-explicit-any` rule
-catches this. Always use `unknown` and narrow with type guards.
+Never use `any` — the `@typescript-eslint/no-explicit-any` rule catches it.
 See `src/utils/type-helpers.ts` for project utilities.
-
-## Testing
-
-Run `npm run typecheck` before submitting. Every service in
-src/services/ should have a corresponding test file.
+Run `npm run typecheck` before submitting.
 ```
 
-Reads fine. Four things are wrong:
+Reads fine. But the rule was disabled months ago, `type-helpers.ts` was renamed,
+and `npm run typecheck` no longer exists — and the agent trusts every stale claim.
+vigiles verifies each reference (the linter rule exists **and is enabled**;
+paths, scripts, and code symbols are real) and flags a typo with a closest-match
+suggestion.
 
-1. `@typescript-eslint/no-explicit-any` — disabled to unblock a deadline, never re-enabled
-2. `src/utils/type-helpers.ts` — renamed to `src/utils/narrowing.ts` last quarter
-3. `npm run typecheck` — script removed from package.json
-4. Service/test pairing — no automated check, just a hope
-
-The agent reads this, trusts it, and writes code based on stale claims nobody verified. vigiles **verifies the references in your instruction files** — that each linter rule exists and is enabled, that every file path and script is real, and that referenced **code symbols** (functions, classes, constants) actually exist in the files that define them — and meets you at whatever commitment level you want.
-
-> **Set it up — paste this into Claude Code:**
->
-> > Install vigiles and verify my instruction files. Scan my CLAUDE.md / AGENTS.md, turn its real claims into checked references (linter rules, file paths, scripts, symbols), run `vigiles audit`, and show me what's already stale. Use sensible defaults, but **ask me first** whether to stay in markdown mode or generate a typed `.spec.ts`, and whether to wire the audit into CI and install the edit-blocking hooks.
-
-Or do it by hand — add a marker to your existing CLAUDE.md and audit it, no install, no new files:
+Start in **markdown mode** — one comment, no new files:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
@@ -95,45 +62,20 @@ Or do it by hand — add a marker to your existing CLAUDE.md and audit it, no in
 npx vigiles audit CLAUDE.md
 ```
 
-Each reference is checked against reality — a typo gets a closest-match suggestion, a disabled rule is flagged. That's **markdown mode**; step up to a **typed spec** (`.spec.ts` → compiled CLAUDE.md, compiler-grade guarantees) when you want it.
+Step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade guarantees)
+when you want it. **[Full guide →](docs/verifying-instruction-files.md)**
 
-→ **Full guide: [docs/verifying-instruction-files.md](docs/verifying-instruction-files.md)** — the adoption ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references (`file` / `cmd` / `symbol` / `ref`), and the before/after tables.
+## ② Test — does your harness actually fire?
 
-## Quick Start
+A hook can be wired wrong, a skill's description can fail to trigger, injected
+context can never reach the model — all silently, all passing a naive "did it
+run?" check. vigiles tests the assembled harness across three tiers, cheapest
+first. The first two need **no model and no API key**, so they run on every commit
+for free (the opposite of eval-only frameworks):
 
-```bash
-npx vigiles init
-```
-
-The wizard auto-detects your project, creates a spec, scans your linters, compiles to markdown, adds a CI step, and installs Claude Code hooks. After install: the agent edits the spec (hooks block direct CLAUDE.md edits), the spec auto-compiles on save, and `vigiles audit` catches drift in CI. Prefer no new files? Stay in [markdown mode](docs/markdown-mode.md). Start with `guidance()` rules and `/strengthen` them to `enforce()` later; flags and agent usage are in the [CLI reference](docs/cli.md).
-
-Companion repo for [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
-
-## Test your harness
-
-Verifying references proves your instructions are _true_ — but the hooks and
-skills that enforce them still have to **actually fire**. A hook can be wired
-wrong, a skill's description can fail to trigger, injected context can never reach
-the model — all silently, all passing a naive "did it run?" check. So vigiles's
-second pillar **tests the harness itself**, as the assembled machine it ships as.
-
-> **Set it up — paste this into Claude Code:**
->
-> > Install vigiles and use its `test-harness` skill to write and run a harness test for this project. If I didn't say what to test, pick something real from my hooks / skills / settings, choose the cheapest tier (unit / deterministic / eval), write the test, and run it. Use good defaults, but **ask me** whether to gate it in CI and whether to add a real-model eval.
-
-Or skip the prompt: `npx skills add zernie/vigiles` installs the `test-harness` skill (and the edit-blocking hooks); prefer code? `npm i -D vigiles` and import from `vigiles/testing` (below).
-
-It's a small library of plain async functions (drops into node:test / vitest /
-jest, or a zero-setup `vigiles test`), with three tiers, cheapest first. The
-design bet is **deterministic and cheap**: the first two tiers never call a model
-or need an API key, so they run on every commit for free — the opposite of
-eval-only frameworks like promptfoo, where every run hits a real model **by
-design**. You only reach for the paid real-model tier when the question genuinely
-needs it.
-
-- **Unit-test a hook** — `runHook` hands a hook a fake event and checks block/allow. No `claude`, no model, milliseconds, reaches **every** event type.
-- **Deterministic harness test** — `runHarnessTest` runs the **real** agent CLI (`claude`, or `codex` via `{ adapter: codexAdapter }`) against a **scripted mock model**, so your hooks fire for real with no API key and the same result every time.
-- **Eval** — `runEval` runs the real model A/B (change on vs off) and reports the gap as **mean ± se**, with a Welch-t-test [significance gate](docs/harness-testing.md#significance--is-the-gap-real), regression baselines, and cost/latency/token tracking.
+- **Unit** (`runHook`) — a hook's block/allow on a fake event; every event type, milliseconds.
+- **Deterministic** (`runHarnessTest`) — the real agent CLI against a scripted mock model; same result every time.
+- **Eval** (`runEval`) — the real model A/B, reported as mean ± se with a significance gate.
 
 ```typescript
 import { runHook } from "vigiles/testing";
@@ -146,61 +88,30 @@ const r = runHook(guardCommand, {
 assert(r.blocked); // exit 2 / decision:"block" / permissionDecision:"deny"
 ```
 
-**[Full guide → `docs/harness-testing.md`](docs/harness-testing.md)** — the tier
-walkthrough, testing skills for real, "fired ≠ landed" (`trace.modelRequests`),
-the safe-by-default sandbox for untrusted plugins, the surface × tier coverage
-matrix, and how it compares to promptfoo. Also: [benchmarks](research/benchmarks-runtime-gates.md).
+**[Full guide →](docs/harness-testing.md)** — testing skills for real, the
+safe-by-default sandbox, the coverage matrix, and how it compares to promptfoo.
 
-## CLI & CI
+## Quick start
 
 ```bash
-npx vigiles init        # Scaffold a spec (full setup wizard)
-npx vigiles compile     # Compile .spec.ts → .md
-npx vigiles audit       # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
-npx vigiles test        # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
-npx vigiles eval        # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
+npx vigiles init   # auto-detects the project, scaffolds a spec, wires CI + hooks
 ```
 
-Drop it into CI with the GitHub Action — a composite action over the same CLI, so it runs the artifact you'd run locally:
+Write harness tests in JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles
+test`. Drop vigiles into CI with the GitHub Action — a composite over the same
+CLI, so it runs the artifact you'd run locally:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: zernie/vigiles@v1 # audit by default; exposes a `valid` output
+- uses: zernie/vigiles@v1 # audits by default; posts a sticky PR comment + a `valid` output
 ```
 
-`vigiles audit` enforces five rules — `require-spec`, `require-skill-spec`, `integrity`, `coverage`, `untested-surface` — configurable in `.vigilesrc.json`. The GitHub Action runs `audit` by default; the Claude Code plugin (`npx skills add zernie/vigiles`) adds the Pre/PostToolUse hooks that block direct `.md` edits and auto-compile specs. [Full CLI, Action (inputs, output, versioning), plugin & validation reference →](docs/cli.md)
+## More
 
-## Skills
-
-Install with [Vercel Skills](https://github.com/vercel-labs/skills): `npx skills add zernie/vigiles`
-
-<details>
-<summary><b>The 8 skills</b></summary>
-
-| Skill                  | What it does                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `strengthen`           | Upgrade `guidance()` → `enforce()` using linter-specific reference docs               |
-| `edit-spec`            | Edit a spec file — guided workflow with compile step                                  |
-| `migrate-to-spec`      | Convert a hand-written CLAUDE.md to a typed `.spec.ts`                                |
-| `generate-rule`        | Add a new `enforce()` / `guidance()` rule to a spec                                   |
-| `pr-to-lint-rule`      | Turn a recurring PR review comment into a lint rule + spec entry                      |
-| `enforce-rules-format` | Validate all rules have enforcement classification                                    |
-| `audit-feedback-loop`  | Score your repo's feedback loop maturity                                              |
-| `test-harness`         | Test a harness — pick the tier (unit / deterministic / eval) and write a passing test |
-
-</details>
-
-## Related Tools
-
-vigiles composes with other tools rather than replacing them: architectural linters ([ast-grep](https://ast-grep.github.io/), [Dependency Cruiser](https://github.com/sverweij/dependency-cruiser)) referenced via `enforce()`, and file-sync tools ([Ruler](https://github.com/intellectronica/ruler), [rulesync](https://github.com/dyoshikawa/rulesync)) that distribute the compiled output. [How it fits with each, and why runtime-LLM rule checkers are the opposite paradigm →](docs/related-tools.md)
-
-## Documentation
-
-- **The two pillar guides:** [verifying instruction files](docs/verifying-instruction-files.md) (Pillar 1) · [testing your harness](docs/harness-testing.md) (Pillar 2).
-- **[Harnesses](docs/harnesses.md)** — which harnesses vigiles targets (Claude Code, and Codex via `vigiles/codex`) and how you select one.
-- **[Build your own adapter](docs/authoring-an-adapter.md)** — vigiles ships **Claude Code and Codex** adapters; teaching it another harness (Gemini, OpenCode, or your own) is writing one object against five small ports. Custom adapters are welcome and supported. ([API reference](docs/adapter-api.md))
-- **[docs/](docs/README.md)** — the full how-to & reference index: adoption ladder, CLI, linter support, skills/agents.
-- **[research/](research/README.md)** — the thinking behind it: design docs, the [harness-testing coverage roadmap](research/harness-testing-coverage-matrix.md), benchmark findings, landscape, and parked ideas.
+- **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `audit` rules.
+- **[Skills →](docs/skills.md)** — 8 skills (`strengthen`, `migrate-to-spec`, `test-harness`, …) via `npx skills add zernie/vigiles`.
+- **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
+- Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## License
 

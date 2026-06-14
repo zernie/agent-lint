@@ -6,7 +6,7 @@ every reference your CLAUDE.md / AGENTS.md makes is real: each linter rule exist
 code symbol actually exists in the file that defines it. Stale references can't
 silently mislead the agent.
 
-The [README](../README.md#verify-your-instruction-files) has the 30-second pitch;
+The [README](../README.md) has the 30-second pitch;
 this is the full guide.
 
 ## Two on-ramps: markdown, then typed spec
