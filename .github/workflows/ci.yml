@@ -45,12 +45,15 @@ jobs:
           gem install rubocop
           rustup component add clippy
 
-      - name: Install claude CLI + bubblewrap (deterministic harness + sandbox tests)
-        # claude (no API key needed — the mock tier) lets the claude-gated tests
-        # run; bubblewrap lets the sandbox confinement test actually execute and
-        # prove egress is blocked, instead of skipping.
+      - name: Install claude + codex CLIs + bubblewrap (deterministic harness + sandbox tests)
+        # claude and codex (no API key needed — both reached via a local mock-model
+        # tier) let the binary-gated tests actually RUN instead of skipping: claude
+        # for the Anthropic-Messages mock, codex for the OpenAI-Responses mock
+        # (src/adapters/codex/mock-model.test.ts drives real codex against it).
+        # bubblewrap lets the sandbox confinement test execute and prove egress is
+        # blocked, instead of skipping.
         run: |
-          npm i -g @anthropic-ai/claude-code
+          npm i -g @anthropic-ai/claude-code @openai/codex
           sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
