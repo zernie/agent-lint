@@ -16,8 +16,12 @@ export const opencodeLayout: PluginLayout = {
   settingsPath: "opencode.json",
   settingsFormat: "json",
   instructionFile: "AGENTS.md",
+  // OpenCode's surfaces already live UNDER `.opencode/` at the source, so they
+  // are NOT relocated — materializeRoot is "" (no prefix) to avoid doubling the
+  // `.opencode/` segment. (Contrast Claude Code: root-level `skills/` surfaces
+  // relocated under `.claude`.)
   surfaceDirs: [".opencode/agent", ".opencode/command"],
-  materializeRoot: ".opencode",
+  materializeRoot: "",
   pluginRootToken: "${OPENCODE_PLUGIN_ROOT}",
   mcpConfigFile: "opencode.json",
   mcpManifestKey: "mcp",

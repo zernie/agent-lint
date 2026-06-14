@@ -76,10 +76,9 @@ test("the loader reads a real OpenCode-shaped plugin through opencodeLayout", ()
 
     // instruction file picked up under its own name
     assert.ok(loaded.files["AGENTS.md"]);
-    // agent surface materialized under the OpenCode materialize root
-    assert.ok(
-      loaded.files[join(".opencode", ".opencode", "agent", "reviewer.md")],
-    );
+    // agent surface materialized at its real path (materializeRoot is "", so the
+    // `.opencode/agent/` segment is NOT doubled).
+    assert.ok(loaded.files[join(".opencode", "agent", "reviewer.md")]);
   } finally {
     cleanupTmpDir(dir);
   }
