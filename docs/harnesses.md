@@ -5,9 +5,12 @@ the CLI that runs it, the hook protocol, the plugin/skill/subagent layout, the
 instruction-file dialect. vigiles is built so the **core is harness-agnostic**
 and the harness-specific pieces live behind a swappable **adapter**.
 
-> **Supported today: Claude Code.** Codex (`AGENTS.md` + its own runtime) is the
-> likely next adapter. The architecture is already split so adding one doesn't
-> touch the core — see [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
+> **Supported today: Claude Code (full) and Codex.** Codex (`vigiles/codex`) ships
+> with a **proven pillar-2** transport (harness testing/evals against the real
+> `codex` binary via an OpenAI-Responses mock) and is auto-detected by the CLI;
+> its pillar-1 _compile renderers_ are still partial (they emit the Claude-Code
+> shape until the format-axis renderers land). Adding a harness doesn't touch the
+> core — see [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
 
 ## You pick the harness by which subpath you import
 
@@ -33,7 +36,7 @@ When a second harness lands, it sits **beside** the first — same core, a new
 adapter import:
 
 ```ts
-import { loadPlugin } from "vigiles/codex"; // hypothetical — not shipped yet
+import { startCodexMock, codexAdapter } from "vigiles/codex"; // shipped
 ```
 
 Nothing in `vigiles/testing` changes. Unused adapters tree-shake out; there's no
@@ -85,24 +88,27 @@ reference-only harness is a first-class adapter, not a broken one.
 
 Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
 
-| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                       |
-| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------ |
-| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                       |
-| **Codex**                  | ✅       | ✅ Responses SSE¹      | ✅ veto (exit 2)         | 🧪 prototype (`src/adapters/codex/`) — transport **proven**² |
-| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false` |
-| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                            |
-| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                   |
+| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                              |
+| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------------- |
+| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                              |
+| **Codex**                  | 🚧¹      | ✅ Responses SSE       | ✅ veto (exit 2)         | ✅ **shipped** (`vigiles/codex`) — pillar 2 full; pillar 1 partial² |
+| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false`        |
+| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                                   |
+| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                          |
 
-¹ Codex's mockable tier is **built and proven**: `@openai/codex` installs with no
-API key (here and in CI), and `src/adapters/codex/mock-model.ts` serves the OpenAI
-**Responses** SSE that real `codex exec` completes a turn against — the request
-shape + event sequence captured from live codex traffic, not guessed.
+¹ Codex **pillar 1 is partial (🚧)**: references are verified and the `AGENTS.md`
+target resolves, but the instruction/skill _renderers_ still emit the Claude-Code
+shape (and config-table `[agents]` surfaces aren't captured) until the format-axis
+renderers land. So the CLI auto-detects a Codex repo, but `compile` output for it
+may be CC-shaped for now — the deliberately-accepted caveat of shipping pillar 2
+first.
 
-² **What remains before Codex flips from 🧪 prototype to ✅ shipped:** register it
-in `ADAPTERS` + export `vigiles/codex` (a deliberate auto-detect change), plus the
-still-deferred _format_-axis pieces (instruction/skill renderers behind the
-dialect; config-table `[agents]` surfaces). The _transport_ half — the blocker
-that mattered — is done.
+² Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
+`.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Pillar
+2 is full and proven** — `@openai/codex` installs with no API key (here and in CI),
+and `src/adapters/codex/mock-model.ts` serves the OpenAI **Responses** SSE that
+real `codex exec` completes a turn against (request shape + event sequence captured
+from live codex traffic, not guessed). Pillar 1 is partial per ¹.
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't

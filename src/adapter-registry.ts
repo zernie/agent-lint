@@ -7,16 +7,21 @@
  *
  * Adding a harness = add its `HarnessAdapter` to `ADAPTERS` (and a
  * `vigiles/<harness>` export). Order matters only if two adapters could both
- * match a repo; today there is one.
+ * match a repo; `detect()` returns a specificity score so the strongest signal
+ * wins regardless of order.
  */
 import type { HarnessAdapter } from "./core/adapter.js";
 import { claudeCodeAdapter } from "./adapters/claude-code/adapter.js";
+import { codexAdapter } from "./adapters/codex/adapter.js";
 
 /** The default adapter when detection finds no harness markers. */
 export const defaultAdapter: HarnessAdapter = claudeCodeAdapter;
 
-/** All registered adapters, in detection priority order. */
-export const ADAPTERS: readonly HarnessAdapter[] = [claudeCodeAdapter];
+/** All registered adapters. detect() specificity (not order) breaks ties. */
+export const ADAPTERS: readonly HarnessAdapter[] = [
+  claudeCodeAdapter,
+  codexAdapter,
+];
 
 /** The result of auto-detecting a harness from a repo's layout. */
 export interface DetectResult {
