@@ -40,9 +40,22 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
-import { claudeCodeRuntime, mockModelEnv } from "./runtime.js";
+import type { HarnessAdapter } from "../../core/adapter.js";
+import type {
+  HarnessTestDriver,
+  HarnessDriverContext,
+  HarnessMockHandle,
+  ToolCall,
+  HookFire,
+  ParsedRun,
+  ModelTurn,
+  ModelRequest,
+} from "../../core/harness-driver.js";
+import { assertHarnessTestable } from "../../adapter-conformance.js";
 
-import { startMock, type ModelTurn, type ModelRequest } from "./mock-model.js";
+import { claudeCodeRuntime } from "./runtime.js";
+
+import { startMock } from "./mock-model.js";
 import { resolveHarness } from "./plugin-loader.js";
 import {
   decideSandbox,
@@ -52,11 +65,14 @@ import {
   type SandboxMode,
 } from "./sandbox.js";
 
-export {
-  scriptModel,
-  type ModelTurn,
-  type ModelRequest,
-} from "./mock-model.js";
+export { scriptModel } from "./mock-model.js";
+export type {
+  ModelTurn,
+  ModelRequest,
+  ToolCall,
+  HookFire,
+  HarnessTestDriver,
+} from "../../core/harness-driver.js";
 export { loadPlugin, resolveHarness } from "./plugin-loader.js";
 export {
   decideSandbox,
@@ -118,25 +134,6 @@ export interface HarnessTestSpec {
 }
 
 /**
- * A hook invocation observed during the run, recorded (not inferred) from the
- * `hook_response` system events the CLI emits in the stream — so a test can
- * assert which hook fired and whether it blocked, instead of inferring it from a
- * marker file the hook had to write.
- */
-export interface HookFire {
-  /** The hook label, e.g. `"PreToolUse:Edit"` (`Event:Matcher`). */
-  readonly name: string;
-  /** The hook event, e.g. `"PreToolUse"`, `"PostToolUse"`, `"Stop"`. */
-  readonly event: string;
-  /** The hook process exit code (2 = block), or undefined if not reported. */
-  readonly exitCode: number | undefined;
-  /** Whether the hook blocked / errored (exit ≠ 0 or outcome "error"). */
-  readonly blocked: boolean;
-  /** What the hook printed (its block reason / diagnostic), or "". */
-  readonly output: string;
-}
-
-/**
  * The observable record of ONE run — the unified shape produced by BOTH testing
  * tiers: `runHarnessTest`'s result and `runEval`'s `measure` ctx (`eval.ts`)
  * both satisfy it. That's what lets the bare predicates in `harness-assert.ts`
@@ -188,16 +185,6 @@ export interface HarnessTestResult extends Trace {
   readonly turns: number;
   /** Remove the temp working dir. */
   cleanup(): void;
-}
-
-/** A tool the agent invoked, paired with its result (transcript mode only). */
-export interface ToolCall {
-  readonly name: string;
-  readonly input: unknown;
-  /** The tool_result text ("" if none / not captured). */
-  readonly resultText: string;
-  /** Whether the tool_result came back flagged as an error. */
-  readonly isError: boolean;
 }
 
 function contentText(content: unknown): string {
@@ -342,6 +329,29 @@ export function buildClaudeArgs(
   ];
 }
 
+/** Build the `claude` argv from the driver context — wraps `buildClaudeArgs`. */
+function buildClaudeArgsFromCtx(ctx: HarnessDriverContext): string[] {
+  return buildClaudeArgs(
+    {
+      model: [],
+      prompt: ctx.prompt,
+      transcript: ctx.transcript,
+      pluginDir: ctx.pluginDir,
+      allowedTools: ctx.tools,
+    },
+    ctx.hasSettings,
+  );
+}
+
+/** Parse the `claude` stdout/stream into the unified trace fields. */
+export function parseClaudeRun(stdout: string): ParsedRun {
+  return {
+    toolCalls: parseToolCalls(stdout),
+    hooks: parseHooks(stdout),
+    output: parseOutput(stdout),
+  };
+}
+
 /* v8 ignore start -- spawns the real claude CLI + filesystem; exercised by the
    claude-backed suite, excluded from the deterministic coverage gate (the parse
    helpers above carry the testable logic). */
@@ -383,18 +393,27 @@ interface RunOut {
   stderr: string;
 }
 
-function spawnClaude(
-  args: string[],
+/**
+ * Spawn the agent binary against the mock. The mock-wiring *args* are already in
+ * `args` (the driver placed `wireMock(url).args` at the correct argv position
+ * via `ctx.mockArgs`); here we only layer `wireMock(url).env` over the caller's
+ * env. Driver-agnostic at the transport seam.
+ */
+function spawnAgent(
+  runtime: HarnessTestDriver["runtime"],
+  args: readonly string[],
   cwd: string,
   baseUrl: string,
   timeoutMs: number,
 ): Promise<RunOut> {
+  const wired = runtime.wireMock(baseUrl);
   return new Promise((resolvePromise) => {
-    const child = spawn(claudeCodeRuntime.agentBinary, args, {
+    const child = spawn(runtime.agentBinary, [...args], {
       cwd,
-      // Any key works — the mock ignores auth; mockModelEnv points the client at
-      // the mock's URL and supplies a dummy key, both from the runtime port.
-      env: mockModelEnv(claudeCodeRuntime, baseUrl),
+      // Any key works — the mock ignores auth. wireMock supplies the overlay
+      // env (base-URL var + dummy key for CC; the dummy key for Codex); layer it
+      // over the caller's env.
+      env: { ...process.env, ...wired.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -410,47 +429,49 @@ function spawnClaude(
 }
 
 /**
- * Run the real `claude` CLI against a scripted mock model, with the given
- * fixture and settings (hooks). Deterministic — same script, same result.
- *
- * Safe by default: an external `plugin` / `pluginDir` brings in untrusted
- * third-party hooks and is confined under bubblewrap (`spec.sandbox`, default
- * `"auto"`); if no sandbox is available the run REFUSES rather than executing
- * unconfined. See `src/sandbox.ts`.
+ * The Claude Code `HarnessTestDriver`: the existing argv/mock/parse seams bundled
+ * behind the port the adapter-driven runner dispatches through. Behaviourally
+ * identical to the previous hard-wired path.
  */
-export async function runHarnessTest(
-  spec: HarnessTestSpec,
-): Promise<HarnessTestResult> {
-  const decision = decideSandbox({
-    trusted: specTrusted(spec),
-    mode: spec.sandbox ?? "auto",
-    available: sandboxAvailable(),
-  });
-  if (decision.action === "throw") throw new Error(decision.reason);
+export const claudeCodeDriver: HarnessTestDriver = {
+  runtime: claudeCodeRuntime,
+  buildArgs: buildClaudeArgsFromCtx,
+  startMock: (script): Promise<HarnessMockHandle> => startMock(script),
+  parseRun: parseClaudeRun,
+  available: claudeAvailable,
+};
+/* v8 ignore stop */
 
-  const cwd = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
-  const { files, settings } = resolveHarness({
-    plugin: spec.plugin,
-    settings: spec.settings,
-    files: spec.files,
-  });
-  writeFixture(cwd, files, settings);
-  const args = buildClaudeArgs(spec, settings !== undefined);
-  const timeoutMs = spec.timeoutMs ?? 60000;
+/** Options for {@link runHarnessTest}. */
+export interface RunHarnessTestOptions {
+  /**
+   * Which harness to drive. Defaults to Claude Code. Pass `codexAdapter`
+   * (`vigiles/codex`) to drive real `codex exec` against its Responses mock.
+   * The adapter must support pillar 2 (`capabilities.harnessTesting`) and carry
+   * a `harnessTestDriver`.
+   */
+  readonly adapter?: HarnessAdapter;
+}
 
-  const build = (
-    out: { code: number; stdout: string; stderr?: string },
-    turns: number,
-    modelRequests: readonly ModelRequest[],
-  ): HarnessTestResult => ({
+/* v8 ignore start -- spawns the real agent CLI + filesystem; exercised by the
+   claude-backed + gated codex suites, excluded from the deterministic coverage
+   gate (the parse helpers above carry the testable logic). */
+function makeResult(
+  cwd: string,
+  out: { code: number; stdout: string; stderr?: string },
+  parsed: ParsedRun,
+  turns: number,
+  modelRequests: readonly ModelRequest[],
+): HarnessTestResult {
+  return {
     exitCode: out.code,
     stdout: out.stdout,
     stderr: out.stderr ?? "",
     cwd,
     turns,
-    toolCalls: parseToolCalls(out.stdout),
-    hooks: parseHooks(out.stdout),
-    output: parseOutput(out.stdout),
+    toolCalls: parsed.toolCalls,
+    hooks: parsed.hooks,
+    output: parsed.output,
     modelRequests,
     file: (p: string): string | null => {
       const f = resolve(cwd, p);
@@ -459,26 +480,106 @@ export async function runHarnessTest(
     cleanup: (): void => {
       rmSync(cwd, { recursive: true, force: true });
     },
-  });
+  };
+}
 
-  // Confined path: the mock is co-launched inside the sandbox's netns.
+/**
+ * Run the real agent CLI against a scripted mock model, with the given fixture
+ * and settings (hooks). Deterministic — same script, same result. Adapter-driven
+ * (`opts.adapter`, default Claude Code): the Claude Code path is unchanged
+ * (incl. the safe-by-default sandbox); pass `codexAdapter` to drive real codex.
+ *
+ * Safe by default (Claude Code): an external `plugin` / `pluginDir` brings in
+ * untrusted third-party hooks and is confined under bubblewrap (`spec.sandbox`,
+ * default `"auto"`); if no sandbox is available the run REFUSES rather than
+ * executing unconfined. See `src/sandbox.ts`. The sandbox path is Claude Code
+ * only — requesting confinement for another harness throws.
+ */
+export async function runHarnessTest(
+  spec: HarnessTestSpec,
+  opts: RunHarnessTestOptions = {},
+): Promise<HarnessTestResult> {
+  const adapter = opts.adapter;
+  // Default (no adapter): the unchanged Claude Code driver — keeps the
+  // sandbox/confined path and behaviour byte-for-byte identical.
+  const driver: HarnessTestDriver = adapter
+    ? requireDriver(adapter)
+    : claudeCodeDriver;
+  const isClaudeCode = driver.runtime.name === claudeCodeRuntime.name;
+
+  const decision = decideSandbox({
+    trusted: specTrusted(spec),
+    mode: spec.sandbox ?? "auto",
+    available: sandboxAvailable(),
+  });
+  if (decision.action === "throw") throw new Error(decision.reason);
+  if (decision.action === "sandbox" && !isClaudeCode) {
+    throw new Error(
+      `sandbox not supported for ${driver.runtime.name}: confined execution is Claude Code only. Pass sandbox: false to run ${driver.runtime.name} unconfined (you audited the code, or trust the outer container).`,
+    );
+  }
+
+  const cwd = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
+  const { files, settings } = resolveHarness({
+    plugin: spec.plugin,
+    settings: spec.settings,
+    files: spec.files,
+  });
+  writeFixture(cwd, files, settings);
+  const tools = spec.allowedTools ?? ["Read", "Edit", "Write", "Bash"];
+  const timeoutMs = spec.timeoutMs ?? 60000;
+  const buildArgs = (mockArgs: readonly string[]): readonly string[] =>
+    driver.buildArgs({
+      prompt: spec.prompt ?? "go",
+      cwd,
+      hasSettings: settings !== undefined,
+      tools,
+      transcript: spec.transcript ?? false,
+      pluginDir: spec.pluginDir,
+      mockArgs,
+    });
+
+  // Confined path (Claude Code only): the mock is co-launched in the netns, so
+  // the agent reaches it over the loopback URL the sandbox sets — Claude Code is
+  // env-only (empty mockArgs), so the argv needs no mock-wiring flags.
   if (decision.action === "sandbox") {
     const out = await runSandboxed({
       cwd,
-      claudeArgs: args,
+      claudeArgs: [...buildArgs([])],
       script: spec.model,
       timeoutMs,
     });
-    return build(out, out.requests.length, out.requests);
+    return makeResult(
+      cwd,
+      out,
+      parseClaudeRun(out.stdout),
+      out.requests.length,
+      out.requests,
+    );
   }
 
-  // Direct path: mock runs in this process; claude reaches it over localhost.
-  const mock = await startMock(spec.model);
+  // Direct path: mock runs in this process; the agent reaches it over localhost.
+  // Start the mock first so its URL feeds the driver's mock-wiring args.
+  const mock = await driver.startMock(spec.model);
   try {
-    const out = await spawnClaude(args, cwd, mock.url, timeoutMs);
-    return build(out, mock.count, [...mock.requests]);
+    const args = buildArgs(driver.runtime.wireMock(mock.url).args);
+    const out = await spawnAgent(driver.runtime, args, cwd, mock.url, timeoutMs);
+    return makeResult(cwd, out, driver.parseRun(out.stdout), mock.count, [
+      ...mock.requests,
+    ]);
   } finally {
-    mock.close();
+    await mock.close();
   }
+}
+
+/** Pull the pillar-2 driver off an adapter, asserting it supports testing. */
+function requireDriver(adapter: HarnessAdapter): HarnessTestDriver {
+  assertHarnessTestable(adapter);
+  if (!adapter.harnessTestDriver) {
+    throw new Error(
+      `Adapter "${adapter.name}" declares harnessTesting but carries no harnessTestDriver — it cannot drive runHarnessTest.`,
+    );
+  }
+  return adapter.harnessTestDriver;
 }
 /* v8 ignore stop */

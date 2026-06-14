@@ -12,4 +12,17 @@ export const opencodeRuntime: HarnessRuntime = {
   modelBaseUrlEnv: "OPENAI_BASE_URL",
   modelApiKeyEnv: "OPENAI_API_KEY",
   mockApiKey: "sk-mock-opencode",
+  /** Env-only (OpenAI-compatible base-URL override), like Claude Code. */
+  wireMock(baseUrl: string): {
+    readonly args: readonly string[];
+    readonly env: Record<string, string>;
+  } {
+    return {
+      args: [],
+      env: {
+        [opencodeRuntime.modelBaseUrlEnv]: baseUrl,
+        [opencodeRuntime.modelApiKeyEnv]: opencodeRuntime.mockApiKey,
+      },
+    };
+  },
 };

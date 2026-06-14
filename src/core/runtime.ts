@@ -21,4 +21,17 @@ export interface HarnessRuntime {
   readonly modelApiKeyEnv: string;
   /** A dummy key value the mock ignores — avoids needing real auth. */
   readonly mockApiKey: string;
+  /**
+   * How to point the spawned binary at a mock model served at `baseUrl` — the
+   * args to add to the binary's argv and the env to spawn it with. For Claude
+   * Code this is env-only (`ANTHROPIC_BASE_URL` + a dummy key, no args); for
+   * Codex it is the keyless `-c model_providers.mock.*` flag recipe plus a
+   * dummy-key env. Behind one method so the runner wires either harness the
+   * same way, without knowing which transport axis (env var vs config flags) a
+   * given harness uses.
+   */
+  wireMock(baseUrl: string): {
+    readonly args: readonly string[];
+    readonly env: Record<string, string>;
+  };
 }

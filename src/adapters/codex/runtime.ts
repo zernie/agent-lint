@@ -12,7 +12,11 @@
  *
  * The `HarnessRuntime` port still requires `modelBaseUrlEnv`/`modelApiKeyEnv`
  * (the env-var transport axis), so we keep valid values for conformance — but
- * codex's real wiring is the flag-based recipe below, not those env vars.
+ * codex's real wiring is the flag-based recipe below, not those env vars. The
+ * port's `wireMock(baseUrl)` surfaces that recipe as `{ args, env }` so the
+ * generalized `runHarnessTest` runner drives codex the same way it drives
+ * Claude Code; `codexMockArgs`/`codexMockEnv` remain exported (used by
+ * `wireMock` and by `mock-model.test.ts`).
  */
 import type { HarnessRuntime } from "../../core/runtime.js";
 
@@ -25,6 +29,19 @@ export const codexRuntime: HarnessRuntime = {
   modelBaseUrlEnv: "OPENAI_BASE_URL",
   modelApiKeyEnv: "MOCK_KEY",
   mockApiKey: "dummy-key",
+  /**
+   * Codex reaches the mock through the PROVEN keyless flag recipe (the
+   * `-c model_providers.mock.*` array), NOT a single base-URL env var. So
+   * `wireMock` carries args (the flags) AND env (the dummy key codex reads
+   * `model_providers.mock.env_key` through). The `wireMock` method unifies both
+   * transport axes (CC's env-only, Codex's flags) behind one call.
+   */
+  wireMock(baseUrl: string): {
+    readonly args: readonly string[];
+    readonly env: Record<string, string>;
+  } {
+    return { args: codexMockArgs(baseUrl), env: codexMockEnv() };
+  },
 };
 
 /**
