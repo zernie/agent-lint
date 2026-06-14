@@ -24,13 +24,16 @@ const EDIT = (file: string) => ({
 test("refs-hook nudges (non-blocking) on an unmarked code ref by default", () => {
   const dir = makeTmpDir("refs-hook");
   try {
-    writeFileSync(join(dir, "CLAUDE.md"), "Use the `parseConfig` helper.\n");
+    writeFileSync(
+      join(dir, "CLAUDE.md"),
+      "Enforce `eslint/no-console` here.\n",
+    );
     const r = runHook(REFS_HOOK, EDIT("CLAUDE.md"), { cwd: dir });
     assert.equal(r.blocked, false, "warn must not block");
     assert.equal(r.exitCode, 0);
     const ctx = r.json?.hookSpecificOutput?.additionalContext ?? "";
-    assert.match(ctx, /parseConfig/);
-    assert.match(ctx, /unmarked code reference/);
+    assert.match(ctx, /eslint\/no-console/);
+    assert.match(ctx, /unmarked linter-rule/);
   } finally {
     cleanupTmpDir(dir);
   }
@@ -39,7 +42,10 @@ test("refs-hook nudges (non-blocking) on an unmarked code ref by default", () =>
 test('refs-hook blocks (exit 2) when unmarked-refs is "error"', () => {
   const dir = makeTmpDir("refs-hook");
   try {
-    writeFileSync(join(dir, "CLAUDE.md"), "Use the `parseConfig` helper.\n");
+    writeFileSync(
+      join(dir, "CLAUDE.md"),
+      "Enforce `eslint/no-console` here.\n",
+    );
     writeFileSync(
       join(dir, ".vigilesrc.json"),
       JSON.stringify({ rules: { "unmarked-refs": "error" } }),
@@ -47,7 +53,7 @@ test('refs-hook blocks (exit 2) when unmarked-refs is "error"', () => {
     const r = runHook(REFS_HOOK, EDIT("CLAUDE.md"), { cwd: dir });
     assert.equal(r.blocked, true, "error must block");
     assert.equal(r.exitCode, 2);
-    assert.match(r.stderr, /parseConfig/);
+    assert.match(r.stderr, /eslint\/no-console/);
   } finally {
     cleanupTmpDir(dir);
   }
@@ -56,7 +62,10 @@ test('refs-hook blocks (exit 2) when unmarked-refs is "error"', () => {
 test("refs-hook is silent when the rule is off", () => {
   const dir = makeTmpDir("refs-hook");
   try {
-    writeFileSync(join(dir, "CLAUDE.md"), "Use the `parseConfig` helper.\n");
+    writeFileSync(
+      join(dir, "CLAUDE.md"),
+      "Enforce `eslint/no-console` here.\n",
+    );
     writeFileSync(
       join(dir, ".vigilesrc.json"),
       JSON.stringify({ rules: { "unmarked-refs": false } }),
@@ -74,7 +83,7 @@ test("refs-hook ignores a clean instruction file and non-instruction files", () 
   const dir = makeTmpDir("refs-hook");
   try {
     writeFileSync(join(dir, "CLAUDE.md"), "Run the build before committing.\n");
-    writeFileSync(join(dir, "notes.md"), "Use the `parseConfig` helper.\n");
+    writeFileSync(join(dir, "notes.md"), "Enforce `eslint/no-console` here.\n");
 
     const clean = runHook(REFS_HOOK, EDIT("CLAUDE.md"), { cwd: dir });
     assert.equal(clean.exitCode, 0);

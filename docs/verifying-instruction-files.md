@@ -152,9 +152,10 @@ in the loop**, the moment it edits an instruction file. The flow, from save:
 
 1. **The agent edits** `CLAUDE.md` / `AGENTS.md` / `SKILL.md`.
 2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles refs-hook`) and scans the
-   saved file for **code-shaped references that aren't marks** (a scoped name
-   like `` `eslint/no-console` ``, a `camelCase`/`PascalCase` identifier) and for
-   `vigiles:symbol` marks whose target is missing.
+   saved file for **unmarked linter-rule references** — a slash-scoped name with
+   no file extension, like `` `eslint/no-console` `` — and for `vigiles:symbol`
+   marks whose target is missing. (It's deliberately narrow: bare identifiers like
+   `` `runHook` `` and file paths are **not** flagged — too noisy.)
 3. **It reacts by the `unmarked-refs` severity** (`.vigilesrc.json`):
    - **`"warn"` (default) → a non-blocking nudge.** The hook injects a message
      into the agent's context — _"these references aren't verifiable; express
@@ -171,8 +172,8 @@ in the loop**, the moment it edits an instruction file. The flow, from save:
 (no backticks, pure prose) to become a mark — distinguishing a load-bearing
 reference from ordinary prose is undecidable (see
 [`research/reference-verification-limits.md`](../research/reference-verification-limits.md)).
-The nudge catches the common case (the agent backticked something code-shaped);
-the rest is a probabilistic job for the shipped instructions, not a hook.
+It catches the high-signal, low-noise case (a backticked linter-rule name); bare
+identifiers, paths, and prose are left to the shipped instructions, not the hook.
 
 **Harness note:** the in-loop nudge is a hook, so it works on **Claude Code and
 Codex**. A harness without hooks doesn't get the per-save nudge — it falls back

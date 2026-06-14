@@ -194,7 +194,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
     "src/core/symbols.test.ts": "Symbol extractor test suite (node:test)",
     "src/core/refs.ts":
-      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK code-shaped references in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md",
+      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md",
     "src/core/refs.test.ts":
       "Symbol reference verification test suite (node:test)",
     "src/adapters/claude-code/mock-model.ts":

@@ -1,11 +1,15 @@
 # unmarked-refs
 
 Nudge (or block) the agent when an instruction file (`CLAUDE.md` / `AGENTS.md` /
-`SKILL.md`) contains a **code-shaped reference that isn't a vigiles mark** — so
-`vigiles audit` can't verify it — or a `vigiles:symbol` mark whose target is
-missing. This is the rule behind the **PostToolUse refs-hook**: it's what makes
-the agent express references as marks _in the loop_, the moment it saves an
-instruction file, instead of leaving them as unverifiable prose.
+`SKILL.md`) names a **linter rule that isn't a vigiles mark** — so `vigiles audit`
+can't verify it exists and is enabled — or has a `vigiles:symbol` mark whose
+target is missing. This is the rule behind the **PostToolUse refs-hook**: it's
+what makes the agent express rule references as marks _in the loop_, the moment
+it saves an instruction file, instead of leaving them as unverifiable prose.
+
+It is **deliberately narrow** (high-signal, low-noise): it flags only
+slash-scoped rule names, not every backticked identifier or path — see
+[What it checks](#what-it-checks).
 
 ## Configuration
 
@@ -34,13 +38,20 @@ up and wants the floor enforced locally.
 For the edited instruction file, two things (both via `collectRefIssues` in
 `src/core/refs.ts`):
 
-- **Unmarked code-shaped spans** — a backticked scoped name (`` `eslint/no-console` ``),
-  a `camelCase` / `PascalCase` / `SCREAMING_CASE` identifier, or a `foo(args)`
-  call form. Bare lowercase prose words (`` `name` ``), file paths
-  (`` `src/config.ts` `` — those are `file()` refs), and spans already written as
-  a `vigiles:symbol` mark are **not** flagged.
-- **Broken `vigiles:symbol` marks** — a `` `vigiles:symbol path#name` `` whose
-  file is missing or doesn't define the symbol.
+- **Unmarked linter-rule references** — a backticked **slash-scoped name with no
+  file extension**: `` `eslint/no-console` ``, `` `@typescript-eslint/no-explicit-any` ``,
+  `` `boundaries/dependencies` ``. These are nudged toward `enforce("…")` (typed
+  spec) or `<!-- vigiles:enforce … -->` (markdown) so the audit verifies the rule
+  exists **and is enabled**.
+  - **Not flagged** (deliberately — too noisy, and the judgment is undecidable):
+    bare identifiers (`` `runHook` ``, `` `MAX_RETRIES` `` — usually API prose),
+    file paths (`` `src/config.ts` ``, `` `docs/guide.md` `` — they have
+    extensions), and spans already written as a `vigiles:symbol` mark. **Symbol
+    marking is opt-in** via an explicit `vigiles:symbol` — the hook never nudges
+    you to add one. (Dogfooding the broader "every code-shaped span" heuristic
+    flagged 23 API names in one real `SKILL.md`; this scope flags zero.)
+- **Broken `vigiles:symbol` marks** — a `` `vigiles:symbol path#name` `` you wrote
+  whose file is missing or doesn't define the symbol.
 
 ## Opting out
 
