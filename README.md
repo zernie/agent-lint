@@ -94,7 +94,9 @@ assert(r.blocked); // a red ✗ here means your hook silently lets it through
 
 Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
 (the real agent CLI against a scripted mock model), **`runEval`** (the real model
-A/B with a significance gate). **[Full guide →](docs/harness-testing.md)**
+A/B with a significance gate). **Testing a skill?** `measureTriggerRate` checks
+its description actually **fires** across varied prompts (recall) without
+hijacking unrelated ones (precision). **[Full guide →](docs/harness-testing.md)**
 
 ## Quick start
 
@@ -103,10 +105,12 @@ npx vigiles init   # sets up BOTH pillars: spec + harness test + CI + plugin
 ```
 
 It's interactive in a terminal and non-interactive for agents/CI (or with
-`--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works. Scope
-it with `--pillars=verify|test|both`. Then write harness tests in JS **or** TS
-(`*.harness.{mjs,ts}`) and run `npx vigiles test`. `init` wires CI as a
-`zernie/vigiles@v1` workflow — a composite over the same CLI:
+`--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
+it installs a model-invocable **`test-harness` skill**, so afterward you can just
+tell your agent _"test my skills"_ and it picks the tier and writes the test.
+Scope `init` with `--pillars=verify|test|both`. Or write harness tests yourself in
+JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles test`. `init` wires CI as
+a `zernie/vigiles@v1` workflow — a composite over the same CLI:
 
 ```yaml
 - uses: actions/checkout@v4
