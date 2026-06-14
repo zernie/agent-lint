@@ -452,6 +452,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Run `npm run fmt:check` before committing. Inline code spans in markdown need surrounding spaces to render correctly.",
     ),
 
+    "conventional-commits": guidance(
+      "Commit subjects AND PR titles are Conventional Commits — they drive the release version via `@semantic-release/commit-analyzer` off `main` (`feat` → minor, `fix` → patch, everything else no bump). Allowed types (enforced by the `validate` CI job, amannn/action-semantic-pull-request): feat, fix, docs, chore, refactor, test, perf, ci, build. CRITICAL — signal breaking changes explicitly: a `!` after the type (`feat!:`/`refactor!:`) or a `BREAKING CHANGE:` footer triggers the MAJOR bump. The CI lint only checks the type prefix; it CANNOT tell whether a change is semantically breaking, so the `!` is on you. A change is breaking when it removes/renames/moves a public API: a `package.json` `exports` subpath (e.g. `vigiles/claude-code`), an exported symbol, a CLI command/flag, a config-file key, or a compiled-output contract. When in doubt whether a change is breaking, mark it `!` — under-signalling ships a wrong (too-low) version, which is worse than an extra major. (Pre-1.0 the major stays 0, but the signal must still be correct so the changelog is right and the first 1.0 bump is clean.)",
+    ),
+
     "progressive-adoption": guidance(
       "vigiles must be adoptable incrementally, like TypeScript. Three on-ramps, zero friction: (1) inline mode — add `<!-- vigiles:enforce ... -->` comments to an existing CLAUDE.md, no new files; (2) spec mode with `guidance()` only — `npx vigiles init` creates a .spec.ts, compiles to markdown, zero linter setup; (3) strict mode — `enforce()` rules, CI gating, `--strict` flag. Each level adds value without requiring the next. Never gate basic functionality on advanced setup. README examples should always show the simplest path first.",
     ),
