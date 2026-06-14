@@ -7,6 +7,7 @@ import { claudeCodeAdapter } from "./adapter.js";
 import {
   assertAdapterConformance,
   assertAdapterLoadsHooks,
+  assertHarnessTestable,
   checkAdapterConformance,
 } from "../../adapter-conformance.js";
 import {
@@ -18,13 +19,16 @@ import {
 import type { HarnessAdapter } from "../../core/adapter.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
-test("claudeCodeAdapter bundles all five ports + a detect", () => {
+test("claudeCodeAdapter bundles all five ports + a detect (full capabilities)", () => {
   assert.equal(claudeCodeAdapter.name, "claude-code");
+  // Claude Code is a full-capability adapter — every transport port is present.
+  assert.equal(claudeCodeAdapter.capabilities.harnessTesting, true);
+  assert.equal(claudeCodeAdapter.capabilities.shellHooks, true);
   assert.equal(claudeCodeAdapter.dialect.name, "claude-code");
   assert.equal(claudeCodeAdapter.layout.name, "claude-code");
-  assert.equal(claudeCodeAdapter.runtime.agentBinary, "claude");
-  assert.equal(claudeCodeAdapter.hookProtocol.blockExitCode, 2);
-  assert.equal(claudeCodeAdapter.modelMock.modelEndpoint, "/v1/messages");
+  assert.equal(claudeCodeAdapter.runtime?.agentBinary, "claude");
+  assert.equal(claudeCodeAdapter.hookProtocol?.blockExitCode, 2);
+  assert.equal(claudeCodeAdapter.modelMock?.modelEndpoint, "/v1/messages");
 });
 
 test("claudeCodeAdapter passes the conformance kit", () => {
@@ -45,6 +49,49 @@ test("conformance kit catches a broken adapter", () => {
   assert.equal(r.ok, false);
   assert.ok(r.failures.some((m) => m.includes("name is empty")));
   assert.ok(r.failures.some((m) => m.includes("builtinAgentTools")));
+});
+
+test("conformance ACCEPTS a pillar-1-only adapter (no transport ports)", () => {
+  // A closed, un-mockable harness (Cursor/Devin shape): reference verification
+  // only. It legitimately omits runtime/hookProtocol/modelMock, and the kit must
+  // not demand them — the capability gate, not a fake transport.
+  const pillar1Only: HarnessAdapter = {
+    name: "cursor-ish",
+    capabilities: {
+      referenceVerification: true,
+      harnessTesting: false,
+      shellHooks: false,
+    },
+    dialect: { ...claudeCodeAdapter.dialect, name: "cursor-ish" },
+    layout: { ...claudeCodeAdapter.layout, name: "cursor-ish" },
+    detect: () => 0,
+  };
+  assertAdapterConformance(pillar1Only); // throws on failure → must not throw
+  assert.throws(
+    () => assertHarnessTestable(pillar1Only),
+    /does not support harness testing/,
+  );
+});
+
+test("conformance REJECTS a half-wired adapter (claims harnessTesting, no runtime)", () => {
+  const halfWired: HarnessAdapter = {
+    name: "claude-code",
+    capabilities: {
+      referenceVerification: true,
+      harnessTesting: true, // claims it…
+      shellHooks: false,
+    },
+    dialect: claudeCodeAdapter.dialect,
+    layout: claudeCodeAdapter.layout,
+    // …but no runtime/modelMock, and a stray hookProtocol it disclaims.
+    hookProtocol: claudeCodeAdapter.hookProtocol,
+    detect: () => 0,
+  };
+  const r = checkAdapterConformance(halfWired);
+  assert.equal(r.ok, false);
+  assert.ok(r.failures.some((m) => m.includes("runtime is missing")));
+  assert.ok(r.failures.some((m) => m.includes("modelMock is missing")));
+  assert.ok(r.failures.some((m) => m.includes("shellHooks is false")));
 });
 
 test("detect: specificity score — empty 0, CLAUDE.md 1, manifest 3", () => {

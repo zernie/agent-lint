@@ -29,7 +29,17 @@ export function checkAdapterConformance(
     if (!cond) failures.push(msg);
   };
 
+  const caps = adapter.capabilities;
+  // Widen to boolean so a malformed (non-TS) adapter that set this false is still
+  // caught at runtime — the literal `true` type would make a direct check redundant.
+  const refVerification: boolean = caps.referenceVerification;
   need(adapter.name.length > 0, "name is empty");
+  need(
+    refVerification,
+    "capabilities.referenceVerification must be true (every adapter does pillar 1)",
+  );
+
+  // --- Pillar 1 (always required): dialect + layout ---
   need(
     adapter.dialect.builtinAgentTools.length > 0,
     "dialect has no builtinAgentTools",
@@ -44,30 +54,72 @@ export function checkAdapterConformance(
   );
   need(adapter.layout.manifestPath.length > 0, "layout.manifestPath is empty");
   need(adapter.layout.surfaceDirs.length > 0, "layout has no surfaceDirs");
-  need(adapter.runtime.agentBinary.length > 0, "runtime.agentBinary is empty");
-  need(
-    adapter.runtime.modelBaseUrlEnv.length > 0,
-    "runtime.modelBaseUrlEnv is empty",
-  );
-  need(
-    Number.isInteger(adapter.hookProtocol.blockExitCode),
-    "hookProtocol.blockExitCode is not an integer",
-  );
-  need(
-    adapter.modelMock.modelEndpoint.length > 0,
-    "modelMock.modelEndpoint is empty",
-  );
   need(typeof adapter.detect === "function", "detect is not a function");
 
-  // Cross-port invariants — the kind of mismatch a copy-paste authoring slip
-  // produces, that no single-port check would catch.
-  for (const [port, name] of [
+  // --- Pillar 2 transport ports: required ONLY for the capabilities the
+  // adapter declares. A pillar-1-only adapter (harnessTesting:false) may omit
+  // runtime/modelMock; a code-module-hook adapter (shellHooks:false) may omit
+  // hookProtocol — and conformance must NOT demand a fake one. The flip side:
+  // if it CLAIMS the capability, the port must be there and populated.
+  const portNames: [string, string][] = [
     ["dialect", adapter.dialect.name],
     ["layout", adapter.layout.name],
-    ["runtime", adapter.runtime.name],
-    ["hookProtocol", adapter.hookProtocol.name],
-    ["modelMock", adapter.modelMock.name],
-  ] as const) {
+  ];
+  if (caps.harnessTesting) {
+    need(
+      adapter.runtime !== undefined,
+      "capabilities.harnessTesting is true but runtime is missing",
+    );
+    need(
+      adapter.modelMock !== undefined,
+      "capabilities.harnessTesting is true but modelMock is missing",
+    );
+    if (adapter.runtime) {
+      need(
+        adapter.runtime.agentBinary.length > 0,
+        "runtime.agentBinary is empty",
+      );
+      need(
+        adapter.runtime.modelBaseUrlEnv.length > 0,
+        "runtime.modelBaseUrlEnv is empty",
+      );
+      portNames.push(["runtime", adapter.runtime.name]);
+    }
+    if (adapter.modelMock) {
+      need(
+        adapter.modelMock.modelEndpoint.length > 0,
+        "modelMock.modelEndpoint is empty",
+      );
+      portNames.push(["modelMock", adapter.modelMock.name]);
+    }
+  } else {
+    need(
+      adapter.runtime === undefined && adapter.modelMock === undefined,
+      "capabilities.harnessTesting is false — omit runtime/modelMock (a pillar-1-only adapter must not ship a half-wired transport)",
+    );
+  }
+  if (caps.shellHooks) {
+    need(
+      adapter.hookProtocol !== undefined,
+      "capabilities.shellHooks is true but hookProtocol is missing",
+    );
+    if (adapter.hookProtocol) {
+      need(
+        Number.isInteger(adapter.hookProtocol.blockExitCode),
+        "hookProtocol.blockExitCode is not an integer",
+      );
+      portNames.push(["hookProtocol", adapter.hookProtocol.name]);
+    }
+  } else {
+    need(
+      adapter.hookProtocol === undefined,
+      "capabilities.shellHooks is false — omit hookProtocol (hooks are code modules, not shell processes)",
+    );
+  }
+
+  // Cross-port invariants — the kind of mismatch a copy-paste authoring slip
+  // produces, that no single-port check would catch. Only the present ports.
+  for (const [port, name] of portNames) {
     need(
       name === adapter.name,
       `${port}.name "${name}" != adapter.name "${adapter.name}"`,
@@ -118,6 +170,29 @@ export function assertAdapterConformance(adapter: HarnessAdapter): void {
       `Adapter "${adapter.name}" failed conformance:\n  - ${r.failures.join("\n  - ")}`,
     );
   }
+}
+
+/**
+ * Guard for the pillar-2 entry points (runHarnessTest/runEval): a pillar-1-only
+ * adapter (Cursor, Devin, Amp, Amazon Q) has no mockable transport, so driving
+ * the deterministic/eval tiers against it would hang or spawn nothing. Calling
+ * this up front turns that into a clear, immediate error. Returns the narrowed
+ * runtime+modelMock so the caller can use them without re-checking for undefined.
+ */
+export function assertHarnessTestable(adapter: HarnessAdapter): {
+  runtime: NonNullable<HarnessAdapter["runtime"]>;
+  modelMock: NonNullable<HarnessAdapter["modelMock"]>;
+} {
+  if (
+    !adapter.capabilities.harnessTesting ||
+    !adapter.runtime ||
+    !adapter.modelMock
+  ) {
+    throw new Error(
+      `Adapter "${adapter.name}" does not support harness testing (pillar 2): it is reference-verification-only (no mockable runtime). Use it for compile/scan/audit, not runHarnessTest/runEval.`,
+    );
+  }
+  return { runtime: adapter.runtime, modelMock: adapter.modelMock };
 }
 
 /**

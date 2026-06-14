@@ -21,6 +21,13 @@ import { codexModelMock } from "./model-mock.js";
 
 export const codexAdapter: HarnessAdapter = {
   name: "codex",
+  // Full convergence with Claude Code: mockable (Responses SSE) + shell hooks
+  // with veto (permissionDecision/exit 2). Both pillars, all tiers.
+  capabilities: {
+    referenceVerification: true,
+    harnessTesting: true,
+    shellHooks: true,
+  },
   dialect: codexDialect,
   layout: codexLayout,
   runtime: codexRuntime,

@@ -16,6 +16,13 @@ import { claudeCodeModelMock } from "./model-mock.js";
 
 export const claudeCodeAdapter: HarnessAdapter = {
   name: "claude-code",
+  // The reference harness: every tier. Mockable transport (Anthropic SSE) and
+  // shell hooks (exit 2 / decision JSON) — both pillars, all tiers.
+  capabilities: {
+    referenceVerification: true,
+    harnessTesting: true,
+    shellHooks: true,
+  },
   dialect: claudeCodeDialect,
   layout: claudeCodeLayout,
   runtime: claudeCodeRuntime,
