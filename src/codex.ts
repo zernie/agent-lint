@@ -15,4 +15,5 @@ export * from "./adapters/codex/runtime.js";
 export * from "./adapters/codex/hook-protocol.js";
 export * from "./adapters/codex/model-mock.js";
 export * from "./adapters/codex/mock-model.js";
+export * from "./adapters/codex/driver.js";
 export * from "./adapters/codex/adapter.js";

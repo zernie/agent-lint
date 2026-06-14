@@ -105,10 +105,14 @@ first.
 
 ² Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
 `.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Pillar
-2 is full and proven** — `@openai/codex` installs with no API key (here and in CI),
-and `src/adapters/codex/mock-model.ts` serves the OpenAI **Responses** SSE that
-real `codex exec` completes a turn against (request shape + event sequence captured
-from live codex traffic, not guessed). Pillar 1 is partial per ¹.
+2 is full and usable through the public API** — `runHarnessTest(spec, { adapter:
+codexAdapter })` drives real `codex exec` against the OpenAI **Responses** mock
+(`src/adapters/codex/mock-model.ts`), keylessly. The runner is adapter-driven: a
+per-harness `HarnessTestDriver` (argv + mock + parse) behind the `wireMock` runtime
+seam, with Claude Code as the default and its behaviour byte-identical. A gated
+`harness-test.test.ts` runs the real-codex turn (request shape + SSE captured from
+live traffic, not guessed). Pillar 1 is partial per ¹; `runEval` follows the same
+driver seam (the documented follow-on).
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't
