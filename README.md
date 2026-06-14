@@ -99,12 +99,14 @@ A/B with a significance gate). **[Full guide →](docs/harness-testing.md)**
 ## Quick start
 
 ```bash
-npx vigiles init   # auto-detects the project, scaffolds a spec, wires CI + hooks
+npx vigiles init   # sets up BOTH pillars: spec + harness test + CI + plugin
 ```
 
-Write harness tests in JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles
-test`. Drop vigiles into CI with the GitHub Action — a composite over the same
-CLI, so it runs the artifact you'd run locally:
+It's interactive in a terminal and non-interactive for agents/CI (or with
+`--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works. Scope
+it with `--pillars=verify|test|both`. Then write harness tests in JS **or** TS
+(`*.harness.{mjs,ts}`) and run `npx vigiles test`. `init` wires CI as a
+`zernie/vigiles@v1` workflow — a composite over the same CLI:
 
 ```yaml
 - uses: actions/checkout@v4

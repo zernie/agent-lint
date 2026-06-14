@@ -22,6 +22,13 @@ import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import { validate, loadConfig } from "./core/validate.js";
 import { applyConfigFlags } from "./cli-flags.js";
+import {
+  parseSetupArgs,
+  shouldPrompt,
+  resolvePlan,
+  type SetupPlan,
+  type SetupAnswers,
+} from "./setup-plan.js";
 import type {
   VigilesConfig,
   CoverageThresholds,
@@ -1344,35 +1351,147 @@ export default claude({${targetLine}
 // Setup wizard
 // ---------------------------------------------------------------------------
 
-const VIGILES_CI_STEP = `      - name: Verify specs
-        run: npx vigiles audit && npx vigiles generate-types --check`;
+/** Full GitHub Actions workflow that wires the production `zernie/vigiles@v1`
+ * Action (Pillar 1) and, when Pillar 2 is set up, a deterministic harness job. */
+function vigilesWorkflow(plan: SetupPlan): string {
+  const harness = plan.test
+    ? `
+  harness:
+    # Pillar 2 — run your *.harness.{mjs,ts} tests against the real agent CLI and
+    # a scripted mock model (deterministic, no API key). Drop this job if you only
+    # author runHook unit tests, or keep it for the deterministic tier.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm i -g @anthropic-ai/claude-code # mock tier needs the binary, no API key
+      - run: npx vigiles test
+`
+    : "";
+  return `name: vigiles
+on:
+  pull_request:
+  push:
+    branches: [main]
 
-function addGhaStep(): boolean {
-  // Find existing GHA workflow
-  const ciPaths = [
-    ".github/workflows/ci.yml",
-    ".github/workflows/ci.yaml",
-    ".github/workflows/main.yml",
-    ".github/workflows/main.yaml",
-    ".github/workflows/test.yml",
-    ".github/workflows/test.yaml",
-  ];
-  for (const ciPath of ciPaths) {
-    const fullPath = resolve(process.cwd(), ciPath);
-    if (existsSync(fullPath)) {
-      const content = readFileSync(fullPath, "utf-8");
-      if (content.includes("vigiles")) {
-        console.log(`✓ ${ciPath} already has vigiles steps`);
-        return true;
-      }
-      // Append step at end of file (safe for all YAML formats)
-      const trimmed = content.trimEnd();
-      writeFileSync(fullPath, trimmed + "\n\n" + VIGILES_CI_STEP + "\n");
-      console.log(`✓ Added vigiles check step to ${ciPath}`);
-      return true;
-    }
+permissions:
+  contents: read
+  pull-requests: write # for the sticky PR comment
+
+jobs:
+  verify:
+    # Pillar 1 — verify the references in your instruction files (composite Action
+    # over the published CLI). Posts a sticky PR comment + a \`valid\` output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1
+${harness}`;
+}
+
+/** Create `.github/workflows/vigiles.yml` (or note it already exists). */
+function wireGha(plan: SetupPlan): void {
+  const dir = resolve(process.cwd(), ".github", "workflows");
+  const path = resolve(dir, "vigiles.yml");
+  if (existsSync(path)) {
+    console.log("✓ .github/workflows/vigiles.yml already exists");
+    return;
   }
-  return false;
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(path, vigilesWorkflow(plan));
+  console.log(
+    "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
+  );
+}
+
+const STARTER_HARNESS = `/**
+ * Starter harness test (Pillar 2) — scaffolded by \`vigiles init\`.
+ * Proves a hook actually FIRES, deterministically and with no API key.
+ *
+ *   npm i -D vigiles          # the testing API this imports
+ *   npx vigiles test          # or: node vigiles.harness.mjs
+ *
+ * Guide: https://github.com/zernie/vigiles/blob/main/docs/harness-testing.md
+ */
+import { runHook } from "vigiles/testing";
+import assert from "node:assert/strict";
+
+// EXAMPLE — replace with one of YOUR hooks. This PreToolUse Bash guard blocks a
+// destructive command; runHook pipes it a fake event and checks the decision.
+const guard =
+  \`CMD=$(cat | jq -r '.tool_input.command // empty'); \` +
+  \`case "$CMD" in *"rm -rf /"*) echo blocked >&2; exit 2 ;; esac; exit 0\`;
+
+const blocked = runHook(guard, {
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "rm -rf / --no-preserve-root" },
+});
+assert.ok(blocked.blocked, "guard should block \\\`rm -rf /\\\`");
+
+const allowed = runHook(guard, {
+  hook_event_name: "PreToolUse",
+  tool_name: "Bash",
+  tool_input: { command: "ls -la" },
+});
+assert.ok(!allowed.blocked, "guard should allow a safe command");
+
+console.log("\\u2713 hook blocks rm -rf / and allows safe commands");
+`;
+
+/** Pillar 2 — scaffold a starter harness test the user adapts to their hooks. */
+function scaffoldPillar2(): void {
+  const path = resolve(process.cwd(), "vigiles.harness.mjs");
+  if (existsSync(path)) {
+    console.log("✓ vigiles.harness.mjs already exists");
+    return;
+  }
+  writeFileSync(path, STARTER_HARNESS);
+  console.log(
+    "✓ Scaffolded vigiles.harness.mjs — Pillar 2 starter (npm i -D vigiles && npx vigiles test)",
+  );
+}
+
+/** Interactive prompts (TTY only): which pillars, CI, plugin. */
+async function promptSetup(): Promise<SetupAnswers> {
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const ask = (q: string, def: string): Promise<string> =>
+    new Promise((res) => {
+      rl.question(q, (a) => {
+        res(a.trim() || def);
+      });
+    });
+  const isYes = (s: string): boolean => /^y(es)?$/i.test(s);
+  try {
+    const pillars = (
+      await ask("Set up which pillars? [both/verify/test] (both): ", "both")
+    ).toLowerCase();
+    const gha = isYes(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
+    const plugin = isYes(
+      await ask(
+        "Install the Claude Code plugin (hooks + skills)? [Y/n]: ",
+        "y",
+      ),
+    );
+    return {
+      verify: pillars !== "test",
+      test: pillars !== "verify",
+      gha,
+      plugin,
+    };
+  } finally {
+    rl.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1475,47 +1594,19 @@ function detectProject(): DetectedProject {
   };
 }
 
-async function setup(args: string[]): Promise<void> {
-  const targetFlag = args.find((a) => a.startsWith("--target="));
-  const strict = args.includes("--strict");
-  const noGha = args.includes("--no-gha");
-
-  console.log(`vigiles setup${strict ? " (strict mode)" : ""}\n`);
-
-  // Step 1: Detect project
-  const detected = detectProject();
-
-  if (detected.agents.length > 0) {
-    console.log(`Detected: ${detected.agents.join(", ")}`);
-  }
-  if (detected.otherConfigs.length > 0) {
-    console.log(`Other agent configs: ${detected.otherConfigs.join(", ")}`);
-  }
-  if (detected.syncTools.length > 0) {
-    console.log(`Sync tools: ${detected.syncTools.join(", ")}`);
-  }
-  for (const f of detected.instructionFiles) {
-    if (f.isSymlink) {
-      console.log(`Note: ${f.path} is a symlink`);
-    }
-  }
-  if (
-    detected.agents.length > 0 ||
-    detected.otherConfigs.length > 0 ||
-    detected.syncTools.length > 0
-  ) {
-    console.log("");
-  }
-
-  // Step 2: Determine targets
+/** Pillar 1 — specs + types + schema + compile. Returns the spec targets
+ * created/found (empty when every existing file needs migration instead). */
+async function setupPillar1(
+  detected: DetectedProject,
+  targetValue: string | undefined,
+): Promise<string[]> {
+  // Determine targets
   let targets: string[];
-  if (targetFlag) {
-    targets = [targetFlag.split("=")[1]];
+  if (targetValue) {
+    targets = [targetValue];
   } else {
-    // Auto-detect: create specs for instruction files that need them
     const needsSpec = detected.instructionFiles.filter((f) => !f.hasSpec);
     if (needsSpec.length > 0) {
-      // Existing files without specs — suggest migration
       for (const f of needsSpec) {
         console.log(
           `Found ${f.path} without a spec. Migrate with the migrate-to-spec skill`,
@@ -1529,26 +1620,21 @@ async function setup(args: string[]): Promise<void> {
         !hasAnySpec &&
         needsSpec.length === detected.instructionFiles.length
       ) {
-        // ALL existing files need migration — don't create new ones
-        console.log("Install the plugin to use the migration skill:");
-        console.log("  npx skills add zernie/vigiles");
-        return;
+        // ALL existing files need migration — don't create new specs.
+        console.log("Use the migration skill: npx skills add zernie/vigiles\n");
+        return [];
       }
     }
-
-    // Default: CLAUDE.md, plus AGENTS.md if Codex detected
     targets = ["CLAUDE.md"];
     const hasAgentsMd = detected.instructionFiles.some(
       (f) => f.path === "AGENTS.md",
     );
     const hasCodex =
       detected.agents.includes("Codex / GitHub Copilot") || hasAgentsMd;
-    if (hasCodex && !hasAgentsMd) {
-      targets.push("AGENTS.md");
-    }
+    if (hasCodex && !hasAgentsMd) targets.push("AGENTS.md");
   }
 
-  // Step 3: Create specs
+  // Create specs
   for (const target of targets) {
     const specPath = `${target}.spec.ts`;
     if (existsSync(resolve(process.cwd(), specPath))) {
@@ -1562,125 +1648,153 @@ async function setup(args: string[]): Promise<void> {
     }
   }
 
-  // Step 4: Generate types
+  // Generate types + schema
   console.log("\nScanning linters and project files...");
   const typesResult = generateTypes({ basePath: process.cwd() });
-  const outPath = ".vigiles/generated.d.ts";
   const outDir = resolve(process.cwd(), ".vigiles");
-  if (!existsSync(outDir)) {
-    mkdirSync(outDir, { recursive: true });
-  }
-  writeFileSync(resolve(process.cwd(), outPath), typesResult.dts);
+  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+  writeFileSync(
+    resolve(process.cwd(), ".vigiles/generated.d.ts"),
+    typesResult.dts,
+  );
   for (const l of typesResult.linters) {
     console.log(`  ${l.linter}: ${String(l.rules.length)} rules`);
   }
   if (typesResult.scripts.length > 0) {
     console.log(`  npm scripts: ${String(typesResult.scripts.length)}`);
   }
-  console.log(`✓ Generated ${outPath}`);
+  console.log("✓ Generated .vigiles/generated.d.ts");
 
-  // Also emit a JSON Schema so `vigiles:` markdown frontmatter (Level 1)
-  // gets rule-name autocomplete + typo squiggles from the editor's YAML LSP.
   const schemaResult = generateSchema({
     basePath: process.cwd(),
     linters: loadConfig().linters,
   });
-  const schemaPath = ".vigiles/schema.json";
-  writeFileSync(resolve(process.cwd(), schemaPath), schemaResult.json);
-  console.log(
-    `✓ Generated ${schemaPath} (point frontmatter at it with \`# yaml-language-server: $schema=./${schemaPath}\`)`,
+  writeFileSync(
+    resolve(process.cwd(), ".vigiles/schema.json"),
+    schemaResult.json,
   );
+  console.log("✓ Generated .vigiles/schema.json (YAML-LSP frontmatter schema)");
 
-  // Step 5: Compile specs
+  // Compile specs
   console.log("\nCompiling specs...");
   const specs = findSpecs();
-  if (specs.length > 0) {
-    await compile(specs, loadConfig());
+  if (specs.length > 0) await compile(specs, loadConfig());
+
+  return targets;
+}
+
+/** Install the Claude Code plugin (hooks + skills). Returns whether the
+ * fallback wrote `.claude/settings.json` (for the commit hint). */
+function installPlugin(): boolean {
+  try {
+    const { execSync: exec } =
+      require("node:child_process") as typeof import("node:child_process");
+    exec("npx skills add zernie/vigiles", {
+      cwd: process.cwd(),
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 30000,
+    });
+    console.log("✓ Installed vigiles plugin (hooks + skills) via skills CLI");
+    return false;
+  } catch {
+    // skills CLI not available — fall back to direct hook installation.
   }
 
-  // Step 6: Add CI step
-  console.log("");
-  const addedGha = noGha ? false : addGhaStep();
-  if (!addedGha) {
-    console.log("  No CI workflow found. Add this step to your CI:\n");
-    console.log("    npx vigiles audit && npx vigiles generate-types --check");
-  }
+  const settingsDir = resolve(process.cwd(), ".claude");
+  const settingsPath = resolve(settingsDir, "settings.json");
+  if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
 
-  // Step 7: Install Claude Code plugin (hooks + skills)
-  const shouldInstallPlugin =
-    detected.hasClaude || targets.includes("CLAUDE.md");
-  if (shouldInstallPlugin) {
-    let pluginInstalled = false;
-
-    // Try installing the full plugin via skills CLI (gives hooks + skills)
+  let settings: Record<string, unknown> = {};
+  if (existsSync(settingsPath)) {
     try {
-      const { execSync: exec } =
-        require("node:child_process") as typeof import("node:child_process");
-      exec("npx skills add zernie/vigiles", {
-        cwd: process.cwd(),
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: 30000,
-      });
-      pluginInstalled = true;
-      console.log("✓ Installed vigiles plugin (hooks + skills) via skills CLI");
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
     } catch {
-      // skills CLI not available — fall back to direct hook installation
-    }
-
-    if (!pluginInstalled) {
-      // Fall back: write hooks directly to .claude/settings.json
-      // (gives auto-compile + block edits, but no skills)
-      const settingsDir = resolve(process.cwd(), ".claude");
-      const settingsPath = resolve(settingsDir, "settings.json");
-      if (!existsSync(settingsDir)) {
-        mkdirSync(settingsDir, { recursive: true });
-      }
-
-      let settings: Record<string, unknown> = {};
-      if (existsSync(settingsPath)) {
-        try {
-          settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<
-            string,
-            unknown
-          >;
-        } catch {
-          // Ignore malformed settings
-        }
-      }
-
-      if (!settings["hooks"]) {
-        settings["hooks"] = {};
-      }
-      const hooks = settings["hooks"] as Record<string, unknown>;
-
-      const preCmd = `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$FILE" in *.md) [ -f "$FILE" ] && head -1 "$FILE" | grep -q 'vigiles:sha256:' && { SPEC=$(head -1 "$FILE" | sed -n 's/.*compiled from \\(.*\\) -->/\\1/p'); echo "BLOCKED: Edit $SPEC instead." >&2; exit 2; } ;; esac; exit 0`;
-      const postCmd = `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$(basename "$FILE")" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case "$FILE" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac`;
-
-      // Append to existing arrays (don't duplicate if already present)
-      const existingStr = JSON.stringify(settings);
-      if (!existingStr.includes("vigiles:sha256")) {
-        const pre = (hooks["PreToolUse"] ?? []) as unknown[];
-        pre.push({ matcher: "Edit|Write", command: preCmd });
-        hooks["PreToolUse"] = pre;
-      }
-      if (!existingStr.includes("vigiles compile")) {
-        const post = (hooks["PostToolUse"] ?? []) as unknown[];
-        post.push({ matcher: "Edit|Write", command: postCmd });
-        hooks["PostToolUse"] = post;
-      }
-
-      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-      console.log("✓ Installed hooks in .claude/settings.json");
-      console.log(
-        "  (For skills like edit-spec and migrate-to-spec, also run: npx skills add zernie/vigiles)",
-      );
+      // Ignore malformed settings.
     }
   }
+  if (!settings["hooks"]) settings["hooks"] = {};
+  const hooks = settings["hooks"] as Record<string, unknown>;
 
-  // Step 8: Agent-specific guidance
-  const specPathsList = targets.map((t) => `${t}.spec.ts`);
-  const specPaths = specPathsList.join(", ");
+  const preCmd = `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$FILE" in *.md) [ -f "$FILE" ] && head -1 "$FILE" | grep -q 'vigiles:sha256:' && { SPEC=$(head -1 "$FILE" | sed -n 's/.*compiled from \\(.*\\) -->/\\1/p'); echo "BLOCKED: Edit $SPEC instead." >&2; exit 2; } ;; esac; exit 0`;
+  const postCmd = `FILE=$(cat | jq -r '.tool_input.file_path // empty') && case "$(basename "$FILE")" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case "$FILE" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac`;
 
+  const existingStr = JSON.stringify(settings);
+  if (!existingStr.includes("vigiles:sha256")) {
+    const pre = (hooks["PreToolUse"] ?? []) as unknown[];
+    pre.push({ matcher: "Edit|Write", command: preCmd });
+    hooks["PreToolUse"] = pre;
+  }
+  if (!existingStr.includes("vigiles compile")) {
+    const post = (hooks["PostToolUse"] ?? []) as unknown[];
+    post.push({ matcher: "Edit|Write", command: postCmd });
+    hooks["PostToolUse"] = post;
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  console.log("✓ Installed hooks in .claude/settings.json");
+  console.log(
+    "  (For skills like edit-spec and migrate-to-spec, also run: npx skills add zernie/vigiles)",
+  );
+  return true;
+}
+
+async function setup(args: string[]): Promise<void> {
+  const parsed = parseSetupArgs(args);
+  const strict = parsed.strict;
+
+  // Plan: defaults → flags → interactive prompts (only a human at a TTY).
+  let plan = resolvePlan(parsed);
+  if (shouldPrompt(parsed, process.stdin.isTTY ?? false)) {
+    plan = resolvePlan(parsed, await promptSetup());
+  }
+
+  const pillars = [plan.verify && "verify", plan.test && "test"]
+    .filter(Boolean)
+    .join(" + ");
+  console.log(
+    `vigiles setup${strict ? " (strict)" : ""} — pillars: ${pillars}\n`,
+  );
+
+  // Detect project.
+  const detected = detectProject();
+  if (detected.agents.length > 0) {
+    console.log(`Detected: ${detected.agents.join(", ")}`);
+  }
+  if (detected.otherConfigs.length > 0) {
+    console.log(`Other agent configs: ${detected.otherConfigs.join(", ")}`);
+  }
+  if (detected.syncTools.length > 0) {
+    console.log(`Sync tools: ${detected.syncTools.join(", ")}`);
+  }
+  for (const f of detected.instructionFiles) {
+    if (f.isSymlink) console.log(`Note: ${f.path} is a symlink`);
+  }
+
+  // Pillar 1 — verify instruction files.
+  let targets: string[] = [];
+  if (plan.verify) {
+    console.log("");
+    targets = await setupPillar1(detected, parsed.target);
+  }
+
+  // Pillar 2 — test the harness.
+  if (plan.test) {
+    console.log("");
+    scaffoldPillar2();
+  }
+
+  // CI — the production Action (+ a harness job when Pillar 2 is on).
+  if (plan.gha) {
+    console.log("");
+    wireGha(plan);
+  }
+
+  // Claude Code plugin (hooks + skills).
+  const wroteSettings = plan.plugin ? installPlugin() : false;
+
+  // Agent-specific guidance.
   if (targets.includes("AGENTS.md")) {
     console.log(
       "\n  Codex / Copilot reads AGENTS.md directly — no hooks needed.",
@@ -1689,7 +1803,6 @@ async function setup(args: string[]): Promise<void> {
       "  Run `npx vigiles compile` after spec edits. CI enforces freshness.",
     );
   }
-
   if (detected.otherConfigs.length > 0 && detected.syncTools.length === 0) {
     console.log(
       "\n  Non-markdown agent configs detected. Use a sync tool to convert:",
@@ -1697,19 +1810,14 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npm install -D rule-porter");
   }
 
-  // Step 8b: Write config if strict mode
+  // Strict config.
   if (strict) {
     const configPath = resolve(process.cwd(), ".vigilesrc.json");
     if (!existsSync(configPath)) {
       writeFileSync(
         configPath,
         JSON.stringify(
-          {
-            rules: {
-              "require-spec": "error",
-              "require-skill-spec": "error",
-            },
-          },
+          { rules: { "require-spec": "error", "require-skill-spec": "error" } },
           null,
           2,
         ) + "\n",
@@ -1718,30 +1826,40 @@ async function setup(args: string[]): Promise<void> {
     }
   }
 
-  // Step 9: Summary
-  console.log("\n---");
-  console.log("Setup complete.\n");
-  console.log(`  1. Edit ${specPaths} — add your project's conventions`);
-  console.log(
-    "  2. Run `/strengthen` in Claude Code to upgrade guidance → enforce",
-  );
-  if (!strict) {
-    console.log(
-      "  3. When ready, enforce specs in CI: npx vigiles setup --strict",
+  // Summary.
+  const specPathsList = targets.map((t) => `${t}.spec.ts`);
+  console.log("\n---\nSetup complete.\n");
+  const nextSteps: string[] = [];
+  if (specPathsList.length > 0) {
+    nextSteps.push(
+      `Edit ${specPathsList.join(", ")} — add your conventions, then \`/strengthen\``,
     );
   }
-  console.log("\n  Commit:");
+  if (plan.test) {
+    nextSteps.push(
+      "Edit vigiles.harness.mjs to test a real hook, then `npx vigiles test`",
+    );
+  }
+  if (!strict) {
+    nextSteps.push("When ready, enforce in CI: npx vigiles init --strict");
+  }
+  nextSteps.forEach((s, i) => {
+    console.log(`  ${String(i + 1)}. ${s}`);
+  });
   const files = [
     ...targets,
     ...specPathsList,
-    ".vigiles/generated.d.ts",
-    ".vigiles/schema.json",
-    ...(shouldInstallPlugin ? [".claude/settings.json"] : []),
+    ...(plan.verify ? [".vigiles/generated.d.ts", ".vigiles/schema.json"] : []),
+    ...(plan.test ? ["vigiles.harness.mjs"] : []),
+    ...(plan.gha ? [".github/workflows/vigiles.yml"] : []),
+    ...(wroteSettings ? [".claude/settings.json"] : []),
     ...(strict ? [".vigilesrc.json"] : []),
   ];
-  console.log(
-    `    git add ${files.join(" ")} && git commit -m "Add vigiles spec"`,
-  );
+  if (files.length > 0) {
+    console.log(
+      `\n  Commit:\n    git add ${files.join(" ")} && git commit -m "Add vigiles"`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
