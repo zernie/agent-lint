@@ -563,7 +563,13 @@ export async function runHarnessTest(
   const mock = await driver.startMock(spec.model);
   try {
     const args = buildArgs(driver.runtime.wireMock(mock.url).args);
-    const out = await spawnAgent(driver.runtime, args, cwd, mock.url, timeoutMs);
+    const out = await spawnAgent(
+      driver.runtime,
+      args,
+      cwd,
+      mock.url,
+      timeoutMs,
+    );
     return makeResult(cwd, out, driver.parseRun(out.stdout), mock.count, [
       ...mock.requests,
     ]);
