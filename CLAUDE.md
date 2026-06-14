@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:393652e3c448ec6e compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:f63763a8b438e6f5 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -316,6 +316,10 @@ The inward dependency rule (core ⊄ adapter) is enforced by `eslint-plugin-boun
 ### Ts Essentials
 
 **Guidance only** — Prefer branded types over plain strings for semantic values (hashes, file paths, rule IDs). Use discriminated unions over boolean flags that gate optional fields. Add exhaustive `default: assertNever(x)` to every switch on a union type. These patterns convert runtime bugs into compile-time errors.
+
+### Prod Grade Gha Cli
+
+**Guidance only** — The CLI and the GitHub Action are production-grade, first-class surfaces — for most users CI is how vigiles actually runs — and must be kept that way, not treated as afterthoughts. The CLI is the single source of truth: every Action input maps to a real CLI flag (no config-file-only knobs the Action can't reach), commands emit GitHub annotations under `GITHUB_ACTIONS`, and exit codes are stable and documented (0 clean / 1 warn / 2 error). The Action wraps that CLI and must actually work as a published `uses: zernie/vigiles@v1` reference — a composite action over the published `npx vigiles` CLI, so it reuses the same tested artifact rather than a `node20` entry pointing at an uncommitted `dist/`. It must declare its `outputs:` and set them via `$GITHUB_OUTPUT` (never the deprecated `::set-output`), pin to a stable floating major-version tag (`v1`) maintained by the release pipeline, and ship a full copy-paste workflow in the docs (runs-on, checkout, setup-node, `permissions:`, every input + the `valid` output, and `@v1`-vs-`@main`-vs-pinned-SHA versioning guidance). Both surfaces are dogfooded in this repo's own CI (the Action via `uses: ./`) and covered by tests, so a regression in the shipped entry points is caught here. See `docs/cli.md`.
 
 ### No Orphan Docs
 
