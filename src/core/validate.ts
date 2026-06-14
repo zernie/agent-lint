@@ -5,6 +5,7 @@ import { cosmiconfigSync } from "cosmiconfig";
 
 import { hasInlineRules } from "./inline.js";
 import { hasFrontmatterRules } from "./frontmatter.js";
+import { defaultDialect } from "./dialect.js";
 
 import type {
   ParsedRule,
@@ -54,7 +55,10 @@ const VALID_MARKERS: readonly MarkerType[] = ["headings", "checkboxes"];
 // Default config
 // ---------------------------------------------------------------------------
 
-const DEFAULT_FILES: string[] = ["CLAUDE.md"];
+// The default instruction file to validate. Sourced from the default harness
+// dialect (Claude Code) rather than a duplicated literal, so the instruction-
+// filename truth lives in exactly one place (src/core/dialect.ts).
+const DEFAULT_FILES: string[] = [defaultDialect.instructionTargets[0]];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
   "require-spec": "warn",
@@ -219,7 +223,7 @@ export function validate(
 
   if (filePath) {
     const basename = pathBasename(filePath);
-    const isInstruction = basename === "CLAUDE.md" || basename === "AGENTS.md";
+    const isInstruction = defaultDialect.instructionTargets.includes(basename);
     const isSkill = basename === "SKILL.md";
 
     // --- require-spec (CLAUDE.md / AGENTS.md) ---

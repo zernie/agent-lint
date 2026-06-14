@@ -521,7 +521,7 @@ export function compileClaude(
   spec: ClaudeSpec,
   options: CompileClaudeOptions = {},
 ): CompileClaudeResult {
-  const targets = spec.target ?? "CLAUDE.md";
+  const targets = spec.target ?? defaultDialect.instructionTargets[0];
   const target = Array.isArray(targets) ? targets[0] : targets;
   const basePath = options.basePath ?? process.cwd();
   const specFile = options.specFile ?? `${target}.spec.ts`;
