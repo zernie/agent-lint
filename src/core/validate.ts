@@ -68,6 +68,7 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   integrity: "warn",
   coverage: false,
   "untested-surface": "warn",
+  "unmarked-refs": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

@@ -185,6 +185,8 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Untested-surface detector test suite (vitest): colocation + content-reference coverage, user-invoked exemption (+ includeUserInvokedSkills override), vigiles:ignore-test opt-out, agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath",
     "docs/rules/untested-surface.md":
       "Rule doc: untested-surface — config, severity, options, the two coverage detectors, exemptions, why",
+    "docs/rules/unmarked-refs.md":
+      "Rule doc: unmarked-refs — the PostToolUse refs-hook that nudges the agent to MARK code-shaped references in instruction files (warn → non-blocking nudge, error → block, false → off); what it checks, opt-outs, where it runs, and the undecidable plaintext floor",
     "src/core/doc-refs.ts":
       "Markdown code-block ref validator: enforce()/file()/cmd()/ref() calls inside ```ts blocks, with vigiles:ignore opt-out",
     "src/core/doc-refs.test.ts": "Doc-refs validator test suite (node:test)",
@@ -192,7 +194,7 @@ The inward dependency rule (core ⊄ adapter) is enforced by \`eslint-plugin-bou
       "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
     "src/core/symbols.test.ts": "Symbol extractor test suite (node:test)",
     "src/core/refs.ts":
-      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs enforcement for the refs-hook",
+      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK code-shaped references in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md",
     "src/core/refs.test.ts":
       "Symbol reference verification test suite (node:test)",
     "src/adapters/claude-code/mock-model.ts":

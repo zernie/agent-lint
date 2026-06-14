@@ -14,6 +14,8 @@ import {
   symbolRefs,
   verifySymbolRefs,
   unmarkedCodeRefs,
+  collectRefIssues,
+  refsHookAction,
 } from "./refs.js";
 
 test("inlineSpans skips fenced code blocks (R1)", () => {
@@ -125,4 +127,34 @@ test("unmarkedCodeRefs flags bare code refs incl. foo(args), not marks/prose/pat
 test("vigiles:ignore-file opts the whole file out", () => {
   const md = "<!-- vigiles:ignore-file -->\nUse `parseConfig` freely.\n";
   assert.equal(unmarkedCodeRefs(md).length, 0);
+});
+
+test("collectRefIssues lists unmarked code refs with marking guidance", () => {
+  const issues = collectRefIssues("Use `parseConfig` for the loader.\n", ".");
+  assert.equal(issues.length, 1);
+  assert.match(issues[0] ?? "", /`parseConfig` is an unmarked code reference/);
+  assert.match(issues[0] ?? "", /mark it as `vigiles:symbol/);
+});
+
+test("collectRefIssues is empty for prose, paths, and ignored spans", () => {
+  assert.deepEqual(
+    collectRefIssues("Run the build before you commit.\n", "."),
+    [],
+  );
+  assert.deepEqual(
+    collectRefIssues("See `src/config.ts` for setup.\n", "."),
+    [],
+  );
+  assert.deepEqual(
+    collectRefIssues("Use `parseConfig` here. <!-- vigiles:ignore -->\n", "."),
+    [],
+  );
+});
+
+test("refsHookAction maps issue-count + severity to ok/nudge/block", () => {
+  assert.equal(refsHookAction(0, "warn"), "ok"); // nothing to say
+  assert.equal(refsHookAction(0, "error"), "ok");
+  assert.equal(refsHookAction(3, false), "ok"); // rule off
+  assert.equal(refsHookAction(3, "warn"), "nudge"); // default
+  assert.equal(refsHookAction(1, "error"), "block"); // opt-in
 });

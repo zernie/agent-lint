@@ -61,7 +61,11 @@ import {
   setActiveAgent,
   clearActiveAgent,
 } from "./adapters/claude-code/agent-runtime.js";
-import { verifySymbolRefs, unmarkedCodeRefs } from "./core/refs.js";
+import {
+  verifySymbolRefs,
+  collectRefIssues,
+  refsHookAction,
+} from "./core/refs.js";
 import { verifyMcpRefs, loadMcpServers, mcpRefMessage } from "./core/mcp.js";
 import {
   parseSkillGates,
@@ -2340,19 +2344,9 @@ function reportRefIssues(
   basePath: string,
   log: (m: string) => void,
 ): boolean {
-  const broken = verifySymbolRefs(markdown, basePath);
-  const unmarked = unmarkedCodeRefs(markdown);
-  for (const b of broken) {
-    log(`  ✗ line ${String(b.line)}: ${b.reason}`);
-  }
-  for (const u of unmarked) {
-    const callee = u.text.replace(/\s*\([^)]*\)\s*$/, "");
-    log(
-      `  ✗ line ${String(u.line)}: \`${u.text}\` is an unmarked code reference — ` +
-        `mark it as \`vigiles:symbol path/to/file.ext#${callee}\` or add <!-- vigiles:ignore --> if it is prose`,
-    );
-  }
-  return broken.length > 0 || unmarked.length > 0;
+  const issues = collectRefIssues(markdown, basePath);
+  for (const m of issues) log(`  ✗ ${m}`);
+  return issues.length > 0;
 }
 
 /** `vigiles refs <file>` — check a file's symbol references (exit 2 on issues). */
@@ -2399,6 +2393,8 @@ function refsHookCommand(): void {
     /* malformed → nothing to do */
   }
   if (!file || !isInstructionFile(file)) return;
+  const severity = ruleSeverity(loadConfig().rules["unmarked-refs"]);
+  if (severity === false) return;
   const cwd = process.cwd();
   const target = relative(cwd, resolve(cwd, file)) || file;
   let markdown: string;
@@ -2407,15 +2403,34 @@ function refsHookCommand(): void {
   } catch {
     return;
   }
-  const lines: string[] = [];
-  const bad = reportRefIssues(markdown, dirname(resolve(cwd, file)), (m) => {
-    lines.push(m);
-  });
-  if (bad) {
+  const issues = collectRefIssues(markdown, dirname(resolve(cwd, file)));
+  const action = refsHookAction(issues.length, severity);
+  if (action === "ok") return;
+
+  if (action === "block") {
+    // Opt-in (`unmarked-refs: "error"`): exit 2 feeds stderr to the model.
     console.error(`vigiles: fix the code references in ${target}:`);
-    for (const l of lines) console.error(l);
+    for (const m of issues) console.error(`  ✗ ${m}`);
     process.exit(2);
   }
+
+  // Default ("warn"): a non-blocking nudge injected into the agent's context.
+  const context =
+    `vigiles: ${target} has reference(s) that won't be verified unless they ` +
+    `are vigiles marks:\n` +
+    issues.map((m) => `  - ${m}`).join("\n") +
+    `\nExpress references as marks (\`enforce()\` / \`file()\` / \`cmd()\` / a ` +
+    `\`vigiles:symbol\` span / an inline \`<!-- vigiles:enforce -->\` comment) so ` +
+    `\`vigiles audit\` can check them — or add \`<!-- vigiles:ignore -->\` if it ` +
+    `is prose, not a reference.`;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: context,
+      },
+    }) + "\n",
+  );
 }
 
 async function main(): Promise<void> {
