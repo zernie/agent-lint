@@ -15,7 +15,7 @@
  *
  *   export const myHarnessAdapter: HarnessAdapter = { name: "my-harness", … };
  */
-export type { HarnessAdapter } from "./core/adapter.js";
+export type { HarnessAdapter, AdapterCapabilities } from "./core/adapter.js";
 export type { HarnessDialect } from "./core/dialect.js";
 export type { PluginLayout } from "./core/layout.js";
 export type { HarnessRuntime } from "./core/runtime.js";
@@ -26,6 +26,7 @@ export {
   checkAdapterConformance,
   assertAdapterConformance,
   assertAdapterLoadsHooks,
+  assertHarnessTestable,
   type ConformanceResult,
 } from "./adapter-conformance.js";
 export {
