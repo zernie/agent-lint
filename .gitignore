@@ -10,3 +10,8 @@ logo-v*.png
 examples/demo/.vigiles/
 # eval record/replay cache (recorded model runs)
 .vigiles/eval-cache/
+
+# locally-installed skills for internal dev use (e.g. obra/superpowers) — not shipped
+.agents/
+.claude/skills/
+skills-lock.json
