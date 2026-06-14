@@ -5,7 +5,7 @@
  * separate from `vigiles/claude-code` so this surface can stay harness-agnostic as
  * more harnesses are added. Granular paths (`vigiles/run-hook`, etc.) still work.
  */
-export * from "./run-hook.js";
-export * from "./harness-test.js";
-export * from "./eval.js";
+export * from "./adapters/claude-code/run-hook.js";
+export * from "./adapters/claude-code/harness-test.js";
+export * from "./adapters/claude-code/eval.js";
 export * from "./harness-assert.js";

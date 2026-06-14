@@ -1,0 +1,46 @@
+/**
+ * codexAdapter — the OpenAI Codex `HarnessAdapter`. Bundles the five Codex ports
+ * + a `detect`. SHIPPED: registered in `src/adapter-registry.ts` (the CLI
+ * auto-detects a `.codex/config.toml` or `AGENTS.md` repo) and exported as
+ * `vigiles/codex`. It passes `assertAdapterConformance`/`assertAdapterLoadsHooks`,
+ * drives the compiler + loader against real Codex fixtures (codex.test.ts), and
+ * its transport (`mock-model.ts`) is proven against the real `codex` binary.
+ *
+ * Caveat — pillar 1 (compile) is partial: the instruction/skill *renderers* still
+ * emit the Claude-Code shape until the format-axis renderers land
+ * (`research/code-adapter-architecture.md`). Pillar 2 (harness testing) is full.
+ */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
+import type { HarnessAdapter } from "../../core/adapter.js";
+import { codexDialect } from "./dialect.js";
+import { codexLayout } from "./layout.js";
+import { codexRuntime } from "./runtime.js";
+import { codexHookProtocol } from "./hook-protocol.js";
+import { codexModelMock } from "./model-mock.js";
+import { codexDriver } from "./driver.js";
+
+export const codexAdapter: HarnessAdapter = {
+  name: "codex",
+  // Full convergence with Claude Code: mockable (Responses SSE) + shell hooks
+  // with veto (permissionDecision/exit 2). Both pillars, all tiers.
+  capabilities: {
+    referenceVerification: true,
+    harnessTesting: true,
+    shellHooks: true,
+  },
+  dialect: codexDialect,
+  layout: codexLayout,
+  runtime: codexRuntime,
+  hookProtocol: codexHookProtocol,
+  modelMock: codexModelMock,
+  harnessTestDriver: codexDriver,
+  detect(root: string): number {
+    // A `.codex/config.toml` is a strong signal; a bare AGENTS.md is weak (many
+    // harnesses read it). (Unused while unregistered — kept for symmetry.)
+    if (existsSync(join(root, ".codex", "config.toml"))) return 3;
+    if (existsSync(join(root, codexLayout.instructionFile))) return 1;
+    return 0;
+  },
+};

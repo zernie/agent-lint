@@ -13,8 +13,8 @@ import {
   driveSkill,
   type SkillProgram,
   type GeneratorSkill,
-} from "./skill-driver.js";
-import type { Gate } from "./spec.js";
+} from "./adapters/claude-code/skill-driver.js";
+import type { Gate } from "./core/spec.js";
 
 function gateLabel(g: Gate): string {
   if (g._ref === "cmd") return g.command;

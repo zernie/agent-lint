@@ -16,7 +16,7 @@ import {
   formatUntestedReport,
   suggestedTestPath,
 } from "./test-coverage.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);

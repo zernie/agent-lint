@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { scanPlugin, formatScanReport } from "./scan.js";
-import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);

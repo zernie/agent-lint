@@ -115,7 +115,7 @@ describe("CLI: vigiles compile", () => {
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
     );
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
       `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { r: guidance("test") } });\n`,
@@ -132,7 +132,7 @@ describe("CLI: vigiles compile", () => {
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
     );
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "worker.md.spec.ts"),
       `import { agent, result } from "${specSrc}";\n` +
@@ -163,7 +163,7 @@ describe("CLI: vigiles compile", () => {
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
     );
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(tmpDir, "flow.md.spec.ts"),
       `import { railway, delegate } from "${specSrc}";\n` +
@@ -183,7 +183,7 @@ describe("CLI: vigiles compile", () => {
     );
     const subDir = join(tmpDir, "examples");
     mkdirSync(subDir);
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       join(subDir, "CLAUDE.md.spec.ts"),
       `import { claude, guidance } from "${specSrc}";\nexport default claude({ rules: { r: guidance("test") } });\n`,
@@ -211,7 +211,7 @@ describe("CLI: vigiles compile", () => {
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
     );
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
 
     // Root spec
     writeFileSync(
@@ -289,7 +289,7 @@ describe("CLI: vigiles audit", () => {
         join(dupDir, "package.json"),
         JSON.stringify({ name: "test", scripts: {} }),
       );
-      const specSrc = resolve(process.cwd(), "dist", "spec.js");
+      const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
       writeFileSync(
         join(dupDir, "CLAUDE.md.spec.ts"),
         `import { claude, guidance } from "${specSrc}";
@@ -326,7 +326,7 @@ export default claude({
         join(specDir, "package.json"),
         JSON.stringify({ name: "test", scripts: {} }),
       );
-      const specSrc = resolve(process.cwd(), "dist", "spec.js");
+      const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
       writeFileSync(
         join(specDir, "CLAUDE.md.spec.ts"),
         `import { claude, guidance } from "${specSrc}";
@@ -853,7 +853,7 @@ describe("CLI: multi-target compile", () => {
     // Create a spec with multiple targets
     writeFileSync(
       join(tmpDir, "CLAUDE.md.spec.ts"),
-      `import { claude, guidance } from "${resolve(process.cwd(), "src/spec.js")}";
+      `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
 export default claude({
   target: ["CLAUDE.md", "AGENTS.md"],
   rules: {
@@ -1212,7 +1212,7 @@ describe("E2E: fixture project adoption", () => {
     if (existsSync(specPath)) rmSync(specPath);
 
     // Write a spec that imports from vigiles dist (not node_modules)
-    const specSrc = resolve(process.cwd(), "dist", "spec.js");
+    const specSrc = resolve(process.cwd(), "dist", "core", "spec.js");
     writeFileSync(
       specPath,
       `import { claude, guidance } from "${specSrc}";

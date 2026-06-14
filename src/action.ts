@@ -9,8 +9,8 @@ import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { globSync } from "glob";
 
-import { compileClaude, compileSkill, addHash } from "./compile.js";
-import type { ClaudeSpec, SkillSpec } from "./spec.js";
+import { compileClaude, compileSkill, addHash } from "./core/compile.js";
+import type { ClaudeSpec, SkillSpec } from "./core/spec.js";
 
 // ---------------------------------------------------------------------------
 // Read action inputs

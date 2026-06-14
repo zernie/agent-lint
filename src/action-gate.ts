@@ -18,7 +18,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { runGate, gateLabel, type RuntimeGate } from "./skill-runtime.js";
+import {
+  runGate,
+  gateLabel,
+  type RuntimeGate,
+} from "./adapters/claude-code/skill-runtime.js";
 
 export interface ActionGate {
   /** Tool name to gate, e.g. "Write" | "Edit" | "Bash". */

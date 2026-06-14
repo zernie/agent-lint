@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { runSkill, scriptModel } from "./skill-test.js";
-import { compileGenerator } from "./compile-generator.js";
+import { compileGenerator } from "./core/compile-generator.js";
 import { prReviewLoop, tdd, subagentDriven } from "./community-skills.js";
 
 const rounds = (r: { acts: readonly { prose: string }[] }, needle: string) =>
