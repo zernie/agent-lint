@@ -12,11 +12,11 @@ Require a `.spec.ts` source file for every `SKILL.md` found in the project.
 }
 ```
 
-| Value              | Behavior                                              |
-| ------------------ | ----------------------------------------------------- |
-| `"error"`          | `vigiles audit` exits non-zero if any spec is missing |
-| `"warn"` (default) | Prints warning, exits 0                               |
-| `false`            | Skip this check                                       |
+| Value              | Behavior                                             |
+| ------------------ | ---------------------------------------------------- |
+| `"error"`          | `vigiles lint` exits non-zero if any spec is missing |
+| `"warn"` (default) | Prints warning, exits 0                              |
+| `false`            | Skip this check                                      |
 
 ## What it checks
 

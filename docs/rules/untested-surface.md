@@ -27,11 +27,11 @@ With options (ESLint-style tuple):
 
 ### Severity
 
-| Value              | Behavior                                                  |
-| ------------------ | --------------------------------------------------------- |
-| `"error"`          | `vigiles audit` exits non-zero when a surface is untested |
-| `"warn"` (default) | Prints a warning, exits 0 — a nudge, not a gate           |
-| `false`            | Skip the check                                            |
+| Value              | Behavior                                                 |
+| ------------------ | -------------------------------------------------------- |
+| `"error"`          | `vigiles lint` exits non-zero when a surface is untested |
+| `"warn"` (default) | Prints a warning, exits 0 — a nudge, not a gate          |
+| `false`            | Skip the check                                           |
 
 ### Options
 

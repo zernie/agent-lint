@@ -33,11 +33,11 @@ Integrity check:
 
 ### Severity
 
-| Value              | Behavior                                  |
-| ------------------ | ----------------------------------------- |
-| `"error"`          | `vigiles audit` exits non-zero (CI fails) |
-| `"warn"` (default) | Prints warning, exits 0                   |
-| `false`            | Skip integrity checks entirely            |
+| Value              | Behavior                                 |
+| ------------------ | ---------------------------------------- |
+| `"error"`          | `vigiles lint` exits non-zero (CI fails) |
+| `"warn"` (default) | Prints warning, exits 0                  |
+| `false`            | Skip integrity checks entirely           |
 
 ## What about stale specs?
 

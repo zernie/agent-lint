@@ -14,11 +14,11 @@ Enforce minimum spec coverage thresholds. Measures how much of the project surfa
 
 ### Severity
 
-| Value             | Behavior                                            |
-| ----------------- | --------------------------------------------------- |
-| `"error"`         | `vigiles audit` exits non-zero when below threshold |
-| `"warn"`          | Prints warning when below threshold, exits 0        |
-| `false` (default) | Skip coverage checks                                |
+| Value             | Behavior                                           |
+| ----------------- | -------------------------------------------------- |
+| `"error"`         | `vigiles lint` exits non-zero when below threshold |
+| `"warn"`          | Prints warning when below threshold, exits 0       |
+| `false` (default) | Skip coverage checks                               |
 
 ### Thresholds
 

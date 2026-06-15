@@ -1,7 +1,7 @@
 # vigiles — 60-second demo
 
 `INSTRUCTIONS.md` reads fine. But two of its references **lie** — and
-`vigiles audit` catches both, while the two truthful ones pass silently.
+`vigiles lint` catches both, while the two truthful ones pass silently.
 
 From the repo root:
 
