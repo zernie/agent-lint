@@ -17,4 +17,4 @@
 export * from "./integration.js";
 // The real-egress capability probe (the egress-using runHook is already re-exported
 // via the integration→unit chain).
-export { egressRoutes } from "./adapters/claude-code/run-hook.js";
+export { egressRoutes } from "./run-hook.js";
