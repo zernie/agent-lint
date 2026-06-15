@@ -151,5 +151,5 @@ not a comment.
 ## See also
 
 - [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md) — the design: the two axes, the ports to extract when adapter #2 lands, and the step-by-step Codex recipe.
-- [`docs/harness-testing.md`](harness-testing.md) — the three test tiers that ride on `vigiles/testing`.
+- [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles/testing`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
 - [`research/sync-tool-compatibility.md`](../research/sync-tool-compatibility.md) — composing with _format-axis_ tools (Ruler, rulesync) that distribute the file vigiles authors.
