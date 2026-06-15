@@ -37,6 +37,7 @@ import { resolve, join, dirname } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
+import { ncd } from "./core/proofs.js";
 import {
   parseToolCalls,
   parseResultEvent,
@@ -735,11 +736,11 @@ export interface TriggerRateSpec {
    */
   readonly minPrompts?: number;
   /**
-   * Reject the run when two prompts in a set are more than this similar
-   * (normalized Levenshtein, 0..1) — near-duplicate prompts inflate a rate
-   * without actually testing varied phrasings. Default 0.8.
+   * Reject the run when two prompts in a set are closer than this in NCD
+   * (gzip-based distance, 0..1; 0 = identical) — near-duplicate prompts inflate
+   * a rate without testing varied phrasings. Default 0.3 (the rule-dup threshold).
    */
-  readonly maxSimilarity?: number;
+  readonly minDistance?: number;
   /** Trials per prompt. Default 1. */
   readonly trials?: number;
   /** Model alias. Default "haiku". */
@@ -830,39 +831,27 @@ export function packageSkillsDir(
 // ---------------------------------------------------------------------------
 // Prompt-set diversity (deterministic, pre-eval) — a trigger rate is only
 // meaningful over ENOUGH and DIFFERENT prompts. Catch a too-small or
-// near-duplicate set before spending a single model token.
+// near-duplicate set before spending a single model token. We measure
+// "different" with Normalized Compression Distance (gzip) — the SAME engine
+// `findSimilarRules` uses for near-duplicate rule detection — not edit
+// distance: NCD scores shared structure/redundancy (a templated prompt with one
+// word swapped compresses together), which is exactly the lazy-copy-paste set
+// we want to reject, and it's the project's house algorithm for "are these two
+// texts basically the same".
 // ---------------------------------------------------------------------------
-
-/** Levenshtein edit distance (iterative DP, two rows). Deterministic. */
-export function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  let curr = new Array<number>(b.length + 1);
-  for (let i = 1; i <= a.length; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-    }
-    [prev, curr] = [curr, prev];
-  }
-  return prev[b.length];
-}
 
 /** Normalize for comparison: lowercase, trim, collapse whitespace. */
 function normalizePrompt(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-/** Similarity in 0..1 (1 = identical) via normalized Levenshtein. */
-export function promptSimilarity(a: string, b: string): number {
-  const na = normalizePrompt(a);
-  const nb = normalizePrompt(b);
-  const max = Math.max(na.length, nb.length);
-  if (max === 0) return 1;
-  return 1 - levenshtein(na, nb) / max;
+/**
+ * Distance between two prompts in ~0..1 (0 = identical, higher = more
+ * different) via Normalized Compression Distance over the normalized text.
+ * Reuses {@link ncd} from the proof engine.
+ */
+export function promptDistance(a: string, b: string): number {
+  return ncd(normalizePrompt(a), normalizePrompt(b));
 }
 
 export interface PromptDiversityIssue {
@@ -872,15 +861,15 @@ export interface PromptDiversityIssue {
 
 /**
  * Deterministically check a prompt set is big and varied enough to measure a
- * trigger rate: at least `minPrompts` entries, and no two more than
- * `maxSimilarity` alike. Pure — no model. `label` names the set in messages.
+ * trigger rate: at least `minPrompts` entries, and no two closer than
+ * `minDistance` in NCD. Pure — no model. `label` names the set in messages.
  */
 export function checkPromptDiversity(
   prompts: readonly string[],
-  opts: { minPrompts?: number; maxSimilarity?: number; label?: string } = {},
+  opts: { minPrompts?: number; minDistance?: number; label?: string } = {},
 ): PromptDiversityIssue[] {
   const minPrompts = opts.minPrompts ?? 10;
-  const maxSimilarity = opts.maxSimilarity ?? 0.8;
+  const minDistance = opts.minDistance ?? 0.3;
   const label = opts.label ?? "prompts";
   const issues: PromptDiversityIssue[] = [];
   if (prompts.length < minPrompts) {
@@ -891,11 +880,11 @@ export function checkPromptDiversity(
   }
   for (let i = 0; i < prompts.length; i++) {
     for (let j = i + 1; j < prompts.length; j++) {
-      const sim = promptSimilarity(prompts[i], prompts[j]);
-      if (sim > maxSimilarity) {
+      const dist = promptDistance(prompts[i], prompts[j]);
+      if (dist < minDistance) {
         issues.push({
           kind: "too-similar",
-          message: `${label}: prompts #${String(i + 1)} and #${String(j + 1)} are ${String(Math.round(sim * 100))}% alike (> ${String(Math.round(maxSimilarity * 100))}%) — vary the phrasing:\n    - ${prompts[i]}\n    - ${prompts[j]}`,
+          message: `${label}: prompts #${String(i + 1)} and #${String(j + 1)} are near-duplicates (NCD ${dist.toFixed(2)} < ${String(minDistance)}) — vary the phrasing:\n    - ${prompts[i]}\n    - ${prompts[j]}`,
         });
       }
     }
@@ -906,7 +895,7 @@ export function checkPromptDiversity(
 /** Throw if a prompt set isn't big/varied enough. See {@link checkPromptDiversity}. */
 export function assertPromptDiversity(
   prompts: readonly string[],
-  opts: { minPrompts?: number; maxSimilarity?: number; label?: string } = {},
+  opts: { minPrompts?: number; minDistance?: number; label?: string } = {},
 ): void {
   const issues = checkPromptDiversity(prompts, opts);
   if (issues.length > 0) {
@@ -1006,7 +995,7 @@ export async function measureTriggerRateWith(
   // before spending a token (and before packaging a skillsDir).
   const diversity = {
     minPrompts: spec.minPrompts,
-    maxSimilarity: spec.maxSimilarity,
+    minDistance: spec.minDistance,
   };
   assertPromptDiversity(spec.prompts, { ...diversity, label: "prompts" });
   if (spec.irrelevantPrompts && spec.irrelevantPrompts.length > 0) {
