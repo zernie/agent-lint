@@ -1,7 +1,7 @@
 /**
  * CLI integration tests — spawn the actual vigiles CLI and verify output.
  *
- * These test the full flow: CLI → init/compile/audit → filesystem output.
+ * These test the full flow: CLI → init/compile/lint → filesystem output.
  */
 import { describe, it, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
@@ -255,7 +255,7 @@ describe("CLI: vigiles compile", () => {
 // vigiles audit
 // ---------------------------------------------------------------------------
 
-describe("CLI: vigiles audit", () => {
+describe("CLI: vigiles lint", () => {
   let tmpDir: string;
 
   before(() => {
@@ -267,13 +267,13 @@ describe("CLI: vigiles audit", () => {
   });
 
   it("should report when no instruction files are found", () => {
-    const { stdout, exitCode } = run("audit", tmpDir);
+    const { stdout, exitCode } = run("lint", tmpDir);
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("No compiled instruction files found"));
   });
 
   it("should include coverage and strengthen output", () => {
-    const { stdout } = run("audit", tmpDir);
+    const { stdout } = run("lint", tmpDir);
     // audit runs discover + strengthen in addition to verification
     assert.ok(
       stdout.includes("coverage") ||
@@ -302,7 +302,7 @@ export default claude({
 });
 `,
       );
-      const { stdout } = run("audit", dupDir);
+      const { stdout } = run("lint", dupDir);
       // Should detect the two logger rules as near-duplicates
       assert.ok(
         stdout.includes("near-duplicate") || stdout.includes("duplicate"),
@@ -351,7 +351,7 @@ export default claude({
         `compile failed: ${compileResult.stdout}`,
       );
 
-      const { stdout, exitCode } = run("audit CLAUDE.md", specDir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", specDir);
       // Should NOT surface the bogus rule as an inline error.
       assert.ok(
         !stdout.includes("total-nonsense"),
@@ -409,7 +409,7 @@ describe("E2E: inline enforcement", () => {
 All output goes through logger.ts.
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("eslint/no-console"),
       `Expected rule in output, got: ${stdout.slice(0, 600)}`,
@@ -428,7 +428,7 @@ All output goes through logger.ts.
 Some prose.
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("no-consol"),
       `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
@@ -456,7 +456,7 @@ Real rule:
 <!-- vigiles:enforce eslint/no-console "outside fence" -->
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     // The bogus rule inside the fence must NOT appear as an error
     assert.ok(
       !stdout.includes("totally-bogus"),
@@ -474,7 +474,7 @@ Real rule:
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/fake-rule-xyz "bad" -->`,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", inlineDir);
     const report = JSON.parse(stdout) as {
       inlineErrors: number;
       inlineRules: number;
@@ -489,7 +489,7 @@ Real rule:
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/fake-rule-xyz "bad" -->`,
     );
-    const { stdout, exitCode } = run("audit --summary CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint --summary CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("inline"),
       `Expected 'inline' in summary, got: ${stdout}`,
@@ -507,7 +507,7 @@ Real rule:
 # Project
 `,
     );
-    const { stdout } = run("audit CLAUDE.md", inlineDir);
+    const { stdout } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       !stdout.includes("require-spec"),
       `require-spec should be satisfied by inline rules, got: ${stdout.slice(0, 600)}`,
@@ -555,7 +555,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("eslint/no-console"),
       `Expected rule in output, got: ${stdout.slice(0, 600)}`,
@@ -574,7 +574,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("no-consol"),
       `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
@@ -599,7 +599,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", fmDir);
     const report = JSON.parse(stdout) as {
       frontmatterErrors: number;
       frontmatterRules: number;
@@ -620,7 +620,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit --summary CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --summary CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("frontmatter"),
       `Expected 'frontmatter' in summary, got: ${stdout}`,
@@ -640,7 +640,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("Malformed YAML frontmatter"),
       `Expected malformed-YAML report, got: ${stdout.slice(0, 600)}`,
@@ -661,7 +661,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout } = run("audit CLAUDE.md", fmDir);
+    const { stdout } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       !stdout.includes("require-spec"),
       `require-spec should be satisfied by frontmatter, got: ${stdout.slice(0, 600)}`,
@@ -683,7 +683,7 @@ vigiles:
 <!-- vigiles:enforce eslint/no-console "from inline" -->
 `,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", fmDir);
     const report = JSON.parse(stdout) as {
       inlineRules: number;
       frontmatterRules: number;
@@ -989,7 +989,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     const dir = freshProject();
     try {
       const { stdout } = run("init --no-plugin", dir);
-      assert.match(stdout, /pillars: verify \+ test/);
+      assert.match(stdout, /pillars: lint \+ test/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
       const wf = join(dir, ".github/workflows/vigiles.yml");
@@ -1002,10 +1002,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--pillars=test: only the harness starter, no spec/workflow", () => {
+  it("--test: only the harness starter, no spec/workflow", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --pillars=test --no-plugin --no-gha", dir);
+      const { stdout } = run("init --test --no-plugin --no-gha", dir);
       assert.match(stdout, /pillars: test/);
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
       assert.ok(!existsSync(join(dir, "CLAUDE.md.spec.ts")), "no spec");
@@ -1018,13 +1018,298 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--pillars=verify: spec only, no harness", () => {
+  it("--lint: spec only, no harness", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --pillars=verify --no-plugin --no-gha", dir);
-      assert.match(stdout, /pillars: verify/);
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      assert.match(stdout, /pillars: lint/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("clean break: old --pillars / --verify flags no longer scope a pillar", () => {
+    const dir = freshProject();
+    try {
+      // --verify is now an unknown flag — both pillars stay on (the default).
+      const out = run("init --verify --no-plugin --no-gha", dir).stdout;
+      assert.match(out, /pillars: lint \+ test/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds vigiles to devDependencies (not dependencies)", () => {
+    const dir = freshProject();
+    try {
+      // Start from a stale runtime pin, like an old git-commit install.
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "demo",
+          dependencies: { vigiles: "github:zernie/vigiles#abc123" },
+        }),
+      );
+      run("init --test --no-plugin --no-gha", dir);
+      const pkg = JSON.parse(
+        readFileSync(join(dir, "package.json"), "utf-8"),
+      ) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      assert.ok(
+        !pkg.dependencies || !("vigiles" in pkg.dependencies),
+        "vigiles moved out of dependencies",
+      );
+      assert.ok(
+        pkg.devDependencies && "vigiles" in pkg.devDependencies,
+        "vigiles in devDependencies",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scaffolds a spec for an existing CLAUDE.md without clobbering it", () => {
+    const dir = freshProject();
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n\nKeep me.\n");
+      run("init --lint --no-plugin --no-gha", dir);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec scaffolded");
+      // The hand-written file must be untouched (no compile-over).
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.ok(md.includes("Keep me."), "content preserved");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns loudly on a stale old-API CI workflow, doesn't clobber it", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n      - run: npx vigiles\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin", dir);
+      assert.match(stdout, /STALE/);
+      // Not clobbered.
+      assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("CLI: vigiles --version", () => {
+  it("prints a version number, not the help banner", () => {
+    const { stdout, exitCode } = run("--version", process.cwd());
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /\d+\.\d+\.\d+/);
+    assert.ok(!stdout.includes("Commands:"), "not the help banner");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Installation smoke test — run `init` against a REALISTIC fake project and
+// assert the WHOLE outcome, including the NEGATIVES (no vendored skills, no
+// clobbered instruction file). This is the regression guard for the class of
+// bugs that shipped in v3: skills vendored into the repo, no spec for an
+// existing file, the dep never added. Deterministic: no network, no real
+// claude/codex (plugin install is `--no-plugin`; its no-vendor invariant is
+// proven by the planPluginInstall unit tests). See setup-plan.test.ts.
+// ---------------------------------------------------------------------------
+
+describe("CLI: installation smoke test (deterministic)", () => {
+  // Paths a vendoring installer (the old `npx skills add`) would have created —
+  // none may exist after `init`.
+  const VENDORED = [".agents", join(".claude", "skills"), "skills-lock.json"];
+
+  function assertNoVendoring(dir: string): void {
+    for (const p of VENDORED) {
+      assert.ok(
+        !existsSync(join(dir, p)),
+        `init must not vendor ${p} into the repo`,
+      );
+    }
+  }
+
+  it("Claude Code todo app: spec + types + devDep, vendors NOTHING", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-cc-"));
+    try {
+      // A realistic Claude Code project: deps (stale vigiles pin), an existing
+      // hand-written CLAUDE.md, and a .claude/ dir + a hook + a skill surface.
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "todo-app",
+          scripts: { test: "echo ok", build: "tsc" },
+          dependencies: { vigiles: "github:zernie/vigiles#stale" },
+        }),
+      );
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# Todo\n\nUse TypeScript strict mode. Keep this prose.\n",
+      );
+      mkdirSync(join(dir, ".claude"), { recursive: true });
+      mkdirSync(join(dir, "hooks"), { recursive: true });
+      writeFileSync(join(dir, "hooks", "guard.sh"), "exit 0\n");
+
+      const { stdout, exitCode } = run("init --no-plugin --no-gha", dir);
+      assert.equal(exitCode, 0, stdout);
+
+      // Pillar 1: spec scaffolded, hand-written CLAUDE.md untouched.
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.ok(md.includes("Keep this prose."), "CLAUDE.md preserved");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      assert.ok(existsSync(join(dir, ".vigiles/generated.d.ts")), "types");
+
+      // Dep: moved to devDependencies, out of dependencies.
+      const pkg = JSON.parse(
+        readFileSync(join(dir, "package.json"), "utf-8"),
+      ) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      assert.ok(pkg.devDependencies?.vigiles, "vigiles in devDependencies");
+      assert.ok(
+        !pkg.dependencies?.vigiles,
+        "vigiles not in runtime dependencies",
+      );
+
+      // The negative: nothing vendored into the working tree.
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Codex todo app: scaffolds an AGENTS.md spec, no CLAUDE.md, no vendoring", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-codex-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-codex", scripts: { test: "echo ok" } }),
+      );
+      writeFileSync(join(dir, "AGENTS.md"), "# Agents\n\nKeep this prose.\n");
+
+      const { stdout, exitCode } = run(
+        "init --harness=codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      // Codex's native instruction file gets the spec — not CLAUDE.md.
+      assert.ok(existsSync(join(dir, "AGENTS.md.spec.ts")), "AGENTS spec");
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "no CLAUDE spec for a codex-only project",
+      );
+      const md = readFileSync(join(dir, "AGENTS.md"), "utf-8");
+      assert.ok(md.includes("Keep this prose."), "AGENTS.md preserved");
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Claude + Codex todo app: a spec for each, still no vendoring", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-both-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-both", scripts: { test: "echo ok" } }),
+      );
+      const { stdout, exitCode } = run(
+        "init --harness=claude,codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "CLAUDE spec");
+      assert.ok(existsSync(join(dir, "AGENTS.md.spec.ts")), "AGENTS spec");
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("AGENTS.md symlinked to CLAUDE.md: ONE spec, not two (no hash collision)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-symlink-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-sym", scripts: { test: "echo ok" } }),
+      );
+      writeFileSync(join(dir, "CLAUDE.md"), "# One artifact\n\nKeep me.\n");
+      // The common bridge to the AGENTS.md tools: ln -s CLAUDE.md AGENTS.md.
+      symlinkSync("CLAUDE.md", join(dir, "AGENTS.md"));
+
+      const { stdout, exitCode } = run(
+        "init --harness=claude,codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      assert.match(stdout, /one artifact/i);
+      // Only the canonical (real) file gets a spec — no competing second spec.
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "canonical spec");
+      assert.ok(
+        !existsSync(join(dir, "AGENTS.md.spec.ts")),
+        "no second spec for the mirror",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Ruler project: redirects the spec into .ruler/ (no root CLAUDE.md collision)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-ruler-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-ruler", scripts: { test: "echo ok" } }),
+      );
+      // Ruler is keyed on its .ruler/ source dir; it regenerates CLAUDE.md.
+      mkdirSync(join(dir, ".ruler"), { recursive: true });
+      const { stdout, exitCode } = run("init --lint --no-plugin --no-gha", dir);
+      assert.equal(exitCode, 0, stdout);
+      assert.match(stdout, /ruler detected/i);
+      // The spec compiles into Ruler's source slot; Ruler distributes from there.
+      assert.ok(
+        existsSync(join(dir, ".ruler", "AGENTS.md.spec.ts")),
+        "spec in the .ruler source slot",
+      );
+      // No root spec that would fight Ruler over CLAUDE.md.
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "no root CLAUDE.md spec (redirected)",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("CLAUDE.md/AGENTS.md byte-identical (synced): ONE spec for CLAUDE.md", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-synced-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-sync", scripts: { test: "echo ok" } }),
+      );
+      const body = "# Synced\n\nKept identical by rulesync.\n";
+      writeFileSync(join(dir, "CLAUDE.md"), body);
+      writeFileSync(join(dir, "AGENTS.md"), body); // byte-identical mirror
+
+      const { exitCode } = run("init --no-plugin --no-gha", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "canonical spec");
+      assert.ok(
+        !existsSync(join(dir, "AGENTS.md.spec.ts")),
+        "no second spec for the synced mirror",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1266,7 +1551,7 @@ describe("E2E: fixture project adoption", () => {
   });
 
   it("audit detects CLAUDE.md has no vigiles hash", () => {
-    const { stdout } = run("audit", workDir);
+    const { stdout } = run("lint", workDir);
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
       stdout.includes("no vigiles hash") ||
@@ -1310,7 +1595,7 @@ export default claude({
     assert.ok(content.includes("<!-- vigiles:sha256:"));
 
     // Audit should pass (hash valid, spec exists)
-    const auditResult = run("audit", workDir);
+    const auditResult = run("lint", workDir);
     assert.ok(
       auditResult.stdout.includes("hash valid") || auditResult.exitCode === 0,
     );
@@ -1340,7 +1625,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
       `# P\n\nSee <!-- vigiles:file src/real.ts --> and run <!-- vigiles:cmd "npm run build" -->.\n`,
     );
     try {
-      const { exitCode } = run("audit CLAUDE.md", dir);
+      const { exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1350,7 +1635,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
   it("fails (exit 2) on a stale inline file reference", () => {
     const dir = scaffold(`# P\n\n<!-- vigiles:file src/GONE.ts -->\n`);
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /File not found: "src\/GONE\.ts"/);
     } finally {
@@ -1361,7 +1646,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
   it("fails (exit 2) on a stale inline command reference", () => {
     const dir = scaffold(`# P\n\n<!-- vigiles:cmd "npm run ghost" -->\n`);
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /Script "ghost" not found/);
     } finally {
@@ -1374,7 +1659,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
       `---\nvigiles:\n  files:\n    - src/real.ts\n    - src/MISSING.ts\n  commands:\n    - npm run build\n    - npm run ghost\n---\n\n# P\n`,
     );
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /File not found: "src\/MISSING\.ts"/);
       assert.match(stdout, /Script "ghost" not found/);

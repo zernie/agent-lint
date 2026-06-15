@@ -11,9 +11,9 @@
 
 /** What `vigiles init` will set up. */
 export interface SetupPlan {
-  /** Pillar 1 — verify instruction files (specs, types, compile, audit, hooks). */
-  verify: boolean;
-  /** Pillar 2 — test the harness (scaffold a starter harness test + CI job). */
+  /** Lint pillar — verify instruction-file references (specs, types, compile, lint/audit, hooks). */
+  lint: boolean;
+  /** Test pillar — test the harness (scaffold a starter harness test + CI job). */
   test: boolean;
   /** Wire CI (the `zernie/vigiles@v1` Action; creates a workflow if none). */
   gha: boolean;
@@ -28,7 +28,12 @@ export interface ParsedSetupArgs {
   target?: string;
   strict: boolean;
   yes: boolean;
-  pillars?: "verify" | "test" | "both";
+  /** Lint pillar — `--lint` → true, `--no-lint` → false, absent → undefined. */
+  lint?: boolean;
+  /** Test pillar — `--test` → true, `--no-test` → false, absent → undefined. */
+  test?: boolean;
+  /** `--harness=claude,codex` override (empty = auto-detect). */
+  harness?: string;
   gha?: boolean;
   plugin?: boolean;
 }
@@ -40,18 +45,23 @@ function flagValue(
   return args.find((a) => a.startsWith(prefix))?.slice(prefix.length);
 }
 
-/** Parse `init` args into the choices the user pinned. */
+/** `--name` → true, `--no-name` → false, neither present → undefined. */
+function boolFlag(args: readonly string[], name: string): boolean | undefined {
+  if (args.includes(`--${name}`)) return true;
+  if (args.includes(`--no-${name}`)) return false;
+  return undefined;
+}
+
+/** Parse `init` args into the choices the user pinned. The two pillars are
+ * selected with `--lint` / `--test`. */
 export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
-  const pillarsRaw = flagValue(args, "--pillars=");
-  const pillars =
-    pillarsRaw === "verify" || pillarsRaw === "test" || pillarsRaw === "both"
-      ? pillarsRaw
-      : undefined;
   return {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
     yes: args.includes("--yes") || args.includes("-y"),
-    pillars,
+    lint: boolFlag(args, "lint"),
+    test: boolFlag(args, "test"),
+    harness: flagValue(args, "--harness="),
     gha: args.includes("--no-gha") ? false : undefined,
     plugin: args.includes("--no-plugin") ? false : undefined,
   };
@@ -59,7 +69,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
 
 /** The non-interactive defaults: both pillars, CI, and the plugin. */
 export function defaultPlan(strict = false): SetupPlan {
-  return { verify: true, test: true, gha: true, plugin: true, strict };
+  return { lint: true, test: true, gha: true, plugin: true, strict };
 }
 
 /**
@@ -69,45 +79,140 @@ export function defaultPlan(strict = false): SetupPlan {
  */
 export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
   if (!isTTY || parsed.yes || parsed.target) return false;
+  const pillarsPinned = parsed.lint !== undefined || parsed.test !== undefined;
   const allPinned =
-    parsed.pillars !== undefined &&
-    parsed.gha !== undefined &&
-    parsed.plugin !== undefined;
+    pillarsPinned && parsed.gha !== undefined && parsed.plugin !== undefined;
   return !allPinned;
 }
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "verify" | "test" | "gha" | "plugin">
+  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin">
 >;
+
+/**
+ * Apply the pillar flags. A positive flag (`--lint` and/or `--test`) is an
+ * explicit SELECTION — enable exactly the named pillars. Otherwise default to
+ * both and let a `--no-*` flag drop one.
+ */
+function applyPillarFlags(plan: SetupPlan, parsed: ParsedSetupArgs): void {
+  if (parsed.lint === true || parsed.test === true) {
+    plan.lint = parsed.lint === true;
+    plan.test = parsed.test === true;
+    return;
+  }
+  if (parsed.lint === false) plan.lint = false;
+  if (parsed.test === false) plan.test = false;
+}
+
+function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
+  if (answers.lint !== undefined) plan.lint = answers.lint;
+  if (answers.test !== undefined) plan.test = answers.test;
+  if (answers.gha !== undefined) plan.gha = answers.gha;
+  if (answers.plugin !== undefined) plan.plugin = answers.plugin;
+}
+
+/**
+ * How to install vigiles's skills/hooks for ONE harness — the deterministic
+ * decision behind the IO in cli.ts, so a CI test asserts WHICH commands an
+ * install runs without a network call or a real `claude`/`codex` binary.
+ *
+ * The method is genuinely harness-specific: Claude Code has a GLOBAL plugin
+ * marketplace (installs to ~/.claude/plugins/, nothing in the repo); Codex has
+ * no global store — its config is repo-committed (`.codex/`, AGENTS.md), so its
+ * instructions are read directly and skills are an opt-in, repo-local concern.
+ */
+export interface InstallPlan {
+  harness: string;
+  /** Shell commands to auto-run (empty = nothing runnable here). */
+  commands: string[];
+  /** One-line success message printed after the commands run. */
+  successMessage: string;
+  /** The equivalent commands a user runs by hand (printed on failure / no-CLI). */
+  manualSteps: string[];
+  /** Always-printed informational lines (where it installs, caveats). */
+  notes: string[];
+  /** Whether this method writes files into the consumer's repo (vendoring). */
+  vendors: boolean;
+}
+
+/** Per-harness install plan. `hasClaude` gates the auto-run `claude plugin` CLI
+ * (else the same two steps are printed as `/plugin` slash commands).
+ *
+ * Both methods install GLOBALLY, never into the repo: Claude through its plugin
+ * marketplace (~/.claude/plugins/), Codex through the cross-agent `skills` CLI
+ * with `-g -y` (the global store ~/.agents/skills/, which Codex reads). Codex
+ * gets the skills but NOT hooks — Codex hook wiring (.codex/config.toml [hooks])
+ * is not automated yet. */
+export function planPluginInstall(
+  harnesses: readonly string[],
+  opts: { hasClaude: boolean },
+): InstallPlan[] {
+  return harnesses.map((harness) => {
+    if (harness === "claude") {
+      return {
+        harness,
+        commands: opts.hasClaude
+          ? [
+              "claude plugin marketplace add zernie/vigiles",
+              "claude plugin install vigiles@vigiles",
+            ]
+          : [],
+        successMessage:
+          "✓ Installed the vigiles plugin (hooks + skills) into ~/.claude/plugins/",
+        manualSteps: [
+          "/plugin marketplace add zernie/vigiles",
+          "/plugin install vigiles@vigiles",
+        ],
+        notes: [
+          "Installs globally to ~/.claude/plugins/ — nothing is added to your repo.",
+        ],
+        vendors: false,
+      };
+    }
+    if (harness === "codex") {
+      // The cross-agent `skills` CLI with `-g -y` installs to the global store
+      // ~/.agents/skills/ (NOT the repo, and NOT ~/.codex/ — verified against
+      // the real CLI). Skills only; Codex hooks (.codex/config.toml [hooks])
+      // are not wired automatically.
+      return {
+        harness,
+        commands: ["npx --yes skills add zernie/vigiles -a codex -g -y"],
+        successMessage:
+          "✓ Installed the vigiles skills into ~/.agents/skills/ (global, not vendored)",
+        manualSteps: ["npx skills add zernie/vigiles -a codex -g -y"],
+        notes: [
+          "Codex reads AGENTS.md directly; the skills install globally to ~/.agents/skills/ (not the repo).",
+          "Codex hooks (.codex/config.toml [hooks]) are not auto-wired yet — add them manually for compile-on-edit.",
+        ],
+        vendors: false,
+      };
+    }
+    return {
+      harness,
+      commands: [],
+      successMessage: "",
+      manualSteps: [],
+      notes: [`No plugin install path for harness '${harness}'.`],
+      vendors: false,
+    };
+  });
+}
 
 /**
  * Resolve the final plan: defaults, then flags, then interactive answers (each
  * layer overrides the previous only where it has an opinion). `--target` pins a
- * bare Pillar-1 spec (no harness scaffold).
+ * bare lint-pillar spec (no harness scaffold).
  */
 export function resolvePlan(
   parsed: ParsedSetupArgs,
   answers?: SetupAnswers,
 ): SetupPlan {
   const plan = defaultPlan(parsed.strict);
-
-  if (parsed.pillars === "verify") {
-    plan.verify = true;
-    plan.test = false;
-  } else if (parsed.pillars === "test") {
-    plan.verify = false;
-    plan.test = true;
-  }
+  applyPillarFlags(plan, parsed);
   if (parsed.gha === false) plan.gha = false;
   if (parsed.plugin === false) plan.plugin = false;
   if (parsed.target) plan.test = false;
-
-  if (answers) {
-    if (answers.verify !== undefined) plan.verify = answers.verify;
-    if (answers.test !== undefined) plan.test = answers.test;
-    if (answers.gha !== undefined) plan.gha = answers.gha;
-    if (answers.plugin !== undefined) plan.plugin = answers.plugin;
-  }
+  if (answers) applyAnswers(plan, answers);
   return plan;
 }

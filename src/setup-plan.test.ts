@@ -7,11 +7,12 @@ import {
   defaultPlan,
   shouldPrompt,
   resolvePlan,
+  planPluginInstall,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
   assert.deepEqual(defaultPlan(), {
-    verify: true,
+    lint: true,
     test: true,
     gha: true,
     plugin: true,
@@ -21,35 +22,58 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
 
 test("parseSetupArgs reads flags", () => {
   const p = parseSetupArgs([
-    "--pillars=test",
+    "--test",
     "--no-gha",
     "--no-plugin",
     "--strict",
     "-y",
   ]);
-  assert.equal(p.pillars, "test");
+  assert.equal(p.test, true);
+  assert.equal(p.lint, undefined);
   assert.equal(p.gha, false);
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
   assert.equal(p.yes, true);
 });
 
-test("parseSetupArgs ignores an invalid --pillars value", () => {
-  assert.equal(parseSetupArgs(["--pillars=nonsense"]).pillars, undefined);
-  assert.equal(parseSetupArgs([]).pillars, undefined);
+test("parseSetupArgs reads --lint / --no-test / --harness", () => {
+  const p = parseSetupArgs(["--lint", "--no-test", "--harness=claude,codex"]);
+  assert.equal(p.lint, true);
+  assert.equal(p.test, false);
+  assert.equal(p.harness, "claude,codex");
+  assert.equal(parseSetupArgs([]).lint, undefined);
+  assert.equal(parseSetupArgs([]).test, undefined);
 });
 
-test("resolvePlan: --pillars scopes to one pillar", () => {
-  assert.deepEqual(resolvePlan(parseSetupArgs(["--pillars=verify"])), {
-    verify: true,
+test("parseSetupArgs: the old --verify/--testing/--pillars flags are gone", () => {
+  // Clean break — they no longer select a pillar (treated as unknown flags).
+  const p = parseSetupArgs(["--verify", "--testing"]);
+  assert.equal(p.lint, undefined);
+  assert.equal(p.test, undefined);
+  const q = parseSetupArgs(["--pillars=test"]);
+  assert.equal(q.lint, undefined);
+  assert.equal(q.test, undefined);
+});
+
+test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
+  assert.deepEqual(resolvePlan(parseSetupArgs(["--lint"])), {
+    lint: true,
     test: false,
     gha: true,
     plugin: true,
     strict: false,
   });
-  const t = resolvePlan(parseSetupArgs(["--pillars=test"]));
-  assert.equal(t.verify, false);
+  const t = resolvePlan(parseSetupArgs(["--test"]));
+  assert.equal(t.lint, false);
   assert.equal(t.test, true);
+  // both named → both on
+  const both = resolvePlan(parseSetupArgs(["--lint", "--test"]));
+  assert.equal(both.lint, true);
+  assert.equal(both.test, true);
+  // --no-* drops one from the default-both
+  const noTest = resolvePlan(parseSetupArgs(["--no-test"]));
+  assert.equal(noTest.lint, true);
+  assert.equal(noTest.test, false);
 });
 
 test("resolvePlan: --no-gha / --no-plugin / --strict / --target", () => {
@@ -59,7 +83,7 @@ test("resolvePlan: --no-gha / --no-plugin / --strict / --target", () => {
   assert.equal(p.gha, false);
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
-  // --target pins a bare Pillar-1 spec → no harness scaffold
+  // --target pins a bare lint-pillar spec → no harness scaffold
   assert.equal(resolvePlan(parseSetupArgs(["--target=AGENTS.md"])).test, false);
 });
 
@@ -67,7 +91,43 @@ test("resolvePlan: interactive answers override flags/defaults", () => {
   const p = resolvePlan(parseSetupArgs([]), { test: false, plugin: false });
   assert.equal(p.test, false);
   assert.equal(p.plugin, false);
-  assert.equal(p.verify, true); // untouched
+  assert.equal(p.lint, true); // untouched
+});
+
+test("planPluginInstall: claude uses the marketplace and never vendors", () => {
+  const [withCli] = planPluginInstall(["claude"], { hasClaude: true });
+  assert.equal(withCli.harness, "claude");
+  assert.equal(withCli.vendors, false); // the whole point of issue #1
+  assert.deepEqual(withCli.commands, [
+    "claude plugin marketplace add zernie/vigiles",
+    "claude plugin install vigiles@vigiles",
+  ]);
+
+  // No claude CLI → no auto-run commands, but the manual /plugin steps print.
+  const [noCli] = planPluginInstall(["claude"], { hasClaude: false });
+  assert.deepEqual(noCli.commands, []);
+  assert.ok(
+    noCli.manualSteps.some((s) => s.includes("/plugin install vigiles")),
+  );
+  assert.equal(noCli.vendors, false);
+});
+
+test("planPluginInstall: codex installs skills GLOBALLY (-g), not vendored", () => {
+  const [codex] = planPluginInstall(["codex"], { hasClaude: false });
+  assert.equal(codex.harness, "codex");
+  // The cross-agent skills CLI with -g → ~/.codex/skills/, not the repo.
+  assert.ok(codex.commands.some((c) => /skills add .* -a codex -g/.test(c)));
+  assert.equal(codex.vendors, false); // -g is global, so no repo pollution
+  assert.ok(codex.notes.some((n) => /hooks/.test(n))); // honest about the gap
+});
+
+test("planPluginInstall: both harnesses → one plan each, none vendoring", () => {
+  const plans = planPluginInstall(["claude", "codex"], { hasClaude: true });
+  assert.deepEqual(
+    plans.map((p) => p.harness),
+    ["claude", "codex"],
+  );
+  assert.ok(plans.every((p) => !p.vendors)); // BOTH install globally
 });
 
 test("shouldPrompt: only a TTY human with unpinned choices", () => {
@@ -82,7 +142,7 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
   // every choice pinned via flags → nothing to ask
   assert.equal(
     shouldPrompt(
-      parseSetupArgs(["--pillars=both", "--no-gha", "--no-plugin"]),
+      parseSetupArgs(["--lint", "--test", "--no-gha", "--no-plugin"]),
       true,
     ),
     false,

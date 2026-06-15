@@ -1,7 +1,7 @@
 # CLI & CI reference
 
 Full command-line surface, the GitHub Action, the Claude Code plugin, and the
-`vigiles audit` validation rules. For the pitch and quick start, see the
+`vigiles lint` validation rules. For the pitch and quick start, see the
 [README](../README.md).
 
 ## Commands
@@ -9,7 +9,7 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
+npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
@@ -27,8 +27,9 @@ Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
 default; in a CI job that **asserts** the capability is present, add `--no-skip`
 so a skipped tier **fails** (a green-with-skips is untested surface).
 
-By default `init` sets up **both pillars**: it scaffolds a typed spec + types
-(Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), wires CI as a
+By default `init` sets up **both pillars** — **Lint** (verify instruction-file
+references) and **Test** (test the harness): it scaffolds a typed spec + types
+(Lint), a starter `vigiles.harness.mjs` (Test), wires CI as a
 `zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none
 exists), and installs the Claude Code plugin.
 
@@ -39,14 +40,21 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                           | Effect                                                 |
-| ------------------------------ | ------------------------------------------------------ |
-| `--yes`, `-y`                  | Skip prompts; use defaults (both pillars, CI, plugin)  |
-| `--pillars=both\|verify\|test` | Which pillars to set up (default `both`)               |
-| `--no-gha`                     | Skip wiring CI                                         |
-| `--no-plugin`                  | Skip installing the Claude Code plugin                 |
-| `--strict`                     | Set `require-spec` / `require-skill-spec` to `"error"` |
-| `--target=AGENTS.md`           | Create a bare spec for one file (Pillar 1 only)        |
+| Flag                     | Effect                                                           |
+| ------------------------ | ---------------------------------------------------------------- |
+| `--yes`, `-y`            | Skip prompts; use defaults (both pillars, CI, plugin)            |
+| `--lint` / `--no-lint`   | Lint pillar — verify instruction-file references (default on)    |
+| `--test` / `--no-test`   | Test pillar — scaffold a harness test (default on)               |
+| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
+| `--no-gha`               | Skip wiring CI                                                   |
+| `--no-plugin`            | Skip installing the Claude Code plugin                           |
+| `--strict`               | Set `require-spec` / `require-skill-spec` to `"error"`           |
+| `--target=AGENTS.md`     | Create a bare spec for one file (Lint pillar only)               |
+
+Passing a single positive pillar flag selects only it (`--lint` = the Lint
+pillar only); pass both, or neither, for both. `init` also adds `vigiles` to your
+`devDependencies` (moving it out of `dependencies` if it's there) so the
+scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
 
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).
@@ -107,10 +115,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: zernie/vigiles@v1 # runs `audit` by default
+      - uses: zernie/vigiles@v1 # runs `lint` by default
 ```
 
-That's the whole thing — `audit` verifies that every linter rule, file path,
+That's the whole thing — `lint` verifies that every linter rule, file path,
 script, and symbol your `CLAUDE.md` / `AGENTS.md` cites is real and enabled, checks
 the integrity hashes, and reports coverage. Failures appear inline as GitHub
 annotations and fail the job.
@@ -128,8 +136,8 @@ annotations and fail the job.
 
 | Input               | Default   | Description                                                                                 |
 | ------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `command`           | `audit`   | `audit` (verify references + integrity + coverage) or `compile` (specs → markdown).         |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `audit`, `.spec.ts` for `compile`. Auto-discovers.  |
+| `command`           | `lint`    | `lint` (verify references + integrity + coverage) or `compile` (specs → markdown).          |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.   |
 | `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
 | `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
 | `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
@@ -162,10 +170,28 @@ On a fork PR (read-only token) the comment step degrades to a warning — the jo
 
 ### Versioning
 
-Pin to the **floating major tag** `@v1` for automatic patch/minor updates (the
-release pipeline keeps `v1` pointed at the latest `1.x`). Pin a full tag
-(`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
-unreleased `HEAD` — use it only to test upcoming changes.
+**The Action tag and the npm version are two separate version lines.** The Action
+is a thin composite that runs the published `npx vigiles@<version>` CLI, so:
+
+- **Action ref** (`uses: zernie/vigiles@v1`) — pin the **floating major tag**
+  `@v1` for automatic patch/minor updates to the _Action wrapper_ (the release
+  pipeline keeps `v1` pointed at the latest `1.x` of the action). Pin a full tag
+  (`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
+  unreleased `HEAD`.
+- **CLI version** (`version:` input, default `latest`) — selects which published
+  `vigiles` npm release the Action runs (currently `3.x`). Leave it `latest`, or
+  pin `version: '3'` / `version: '3.0.0'` to lock the CLI independently of the
+  Action tag.
+
+So `uses: zernie/vigiles@v1` with the default `version: latest` runs the newest
+`vigiles` CLI (3.x today) through the v1 action wrapper. The `@v1` does **not**
+mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: '3' }`.
+
+```yaml
+- uses: zernie/vigiles@v1
+  with:
+    version: "3" # pin the CLI major; @v1 pins the action wrapper
+```
 
 To verify generated types are fresh in CI:
 
@@ -177,20 +203,55 @@ To verify generated types are fresh in CI:
 
 Without the plugin, you're responsible for manually running `compile` and
 `generate-types`. With it, the agent works with fresh instruction files
-automatically.
+automatically, and the consumer skills (`strengthen`, `migrate-to-spec`,
+`test-harness`, `edit-spec`, `generate-rule`) are available.
 
-```bash
-npx skills add zernie/vigiles
+The plugin installs through the **Claude Code plugin marketplace** — globally
+into `~/.claude/plugins/`, **not** vendored into your repo. In a Claude Code
+session:
+
+```
+/plugin marketplace add zernie/vigiles
+/plugin install vigiles@vigiles
 ```
 
-The plugin provides two hooks:
+`vigiles init` does this for you (it runs the non-interactive `claude plugin`
+CLI when available, else prints these two commands). Nothing is written to your
+working tree, so there is nothing to `.gitignore` or accidentally commit.
+
+The plugin provides hooks:
 
 - **PreToolUse** (Edit/Write) — blocks direct edits to compiled `.md` files and redirects the agent to the `.spec.ts` source
-- **PostToolUse** (Edit/Write) — auto-runs `generate-types` on linter config changes, `compile` on `.spec.ts` changes
+- **PostToolUse** (Edit/Write) — auto-runs `generate-types` on linter config changes, `compile` on `.spec.ts` changes; nudges marking unmarked references
+- **SessionStart** — surfaces the project's vigiles state
+
+> Internal vigiles-development skills (`generate-logo`, `pr-to-lint-rule`,
+> `enforce-rules-format`, `audit-feedback-loop`) live under `dev/` and are **not**
+> shipped to consumers. Contributors load them with `--plugin-dir dev/`.
+
+### Codex
+
+Codex has no plugin marketplace, but the same skills install **globally** via the
+cross-agent [`skills` CLI](https://github.com/vercel-labs/skills) — to the global
+agents store `~/.agents/skills/` (which Codex reads), again not vendored into your
+repo:
+
+```bash
+npx skills add zernie/vigiles -a codex -g -y
+```
+
+(The `-g` is what keeps it out of your repo — without it, `skills` vendors into
+`./.agents/skills/`. `-y` skips the confirmation prompt.)
+
+`vigiles init --harness=codex` (or auto-detection on an `AGENTS.md` repo) runs
+this for you. Codex reads `AGENTS.md` directly, so no plugin is needed for
+instructions; only the authoring skills install. Codex **hooks**
+(`.codex/config.toml [hooks]`) are not auto-wired yet — add them by hand if you
+want compile-on-edit.
 
 ## Validation rules
 
-`vigiles audit` validates instruction files; the refs-hook nudges marking on edit:
+`vigiles lint` validates instruction files; the refs-hook nudges marking on edit:
 
 | Rule                                                | Default  | What it checks                                                                  |
 | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |

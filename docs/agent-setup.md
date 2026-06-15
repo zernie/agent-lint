@@ -4,16 +4,22 @@ How to set up vigiles when an AI agent is doing the installation (non-interactiv
 
 ## What an Agent Can Do
 
-| Action                    | Agent can do it? | How                                         |
-| ------------------------- | ---------------- | ------------------------------------------- |
-| Create spec file          | Yes              | `npx vigiles init` (non-interactive wizard) |
-| Generate types            | Yes              | `npx vigiles generate-types`                |
-| Compile specs             | Yes              | `npx vigiles compile`                       |
-| Add CI step               | Yes              | Edit `.github/workflows/*.yml` directly     |
-| Install hooks             | Yes              | Write to `.claude/settings.json` directly   |
-| Install plugin via skills | **No**           | Requires user to run `npx skills add`       |
+| Action                   | Agent can do it? | How                                                                                                                              |
+| ------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Create spec file         | Yes              | `npx vigiles init` (non-interactive wizard)                                                                                      |
+| Generate types           | Yes              | `npx vigiles generate-types`                                                                                                     |
+| Compile specs            | Yes              | `npx vigiles compile`                                                                                                            |
+| Add the dev dependency   | Yes              | `npx vigiles init` adds `vigiles` to devDeps                                                                                     |
+| Add CI step              | Yes              | Edit `.github/workflows/*.yml` directly                                                                                          |
+| Install the plugin       | Maybe            | `claude plugin install vigiles@vigiles` if the `claude` CLI is on PATH; else the user runs the two `/plugin` commands in-session |
+| Install hooks (fallback) | Yes              | Write to `.claude/settings.json` directly                                                                                        |
 
-The `skills add` command requires user action — an agent can't install plugins for itself. But it CAN write the hook configuration directly to `.claude/settings.json`, which achieves the same result.
+The plugin installs through the Claude Code **marketplace** — globally into
+`~/.claude/plugins/`, never vendored into the repo. `init` runs the
+non-interactive `claude plugin` CLI when it's available; otherwise it prints the
+two in-session slash commands for the user to run. An agent that can't reach the
+`claude` CLI can still get the hook behaviour by writing it to
+`.claude/settings.json` directly (Step 2).
 
 ## Non-Interactive Setup
 
@@ -26,17 +32,19 @@ npx vigiles init        # or `npx vigiles init --yes` to be explicit
 `init` auto-detects a non-TTY (an agent / CI / piped input) and runs
 **non-interactively** — no prompts, no hanging. So a user prompt as simple as
 _"set up vigiles in this repo"_ works: the agent runs `npx vigiles init` and gets
-sensible defaults. With the defaults it sets up **both pillars** — a typed spec +
-types (Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), a
-`zernie/vigiles@v1` CI workflow (`.github/workflows/vigiles.yml`), and the plugin.
+sensible defaults. With the defaults it sets up **both pillars** — Lint (a typed
+spec + types) and Test (a starter `vigiles.harness.mjs`), a
+`zernie/vigiles@v1` CI workflow (`.github/workflows/vigiles.yml`), `vigiles` added
+to `devDependencies`, and the Claude Code plugin installed via the marketplace.
 
-Scope it with flags when needed: `--pillars=verify|test|both`, `--no-gha`,
-`--no-plugin`, `--strict`. (A human running it in a terminal gets interactive
-prompts instead.)
+Scope it with flags when needed: `--lint`, `--test` (one pillar or both),
+`--harness=claude,codex`, `--no-gha`, `--no-plugin`, `--strict`. (A human running
+it in a terminal gets interactive prompts instead.)
 
-### Step 2: Install hooks directly
+### Step 2: Install hooks directly (fallback)
 
-Instead of `npx skills add zernie/vigiles`, the agent can write the hooks to `.claude/settings.json`:
+The plugin already brings the hooks. If you'd rather commit project-level hooks
+instead of (or alongside) the plugin, write them to `.claude/settings.json`:
 
 ```json
 {
@@ -67,7 +75,7 @@ The agent should read the generated `.spec.ts` file and fill in the project's ac
 
 ```bash
 npx vigiles compile
-npx vigiles audit
+npx vigiles lint
 ```
 
 ## Recommended Agent Prompt
@@ -76,12 +84,12 @@ If you want an agent to set up vigiles in a project, use this prompt:
 
 ```
 Set up vigiles for this project:
-1. Run `npx vigiles init`
+1. Run `npx vigiles init` (it adds vigiles to devDependencies and installs the
+   Claude Code plugin via the marketplace — nothing is vendored into the repo)
 2. Read the generated .spec.ts file
 3. Fill in the project's actual conventions based on the codebase
-4. Add hooks to .claude/settings.json for auto-compilation
-5. Run `npx vigiles compile` to verify everything works
-6. Commit the .spec.ts, compiled .md, .vigiles/generated.d.ts, and settings changes
+4. Run `npm install`, then `npx vigiles compile` to verify everything works
+5. Commit the .spec.ts, compiled .md, .vigiles/generated.d.ts, and package.json
 ```
 
 ## What the Agent Gets Wrong

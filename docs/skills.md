@@ -143,10 +143,12 @@ keeping big scripts out of the body (token budget + progressive disclosure).
   (`vigiles skill-hook`) runs its result gate and **blocks completion until it
   passes** (exit 2 feeds the reason back to the model); `vigiles skill-done`
   clears it. Proven end-to-end against real Claude Code in `test/e2e`.
-- **Edit protection**: `vigiles init` installs a `PreToolUse` hook that blocks
-  edits to any vigiles-compiled file (one carrying a `vigiles:sha256:` header —
-  including a compiled `SKILL.md`) and redirects to its spec, and a `PostToolUse`
-  hook that recompiles on `*.spec.ts` edits. Hand-written markdown is untouched.
+- **Edit protection**: the Claude Code plugin (installed via the marketplace —
+  `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`,
+  or via `vigiles init`) ships a `PreToolUse` hook that blocks edits to any
+  vigiles-compiled file (one carrying a `vigiles:sha256:` header — including a
+  compiled `SKILL.md`) and redirects to its spec, and a `PostToolUse` hook that
+  recompiles on `*.spec.ts` edits. Hand-written markdown is untouched.
 
 ## Testing skills deterministically — `vigiles/skill-test`
 
