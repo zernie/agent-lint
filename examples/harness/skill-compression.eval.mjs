@@ -26,10 +26,7 @@
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
  * External users import from the package: `from "vigiles/eval"`.
  */
-import {
-  runEval,
-  formatEvalReport,
-} from "../../dist/adapters/claude-code/eval.js";
+import { runEval, formatEvalReport } from "../../dist/eval.js";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 

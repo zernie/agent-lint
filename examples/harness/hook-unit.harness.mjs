@@ -18,7 +18,7 @@
  * External users import from the package: `from "vigiles/run-hook"` and
  * `from "vigiles/harness-assert"`.
  */
-import { runHook } from "../../dist/adapters/claude-code/run-hook.js";
+import { runHook } from "../../dist/run-hook.js";
 import {
   assertHookBlocked,
   assertHookAllowed,
