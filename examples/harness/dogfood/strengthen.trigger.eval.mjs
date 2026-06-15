@@ -30,6 +30,7 @@ const skill = "vigiles:strengthen";
 
 const report = await measureTriggerRate({
   pluginDir,
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // SHOULD fire — requests to harden/strengthen vigiles rules (>= 10 varied):
   prompts: [
     "Strengthen the rules in my CLAUDE.md — upgrade the guidance ones where a linter rule exists.",

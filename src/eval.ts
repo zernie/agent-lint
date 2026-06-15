@@ -729,6 +729,17 @@ export interface TriggerRateSpec {
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
   /**
+   * Replace each skill's BODY with a no-op stub (keeping its frontmatter — name +
+   * description) before running. Trigger-rate is decided by the frontmatter alone
+   * (the model selects a skill before its body loads), so stubbing the body can't
+   * change what's measured but stops the run from executing an expensive
+   * procedure once the skill fires — far cheaper, faster, side-effect-free. All
+   * skills' descriptions stay present, so the selection competition is faithful.
+   * Default false (off) for now; recommended `true` for trigger evals. See
+   * {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
+  /**
    * Minimum number of prompts each set (relevant + irrelevant) must have. A
    * handful of prompts can't tell a real recall/precision rate from noise, so
    * the run is rejected before it spends a token. Default 10; lower it
@@ -795,7 +806,7 @@ export interface TriggerRateReport {
  */
 export function packageSkillsDir(
   skillsDir: string,
-  opts: { name?: string } = {},
+  opts: { name?: string; stub?: boolean } = {},
 ): string {
   const abs = resolve(skillsDir);
   if (!existsSync(abs))
@@ -815,10 +826,20 @@ export function packageSkillsDir(
   let copied = 0;
   for (const entry of readdirSync(abs, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    if (!existsSync(join(abs, entry.name, "SKILL.md"))) continue;
-    cpSync(join(abs, entry.name), join(skillsOut, entry.name), {
-      recursive: true,
-    });
+    const srcSkill = join(abs, entry.name, "SKILL.md");
+    if (!existsSync(srcSkill)) continue;
+    const destDir = join(skillsOut, entry.name);
+    if (opts.stub) {
+      // Frontmatter-only: keep the trigger surface (name + description), drop the
+      // body so a selected skill stops instead of running its procedure.
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(
+        join(destDir, "SKILL.md"),
+        stubSkillBody(readFileSync(srcSkill, "utf-8")),
+      );
+    } else {
+      cpSync(join(abs, entry.name), destDir, { recursive: true });
+    }
     copied++;
   }
   if (copied === 0) {
@@ -826,6 +847,40 @@ export function packageSkillsDir(
     throw new Error(`No <name>/SKILL.md skills found under ${skillsDir}`);
   }
   return root;
+}
+
+/**
+ * Rewrite a SKILL.md to keep its YAML frontmatter (the trigger surface — name +
+ * description) but replace the body with a no-op stub. Trigger-rate is a property
+ * of the frontmatter ONLY: the model picks a skill from its name + description
+ * before the body is ever loaded, so the body is causally downstream of selection
+ * and irrelevant to whether the skill fires. Stubbing it lets a trigger run stop
+ * AT selection instead of executing an expensive multi-step procedure — cheaper,
+ * faster, and side-effect-free, without changing what's measured. Pure.
+ */
+export function stubSkillBody(skillMd: string): string {
+  const m = /^(---\n[\s\S]*?\n---\n)/.exec(skillMd);
+  const frontmatter = m ? m[1] : "";
+  return `${frontmatter}\nThis skill was selected (trigger-test stub). Acknowledge and stop — do not perform any actions.\n`;
+}
+
+/** The skills directory inside a plugin (`skills/` or `.claude/skills/`). */
+function skillsDirOf(pluginDir: string): string {
+  const direct = join(pluginDir, "skills");
+  if (existsSync(direct)) return direct;
+  return join(pluginDir, ".claude", "skills");
+}
+
+/** A plugin's declared name (from `.claude-plugin/plugin.json`), for the skill
+ * id the `fired` predicate matches (`<name>:<skill>`). */
+function pluginName(pluginDir: string): string | undefined {
+  const manifest = join(pluginDir, ".claude-plugin", "plugin.json");
+  try {
+    return (JSON.parse(readFileSync(manifest, "utf-8")) as { name?: string })
+      .name;
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -919,11 +974,21 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
     throw new Error(
       "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
     );
+  const stub = spec.stubSkillBodies ?? false;
   if (spec.skillsDir) {
-    const packaged = packageSkillsDir(spec.skillsDir);
+    const packaged = packageSkillsDir(spec.skillsDir, { stub });
     return { pluginDir: packaged, packaged };
   }
-  if (spec.pluginDir) return { pluginDir: spec.pluginDir };
+  if (spec.pluginDir) {
+    if (!stub) return { pluginDir: spec.pluginDir };
+    // Stub a real plugin: build a minimal plugin from its skills/ with bodies
+    // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
+    const packaged = packageSkillsDir(skillsDirOf(spec.pluginDir), {
+      stub: true,
+      name: pluginName(spec.pluginDir),
+    });
+    return { pluginDir: packaged, packaged };
+  }
   throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
 }
 

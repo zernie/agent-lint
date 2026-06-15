@@ -33,6 +33,7 @@ const skill = "vigiles-dev:generate-logo";
 
 const report = await measureTriggerRate({
   pluginDir,
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // SHOULD fire — logo requests, varied phrasings (>= 10 for the diversity gate):
   prompts: [
     "Regenerate the vigiles logo with a darker palette.",
