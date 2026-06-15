@@ -27,6 +27,7 @@ how-to docs live in [`../docs/`](../docs/README.md).)
 
 - [`harness-testing.md`](harness-testing.md) — the three-tier design (unit `runHook` / deterministic `runHarnessTest` / eval `runEval`) + the plugin loader. Start here.
 - [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md) — the **pillar-2 surface detail**: every plugin surface × tier, what's shipped vs. next, the spikes, the parked ideas. (The cross-pillar ranking now lives in [`roadmap.md`](roadmap.md).)
+- [`adapter-api-design.md`](adapter-api-design.md) — **core-plus-adapters API design** (AI SDK, unplugin, Drizzle, Testing Library, ESLint, OTel): entry points, import-vs-string selection, the boundary lint rule, conformance posture, and the semver of the pillar-2 runner relayout. Companion to [`code-adapter-architecture.md`](code-adapter-architecture.md).
 - [`eval-api-landscape.md`](eval-api-landscape.md) — the eval-API field scored against ours; the B→A→C roadmap (shipped) and the D/E punts.
 - [`promptfoo-deep-dive.md`](promptfoo-deep-dive.md) — promptfoo in 2026; the one axis that still separates us (harness-arm A/B + cheap sub-model tiers + significance).
 - [`skill-eval-landscape.md`](skill-eval-landscape.md) — AWS skill-eval scored against our pillar; trigger precision + the token-compression use case.

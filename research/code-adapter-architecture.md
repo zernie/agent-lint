@@ -217,6 +217,11 @@ is a deliberate non-goal (model mismatch), not a TODO.
 
 ## See also
 
+- `research/adapter-api-design.md` — the **API-shape** companion to this port
+  design: how comparable tools (AI SDK, unplugin, Drizzle, Testing Library, ESLint,
+  OTel) lay out a core-plus-adapters package — entry points, import-vs-string
+  selection, the boundary lint rule, conformance-kit posture, and the semver of
+  relocating the runners to the composition root. Grounds the pillar-2 relayout.
 - `research/codex-prototype-findings.md` — an internal, non-shipped Codex adapter
   (`src/adapters/codex/`) built to **validate** this architecture: it passes the
   conformance kit + drives the real compiler/loader against Codex fixtures (format
