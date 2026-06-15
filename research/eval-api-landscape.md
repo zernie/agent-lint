@@ -5,6 +5,40 @@ Research capturing how vigiles' eval API (`src/eval.ts`, `src/harness-assert.ts`
 that follows. Companion to `research/harness-testing.md` (the three-tier design)
 and `docs/harness-testing.md` (the guide).
 
+## Decision (2026-06-15): keep the harness tiers, don't rebuild the eval stack
+
+A harness eval is **not** a model/prompt eval, and that distinction decides the
+build-vs-defer question:
+
+- **Fidelity is the moat.** The unit under test is the harness loaded as it
+  **ships** — the real Claude Code system prompt, the real `CLAUDE.md`, real
+  `hooks.json`/`settings.json`/`plugin.json`. Those dominate behaviour (the
+  Claude Code system prompt alone steers skill selection more than a description
+  does). A generic eval runner (promptfoo, DeepEval, Inspect, Braintrust)
+  configures an agent **from YAML/SDK** — a _reconstruction_, not the harness —
+  so it structurally **cannot** host a harness eval. promptfoo's own gap, per
+  `promptfoo-deep-dive.md`, is exactly "the matrix is prompts×providers, not
+  harness arms loaded as they ship." So vigiles owns this; it does not compete on
+  generic eval infra.
+- **Keep the real-model surface THIN.** Most harness questions need no real model
+  at all — `runHook` (no model) and `runHarnessTest` (real `claude` + scripted
+  mock model, full environment fidelity, key-free) answer "does the hook fire /
+  block / inject" deterministically. Only two questions are irreducibly
+  real-model: _does a description FIRE_ (trigger-rate) and _does behaviour MOVE_
+  (A/B delta). Confine real-model machinery to that slice; don't spread it.
+- **`stubSkillBodies`** is the concrete application: trigger-rate is a property of
+  the **frontmatter** (the model selects a skill before its body loads), so the
+  body is stubbed to a no-op — the run stops at selection instead of executing an
+  expensive procedure. Cheaper, faster, side-effect-free, same measurement.
+- **Don't chase eval-infra features.** Cost budgets, model matrices, dataset
+  managers, dashboards — that's promptfoo's lane. For depth, bridge
+  (`AgentRunner` → promptfoo `ProviderFunction`), don't rebuild. The model
+  _itself_ is part of the harness, so the one on-moat eval refinement worth
+  making is **model fidelity** — measure on the model your users actually run
+  (Sonnet for most Claude Code users), not an invisible Haiku default. The NCD
+  prompt-diversity gate stays (deterministic, dogfoods `proofs.ts`);
+  turn-caps/cost-budgets are off-moat.
+
 ## Framing: we are not a model/prompt eval framework
 
 The single most important distinction for any comparison: **the unit under test
