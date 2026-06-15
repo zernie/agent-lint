@@ -13,7 +13,7 @@ import { claudeCodeLayout } from "./layout.js";
 import { claudeCodeRuntime } from "./runtime.js";
 import { claudeCodeHookProtocol } from "./hook-protocol.js";
 import { claudeCodeModelMock } from "./model-mock.js";
-import { claudeCodeDriver } from "./harness-test.js";
+import { claudeCodeDriver } from "../../harness-test.js";
 
 export const claudeCodeAdapter: HarnessAdapter = {
   name: "claude-code",

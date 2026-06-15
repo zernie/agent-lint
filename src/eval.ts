@@ -33,8 +33,8 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
-import { resolveHarness } from "./plugin-loader.js";
-import { claudeCodeRuntime } from "./runtime.js";
+import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
+import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 import {
   parseToolCalls,
   parseResultEvent,

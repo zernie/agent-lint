@@ -111,8 +111,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Audit compiled files
-        run: node dist/cli.js audit
+      - name: Lint compiled files
+        run: node dist/cli.js lint
 
       # Dogfood the shipped GitHub Action itself (composite over the CLI),
       # running the repo's own build via `version: local`. Catches a
@@ -122,7 +122,7 @@ jobs:
         id: vigiles-action
         uses: ./
         with:
-          command: audit
+          command: lint
           version: local
 
       - name: Assert the action reported success

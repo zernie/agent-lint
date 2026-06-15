@@ -24,8 +24,8 @@ import type { AddressInfo } from "node:net";
 // harness-agnostic runner + every adapter can reference them without a
 // cross-adapter import. Re-exported here so `vigiles/claude-code` and the
 // granular `vigiles/mock-model` path keep exporting `ModelTurn`/`ModelRequest`.
-import type { ModelTurn, ModelRequest } from "../../core/harness-driver.js";
-export type { ModelTurn, ModelRequest } from "../../core/harness-driver.js";
+import type { ModelTurn, ModelRequest } from "./core/harness-driver.js";
+export type { ModelTurn, ModelRequest } from "./core/harness-driver.js";
 
 /** Build a scripted model from an ordered list of turns. */
 export function scriptModel(turns: readonly ModelTurn[]): ModelTurn[] {

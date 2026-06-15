@@ -1,7 +1,7 @@
 # unmarked-refs
 
 Nudge (or block) the agent when an instruction file (`CLAUDE.md` / `AGENTS.md` /
-`SKILL.md`) names a **linter rule that isn't a vigiles mark** — so `vigiles audit`
+`SKILL.md`) names a **linter rule that isn't a vigiles mark** — so `vigiles lint`
 can't verify it exists and is enabled — or has a `vigiles:symbol` mark whose
 target is missing. This is the rule behind the **PostToolUse refs-hook**: it's
 what makes the agent express rule references as marks _in the loop_, the moment

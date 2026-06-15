@@ -72,7 +72,7 @@ and **no** hooks).
 
 Below the three runtime tiers sits a **static, model-free floor** the table
 doesn't have a column for: skills load and resolve with a usable `description`
-(`src/skills-dogfood.test.ts`), and `vigiles audit`'s
+(`src/skills-dogfood.test.ts`), and `vigiles lint`'s
 [`untested-surface`](rules/untested-surface.md) rule flags any skill/hook/subagent
 that ships with no test or eval at all — the "is there even a test?" check that
 precedes "does the test pass?".
@@ -136,13 +136,13 @@ CI runs **every tier except evals** — not one at a time, and not all crammed i
 one job. Each tier runs where it's cheapest, so a fast unit failure surfaces
 before the slow, privileged ones.
 
-| Tier                     | Run it with                                   | This repo's CI job           | Needs                         |
-| ------------------------ | --------------------------------------------- | ---------------------------- | ----------------------------- |
-| Unit (+ coverage gate)   | `npm test` / `npm run coverage`               | `test`                       | nothing (model-free)          |
-| Reference verification   | `vigiles audit` (+ the Action via `uses: ./`) | `check`                      | nothing                       |
-| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)         | `harness`                    | the real `claude` CLI, no key |
-| e2e (allowlisted egress) | `npm run test:e2e`                            | `e2e` (privileged container) | bubblewrap + slirp4netns      |
-| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)       | **manual — not in CI**       | model auth ($)                |
+| Tier                     | Run it with                                  | This repo's CI job           | Needs                         |
+| ------------------------ | -------------------------------------------- | ---------------------------- | ----------------------------- |
+| Unit (+ coverage gate)   | `npm test` / `npm run coverage`              | `test`                       | nothing (model-free)          |
+| Reference verification   | `vigiles lint` (+ the Action via `uses: ./`) | `check`                      | nothing                       |
+| Deterministic harness    | `vigiles test` (`*.harness.{mjs,ts}`)        | `harness`                    | the real `claude` CLI, no key |
+| e2e (allowlisted egress) | `npm run test:e2e`                           | `e2e` (privileged container) | bubblewrap + slirp4netns      |
+| **Eval** (real model)    | `npm run test:eval` (`*.eval.{mjs,ts}`)      | **manual — not in CI**       | model auth ($)                |
 
 **Best practice** (what this maps to): keep the model-free tiers (unit /
 reference / deterministic) on every push and PR so feedback is fast and free;

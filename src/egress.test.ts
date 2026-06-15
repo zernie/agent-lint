@@ -10,6 +10,7 @@ import {
   parseNftCounters,
   countersToResult,
   probeEgressAvailable,
+  egressAvailable,
 } from "./egress.js";
 
 test("parseGetent splits unique IPs by family, ignores junk", () => {
@@ -36,6 +37,16 @@ test("resolveAllow maps each host through the injected resolver", () => {
     { host: "a.com", v4: ["1.1.1.1"], v6: [] },
     { host: "b.com", v4: [], v6: ["::1"] },
   ]);
+});
+
+test("resolveAllow defaults to the real getent resolver", () => {
+  // no injected lookup → exercises the default getentLookup (shells out to
+  // getent; the verdict is host/env-dependent, but the shape is invariant).
+  const out = resolveAllow([]);
+  assert.deepEqual(out, []);
+  const [r] = resolveAllow(["localhost"]);
+  assert.equal(r?.host, "localhost");
+  assert.ok(Array.isArray(r?.v4) && Array.isArray(r?.v6));
 });
 
 test("parseResolvers reads nameservers, falls back to 8.8.8.8", () => {
@@ -197,4 +208,15 @@ test("countersToResult: reached hosts become allowed attempts; zero-traffic drop
 test("probeEgressAvailable requires the bwrap probe AND the tools", () => {
   // available:false short-circuits regardless of the host's tools
   assert.equal(probeEgressAvailable(false), false);
+  // available:true runs the real `command -v` PATH probe for slirp4netns/nft;
+  // the verdict is host-dependent (true only where both resolve) but the probe
+  // itself executes either way — a boolean, never a throw.
+  assert.equal(typeof probeEgressAvailable(true), "boolean");
+});
+
+test("egressAvailable caches the probe verdict", () => {
+  // first call runs probeEgressAvailable, then memoizes; both calls agree.
+  const first = egressAvailable(false);
+  assert.equal(typeof first, "boolean");
+  assert.equal(egressAvailable(true), first); // cached → ignores the new arg
 });

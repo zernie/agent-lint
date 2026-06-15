@@ -3,7 +3,7 @@
 vigiles meets you in the markdown you already have. You don't need a
 TypeScript build step, and you don't need to port your `CLAUDE.md` into a
 `.spec.ts` to get verified rules. Markdown mode is the on-ramp: declare
-enforce rules **in the instruction file itself** and `vigiles audit`
+enforce rules **in the instruction file itself** and `vigiles lint`
 verifies them against your real linter config — existence check,
 closest-match typo suggestions, disabled-rule detection, and GitHub Actions
 annotations, exactly like spec mode.
@@ -108,9 +108,9 @@ no TypeScript in the project. Re-run `generate-schema` when your linter
 config changes (or wire it into CI with `--check`, alongside
 `generate-types --check`).
 
-### What `vigiles audit` catches
+### What `vigiles lint` catches
 
-Running `vigiles audit CLAUDE.md` on a file with a `vigiles:` frontmatter
+Running `vigiles lint CLAUDE.md` on a file with a `vigiles:` frontmatter
 block will:
 
 - Verify each `rule` reference against your real linter config.

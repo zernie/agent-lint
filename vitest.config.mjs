@@ -68,6 +68,8 @@ export default defineConfig({
         "src/harness-assert.ts",
         "src/eval.ts",
         "src/eval-baseline.ts",
+        "src/eval-cache.ts",
+        "src/stats.ts",
         "src/run-hook.ts",
         "src/mock-model.ts",
         "src/plugin-loader.ts",

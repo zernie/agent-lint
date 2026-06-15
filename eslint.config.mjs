@@ -17,6 +17,12 @@ const VERIFY_CORE = "src/core/**/*.ts";
 const CC_HARNESS = "src/adapters/claude-code/**/*.ts";
 const CODEX_HARNESS = "src/adapters/codex/**/*.ts";
 const OPENCODE_HARNESS = "src/adapters/opencode/**/*.ts";
+// The harness-AGNOSTIC public surface: the pillar-2 entry + the per-tier barrels.
+// These advertise themselves as harness-agnostic, so they must route through the
+// composition-root runner modules (src/{harness-test,run-hook,eval,mock-model}.ts),
+// never reach into a specific adapter — otherwise "agnostic" is a name only. See
+// research/adapter-api-design.md.
+const AGNOSTIC_SURFACE = "src/{testing,unit,integration,e2e}.ts";
 
 export default [
   {
@@ -91,6 +97,7 @@ export default [
         { type: "codex-harness", mode: "full", pattern: CODEX_HARNESS },
         { type: "opencode-harness", mode: "full", pattern: OPENCODE_HARNESS },
         { type: "verify-core", mode: "full", pattern: VERIFY_CORE },
+        { type: "agnostic-surface", mode: "full", pattern: AGNOSTIC_SURFACE },
       ],
     },
     rules: {
@@ -108,6 +115,16 @@ export default [
               },
               message:
                 "Hexagonal boundary: the reference-verification domain (${file.type}) must not import a harness/transport adapter (${dependency.type}). Keep the core harness-agnostic — depend through a port, or move this module into the application layer. See research/code-adapter-architecture.md.",
+            },
+            {
+              from: { type: "agnostic-surface" },
+              disallow: {
+                to: {
+                  type: ["cc-harness", "codex-harness", "opencode-harness"],
+                },
+              },
+              message:
+                "Agnostic surface: the harness-agnostic public entry (${file.type}) must not import a specific harness adapter (${dependency.type}). Re-export the composition-root runner modules (src/{harness-test,run-hook,eval,mock-model}.ts) instead, so this surface stays harness-agnostic. See research/adapter-api-design.md.",
             },
           ],
         },

@@ -87,7 +87,7 @@ import {
   gateLabel,
 } from "./adapters/claude-code/skill-runtime.js";
 import { checkLinterRule } from "./core/linters.js";
-import { claudeAvailable } from "./adapters/claude-code/harness-test.js";
+import { claudeAvailable } from "./harness-test.js";
 import {
   discoverScripts,
   runScripts,
@@ -2486,7 +2486,7 @@ function printUsage(command: string | undefined): void {
   );
   console.log("  vigiles compile              Compile all .spec.ts files");
   console.log(
-    "  vigiles audit                Verify hashes + coverage + suggestions",
+    "  vigiles lint                 Verify references, hashes, coverage + suggestions",
   );
   console.log("");
   console.log("Plumbing:");
@@ -2815,7 +2815,7 @@ function refsHookCommand(): void {
     issues.map((m) => `  - ${m}`).join("\n") +
     `\nExpress references as marks (\`enforce()\` / \`file()\` / \`cmd()\` / a ` +
     `\`vigiles:symbol\` span / an inline \`<!-- vigiles:enforce -->\` comment) so ` +
-    `\`vigiles audit\` can check them — or add \`<!-- vigiles:ignore -->\` if it ` +
+    `\`vigiles lint\` can check them — or add \`<!-- vigiles:ignore -->\` if it ` +
     `is prose, not a reference.`;
   process.stdout.write(
     JSON.stringify({

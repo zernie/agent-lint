@@ -20,7 +20,7 @@ import {
   evaluatePreToolUse,
 } from "./agent-runtime.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
-import { runHook } from "./run-hook.js";
+import { runHook } from "../../run-hook.js";
 import { writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 

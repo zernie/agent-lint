@@ -1,6 +1,6 @@
 # Agent instructions (demo)
 
-This file reads fine. Two of its references lie — `vigiles audit` catches both,
+This file reads fine. Two of its references lie — `vigiles lint` catches both,
 while the two truthful ones pass silently.
 
 ## Auth

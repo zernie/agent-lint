@@ -7,7 +7,7 @@ and the harness-specific pieces live behind a swappable **adapter**.
 
 > **Supported today: Claude Code and Codex.** Codex (`vigiles/codex`) is
 > auto-detected by the CLI, **verifies** references, **compiles** Codex-shaped
-> instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs **pillar-2**
+> instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs **Test**-pillar
 > harness tests against the real `codex` binary (keyless, OpenAI-Responses mock) via
 > `runHarnessTest({ adapter: codexAdapter })`. Subagents are a deliberate boundary
 > (a Codex subagent is concurrency config, not a tool-contract file — see the
@@ -34,31 +34,23 @@ Claude Code layouts (`.claude-plugin/plugin.json`, `.claude/settings.json`,
 `${CLAUDE_PLUGIN_ROOT}`, `skills/`, `agents/`) and the scriptable Anthropic
 Messages mock you point `claude` at.
 
-When a second harness lands, it sits **beside** the first — same core, a new
-adapter import:
+A second harness sits **beside** the first — same core, a different import. Codex
+already ships this way:
 
 ```ts
-import { startCodexMock, codexAdapter } from "vigiles/codex"; // shipped
+import { startCodexMock, codexAdapter } from "vigiles/codex";
 ```
 
-Nothing in `vigiles/testing` changes. Unused adapters tree-shake out; there's no
-runtime registry and no "harness not found" surprise.
+Nothing in `vigiles/testing` changes, and unused adapters tree-shake out.
+Importing the adapter (rather than a `harness:` config key) means the bundle only
+carries the adapter you use, and the choice is type-checked where you write it.
 
-### Why import, not a `harness:` config key
+## The CLI auto-detects
 
-- You're already writing code (`.spec.ts`, `*.harness.mjs`) — naming the adapter
-  is one more import, and the types flow through.
-- The bundle only carries the adapter you import (each drags in its own spawn /
-  SSE / sandbox machinery).
-- A config string is a runtime lookup; an import is checked when you write it.
-
-## The CLI is the exception — it auto-detects
-
-The programmatic API names the adapter by import. The **CLI cannot** — so
-`vigiles compile`, `vigiles scan`, and `vigiles audit` **detect** the harness
-from what's in the repo (a `.claude-plugin/`, an `AGENTS.md`, …) and keep working
-with zero config. A `vigiles.config` override is the planned escape hatch if
-detection is ever ambiguous.
+The CLI can't take an import, so `vigiles compile`, `vigiles scan`, and
+`vigiles lint` **detect** the harness from the repo (a `.claude-plugin/`, an
+`AGENTS.md`, …) and work with zero config; a `vigiles.config` override is the
+planned escape hatch if detection is ever ambiguous.
 
 ## What's actually harness-specific (the two axes)
 
@@ -82,23 +74,23 @@ adapters that hang or no-op. Each adapter therefore declares an
 **requires a transport port only for the capability the adapter claims** — so a
 reference-only harness is a first-class adapter, not a broken one.
 
-| Capability                            | Descriptor flag                         | Needs ports             | What it unlocks                                          |
-| ------------------------------------- | --------------------------------------- | ----------------------- | -------------------------------------------------------- |
-| **Pillar 1** — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `audit` — verify refs, tools, paths |
-| **Pillar 2** — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model)  |
-| **Shell-hook tier**                   | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)       |
+| Capability                                   | Descriptor flag                         | Needs ports             | What it unlocks                                         |
+| -------------------------------------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------- |
+| **Lint** (pillar 1) — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `lint` — verify refs, tools, paths |
+| **Test** (pillar 2) — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model) |
+| **Shell-hook tier**                          | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)      |
 
 Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
 
-| Harness                    | Pillar 1 | Pillar 2 (mockable)    | Shell hooks              | Status                                                                         |
-| -------------------------- | -------- | ---------------------- | ------------------------ | ------------------------------------------------------------------------------ |
-| **Claude Code**            | ✅       | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                                         |
-| **Codex**                  | ✅¹      | ✅ Responses SSE       | ✅ veto (exit 2)         | ✅ **shipped** (`vigiles/codex`) — pillars 1 & 2² (subagents differ by design) |
-| **OpenCode**               | ✅       | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false`                   |
-| **Cursor**                 | ✅       | ⛔ **closed, no BYOM** | ⛔                       | not built — pillar-1-only at best                                              |
-| **Devin / Amp / Amazon Q** | ✅       | ⛔ **un-mockable**     | varies                   | not built — pillar-1-only (closed backend)                                     |
+| Harness                    | Lint | Test (mockable)        | Shell hooks              | Status                                                                       |
+| -------------------------- | ---- | ---------------------- | ------------------------ | ---------------------------------------------------------------------------- |
+| **Claude Code**            | ✅   | ✅ Anthropic SSE       | ✅ exit 2 / decision     | ✅ **shipped** — the reference adapter                                       |
+| **Codex**                  | ✅¹  | ✅ Responses SSE       | ✅ veto (exit 2)         | ✅ **shipped** (`vigiles/codex`) — Lint & Test² (subagents differ by design) |
+| **OpenCode**               | ✅   | 🚧 openai-compat³      | ⛔ **code-module hooks** | 🧪 prototype (`src/adapters/opencode/`) — `shellHooks:false`                 |
+| **Cursor**                 | ✅   | ⛔ **closed, no BYOM** | ⛔                       | not built — Lint-only at best                                                |
+| **Devin / Amp / Amazon Q** | ✅   | ⛔ **un-mockable**     | varies                   | not built — Lint-only (closed backend)                                       |
 
-¹ Codex **pillar 1 is format-correct for the surfaces that map**: references are
+¹ Codex **Lint is format-correct for the surfaces that map**: references are
 verified against the Codex dialect, and `compile` emits Codex-shaped output —
 `AGENTS.md` (plain markdown) and minimal `SKILL.md` (`name`/`description` only,
 driven by `dialect.skillFrontmatter`), with Claude Code output byte-identical
@@ -110,14 +102,14 @@ loader reads Codex's TOML manifest format-aware, so its `[mcp_servers]` table is
 detected like CC's JSON `mcpServers`.
 
 ² Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
-`.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Pillar
-2 is full and usable through the public API** — `runHarnessTest(spec, { adapter:
+`.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. **Test
+is full and usable through the public API** — `runHarnessTest(spec, { adapter:
 codexAdapter })` drives real `codex exec` against the OpenAI **Responses** mock
 (`src/adapters/codex/mock-model.ts`), keylessly. The runner is adapter-driven: a
 per-harness `HarnessTestDriver` (argv + mock + parse) behind the `wireMock` runtime
 seam, with Claude Code as the default and its behaviour byte-identical. A gated
 `harness-test.test.ts` runs the real-codex turn (request shape + SSE captured from
-live traffic, not guessed). Pillar 1 is format-correct per ¹; `runEval` follows the
+live traffic, not guessed). Lint is format-correct per ¹; `runEval` follows the
 same driver seam (the documented follow-on).
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
@@ -127,9 +119,9 @@ wired here yet (see
 The codex path is the proof the same work generalizes (see
 [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)).
 
-The takeaway: **everyone converges on pillar 1** (AGENTS.md is becoming universal),
-so the discriminator is pillar 2 — and there, _mockability_ is the gate. OpenCode
-is the case that splits the matrix mid-row: mockable (so pillar 2 is reachable)
+The takeaway: **everyone converges on Lint** (AGENTS.md is becoming universal),
+so the discriminator is Test — and there, _mockability_ is the gate. OpenCode
+is the case that splits the matrix mid-row: mockable (so Test is reachable)
 but with in-process plugin hooks instead of shell processes (so the `runHook`
 unit tier doesn't apply — `shellHooks:false`, no `hookProtocol`).
 
@@ -159,5 +151,5 @@ not a comment.
 ## See also
 
 - [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md) — the design: the two axes, the ports to extract when adapter #2 lands, and the step-by-step Codex recipe.
-- [`docs/harness-testing.md`](harness-testing.md) — the three test tiers that ride on `vigiles/testing`.
+- [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles/testing`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
 - [`research/sync-tool-compatibility.md`](../research/sync-tool-compatibility.md) — composing with _format-axis_ tools (Ruler, rulesync) that distribute the file vigiles authors.

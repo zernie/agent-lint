@@ -27,8 +27,8 @@ import {
   usedTool,
   outputContains,
   assertTriggerRate,
-} from "../../harness-assert.js";
-import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
+} from "./harness-assert.js";
+import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
