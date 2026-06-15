@@ -539,7 +539,7 @@ test("requestContains / assertRequestContains search system + messages", () => {
       {
         system: "",
         messages: [
-          { role: "user", text: "/audit the repo" },
+          { role: "user", text: "/review the repo" },
           { role: "assistant", text: "on it" },
         ],
       },
@@ -549,7 +549,7 @@ test("requestContains / assertRequestContains search system + messages", () => {
   assert.equal(requestContains(r, "You have superpowers"), true);
   assert.equal(requestContains(r, /super\w+/), true);
   // hits in a message (slash-command expansion shape)
-  assert.equal(requestContains(r, "/audit the repo"), true);
+  assert.equal(requestContains(r, "/review the repo"), true);
   assert.equal(requestContains(r, "never sent"), false);
   assertRequestContains(r, "superpowers");
   assert.throws(() => {

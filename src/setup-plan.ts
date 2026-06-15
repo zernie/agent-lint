@@ -11,7 +11,7 @@
 
 /** What `vigiles init` will set up. */
 export interface SetupPlan {
-  /** Lint pillar — verify instruction-file references (specs, types, compile, lint/audit, hooks). */
+  /** Lint pillar — verify instruction-file references (specs, types, compile, lint, hooks). */
   lint: boolean;
   /** Test pillar — test the harness (scaffold a starter harness test + CI job). */
   test: boolean;

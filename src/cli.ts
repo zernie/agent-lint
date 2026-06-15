@@ -115,7 +115,7 @@ function findSpecs(pattern?: string): string[] {
   return globSync(glob, {
     // `dot: true` so specs that live in a sync tool's source slot (e.g.
     // `.ruler/AGENTS.md.spec.ts`, the redirect target) are discovered by
-    // compile/audit/the recompile hook — not just root-level specs.
+    // compile/lint/the recompile hook — not just root-level specs.
     dot: true,
     ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
     cwd: process.cwd(),
@@ -413,7 +413,7 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
 
     // If the file doesn't exist at all (typo, deleted), that's an error —
     // not a "no hash" informational message. Without this check, a scoped
-    // audit like `vigiles lint typo.md` would silently exit clean.
+    // lint like `vigiles lint typo.md` would silently exit clean.
     if (!existsSync(fullPath)) {
       log(`\n✗ ${filePath} — file not found`);
       if (!silent) {
@@ -515,7 +515,7 @@ function check(filePaths: string[], silent = false): CombinedCheckResult {
     hashErrors: hashes.errorCount,
     // `validateSpecs` only returns a boolean today, so we collapse
     // failures to 1 until it starts reporting counts. Kept in its own
-    // counter so audit's "stale hash — run vigiles compile" remediation
+    // counter so lint's "stale hash — run vigiles compile" remediation
     // doesn't misreport a require-spec / other validation failure.
     validationErrors: specsValid ? 0 : 1,
   };
@@ -540,7 +540,7 @@ async function findDuplicateRules(
     if (!silent) console.log(msg);
   };
   const allSpecs = findSpecs();
-  // If audit was invoked with explicit file arguments, only scan the specs
+  // If lint was invoked with explicit file arguments, only scan the specs
   // for those files — otherwise an unrelated duplicate elsewhere in the
   // repo would fail a targeted CI check (e.g. `vigiles lint path/foo.md`).
   //
@@ -622,9 +622,9 @@ async function findDuplicateRules(
 }
 
 /**
- * Structured audit report used by --json, --summary, and exit-code logic.
+ * Structured lint report used by --json, --summary, and exit-code logic.
  */
-interface AuditReport {
+interface LintReport {
   hashErrors: number;
   validationErrors: number;
   inlineErrors: number;
@@ -724,7 +724,7 @@ async function verifyMarkdownMcpRefs(
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
-function auditExitCode(report: AuditReport): 0 | 1 | 2 {
+function lintExitCode(report: LintReport): 0 | 1 | 2 {
   if (
     report.hashErrors > 0 ||
     report.validationErrors > 0 ||
@@ -960,7 +960,7 @@ interface MarkdownModeTotals {
  *
  * Spec mode is the source of truth when it exists, so a literal
  * `<!-- vigiles:enforce ... -->` snippet that survived into compiled
- * markdown (or an example in a spec-managed file) must not trip audit. A
+ * markdown (or an example in a spec-managed file) must not trip lint. A
  * file is spec-managed iff it has a sibling `<file>.spec.ts` OR its own
  * `<!-- vigiles:sha256:... compiled from <spec> -->` header. A rule
  * declared both inline and in frontmatter is verified once (inline wins as
@@ -1022,18 +1022,18 @@ function verifyMarkdownModeRules(
 }
 
 /**
- * Unified audit command: verify hashes, report coverage gaps, detect duplicates,
+ * Unified lint command: verify hashes, report coverage gaps, detect duplicates,
  * suggest improvements.
  *
  * Flags:
  *   --summary   Print a single-line summary (for SessionStart hooks)
  *   --json      Print structured JSON report (for CI integration)
  */
-async function audit(
+async function runLint(
   restArgs: string[],
   flags: string[],
   config?: VigilesConfig,
-): Promise<AuditReport> {
+): Promise<LintReport> {
   const summary = flags.includes("--summary");
   const json = flags.includes("--json");
   const silent = summary || json;
@@ -1063,7 +1063,7 @@ async function audit(
   const coverage = discover(silent);
 
   // 3. Duplicate rule detection (NCD). Scope to the requested files when
-  // audit was invoked with explicit paths, so targeted CI checks don't
+  // lint was invoked with explicit paths, so targeted CI checks don't
   // fail on unrelated duplicates elsewhere in the repo.
   if (!silent) console.log("\nDuplicate rule detection:\n");
   const dups = await findDuplicateRules(
@@ -1131,7 +1131,7 @@ async function audit(
   // (only when a .mcp.json declares them). See src/mcp.ts.
   const mcpRefErrors = await verifyMarkdownMcpRefs(files, silent);
 
-  const report: AuditReport = {
+  const report: LintReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
     inlineErrors,
@@ -1154,7 +1154,7 @@ async function audit(
   };
 
   if (summary) {
-    printAuditSummary(report);
+    printLintSummary(report);
   } else if (json) {
     console.log(JSON.stringify(report, null, 2));
   }
@@ -1162,8 +1162,8 @@ async function audit(
   return report;
 }
 
-/** Single-line audit summary for SessionStart hooks — minimal token cost. */
-function printAuditSummary(report: AuditReport): void {
+/** Single-line lint summary for SessionStart hooks — minimal token cost. */
+function printLintSummary(report: LintReport): void {
   const parts: string[] = [];
   if (report.hashErrors > 0) parts.push(`${String(report.hashErrors)} stale`);
   if (report.validationErrors > 0)
@@ -2267,7 +2267,7 @@ function checkUntestedSurfaces(
 
 /**
  * Apply the configured coverage thresholds. Returns the number of failing
- * thresholds (so the audit can fail CI when severity is "error").
+ * thresholds (so the lint can fail CI when severity is "error").
  *
  * Loads specs directly via loadSpec() when the scripts threshold is set —
  * avoids depending on a pre-built `dist/` tree, which the setup-generated
@@ -2577,11 +2577,11 @@ function printUsage(command: string | undefined): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Emit GitHub Actions annotations for an audit report. Skipped when --json or
+ * Emit GitHub Actions annotations for an lint report. Skipped when --json or
  * --summary is active — those modes promise clean machine-readable stdout, and
  * ::error/::warning lines would contaminate output parsed as JSON.
  */
-function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
+function annotateLintForGitHub(report: LintReport, flags: string[]): void {
   const structuredOutput =
     flags.includes("--json") || flags.includes("--summary");
   if (!isGitHubActions() || structuredOutput) return;
@@ -2594,7 +2594,7 @@ function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
   if (report.validationErrors > 0) {
     ghAnnotate(
       "error",
-      `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
+      `${String(report.validationErrors)} spec validation failure(s) — see lint output`,
     );
   }
   if (report.duplicatePairs > 0) {
@@ -2948,9 +2948,9 @@ async function main(): Promise<void> {
     case "lint": {
       // lint = verify references + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
-      const report = await audit(restArgs, flags, config);
-      annotateAuditForGitHub(report, flags);
-      const exitCode = auditExitCode(report);
+      const report = await runLint(restArgs, flags, config);
+      annotateLintForGitHub(report, flags);
+      const exitCode = lintExitCode(report);
       if (exitCode !== 0) {
         process.exit(exitCode);
       }

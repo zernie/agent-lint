@@ -58,7 +58,7 @@ Linter rule coverage: 3/64 (5%) (threshold: 5%)
 }
 ```
 
-This fails audit if more than 20% of npm scripts are undocumented in specs. Linter rule coverage is not checked (no `linterRules` threshold).
+This fails lint if more than 20% of npm scripts are undocumented in specs. Linter rule coverage is not checked (no `linterRules` threshold).
 
 ## Why
 

@@ -171,7 +171,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/core/coverage.test.ts": "Coverage test suite (node:test)",
     "src/core/session.ts":
       "Post-session audit: git diff analysis against spec surface area",
-    "src/core/session.test.ts": "Session audit test suite (node:test)",
+    "src/core/session.test.ts": "Session lint test suite (node:test)",
     "src/core/hash.ts":
       "Shared SHA256Hash branded type and assertNever exhaustive check helper",
     "src/core/orphans.ts":
@@ -196,7 +196,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback",
     "src/core/symbols.test.ts": "Symbol extractor test suite (node:test)",
     "src/core/refs.ts":
-      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md",
+      "Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so lint can verify them; see docs/rules/unmarked-refs.md",
     "src/core/refs.test.ts":
       "Symbol reference verification test suite (node:test)",
     "src/mock-model.ts":

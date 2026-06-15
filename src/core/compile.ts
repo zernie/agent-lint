@@ -1003,7 +1003,7 @@ export interface CompileAgentResult {
 /**
  * Compile an AgentSpec into a subagent markdown file with YAML frontmatter.
  * Verifies the tool contract and the body's references; the marks the body
- * carries (`vigiles:symbol`, file/cmd refs) are the same ones `audit` re-checks.
+ * carries (`vigiles:symbol`, file/cmd refs) are the same ones `lint` re-checks.
  */
 export function compileAgent(
   spec: AgentSpec,

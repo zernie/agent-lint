@@ -227,7 +227,7 @@ export function findSimilarRules(
  *
  * Throws a structured error on unknown rule kinds so that the caller (e.g.
  * runProofSuite) can surface a clear proof failure rather than letting an
- * `undefined` propagate into compressedSize and crash the audit.
+ * `undefined` propagate into compressedSize and crash the computation.
  */
 function ruleToText(rule: Rule): string {
   switch (rule._kind) {

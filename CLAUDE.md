@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:71c205ce8303ee54 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c2e11d9d5461a461 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -109,7 +109,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 - `src/core/coverage.ts` — Spec coverage analysis: linter rule coverage + npm script coverage with configurable thresholds
 - `src/core/coverage.test.ts` — Coverage test suite (node:test)
 - `src/core/session.ts` — Post-session audit: git diff analysis against spec surface area
-- `src/core/session.test.ts` — Session audit test suite (node:test)
+- `src/core/session.test.ts` — Session lint test suite (node:test)
 - `src/core/hash.ts` — Shared SHA256Hash branded type and assertNever exhaustive check helper
 - `src/core/orphans.ts` — Orphan-docs detector: finds .md files under docs/ and research/ that no other .md references
 - `src/core/orphans.test.ts` — Orphan-docs detector test suite (node:test)
@@ -123,7 +123,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 - `src/core/doc-refs.test.ts` — Doc-refs validator test suite (node:test)
 - `src/core/symbols.ts` — Cross-language symbol extractor (ast-grep): defines symbols a file declares (functions/classes/methods/constants) across JS/TS/Python/Ruby/Rust/CSS; fileDefinesSymbol with .d.ts/.rbi fallback
 - `src/core/symbols.test.ts` — Symbol extractor test suite (node:test)
-- `src/core/refs.ts` — Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so audit can verify them; see docs/rules/unmarked-refs.md
+- `src/core/refs.ts` — Symbol reference verification: the `vigiles:symbol path#name` mark (verify the named file defines the symbol) + unmarkedCodeRefs detection. collectRefIssues (shared by the `vigiles refs` CLI and the PostToolUse refs-hook) + refsHookAction map the `unmarked-refs` severity to ok/nudge/block — the hook nudges the agent to MARK unmarked linter-rule references (slash-scoped, no extension; deliberately narrow to stay high-signal — bare identifiers and paths are not flagged) in the loop (warn, default) or blocks the edit (error). The authoring-time half that makes references markable so lint can verify them; see docs/rules/unmarked-refs.md
 - `src/core/refs.test.ts` — Symbol reference verification test suite (node:test)
 - `src/mock-model.ts` — Scriptable, dependency-free Anthropic Messages SSE mock (startMock/scriptModel) — point real claude at it via ANTHROPIC_BASE_URL for deterministic harness tests; extractRequest + onRequest capture each request into trace.modelRequests
 - `src/harness-test.ts` — Deterministic harness testing: runHarnessTest(spec, { adapter = claudeCodeAdapter }) runs the adapter's real binary + real hooks/settings against a scripted mock model, dispatching the harness-specific argv/mock/parse through the adapter's HarnessTestDriver (Stop-hooks reliable; tool-event hooks via the eval tier). Defines claudeCodeDriver (the CC driver — wraps the existing argv/startMock/parse, behaviour identical) so a non-CC adapter (codexAdapter) drives real codex through the SAME entry. Safe-by-default — an external plugin/pluginDir is confined per src/sandbox.ts (CC-only path)

@@ -3,7 +3,7 @@
  * and what's broken, with **no model and no API key**.
  *
  * This is the deterministic substrate under the plugin/skill leaderboard
- * (research/divergent-bets.md #9) and the harness-aware audit
+ * (research/divergent-bets.md #9) and the harness-aware scan
  * (research/agent-supply-chain-security.md #1): it re-aims the machinery that
  * already exists — `loadPlugin` (surfaces + dangling-ref/MCP/empty-machine
  * warnings), `parseAgentTools` (the declared tool contract), and

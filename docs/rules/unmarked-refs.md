@@ -41,7 +41,7 @@ For the edited instruction file, two things (both via `collectRefIssues` in
 - **Unmarked linter-rule references** — a backticked **slash-scoped name with no
   file extension**: `` `eslint/no-console` ``, `` `@typescript-eslint/no-explicit-any` ``,
   `` `boundaries/dependencies` ``. These are nudged toward `enforce("…")` (typed
-  spec) or `<!-- vigiles:enforce … -->` (markdown) so the audit verifies the rule
+  spec) or `<!-- vigiles:enforce … -->` (markdown) so the lint verifies the rule
   exists **and is enabled**.
   - **Not flagged** (deliberately — too noisy, and the judgment is undecidable):
     bare identifiers (`` `runHook` ``, `` `MAX_RETRIES` `` — usually API prose),

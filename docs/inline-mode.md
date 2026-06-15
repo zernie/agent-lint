@@ -65,7 +65,7 @@ Every promise must be awaited or explicitly voided. The ESLint rule
 enforces this automatically.
 ```
 
-## What audit catches
+## What lint catches
 
 Running `vigiles lint CLAUDE.md` on the above file will:
 
@@ -76,7 +76,7 @@ Running `vigiles lint CLAUDE.md` on the above file will:
 - Emit `::error` annotations when running inside GitHub Actions
 - Exit with code 2 (hard error) on any failed rule, so CI fails fast
 
-## What audit does NOT do in inline mode
+## What lint does NOT do in inline mode
 
 - **No type safety at edit time.** The `.spec.ts` path gets TypeScript
   squiggles in the editor because `StrictLinterRule` is a type union of
