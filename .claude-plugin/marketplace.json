@@ -7,8 +7,8 @@
     {
       "name": "vigiles",
       "source": "./",
-      "description": "Validate CLAUDE.md, audit feedback loops, and generate lint rules from PR comments",
-      "version": "1.0.0"
+      "description": "Verify CLAUDE.md/AGENTS.md references, compile typed specs, and test the agent harness",
+      "version": "3.0.0"
     }
   ]
 }

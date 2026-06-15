@@ -1,13 +1,13 @@
 /**
  * Dogfood — does vigiles's OWN `generate-logo` skill trigger (and only then)?
  *
- * The second of the two model-invocable vigiles skills (the other is
- * `test-harness`). `generate-logo` is narrow on purpose — it should fire ONLY on
- * a request about the vigiles logo, and a narrow skill's risk is the opposite of
- * a broad one: high precision, but watch recall doesn't collapse. The
- * precision-aware `measureTriggerRate` checks both. The 7 `disable-model-invocation`
- * skills don't auto-trigger and are covered by the free load gate
- * (`src/skills-dogfood.test.ts`).
+ * `generate-logo` is an INTERNAL, contributor-only dev skill (it lives under
+ * `dev/skills/`, not the shipped consumer plugin), but it stays a useful narrow
+ * model-invocable dogfood: it should fire ONLY on a request about the vigiles
+ * logo, and a narrow skill's risk is the opposite of a broad one — high
+ * precision, but watch recall doesn't collapse. The precision-aware
+ * `measureTriggerRate` checks both. The shipped user-invoked skills don't
+ * auto-trigger and are covered by the free load gate (`src/skills-dogfood.test.ts`).
  *
  *   npx vigiles eval examples/harness/dogfood/generate-logo.trigger.eval.mjs
  *
@@ -26,8 +26,10 @@ import { fileURLToPath } from "node:url";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);
 
-const pluginDir = fileURLToPath(new URL("../../../", import.meta.url));
-const skill = "vigiles:generate-logo";
+// generate-logo is an INTERNAL dev skill (not in the shipped plugin), so load it
+// from the contributor-only `dev/` plugin, not the repo root.
+const pluginDir = fileURLToPath(new URL("../../../dev/", import.meta.url));
+const skill = "vigiles-dev:generate-logo";
 
 const report = await measureTriggerRate({
   pluginDir,
