@@ -32,7 +32,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { claudeCodeRuntime } from "./runtime.js";
+import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
 import { type ModelTurn, type ModelRequest } from "./mock-model.js";
 

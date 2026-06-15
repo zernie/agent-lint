@@ -24,10 +24,7 @@ import {
   claudeAvailable,
   scriptModel,
 } from "./harness-test.js";
-import {
-  assertRequestContains,
-  assertHookFired,
-} from "../../harness-assert.js";
+import { assertRequestContains, assertHookFired } from "./harness-assert.js";
 
 test("specTrusted: inline-only is trusted, any external plugin is not", () => {
   assert.equal(specTrusted({}), true);
@@ -280,7 +277,7 @@ test.skipIf(!sandboxRunnable)(
   async () => {
     const superpowers = join(
       __dirname,
-      "../../../examples/harness/vendor/superpowers@6fd4507",
+      "../examples/harness/vendor/superpowers@6fd4507",
     );
     const r = await runHarnessTest({
       plugin: superpowers, // external → untrusted → confined (no sandbox:false)

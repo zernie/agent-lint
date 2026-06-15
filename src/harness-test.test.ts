@@ -29,7 +29,7 @@ import {
   assertToolSequence,
   assertToolCount,
   assertToolCalls,
-} from "../../harness-assert.js";
+} from "./harness-assert.js";
 
 const maybe = claudeAvailable() ? test : test.skip;
 
@@ -225,7 +225,7 @@ maybe(
     // __dirname is dist/ at runtime; the fixture lives at the repo root.
     const pluginDir = join(
       __dirname,
-      "../../../examples/harness/fixture-skill-plugin",
+      "../examples/harness/fixture-skill-plugin",
     );
     const r = await runHarnessTest({
       pluginDir,
@@ -267,7 +267,7 @@ for (const [label, dir, skill] of [
 ] as const) {
   maybe(`a real ${label} skill resolves via --plugin-dir`, async () => {
     const r = await runHarnessTest({
-      pluginDir: join(__dirname, "..", "..", dir),
+      pluginDir: join(__dirname, dir),
       sandbox: false, // pinned vendored plugin we audited → trusted, run direct
       allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
       transcript: true,
