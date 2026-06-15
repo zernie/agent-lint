@@ -1236,6 +1236,57 @@ describe("CLI: installation smoke test (deterministic)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("AGENTS.md symlinked to CLAUDE.md: ONE spec, not two (no hash collision)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-symlink-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-sym", scripts: { test: "echo ok" } }),
+      );
+      writeFileSync(join(dir, "CLAUDE.md"), "# One artifact\n\nKeep me.\n");
+      // The common bridge to the AGENTS.md tools: ln -s CLAUDE.md AGENTS.md.
+      symlinkSync("CLAUDE.md", join(dir, "AGENTS.md"));
+
+      const { stdout, exitCode } = run(
+        "init --harness=claude,codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      assert.match(stdout, /one artifact/i);
+      // Only the canonical (real) file gets a spec — no competing second spec.
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "canonical spec");
+      assert.ok(
+        !existsSync(join(dir, "AGENTS.md.spec.ts")),
+        "no second spec for the mirror",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("CLAUDE.md/AGENTS.md byte-identical (synced): ONE spec for CLAUDE.md", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-synced-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-sync", scripts: { test: "echo ok" } }),
+      );
+      const body = "# Synced\n\nKept identical by rulesync.\n";
+      writeFileSync(join(dir, "CLAUDE.md"), body);
+      writeFileSync(join(dir, "AGENTS.md"), body); // byte-identical mirror
+
+      const { exitCode } = run("init --no-plugin --no-gha", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "canonical spec");
+      assert.ok(
+        !existsSync(join(dir, "AGENTS.md.spec.ts")),
+        "no second spec for the synced mirror",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("CLI: vigiles test — skips are loud and gateable", () => {
