@@ -26,6 +26,7 @@ import {
   parseSetupArgs,
   shouldPrompt,
   resolvePlan,
+  planPluginInstall,
   type SetupPlan,
   type SetupAnswers,
   type ParsedSetupArgs,
@@ -1672,19 +1673,19 @@ interface Pillar1Result {
   needsMigration: string[];
 }
 
-/** The instruction-file targets Pillar 1 will create specs for. */
+/** The instruction-file targets Pillar 1 will create specs for — the harness's
+ * native instruction file (CLAUDE.md for Claude Code, AGENTS.md for Codex),
+ * plus any existing instruction file that lacks a spec. */
 function determineTargets(
   detected: DetectedProject,
   targetValue: string | undefined,
+  harnesses: string[],
 ): string[] {
   if (targetValue) return [targetValue];
-  const targets = ["CLAUDE.md"];
-  const hasAgentsMd = detected.instructionFiles.some(
-    (f) => f.path === "AGENTS.md",
-  );
-  const hasCodex =
-    detected.agents.includes("Codex / GitHub Copilot") || hasAgentsMd;
-  if (hasCodex && !hasAgentsMd) targets.push("AGENTS.md");
+  const targets: string[] = [];
+  if (harnesses.includes("claude")) targets.push("CLAUDE.md");
+  if (harnesses.includes("codex")) targets.push("AGENTS.md");
+  if (targets.length === 0) targets.push("CLAUDE.md");
   // Any existing instruction file without a spec also gets one.
   for (const f of detected.instructionFiles) {
     if (!f.hasSpec && !targets.includes(f.path)) targets.push(f.path);
@@ -1698,11 +1699,12 @@ function determineTargets(
 async function setupPillar1(
   detected: DetectedProject,
   targetValue: string | undefined,
+  harnesses: string[],
 ): Promise<Pillar1Result> {
   const cwd = process.cwd();
   const written: string[] = [];
   const needsMigration: string[] = [];
-  const targets = determineTargets(detected, targetValue);
+  const targets = determineTargets(detected, targetValue, harnesses);
 
   // Create specs (blank). An existing hand-written target keeps its content —
   // we scaffold the spec but flag it for migration rather than clobbering it.
@@ -1759,53 +1761,51 @@ async function setupPillar1(
   return { specTargets: targets, written, needsMigration };
 }
 
+/** Whether a harness binary (`claude`, `codex`) is on PATH. */
+function harnessBinaryPresent(bin: string): boolean {
+  try {
+    const { execSync: exec } =
+      require("node:child_process") as typeof import("node:child_process");
+    exec(`${bin} --version`, { stdio: "ignore", timeout: 10000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Install the vigiles Claude Code plugin (hooks + consumer skills) via the
- * plugin MARKETPLACE — globally into `~/.claude/plugins/`, not vendored into the
- * consumer's repo. Runs the non-interactive `claude plugin` CLI when available,
- * else prints the two in-session slash commands. Writes nothing to the repo.
+ * Install vigiles's skills/hooks for the chosen harness(es) via the per-harness
+ * `planPluginInstall` decision — Claude Code through the GLOBAL plugin
+ * marketplace (nothing vendored into the repo), Codex via AGENTS.md-direct (no
+ * global store). The decision is pure and unit-tested; this is the thin IO.
  */
-function installClaudePlugin(): void {
+function installPlugins(harnesses: string[]): void {
   const { execSync: exec } =
     require("node:child_process") as typeof import("node:child_process");
+  const plans = planPluginInstall(harnesses, {
+    hasClaude: harnesses.includes("claude") && harnessBinaryPresent("claude"),
+  });
 
-  let hasClaude = false;
-  try {
-    exec("claude --version", { stdio: "ignore", timeout: 10000 });
-    hasClaude = true;
-  } catch {
-    // claude CLI not on PATH — fall through to printed instructions.
-  }
-
-  if (hasClaude) {
-    try {
-      exec("claude plugin marketplace add zernie/vigiles", {
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 60000,
-      });
-      exec("claude plugin install vigiles@vigiles", {
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: 60000,
-      });
-      console.log(
-        "✓ Installed the vigiles plugin (hooks + skills) into ~/.claude/plugins/",
-      );
-      return;
-    } catch {
-      console.log(
-        "⚠ Could not install the plugin automatically. In Claude Code, run:",
-      );
+  for (const plan of plans) {
+    console.log("");
+    let installed = false;
+    if (plan.commands.length > 0) {
+      try {
+        for (const cmd of plan.commands) {
+          exec(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 });
+        }
+        console.log(plan.successMessage);
+        installed = true;
+      } catch {
+        // Fall through to the manual instructions below.
+      }
     }
-  } else {
-    console.log(
-      "\nInstall the vigiles plugin (hooks + skills) in Claude Code:",
-    );
+    if (!installed) {
+      console.log(`Install vigiles for ${plan.harness}:`);
+      for (const step of plan.manualSteps) console.log(`    ${step}`);
+    }
+    for (const note of plan.notes) console.log(`  ${note}`);
   }
-  console.log("    /plugin marketplace add zernie/vigiles");
-  console.log("    /plugin install vigiles@vigiles");
-  console.log(
-    "  Plugins install globally to ~/.claude/plugins/ — nothing is added to your repo.",
-  );
 }
 
 /** Add/upgrade `vigiles` in the project's `devDependencies` (and move it out of
@@ -1973,7 +1973,7 @@ async function setup(args: string[]): Promise<void> {
   let needsMigration: string[] = [];
   if (plan.verify) {
     console.log("");
-    const p1 = await setupPillar1(detected, parsed.target);
+    const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
     needsMigration = p1.needsMigration;
     written.push(...p1.written);
@@ -1996,10 +1996,9 @@ async function setup(args: string[]): Promise<void> {
     written.push(...wireGha(plan));
   }
 
-  // Claude Code plugin (hooks + skills) — via the marketplace, only when a
-  // Claude Code harness is in play. Writes nothing to the repo.
-  if (plan.plugin && harnesses.includes("claude")) {
-    installClaudePlugin();
+  // Plugin/skill install — per-harness (Claude marketplace / Codex direct).
+  if (plan.plugin) {
+    installPlugins(harnesses);
   }
 
   // Agent-specific guidance.

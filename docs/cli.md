@@ -229,6 +229,22 @@ The plugin provides hooks:
 > `enforce-rules-format`, `audit-feedback-loop`) live under `dev/` and are **not**
 > shipped to consumers. Contributors load them with `--plugin-dir dev/`.
 
+### Codex
+
+Codex has no plugin marketplace, but the same skills install **globally** via the
+cross-agent [`skills` CLI](https://github.com/vercel-labs/skills) — to
+`~/.codex/skills/`, again not vendored into your repo:
+
+```bash
+npx skills add zernie/vigiles -a codex -g
+```
+
+`vigiles init --harness=codex` (or auto-detection on an `AGENTS.md` repo) runs
+this for you. Codex reads `AGENTS.md` directly, so no plugin is needed for
+instructions; only the authoring skills install. Codex **hooks**
+(`.codex/config.toml [hooks]`) are not auto-wired yet — add them by hand if you
+want compile-on-edit.
+
 ## Validation rules
 
 `vigiles audit` validates instruction files; the refs-hook nudges marking on edit:

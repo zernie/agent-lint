@@ -136,6 +136,91 @@ function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
 }
 
+/**
+ * How to install vigiles's skills/hooks for ONE harness — the deterministic
+ * decision behind the IO in cli.ts, so a CI test asserts WHICH commands an
+ * install runs without a network call or a real `claude`/`codex` binary.
+ *
+ * The method is genuinely harness-specific: Claude Code has a GLOBAL plugin
+ * marketplace (installs to ~/.claude/plugins/, nothing in the repo); Codex has
+ * no global store — its config is repo-committed (`.codex/`, AGENTS.md), so its
+ * instructions are read directly and skills are an opt-in, repo-local concern.
+ */
+export interface InstallPlan {
+  harness: string;
+  /** Shell commands to auto-run (empty = nothing runnable here). */
+  commands: string[];
+  /** One-line success message printed after the commands run. */
+  successMessage: string;
+  /** The equivalent commands a user runs by hand (printed on failure / no-CLI). */
+  manualSteps: string[];
+  /** Always-printed informational lines (where it installs, caveats). */
+  notes: string[];
+  /** Whether this method writes files into the consumer's repo (vendoring). */
+  vendors: boolean;
+}
+
+/** Per-harness install plan. `hasClaude` gates the auto-run `claude plugin` CLI
+ * (else the same two steps are printed as `/plugin` slash commands).
+ *
+ * Both methods install GLOBALLY, never into the repo: Claude through its plugin
+ * marketplace (~/.claude/plugins/), Codex through the cross-agent `skills` CLI
+ * with `-g` (~/.codex/skills/). Codex gets the skills but NOT hooks — Codex hook
+ * wiring (.codex/config.toml [hooks]) is not automated yet. */
+export function planPluginInstall(
+  harnesses: readonly string[],
+  opts: { hasClaude: boolean },
+): InstallPlan[] {
+  return harnesses.map((harness) => {
+    if (harness === "claude") {
+      return {
+        harness,
+        commands: opts.hasClaude
+          ? [
+              "claude plugin marketplace add zernie/vigiles",
+              "claude plugin install vigiles@vigiles",
+            ]
+          : [],
+        successMessage:
+          "✓ Installed the vigiles plugin (hooks + skills) into ~/.claude/plugins/",
+        manualSteps: [
+          "/plugin marketplace add zernie/vigiles",
+          "/plugin install vigiles@vigiles",
+        ],
+        notes: [
+          "Installs globally to ~/.claude/plugins/ — nothing is added to your repo.",
+        ],
+        vendors: false,
+      };
+    }
+    if (harness === "codex") {
+      // The cross-agent `skills` CLI with -g installs globally to
+      // ~/.codex/skills/ — no repo vendoring. Skills only; Codex hooks
+      // (.codex/config.toml [hooks]) are not wired automatically.
+      return {
+        harness,
+        commands: ["npx --yes skills add zernie/vigiles -a codex -g"],
+        successMessage:
+          "✓ Installed the vigiles skills into ~/.codex/skills/ (global, not vendored)",
+        manualSteps: ["npx skills add zernie/vigiles -a codex -g"],
+        notes: [
+          "Codex reads AGENTS.md directly; the skills install globally to ~/.codex/skills/.",
+          "Codex hooks (.codex/config.toml [hooks]) are not auto-wired yet — add them manually for compile-on-edit.",
+        ],
+        vendors: false,
+      };
+    }
+    return {
+      harness,
+      commands: [],
+      successMessage: "",
+      manualSteps: [],
+      notes: [`No plugin install path for harness '${harness}'.`],
+      vendors: false,
+    };
+  });
+}
+
 export function resolvePlan(
   parsed: ParsedSetupArgs,
   answers?: SetupAnswers,
