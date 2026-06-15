@@ -7,7 +7,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -21,6 +21,7 @@ import {
   isRateLimited,
   measureTriggerRateWith,
   formatTriggerRateReport,
+  packageSkillsDir,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -230,6 +231,94 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.equal(ignore?.fired, 0);
   assert.equal(ignore?.rate, 0);
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
+  const dir = makeTmpDir("pkg-skills");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo", "references"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  writeFileSync(join(skills, "foo", "references", "extra.md"), "ref\n");
+  // a non-skill dir (no SKILL.md) is skipped
+  mkdirSync(join(skills, "notaskill"), { recursive: true });
+
+  const pluginDir = packageSkillsDir(skills);
+  assert.ok(existsSync(join(pluginDir, ".claude-plugin", "plugin.json")));
+  assert.ok(existsSync(join(pluginDir, "skills", "foo", "SKILL.md")));
+  // recursive copy brings references/ along
+  assert.ok(
+    existsSync(join(pluginDir, "skills", "foo", "references", "extra.md")),
+  );
+  assert.ok(!existsSync(join(pluginDir, "skills", "notaskill")));
+  const manifest = JSON.parse(
+    readFileSync(join(pluginDir, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.ok(manifest.name.length > 0);
+  cleanupTmpDir(dir);
+});
+
+test("packageSkillsDir throws when the dir has no <name>/SKILL.md", () => {
+  const dir = makeTmpDir("pkg-empty");
+  mkdirSync(join(dir, "skills"), { recursive: true });
+  assert.throws(() => packageSkillsDir(join(dir, "skills")), /No .*SKILL\.md/);
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir", async () => {
+  const dir = makeTmpDir("trigger-skillsdir");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      prompts: ["do foo"],
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+  // The runner saw a real packaged plugin dir (not the loose skills dir), and
+  // it was cleaned up after the run.
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && used !== skills, "a packaged plugin dir was used");
+  assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith rejects both/neither pluginDir and skillsDir", async () => {
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  await assert.rejects(
+    measureTriggerRateWith(
+      { pluginDir: "/p", skillsDir: "/s", prompts: ["x"], fired: () => true },
+      runner,
+    ),
+    /not both/,
+  );
+  await assert.rejects(
+    measureTriggerRateWith({ prompts: ["x"], fired: () => true }, runner),
+    /provide `pluginDir` or `skillsDir`/,
+  );
 });
 
 test("measureTriggerRateWith adds precision when irrelevant prompts are given", async () => {

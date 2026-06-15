@@ -252,7 +252,7 @@ describe("CLI: vigiles compile", () => {
 });
 
 // ---------------------------------------------------------------------------
-// vigiles audit
+// vigiles lint
 // ---------------------------------------------------------------------------
 
 describe("CLI: vigiles lint", () => {
@@ -763,7 +763,7 @@ describe("CLI: vigiles generate-schema", () => {
 
   it("includes configured custom-linter rules from rulesDir in the enum", () => {
     // A custom linter declared in .vigilesrc.json resolves its rules from a
-    // rulesDir. `vigiles audit` accepts `my-tool/no-foo`, so the schema enum
+    // rulesDir. `vigiles lint` accepts `my-tool/no-foo`, so the schema enum
     // must include it too (otherwise the YAML LSP false-flags a valid rule).
     const customDir = mkdtempSync(join(tmpdir(), "vigiles-schema-custom-"));
     symlinkSync(
@@ -1098,6 +1098,33 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const { stdout } = run("init --no-plugin", dir);
       assert.match(stdout, /STALE/);
       // Not clobbered.
+      assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("flags a workflow calling a renamed subcommand (audit→lint), even with the Action present", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      // The v3→v4 trap: an Action reference (so the bare-API heuristic passes)
+      // PLUS a leftover `npx vigiles audit` step that v4 no longer has.
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n" +
+        "      - uses: zernie/vigiles@v1\n" +
+        "      - run: npx vigiles audit\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin", dir);
+      assert.match(stdout, /STALE/);
+      assert.match(stdout, /vigiles audit/);
+      assert.match(stdout, /vigiles lint/);
+      assert.ok(
+        !/already exists \(up to date\)/.test(stdout),
+        "must not claim the stale workflow is up to date",
+      );
+      // Not clobbered — we warn, we don't rewrite.
       assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
     } finally {
       rmSync(dir, { recursive: true, force: true });

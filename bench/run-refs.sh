@@ -12,7 +12,7 @@
 #   ignores      — count of `vigiles:ignore` (Goodhart: did it opt out instead?)
 #   broken       — marks that don't resolve (`vigiles refs`) — correctness
 #   names        — did the SKILL mention chargeCard at all (rename is relevant)
-#   catch        — after renaming chargeCard in the code, does `vigiles audit`
+#   catch        — after renaming chargeCard in the code, does `vigiles lint`
 #                  flag the now-broken reference? (the payoff)
 #   turns        — agent turns
 #

@@ -203,7 +203,14 @@ function discoverTests(
   globs: readonly string[],
   ignore: string[],
 ): TestFile[] {
-  const found = globSync([...globs], { cwd: basePath, ignore });
+  // `dot: true` so a colocated test under a DOT directory is found — most
+  // loose skills live in `.claude/skills/<name>/`, so the eval the warning
+  // suggests (`.claude/skills/<name>/<name>.eval.mjs`) is itself dot-pathed.
+  // Without this, a globstar (`**/*.eval.mjs`) silently skips it while the
+  // skill (matched by the explicit-dot `.claude/skills/*/SKILL.md` pattern) is
+  // still discovered — so the surface looks untested even after the user adds
+  // exactly the suggested file. DEFAULT_IGNORE still drops .git/node_modules/etc.
+  const found = globSync([...globs], { cwd: basePath, ignore, dot: true });
   return found.map((path) => ({ path, content: read(join(basePath, path)) }));
 }
 

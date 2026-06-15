@@ -27,7 +27,9 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
+  cpSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -700,8 +702,19 @@ export function formatEvalReport(report: EvalReport): string {
  * (reuse the bare predicates, e.g. `(t) => skillResolved(t, "x:y")`).
  */
 export interface TriggerRateSpec {
-  /** Plugin dir installed natively (`--plugin-dir`) so its skills/commands activate. */
-  readonly pluginDir: string;
+  /**
+   * Plugin dir installed natively (`--plugin-dir`) so its skills/commands
+   * activate. Provide this OR {@link skillsDir}, not both.
+   */
+  readonly pluginDir?: string;
+  /**
+   * A directory of LOOSE skills (`<skillsDir>/<name>/SKILL.md`, e.g. a repo's
+   * `.claude/skills`) to trigger-test directly. vigiles packages them into a
+   * throwaway `--plugin-dir` for you and removes it afterward — the one-liner
+   * for repo-local skills that aren't a published plugin. Provide this OR
+   * {@link pluginDir}, not both.
+   */
+  readonly skillsDir?: string;
   /** The varied prompts to test the trigger against. */
   readonly prompts: readonly string[];
   /**
@@ -755,6 +768,72 @@ export interface TriggerRateReport {
   readonly precision?: number;
   /** Per-prompt stats for the irrelevant set. Present with irrelevant prompts. */
   readonly perIrrelevant?: readonly PromptTriggerStat[];
+}
+
+/**
+ * Package loose `<skillsDir>/<name>/SKILL.md` skills into a throwaway plugin dir
+ * that `claude --plugin-dir` accepts — so repo-local skills (e.g. `.claude/skills`)
+ * can be trigger-tested without hand-rolling a `plugin.json`. Writes a minimal
+ * `.claude-plugin/plugin.json` and copies each `<name>/` (recursively, so
+ * `references/` etc. come along) under `skills/<name>/`. Returns the temp plugin
+ * dir; the caller removes it (`measureTriggerRate` does). Throws if the directory
+ * is missing or holds no `<name>/SKILL.md`.
+ */
+export function packageSkillsDir(
+  skillsDir: string,
+  opts: { name?: string } = {},
+): string {
+  const abs = resolve(skillsDir);
+  if (!existsSync(abs))
+    throw new Error(`skillsDir not found: ${skillsDir} (resolved ${abs})`);
+  const root = mkdtempSync(join(tmpdir(), "vigiles-skills-"));
+  mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(root, ".claude-plugin", "plugin.json"),
+    JSON.stringify(
+      { name: opts.name ?? "vigiles-loose-skills", version: "0.0.0" },
+      null,
+      2,
+    ),
+  );
+  const skillsOut = join(root, "skills");
+  mkdirSync(skillsOut, { recursive: true });
+  let copied = 0;
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (!existsSync(join(abs, entry.name, "SKILL.md"))) continue;
+    cpSync(join(abs, entry.name), join(skillsOut, entry.name), {
+      recursive: true,
+    });
+    copied++;
+  }
+  if (copied === 0) {
+    rmSync(root, { recursive: true, force: true });
+    throw new Error(`No <name>/SKILL.md skills found under ${skillsDir}`);
+  }
+  return root;
+}
+
+/**
+ * Resolve the effective `--plugin-dir` for a trigger run: a caller's `pluginDir`
+ * as-is, or a throwaway package built from a loose `skillsDir`. Exactly one must
+ * be set. `packaged` is present only when vigiles built it, so the caller knows
+ * to remove it afterward.
+ */
+function resolveTriggerPluginDir(spec: TriggerRateSpec): {
+  pluginDir: string;
+  packaged?: string;
+} {
+  if (spec.pluginDir && spec.skillsDir)
+    throw new Error(
+      "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
+    );
+  if (spec.skillsDir) {
+    const packaged = packageSkillsDir(spec.skillsDir);
+    return { pluginDir: packaged, packaged };
+  }
+  if (spec.pluginDir) return { pluginDir: spec.pluginDir };
+  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
 }
 
 /** The per-run knobs a trigger set shares (everything but the prompt list). */
@@ -821,36 +900,42 @@ export async function measureTriggerRateWith(
   spec: TriggerRateSpec,
   runner: AgentRunner,
 ): Promise<TriggerRateReport> {
+  const { pluginDir, packaged } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
     model: spec.model ?? "haiku",
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,
-    pluginDir: spec.pluginDir,
+    pluginDir,
     fired: spec.fired,
   };
 
-  const relevant = await runTriggerSet(spec.prompts, cfg, runner);
-  const base: TriggerRateReport = {
-    rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
-    n: relevant.n,
-    perPrompt: relevant.perPrompt,
-  };
-  if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
+  try {
+    const relevant = await runTriggerSet(spec.prompts, cfg, runner);
+    const base: TriggerRateReport = {
+      rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
+      n: relevant.n,
+      perPrompt: relevant.perPrompt,
+    };
+    if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
-  const irrelevant = await runTriggerSet(
-    spec.irrelevantPrompts ?? [],
-    cfg,
-    runner,
-  );
-  const fires = relevant.fired + irrelevant.fired;
-  return {
-    ...base,
-    falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
-    precision: fires > 0 ? relevant.fired / fires : undefined,
-    perIrrelevant: irrelevant.perPrompt,
-  };
+    const irrelevant = await runTriggerSet(
+      spec.irrelevantPrompts ?? [],
+      cfg,
+      runner,
+    );
+    const fires = relevant.fired + irrelevant.fired;
+    return {
+      ...base,
+      falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
+      precision: fires > 0 ? relevant.fired / fires : undefined,
+      perIrrelevant: irrelevant.perPrompt,
+    };
+  } finally {
+    // Remove the throwaway plugin dir we built from a loose `skillsDir`.
+    if (packaged) rmSync(packaged, { recursive: true, force: true });
+  }
 }
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureTriggerRateWith */

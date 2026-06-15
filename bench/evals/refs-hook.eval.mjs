@@ -5,7 +5,7 @@
  * Question: does forcing the agent to mark its code references actually make
  * them verifiable? Two arms — no hook vs the refs-hook — on a "document these
  * functions in a SKILL.md" task. The payoff metric `caught`: after the run we
- * rename a documented function in the code and ask whether `vigiles audit`
+ * rename a documented function in the code and ask whether `vigiles lint`
  * flags the now-broken reference.
  *
  *   node bench/evals/refs-hook.eval.mjs            # 3 trials/arm (default)
