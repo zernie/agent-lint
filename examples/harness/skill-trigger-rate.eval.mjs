@@ -32,10 +32,20 @@ const skill = "superpowers:test-driven-development";
 
 const report = await measureTriggerRate({
   pluginDir,
+  // Aim for >= 10 varied phrasings — measureTriggerRate runs a deterministic
+  // diversity gate (min count + near-duplicate Levenshtein check) before
+  // spending any tokens, so a thin or copy-pasted set is rejected up front.
   prompts: [
     "Add an `isEven(n)` function to utils.js — write it test-first.",
     "Implement a stack class in stack.js. Use TDD.",
     "Fix the off-by-one in paginate(); add a regression test first.",
+    "Build a small LRU cache, driving it with failing tests first.",
+    "Add a `slugify` helper — red/green/refactor please.",
+    "Write a rate limiter; start from the tests and work outward.",
+    "Implement currency rounding with a test-first approach.",
+    "Add retry-with-backoff to the API client, tests leading.",
+    "Create a debounce utility; specify behaviour as tests first.",
+    "Parse ISO durations into seconds — write the spec before the code.",
   ],
   // reuse a bare predicate: did the model activate the skill (no error)?
   fired: (t) => skillResolved(t, skill),

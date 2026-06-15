@@ -35,17 +35,32 @@ const skill = "vigiles:test-harness";
 
 const report = await measureTriggerRate({
   pluginDir,
-  // SHOULD fire — harness-testing requests in varied phrasings:
+  // SHOULD fire — harness-testing requests in varied phrasings (>= 10, the
+  // diversity gate rejects a too-small or near-duplicate set before any run):
   prompts: [
     "Write a test that my PreToolUse hook blocks `git commit --no-verify`.",
     "Does my SessionStart hook actually inject context into the model? Add a test.",
     "Check that my skill triggers across different prompts.",
+    "Verify my Stop hook fires when the agent finishes a turn.",
+    "I want to know if my CLAUDE.md rule actually changes the agent's behavior — measure it.",
+    "Set up an eval comparing my hook switched on versus off.",
+    "Prove my settings.json permissions really block the Write tool.",
+    "How reliably does my subagent get dispatched? Measure the trigger rate.",
+    "Confirm the injected context from my hook reaches the model.",
+    "Add a deterministic check that my PostToolUse hook runs the formatter.",
   ],
   // should NOT fire — ordinary coding work the skill must not hijack:
   irrelevantPrompts: [
     "Rename the variable `foo` to `bar` in utils.ts.",
     "Add a dark-mode toggle to the settings page.",
     "Why is this regex throwing? Fix it.",
+    "Convert this callback-based code to async/await.",
+    "Write a SQL migration to add an index on users.email.",
+    "Bump the lodash dependency and fix the breaking changes.",
+    "Implement pagination for the search results endpoint.",
+    "Refactor this 200-line function into smaller pieces.",
+    "Add input validation to the signup form.",
+    "Fix the off-by-one error in the date picker.",
   ],
   fired: (t) => skillResolved(t, skill),
   trials,
@@ -54,7 +69,7 @@ const report = await measureTriggerRate({
 console.log(formatTriggerRateReport(report));
 if (report.n === 0) throw new Error("no runs executed");
 
-// The dogfood bar: fire most of the time on real harness work, rarely on noise.
-// Recall (min) AND precision (maxFalsePositive) — the AWS skill-eval lesson.
-assertTriggerRate(report, { min: 0.6, maxFalsePositive: 0.34 });
+// The dogfood bar: a model-invocable ("auto") skill must fire on real harness
+// work at least 80% of the time (recall) and rarely on noise (precision).
+assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.3 });
 console.log(`\n✓ ${skill}: recall + precision within bounds.`);

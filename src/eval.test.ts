@@ -22,6 +22,10 @@ import {
   measureTriggerRateWith,
   formatTriggerRateReport,
   packageSkillsDir,
+  levenshtein,
+  promptSimilarity,
+  checkPromptDiversity,
+  assertPromptDiversity,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -213,6 +217,7 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
     {
       pluginDir: "/some/plugin",
       prompts: ["fire one", "ignore this", "fire two"],
+      minPrompts: 1,
       fired: (t) => usedTool(t, "Skill"),
       trials: 2,
       spacingSec: 0,
@@ -231,6 +236,72 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.equal(ignore?.fired, 0);
   assert.equal(ignore?.rate, 0);
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("levenshtein + promptSimilarity are deterministic and symmetric", () => {
+  assert.equal(levenshtein("", ""), 0);
+  assert.equal(levenshtein("abc", "abc"), 0);
+  assert.equal(levenshtein("kitten", "sitting"), 3);
+  assert.equal(levenshtein("abc", ""), 3);
+  assert.equal(promptSimilarity("same text", "same text"), 1);
+  assert.equal(promptSimilarity("SAME  text", "same text"), 1); // normalized
+  assert.ok(
+    promptSimilarity("add a dark mode toggle", "rename foo to bar") < 0.5,
+  );
+});
+
+test("checkPromptDiversity flags too-few and too-similar sets", () => {
+  // Too few (default min 10)
+  const few = checkPromptDiversity(["a", "b", "c"]);
+  assert.ok(few.some((i) => i.kind === "too-few"));
+
+  // Near-duplicate pair (override min so only similarity is tested)
+  const dup = checkPromptDiversity(
+    [
+      "Write a test for my hook.",
+      "Write a test for my hook!",
+      "Totally different prompt here.",
+    ],
+    { minPrompts: 1 },
+  );
+  assert.ok(dup.some((i) => i.kind === "too-similar"));
+
+  // A genuinely varied set of 10 distinct prompts passes clean.
+  const varied = [
+    "Add a dark-mode toggle to the settings page.",
+    "Why is this regex throwing an exception?",
+    "Rename the chargeCard function across the billing module.",
+    "Write a unit test for the pagination helper.",
+    "Refactor the auth middleware to use async/await.",
+    "Document the public API in the README.",
+    "Investigate the memory leak in the worker pool.",
+    "Set up a GitHub Action that runs the linter on push.",
+    "Convert these CommonJS modules to ESM.",
+    "Optimize the SQL query behind the dashboard.",
+  ];
+  assert.deepEqual(checkPromptDiversity(varied), []);
+});
+
+test("assertPromptDiversity throws with an actionable message", () => {
+  assert.throws(() => {
+    assertPromptDiversity(["one", "two"]);
+  }, /at least 10/);
+});
+
+test("measureTriggerRateWith rejects a too-small prompt set by default (no model run)", async () => {
+  let calls = 0;
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({ code: 0, stdout: "" });
+  };
+  await assert.rejects(
+    measureTriggerRateWith(
+      { pluginDir: "/p", prompts: ["just one"], fired: () => true },
+      runner,
+    ),
+    /not eval-ready|at least 10/,
+  );
+  assert.equal(calls, 0, "must reject before any model run");
 });
 
 test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
@@ -291,6 +362,7 @@ test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir",
     {
       skillsDir: skills,
       prompts: ["do foo"],
+      minPrompts: 1,
       fired: () => true,
       spacingSec: 0,
     },
@@ -310,13 +382,22 @@ test("measureTriggerRateWith rejects both/neither pluginDir and skillsDir", asyn
     Promise.resolve({ code: 0, stdout: "" });
   await assert.rejects(
     measureTriggerRateWith(
-      { pluginDir: "/p", skillsDir: "/s", prompts: ["x"], fired: () => true },
+      {
+        pluginDir: "/p",
+        skillsDir: "/s",
+        prompts: ["x"],
+        fired: () => true,
+        minPrompts: 1,
+      },
       runner,
     ),
     /not both/,
   );
   await assert.rejects(
-    measureTriggerRateWith({ prompts: ["x"], fired: () => true }, runner),
+    measureTriggerRateWith(
+      { prompts: ["x"], fired: () => true, minPrompts: 1 },
+      runner,
+    ),
     /provide `pluginDir` or `skillsDir`/,
   );
 });
@@ -343,6 +424,7 @@ test("measureTriggerRateWith adds precision when irrelevant prompts are given", 
     {
       pluginDir: "/p",
       prompts: ["fire one", "fire two"], // both should fire → recall 1.0
+      minPrompts: 1,
       irrelevantPrompts: ["calm down", "fire wrongly"], // one wrongly fires
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,
@@ -370,6 +452,7 @@ test("measureTriggerRateWith: precision is undefined when nothing fires at all",
     {
       pluginDir: "/p",
       prompts: ["quiet"],
+      minPrompts: 1,
       irrelevantPrompts: ["silent"],
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,

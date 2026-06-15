@@ -727,6 +727,19 @@ export interface TriggerRateSpec {
   readonly irrelevantPrompts?: readonly string[];
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
+  /**
+   * Minimum number of prompts each set (relevant + irrelevant) must have. A
+   * handful of prompts can't tell a real recall/precision rate from noise, so
+   * the run is rejected before it spends a token. Default 10; lower it
+   * deliberately for a genuinely narrow skill.
+   */
+  readonly minPrompts?: number;
+  /**
+   * Reject the run when two prompts in a set are more than this similar
+   * (normalized Levenshtein, 0..1) — near-duplicate prompts inflate a rate
+   * without actually testing varied phrasings. Default 0.8.
+   */
+  readonly maxSimilarity?: number;
   /** Trials per prompt. Default 1. */
   readonly trials?: number;
   /** Model alias. Default "haiku". */
@@ -812,6 +825,95 @@ export function packageSkillsDir(
     throw new Error(`No <name>/SKILL.md skills found under ${skillsDir}`);
   }
   return root;
+}
+
+// ---------------------------------------------------------------------------
+// Prompt-set diversity (deterministic, pre-eval) — a trigger rate is only
+// meaningful over ENOUGH and DIFFERENT prompts. Catch a too-small or
+// near-duplicate set before spending a single model token.
+// ---------------------------------------------------------------------------
+
+/** Levenshtein edit distance (iterative DP, two rows). Deterministic. */
+export function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = new Array<number>(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+
+/** Normalize for comparison: lowercase, trim, collapse whitespace. */
+function normalizePrompt(s: string): string {
+  return s.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/** Similarity in 0..1 (1 = identical) via normalized Levenshtein. */
+export function promptSimilarity(a: string, b: string): number {
+  const na = normalizePrompt(a);
+  const nb = normalizePrompt(b);
+  const max = Math.max(na.length, nb.length);
+  if (max === 0) return 1;
+  return 1 - levenshtein(na, nb) / max;
+}
+
+export interface PromptDiversityIssue {
+  readonly kind: "too-few" | "too-similar";
+  readonly message: string;
+}
+
+/**
+ * Deterministically check a prompt set is big and varied enough to measure a
+ * trigger rate: at least `minPrompts` entries, and no two more than
+ * `maxSimilarity` alike. Pure — no model. `label` names the set in messages.
+ */
+export function checkPromptDiversity(
+  prompts: readonly string[],
+  opts: { minPrompts?: number; maxSimilarity?: number; label?: string } = {},
+): PromptDiversityIssue[] {
+  const minPrompts = opts.minPrompts ?? 10;
+  const maxSimilarity = opts.maxSimilarity ?? 0.8;
+  const label = opts.label ?? "prompts";
+  const issues: PromptDiversityIssue[] = [];
+  if (prompts.length < minPrompts) {
+    issues.push({
+      kind: "too-few",
+      message: `${label}: ${String(prompts.length)} prompt(s), need at least ${String(minPrompts)} to measure a rate (set minPrompts to override).`,
+    });
+  }
+  for (let i = 0; i < prompts.length; i++) {
+    for (let j = i + 1; j < prompts.length; j++) {
+      const sim = promptSimilarity(prompts[i], prompts[j]);
+      if (sim > maxSimilarity) {
+        issues.push({
+          kind: "too-similar",
+          message: `${label}: prompts #${String(i + 1)} and #${String(j + 1)} are ${String(Math.round(sim * 100))}% alike (> ${String(Math.round(maxSimilarity * 100))}%) — vary the phrasing:\n    - ${prompts[i]}\n    - ${prompts[j]}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+/** Throw if a prompt set isn't big/varied enough. See {@link checkPromptDiversity}. */
+export function assertPromptDiversity(
+  prompts: readonly string[],
+  opts: { minPrompts?: number; maxSimilarity?: number; label?: string } = {},
+): void {
+  const issues = checkPromptDiversity(prompts, opts);
+  if (issues.length > 0) {
+    throw new Error(
+      `Prompt set is not eval-ready:\n  ${issues.map((i) => i.message).join("\n  ")}`,
+    );
+  }
 }
 
 /**
@@ -900,6 +1002,20 @@ export async function measureTriggerRateWith(
   spec: TriggerRateSpec,
   runner: AgentRunner,
 ): Promise<TriggerRateReport> {
+  // Deterministic gate FIRST — reject a too-small / near-duplicate prompt set
+  // before spending a token (and before packaging a skillsDir).
+  const diversity = {
+    minPrompts: spec.minPrompts,
+    maxSimilarity: spec.maxSimilarity,
+  };
+  assertPromptDiversity(spec.prompts, { ...diversity, label: "prompts" });
+  if (spec.irrelevantPrompts && spec.irrelevantPrompts.length > 0) {
+    assertPromptDiversity(spec.irrelevantPrompts, {
+      ...diversity,
+      label: "irrelevantPrompts",
+    });
+  }
+
   const { pluginDir, packaged } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
