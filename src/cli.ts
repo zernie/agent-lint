@@ -1891,6 +1891,57 @@ function harnessBinaryPresent(bin: string): boolean {
   }
 }
 
+type InstallOutcome = "ok" | "failed" | "no-cli";
+
+/** Run a plan's auto-install commands; classify the result. */
+function runInstall(
+  plan: ReturnType<typeof planPluginInstall>[number],
+  exec: typeof import("node:child_process").execSync,
+): InstallOutcome {
+  if (plan.commands.length === 0) return "no-cli";
+  try {
+    for (const cmd of plan.commands) {
+      exec(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 });
+    }
+    return "ok";
+  } catch {
+    return "failed";
+  }
+}
+
+/**
+ * Report a plan's outcome. On anything but success, be LOUD — when an AGENT runs
+ * `init` (no human at the TTY), a quiet "Install vigiles:" hint followed by
+ * `/plugin` slash commands is a trap: the agent can't run a TUI slash command,
+ * so the plugin silently never installs. Surface the failure as a warning AND
+ * lead with the shell-runnable CLI form (which an agent CAN run), keeping the
+ * slash commands clearly labelled as the in-TUI alternative for a human.
+ */
+function reportInstall(
+  plan: ReturnType<typeof planPluginInstall>[number],
+  outcome: InstallOutcome,
+): void {
+  if (outcome === "ok") {
+    console.log(plan.successMessage);
+    for (const note of plan.notes) console.log(`  ${note}`);
+    return;
+  }
+  console.log(
+    outcome === "failed"
+      ? `⚠ vigiles plugin auto-install for ${plan.harness} FAILED — the plugin (hooks + skills) is NOT installed.`
+      : `⚠ vigiles plugin for ${plan.harness} was NOT installed (the ${plan.harness} CLI isn't on PATH here).`,
+  );
+  if (plan.commands.length > 0) {
+    console.log("  Finish from a shell (an agent can run these):");
+    for (const cmd of plan.commands) console.log(`    ${cmd}`);
+  }
+  if (plan.manualSteps.length > 0) {
+    console.log("  Or inside the Claude Code TUI (a human, not an agent):");
+    for (const step of plan.manualSteps) console.log(`    ${step}`);
+  }
+  for (const note of plan.notes) console.log(`  ${note}`);
+}
+
 /**
  * Install vigiles's skills/hooks for the chosen harness(es) via the per-harness
  * `planPluginInstall` decision — Claude Code through the GLOBAL plugin
@@ -1906,23 +1957,7 @@ function installPlugins(harnesses: string[]): void {
 
   for (const plan of plans) {
     console.log("");
-    let installed = false;
-    if (plan.commands.length > 0) {
-      try {
-        for (const cmd of plan.commands) {
-          exec(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 });
-        }
-        console.log(plan.successMessage);
-        installed = true;
-      } catch {
-        // Fall through to the manual instructions below.
-      }
-    }
-    if (!installed) {
-      console.log(`Install vigiles for ${plan.harness}:`);
-      for (const step of plan.manualSteps) console.log(`    ${step}`);
-    }
-    for (const note of plan.notes) console.log(`  ${note}`);
+    reportInstall(plan, runInstall(plan, exec));
   }
 }
 

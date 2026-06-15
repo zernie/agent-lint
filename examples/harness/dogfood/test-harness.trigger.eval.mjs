@@ -4,11 +4,12 @@
  * We eat our own dog food: point `measureTriggerRate` at the vigiles plugin
  * itself and check the `test-harness` skill's description on the precision-aware
  * axis the AWS skill-eval taught us — it should FIRE on harness-testing requests
- * (recall) and stay QUIET on unrelated coding work (precision). Only the 2
- * model-invocable skills (`test-harness`, `generate-logo`) get a trigger eval;
- * the other 7 are `disable-model-invocation: true` (user-invoked), so triggering
- * doesn't apply — see `src/skills-dogfood.test.ts` for the (free) load gate that
- * covers all 9.
+ * (recall) and stay QUIET on unrelated coding work (precision). The
+ * model-invocable shipped skills (`test-harness`, `strengthen`, `edit-spec`)
+ * each get a trigger eval; the user-invoked ones (`migrate-to-spec`,
+ * `linter-docs`) can't auto-fire, so triggering doesn't apply — see
+ * `src/adapters/claude-code/skills-dogfood.test.ts` for the (free) load gate
+ * that covers every shipped skill.
  *
  *   npx vigiles eval examples/harness/dogfood/test-harness.trigger.eval.mjs
  *

@@ -1,7 +1,6 @@
 ---
 name: edit-spec
-description: Edit a vigiles spec file to update instruction files (CLAUDE.md, AGENTS.md)
-disable-model-invocation: true
+description: Edit a vigiles .spec.ts to change a compiled instruction file (CLAUDE.md / AGENTS.md) — add, modify, or remove a rule, section, command, or key file. Use whenever you need to change a CLAUDE.md/AGENTS.md that carries a vigiles hash (edit the spec, never the artifact), including adding a new enforce()/check()/guidance() rule.
 argument-hint: <what to change — e.g., "add a rule about error handling" or "update the testing section">
 ---
 
@@ -27,7 +26,8 @@ Look for spec files in the repo root:
 - `AGENTS.md.spec.ts` — source for AGENTS.md
 - Any `*.spec.ts` matching instruction files
 
-If no spec exists, suggest: `npx vigiles setup`
+If no spec exists: if there's a hand-written `CLAUDE.md`, suggest the
+`migrate-to-spec` skill; otherwise suggest `npx vigiles init` to scaffold one.
 
 ### Step 2: Read and Understand the Spec
 
@@ -83,11 +83,22 @@ export default claude({
 
 Based on what the user asked for:
 
-**Adding a rule:**
+**Adding a rule** (this absorbs the old `generate-rule` skill):
 
-- Determine the type: `enforce()` if a linter rule exists, `check()` for filesystem conventions, `guidance()` for prose-only
-- For `enforce()`: find the actual linter rule name (e.g., `eslint/no-console`, `@typescript-eslint/no-explicit-any`, `ruff/T201`)
-- Add to the `rules` object with a descriptive key
+- **Classify the rule** from the request:
+  - `enforce()` — a linter rule can back it. Check the project's linter configs
+    (ESLint, Ruff, Clippy, Pylint, RuboCop, Stylelint) for a matching rule; also
+    consider an architectural tool (ast-grep, Dependency Cruiser, Steiger). If
+    uncertain whether a rule exists, **ask the user** rather than guessing.
+  - `check()` — a filesystem structural convention ("every X needs a Y"). Only
+    for file-pairing; never for code content.
+  - `guidance()` — can't be mechanically enforced (subjective conventions,
+    process rules, migration context).
+- For `enforce()`: use the real linter rule name (e.g. `eslint/no-console`,
+  `@typescript-eslint/no-explicit-any`, `ruff/T201`).
+- Add to the `rules` object with a kebab-case key derived from the intent,
+  preserving alphabetical order if the existing rules are alphabetical. Import
+  any new builders needed (e.g. `check` and `every` for the first `check()`).
 
 **Updating a section:**
 
@@ -118,10 +129,10 @@ This regenerates the compiled instruction file(s). Review the output for any err
 ### Step 5: Verify
 
 ```bash
-npx vigiles check
+npx vigiles lint
 ```
 
-If the PostToolUse hook is installed (via `npx skills add zernie/vigiles`), compilation happens automatically after you save the spec.
+If the vigiles plugin is installed (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or `npx vigiles init`), the PostToolUse hook recompiles automatically after you save the spec.
 
 ## Important
 
