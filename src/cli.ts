@@ -63,6 +63,8 @@ import { findSimilarRules } from "./core/proofs.js";
 import { parseInlineRules } from "./core/inline.js";
 import { parseFrontmatterRules } from "./core/frontmatter.js";
 import { generateSchema } from "./core/generate-schema.js";
+import { detectInstructionMirror } from "./core/compose.js";
+import type { InstructionMirror } from "./core/compose.js";
 import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import {
@@ -1693,6 +1695,39 @@ function determineTargets(
   return targets;
 }
 
+/**
+ * When CLAUDE.md and AGENTS.md are ONE artifact — a symlink, or kept
+ * byte-identical by rulesync/Ruler — collapse them to a single canonical spec
+ * target. Two specs would fight over one file and collide on the integrity hash
+ * (see the "Compose With Sync Tools" rule). The mirror is distributed from the
+ * canonical, not compiled separately.
+ */
+function collapseMirroredTargets(
+  targets: string[],
+  mirror: InstructionMirror | null,
+): string[] {
+  if (!mirror) return targets;
+  // The compile source slot: the real file for a symlink, else CLAUDE.md (the
+  // one Claude Code reads natively; the sync tool fans out to AGENTS.md).
+  const canonical =
+    mirror.kind === "symlink"
+      ? (mirror.realTarget ?? "CLAUDE.md")
+      : "CLAUDE.md";
+  const mirrored = mirror.files.find((f) => f !== canonical);
+  if (!mirrored) return targets;
+  if (!targets.includes(canonical) && !targets.includes(mirrored)) {
+    return targets; // neither file is a target — nothing to collapse
+  }
+  const collapsed = targets.filter((t) => t !== mirrored);
+  if (!collapsed.includes(canonical)) collapsed.push(canonical);
+  console.log(
+    `Note: CLAUDE.md and AGENTS.md are one artifact (${mirror.kind}). ` +
+      `Scaffolding a single spec for ${canonical}; ${mirrored} is its mirror ` +
+      `(don't add a second spec — it would collide on the integrity hash).`,
+  );
+  return collapsed;
+}
+
 /** Pillar 1 — specs + types + schema + compile. Scaffolds a spec for every
  * instruction file (so `--verify` always delivers a spec), but never compiles
  * OVER a hand-written file — that is left to the migrate-to-spec skill. */
@@ -1704,7 +1739,14 @@ async function setupPillar1(
   const cwd = process.cwd();
   const written: string[] = [];
   const needsMigration: string[] = [];
-  const targets = determineTargets(detected, targetValue, harnesses);
+  // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
+  // AGENTS.md mirror (symlink or synced) to one canonical spec.
+  const targets = targetValue
+    ? determineTargets(detected, targetValue, harnesses)
+    : collapseMirroredTargets(
+        determineTargets(detected, targetValue, harnesses),
+        detectInstructionMirror(cwd),
+      );
 
   // Create specs (blank). An existing hand-written target keeps its content —
   // we scaffold the spec but flag it for migration rather than clobbering it.
