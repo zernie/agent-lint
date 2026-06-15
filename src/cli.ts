@@ -1356,7 +1356,14 @@ function init(args: string[]): void {
   const targetName = basename(target);
   const targetLine =
     targetName !== "CLAUDE.md" ? `\n  target: "${targetName}",` : "";
-  const template = `import { claude, enforce, guidance } from "vigiles/spec";
+  // Import ONLY what the scaffold uses (`claude`) — a strict ESLint with
+  // \`no-unused-vars\` + \`--max-warnings=0\` (common in CI) would otherwise fail
+  // the moment this is committed, because the enforce()/guidance() examples
+  // below are commented out. The commented import shows what to add when you
+  // write a real rule.
+  const template = `import { claude } from "vigiles/spec";
+// When you add rules below, import the builders you use, e.g.:
+// import { claude, enforce, guidance } from "vigiles/spec";
 
 export default claude({${targetLine}
   sections: {
