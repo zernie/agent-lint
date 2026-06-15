@@ -17,7 +17,7 @@ Two questions, answered together:
    3×-expressed assertion surface.)
 
 The conclusion is one coherent shape. The short version: **one `Trace`, one
-declarative `check` vocabulary, two evaluators (strict / scored), three tiers.**
+declarative `check` vocabulary, two evaluators (strict / scored), and two execution scopes over a static lint floor (not four tiers).**
 
 ---
 
@@ -105,58 +105,130 @@ vigiles already produces. One vocabulary; the runner picks the mode.
 
 ## Part 4 — Do we need all those layers? (the second question, folded in)
 
-Two over-segmentations, same disease, same cure.
+The layer names (unit / integration / e2e / eval) are **borrowed from app
+testing, not derived from the harness**, and that's why they don't sit right.
+Derive them instead from two real axes: **scope** (what's under test) and
+**capability** (what the test needs to run).
 
-**Tiers — it's 3 kinds, not 4.** There's a clean axis: _what a test needs_.
+### The harness only has two execution scopes
 
-- **unit** (`runHook`) — needs **nothing**; tests a hook's decision logic.
-- **integration** (`runHarnessTest`) — needs the **`claude` binary + a mock
-  model**; tests the hook is wired into the assembled machine and fires.
-- **eval** (`runEval`) — needs a **real model + key**; measures behaviour.
+A Claude Code harness has two _structurally_ different things you can run:
 
-`e2e` is **not** a fourth kind. The code proves it: `src/e2e.ts` re-exports
-`integration` and adds exactly **one** symbol (`egressRoutes`). It's integration
-whose only extra variable is real network egress, split out solely because egress
-needs a privileged sandbox (slirp4netns) most CI can't give. That's a
-**capability of integration**, promoted to a tier.
+- A **hook** is a standalone process — `(event JSON) → decision`. You can execute
+  it **in isolation** (`runHook`). It's the _only_ surface that's independently
+  runnable.
+- **Everything else** — skills, CLAUDE.md, settings, subagents, commands, MCP —
+  is **not independently runnable**. A skill description only does something when
+  a live agent is choosing skills; a CLAUDE.md rule only acts inside a running
+  turn. The only way to exercise their _behaviour_ is to run the **whole
+  assembled agent**.
 
-**Assertion surface — it's 1 vocabulary, expressed 3×.** Every `Trace` concept
-appears as a bare predicate (`usedTool`), a throwing assert (`assertToolUsed`),
-and (for 3) a matcher (`toBlock`) — ~40 exports for what is really a handful of
-fields plus a few helpers. Most predicates are one-liners over public `Trace`
-fields (`usedTool(t, "Bash")` ≡ `t.toolCalls.some(c => c.name === "Bash")`).
+So there are two scopes — **hook** and **harness (the whole agent)** — plus a
+**static floor** for the non-hook surfaces that can't be executed in isolation at
+all: "does the skill load / have a description / do its refs resolve / does the
+agent's tool contract hold" — which is the **lint pillar** + `skills-dogfood`, not
+a runtime tier.
 
-**The shared cure:** keep the thing the layering gets _right_ — the **capability
-ladder** (import path = "what this test is allowed to need", so you physically
-can't hide a `$`/network test in the free gate, and fast/free failures surface
-first) — and shed the redundant _named_ expression of it. Collapse `e2e` into
-`integration` (egress as a capability flag), and collapse predicate/assert/matcher
-into **one check vocabulary with two evaluators**.
+### "unit only works with hooks" — that's structural, not a missing capability
+
+`runHook` is hooks-only because hooks are the only executable surface, **not**
+because it lacks a capability — it's the capability **floor** (needs nothing). The
+isolated tier for a _non-hook_ surface isn't a runtime test at all; it's the
+**static** check (lint). There is no "unit test a skill's behaviour" because a
+skill has no behaviour outside a live agent. So: hooks get a behavioural unit
+tier; everything else gets a _static_ isolated tier (lint) and a _behavioural_
+tier only at harness scope.
+
+### Each higher layer adds exactly one capability — that's the whole ladder
+
+| Tier (today)             | Scope   | Capability it adds over the one below   |
+| ------------------------ | ------- | --------------------------------------- |
+| `runHook` (unit)         | hook    | — (the floor: nothing)                  |
+| `runHarnessTest` (integ) | harness | spawn `claude` + serve a **mock** model |
+| e2e                      | harness | **real egress** through a sandbox       |
+| `runEval` (eval)         | harness | a **real model** + API key              |
+
+Read down the **Scope** column: **integration, e2e, and eval are all the same
+scope** — the whole assembled agent. They differ only by _realness knobs_: the
+model (mock → deterministic; real → measured) and the network (confined →
+real-egress). That's exactly why they feel redundant — **they are one tier with
+capability flags, not three kinds.**
+
+### Your integration-vs-e2e instinct, resolved
+
+In app testing, "integration" means a few components wired together (often real
+local IO) and "e2e" means the full system through real external interfaces. By
+that definition vigiles's **"integration" is misnamed**: `runHarnessTest` runs the
+**entire real system** (the `claude` binary + every hook/plugin/setting) with only
+the _model_ swapped for a deterministic double. That's not classic integration —
+it's **"e2e with the model stubbed."** And there's no genuine classic integration
+tier to be had, because the harness doesn't decompose into integratable
+components (a hook in the machine isn't "two components talking"; it's the whole
+agent running).
+
+But the conclusion isn't "drop integration, keep e2e." The value of
+`runHarnessTest` isn't that it's a _middle_ tier — it's that it's the
+**deterministic whole-system run** (mock model → no key, repeatable, gate every
+commit). e2e (real egress) and eval (real model) are _more-real variants of the
+same whole-system scope_. You keep the deterministic run as the workhorse and add
+realness on top; you don't replace it with the privileged/paid variants.
+
+### The derived model
+
+> **Two execution scopes — `hook` and `harness` — over a static `lint` floor; the
+> harness run carries the realness as capability flags (`model: mock | real`,
+> `egress`), and the flag picks the verdict mode** (mock → strict assert; real →
+> scored ± se, from Part 3).
+
+Concretely that's: `vigiles lint` (static floor) · `runHook` (hook scope) ·
+`runHarness(spec, { model, egress })` (harness scope) — one entry that subsumes
+today's integration + e2e + eval. The capability ladder (and its CI legibility —
+you can't hide a `$`/network test in the free gate) is **preserved**; the
+redundant _named_ tiers (`integration` vs `e2e` vs `eval` as separate barrels)
+collapse into flags.
+
+### Same story for the assertion surface
+
+It's **1 vocabulary expressed 3×**: every `Trace` concept appears as a bare
+predicate (`usedTool`), a throwing assert (`assertToolUsed`), and (for 3) a
+matcher (`toBlock`) — ~40 exports for a handful of fields plus a few helpers, most
+one-liners over public `Trace` fields (`usedTool(t, "Bash")` ≡
+`t.toolCalls.some(c => c.name === "Bash")`). Same cure: collapse to **one check
+vocabulary, two evaluators** (Part 3), with raw `Trace` fields primary.
+
+**Both fixes are the same move:** keep the capability _ladder_ (it's the real
+value); shed the redundant _named_ expression of it.
 
 ---
 
 ## Part 5 — The ideal API (recommended shape)
 
 A declarative **check** vocabulary over `Trace`, two evaluators, an optional
-fluent veneer, three tiers.
+fluent veneer — over **two execution scopes (`runHook`, `runHarness`) and a static
+`lint` floor** (Part 4), with realness as flags, not tiers.
 
 ```ts
 // ONE vocabulary — each check is DATA: { eval(trace) → {pass, score, message}, toJSON() }
 import { tool, skill, output, hookFired, wrote, trigger } from "vigiles/check";
+import { runHook, runHarness, expect, measure } from "vigiles/testing";
 
-// --- deterministic (strict): one run, throws with a good message ---
-import { run, expect } from "vigiles/testing";
-const r = await run(spec); // unit|integration; egress is a capability: run(spec, { egress })
-expect(r, [tool("Bash"), output(/done/), hookFired("PreToolUse")]);
+// --- hook scope: execute one hook in isolation, no agent, no model ---
+expect(runHook(hook, event), [hookFired("PreToolUse")]); // strict, throws
 
-// --- non-deterministic (scored): same checks, aggregated across trials ---
-import { measure } from "vigiles/testing";
+// --- harness scope, mock model → DETERMINISTIC (strict). egress is a flag. ---
+const r = await runHarness(spec, { model: "mock", egress: true });
+expect(r, [tool("Bash"), output(/done/)]); // gate every commit, no key
+
+// --- harness scope, real model → MEASURED (scored). same checks. ---
 const report = await measure(spec, {
   trials: 10,
   checks: [skill("vigiles:test-harness"), trigger({ min: 0.8 })],
-});
-// report: per-check rate ± se, pass^k, threshold verdict — and report.toJUnit()
+}); // per-check rate ± se, pass^k, threshold verdict — report.toJUnit()
 ```
+
+`model: "mock"` selects strict evaluation (deterministic assert); a real model
+selects scored evaluation (the `measure` entry). Today's `integration`, `e2e`, and
+`eval` are the **one `runHarness` scope** under different flags.
 
 Why this is the world-class shape:
 
@@ -177,10 +249,13 @@ Why this is the world-class shape:
   not a mandatory wrapper — `r.toolCalls`, `r.output`, `r.file()` remain the
   primary, smallest surface. (The honest reframe from the assertion-surface
   discussion: lead with the fields; checks/matchers are sugar.)
-- **3 tiers, egress as a capability.** `vigiles/unit` (no-model `run`),
-  `vigiles/integration` (real-`claude` `run`, `{ egress }` opt-in),
-  `vigiles/eval` (`measure`). The import path stays a capability contract; the
-  near-empty `e2e` barrel disappears.
+- **Two scopes + a static floor, not four tiers.** `runHook` (hook scope),
+  `runHarness(spec, { model, egress })` (harness scope — subsumes integration /
+  e2e / eval via flags), over the `vigiles lint` static floor. The import path
+  still encodes the capability contract (`vigiles/unit` exposes no-model surface;
+  the harness entry adds `claude`/egress/model), so you can't hide a `$`/network
+  test in the free gate — but the redundant `integration`/`e2e`/`eval` barrels
+  collapse into flags (Part 4).
 
 ### Options considered (and why C wins)
 
@@ -204,7 +279,7 @@ Why this is the world-class shape:
   block"). Pairs with any option; high-value for hook robustness. Recommend as an
   add-on to the unit tier.
 
-**Recommendation: C as the core + D as a unit-tier add-on, on 3 tiers with egress
+**Recommendation: C as the core + D as a hook-scope add-on, over two scopes (runHook / runHarness) with egress
 as a capability of integration.**
 
 ---
