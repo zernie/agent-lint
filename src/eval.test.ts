@@ -22,8 +22,7 @@ import {
   measureTriggerRateWith,
   formatTriggerRateReport,
   packageSkillsDir,
-  levenshtein,
-  promptSimilarity,
+  promptDistance,
   checkPromptDiversity,
   assertPromptDiversity,
   type AgentRunArgs,
@@ -218,6 +217,7 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
       pluginDir: "/some/plugin",
       prompts: ["fire one", "ignore this", "fire two"],
       minPrompts: 1,
+      minDistance: 0,
       fired: (t) => usedTool(t, "Skill"),
       trials: 2,
       spacingSec: 0,
@@ -238,16 +238,20 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
 });
 
-test("levenshtein + promptSimilarity are deterministic and symmetric", () => {
-  assert.equal(levenshtein("", ""), 0);
-  assert.equal(levenshtein("abc", "abc"), 0);
-  assert.equal(levenshtein("kitten", "sitting"), 3);
-  assert.equal(levenshtein("abc", ""), 3);
-  assert.equal(promptSimilarity("same text", "same text"), 1);
-  assert.equal(promptSimilarity("SAME  text", "same text"), 1); // normalized
-  assert.ok(
-    promptSimilarity("add a dark mode toggle", "rename foo to bar") < 0.5,
+test("promptDistance (NCD) is 0 for identical, larger for different, normalized", () => {
+  assert.equal(promptDistance("same text", "same text"), 0);
+  assert.equal(promptDistance("SAME  text", "same text"), 0); // normalized
+  // a one-word-swap template is closer than two unrelated sentences
+  const near = promptDistance(
+    "Update the architecture section of CLAUDE.md.",
+    "Update the testing section of CLAUDE.md.",
   );
+  const far = promptDistance(
+    "Add a dark-mode toggle to the settings page.",
+    "Why is this regex throwing an exception?",
+  );
+  assert.ok(near < far);
+  assert.ok(near < 0.3, `template pair should be < 0.3, got ${String(near)}`);
 });
 
 test("checkPromptDiversity flags too-few and too-similar sets", () => {
@@ -255,7 +259,7 @@ test("checkPromptDiversity flags too-few and too-similar sets", () => {
   const few = checkPromptDiversity(["a", "b", "c"]);
   assert.ok(few.some((i) => i.kind === "too-few"));
 
-  // Near-duplicate pair (override min so only similarity is tested)
+  // Near-duplicate pair (override min so only the NCD distance is tested)
   const dup = checkPromptDiversity(
     [
       "Write a test for my hook.",
@@ -363,6 +367,7 @@ test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir",
       skillsDir: skills,
       prompts: ["do foo"],
       minPrompts: 1,
+      minDistance: 0,
       fired: () => true,
       spacingSec: 0,
     },
@@ -388,6 +393,7 @@ test("measureTriggerRateWith rejects both/neither pluginDir and skillsDir", asyn
         prompts: ["x"],
         fired: () => true,
         minPrompts: 1,
+        minDistance: 0,
       },
       runner,
     ),
@@ -425,6 +431,7 @@ test("measureTriggerRateWith adds precision when irrelevant prompts are given", 
       pluginDir: "/p",
       prompts: ["fire one", "fire two"], // both should fire → recall 1.0
       minPrompts: 1,
+      minDistance: 0,
       irrelevantPrompts: ["calm down", "fire wrongly"], // one wrongly fires
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,
@@ -453,6 +460,7 @@ test("measureTriggerRateWith: precision is undefined when nothing fires at all",
       pluginDir: "/p",
       prompts: ["quiet"],
       minPrompts: 1,
+      minDistance: 0,
       irrelevantPrompts: ["silent"],
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,
