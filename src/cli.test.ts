@@ -1144,6 +1144,28 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("--force rewrites a renamed-subcommand workflow in place (audit→lint), preserving the rest", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n" +
+        "      - uses: actions/checkout@v4\n" +
+        "      - run: npx vigiles audit\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin --force", dir);
+      assert.match(stdout, /Rewrote/);
+      const after = readFileSync(join(wfDir, "vigiles.yml"), "utf-8");
+      assert.ok(after.includes("npx vigiles lint"), "audit → lint");
+      assert.ok(!after.includes("vigiles audit"), "no stale audit left");
+      // Surgical: the rest of the user's workflow is preserved.
+      assert.ok(after.includes("actions/checkout@v4"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("CLI: vigiles --version", () => {

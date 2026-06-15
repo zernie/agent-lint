@@ -1489,37 +1489,59 @@ function workflowRemovedSubcommand(
   return null;
 }
 
+/** Rewrite removed/renamed `vigiles <sub>` invocations in place (audit → lint).
+ * Surgical — preserves the rest of the user's workflow. */
+function rewriteRemovedSubcommands(content: string): string {
+  let out = content;
+  for (const [sub, replacement] of Object.entries(REMOVED_SUBCOMMANDS)) {
+    out = out.replace(
+      new RegExp(`(vigiles\\s+)${sub}\\b`, "g"),
+      `$1${replacement}`,
+    );
+  }
+  return out;
+}
+
 /** Create `.github/workflows/vigiles.yml`. Returns the files it wrote (for the
- * commit hint). An existing workflow is never clobbered, but a STALE one (old
- * bare-`npx vigiles` API) is reported loudly instead of silently skipped. */
+ * commit hint). An existing workflow is never clobbered unless `--force`, but a
+ * STALE one (old bare-`npx vigiles` API, or a removed subcommand) is reported
+ * loudly instead of silently skipped — and rewritten in place with `--force`. */
 function wireGha(plan: SetupPlan): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
+  const rel = ".github/workflows/vigiles.yml";
   if (existsSync(path)) {
     const content = readFileSync(path, "utf-8");
     const removed = workflowRemovedSubcommand(content);
     if (removed) {
+      if (plan.force) {
+        writeFileSync(path, rewriteRemovedSubcommands(content));
+        console.log(
+          `✓ Rewrote ${rel} (vigiles ${removed.sub} → ${removed.replacement})`,
+        );
+        return [rel];
+      }
       console.log(
-        `⚠ .github/workflows/vigiles.yml is STALE — it runs \`vigiles ${removed.sub}\`,\n` +
+        `⚠ ${rel} is STALE — it runs \`vigiles ${removed.sub}\`,\n` +
           `  which was removed/renamed (now \`vigiles ${removed.replacement}\`). That CI\n` +
-          "  step is silently broken. Rewrite it:\n" +
-          `    - s/vigiles ${removed.sub}/vigiles ${removed.replacement}/  in the run step, or\n` +
-          "    - uses: zernie/vigiles@v1   # the composite Action (recommended)\n" +
-          "  Or delete the file and re-run `vigiles init` to regenerate it.",
+          "  step is silently broken. Fix it:\n" +
+          `    - re-run \`vigiles init --force\` to rewrite it in place (vigiles ${removed.sub} → ${removed.replacement}), or\n` +
+          "    - switch the run step to `uses: zernie/vigiles@v1` (the composite Action).",
       );
     } else if (workflowUsesStaleApi(content)) {
+      if (plan.force) {
+        writeFileSync(path, vigilesWorkflow(plan));
+        console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
+        return [rel];
+      }
       console.log(
-        "⚠ .github/workflows/vigiles.yml is STALE — it runs a bare `npx vigiles`,\n" +
-          "  which is a no-op help screen now. Replace its run step with the Action +\n" +
-          "  the test job (CI is otherwise silently not validating anything):\n" +
-          "    - uses: zernie/vigiles@v1   # lint pillar — verify references\n" +
-          "    - run: npx vigiles test     # pillar 2 — harness tests\n" +
-          "  Or delete the file and re-run `vigiles init` to regenerate it.",
+        `⚠ ${rel} is STALE — it runs a bare \`npx vigiles\`,\n` +
+          "  which is a no-op help screen now. CI is silently not validating anything. Fix it:\n" +
+          "    - re-run `vigiles init --force` to regenerate the workflow, or\n" +
+          "    - replace its run step with `uses: zernie/vigiles@v1` + `run: npx vigiles test`.",
       );
     } else {
-      console.log(
-        "✓ .github/workflows/vigiles.yml already exists (up to date)",
-      );
+      console.log(`✓ ${rel} already exists (up to date)`);
     }
     return [];
   }
@@ -2541,7 +2563,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha)",
+    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
