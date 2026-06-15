@@ -14,11 +14,9 @@
 > `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
 > model) discover and run `*.harness.mjs` / `*.eval.mjs`.
 
-> **Just want to see it?** `npm run demo:plugin` runs vigiles against a real,
-> popular third-party plugin (oh-my-claudecode) and narrates, in plain language,
-> what it ships, whether a hook works, and what it phones home to — including a
-> real finding (it pings the npm registry on every session start, which we
-> record and block). See [`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs).
+> **Just want to see it?** `npm run demo:plugin` runs vigiles against a real
+> third-party plugin and narrates what it ships, whether its hook works, and what
+> it phones home to ([`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs)).
 
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md — is
 code, and code should be tested. vigiles gives the harness **clear levels**, and a
@@ -28,7 +26,7 @@ inside the unit gate. Pick the cheapest level that answers your question:
 
 | Level                 | Answers                                                  | Import                | File                    | Runner               | Needs                      |
 | --------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | -------------------------- |
-| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles audit`      | nothing                    |
+| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                    |
 | **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                    |
 | **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | `claude` + bwrap, no key   |
 | **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network |
@@ -821,7 +819,7 @@ harness's** test coverage (do your skills/hooks/subagents each have a test?) and
 ### Coverage of your harness surfaces
 
 A harness grows surfaces faster than tests — a new skill, hook, or subagent
-lands and nothing tells you it shipped untested. `vigiles audit` closes that gap
+lands and nothing tells you it shipped untested. `vigiles lint` closes that gap
 with the [`untested-surface`](rules/untested-surface.md) rule: it reports any
 skill, subagent, or hook that has **no test or eval**. A surface counts as
 covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention

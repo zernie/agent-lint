@@ -100,13 +100,15 @@ hijacking unrelated ones (precision). **[Full guide →](docs/harness-testing.md
 
 ## Quick start
 
-> **Paste into Claude Code or Codex:**
->
-> > Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
-> > references and show me what's stale, then write and run a harness test for one
-> > of my hooks or skills. Use good defaults (both pillars, non-interactive), but
-> > **ask me first** whether to gate it in CI, whether to add a real-model eval,
-> > and whether to enforce strictly (`--strict`).
+**Paste into Claude Code or Codex:**
+
+```text
+Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
+references and show me what's stale, then write and run a harness test for one
+of my hooks or skills. Use good defaults (both pillars, non-interactive), but
+ask me first whether to gate it in CI, whether to add a real-model eval, and
+whether to enforce strictly (--strict).
+```
 
 Or do it yourself:
 
@@ -118,16 +120,25 @@ It's interactive in a terminal and non-interactive for agents/CI (or with
 `--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
 it installs a model-invocable **`test-harness` skill**, so afterward you can just
 tell your agent _"test my skills"_ and it picks the tier and writes the test.
-Scope `init` with `--lint` / `--test` (one pillar or both). Or write harness
-tests yourself in JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles test`.
-`init` also adds `vigiles` to your `devDependencies` and installs the Claude Code
-plugin (skills + hooks) via the marketplace — globally, never vendored into your
-repo. It wires CI as a `zernie/vigiles@v1` workflow — a composite over the same CLI:
 
-```yaml
-- uses: actions/checkout@v4
-- uses: zernie/vigiles@v1 # lints by default; posts a sticky PR comment + a `valid` output
-```
+<details>
+<summary>What <code>init</code> sets up</summary>
+
+- **Both pillars** by default; scope with `--lint` / `--test` (one or both).
+- Adds `vigiles` to your `devDependencies`.
+- Installs the Claude Code plugin (skills + hooks) via the marketplace —
+  globally, never vendored into your repo.
+- Wires CI as a `zernie/vigiles@v1` workflow (a composite over the same CLI):
+
+  ```yaml
+  - uses: actions/checkout@v4
+  - uses: zernie/vigiles@v1 # lints by default; posts a sticky PR comment + a `valid` output
+  ```
+
+Prefer to write tests yourself? They can be JS **or** TS
+(`*.harness.{mjs,ts}`) — run them with `npx vigiles test`.
+
+</details>
 
 ## More
 

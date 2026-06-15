@@ -9,6 +9,6 @@ if [ ! -f ../../dist/cli.js ]; then
 fi
 echo "INSTRUCTIONS.md reads fine — but two of its references lie."
 echo
-echo "\$ vigiles audit INSTRUCTIONS.md"
+echo "\$ vigiles lint INSTRUCTIONS.md"
 echo
-node ../../dist/cli.js audit INSTRUCTIONS.md
+node ../../dist/cli.js lint INSTRUCTIONS.md
