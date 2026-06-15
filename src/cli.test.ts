@@ -1002,10 +1002,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--pillars=test: only the harness starter, no spec/workflow", () => {
+  it("--testing: only the harness starter, no spec/workflow", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --pillars=test --no-plugin --no-gha", dir);
+      const { stdout } = run("init --testing --no-plugin --no-gha", dir);
       assert.match(stdout, /pillars: test/);
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
       assert.ok(!existsSync(join(dir, "CLAUDE.md.spec.ts")), "no spec");
@@ -1018,16 +1018,99 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--pillars=verify: spec only, no harness", () => {
+  it("--verify: spec only, no harness", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --pillars=verify --no-plugin --no-gha", dir);
+      const { stdout } = run("init --verify --no-plugin --no-gha", dir);
       assert.match(stdout, /pillars: verify/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("the deprecated --pillars alias still works", () => {
+    const dir = freshProject();
+    try {
+      const { stdout } = run("init --pillars=test --no-plugin --no-gha", dir);
+      assert.match(stdout, /pillars: test/);
+      assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds vigiles to devDependencies (not dependencies)", () => {
+    const dir = freshProject();
+    try {
+      // Start from a stale runtime pin, like an old git-commit install.
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "demo",
+          dependencies: { vigiles: "github:zernie/vigiles#abc123" },
+        }),
+      );
+      run("init --testing --no-plugin --no-gha", dir);
+      const pkg = JSON.parse(
+        readFileSync(join(dir, "package.json"), "utf-8"),
+      ) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      assert.ok(
+        !pkg.dependencies || !("vigiles" in pkg.dependencies),
+        "vigiles moved out of dependencies",
+      );
+      assert.ok(
+        pkg.devDependencies && "vigiles" in pkg.devDependencies,
+        "vigiles in devDependencies",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("scaffolds a spec for an existing CLAUDE.md without clobbering it", () => {
+    const dir = freshProject();
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n\nKeep me.\n");
+      run("init --verify --no-plugin --no-gha", dir);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec scaffolded");
+      // The hand-written file must be untouched (no compile-over).
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.ok(md.includes("Keep me."), "content preserved");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns loudly on a stale old-API CI workflow, doesn't clobber it", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n      - run: npx vigiles\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin", dir);
+      assert.match(stdout, /STALE/);
+      // Not clobbered.
+      assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("CLI: vigiles --version", () => {
+  it("prints a version number, not the help banner", () => {
+    const { stdout, exitCode } = run("--version", process.cwd());
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /\d+\.\d+\.\d+/);
+    assert.ok(!stdout.includes("Commands:"), "not the help banner");
   });
 });
 
