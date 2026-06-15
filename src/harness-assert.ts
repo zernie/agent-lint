@@ -19,31 +19,25 @@ import {
   type HarnessTestResult,
   type ToolCall,
   type Trace,
-} from "./adapters/claude-code/harness-test.js";
-import type {
-  EvalReport,
-  TriggerRateReport,
-} from "./adapters/claude-code/eval.js";
-import type {
-  HookRunResult,
-  EgressAttempt,
-} from "./adapters/claude-code/run-hook.js";
+} from "./harness-test.js";
+import type { EvalReport, TriggerRateReport } from "./eval.js";
+import type { HookRunResult, EgressAttempt } from "./run-hook.js";
 import type { OutputContract } from "./core/spec.js";
 import {
   parseAgentResult,
   type ParsedAgentResult,
 } from "./adapters/claude-code/agent-result.js";
-import { compareArms } from "./adapters/claude-code/stats.js";
+import { compareArms } from "./stats.js";
 import {
   diffReports,
   type BaselineFile,
   type DiffOptions,
-} from "./adapters/claude-code/eval-baseline.js";
+} from "./eval-baseline.js";
 
 // Re-export the significance primitives so the whole eval-analysis surface lives
 // behind `vigiles/harness-assert` (no separate entry point).
-export { compareArms } from "./adapters/claude-code/stats.js";
-export type { Comparison } from "./adapters/claude-code/stats.js";
+export { compareArms } from "./stats.js";
+export type { Comparison } from "./stats.js";
 export {
   diffReports,
   toBaselineFile,
@@ -52,14 +46,14 @@ export {
   writeBaseline,
   formatBaselineDiff,
   diffToJUnit,
-} from "./adapters/claude-code/eval-baseline.js";
+} from "./eval-baseline.js";
 export type {
   BaselineFile,
   BaselineDiff,
   MetricDiff,
   DiffStatus,
   DiffOptions,
-} from "./adapters/claude-code/eval-baseline.js";
+} from "./eval-baseline.js";
 
 /**
  * Run a harness test, hand the result to `fn`, and always clean up the sandbox.

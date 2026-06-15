@@ -14,7 +14,7 @@ import {
   assertNoEgress,
   assertEgressOnly,
   assertWroteOnly,
-} from "../../harness-assert.js";
+} from "./harness-assert.js";
 import {
   runHook,
   runHookWith,

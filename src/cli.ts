@@ -87,7 +87,7 @@ import {
   gateLabel,
 } from "./adapters/claude-code/skill-runtime.js";
 import { checkLinterRule } from "./core/linters.js";
-import { claudeAvailable } from "./adapters/claude-code/harness-test.js";
+import { claudeAvailable } from "./harness-test.js";
 import {
   discoverScripts,
   runScripts,
