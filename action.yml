@@ -7,9 +7,9 @@ branding:
 
 inputs:
   command:
-    description: "Which vigiles command to run: 'audit' (verify references + integrity + coverage) or 'compile' (specs → markdown)."
+    description: "Which vigiles command to run: 'lint' (verify references + integrity + coverage; alias 'audit') or 'compile' (specs → markdown)."
     required: false
-    default: "audit"
+    default: "lint"
   paths:
     description: "Comma- or space-separated paths to operate on (.md files for audit, .spec.ts files for compile). Auto-discovers when empty."
     required: false
@@ -64,7 +64,7 @@ runs:
       run: |
         set -euo pipefail
 
-        cmd="${VIGILES_COMMAND:-audit}"
+        cmd="${VIGILES_COMMAND:-lint}"
         args=("$cmd")
 
         # paths: split on commas and whitespace into positional args.

@@ -12,7 +12,7 @@ import {
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
   assert.deepEqual(defaultPlan(), {
-    verify: true,
+    lint: true,
     test: true,
     gha: true,
     plugin: true,
@@ -22,63 +22,65 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
 
 test("parseSetupArgs reads flags", () => {
   const p = parseSetupArgs([
-    "--testing",
+    "--test",
     "--no-gha",
     "--no-plugin",
     "--strict",
     "-y",
   ]);
-  assert.equal(p.testing, true);
-  assert.equal(p.verify, undefined);
+  assert.equal(p.test, true);
+  assert.equal(p.lint, undefined);
   assert.equal(p.gha, false);
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
   assert.equal(p.yes, true);
 });
 
-test("parseSetupArgs reads --verify / --no-testing / --harness", () => {
-  const p = parseSetupArgs([
-    "--verify",
-    "--no-testing",
-    "--harness=claude,codex",
-  ]);
-  assert.equal(p.verify, true);
-  assert.equal(p.testing, false);
+test("parseSetupArgs reads --lint / --no-test / --harness", () => {
+  const p = parseSetupArgs(["--lint", "--no-test", "--harness=claude,codex"]);
+  assert.equal(p.lint, true);
+  assert.equal(p.test, false);
   assert.equal(p.harness, "claude,codex");
-  assert.equal(parseSetupArgs([]).verify, undefined);
-  assert.equal(parseSetupArgs([]).testing, undefined);
+  assert.equal(parseSetupArgs([]).lint, undefined);
+  assert.equal(parseSetupArgs([]).test, undefined);
 });
 
-test("parseSetupArgs: deprecated --pillars alias maps onto verify/testing", () => {
+test("parseSetupArgs: --verify/--testing are deprecated aliases for --lint/--test", () => {
+  const p = parseSetupArgs(["--verify", "--no-testing"]);
+  assert.equal(p.lint, true);
+  assert.equal(p.test, false);
+});
+
+test("parseSetupArgs: deprecated --pillars alias maps onto lint/test", () => {
   const both = parseSetupArgs(["--pillars=both"]);
-  assert.equal(both.verify, true);
-  assert.equal(both.testing, true);
+  assert.equal(both.lint, true);
+  assert.equal(both.test, true);
   const v = parseSetupArgs(["--pillars=verify"]);
-  assert.equal(v.verify, true);
-  assert.equal(v.testing, false);
+  assert.equal(v.lint, true);
+  assert.equal(v.test, false);
   const bad = parseSetupArgs(["--pillars=nonsense"]);
-  assert.equal(bad.verify, undefined);
-  assert.equal(bad.testing, undefined);
+  assert.equal(bad.lint, undefined);
+  assert.equal(bad.test, undefined);
 });
 
 test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
-  assert.deepEqual(resolvePlan(parseSetupArgs(["--verify"])), {
-    verify: true,
+  assert.deepEqual(resolvePlan(parseSetupArgs(["--lint"])), {
+    lint: true,
     test: false,
     gha: true,
     plugin: true,
     strict: false,
   });
-  const t = resolvePlan(parseSetupArgs(["--testing"]));
-  assert.equal(t.verify, false);
+  const t = resolvePlan(parseSetupArgs(["--test"]));
+  assert.equal(t.lint, false);
   assert.equal(t.test, true);
   // both named → both on
-  const both = resolvePlan(parseSetupArgs(["--verify", "--testing"]));
-  assert.equal(both.verify, true);
+  const both = resolvePlan(parseSetupArgs(["--lint", "--test"]));
+  assert.equal(both.lint, true);
   assert.equal(both.test, true);
   // --no-* drops one from the default-both
-  const noTest = resolvePlan(parseSetupArgs(["--no-testing"]));
-  assert.equal(noTest.verify, true);
+  const noTest = resolvePlan(parseSetupArgs(["--no-test"]));
+  assert.equal(noTest.lint, true);
   assert.equal(noTest.test, false);
 });
 
@@ -89,7 +91,7 @@ test("resolvePlan: --no-gha / --no-plugin / --strict / --target", () => {
   assert.equal(p.gha, false);
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
-  // --target pins a bare Pillar-1 spec → no harness scaffold
+  // --target pins a bare lint-pillar spec → no harness scaffold
   assert.equal(resolvePlan(parseSetupArgs(["--target=AGENTS.md"])).test, false);
 });
 
@@ -97,7 +99,7 @@ test("resolvePlan: interactive answers override flags/defaults", () => {
   const p = resolvePlan(parseSetupArgs([]), { test: false, plugin: false });
   assert.equal(p.test, false);
   assert.equal(p.plugin, false);
-  assert.equal(p.verify, true); // untouched
+  assert.equal(p.lint, true); // untouched
 });
 
 test("planPluginInstall: claude uses the marketplace and never vendors", () => {
@@ -148,7 +150,7 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
   // every choice pinned via flags → nothing to ask
   assert.equal(
     shouldPrompt(
-      parseSetupArgs(["--verify", "--testing", "--no-gha", "--no-plugin"]),
+      parseSetupArgs(["--lint", "--test", "--no-gha", "--no-plugin"]),
       true,
     ),
     false,
