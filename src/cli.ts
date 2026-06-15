@@ -63,7 +63,7 @@ import { findSimilarRules } from "./core/proofs.js";
 import { parseInlineRules } from "./core/inline.js";
 import { parseFrontmatterRules } from "./core/frontmatter.js";
 import { generateSchema } from "./core/generate-schema.js";
-import { detectInstructionMirror } from "./core/compose.js";
+import { detectInstructionMirror, composeCollisions } from "./core/compose.js";
 import type { InstructionMirror } from "./core/compose.js";
 import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
@@ -113,7 +113,11 @@ const IGNORE_NODE_MODULES = ["node_modules/**"];
 function findSpecs(pattern?: string): string[] {
   const glob = pattern ?? "**/*.md.spec.ts";
   return globSync(glob, {
-    ignore: [...IGNORE_NODE_MODULES, "dist/**"],
+    // `dot: true` so specs that live in a sync tool's source slot (e.g.
+    // `.ruler/AGENTS.md.spec.ts`, the redirect target) are discovered by
+    // compile/audit/the recompile hook — not just root-level specs.
+    dot: true,
+    ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
     cwd: process.cwd(),
   });
 }
@@ -1345,7 +1349,13 @@ function init(args: string[]): void {
     return;
   }
 
-  const targetLine = target !== "CLAUDE.md" ? `\n  target: "${target}",` : "";
+  // The compiled output is derived from the spec FILE path; the spec's `target`
+  // field is the h1 + the name the compiler validates against, so it must be the
+  // bare filename even when the spec lives in a subdir (e.g. a sync tool's
+  // `.ruler/AGENTS.md.spec.ts` source slot → target "AGENTS.md").
+  const targetName = basename(target);
+  const targetLine =
+    targetName !== "CLAUDE.md" ? `\n  target: "${targetName}",` : "";
   const template = `import { claude, enforce, guidance } from "vigiles/spec";
 
 export default claude({${targetLine}
@@ -1379,7 +1389,9 @@ export default claude({${targetLine}
   },
 });
 `;
-  writeFileSync(resolve(process.cwd(), specPath), template);
+  const specAbs = resolve(process.cwd(), specPath);
+  mkdirSync(dirname(specAbs), { recursive: true });
+  writeFileSync(specAbs, template);
   console.log(`Created ${specPath} — edit it and run \`vigiles compile\`.`);
 }
 
@@ -1728,6 +1740,33 @@ function collapseMirroredTargets(
   return collapsed;
 }
 
+/**
+ * When a detected rule-sync tool (rulesync / Ruler) regenerates a file vigiles
+ * would compile to, REDIRECT the compile target to the tool's source slot
+ * (`.ruler/AGENTS.md`, `.rulesync/rules/vigiles.md`). vigiles compiles upstream;
+ * the tool distributes to CLAUDE.md/AGENTS.md/Cursor/… — so the integrity hash
+ * never collides with the tool's output (the "Compose With Sync Tools" rule).
+ */
+function redirectSyncToolTargets(cwd: string, targets: string[]): string[] {
+  const collisions = composeCollisions(cwd, targets);
+  if (collisions.length === 0) return targets;
+  const slotFor = new Map(collisions.map((c) => [c.target, c.redirectTo]));
+  const out: string[] = [];
+  for (const t of targets) {
+    const redirected = slotFor.get(t) ?? t;
+    if (!out.includes(redirected)) out.push(redirected);
+  }
+  const tool = collisions[0].tool;
+  const slots = [...new Set(collisions.map((c) => c.redirectTo))].join(", ");
+  const from = [...slotFor.keys()].join(", ");
+  console.log(
+    `Note: ${tool} detected — scaffolding the spec to compile into its source ` +
+      `slot (${slots}) instead of ${from}, so ${tool} distributes it without ` +
+      `staling the integrity hash.`,
+  );
+  return out;
+}
+
 /** Pillar 1 — specs + types + schema + compile. Scaffolds a spec for every
  * instruction file (so `--verify` always delivers a spec), but never compiles
  * OVER a hand-written file — that is left to the migrate-to-spec skill. */
@@ -1740,12 +1779,16 @@ async function setupPillar1(
   const written: string[] = [];
   const needsMigration: string[] = [];
   // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
-  // AGENTS.md mirror (symlink or synced) to one canonical spec.
+  // AGENTS.md mirror (symlink or synced) to one canonical spec, then redirect
+  // into a sync tool's source slot when one would own the output.
   const targets = targetValue
     ? determineTargets(detected, targetValue, harnesses)
-    : collapseMirroredTargets(
-        determineTargets(detected, targetValue, harnesses),
-        detectInstructionMirror(cwd),
+    : redirectSyncToolTargets(
+        cwd,
+        collapseMirroredTargets(
+          determineTargets(detected, targetValue, harnesses),
+          detectInstructionMirror(cwd),
+        ),
       );
 
   // Create specs (blank). An existing hand-written target keeps its content —

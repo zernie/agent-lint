@@ -232,12 +232,16 @@ The plugin provides hooks:
 ### Codex
 
 Codex has no plugin marketplace, but the same skills install **globally** via the
-cross-agent [`skills` CLI](https://github.com/vercel-labs/skills) — to
-`~/.codex/skills/`, again not vendored into your repo:
+cross-agent [`skills` CLI](https://github.com/vercel-labs/skills) — to the global
+agents store `~/.agents/skills/` (which Codex reads), again not vendored into your
+repo:
 
 ```bash
-npx skills add zernie/vigiles -a codex -g
+npx skills add zernie/vigiles -a codex -g -y
 ```
+
+(The `-g` is what keeps it out of your repo — without it, `skills` vendors into
+`./.agents/skills/`. `-y` skips the confirmation prompt.)
 
 `vigiles init --harness=codex` (or auto-detection on an `AGENTS.md` repo) runs
 this for you. Codex reads `AGENTS.md` directly, so no plugin is needed for
