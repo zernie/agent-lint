@@ -165,8 +165,9 @@ export interface InstallPlan {
  *
  * Both methods install GLOBALLY, never into the repo: Claude through its plugin
  * marketplace (~/.claude/plugins/), Codex through the cross-agent `skills` CLI
- * with `-g` (~/.codex/skills/). Codex gets the skills but NOT hooks — Codex hook
- * wiring (.codex/config.toml [hooks]) is not automated yet. */
+ * with `-g -y` (the global store ~/.agents/skills/, which Codex reads). Codex
+ * gets the skills but NOT hooks — Codex hook wiring (.codex/config.toml [hooks])
+ * is not automated yet. */
 export function planPluginInstall(
   harnesses: readonly string[],
   opts: { hasClaude: boolean },
@@ -194,17 +195,18 @@ export function planPluginInstall(
       };
     }
     if (harness === "codex") {
-      // The cross-agent `skills` CLI with -g installs globally to
-      // ~/.codex/skills/ — no repo vendoring. Skills only; Codex hooks
-      // (.codex/config.toml [hooks]) are not wired automatically.
+      // The cross-agent `skills` CLI with `-g -y` installs to the global store
+      // ~/.agents/skills/ (NOT the repo, and NOT ~/.codex/ — verified against
+      // the real CLI). Skills only; Codex hooks (.codex/config.toml [hooks])
+      // are not wired automatically.
       return {
         harness,
-        commands: ["npx --yes skills add zernie/vigiles -a codex -g"],
+        commands: ["npx --yes skills add zernie/vigiles -a codex -g -y"],
         successMessage:
-          "✓ Installed the vigiles skills into ~/.codex/skills/ (global, not vendored)",
-        manualSteps: ["npx skills add zernie/vigiles -a codex -g"],
+          "✓ Installed the vigiles skills into ~/.agents/skills/ (global, not vendored)",
+        manualSteps: ["npx skills add zernie/vigiles -a codex -g -y"],
         notes: [
-          "Codex reads AGENTS.md directly; the skills install globally to ~/.codex/skills/.",
+          "Codex reads AGENTS.md directly; the skills install globally to ~/.agents/skills/ (not the repo).",
           "Codex hooks (.codex/config.toml [hooks]) are not auto-wired yet — add them manually for compile-on-edit.",
         ],
         vendors: false,

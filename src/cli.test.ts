@@ -1265,6 +1265,36 @@ describe("CLI: installation smoke test (deterministic)", () => {
     }
   });
 
+  it("Ruler project: redirects the spec into .ruler/ (no root CLAUDE.md collision)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-ruler-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-ruler", scripts: { test: "echo ok" } }),
+      );
+      // Ruler is keyed on its .ruler/ source dir; it regenerates CLAUDE.md.
+      mkdirSync(join(dir, ".ruler"), { recursive: true });
+      const { stdout, exitCode } = run(
+        "init --verify --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      assert.match(stdout, /ruler detected/i);
+      // The spec compiles into Ruler's source slot; Ruler distributes from there.
+      assert.ok(
+        existsSync(join(dir, ".ruler", "AGENTS.md.spec.ts")),
+        "spec in the .ruler source slot",
+      );
+      // No root spec that would fight Ruler over CLAUDE.md.
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "no root CLAUDE.md spec (redirected)",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("CLAUDE.md/AGENTS.md byte-identical (synced): ONE spec for CLAUDE.md", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-synced-"));
     try {
