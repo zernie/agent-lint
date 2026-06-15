@@ -160,7 +160,7 @@ Beyond checking individual rules, vigiles validates that the architecture declar
 ### Structure validation
 
 ```
-vigiles audit --arch
+vigiles lint --arch
 
 Architecture: FSD (Feature-Sliced Design)
   ✓ src/app/ exists
@@ -187,7 +187,7 @@ This is deterministic — filesystem checks, linter config parsing, structure va
 ### AI setup validation (meta-meta-check)
 
 ```
-vigiles audit --setup
+vigiles lint --setup
 
 AI Agent Setup:
   ✓ CLAUDE.md exists and is compiled from spec
@@ -273,7 +273,7 @@ FSD is the best starting point: most structured, active community (steiger exist
 
 ```
 User writes CLAUDE.md.spec.ts → vigiles compiles → CLAUDE.md
-                                  vigiles audits → "hash OK, 2 rules enforced"
+                                  vigiles lints → "hash OK, 2 rules enforced"
 ```
 
 ### After (vigiles as an architecture-aware agent platform)
@@ -290,7 +290,7 @@ User writes code (or agent writes code)
   → Hooks enforce FSD layer boundaries in real time
   → Skills create features with correct structure
   → Compile time: linter rules verified against architecture
-  → Audit time: architecture matches filesystem, setup is complete
+  → Lint time: architecture matches filesystem, setup is complete
   → Session end: agent behavior cross-referenced against architecture
 ```
 
@@ -314,13 +314,13 @@ interface ClaudeSpec {
 }
 ```
 
-Compile-time: merge architecture rules/keyFiles with spec-level ones. Audit-time: validate filesystem matches declared layers. This is just data — no preset packages needed.
+Compile-time: merge architecture rules/keyFiles with spec-level ones. Lint-time: validate filesystem matches declared layers. This is just data — no preset packages needed.
 
 ### Phase 2: First preset (`@vigiles/arch-fsd`)
 
 Extract the FSD-specific logic into a package. Publish. Users install it alongside vigiles. The preset is a function that returns architecture config.
 
-### Phase 3: Meta-validation (`vigiles audit --setup`)
+### Phase 3: Meta-validation (`vigiles lint --setup`)
 
 Cross-check everything: spec exists, architecture declared, linter rules enabled, skills installed, hooks configured, freshness OK. One command, one report, complete picture.
 
@@ -333,6 +333,6 @@ DDD, hexagonal, clean architecture, monorepo presets. Each with architecture-spe
 1. **Should presets be npm packages or built into vigiles?** Recommendation: npm packages. Keeps core small. Each architecture community can maintain their own preset.
 2. **How opinionated should presets be?** They should enforce structure (layers, boundaries) but not style (tabs vs spaces, naming conventions). Structure is architecture; style is the linter's job.
 3. **How to handle architecture migrations?** A "migrate-to-fsd" skill that gradually restructures a project. This is ambitious but high-value for adoption.
-4. **Should vigiles generate linter configs or just validate them?** Both. `vigiles init --arch fsd` generates a starter config. `vigiles audit --arch` validates the config matches the architecture. Generation is for setup, validation is for maintenance.
+4. **Should vigiles generate linter configs or just validate them?** Both. `vigiles init --arch fsd` generates a starter config. `vigiles lint --arch` validates the config matches the architecture. Generation is for setup, validation is for maintenance.
 5. **Relationship to steiger?** steiger is FSD-specific. vigiles is architecture-agnostic. The FSD preset wraps steiger's rules via `enforce()`. If steiger covers everything, the preset is thin. If it doesn't, the preset adds rules via eslint-plugin-boundaries or dependency-cruiser.
 6. **Does architecture validation belong in vigiles or in a separate tool?** vigiles already validates linter configs (6 linters). Architecture enforcement is just more linter configs (dependency-cruiser, eslint-plugin-boundaries). Same machinery, higher abstraction.

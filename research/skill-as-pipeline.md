@@ -166,7 +166,7 @@ frontmatter; no TS required.
 
 ## Where it's enforced (both already half-designed in sibling docs)
 
-- **Author-time (`vigiles compile`/`audit`):** gates _reference real things_ (`cmd` exists,
+- **Author-time (`vigiles compile`/`lint`):** gates _reference real things_ (`cmd` exists,
   `file` resolves, rule enabled) **and** the shape is complete (every step has a gate; there is
   a result gate; the graph is reachable/terminating). This is the existing cross-referencing
   engine + a structural check.
@@ -262,7 +262,7 @@ A phased order that occupies the empty quadrant with the least risk by reusing w
 
 1. **Author-time skill-gate verification (build first).** Extend the in-flight
    inline/frontmatter parser so a SKILL.md declares per-step `vigiles:gate "<cmd>"` (gate kinds:
-   cmd/file/rule) and a frontmatter `result:` gate; `vigiles audit` verifies every gate's
+   cmd/file/rule) and a frontmatter `result:` gate; `vigiles lint` verifies every gate's
    reference resolves. Pure verification, zero runtime risk, **directly unpauses the file/cmd
    parser work and points it at skills**, and occupies the quadrant nobody else does. Delivers
    value with no driver.

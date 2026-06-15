@@ -274,7 +274,7 @@ export function cmd(command: NoInfer<StrictCmd>): CmdRef {
  * Reference a symbol defined in a file — verified at compile time that the
  * named file exists AND defines the named symbol (via ast-grep, cross-language).
  * Compiles to the file-qualified inline form `` `file#symbol` `` so the markdown
- * `audit` / `refs-hook` re-verify the same reference.
+ * `lint` / `refs-hook` re-verify the same reference.
  */
 export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef {
   return { _ref: "symbol", file: file as VerifiedPath, symbol: name };

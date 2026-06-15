@@ -259,7 +259,7 @@ describe("CLI: vigiles lint", () => {
   let tmpDir: string;
 
   before(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-audit-"));
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-lint-"));
   });
 
   after(() => {
@@ -274,7 +274,7 @@ describe("CLI: vigiles lint", () => {
 
   it("should include coverage and strengthen output", () => {
     const { stdout } = run("lint", tmpDir);
-    // audit runs discover + strengthen in addition to verification
+    // lint runs discover + strengthen in addition to verification
     assert.ok(
       stdout.includes("coverage") ||
         stdout.includes("Linter") ||
@@ -283,7 +283,7 @@ describe("CLI: vigiles lint", () => {
   });
 
   it("should detect duplicate rules via NCD", () => {
-    const dupDir = mkdtempSync(join(tmpdir(), "vigiles-audit-dup-"));
+    const dupDir = mkdtempSync(join(tmpdir(), "vigiles-lint-dup-"));
     try {
       writeFileSync(
         join(dupDir, "package.json"),
@@ -316,11 +316,11 @@ export default claude({
   it("should skip inline verification for spec-managed files", () => {
     // A file with a sibling .spec.ts (and compiled-from header) must
     // not run inline verification, so literal vigiles:enforce snippets
-    // in prose cannot trip audit when the file is spec-managed.
+    // in prose cannot trip lint when the file is spec-managed.
     // We use a sibling-.spec.ts with the spec snippet embedded as a
-    // prose section — compile generates the valid hash, then audit
+    // prose section — compile generates the valid hash, then lint
     // must ignore the inline marker in the output.
-    const specDir = mkdtempSync(join(tmpdir(), "vigiles-audit-spec-skip-"));
+    const specDir = mkdtempSync(join(tmpdir(), "vigiles-lint-spec-skip-"));
     try {
       writeFileSync(
         join(specDir, "package.json"),
@@ -333,7 +333,7 @@ export default claude({
 export default claude({
   sections: {
     // A literal enforce marker embedded in prose — would be picked
-    // up as an inline rule if audit didn't skip spec-managed files.
+    // up as an inline rule if lint did not skip spec-managed files.
     example: 'Example: <!-- vigiles:enforce eslint/total-nonsense "prose" -->',
   },
   rules: {
@@ -1577,7 +1577,7 @@ describe("E2E: fixture project adoption", () => {
     );
   });
 
-  it("audit detects CLAUDE.md has no vigiles hash", () => {
+  it("lint detects CLAUDE.md has no vigiles hash", () => {
     const { stdout } = run("lint", workDir);
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
@@ -1593,7 +1593,7 @@ describe("E2E: fixture project adoption", () => {
     assert.ok(existsSync(join(workDir, ".vigiles/generated.d.ts")));
   });
 
-  it("full flow: write spec → compile → audit passes", () => {
+  it("full flow: write spec → compile → lint passes", () => {
     // Clean slate: remove any existing CLAUDE.md and spec
     const mdPath = join(workDir, "CLAUDE.md");
     const specPath = join(workDir, "CLAUDE.md.spec.ts");
@@ -1622,9 +1622,9 @@ export default claude({
     assert.ok(content.includes("<!-- vigiles:sha256:"));
 
     // Audit should pass (hash valid, spec exists)
-    const auditResult = run("lint", workDir);
+    const lintResult = run("lint", workDir);
     assert.ok(
-      auditResult.stdout.includes("hash valid") || auditResult.exitCode === 0,
+      lintResult.stdout.includes("hash valid") || lintResult.exitCode === 0,
     );
   });
 });

@@ -44,7 +44,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 | PR comment → lint rule           | **No**         | Agent generates custom rule code — `/pr-to-lint-rule` skill                          |
 | Spec content authoring           | **No**         | Agent or human writes the spec — vigiles verifies it                                 |
 
-Everything vigiles compiles and audits is deterministic — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline.
+Everything vigiles compiles and lints is deterministic — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline.
 
 ## What vigiles Does and Doesn't Validate in Markdown
 

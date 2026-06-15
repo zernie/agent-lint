@@ -153,12 +153,12 @@ are present (`.ruler/` + `ruler.toml`, `.rulesync/`), their source slots, and an
 collision where a vigiles compile target is also a file the detected tool
 regenerates (the integrity-hash hazard of requirement 3). Mirrors the existing
 deterministic-detector pattern (`orphans.ts`, `test-coverage.ts`); surfaced by
-`vigiles audit` as a warning with the recommended source-slot redirect. The rest
+`vigiles lint` as a warning with the recommended source-slot redirect. The rest
 of the requirements are already met by the engine being format-agnostic.
 
 ## Next steps (not in this pass)
 
-- Wire `composeCollisions` into `vigiles audit` output (warning + suggested
+- Wire `composeCollisions` into `vigiles lint` output (warning + suggested
   source-slot path). See `roadmap.md`.
 - A `--into <dir>` compile flag so Topology A is one command
   (`vigiles compile --into .ruler/`).

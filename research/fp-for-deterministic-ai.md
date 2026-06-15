@@ -70,7 +70,7 @@ Expose `Rule<A, B>` as a public plugin type so users can compose their own rules
 
 ### 4. PBT coverage check — NOT BUILT
 
-Audit-time assertion: for every file matching `src/**/*.ts` that exports a pure function (no `Promise`, no parameter of type `unknown`, no `void` return), require a colocated `*.property.test.ts`. Dovetails directly with arxiv 2506.18315 — properties catch the failure modes tests miss, and agents iterate on property failures faster than they iterate on hand-written tests. `fast-check` already handles the runtime. vigiles just makes coverage visible.
+Lint-time assertion: for every file matching `src/**/*.ts` that exports a pure function (no `Promise`, no parameter of type `unknown`, no `void` return), require a colocated `*.property.test.ts`. Dovetails directly with arxiv 2506.18315 — properties catch the failure modes tests miss, and agents iterate on property failures faster than they iterate on hand-written tests. `fast-check` already handles the runtime. vigiles just makes coverage visible.
 
 ### 5. Content-addressed compile cache — NOT BUILT
 
@@ -94,7 +94,7 @@ Bundle: `no-let`, `immutable-data`, `no-loop-statements`, `prefer-readonly-type`
 
 ### 10. Lens recommendation detector — NOT BUILT
 
-Audit-time scan: detect the pattern `{...a, b: {...a.b, c: {...a.b.c, d: value}}}` (spread nesting ≥ 3) and suggest switching to `monocle-ts` or `optics-ts`. Pure diagnostic — vigiles does not rewrite the code. But it does catch the single ugliest FP anti-pattern LLMs produce when asked to "update this field immutably": nested spreads that nobody can read and nobody tests. Flagging them directs the agent toward the lens library the project presumably already has.
+Lint-time scan: detect the pattern `{...a, b: {...a.b, c: {...a.b.c, d: value}}}` (spread nesting ≥ 3) and suggest switching to `monocle-ts` or `optics-ts`. Pure diagnostic — vigiles does not rewrite the code. But it does catch the single ugliest FP anti-pattern LLMs produce when asked to "update this field immutably": nested spreads that nobody can read and nobody tests. Flagging them directs the agent toward the lens library the project presumably already has.
 
 ### 11. Immutability as a security property — NOT BUILT
 
@@ -106,11 +106,11 @@ The current fitness formula (`coverage × (1 - redundancy) × (1 - budgetPressur
 
 ### 13. Deterministic seed for property tests in CI — NOT BUILT
 
-`propertyTest()` in proofs.ts accepts a `seed` option, but nothing in the CI pipeline uses it. Ship a convention: `vigiles audit --pbt-seed=$GITHUB_SHA` so property-based tests are deterministic per commit (reproducible failures) but vary across commits (explore the search space over time). Combines the benefits of deterministic CI (no flakes) with the coverage of randomized testing (different inputs each push).
+`propertyTest()` in proofs.ts accepts a `seed` option, but nothing in the CI pipeline uses it. Ship a convention: `vigiles lint --pbt-seed=$GITHUB_SHA` so property-based tests are deterministic per commit (reproducible failures) but vary across commits (explore the search space over time). Combines the benefits of deterministic CI (no flakes) with the coverage of randomized testing (different inputs each push).
 
 ## Railway-oriented programming for skills
 
-Tangent worth noting: the same Result-pipe pattern applies to vigiles's own internal surface. If every audit step, every compile step, every linter-verification step is typed as `(Input) => Result<Output, Diagnostic[]>`, the whole compiler is one `pipe()` chain from spec AST to final output. Errors collect instead of throwing; the top-level command decides whether to short-circuit or aggregate. This is how Effect.ts pipelines are structured, and it would make the compiler's own behavior under partial failure **provably** correct instead of "seems to work in tests." A good reason to adopt neverthrow internally even before we ship it as a preset.
+Tangent worth noting: the same Result-pipe pattern applies to vigiles's own internal surface. If every lint step, every compile step, every linter-verification step is typed as `(Input) => Result<Output, Diagnostic[]>`, the whole compiler is one `pipe()` chain from spec AST to final output. Errors collect instead of throwing; the top-level command decides whether to short-circuit or aggregate. This is how Effect.ts pipelines are structured, and it would make the compiler's own behavior under partial failure **provably** correct instead of "seems to work in tests." A good reason to adopt neverthrow internally even before we ship it as a preset.
 
 ## What we are NOT doing
 
@@ -123,7 +123,7 @@ Tangent worth noting: the same Result-pipe pattern applies to vigiles's own inte
 
 1. **#1 fpDeterminism preset** + **#7 exhaustiveness preset** — single day of work, zero new dependencies beyond what users opt into, immediate win
 2. **#2 pureZone + #6 schema boundaries** — the core pair; these define where the other presets apply
-3. **#4 PBT coverage check** — wires into audit, no new subsystem, matches the strongest academic signal
+3. **#4 PBT coverage check** — wires into lint, no new subsystem, matches the strongest academic signal
 4. **#3 rule combinator API** — enables plugins, unlocks user-contributed presets, 1–2 days of refactor
 5. **#8 Result preset + #9 immutable preset + #10 lens detector** — powerful but opinionated; ship after the first four land so adopters have the machinery to opt in surgically
 6. **#5 content-addressed cache** — pure performance work; ship when compile times become a complaint

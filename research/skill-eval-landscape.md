@@ -21,9 +21,9 @@ A framework to grade an Agent Skill (against the agentskills.io standard) as
 | **Reliability**     | Trigger precision: relevant **+ irrelevant** query testing                                        |
 | **Cost efficiency** | Pareto classification — do quality gains justify the token cost                                   |
 
-Stages: `audit` (no Claude) · `functional` (assertions, needs Claude) ·
+Stages: `lint` (no Claude) · `functional` (assertions, needs Claude) ·
 `trigger` (relevant/irrelevant activation) · `regression` (vs versioned
-baseline) · `report` (weighted `audit 40 + functional 40 + trigger 20` → A–F).
+baseline) · `report` (weighted `lint 40 + functional 40 + trigger 20` → A–F).
 Config via `.skilleval.yaml`.
 
 ### Scored against our eval pillar
@@ -41,7 +41,7 @@ the harness" is a real category.
 | **Trigger _precision_ (irrelevant queries)** | _was recall only_                                                                                                                                       | **absorbed ↓**                 |
 | **Unified A–F scorecard (weighted)**         | pieces exist, no single grade                                                                                                                           | absorb candidate               |
 | **Cost-efficiency Pareto verdict**           | we measure tokens + outcome A/B; no classification                                                                                                      | absorb candidate               |
-| **Skill security static scan**               | not us — `vigiles audit` verifies _references_, not security                                                                                            | delegate                       |
+| **Skill security static scan**               | not us — `vigiles lint` verifies _references_, not security                                                                                             | delegate                       |
 
 ### Absorb-list
 
@@ -53,7 +53,7 @@ the harness" is a real category.
    `assertTriggerRate({ maxFalsePositive, minPrecision })` (`src/eval.ts`,
    `src/harness-assert.ts`).
 2. **Unified skill scorecard (candidate).** A weighted roll-up
-   (`audit + outcome + trigger → grade`) over the pieces we already emit. Fits the
+   (`lint + outcome + trigger → grade`) over the pieces we already emit. Fits the
    `audit-feedback-loop` skill. Defer until a user wants one number.
 3. **Cost-efficiency verdict (candidate).** We already aggregate token usage and
    outcome deltas per arm; a "quality gain per token" classification is a thin
@@ -61,7 +61,7 @@ the harness" is a real category.
 4. **Skill security scan — delegate, don't build.** Per the "don't reimplement"
    rule, secrets/injection/over-privileged scanning belongs in a dedicated
    scanner (`gitleaks`, `semgrep`); `enforce()` can reference its rules. vigiles's
-   audit stays about _references_.
+   lint stays about _references_.
 
 ## 2. The token/context-compression cluster — not ours to build, ours to _verify_
 

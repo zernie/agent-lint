@@ -67,7 +67,7 @@ nobody else can hold honestly.
 
 1. **AGENTS.md + SKILL.md as first-class verified inputs** (standards #1). The
    engine is already format-agnostic; AGENTS.md is 60k+ repos and SKILL.md ~32
-   tools. Nearly free distribution. _First step:_ `vigiles audit` verifies a
+   tools. Nearly free distribution. _First step:_ `vigiles lint` verifies a
    hand-written AGENTS.md/SKILL.md's refs; scan one popular OSS repo's AGENTS.md
    and publish the findings (the distribution-strategy E1 lever, bigger corpus).
 2. **`vigiles scan <plugin|mcp>`** (security #1) — a CLI face on `loadPlugin` +

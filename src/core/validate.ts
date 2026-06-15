@@ -238,7 +238,7 @@ export function validate(
       // `<!-- vigiles:enforce ... -->` comment means the file is
       // verified on `vigiles lint` even without a .spec.ts sibling.
       // Delegate to the real parser so a malformed marker can't
-      // satisfy require-spec with a rule that audit can't verify.
+      // satisfy require-spec with a rule that lint can't verify.
       const hasInline = hasInlineRules(content) || hasFrontmatterRules(content);
       if (!existsSync(specPath) && !hasInline) {
         const msg: ValidationError = {

@@ -61,7 +61,7 @@ const report = await runEval({
     const ignores = count("vigiles:ignore");
     // Payoff: rename chargeCard in the code, does audit catch the broken ref?
     ctx.sh("sed -i 's/chargeCard/captureCard/g' src/billing.ts");
-    const audit = ctx.sh(`node ${CLI} audit SKILL.md`);
+    const audit = ctx.sh(`node ${CLI} lint SKILL.md`);
     const caught = /"chargeCard" is not defined/.test(audit);
     ctx.sh("sed -i 's/captureCard/chargeCard/g' src/billing.ts");
     return { marks, ignores, caught };

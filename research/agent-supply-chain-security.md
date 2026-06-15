@@ -130,7 +130,7 @@ provenance or the plugin manifest.
 Ranked: improvement → new direction → pivot. Each: the bet · the risk · the
 smallest first step.
 
-### 1. `vigiles scan <plugin|mcp>` — the harness-aware audit (IMPROVEMENT)
+### 1. `vigiles scan <plugin|mcp>` — the harness-aware lint (IMPROVEMENT)
 
 - **The bet.** Re-aim `loadPlugin` + the sandbox into one command that emits a
   findings report against the OWASP Agentic Skills Top 10, but **only the rows

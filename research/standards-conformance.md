@@ -119,7 +119,7 @@ Pillar 1.
   `skills-ref`/agnix structurally don't do.
 - **Risk:** Low. Mostly a parser + docs + positioning change. Risk is _perceived_ scope creep if marketed as
   "now a generic AGENTS.md linter" — must stay framed as _reference verification_, not generic lint.
-- **Smallest first step:** Make `vigiles audit` accept a hand-written `AGENTS.md` / `SKILL.md` and verify its
+- **Smallest first step:** Make `vigiles lint` accept a hand-written `AGENTS.md` / `SKILL.md` and verify its
   backticked + marked refs (reusing inline/frontmatter parsers), emitting the same exists-AND-enabled report.
   One worked example: scan a popular OSS repo's real AGENTS.md, publish the findings (the E1 lever from
   distribution-strategy, now retargeted at the larger AGENTS.md corpus).

@@ -136,7 +136,7 @@ test("my adapter conforms", () => {
   `compileAgent(spec, { dialect: myHarnessAdapter.dialect })`,
   `loadPlugin(path, myHarnessAdapter.layout)`.
 - **CLI auto-detection:** add it to the registry (`src/adapter-registry.ts`
-  `ADAPTERS`) so `vigiles compile|scan|audit` detect it from a repo's layout
+  `ADAPTERS`) so `vigiles compile|scan|lint` detect it from a repo's layout
   (highest `detect` specificity wins). Claude Code stays the default, so nothing
   existing breaks. Users force a harness with `--harness <name>` when a repo
   matches more than one.

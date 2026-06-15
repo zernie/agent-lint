@@ -42,11 +42,11 @@ Model a skill as `Skill<Ctx> = (Ctx) => Effect<Ctx, Diagnostic>` — it takes th
 const reviewAndFix = review.andThen(runTests).andThen(fixFailures);
 ```
 
-In Scott Wlaschin's formulation this is the two-track railway: the success track carries Ctx forward, the failure track carries Diagnostic short-circuited to the end. vigiles's contribution: a **spec-level declaration** of skill shape (`skill("review", { input: ..., output: ... })`) that compiles to a SKILL.md with the pipeline documented, and an audit check that each declared skill step actually exists. Users write skills any way they like; vigiles enforces the shape at the edges.
+In Scott Wlaschin's formulation this is the two-track railway: the success track carries Ctx forward, the failure track carries Diagnostic short-circuited to the end. vigiles's contribution: a **spec-level declaration** of skill shape (`skill("review", { input: ..., output: ... })`) that compiles to a SKILL.md with the pipeline documented, and an lint check that each declared skill step actually exists. Users write skills any way they like; vigiles enforces the shape at the edges.
 
-### 2. Validation applicative for rule audits — PARTIALLY SHIPPED (audit collects all diagnostics across stages, but no formal Validation type)
+### 2. Validation applicative for rule lints — PARTIALLY SHIPPED (lint collects all diagnostics across stages, but no formal Validation type)
 
-Today `vigiles audit` collects problems across stages (stale refs, dead enforcements, duplicates, coverage gaps) but each stage is written imperatively and short-circuits on its own. Switch to the Validation pattern: every check returns `Validation<OK, Diagnostic[]>` and the whole audit is `checks.map(run).sequence()`, collecting **all** failures across **all** checks in one pass. Contrast with Either monad: Either short-circuits at the first error. For audits you want the opposite — run everything, collect everything. This is a one-library change (neverthrow's `Result.combineWithAllErrors`) and makes audit output dramatically more useful per invocation.
+Today `vigiles lint` collects problems across stages (stale refs, dead enforcements, duplicates, coverage gaps) but each stage is written imperatively and short-circuits on its own. Switch to the Validation pattern: every check returns `Validation<OK, Diagnostic[]>` and the whole lint is `checks.map(run).sequence()`, collecting **all** failures across **all** checks in one pass. Contrast with Either monad: Either short-circuits at the first error. For lints you want the opposite — run everything, collect everything. This is a one-library change (neverthrow's `Result.combineWithAllErrors`) and makes lint output dramatically more useful per invocation.
 
 ### 3. Hooks as algebraic effect handlers — NOT BUILT
 
@@ -72,7 +72,7 @@ Treat the session transcript as an **event log**: each user message, model respo
 - **Replay**: re-run `reduce` from event N to reconstruct state at turn N. Debugging a weird agent decision becomes point-in-time inspection.
 - **Fork**: `events.slice(0, n).concat(newEvent)` forks the session at turn n with a different branch. Lets you A/B a prompt change without losing the prefix.
 
-This is what Redux/Elm do and what Effect's `Fiber` model does internally. The harness already persists the transcript on disk; vigiles's role is a **spec-level invariant** that every rule produces deterministic output from the same input prefix — so replays match. An audit check: "replay session X from transcript, compare final state to recorded — diverge = bug."
+This is what Redux/Elm do and what Effect's `Fiber` model does internally. The harness already persists the transcript on disk; vigiles's role is a **spec-level invariant** that every rule produces deterministic output from the same input prefix — so replays match. An lint check: "replay session X from transcript, compare final state to recorded — diverge = bug."
 
 ### 6. Lenses for settings.json — NOT BUILT
 
@@ -121,9 +121,9 @@ None of the above asks Claude Code's harness to change. vigiles's leverage is th
 
 - `skill(name, { input, output, may, steps })` builder in `src/spec.ts`
 - Compiles to a SKILL.md documenting the pipeline, effect set, and failure modes
-- Audit check that every step referenced actually exists as a file or subskill
+- Lint check that every step referenced actually exists as a file or subskill
 - Optional: a tiny runtime wrapper (`@vigiles/skill`) that provides the neverthrow-based `Skill<Ctx>` type and combinators, so users who want to adopt the pattern in their own tooling can import a shared definition
-- Hook validation subcommand (`vigiles audit --hooks`) that treats hooks as pure functions and property-tests them
+- Hook validation subcommand (`vigiles lint --hooks`) that treats hooks as pure functions and property-tests them
 
 The runtime wrapper is optional. The spec layer is the thing. Everything else is documentation of the pattern with a compile-time check that the documentation matches reality.
 
@@ -131,18 +131,18 @@ The runtime wrapper is optional. The spec layer is the thing. Everything else is
 
 Record the Merkle chain from a session (every mutation + proof receipt). Replay the same sequence through a different LLM (or different temperature) and compare: which mutations does each accept/reject? Divergence = the mutation is model-sensitive, which means the proof suite isn't strict enough (the deterministic gate should have caught it). This is differential testing applied to agent behavior, and the Merkle chain is already the exact replay log it needs.
 
-### 12. Audit stage as a composable functor — NOT BUILT
+### 12. Lint stage as a composable functor — NOT BUILT
 
-Each audit stage today is an imperative function that mutates `silent` state and accumulates counters. Make each stage a pure `(AuditReport) → AuditReport` transformation. Stages compose via plain function composition. The `silent`/`loud` threading becomes a Reader effect; the counter accumulation is just field merges. Users could define custom audit pipelines in their spec: `auditStages: [verifyHashes, inlineRules, coverage]` — pick what runs, skip what doesn't apply.
+Each lint stage today is an imperative function that mutates `silent` state and accumulates counters. Make each stage a pure `(LintReport) → LintReport` transformation. Stages compose via plain function composition. The `silent`/`loud` threading becomes a Reader effect; the counter accumulation is just field merges. Users could define custom lint pipelines in their spec: `lintStages: [verifyHashes, inlineRules, coverage]` — pick what runs, skip what doesn't apply.
 
 ### 13. Hook contract testing via fast-check — NOT BUILT
 
-Treat each Claude Code hook (PreToolUse, PostToolUse, SessionStart) as a pure function of `(Request, Env) → Response` and property-test it with fast-check: generate random tool-use requests, assert invariants like "PreToolUse never returns both Allow and Block" or "PostToolUse output is always valid JSON." The existing hook scripts are bash, so the "function" is actually `echo $INPUT | bash hook.sh | read $OUTPUT` — property testing over that subprocess boundary catches the silent-matcher-ignore and trailing-wildcard anti-patterns from the agent-integration doc with machine coverage instead of manual audit.
+Treat each Claude Code hook (PreToolUse, PostToolUse, SessionStart) as a pure function of `(Request, Env) → Response` and property-test it with fast-check: generate random tool-use requests, assert invariants like "PreToolUse never returns both Allow and Block" or "PostToolUse output is always valid JSON." The existing hook scripts are bash, so the "function" is actually `echo $INPUT | bash hook.sh | read $OUTPUT` — property testing over that subprocess boundary catches the silent-matcher-ignore and trailing-wildcard anti-patterns from the agent-integration doc with machine coverage instead of manual lint.
 
 ## Priority
 
-1. **`skill()` builder with typed input/output** — the smallest change, unblocks everything else. Write the builder, compile it to the existing SKILL.md format, audit for missing referenced files.
-2. **Validation applicative for audit** — one-library refactor, immediate UX win ("audit reports 7 issues" instead of "audit failed at issue 1").
+1. **`skill()` builder with typed input/output** — the smallest change, unblocks everything else. Write the builder, compile it to the existing SKILL.md format, lint for missing referenced files.
+2. **Validation applicative for lint** — one-library refactor, immediate UX win ("lint reports 7 issues" instead of "lint failed at issue 1").
 3. **Skill combinators as spec builders** — `retry()`, `fallback()`, `parallel()` that compile to prose. No runtime required, just better SKILL.md output.
 4. **Hook property testing** — depends on having a spec model of hooks first, then layering fast-check.
 5. **Effect annotations + lens-based settings editor** — the sharpest tools but the most design work. Ship last.

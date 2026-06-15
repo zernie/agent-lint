@@ -13,7 +13,7 @@
  * This detector is pure filesystem inspection — the same deterministic-detector
  * shape as `orphans.ts` / `test-coverage.ts`. It reports which tools are present
  * and any target that collides with a file the tool regenerates, so `vigiles
- * audit` can warn before the integrity guarantee is lost.
+ * lint` can warn before the integrity guarantee is lost.
  */
 
 import {

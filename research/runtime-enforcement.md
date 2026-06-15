@@ -5,7 +5,7 @@
 vigiles currently operates at two points:
 
 1. **Compile time** — validate the spec (linter rules exist, files resolve, commands are in package.json)
-2. **Audit time** — validate the output (hash intact, inputs fresh)
+2. **Lint time** — validate the output (hash intact, inputs fresh)
 
 Missing: **runtime** — validate agent behavior as it happens.
 
@@ -156,7 +156,7 @@ This keeps the spec as the single source of truth. The hooks are derived artifac
 
 ## Differential Analysis (Post-Session)
 
-After an agent session, `vigiles audit --diff` could compare the workspace state against spec expectations:
+After an agent session, `vigiles lint --diff` could compare the workspace state against spec expectations:
 
 ```
 Session analysis:
@@ -194,7 +194,7 @@ The gap: Claude Code hooks are powerful but manual. Users write ad-hoc shell scr
 ### What to build
 
 1. **Compiled output protection** — already exists (PreToolUse blocks edits to hashed `.md` files).
-2. **Post-session differential analysis** — `vigiles audit --diff` compares workspace state against spec surface area. Read-only, zero risk.
+2. **Post-session differential analysis** — `vigiles lint --diff` compares workspace state against spec surface area. Read-only, zero risk.
 3. **Hook generation from specs** — `vigiles compile --hooks` emits hook configurations derived from keyFiles, commands, and enforce rules. User reviews and installs.
 4. **Scoped linting on modified files** — PostToolUse runs enforced linter rules on files the agent just modified. Read-only analysis, no execution of arbitrary commands.
 
@@ -213,13 +213,13 @@ Hooks run in the same process context as the agent. A sufficiently capable agent
 
 ### Phase 1: Post-session audit (read-only, no hooks needed)
 
-`vigiles audit --session` reads the git diff since the last commit (or a specified base) and reports:
+`vigiles lint --session` reads the git diff since the last commit (or a specified base) and reports:
 
 - Files modified that aren't in any spec's keyFiles
 - Commands in bash history that aren't in any spec's commands
 - Specs that are now stale due to input changes
 
-This works without hooks. It's git diff analysis against the sidecar manifests. Ship it as an audit subcommand.
+This works without hooks. It's git diff analysis against the sidecar manifests. Ship it as an lint subcommand.
 
 ### Phase 2: Hook generation (compile target)
 
@@ -251,6 +251,6 @@ Extend the `skill()` API with optional `contract` field. Compile skill contracts
 1. **Should hook generation be opt-in or default?** Recommendation: opt-in via `vigiles compile --hooks`. Hooks change agent behavior — that should be explicit.
 2. **Warn or block?** Recommendation: warn by default, block for compiled output protection only. A `--strict` flag escalates warnings to blocks.
 3. **How to handle subagents?** Claude Code hooks fire for subagent tool calls too (agent_id is in stdin). Should policies differ for Plan/Explore/Task subagents?
-4. **Session boundary detection:** `vigiles audit --session` needs to know "what changed since the agent started." Git stash? Commit hash? Timestamp? The sidecar manifest's `compiledAt` timestamp could serve as the baseline.
+4. **Session boundary detection:** `vigiles lint --session` needs to know "what changed since the agent started." Git stash? Commit hash? Timestamp? The sidecar manifest's `compiledAt` timestamp could serve as the baseline.
 5. **keyFiles access modes:** Should `readonly`/`read-write`/`none` be a first-class API, or should vigiles infer intent from descriptions? Recommendation: first-class API. Inference from prose is fragile.
 6. **Contract enforcement without skill context:** If hooks can't know which skill is active, should the skill write a state file (`.vigiles/active-skill.json`) at start and clean up at end? This is brittle but workable.

@@ -162,7 +162,7 @@ Order of operations after A lands:
 ## What NOT to do
 
 - **Don't rewrite the README again.** Just rewrote it. Let it stabilize. Measure before iterating.
-- **Don't build core features for non-existent users.** New `block()`, `intercept()`, `boundary()` builders, structural audit, snapshot downgrades — all useless without adoption. Already parked.
+- **Don't build core features for non-existent users.** New `block()`, `intercept()`, `boundary()` builders, structural lint, snapshot downgrades — all useless without adoption. Already parked.
 - **Don't launch community Discord/Slack** until there's user volume to fill it. Empty community is worse than no community.
 - **Don't do generic "AI dev marketing."** Too broad. The narrow audience (people with non-trivial CLAUDE.md who noticed agent reliability problems) is too specific to reach via broadcast.
 - **Don't burn cycles on `npm` SEO.** Search-engine SEO on npm doesn't move the needle for a tool nobody is searching for yet. Word of mouth first, then SEO matters.
@@ -208,12 +208,12 @@ This swaps the funnel logic: instead of finding the user's pre-existing broken r
 The direction stabilized into a broader move than `vigiles starter` alone: **markdown-first adoption**. The diagnosis underneath stages 2–3 was that the `.spec.ts` requirement is the adoption barrier — non-TS projects won't add TypeScript for an instruction-file linter, and brownfield migration from an existing CLAUDE.md is too much friction for the value. So the entry point is now plain markdown, with the typed spec demoted to the deepest of three commitment levels:
 
 - **Level 0 — inline comments.** `<!-- vigiles:enforce ... -->` in an existing CLAUDE.md. Already shipped.
-- **Level 1 — YAML frontmatter.** A `vigiles:` block verified by `vigiles audit`, plus `vigiles generate-schema` → a JSON Schema so the editor's built-in YAML LSP autocompletes rule names and squiggles typos. No TypeScript. **Shipped in this pass.**
+- **Level 1 — YAML frontmatter.** A `vigiles:` block verified by `vigiles lint`, plus `vigiles generate-schema` → a JSON Schema so the editor's built-in YAML LSP autocompletes rule names and squiggles typos. No TypeScript. **Shipped in this pass.**
 - **Level 2 — typed spec.** Unchanged; now positioned as "when you want compiler-grade guarantees," not the front door.
 
 What this resolves from the funnel analysis:
 
-- **Stage 3 (resolution friction):** value is visible by adding one marker and running `vigiles audit` — no init, no migration, no build step.
+- **Stage 3 (resolution friction):** value is visible by adding one marker and running `vigiles lint` — no init, no migration, no build step.
 - **Stage 2 (resonance):** the user's own broken/missing refs surface against their own config, with line numbers.
 - **The narrow-audience problem:** dropping the TS requirement widens the addressable slice to any project with a non-trivial instruction file, regardless of language.
 
@@ -235,10 +235,10 @@ The "value visible in the first 30 seconds, output is the product" artifact that
 Why this resolves the A-vs-reconsidered tension:
 
 - **The tweetable artifact materializes** because it's deterministic — no "did the heuristic guess right?" coin-flip. Curated input, 100% signal, real findings (the symbol check parses the file; the MCP check starts a real stdio server and lists its tools).
-- **It's honest, not staged** — every catch is a real `vigiles audit` run, reproducible by anyone who clones (`npm run demo`).
+- **It's honest, not staged** — every catch is a real `vigiles lint` run, reproducible by anyone who clones (`npm run demo`).
 - It addresses **Stage 3** (value in 60s, zero setup) and seeds **Stage 1** (shareable output) — same triple-stage logic as A.
 
-What it is _not_: the "scan the user's OWN repo and surface their pre-existing broken refs" hook (the strongest **Stage 2** lever). That remains the heuristic problem A was reconsidered over; the shipped path to a user's own repo is still _add a Level-0 mark, then `audit`_.
+What it is _not_: the "scan the user's OWN repo and surface their pre-existing broken refs" hook (the strongest **Stage 2** lever). That remains the heuristic problem A was reconsidered over; the shipped path to a user's own repo is still _add a Level-0 mark, then `lint`_.
 
 **New distinctive Reach hook — MCP reference verification.** `` `vigiles:mcp server#tool` `` starts the declared MCP server and verifies the cited tool exists (with a "did you mean"). No other instruction-file tool does this, and "the GitHub MCP server renamed `create_issue` → `issue_write` and your skill silently broke" is a concrete, current, MCP-ecosystem-shaped pain — a sharper wedge than generic "stale refs."
 

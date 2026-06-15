@@ -76,7 +76,7 @@ const hit = runHook(keywordDetectorCmd, {
 ```
 
 We run this **vendored, audited, pinned** script directly. For a hook you have
-_not_ audited, pass `{ trusted: false }` and `runHook` confines it under
+_not_ linted, pass `{ trusted: false }` and `runHook` confines it under
 bubblewrap (no egress, cleared env). Full file:
 [`examples/harness/oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs).
 
@@ -343,7 +343,7 @@ hooks**, and those are confined by default (`sandbox: "auto"`):
 
 ```ts
 runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
-runHarnessTest({ pluginDir: "./vendor/audited", model, sandbox: false }); // you vouch for it → direct
+runHarnessTest({ pluginDir: "./vendor/linted", model, sandbox: false }); // you vouch for it → direct
 runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
 ```
 

@@ -178,7 +178,7 @@ The prevailing answers, by project:
   ([podman#9543](https://github.com/containers/podman/issues/9543)) — i.e.
   privileged-device, the (b) answer, not available to us unprivileged.
 - **StepSecurity harden-runner** — eBPF egress allowlist with **full block +
-  audit on Linux GitHub-hosted runners** (Windows/macOS audit-only), read-back
+  lint on Linux GitHub-hosted runners** (Windows/macOS lint-only), read-back
   via the job-summary "security insights" view
   ([harden-runner](https://github.com/step-security/harden-runner)). Proof eBPF
   egress control _does_ run on stock GH-hosted Linux — but it's a **job-level

@@ -130,7 +130,7 @@ Three builders cover three kinds of constraints. The split mirrors a useful ment
 - **Architectural rules** (boundaries, layering, file pairing) — covered by `enforce()` delegating to ast-grep / Dependency Cruiser / Steiger via the same `enforce()` API.
 - **Prose-only intent** (anything semantic that can't be checked mechanically) — covered by `guidance()`. Lives in the spec for humans and agents to read; no compile-time verdict.
 
-When you're writing a new rule, ask first which category it falls into. If the answer is "I'm not sure how to mechanically check it," that's a `guidance()` rule. If the answer is "some external tool already does this," that's an `enforce()` rule. If it's "vigiles itself should check this at compile or audit time," that's `enforce("vigiles/<name>", ...)` against the built-in catalog (currently `vigiles/orphan-docs`).
+When you're writing a new rule, ask first which category it falls into. If the answer is "I'm not sure how to mechanically check it," that's a `guidance()` rule. If the answer is "some external tool already does this," that's an `enforce()` rule. If it's "vigiles itself should check this at compile or lint time," that's `enforce("vigiles/<name>", ...)` against the built-in catalog (currently `vigiles/orphan-docs`).
 
 ### `enforce(ref, why)`
 
@@ -140,7 +140,7 @@ Declares a rule delegated to an external linter or to a vigiles-internal check. 
 - `@${scope}/${rule}` for scoped ESLint plugins (e.g., `@typescript-eslint/no-explicit-any`)
 - `vigiles/${string}` for vigiles-internal assertions (e.g., `vigiles/orphan-docs`)
 
-At compile time, vigiles verifies the rule exists in the catalog and — for external linters — is enabled in the project's config. For Cedar, presence in a `.cedar` file counts as enabled. For `vigiles/<id>`, existence is checked against a built-in catalog and the actual check runs at audit time. Compiles to `**Enforced by:** ` followed by the rule reference in backticks.
+At compile time, vigiles verifies the rule exists in the catalog and — for external linters — is enabled in the project's config. For Cedar, presence in a `.cedar` file counts as enabled. For `vigiles/<id>`, existence is checked against a built-in catalog and the actual check runs at lint time. Compiles to `**Enforced by:** ` followed by the rule reference in backticks.
 
 ```ts
 rules: {

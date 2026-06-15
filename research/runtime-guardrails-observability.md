@@ -74,12 +74,12 @@ agent.spec.ts  (tools contract)
       │  vigiles compile / generate
       ├─▶ agents/x.md frontmatter ──▶ PreToolUse hook (agent-runtime.ts)   [dev loop — SHIPPED]
       ├─▶ x.cedar policy            ──▶ AgentCore/OPA gate                  [prod authz — idea #3]
-      └─▶ expected-tool span set    ──▶ vigiles verify-trace (OTel-GenAI)   [prod audit — idea #2]
+      └─▶ expected-tool span set    ──▶ vigiles verify-trace (OTel-GenAI)   [prod lint — idea #2]
                                               ▲
 runEval/runHarnessTest ──▶ traceToOtel ──▶ emitted spans  [test — idea #1]
 ```
 
-The payoff is that the **test-time emitted trace and the prod-time recorded trace are the same shape**, both checkable against the same contract by the same `decidePreToolUse` logic. A regression where production starts calling a tool the spec forbids is then catchable two ways — the prod gate denies it live, and `verify-trace` flags it in the audit — both grounded in the one declaration the harness test already exercised. That binding is the whitespace from the previous section, made mechanical.
+The payoff is that the **test-time emitted trace and the prod-time recorded trace are the same shape**, both checkable against the same contract by the same `decidePreToolUse` logic. A regression where production starts calling a tool the spec forbids is then catchable two ways — the prod gate denies it live, and `verify-trace` flags it in the lint — both grounded in the one declaration the harness test already exercised. That binding is the whitespace from the previous section, made mechanical.
 
 ## Bold ideas (ranked: improvement → new direction → pivot)
 

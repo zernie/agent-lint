@@ -571,7 +571,7 @@ function isEslintPluginRule(ruleName: string, basePath: string): boolean {
 /**
  * Enumerate all rules for a CLI-based linter so `tryCliCheck` can emit
  * closest-match suggestions on typos. Result is cached per (linter,
- * basePath) so each linter's discovery CLI runs at most once per audit.
+ * basePath) so each linter's discovery CLI runs at most once per lint.
  */
 const CLI_RULE_SET_CACHE = new Map<string, Set<string>>();
 function getCliRuleSet(linterName: string, basePath: string): Set<string> {
@@ -692,7 +692,7 @@ function getCliRuleSet(linterName: string, basePath: string): Set<string> {
 // The `vigiles/<id>` namespace lets specs declare mechanical checks that
 // vigiles itself runs (orphan docs, integrity, etc.) without delegating to
 // an external linter. Existence is verified at compile time against this
-// fixed catalog; the actual check runs at audit time.
+// fixed catalog; the actual check runs at lint time.
 // ---------------------------------------------------------------------------
 
 const VIGILES_INTERNAL_RULES = new Set<string>(["orphan-docs"]);

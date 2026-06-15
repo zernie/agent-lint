@@ -339,7 +339,7 @@ function makeContext(cwd: string, out: RunOut): RunContext {
           stdio: ["ignore", "pipe", "ignore"],
         }).trim();
       } catch (e) {
-        // Return captured stdout even on a non-zero exit (e.g. `audit` exits 2
+        // Return captured stdout even on a non-zero exit (e.g. `lint` exits 2
         // but still prints its findings), rather than swallowing it.
         const out = (e as { stdout?: string }).stdout;
         return typeof out === "string" ? out.trim() : "";

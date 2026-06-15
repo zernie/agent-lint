@@ -16,7 +16,7 @@ Both are independently useful: start in **markdown** (no new files), step up to 
 
 ### Markdown mode — no new files, no TypeScript
 
-Add a comment to your existing CLAUDE.md and audit it:
+Add a comment to your existing CLAUDE.md and lint it:
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
@@ -200,7 +200,7 @@ to the always-loaded instructions plus the `vigiles lint` CI floor. See the
 `vigiles lint` CI pipeline — just no hooks (no plugin system), so you run
 `vigiles compile` manually or in CI.
 
-Everything vigiles compiles and audits is **deterministic** — same input, same
+Everything vigiles compiles and lints is **deterministic** — same input, same
 output, no LLM in the loop. The non-deterministic parts (authoring specs,
 suggesting upgrades, writing custom rules) are agent skills that run outside the
 compilation pipeline. [Determinism breakdown and flow diagram →](comparison.md)
