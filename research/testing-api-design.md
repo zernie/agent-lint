@@ -314,6 +314,39 @@ as a capability of integration.**
   don't-rebuild-the-eval-stack decision). `measure` reuses existing aggregation;
   it does not grow a dashboard.
 
+## Part 6 — Build plan (phased; additive before breaking)
+
+Each phase ships green; the only thing to keep passing is our own suite +
+examples (no external users). Lowest-risk first.
+
+- **Phase 0 — `vigiles/check` vocabulary. ✅ SHIPPED.** The declarative checks
+  (`tool`/`skill`/`output`/`hookFired`/`wrote`/`blocked`/`allowed`), each a pure
+  `Check<T>` with `eval → {pass, score, message}` + `toJSON`, typed over `Trace`
+  vs `HookRunResult`. `src/check.ts` (+ `src/check.test.ts`), exported at
+  `vigiles/check` only (NOT folded into `vigiles/testing` yet — `hookFired`
+  collides with the legacy predicate; reconciled in Phase 6). Additive, model-free.
+- **Phase 1 — `expect(result, checks)` + matcher veneer.** The strict evaluator
+  over `Trace` and `HookRunResult` (throws the first failed check's message);
+  re-express the legacy `assert*`/matchers as thin wrappers over checks (coexist);
+  generate `vigiles/vitest` + `vigiles/jest` matchers from checks. Additive.
+- **Phase 2 — `runHarness(spec, { model, egress })`.** Unify `runHarnessTest`
+  (`model:"mock"`) and the eval runner (`model:"real"`) behind one entry; fold
+  egress in; drop the `vigiles/e2e` barrel. The layer collapse (Part 4). Refactor.
+- **Phase 3 — `measure(spec, { trials, checks })`.** Generalize
+  `measureTriggerRateWith` to score an arbitrary `checks[]` (not just one `fired`
+  predicate); `trigger({min})` becomes one check; per-check rate ± se + pass^k.
+  Resolve the per-run-check vs aggregate-threshold call here.
+- **Phase 4 — serialization → CI.** `check.toJSON()` / `report.toJUnit()`; wire
+  into the existing `eval-baseline` + the Action; expose checks to a promptfoo
+  provider bridge. Additive, high payoff.
+- **Phase 5 — `property(hook, arbitrary, invariant)` (Option D).** fast-check over
+  a hook's `(event) → decision`. Additive add-on.
+- **Phase 6 — delete the old surface (the one breaking step).** Remove the
+  predicate/`assert*`/matcher trio + the `e2e` barrel; rename barrels to
+  `vigiles/unit` (hook) + `vigiles/harness` + `vigiles/eval`; fold `vigiles/check`
+  into `vigiles/testing`; rewrite `docs/harness-testing.md` to lead with `Trace`
+  fields → checks → matchers.
+
 ## See also
 
 - `research/eval-api-landscape.md` — eval _infra_ features, the scorecard, and the
