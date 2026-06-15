@@ -6,7 +6,7 @@
  * Commands:
  *   vigiles init            — scaffold a spec from scratch
  *   vigiles compile         — compile .spec.ts → .md with linter verification
- *   vigiles audit           — verify hashes, report coverage, detect duplicates
+ *   vigiles lint            — verify hashes, report coverage, detect duplicates
  *   vigiles generate-types  — emit .d.ts with types from project state
  */
 
@@ -542,7 +542,7 @@ async function findDuplicateRules(
   const allSpecs = findSpecs();
   // If audit was invoked with explicit file arguments, only scan the specs
   // for those files — otherwise an unrelated duplicate elsewhere in the
-  // repo would fail a targeted CI check (e.g. `vigiles audit path/foo.md`).
+  // repo would fail a targeted CI check (e.g. `vigiles lint path/foo.md`).
   //
   // Resolve each requested file to its real source spec by reading the
   // compiled-from header. Multi-target projects compile one spec to
@@ -1454,7 +1454,7 @@ function workflowUsesStaleApi(content: string): boolean {
   if (content.includes("zernie/vigiles@")) return false; // uses the Action — fine
   if (!/\bvigiles\b/.test(content)) return false; // not a vigiles workflow
   const hasModernCmd =
-    /vigiles\s+(audit|test|eval|compile|scan|generate-types|generate-schema|init)\b/.test(
+    /vigiles\s+(lint|test|eval|compile|scan|generate-types|generate-schema|init)\b/.test(
       content,
     );
   return !hasModernCmd;
@@ -1473,7 +1473,7 @@ function wireGha(plan: SetupPlan): string[] {
         "⚠ .github/workflows/vigiles.yml is STALE — it runs a bare `npx vigiles`,\n" +
           "  which is a no-op help screen now. Replace its run step with the Action +\n" +
           "  the test job (CI is otherwise silently not validating anything):\n" +
-          "    - uses: zernie/vigiles@v1   # pillar 1 — audit references\n" +
+          "    - uses: zernie/vigiles@v1   # lint pillar — verify references\n" +
           "    - run: npx vigiles test     # pillar 2 — harness tests\n" +
           "  Or delete the file and re-run `vigiles init` to regenerate it.",
       );
@@ -1769,7 +1769,7 @@ function redirectSyncToolTargets(cwd: string, targets: string[]): string[] {
 }
 
 /** Pillar 1 — specs + types + schema + compile. Scaffolds a spec for every
- * instruction file (so `--verify` always delivers a spec), but never compiles
+ * instruction file (so `--lint` always delivers a spec), but never compiles
  * OVER a hand-written file — that is left to the migrate-to-spec skill. */
 async function setupPillar1(
   detected: DetectedProject,
@@ -2471,7 +2471,7 @@ function printUsage(command: string | undefined): void {
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
-    "  vigiles lint [files...]        Verify references, find gaps (alias: audit)",
+    "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -2878,9 +2878,8 @@ async function main(): Promise<void> {
       break;
     }
 
-    case "lint": // `lint` is the canonical name for the verify pillar's command
-    case "audit": {
-      // audit/lint = verify references + discover + guidance count
+    case "lint": {
+      // lint = verify references + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
       annotateAuditForGitHub(report, flags);

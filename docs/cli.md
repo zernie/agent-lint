@@ -9,7 +9,7 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (alias: audit)
+npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
@@ -54,9 +54,7 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 Passing a single positive pillar flag selects only it (`--lint` = the Lint
 pillar only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
-scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`. (The old
-`--verify` / `--testing` and `--pillars=both|verify|test` flags still work as
-aliases.)
+scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
 
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).
@@ -136,16 +134,16 @@ annotations and fail the job.
 
 ### Inputs
 
-| Input               | Default   | Description                                                                                       |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------------- |
-| `command`           | `lint`    | `lint` (verify references + integrity + coverage; alias `audit`) or `compile` (specs → markdown). |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.         |
-| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build.       |
-| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                       |
-| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).        |
-| `working-directory` | `.`       | Directory to run vigiles in.                                                                      |
-| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                        |
-| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                 |
+| Input               | Default   | Description                                                                                 |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `command`           | `lint`    | `lint` (verify references + integrity + coverage) or `compile` (specs → markdown).          |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.   |
+| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
+| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
+| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
+| `working-directory` | `.`       | Directory to run vigiles in.                                                                |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
 
 ### Output channels
 

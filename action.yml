@@ -7,7 +7,7 @@ branding:
 
 inputs:
   command:
-    description: "Which vigiles command to run: 'lint' (verify references + integrity + coverage; alias 'audit') or 'compile' (specs → markdown)."
+    description: "Which vigiles command to run: 'lint' (verify references + integrity + coverage) or 'compile' (specs → markdown)."
     required: false
     default: "lint"
   paths:
