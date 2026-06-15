@@ -7,6 +7,7 @@ import {
   defaultPlan,
   shouldPrompt,
   resolvePlan,
+  planPluginInstall,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -97,6 +98,42 @@ test("resolvePlan: interactive answers override flags/defaults", () => {
   assert.equal(p.test, false);
   assert.equal(p.plugin, false);
   assert.equal(p.verify, true); // untouched
+});
+
+test("planPluginInstall: claude uses the marketplace and never vendors", () => {
+  const [withCli] = planPluginInstall(["claude"], { hasClaude: true });
+  assert.equal(withCli.harness, "claude");
+  assert.equal(withCli.vendors, false); // the whole point of issue #1
+  assert.deepEqual(withCli.commands, [
+    "claude plugin marketplace add zernie/vigiles",
+    "claude plugin install vigiles@vigiles",
+  ]);
+
+  // No claude CLI → no auto-run commands, but the manual /plugin steps print.
+  const [noCli] = planPluginInstall(["claude"], { hasClaude: false });
+  assert.deepEqual(noCli.commands, []);
+  assert.ok(
+    noCli.manualSteps.some((s) => s.includes("/plugin install vigiles")),
+  );
+  assert.equal(noCli.vendors, false);
+});
+
+test("planPluginInstall: codex installs skills GLOBALLY (-g), not vendored", () => {
+  const [codex] = planPluginInstall(["codex"], { hasClaude: false });
+  assert.equal(codex.harness, "codex");
+  // The cross-agent skills CLI with -g → ~/.codex/skills/, not the repo.
+  assert.ok(codex.commands.some((c) => /skills add .* -a codex -g/.test(c)));
+  assert.equal(codex.vendors, false); // -g is global, so no repo pollution
+  assert.ok(codex.notes.some((n) => /hooks/.test(n))); // honest about the gap
+});
+
+test("planPluginInstall: both harnesses → one plan each, none vendoring", () => {
+  const plans = planPluginInstall(["claude", "codex"], { hasClaude: true });
+  assert.deepEqual(
+    plans.map((p) => p.harness),
+    ["claude", "codex"],
+  );
+  assert.ok(plans.every((p) => !p.vendors)); // BOTH install globally
 });
 
 test("shouldPrompt: only a TTY human with unpinned choices", () => {

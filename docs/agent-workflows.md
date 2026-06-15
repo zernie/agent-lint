@@ -58,7 +58,7 @@ Codex and GitHub Copilot read `AGENTS.md` directly. There is no plugin or hook s
 2. Run `npx vigiles compile` to regenerate `AGENTS.md`
 3. CI verifies freshness: `npx vigiles audit && npx vigiles generate-types --check`
 
-If you also use Claude Code, install the plugin (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or let `vigiles init` do it) to get auto-recompilation.
+vigiles's authoring skills install globally for Codex via the cross-agent `skills` CLI (no repo vendoring): `npx skills add zernie/vigiles -a codex -g` (or let `vigiles init --harness=codex` run it). Codex hooks (`.codex/config.toml [hooks]`) aren't auto-wired yet. If you also use Claude Code, install the plugin (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or `vigiles init`) for auto-recompilation.
 
 ## Multi-Agent (Claude + Codex)
 

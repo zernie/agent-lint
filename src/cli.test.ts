@@ -1114,6 +1114,130 @@ describe("CLI: vigiles --version", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Installation smoke test — run `init` against a REALISTIC fake project and
+// assert the WHOLE outcome, including the NEGATIVES (no vendored skills, no
+// clobbered instruction file). This is the regression guard for the class of
+// bugs that shipped in v3: skills vendored into the repo, no spec for an
+// existing file, the dep never added. Deterministic: no network, no real
+// claude/codex (plugin install is `--no-plugin`; its no-vendor invariant is
+// proven by the planPluginInstall unit tests). See setup-plan.test.ts.
+// ---------------------------------------------------------------------------
+
+describe("CLI: installation smoke test (deterministic)", () => {
+  // Paths a vendoring installer (the old `npx skills add`) would have created —
+  // none may exist after `init`.
+  const VENDORED = [".agents", join(".claude", "skills"), "skills-lock.json"];
+
+  function assertNoVendoring(dir: string): void {
+    for (const p of VENDORED) {
+      assert.ok(
+        !existsSync(join(dir, p)),
+        `init must not vendor ${p} into the repo`,
+      );
+    }
+  }
+
+  it("Claude Code todo app: spec + types + devDep, vendors NOTHING", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-cc-"));
+    try {
+      // A realistic Claude Code project: deps (stale vigiles pin), an existing
+      // hand-written CLAUDE.md, and a .claude/ dir + a hook + a skill surface.
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({
+          name: "todo-app",
+          scripts: { test: "echo ok", build: "tsc" },
+          dependencies: { vigiles: "github:zernie/vigiles#stale" },
+        }),
+      );
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# Todo\n\nUse TypeScript strict mode. Keep this prose.\n",
+      );
+      mkdirSync(join(dir, ".claude"), { recursive: true });
+      mkdirSync(join(dir, "hooks"), { recursive: true });
+      writeFileSync(join(dir, "hooks", "guard.sh"), "exit 0\n");
+
+      const { stdout, exitCode } = run("init --no-plugin --no-gha", dir);
+      assert.equal(exitCode, 0, stdout);
+
+      // Pillar 1: spec scaffolded, hand-written CLAUDE.md untouched.
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.ok(md.includes("Keep this prose."), "CLAUDE.md preserved");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      assert.ok(existsSync(join(dir, ".vigiles/generated.d.ts")), "types");
+
+      // Dep: moved to devDependencies, out of dependencies.
+      const pkg = JSON.parse(
+        readFileSync(join(dir, "package.json"), "utf-8"),
+      ) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      assert.ok(pkg.devDependencies?.vigiles, "vigiles in devDependencies");
+      assert.ok(
+        !pkg.dependencies?.vigiles,
+        "vigiles not in runtime dependencies",
+      );
+
+      // The negative: nothing vendored into the working tree.
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Codex todo app: scaffolds an AGENTS.md spec, no CLAUDE.md, no vendoring", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-codex-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-codex", scripts: { test: "echo ok" } }),
+      );
+      writeFileSync(join(dir, "AGENTS.md"), "# Agents\n\nKeep this prose.\n");
+
+      const { stdout, exitCode } = run(
+        "init --harness=codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      // Codex's native instruction file gets the spec — not CLAUDE.md.
+      assert.ok(existsSync(join(dir, "AGENTS.md.spec.ts")), "AGENTS spec");
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "no CLAUDE spec for a codex-only project",
+      );
+      const md = readFileSync(join(dir, "AGENTS.md"), "utf-8");
+      assert.ok(md.includes("Keep this prose."), "AGENTS.md preserved");
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("Claude + Codex todo app: a spec for each, still no vendoring", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-smoke-both-"));
+    try {
+      writeFileSync(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "todo-both", scripts: { test: "echo ok" } }),
+      );
+      const { stdout, exitCode } = run(
+        "init --harness=claude,codex --no-plugin --no-gha",
+        dir,
+      );
+      assert.equal(exitCode, 0, stdout);
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "CLAUDE spec");
+      assert.ok(existsSync(join(dir, "AGENTS.md.spec.ts")), "AGENTS spec");
+      assertNoVendoring(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("CLI: vigiles test — skips are loud and gateable", () => {
   it("reports SKIPPED + passes by default; --no-skip fails on a skip", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-test-skip-"));
