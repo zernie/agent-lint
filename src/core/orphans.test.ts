@@ -141,6 +141,26 @@ describe("findOrphanDocs()", () => {
     }
   });
 
+  it("honors an inline `vigiles-disable orphan-docs` marker", () => {
+    const dir = makeTmpDir("orphans-disable");
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(join(dir, "docs/rot.md"), "# rot");
+      writeFileSync(
+        join(dir, "docs/intentional.md"),
+        "# intentional\n\n<!-- vigiles-disable orphan-docs -->\n",
+      );
+      writeFileSync(join(dir, "README.md"), "hello");
+
+      const report = findOrphanDocs({ basePath: dir });
+      // The marked doc is exempt entirely (not even counted); only rot.md flags.
+      assert.deepEqual([...report.orphans], ["docs/rot.md"]);
+      assert.equal(report.totalDocs, 1);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   it("ignores node_modules, dist, and .vigiles", () => {
     const dir = makeTmpDir("orphans-ignore");
     try {
@@ -183,5 +203,8 @@ describe("formatOrphanReport()", () => {
     });
     assert.match(out, /1 orphan/);
     assert.match(out, /docs\/b\.md/);
+    // Points the user at both escape hatches when something is flagged.
+    assert.match(out, /vigiles-disable orphan-docs/);
+    assert.match(out, /orphans\.exclude/);
   });
 });

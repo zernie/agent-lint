@@ -413,7 +413,7 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
 
     // If the file doesn't exist at all (typo, deleted), that's an error —
     // not a "no hash" informational message. Without this check, a scoped
-    // audit like `vigiles audit typo.md` would silently exit clean.
+    // audit like `vigiles lint typo.md` would silently exit clean.
     if (!existsSync(fullPath)) {
       log(`\n✗ ${filePath} — file not found`);
       if (!silent) {
@@ -1447,7 +1447,7 @@ ${harness}`;
 /**
  * Detect a workflow that drives vigiles through an OLD API — a bare `npx vigiles`
  * (a no-op help screen in v2+) rather than the `zernie/vigiles@` Action or a real
- * subcommand (`audit`/`test`/…). Upgrading users whose workflow predates the
+ * subcommand (`lint`/`test`/…). Upgrading users whose workflow predates the
  * subcommand split silently lose CI validation, so we flag it loudly.
  */
 function workflowUsesStaleApi(content: string): boolean {
@@ -1460,6 +1460,28 @@ function workflowUsesStaleApi(content: string): boolean {
   return !hasModernCmd;
 }
 
+/**
+ * Subcommands removed/renamed across majors → the replacement to suggest. A
+ * workflow that still calls one is a silently-broken CI step (the removed
+ * subcommand exits non-zero / no-ops), and this stays true even when the file
+ * ALSO uses the Action or a modern command — so it is checked independently of
+ * the bare-API heuristic above, which an Action reference short-circuits.
+ */
+const REMOVED_SUBCOMMANDS: Record<string, string> = {
+  audit: "lint", // v3 → v4 rename
+};
+
+/** The first removed/renamed `vigiles <sub>` a workflow still calls, if any. */
+function workflowRemovedSubcommand(
+  content: string,
+): { sub: string; replacement: string } | null {
+  for (const [sub, replacement] of Object.entries(REMOVED_SUBCOMMANDS)) {
+    if (new RegExp(`vigiles\\s+${sub}\\b`).test(content))
+      return { sub, replacement };
+  }
+  return null;
+}
+
 /** Create `.github/workflows/vigiles.yml`. Returns the files it wrote (for the
  * commit hint). An existing workflow is never clobbered, but a STALE one (old
  * bare-`npx vigiles` API) is reported loudly instead of silently skipped. */
@@ -1468,7 +1490,17 @@ function wireGha(plan: SetupPlan): string[] {
   const path = resolve(dir, "vigiles.yml");
   if (existsSync(path)) {
     const content = readFileSync(path, "utf-8");
-    if (workflowUsesStaleApi(content)) {
+    const removed = workflowRemovedSubcommand(content);
+    if (removed) {
+      console.log(
+        `⚠ .github/workflows/vigiles.yml is STALE — it runs \`vigiles ${removed.sub}\`,\n` +
+          `  which was removed/renamed (now \`vigiles ${removed.replacement}\`). That CI\n` +
+          "  step is silently broken. Rewrite it:\n" +
+          `    - s/vigiles ${removed.sub}/vigiles ${removed.replacement}/  in the run step, or\n` +
+          "    - uses: zernie/vigiles@v1   # the composite Action (recommended)\n" +
+          "  Or delete the file and re-run `vigiles init` to regenerate it.",
+      );
+    } else if (workflowUsesStaleApi(content)) {
       console.log(
         "⚠ .github/workflows/vigiles.yml is STALE — it runs a bare `npx vigiles`,\n" +
           "  which is a no-op help screen now. Replace its run step with the Action +\n" +

@@ -7,7 +7,7 @@ argument-hint: <path to CLAUDE.md, defaults to CLAUDE.md>
 
 Convert an existing hand-written CLAUDE.md (or AGENTS.md) into a typed `CLAUDE.md.spec.ts` file. This is the incremental adoption path — you keep your existing instruction file as the starting point and get type safety going forward.
 
-> **Don't need full TypeScript?** A typed spec is the deepest commitment level. If the user only wants verified rules without a build step, point them at markdown mode first: inline `<!-- vigiles:enforce ... -->` comments (Level 0) or a `vigiles:` YAML frontmatter block with `vigiles generate-schema` for editor autocomplete (Level 1). Both are verified by `vigiles audit` with the same engine as a spec. See `docs/markdown-mode.md`. Migrate to a spec only when they want compiler-grade guarantees.
+> **Don't need full TypeScript?** A typed spec is the deepest commitment level. If the user only wants verified rules without a build step, point them at markdown mode first: inline `<!-- vigiles:enforce ... -->` comments (Level 0) or a `vigiles:` YAML frontmatter block with `vigiles generate-schema` for editor autocomplete (Level 1). Both are verified by `vigiles lint` with the same engine as a spec. See `docs/markdown-mode.md`. Migrate to a spec only when they want compiler-grade guarantees.
 
 ## Instructions
 

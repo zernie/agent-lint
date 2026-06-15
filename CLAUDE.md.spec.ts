@@ -182,7 +182,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/core/compose.test.ts":
       "Sync-tool detector test suite (node:test): ruler/rulesync detection (dir + ruler.toml keys), source-slot paths, CLAUDE.md/AGENTS.md collision incl. path-qualified target match by filename, no-tool and non-overlapping no-collision, both-tools-present",
     "src/test-coverage.ts":
-      "Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). User-invoked (disable-model-invocation) skills exempt by default; vigiles:ignore-test opts a surface out. Warning-by-default, surfaced by vigiles audit",
+      "Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). User-invoked (disable-model-invocation) skills exempt by default; vigiles:ignore-test opts a surface out. Warning-by-default, surfaced by vigiles lint",
     "src/test-coverage.test.ts":
       "Untested-surface detector test suite (vitest): colocation + content-reference coverage, user-invoked exemption (+ includeUserInvokedSkills override), vigiles:ignore-test opt-out, agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath",
     "docs/rules/untested-surface.md":
@@ -531,7 +531,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
 
     "no-orphan-docs": enforce(
       "vigiles/orphan-docs",
-      "Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/core/orphans.ts`, surfaced by `vigiles audit`.",
+      "Every `.md` under `docs/` and `research/` must be referenced from at least one other markdown file — README, a compiled spec's Key Files, or another doc. Orphan docs rot silently because nothing tells the agent they're still load-bearing. Inverse of stale-reference detection: stale-ref catches specs pointing at missing files, orphan detection catches existing files that no spec points at. Mechanical check in `src/core/orphans.ts`, surfaced by `vigiles lint`.",
     ),
 
     "recompile-on-spec-change": guard(
