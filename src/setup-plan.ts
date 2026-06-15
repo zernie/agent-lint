@@ -21,6 +21,8 @@ export interface SetupPlan {
   plugin: boolean;
   /** Strict rule severities in `.vigilesrc.json`. */
   strict: boolean;
+  /** Rewrite an existing STALE CI workflow in place (instead of only warning). */
+  force: boolean;
 }
 
 /** The explicit choices a user pinned via flags (undefined = "not specified"). */
@@ -28,6 +30,8 @@ export interface ParsedSetupArgs {
   target?: string;
   strict: boolean;
   yes: boolean;
+  /** `--force` — rewrite a stale CI workflow in place. */
+  force: boolean;
   /** Lint pillar — `--lint` → true, `--no-lint` → false, absent → undefined. */
   lint?: boolean;
   /** Test pillar — `--test` → true, `--no-test` → false, absent → undefined. */
@@ -59,6 +63,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
     yes: args.includes("--yes") || args.includes("-y"),
+    force: args.includes("--force"),
     lint: boolFlag(args, "lint"),
     test: boolFlag(args, "test"),
     harness: flagValue(args, "--harness="),
@@ -69,7 +74,14 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
 
 /** The non-interactive defaults: both pillars, CI, and the plugin. */
 export function defaultPlan(strict = false): SetupPlan {
-  return { lint: true, test: true, gha: true, plugin: true, strict };
+  return {
+    lint: true,
+    test: true,
+    gha: true,
+    plugin: true,
+    strict,
+    force: false,
+  };
 }
 
 /**
@@ -212,6 +224,7 @@ export function resolvePlan(
   applyPillarFlags(plan, parsed);
   if (parsed.gha === false) plan.gha = false;
   if (parsed.plugin === false) plan.plugin = false;
+  if (parsed.force) plan.force = true;
   if (parsed.target) plan.test = false;
   if (answers) applyAnswers(plan, answers);
   return plan;
