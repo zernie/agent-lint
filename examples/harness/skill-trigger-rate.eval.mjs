@@ -17,7 +17,7 @@
 import {
   measureTriggerRate,
   formatTriggerRateReport,
-} from "../../dist/adapters/claude-code/eval.js";
+} from "../../dist/eval.js";
 import { skillResolved } from "../../dist/harness-assert.js";
 import { fileURLToPath } from "node:url";
 

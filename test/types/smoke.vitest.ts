@@ -5,8 +5,8 @@
  */
 import "../../dist/vitest.mjs";
 import { expect } from "vitest";
-import type { HarnessTestResult } from "../../dist/adapters/claude-code/harness-test.js";
-import type { EvalReport } from "../../dist/adapters/claude-code/eval.js";
+import type { HarnessTestResult } from "../../dist/harness-test.js";
+import type { EvalReport } from "../../dist/eval.js";
 
 declare const r: HarnessTestResult;
 declare const report: EvalReport;

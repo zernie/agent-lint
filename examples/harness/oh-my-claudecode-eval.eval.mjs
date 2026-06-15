@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import {
   measureTriggerRate,
   formatTriggerRateReport,
-} from "../../dist/adapters/claude-code/eval.js";
+} from "../../dist/eval.js";
 import { skillResolved } from "../../dist/harness-assert.js";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);

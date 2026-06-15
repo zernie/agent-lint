@@ -18,10 +18,7 @@
  * package: `from "vigiles/harness-test"` and `from "vigiles/harness-assert"`.
  */
 import { fileURLToPath } from "node:url";
-import {
-  scriptModel,
-  claudeAvailable,
-} from "../../dist/adapters/claude-code/harness-test.js";
+import { scriptModel, claudeAvailable } from "../../dist/harness-test.js";
 import { withHarness, assertCreated, skip } from "../../dist/harness-assert.js";
 
 if (!claudeAvailable()) skip("`claude` CLI not found");

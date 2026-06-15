@@ -15,10 +15,7 @@
  * Needs the `claude` CLI + model auth, and a built dist/ (`npm run build`).
  */
 import { resolve } from "node:path";
-import {
-  runEval,
-  formatEvalReport,
-} from "../../dist/adapters/claude-code/eval.js";
+import { runEval, formatEvalReport } from "../../dist/eval.js";
 
 const CLI = resolve("dist/cli.js");
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
