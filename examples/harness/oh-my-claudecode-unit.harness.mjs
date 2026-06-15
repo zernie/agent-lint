@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runHook } from "../../dist/adapters/claude-code/run-hook.js";
+import { runHook } from "../../dist/run-hook.js";
 import { assertHookAllowed } from "../../dist/harness-assert.js";
 
 const ROOT = fileURLToPath(

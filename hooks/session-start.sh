@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# SessionStart hook — inject a one-line vigiles audit summary into
+# SessionStart hook — inject a one-line vigiles lint summary into
 # Claude's context at session start and after compaction.
 #
-# Uses `vigiles audit --summary` which is designed for this: it
+# Uses `vigiles lint --summary` which is designed for this: it
 # silences all per-stage output and prints a single line like
 #   vigiles: 3 stale / 2 validation errors / 1 duplicate
 # (or "vigiles: clean") so the injection costs a handful of tokens.
@@ -24,7 +24,7 @@ fi
 
 # Prefer local install, fall back to npx.
 if command -v npx &>/dev/null; then
-  SUMMARY=$(npx --no-install vigiles audit --summary 2>/dev/null || true)
+  SUMMARY=$(npx --no-install vigiles lint --summary 2>/dev/null || true)
 else
   exit 0
 fi

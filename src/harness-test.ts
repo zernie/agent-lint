@@ -40,7 +40,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
-import type { HarnessAdapter } from "../../core/adapter.js";
+import type { HarnessAdapter } from "./core/adapter.js";
 import type {
   HarnessTestDriver,
   HarnessDriverContext,
@@ -50,13 +50,13 @@ import type {
   ParsedRun,
   ModelTurn,
   ModelRequest,
-} from "../../core/harness-driver.js";
-import { assertHarnessTestable } from "../../adapter-conformance.js";
+} from "./core/harness-driver.js";
+import { assertHarnessTestable } from "./adapter-conformance.js";
 
-import { claudeCodeRuntime } from "./runtime.js";
+import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 
 import { startMock } from "./mock-model.js";
-import { resolveHarness } from "./plugin-loader.js";
+import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import {
   decideSandbox,
   specTrusted,
@@ -72,8 +72,11 @@ export type {
   ToolCall,
   HookFire,
   HarnessTestDriver,
-} from "../../core/harness-driver.js";
-export { loadPlugin, resolveHarness } from "./plugin-loader.js";
+} from "./core/harness-driver.js";
+export {
+  loadPlugin,
+  resolveHarness,
+} from "./adapters/claude-code/plugin-loader.js";
 export {
   decideSandbox,
   specTrusted,

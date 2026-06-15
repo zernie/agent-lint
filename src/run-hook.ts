@@ -41,8 +41,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { HookProtocol } from "../../core/hook-protocol.js";
-import { claudeCodeHookProtocol } from "./hook-protocol.js";
+import type { HookProtocol } from "./core/hook-protocol.js";
+import { claudeCodeHookProtocol } from "./adapters/claude-code/hook-protocol.js";
 import {
   buildEgressNft,
   buildEgressBwrapArgv,

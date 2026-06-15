@@ -21,7 +21,7 @@ New here? Start with the [README](../README.md).
   - `vigiles/testing` — Pillar 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
   - `vigiles/claude-code` — the Claude Code-specific adapter (`loadPlugin`, `scriptModel`, the mock).
   - The granular paths (`vigiles/spec`, `vigiles/run-hook`, `vigiles/harness-test`, …) keep working.
-- [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `audit` validation rules.
+- [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `lint` validation rules.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
@@ -29,7 +29,9 @@ New here? Start with the [README](../README.md).
 
 ## Test your harness (pillar 2)
 
-- [`harness-testing.md`](harness-testing.md) — the full guide: the four layers (verify-refs / hook-unit / deterministic / eval), `pluginDir` native skill testing, action/sequence assertions, runner-agnostic usage, the CLI fallback.
+- [`harness-testing.md`](harness-testing.md) — the harness-agnostic core: the four layers (verify-refs / hook-unit / deterministic / eval), the `Trace` model, runner-agnostic usage (node:test / vitest / jest), the CLI fallback, per-level CI.
+  - [`harness-testing-claude-code.md`](harness-testing-claude-code.md) — Claude Code specifics: the oh-my-claudecode walkthrough, `${CLAUDE_PLUGIN_ROOT}` / `pluginDir` / the `Skill` tool, `scriptModel`, the bubblewrap sandbox.
+  - [`harness-testing-codex.md`](harness-testing-codex.md) — Codex specifics: `runHarnessTest({ adapter: codexAdapter })` against real `codex exec`, the OpenAI Responses mock, what maps and what doesn't.
 - [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
 - [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), tiers and limits.
 

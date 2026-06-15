@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runHook } from "./run-hook.js";
+import { runHook } from "../../run-hook.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 const CLI = resolve(process.cwd(), "dist", "cli.js");

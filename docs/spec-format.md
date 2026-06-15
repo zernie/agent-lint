@@ -246,6 +246,6 @@ Every compiled file starts with a SHA-256 integrity hash comment:
 
 The hash covers the full compiled content (excluding the hash line itself), truncated to 16 hex characters.
 
-### `vigiles audit`
+### `vigiles lint`
 
-Verifies that each compiled file's hash matches its content, reports linter rule coverage gaps, and suggests guidance rules that could be upgraded to `enforce()`. If someone manually edits the markdown, the hash will no longer match, and `vigiles audit` reports the file as modified. This ensures the spec remains the source of truth.
+Verifies that each compiled file's hash matches its content, reports linter rule coverage gaps, and suggests guidance rules that could be upgraded to `enforce()`. If someone manually edits the markdown, the hash will no longer match, and `vigiles lint` reports the file as modified. This ensures the spec remains the source of truth.

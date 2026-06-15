@@ -49,12 +49,9 @@ import {
   vigilesMatchers,
 } from "./harness-assert.js";
 import { result } from "./core/spec.js";
-import type { EvalReport } from "./adapters/claude-code/eval.js";
-import type {
-  HarnessTestResult,
-  HookFire,
-} from "./adapters/claude-code/harness-test.js";
-import type { HookRunResult } from "./adapters/claude-code/run-hook.js";
+import type { EvalReport } from "./eval.js";
+import type { HarnessTestResult, HookFire } from "./harness-test.js";
+import type { HookRunResult } from "./run-hook.js";
 
 /** Minimal HookRunResult stand-in for the run-hook-tier assertions/matcher. */
 function fakeHook(blocked: boolean): HookRunResult {

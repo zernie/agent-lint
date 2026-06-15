@@ -12,7 +12,7 @@
 import { test, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 
-import { runHarnessTest } from "../claude-code/harness-test.js";
+import { runHarnessTest } from "../../harness-test.js";
 import { codexAdapter } from "./adapter.js";
 import { buildCodexArgs, parseCodexRun } from "./driver.js";
 

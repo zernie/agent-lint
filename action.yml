@@ -11,7 +11,7 @@ inputs:
     required: false
     default: "lint"
   paths:
-    description: "Comma- or space-separated paths to operate on (.md files for audit, .spec.ts files for compile). Auto-discovers when empty."
+    description: "Comma- or space-separated paths to operate on (.md files for lint, .spec.ts files for compile). Auto-discovers when empty."
     required: false
     default: ""
   version:
