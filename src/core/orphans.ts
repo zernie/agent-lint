@@ -13,7 +13,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, posix } from "node:path";
 import { globSync } from "glob";
 
 // ---------------------------------------------------------------------------
@@ -108,6 +108,24 @@ function extractRefs(content: string): string[] {
   return refs;
 }
 
+/**
+ * Repo-root-relative targets a reference could mean, from a given source file.
+ * Markdown links are conventionally **file-relative** (a `[x](foo.md)` in
+ * `research/README.md` points at `research/foo.md`, and `../docs/x.md` walks up),
+ * but docs also write **root-relative** paths (`research/foo.md` from anywhere).
+ * We credit both so a real link is never miscounted as an orphan.
+ */
+function refTargets(sourcePath: string, ref: string): string[] {
+  const targets = new Set<string>([ref]); // root-relative reading
+  const dir = sourcePath.includes("/")
+    ? sourcePath.slice(0, sourcePath.lastIndexOf("/"))
+    : "";
+  // file-relative reading: resolve against the source's directory.
+  const resolved = normalizePath(posix.normalize(dir ? `${dir}/${ref}` : ref));
+  targets.add(resolved);
+  return [...targets];
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -146,14 +164,16 @@ export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
     } catch {
       continue;
     }
-    for (const target of extractRefs(content)) {
-      if (target === source) continue;
-      let sources = referencedBy.get(target);
-      if (!sources) {
-        sources = new Set();
-        referencedBy.set(target, sources);
+    for (const rawRef of extractRefs(content)) {
+      for (const target of refTargets(source, rawRef)) {
+        if (target === source) continue;
+        let sources = referencedBy.get(target);
+        if (!sources) {
+          sources = new Set();
+          referencedBy.set(target, sources);
+        }
+        sources.add(source);
       }
-      sources.add(source);
     }
   }
 

@@ -141,6 +141,49 @@ describe("findOrphanDocs()", () => {
     }
   });
 
+  it("credits a file-relative link from a same-directory index (not just root-relative)", () => {
+    const dir = makeTmpDir("orphans-relative");
+    try {
+      mkdirSync(join(dir, "research"), { recursive: true });
+      writeFileSync(join(dir, "research/target.md"), "# target");
+      // A bare, file-relative link from research/README.md → research/target.md
+      writeFileSync(
+        join(dir, "research/README.md"),
+        "See [target](target.md) for details.",
+      );
+
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["research/**/*.md"],
+      });
+      // target.md is referenced by the sibling README via a relative link.
+      assert.ok(!report.orphans.includes("research/target.md"));
+      assert.ok(report.referencedDocs.includes("research/target.md"));
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("resolves `../` relative links across directories", () => {
+    const dir = makeTmpDir("orphans-updir");
+    try {
+      mkdirSync(join(dir, "research"), { recursive: true });
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(join(dir, "research/deep.md"), "# deep");
+      // docs/guide.md → ../research/deep.md
+      writeFileSync(
+        join(dir, "docs/guide.md"),
+        "Background: [deep](../research/deep.md).",
+      );
+      writeFileSync(join(dir, "README.md"), "[g](docs/guide.md)");
+
+      const report = findOrphanDocs({ basePath: dir });
+      assert.ok(!report.orphans.includes("research/deep.md"));
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   it("honors an inline `vigiles-disable orphan-docs` marker", () => {
     const dir = makeTmpDir("orphans-disable");
     try {
