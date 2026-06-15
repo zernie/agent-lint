@@ -26,7 +26,7 @@
     "./run-hook": "./dist/run-hook.js",
     "./plugin-loader": "./dist/adapters/claude-code/plugin-loader.js",
     "./mcp": "./dist/core/mcp.js",
-    "./judge": "./dist/adapters/claude-code/judge.js",
+    "./judge": "./dist/judge.js",
     "./mock-model": "./dist/mock-model.js",
     "./vitest": {
       "types": "./dist/vitest.d.mts",
