@@ -247,6 +247,10 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Runner-agnostic harness helpers: withHarness (auto-cleanup), throwing `assert*` helpers incl. assertHookBlocked/assertHookAllowed and assertAgentOk/Err/Result (test a subagent's railway outcome via parseAgentResult — the testing-framework payoff of the result contract), and vigilesMatchers (toHaveCreated/toBlock/toBeatBaseline) for vitest/jest expect.extend",
     "src/harness-assert.test.ts":
       "Harness-assert test suite (node:test): eval delta helpers + matcher pass/fail logic",
+    "src/check.ts":
+      '`vigiles/check` — the declarative check vocabulary (Phase 0 of the testing-API revamp, research/testing-api-design.md). A check is DATA not a throwing assert: { kind, eval(target) → {pass, score, message}, toJSON() }, typed over Trace (tool/skill/output/hookFired/wrote) vs HookRunResult (blocked/allowed). One vocabulary evaluated two ways downstream — strict (expect, Phase 1) + scored (measure, Phase 3) — so `tool("Bash")` reads as pass/fail on one run AND a rate across trials; serializable so JUnit/baseline/promptfoo-bridge fall out. Exported at vigiles/check only (folds into vigiles/testing in Phase 6, where hookFired collides with the legacy predicate). Pure + model-free',
+    "src/check.test.ts":
+      "Check-vocabulary test suite (vitest): each check's pass/fail + 0–1 score + ACTIONABLE failure message (the message is the product, tested as much as the verdict) + toJSON round-trip; evalChecks order; over fake Trace + HookRunResult, no model",
     "src/judge.ts":
       "Thin LLM-as-judge for the eval tier: judge() grades an output against a rubric with a model (synchronous, for use inside measure); parseJudgeOutput is the pure, testable verdict parser",
     "src/judge.test.ts":
