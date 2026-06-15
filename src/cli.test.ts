@@ -65,6 +65,20 @@ describe("CLI: vigiles init", () => {
     assert.ok(existsSync(join(tmpDir, "CLAUDE.md.spec.ts")));
   });
 
+  it("scaffolds a spec that imports ONLY what it uses (no unused-vars under strict ESLint)", () => {
+    run("init --target=LINTSAFE.md", tmpDir);
+    const content = readFileSync(join(tmpDir, "LINTSAFE.md.spec.ts"), "utf-8");
+    // The live import must bring in only `claude` (the one symbol the scaffold
+    // uses); enforce/guidance appear solely in a COMMENTED import. A strict
+    // `no-unused-vars` + `--max-warnings=0` CI would fail otherwise.
+    const liveImport = content.split("\n").find((l) => l.startsWith("import "));
+    assert.equal(liveImport, 'import { claude } from "vigiles/spec";');
+    assert.ok(
+      content.includes("// import { claude, enforce, guidance }"),
+      "shows the fuller import as a comment for when rules are added",
+    );
+  });
+
   it("should not overwrite existing spec", () => {
     // Already created in previous test
     const { stdout } = run("init --no-plugin", tmpDir);
