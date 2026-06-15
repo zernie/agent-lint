@@ -1,4 +1,4 @@
-# Testing your Claude Code harness
+# Testing your harness
 
 > **Try it now — paste this into Claude Code, in any repo:**
 >
@@ -18,19 +18,20 @@
 > third-party plugin and narrates what it ships, whether its hook works, and what
 > it phones home to ([`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs)).
 
-`Agent = Model + Harness`. Your harness — hooks, settings, skills, CLAUDE.md — is
-code, and code should be tested. vigiles gives the harness **clear levels**, and a
-test's level is legible three ways at once — its **import path**, its **file
-suffix**, and its **CI job** — so you can't accidentally hide a network e2e test
-inside the unit gate. Pick the cheapest level that answers your question:
+`Agent = Model + Harness`. Your harness — hooks, settings, skills, the
+instruction file — is code, and code should be tested. vigiles gives the harness
+**clear levels**, and a test's level is legible three ways at once — its **import
+path**, its **file suffix**, and its **CI job** — so you can't accidentally hide a
+network e2e test inside the unit gate. Pick the cheapest level that answers your
+question:
 
-| Level                 | Answers                                                  | Import                | File                    | Runner               | Needs                      |
-| --------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | -------------------------- |
-| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                    |
-| **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                    |
-| **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | `claude` + bwrap, no key   |
-| **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network |
-| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/eval`        | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)       |
+| Level                 | Answers                                                  | Import                | File                    | Runner               | Needs                          |
+| --------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | ------------------------------ |
+| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                        |
+| **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
+| **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
+| **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
+| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/eval`        | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
 
 **refs + unit + integration + e2e are deterministic verification** — you assert
 pass/fail, they run on every commit. **eval is a different axis: non-deterministic
@@ -52,160 +53,75 @@ model **by design** (and bills accordingly). The paid real-model **eval** axis i
 here too, but you reach for it only when the question genuinely needs a real model
 — not to answer "does my hook block this?"
 
+## You select the harness by import; the runners are agnostic
+
+The runners — `runHook`, `runHarnessTest`, `runEval` — are **harness-agnostic**.
+You write your tests against the stable surface and pick the harness with one
+option, defaulting to Claude Code:
+
+```ts
+// Core — harness-agnostic. The stable API you write tests/evals against.
+import { runHarnessTest, runEval, runHook } from "vigiles/testing";
+import { usedTool, skillResolved, assertHookBlocked } from "vigiles/testing";
+
+await runHarnessTest(spec); // Claude Code (default)
+await runHarnessTest(spec, { adapter: codexAdapter }); // a second harness
+```
+
+`codexAdapter` and the Codex mock come from `vigiles/codex`, beside
+`vigiles/claude-code`. Nothing in `vigiles/testing` changes when the harness
+changes; unused adapters tree-shake out. The runners live at the **composition
+root** (`src/`), and the agnostic surface **never imports an adapter** — an
+`eslint-plugin-boundaries` rule forbids an agnostic barrel from importing
+`src/adapters/*`, so "agnostic" is enforced, not just named. The CLI can't take an
+import, so it **auto-detects** the harness from the repo. For the full
+adapter/import model and the capability matrix, see
+[`docs/harnesses.md`](harnesses.md).
+
+The **harness-specific** pieces — the mock wire format, the plugin layout, the
+sandbox — live in the per-harness guides:
+
+- **[Harness testing — Claude Code](harness-testing-claude-code.md)** — the
+  oh-my-claudecode worked walkthrough, `${CLAUDE_PLUGIN_ROOT}` / `hooks.json` /
+  `plugin` / `pluginDir` / the `Skill` tool, `scriptModel` + the Anthropic
+  Messages mock, the bubblewrap sandbox + egress, the reliable-events list.
+- **[Harness testing — Codex](harness-testing-codex.md)** — driving real
+  `codex exec` with `{ adapter: codexAdapter }` against the OpenAI **Responses**
+  mock (`startCodexMock`), keyless; what maps (`AGENTS.md`, minimal `SKILL.md`)
+  and what doesn't (subagents, by design).
+
 ## Contents
 
-- [A worked example: one real plugin, every tier](#a-worked-example-one-real-plugin-every-tier)
-  - [Tier 0 — load the assembled machine](#tier-0--load-the-assembled-machine)
-  - [Tier 1 — unit-test a hook (`runHook`)](#tier-1--unit-test-a-hook-runhook)
-  - [Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)](#tier-2--deterministic-fired-and-landed-runharnesstest)
-  - [Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)](#tier-3--eval-does-the-skill-trigger-measuretriggerrate)
-- [Unit-test a hook (no `claude`, every event)](#unit-test-a-hook-no-claude-every-event)
-- [Test the whole machine, not one hook](#test-the-whole-machine-not-one-hook)
-  - [Native install: testing skills (`pluginDir`)](#native-install-testing-skills-plugindir)
+- [unit: test a hook's logic (`runHook`)](#unit-test-a-hooks-logic-runhook)
+- [integration: test the whole machine (`runHarnessTest`)](#integration-test-the-whole-machine-runharnesstest)
 - [One Trace, two consumers — predicates and assertions](#one-trace-two-consumers--predicates-and-assertions)
-  - [Did the injected context land? (`modelRequests`)](#did-the-injected-context-land-modelrequests)
-  - [Dogfooding real third-party plugins (and the sandbox boundary)](#dogfooding-real-third-party-plugins-and-the-sandbox-boundary)
-- [Deterministic tests in your runner](#deterministic-tests-in-your-runner)
 - [Evals — does the change move behaviour?](#evals--does-the-change-move-behaviour)
   - [Significance — is the gap real?](#significance--is-the-gap-real)
   - [Regression gating — did this PR make the harness worse?](#regression-gating--did-this-pr-make-the-harness-worse)
   - [Cost, caching, concurrency](#cost-caching-concurrency)
   - [Trigger rate — does the skill _fire_?](#trigger-rate--does-the-skill-fire)
   - [LLM-as-judge for subjective outcomes](#llm-as-judge-for-subjective-outcomes)
+- [Use it in your runner (node:test / vitest / jest)](#use-it-in-your-runner-nodetest--vitest--jest)
 - [CLI fallback (no runner, CI-friendly)](#cli-fallback-no-runner-ci-friendly)
 - [Per-level CI (the reusable action)](#per-level-ci-the-reusable-action)
 - [Two pillars or three? (where eval sits)](#two-pillars-or-three-where-eval-sits)
 - [Coverage](#coverage)
-  - [Coverage of your harness surfaces](#coverage-of-your-harness-surfaces)
-  - [vigiles's own coverage](#vigiless-own-coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
 - [How this compares to promptfoo](#how-this-compares-to-promptfoo)
+- [Per-harness guides](#per-harness-guides)
 - [See also](#see-also)
 
-## A worked example: one real plugin, every tier
+## unit: test a hook's logic (`runHook`)
 
-Rather than scatter synthetic snippets, this section walks **one real, popular
-plugin** up the tiers — unit → deterministic → eval. The plugin is
-[**oh-my-claudecode**](https://github.com/Yeachan-Heo/oh-my-claudecode) (MIT,
-~36k★), chosen because it ships **all four harness surfaces in one plugin** —
-hooks, skills, agents (subagents), and an MCP server — so a single subject can
-demonstrate everything. It's vendored as a pinned, offline **slice** under
-[`examples/harness/vendor/oh-my-claudecode@deee3a4`](../examples/harness/vendor/oh-my-claudecode@deee3a4)
-(see its `SOURCE`); every tier below is a **committed, runnable** file.
-
-### Tier 0 — load the assembled machine
-
-Before testing a hook, load the plugin the way Claude Code assembles it and see
-what's actually there. `loadPlugin` parses the manifest + `hooks/hooks.json`,
-materializes skills/agents, and flags the surfaces only a real model can drive:
+A hook is just a process: the harness pipes a JSON event to its stdin and reads
+back an exit code (`2` = block) and an optional JSON decision on stdout. `runHook`
+exercises exactly that contract — no harness binary, no model — so a hook's logic
+is testable in milliseconds, in any runner:
 
 ```ts
-import { loadPlugin } from "vigiles/plugin-loader";
-
-const p = loadPlugin("examples/harness/vendor/oh-my-claudecode@deee3a4");
-// p.settings.hooks → { UserPromptSubmit: [...] }   (hooks surface)
-// p.files          → .claude/skills/{ask,verify}/SKILL.md + .claude/agents/*  (skills + agents)
-// p.warnings       → "… MCP server(s) …"  +  "… 2 subagent file(s) … test at the eval tier"
-```
-
-All four surfaces in one load. This runs model-free in the gate as a conformance
-case in [`src/vendor.test.ts`](../src/vendor.test.ts), alongside obra/superpowers
-and wshobson/agents.
-
-### Tier 1 — unit-test a hook (`runHook`)
-
-OMC's `keyword-detector` is a `UserPromptSubmit` hook: it scans the prompt for a
-"magic keyword" and, on a hit, injects skill-routing `additionalContext`. Hand it
-an event and check the decision — no `claude`, no model, milliseconds:
-
-```ts
-import { runHook } from "vigiles/run-hook";
-
-const hit = runHook(keywordDetectorCmd, {
-  hook_event_name: "UserPromptSubmit",
-  prompt: "please ultrawork on this",
-});
-// hit.json.hookSpecificOutput.additionalContext includes "ULTRAWORK"
-// a plain prompt → no additionalContext injected
-```
-
-We run this **vendored, audited, pinned** script directly. For a hook you have
-_not_ audited, pass `{ trusted: false }` and `runHook` confines it under
-bubblewrap (no egress, cleared env). Full file:
-[`examples/harness/oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs).
-
-### Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)
-
-Right logic ≠ wired in correctly _and_ reaching the model. Run the real `claude`
-against a scripted mock model with the hook wired on `UserPromptSubmit`, then
-assert both that it **fired** and that its injected context **landed** in the
-model's request (`trace.modelRequests`) — the "fired ≠ landed" check a "did it
-run?" test can't make:
-
-```ts
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-import { assertHookFired, assertRequestContains } from "vigiles/harness-assert";
-
-const r = await runHarnessTest({
-  settings: {
-    hooks: {
-      UserPromptSubmit: [
-        { hooks: [{ type: "command", command: keywordDetectorCmd }] },
-      ],
-    },
-  },
-  prompt: "please ultrawork on this refactor",
-  transcript: true,
-  model: scriptModel([{ text: "on it" }]),
-});
-assertHookFired(r, "UserPromptSubmit"); // fired
-assertRequestContains(r, "ULTRAWORK"); // …and landed
-```
-
-Wired via inline `settings` (code you authored → trusted → runs direct, no
-sandbox). Pointing `pluginDir` at the whole untrusted plugin instead would run it
-confined under bubblewrap. Full file:
-[`examples/harness/oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs).
-
-### Tier 3 — eval: does the skill _trigger_? (`measureTriggerRate`)
-
-Wiring (Tier 0) proves a skill _resolves_; whether the **real model chooses** it
-from its description across varied phrasings is a property only a model can
-answer. Install OMC natively (`pluginDir`) and measure how reliably its `verify`
-skill fires on prompts about confirming a change works:
-
-```ts
-import { measureTriggerRate } from "vigiles/eval";
-import { skillResolved } from "vigiles/harness-assert";
-
-const report = await measureTriggerRate({
-  pluginDir: "examples/harness/vendor/oh-my-claudecode@deee3a4",
-  prompts: [
-    "I think the pagination fix is done — can you confirm it actually works?",
-    "Before I mark this complete, prove the new endpoint really behaves.",
-  ],
-  fired: (t) => skillResolved(t, "oh-my-claudecode:verify"),
-  trials: 3,
-});
-```
-
-This is the **one** tier that needs model auth, so — unlike Tiers 0–2 — it's
-**not** run in CI. Full file:
-[`examples/harness/oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs).
-
-The rest of this guide is the per-API reference behind these four tiers.
-
-## Unit-test a hook (no `claude`, every event)
-
-A hook is just a process: Claude Code pipes a JSON event to its stdin and reads
-back an exit code (`2` = block) and an optional JSON decision on stdout.
-`runHook` exercises exactly that contract — no `claude` binary, no model — so a
-hook's logic is testable in milliseconds, in any runner:
-
-```ts
-import { runHook } from "vigiles/run-hook";
-import { assertHookBlocked } from "vigiles/harness-assert";
+import { runHook } from "vigiles/unit";
+import { assertHookBlocked } from "vigiles/unit";
 
 const r = runHook(
   '"$GUARD"',
@@ -222,25 +138,21 @@ assertHookBlocked(r); // exit 2, decision:"block", or permissionDecision:"deny"
 ```
 
 This is the **base of the pyramid** and the only tier that reaches every event.
-The deterministic mock (next section) drives SessionStart / Stop /
-UserPromptSubmit / Bash **and Edit/Write** PreToolUse|PostToolUse — but **not**
-PreCompact, Notification, SessionEnd, or SubagentStop (the mock can't trigger
-them). At this tier _you_ hand the hook the event JSON, so all of them are
-testable.
+The deterministic tier (next section) drives the common governance events but
+can't synthesize every one — the events a mock can't trigger are testable here,
+because _you_ hand the hook the event JSON. (Which events the deterministic mock
+can drive is harness-specific — see the per-harness guides.)
 
 What it does **not** prove: that the hook is _wired in_ (settings point at it,
-`${CLAUDE_PLUGIN_ROOT}` resolves). That's what the next layer is for — so use
-both: unit-test the logic here, then assert it fires in the assembled machine.
+plugin-root tokens resolve). That's what the next layer is for — so use both:
+unit-test the logic here, then assert it fires in the assembled machine.
 
 **Unit-testing a hook you don't trust?** Mark it `trusted: false` and confinement
 is the default — no need to also remember `sandbox: "auto"`. A foreign hook
 command runs under bubblewrap (a no-egress namespace with a cleared environment,
-so it can't read your `ANTHROPIC_API_KEY`, while the env _you_ pass in `opts.env`
-is added back), and **refuses** rather than running unconfined where no sandbox
-is available (Linux + bwrap only). This is the same safe-by-default policy as
-`runHarnessTest`'s plugin confinement (`src/sandbox.ts`) — there trust follows
-`plugin`/`pluginDir` provenance; here you declare it, because the unit tier takes
-a raw command string:
+so it can't read your API key, while the env _you_ pass in `opts.env` is added
+back), and **refuses** rather than running unconfined where no sandbox is
+available (Linux + bwrap only):
 
 ```ts
 runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
@@ -248,118 +160,60 @@ runHook(vendoredHookCmd, event, { trusted: false, env: { GUARD: guardPath } });
 
 Set `sandbox` explicitly to override the trust-derived default: `"auto"`/`"strict"`
 force confinement, and `sandbox: false` opts an untrusted hook back out to a
-direct run (you vouch for it, or the outer container is the boundary).
+direct run (you vouch for it, or the outer container is the boundary). The sandbox
+is a Claude Code adapter capability — see
+[harness-testing-claude-code.md](harness-testing-claude-code.md) and
+[`docs/sandboxing.md`](sandboxing.md).
 
-## Test the whole machine, not one hook
+## integration: test the whole machine (`runHarnessTest`)
 
-The unit that matters is the _assembled_ plugin/repo: hooks + settings +
-CLAUDE.md + skills working together. Point `plugin` at a plugin (or `"./"` for
-your repo) and the real harness is loaded from `.claude-plugin/plugin.json` (or
-`.claude/settings.json`), with `${CLAUDE_PLUGIN_ROOT}` resolved to the real
-scripts, plus its CLAUDE.md and skills:
+Right logic ≠ wired in correctly _and_ reaching the model. `runHarnessTest`
+spawns the **real** harness binary against a **scripted mock model** — real hooks
+fire, model turns are fixed, the outcome is reproducible. No key, no cost. The
+unit that matters is the _assembled_ plugin/repo: hooks + settings + the
+instruction file + skills working together.
 
-```ts
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-
-const r = await runHarnessTest({
-  plugin: "./", // load THIS repo's real hooks + CLAUDE.md + skills
-  model: scriptModel([
-    { tool: "Bash", input: { command: "rm -rf /tmp/x" } }, // gate should block
-    { text: "done" },
-  ]),
-});
-```
-
-Inline `settings` / `files` layer on top (per-event hook arrays are
-concatenated), so you can add one extra hook over the real plugin. Worked
-example: [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs).
-
-**Surface coverage.** The loader materializes hooks, CLAUDE.md, skills,
-`agents/` (subagents) and `commands/` (slash commands) into the sandbox.
-Subagents, slash commands and MCP servers only run under a **real model**, so
-they belong to the eval tier — `loadPlugin(...).warnings` lists any such surface
-a plugin ships, so "load the whole plugin" never silently tests an empty machine
-(e.g. a subagents-only plugin with no hooks):
+The spec shape is harness-agnostic. You give it some combination of inline
+`settings` / `files`, an external `plugin` / `pluginDir`, a `prompt`, the scripted
+`model` turns, and `transcript: true` to capture the event stream; you pick the
+harness with `{ adapter }` (default Claude Code):
 
 ```ts
-import { loadPlugin } from "vigiles/plugin-loader";
-const { warnings } = loadPlugin("./some-plugin");
-if (warnings.length) console.warn(warnings.join("\n"));
-// ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
-```
+import { runHarnessTest } from "vigiles/integration";
+import { assertHookFired, assertOutputContains } from "vigiles/integration";
 
-### Native install: testing skills (`pluginDir`)
-
-`plugin` materializes a plugin's files into the sandbox — good for hooks and
-CLAUDE.md, but those files do **not** register a plugin's _skills_ for the `Skill`
-tool. To test skills, install the plugin **natively** with `pluginDir` (passes
-`claude --plugin-dir`), so its skills register and a scripted `Skill` tool_use
-resolves. Point it at a **complete** plugin (native install resolves the plugin's
-internal references). Add `transcript: true` to capture the event stream so you
-can assert the skill's body was injected:
-
-```ts
-import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
-
-const r = await runHarnessTest({
-  pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
-  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
-  transcript: true, // populate r.toolCalls
-  model: scriptModel([
-    { tool: "Skill", input: { skill: "demo:greet" } }, // resolves the skill
-    { text: "ok" },
-  ]),
-});
-assertSkillResolved(r, "demo:greet"); // a non-error Skill tool_use by that name
-assertToolNotUsed(r, /^mcp__/); // the safety negative: no MCP tool was used
-```
-
-**Assert on the agent's _actions_, not stdout.** With `transcript: true`,
-`r.toolCalls` is the parsed list of tools the agent invoked (each paired with its
-result). The helpers `assertToolUsed(r, name|/regex/)`, `assertToolNotUsed(...)`
-(the safety negative — _"the destructive tool was never called"_), and
-`assertSkillResolved(r, "plugin:skill")` are correct invariants — unlike
-`r.stdout.includes(marker)`, which false-positives on echoes and needs a marker
-injected (so it can't test a _real_ plugin). The worked tests in
-`src/harness-test.test.ts` assert real **obra/superpowers** and **wshobson/agents**
-skills this way — no marker needed. This is the deterministic **wiring** tier
-(does the skill resolve); whether the real model _chooses_ a skill is the eval
-tier.
-
-Beyond a single tool, you can assert on the **sequence and budget** of what the
-agent did:
-
-```ts
-assertToolSequence(r, ["Read", "Edit"]); // ordering — Read before Edit
-assertToolCount(r, "Write", { max: 1 }); // budget — no runaway writes
-assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
-```
-
-`assertToolSequence` matches an in-order subsequence (gaps allowed);
-`assertToolCount` takes `{ min, max, exactly }`; `assertToolCalls` is the escape
-hatch for a custom invariant like _"every Edit was preceded by a Read"_.
-
-You can also assert on a tool's **arguments**, not just its name (DeepEval-style)
-— e.g. the `Edit` targeted the right file, not just that _an_ Edit ran:
-
-```ts
-import { assertToolUsedWith } from "vigiles/harness-assert";
-
-assertToolUsedWith(
-  r,
-  "Edit",
-  (input) => (input as { file_path?: string }).file_path === "src/billing.ts",
+const r = await runHarnessTest(
+  {
+    plugin: "./", // load THIS repo's real hooks + instruction file + skills
+    prompt: "refactor the billing module",
+    transcript: true,
+    model: [{ text: "on it" }], // the scripted model turns
+  },
+  // { adapter: codexAdapter },  // ← a second harness; omit for Claude Code
 );
+
+assertHookFired(r, "UserPromptSubmit"); // it actually fired
+assertOutputContains(r, /on it/); // …and the run completed
 ```
+
+The scripted `model` turns and the mock that serves them are harness-specific:
+Claude Code's `scriptModel` renders the Anthropic Messages SSE; Codex drives real
+`codex exec` against the OpenAI Responses mock. The plugin layout the loader reads
+(`.claude-plugin/plugin.json`, `${CLAUDE_PLUGIN_ROOT}`, `pluginDir` native install
+for the `Skill` tool — vs. Codex's `AGENTS.md` + TOML config) is likewise
+per-harness. The rich worked examples — loading a real plugin, native skill
+install, the safe-by-default sandbox — live in the per-harness guides:
+**[Claude Code](harness-testing-claude-code.md)** ·
+**[Codex](harness-testing-codex.md)**.
 
 ## One Trace, two consumers — predicates and assertions
 
 Both tiers produce one **`Trace`**: the observable record of a run —
 `toolCalls`, `hooks` (which fired + its decision), `output` (the final answer),
-`turns`, and `file(p)`. A `runHarnessTest` result _is_ a `Trace`, and so is the
-`ctx` handed to a `runEval` `measure`. Over that one shape there is one set of
-**bare predicates** — pure functions returning a value, with **no `assert`
-prefix and no throw**:
+`modelRequests` (what reached the model), `turns`, and `file(p)`. A
+`runHarnessTest` result _is_ a `Trace`, and so is the `ctx` handed to a `runEval`
+`measure`. Over that one shape there is one set of **bare predicates** — pure
+functions returning a value, with **no `assert` prefix and no throw**:
 
 ```ts
 import {
@@ -370,7 +224,7 @@ import {
   outputContains,
   hookFired,
   hookBlocked,
-} from "vigiles/harness-assert";
+} from "vigiles/testing";
 
 usedTool(trace, "Skill"); // boolean
 usedTool(trace, /^mcp__github__merge/); // boolean (regex)
@@ -383,12 +237,18 @@ hookBlocked(trace, "PreToolUse"); // boolean (fired AND exit ≠ 0)
 ```
 
 `trace.hooks` is **recorded**, not inferred: each `HookFire` (`name`, `event`,
-`exitCode`, `blocked`, `output`) comes from the CLI's `hook_response` stream
-events, so a test asserts a hook _actually_ fired and blocked — no marker file
-the hook had to write. Capture it the same way as `toolCalls` (`transcript:
-true` on the harness tier; always on at the eval tier). The throwing form is
-`assertHookFired(trace, name, { blocked: true })`; `assertOutputContains(trace,
-needle)` does the same for the final answer.
+`exitCode`, `blocked`, `output`) comes from the CLI's stream events, so a test
+asserts a hook _actually_ fired and blocked — no marker file the hook had to
+write. Capture it the same way as `toolCalls` (`transcript: true` on the harness
+tier; always on at the eval tier). Beyond a single tool you can assert on the
+**sequence and budget** of what the agent did:
+
+```ts
+assertToolSequence(r, ["Read", "Edit"]); // ordering — Read before Edit
+assertToolCount(r, "Write", { max: 1 }); // budget — no runaway writes
+assertToolUsedWith(r, "Edit", (i) => i.file_path === "src/billing.ts"); // argument
+assertToolCalls(r, (calls) => /* any custom rule over the list */ true);
+```
 
 The two consumers stay **separate** — same vocabulary, never one dual-purpose
 function:
@@ -413,167 +273,6 @@ arms' spread, not hand-fed) — or `assertReliable(report, { arm, metric })`, th
 metric succeeded on **every** trial (pass^k = 1), the reliability bar for a
 non-deterministic harness.
 
-`runEval` arms take `pluginDir` too, so an A/B can be "skill installed" vs "off"
-and measure **real** activation (the model triggering the skill by its
-description), superseding the older "tell the agent to read a SKILL.md" trick:
-
-```ts
-await runEval({
-  arms: { off: {}, on: { pluginDir: "/path/to/a/whole/plugin" } },
-  task: "…a task the skill should handle…",
-  allowedTools: ["Read", "Edit", "Write", "Bash", "Skill"],
-  measure: (ctx) => ({
-    usedSkill: ctx.sh("grep -c MARKER out.txt") !== "0",
-  }),
-});
-```
-
-### Did the injected context land? (`modelRequests`)
-
-Some hooks exist to add text to the model's context — a `SessionStart` hook that
-injects project rules, for example. But a hook can exit `0`, look perfectly
-healthy, and still inject **nothing**: it printed the JSON in a shape Claude Code
-doesn't read, or it only works on the author's platform. The hook _ran_ — the
-context never _landed_.
-
-So don't check that the hook ran. Check what the model actually received.
-`trace.modelRequests` is the real request sent to the model (its system prompt
-and messages), and `assertRequestContains` asserts your text is in it:
-
-```ts
-import { assertRequestContains } from "vigiles/harness-assert";
-
-assertRequestContains(r, "You have superpowers"); // the injected context is really there
-```
-
-This is a real bug vigiles caught: `obra/superpowers` puts `additionalContext` at
-the **top level** of its hook output, but Claude Code only reads the **nested**
-field (`hookSpecificOutput.additionalContext`). The hook fired and exited clean,
-so every "did it run?" check passed — yet the context never reached the model.
-Only inspecting the request showed it was missing.
-
-### Dogfooding real third-party plugins (and the sandbox boundary)
-
-The loader is exercised against **real, pinned** Claude Code plugins, not just
-synthetic look-alikes:
-[`real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs)
-loads obra/superpowers (the `hooks/hooks.json` convention + `${CLAUDE_PLUGIN_ROOT}`
-expansion) and
-[`real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs)
-loads a wshobson/agents sub-plugin (the no-hooks subagents+commands+skills shape,
-where the whole result is the warnings). Both are **pinned, vendored snapshots**
-under [`examples/harness/vendor/`](../examples/harness/vendor) — each carrying the
-upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
-clone at test time, so they run **offline and deterministically**. Refresh
-deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
-
-**Safe by default — untrusted hooks are confined, not trusted.** A hook is a
-real child process: `runHarnessTest` runs the _actual_ hook, not a
-reimplementation. Code _you_ authored (inline `settings`/`files`) is trusted and
-runs directly. But an external `plugin` / `pluginDir` brings in **third-party
-hooks**, and those are confined by default (`sandbox: "auto"`):
-
-- **bubblewrap available** → the run is confined. The mock and `claude` are
-  co-launched inside **one network namespace** (`--unshare-all`): loopback is up
-  so the in-sandbox mock is reachable, but there is **no external route**, so a
-  malicious hook cannot phone home. The filesystem is read-only except the
-  throwaway work dir, a fresh empty `$HOME`, and an IO dir.
-- **no bubblewrap** → the run **refuses** (throws) rather than executing an
-  untrusted hook unconfined. Install `bwrap`, or pass `sandbox: false` to opt out
-  if you trust the code / the outer container.
-
-```ts
-runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
-runHarnessTest({ pluginDir: "./vendor/audited", model, sandbox: false }); // you vouch for it → direct
-runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
-```
-
-The policy lives in [`src/sandbox.ts`](../src/sandbox.ts) (`decideSandbox` is a
-pure function — untrusted code never runs unconfined unless you typed
-`sandbox: false`), and the end-to-end test proves egress is blocked while the
-mock stays reachable. Network egress confinement on a bare laptop comes from the
-netns; in CI the ephemeral container is an additional boundary. Subtlety: bwrap
-confines filesystem + network here, not a kernel-exploit boundary — for that you
-still want the outer container / a microVM.
-
-## Deterministic tests in your runner
-
-`runHarnessTest` spawns the real `claude` CLI against a **scripted mock model**
-(`vigiles/mock-model`) — real hooks fire, model turns are fixed, outcome is
-reproducible. No key, no cost. `{cwd}` in a hook command is substituted with the
-sandbox dir.
-
-```ts
-// node:test — works out of the box
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { withHarness, assertCreated } from "vigiles/harness-assert";
-
-test("Stop hook forces more work", async () => {
-  await withHarness(
-    {
-      settings: {
-        hooks: {
-          Stop: [
-            {
-              hooks: [
-                { type: "command", command: "test -f {cwd}/DONE || exit 2" },
-              ],
-            },
-          ],
-        },
-      },
-      model: scriptModel([
-        { text: "done?" }, // blocked
-        { tool: "Bash", input: { command: "touch DONE" } },
-        { text: "done" },
-      ]),
-    },
-    (r) => assertCreated(r, "DONE"),
-  );
-});
-```
-
-`withHarness` auto-cleans the sandbox (try/finally) so you don't leak temp dirs.
-
-**vitest / jest** use the exact same code. The `vigilesMatchers` object has an
-identical contract in both, so you can register it by hand:
-
-```ts
-import { expect } from "vitest"; // or "@jest/globals"
-import { vigilesMatchers } from "vigiles/harness-assert";
-expect.extend(vigilesMatchers);
-```
-
-…or use the **opt-in integration entries**, which register the matchers _and_
-add their TypeScript types (so `toHaveCreated` / `toBeatBaseline` autocomplete
-and type-check in a `.test.ts`):
-
-```ts
-// vitest.config.ts →  test: { setupFiles: ["vigiles/vitest"] }
-// jest.config.js   →  setupFilesAfterEnv: ["vigiles/jest"]
-// …or import once at the top of a test file:
-import "vigiles/vitest"; // or "vigiles/jest"
-
-expect(r).toHaveCreated("DONE");
-expect(report).toBeatBaseline("vanilla", "gated", "caught");
-```
-
-vitest and jest are **optional peer dependencies** — only the entry you import
-pulls one in. The same `vigilesMatchers` is exercised under both runners in
-[`test/runners/`](../test/runners/) (`npm run test:vitest` / `npm run test:jest`),
-and the type augmentation is compile-checked in
-[`test/types/`](../test/types/) (`npm run test:types`) — all three run in CI.
-jest uses the CommonJS dist natively (no ESM flags); the `vigiles/vitest` entry
-is ESM because vitest is ESM-only.
-
-**Reliable for:** SessionStart, Stop, UserPromptSubmit, and Bash **and
-Edit/Write** PreToolUse/PostToolUse — the governance/policy shapes most real
-plugins use (`--allowedTools` allowlists the edit tools past the permission
-prompt; verified on claude 2.1.169). The events the mock can't trigger —
-PreCompact, Notification, SessionEnd, SubagentStop — belong to the `runHook`
-unit tier.
-
 ## Evals — does the change move behaviour?
 
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
@@ -582,7 +281,7 @@ real gap from noise, plus **pass^k** (τ-bench) — _did the metric succeed on
 every trial?_ — the reliability question a non-deterministic harness needs
 ("worked every time" ≠ "worked on average"). `formatEvalReport` prints
 `metric=mean±se pass^k=…`; each `stat` carries `passK`. An arm is a fixture +
-settings, or a whole `plugin`.
+settings, or a whole `plugin` / `pluginDir`.
 
 The `measure` ctx is a full `Trace`, so a metric can read the agent's
 **actions** (`ctx.toolCalls`) and its **final answer** (`ctx.output`), not just
@@ -610,7 +309,15 @@ console.log(formatEvalReport(report));
 ```
 
 (The cost/latency/token suffix and a `— $… total` header appear when the run
-reports usage; they're silent under the scripted mock.)
+reports usage.) `runEval` arms take `pluginDir` too, so an A/B can be "skill
+installed" vs "off" and measure **real** activation (the model triggering the
+skill by its description), superseding the older "tell the agent to read a
+SKILL.md" trick.
+
+> **Note:** `runEval` is shipped and proven for Claude Code. For Codex it's a
+> documented follow-on on the same driver seam, not yet wired — use the
+> deterministic `runHarnessTest` tier there. See
+> [harness-testing-codex.md](harness-testing-codex.md).
 
 ### Significance — is the gap real?
 
@@ -624,7 +331,7 @@ import {
   assertSignificant,
   significantlyBeats,
   compareArms,
-} from "vigiles/harness-assert";
+} from "vigiles/testing";
 
 assertSignificant(report, {
   baseline: "vanilla",
@@ -632,7 +339,6 @@ assertSignificant(report, {
   metric: "marked",
 });
 significantlyBeats(report, "vanilla", "gated", "marked"); // the bare predicate
-// or: assertImproves(report, { baseline, arm, metric, significant: true });
 
 const c = compareArms(report, "vanilla", "gated", "marked");
 // → { delta, seDelta, t, df, pValue, significant }  (reads mean/se/n, no raw rows)
@@ -647,9 +353,8 @@ floor drops below it.
 Significance compares two _arms_ in one run; **regression gating** compares one
 run against a **committed baseline** — "jest snapshots for agent behaviour, with a
 real noise floor". Record a baseline once, commit it, then fail CI when any
-arm×metric moves _significantly in the bad direction_ vs. that baseline (a bare
-pass-rate can't tell a real regression from sampling noise — the same Welch test
-can, current vs. baseline):
+arm×metric moves _significantly in the bad direction_ vs. that baseline (the same
+Welch test, current vs. baseline):
 
 ```ts
 import {
@@ -658,11 +363,7 @@ import {
   assertNoRegression,
   diffToJUnit,
   diffReports,
-} from "vigiles/harness-assert";
-
-const report = await runEval({
-  /* … */
-});
+} from "vigiles/testing";
 
 // Record once (commit .vigiles/eval-baseline.json):
 writeBaseline(".vigiles/eval-baseline.json", [report]);
@@ -707,22 +408,27 @@ varied prompts, reporting how often a `Trace` predicate holds:
 
 ```ts
 import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
-import { skillResolved, assertTriggerRate } from "vigiles/harness-assert";
+import { skillResolved, assertTriggerRate } from "vigiles/testing";
 
 const report = await measureTriggerRate({
   pluginDir: "./my-plugin",
   prompts: ["…varied tasks the skill should handle…"],
+  irrelevantPrompts: ["…unrelated tasks it should stay quiet on…"], // optional
   fired: (t) => skillResolved(t, "my-plugin:greet"),
   trials: 2,
 });
 console.log(formatTriggerRateReport(report)); // trigger-rate: 80% (10 runs)
-assertTriggerRate(report, { min: 0.6 }); // gate in CI
+assertTriggerRate(report, { min: 0.6, maxFalsePositive: 0.1 }); // recall + precision
 ```
+
+`prompts` measures **recall** (does it fire when it should); `irrelevantPrompts`
+adds **precision** (`falsePositiveRate` / `precision`), so a too-broad description
+that hijacks unrelated work fails too.
 
 ### LLM-as-judge for subjective outcomes
 
 When the metric isn't a regex, grade with a model inside `measure` (synchronous,
-shells out via the `claude` CLI):
+shells out via the harness CLI):
 
 <!-- vigiles:ignore -->
 
@@ -742,18 +448,73 @@ This is deliberately thin — for datasets, tracing, and dashboards use a
 dedicated eval platform (Braintrust, DeepEval). vigiles owns the harness A/B,
 not the judging platform.
 
+## Use it in your runner (node:test / vitest / jest)
+
+The testing API is **runner-agnostic**: the throwing `assert*` helpers are plain
+functions, so they work as-is in `node:test`, vitest, jest, or any runner — no
+adapter, no plugin. `withHarness` auto-cleans the sandbox (try/finally) so a
+deterministic test doesn't leak temp dirs:
+
+```ts
+import { test } from "node:test"; // or vitest / jest — same code
+import { withHarness, assertCreated } from "vigiles/integration";
+
+test("Stop hook forces more work", async () => {
+  await withHarness(spec, (r) => assertCreated(r, "DONE"));
+});
+```
+
+**vitest / jest matchers.** The `vigilesMatchers` object has an identical contract
+in both, so you can register it by hand:
+
+```ts
+import { expect } from "vitest"; // or "@jest/globals"
+import { vigilesMatchers } from "vigiles/testing";
+expect.extend(vigilesMatchers);
+```
+
+…or use the **opt-in integration entries**, which register the matchers _and_
+add their TypeScript types (so `toHaveCreated` / `toBlock` / `toBeatBaseline`
+autocomplete and type-check in a `.test.ts`):
+
+```ts
+// vitest.config.ts →  test: { setupFiles: ["vigiles/vitest"] }
+// jest.config.js   →  setupFilesAfterEnv: ["vigiles/jest"]
+// …or import once at the top of a test file:
+import "vigiles/vitest"; // or "vigiles/jest"
+
+expect(r).toHaveCreated("DONE");
+expect(r).toBlock();
+expect(report).toBeatBaseline("vanilla", "gated", "caught");
+```
+
+vitest and jest are **optional peer dependencies** — only the entry you import
+pulls one in. This seam is **tested**: the same `vigilesMatchers` is exercised
+under both runners in [`test/runners/`](../test/runners/) (`matchers.vitest.mjs`
+
+- `matchers.jest.cjs`, via `npm run test:vitest` / `npm run test:jest`), and the
+  type augmentation is compile-checked in [`test/types/`](../test/types/)
+  (`smoke.vitest.ts` + `smoke.jest.ts`, via `npm run test:types`) — all three run
+  in CI. jest uses the CommonJS dist natively (no ESM flags); the `vigiles/vitest`
+  entry is ESM because vitest is ESM-only.
+
 ## CLI fallback (no runner, CI-friendly)
 
 For repos without a test runner, name files `*.harness.mjs` / `*.eval.mjs` and
 run them via the CLI, which discovers and runs each, aggregating exit codes:
 
 ```bash
-vigiles test                 # discover & run *.harness.mjs (skips if no claude CLI)
+vigiles test                 # discover & run *.harness.mjs (skips if no harness CLI)
 vigiles eval --trials=6      # discover & run *.eval.mjs (forwards VIGILES_TRIALS)
 ```
 
-`vigiles test` needs only the `claude` CLI (no API key) — so it runs the
-deterministic tier in CI at zero cost. See the repo's `harness` CI job.
+`vigiles test` needs only the harness CLI (no API key) — so it runs the
+deterministic tier in CI at zero cost. A skip is **loud** (`⊘ SKIPPED`, tallied
+separately), never a silent green; pass `--no-skip` in a job that asserts the
+capability is present, so a skipped tier fails. See the repo's `harness` CI job.
+Scripts can be authored in JavaScript (`.mjs`/`.cjs`/`.js`) **or** TypeScript
+(`.ts`/`.mts`/`.cts`) — discovery runs both (TS via `tsx` if installed, else
+Node's native type stripping).
 
 ## Per-level CI (the reusable action)
 
@@ -778,7 +539,7 @@ jobs:
         with: { tier: e2e } # sets up bwrap + pasta/slirp4netns + nft for you
 ```
 
-`tier: integration` adds bubblewrap + the `claude` CLI (no key); `tier: e2e`
+`tier: integration` adds bubblewrap + the harness CLI (no key); `tier: e2e`
 additionally sets up the rootless egress connector. vigiles **dogfoods** this in
 its own [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). The action runs
 `npm run test:<tier>` (the per-tier vitest projects), so a consumer wires per-level
@@ -832,7 +593,7 @@ flip `includeUserInvokedSkills` to demand an outcome test for them.
 Beneath that gate sits a free, model-free **conformance floor**: load your own
 plugin and assert every skill resolves with a usable `description` — the surface
 the model triggers on, so a skill that won't load can never fire. `loadPlugin`
-plus a name/description check needs no `claude` and no key, so it runs on every
+plus a name/description check needs no harness CLI and no key, so it runs on every
 commit, well under the (paid) trigger-rate eval. vigiles dogfoods exactly this
 on its own skills in
 [`src/skills-dogfood.test.ts`](../src/skills-dogfood.test.ts) — the gate that
@@ -851,17 +612,16 @@ npm run coverage   # vitest run --coverage
 The deterministic tiers (`runHook`, `runHarnessTest`) and **all the pure eval
 orchestration** — the loop (`runEvalWith`), the record/replay cache, usage
 aggregation, and the significance stats — are fully unit-tested via an
-**injected runner** (canned stream-json, no model). Only the real-`claude`
-subprocess (`spawnAgent`) is excluded from the gate (exercised by `bench/`);
-everything around it is covered, so the statement/line/function gate holds at
-100%.
+**injected runner** (canned stream-json, no model). Only the real-subprocess
+spawn is excluded from the gate (exercised by `bench/`); everything around it is
+covered.
 
 ## Canonical examples
 
-- [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no `claude` CLI (the cheap base of the pyramid).
+- [`examples/harness/hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — unit-test a hook's logic with `runHook`, no harness CLI (the cheap base of the pyramid).
 - [`examples/harness/policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — PreToolUse Bash gate (block-no-verify) + SessionStart setup, deterministic.
 - [`examples/harness/plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin and assert multiple hooks fire together.
-- **The oh-my-claudecode walkthrough** — one real plugin, every tier: [`oh-my-claudecode-unit.harness.mjs`](../examples/harness/oh-my-claudecode-unit.harness.mjs) (runHook on a real `keyword-detector` hook) · [`oh-my-claudecode-deterministic.harness.mjs`](../examples/harness/oh-my-claudecode-deterministic.harness.mjs) (fired _and_ landed) · [`oh-my-claudecode-egress.harness.mjs`](../examples/harness/oh-my-claudecode-egress.harness.mjs) (record + block network egress) · [`oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs) (skill trigger-rate).
+- **The oh-my-claudecode walkthrough** — one real plugin, every tier (Claude Code): see [harness-testing-claude-code.md](harness-testing-claude-code.md).
 - [`examples/harness/real-superpowers.harness.mjs`](../examples/harness/real-superpowers.harness.mjs) — dogfood `loadPlugin` on a real, pinned obra/superpowers snapshot (key-free, offline).
 - [`examples/harness/real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs) — dogfood `loadPlugin` on a real wshobson/agents sub-plugin (the no-hooks marketplace shape).
 - [`examples/harness/skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
@@ -870,14 +630,15 @@ everything around it is covered, so the statement/line/function gate holds at
 
 ## What's covered today — surface × tier
 
-The whole harness surface and how far each tier reaches today:
+The whole harness surface and how far each tier reaches today (Claude Code, the
+reference adapter):
 
 | Surface                                                       | Unit / static                    | Integration (no API key)    | Eval (real model) |
 | ------------------------------------------------------------- | -------------------------------- | --------------------------- | ----------------- |
 | Hooks — Bash / SessionStart / Stop / UserPromptSubmit         | ✅ logic                         | ✅ fires                    | ✅                |
 | Hooks — Edit / Write                                          | ✅ logic                         | ✅ fires                    | ✅                |
 | Hooks — PreCompact / Notification / SessionEnd / SubagentStop | ✅ logic                         | — (mock can't trigger)      | 🟡                |
-| CLAUDE.md / instructions                                      | ✅ refs                          | 🟡 present, not behaviour   | ✅ behaviour      |
+| Instruction file (CLAUDE.md / AGENTS.md)                      | ✅ refs                          | 🟡 present, not behaviour   | ✅ behaviour      |
 | Skills                                                        | ✅ loads + description · 🟡 refs | ✅ resolves via `pluginDir` | ✅ activation     |
 | Subagents (`agents/`)                                         | ✅ tool rail · 🟡 refs           | 🟡 rail not live-armed      | ✅ via Task       |
 | Slash commands (`commands/`)                                  | 🟡 refs                          | 🟡 needs prompt capture     | ✅ via `/cmd`     |
@@ -892,27 +653,41 @@ The whole harness surface and how far each tier reaches today:
 
 [promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
 and it's excellent at what it does. vigiles isn't a competing eval framework: it
-tests **the harness** (your hooks / settings / CLAUDE.md / skills as they ship),
-and it's built to be **deterministic and cheap** where promptfoo is
+tests **the harness** (your hooks / settings / instruction file / skills as they
+ship), and it's built to be **deterministic and cheap** where promptfoo is
 real-model-only. The core difference is cost by construction: every promptfoo run
 is a real model call by design, while vigiles answers most harness questions —
 does this hook block? is it wired in? does the skill resolve? — with **no model
 and no API key at all**, paying for a real model only at the eval tier, only when
 the question needs one.
 
-| Question you're asking                                  | vigiles                               | promptfoo                      |
-| ------------------------------------------------------- | ------------------------------------- | ------------------------------ |
-| Does my hook block/allow? Is it wired in?               | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
-| Unit under test                                         | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
-| Loads the **real shipped** plugin.json/hooks/CLAUDE.md? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
-| Is an A/B gap real, not noise? (significance / pass^k)  | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
-| Regression vs a committed baseline                      | ✅ `assertNoRegression`               | ✗                              |
-| Run an untrusted harness **confined**                   | ✅ bubblewrap, safe-by-default        | ✗                              |
-| Dataset / red-team / assertion library / web UI         | ✗ (not our game)                      | ✅✅ deep, mature              |
+| Question you're asking                                     | vigiles                               | promptfoo                      |
+| ---------------------------------------------------------- | ------------------------------------- | ------------------------------ |
+| Does my hook block/allow? Is it wired in?                  | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
+| Unit under test                                            | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
+| Loads the **real shipped** plugin.json/hooks/instructions? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
+| Is an A/B gap real, not noise? (significance / pass^k)     | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
+| Regression vs a committed baseline                         | ✅ `assertNoRegression`               | ✗                              |
+| Run an untrusted harness **confined**                      | ✅ bubblewrap, safe-by-default        | ✗                              |
+| Dataset / red-team / assertion library / web UI            | ✗ (not our game)                      | ✅✅ deep, mature              |
 
 Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
 the harness cheaply and safely.** The full analysis (and why we don't chase
 parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
+
+## Per-harness guides
+
+The runners above are harness-agnostic; the transport (the mock wire format, the
+plugin layout, the sandbox) is per-harness. Pick your harness:
+
+- **[Harness testing — Claude Code](harness-testing-claude-code.md)** — the
+  default adapter: the oh-my-claudecode worked walkthrough, `${CLAUDE_PLUGIN_ROOT}`
+  / `hooks.json` / `plugin` / `pluginDir` / the `Skill` tool, `scriptModel` + the
+  Anthropic Messages mock, the bubblewrap sandbox + egress, reliable events.
+- **[Harness testing — Codex](harness-testing-codex.md)** — driving real
+  `codex exec` with `{ adapter: codexAdapter }` against the OpenAI Responses mock
+  (`startCodexMock`), keyless; what maps (`AGENTS.md`, minimal `SKILL.md`) and
+  what doesn't (subagents, by design).
 
 ## See also
 
