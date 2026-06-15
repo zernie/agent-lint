@@ -411,19 +411,39 @@ import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
 import { skillResolved, assertTriggerRate } from "vigiles/testing";
 
 const report = await measureTriggerRate({
-  pluginDir: "./my-plugin",
-  prompts: ["…varied tasks the skill should handle…"],
-  irrelevantPrompts: ["…unrelated tasks it should stay quiet on…"], // optional
+  skillsDir: ".claude/skills", // loose repo skills — auto-packaged (or pluginDir: "./my-plugin")
+  stubSkillBodies: true, // measure SELECTION only — stub each body so a run stops
+  // when the skill fires instead of executing its whole procedure (much cheaper)
+  prompts: ["…≥10 varied tasks the skill should handle…"],
+  irrelevantPrompts: ["…≥10 unrelated tasks it should stay quiet on…"], // optional
   fired: (t) => skillResolved(t, "my-plugin:greet"),
   trials: 2,
 });
 console.log(formatTriggerRateReport(report)); // trigger-rate: 80% (10 runs)
-assertTriggerRate(report, { min: 0.6, maxFalsePositive: 0.1 }); // recall + precision
+assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 }); // recall + precision
 ```
 
 `prompts` measures **recall** (does it fire when it should); `irrelevantPrompts`
 adds **precision** (`falsePositiveRate` / `precision`), so a too-broad description
 that hijacks unrelated work fails too.
+
+Three things make this cheap and honest, all on by choice:
+
+- **`skillsDir`** — point at a loose `.claude/skills` dir and vigiles packages it
+  into a throwaway plugin for you (no hand-rolled `plugin.json`). Use `pluginDir`
+  for an already-packaged plugin. Exactly one of the two.
+- **`stubSkillBodies`** — triggering is decided by a skill's **frontmatter** (name
+  - description) _before_ its body loads, so the body is irrelevant to whether it
+    fires. Stubbing it (all descriptions stay, so selection stays faithful) lets a
+    run stop at selection instead of paying to execute a multi-step procedure.
+- **Diversity gate** — before spending a token, `measureTriggerRate` rejects a
+  too-small or near-duplicate prompt set (`minPrompts`, default 10; an NCD
+  near-duplicate check). A rate over 3 copy-pasted prompts is noise; the gate
+  refuses to produce it. Lower `minPrompts` for a genuinely narrow skill.
+
+Measure on the model your users actually run (`model: "sonnet"` for most Claude
+Code users) — the model is part of the harness, so trigger-rate inherits its
+skill-selection behaviour; the default `"haiku"` is a cheap conservative floor.
 
 ### LLM-as-judge for subjective outcomes
 
