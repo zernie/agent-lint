@@ -118,9 +118,11 @@ It's interactive in a terminal and non-interactive for agents/CI (or with
 `--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
 it installs a model-invocable **`test-harness` skill**, so afterward you can just
 tell your agent _"test my skills"_ and it picks the tier and writes the test.
-Scope `init` with `--pillars=verify|test|both`. Or write harness tests yourself in
-JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles test`. `init` wires CI as
-a `zernie/vigiles@v1` workflow — a composite over the same CLI:
+Scope `init` with `--verify` / `--testing` (one pillar or both). Or write harness
+tests yourself in JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles test`.
+`init` also adds `vigiles` to your `devDependencies` and installs the Claude Code
+plugin (skills + hooks) via the marketplace — globally, never vendored into your
+repo. It wires CI as a `zernie/vigiles@v1` workflow — a composite over the same CLI:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -130,7 +132,7 @@ a `zernie/vigiles@v1` workflow — a composite over the same CLI:
 ## More
 
 - **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `audit` rules.
-- **[Skills →](docs/skills.md)** — 8 skills (`strengthen`, `migrate-to-spec`, `test-harness`, …) via `npx skills add zernie/vigiles`.
+- **[Skills →](docs/skills.md)** — consumer skills (`strengthen`, `migrate-to-spec`, `test-harness`, `edit-spec`, …) installed as a Claude Code plugin: `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles` (or let `vigiles init` do it).
 - **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
 - Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 

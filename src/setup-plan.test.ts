@@ -21,35 +21,64 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
 
 test("parseSetupArgs reads flags", () => {
   const p = parseSetupArgs([
-    "--pillars=test",
+    "--testing",
     "--no-gha",
     "--no-plugin",
     "--strict",
     "-y",
   ]);
-  assert.equal(p.pillars, "test");
+  assert.equal(p.testing, true);
+  assert.equal(p.verify, undefined);
   assert.equal(p.gha, false);
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
   assert.equal(p.yes, true);
 });
 
-test("parseSetupArgs ignores an invalid --pillars value", () => {
-  assert.equal(parseSetupArgs(["--pillars=nonsense"]).pillars, undefined);
-  assert.equal(parseSetupArgs([]).pillars, undefined);
+test("parseSetupArgs reads --verify / --no-testing / --harness", () => {
+  const p = parseSetupArgs([
+    "--verify",
+    "--no-testing",
+    "--harness=claude,codex",
+  ]);
+  assert.equal(p.verify, true);
+  assert.equal(p.testing, false);
+  assert.equal(p.harness, "claude,codex");
+  assert.equal(parseSetupArgs([]).verify, undefined);
+  assert.equal(parseSetupArgs([]).testing, undefined);
 });
 
-test("resolvePlan: --pillars scopes to one pillar", () => {
-  assert.deepEqual(resolvePlan(parseSetupArgs(["--pillars=verify"])), {
+test("parseSetupArgs: deprecated --pillars alias maps onto verify/testing", () => {
+  const both = parseSetupArgs(["--pillars=both"]);
+  assert.equal(both.verify, true);
+  assert.equal(both.testing, true);
+  const v = parseSetupArgs(["--pillars=verify"]);
+  assert.equal(v.verify, true);
+  assert.equal(v.testing, false);
+  const bad = parseSetupArgs(["--pillars=nonsense"]);
+  assert.equal(bad.verify, undefined);
+  assert.equal(bad.testing, undefined);
+});
+
+test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
+  assert.deepEqual(resolvePlan(parseSetupArgs(["--verify"])), {
     verify: true,
     test: false,
     gha: true,
     plugin: true,
     strict: false,
   });
-  const t = resolvePlan(parseSetupArgs(["--pillars=test"]));
+  const t = resolvePlan(parseSetupArgs(["--testing"]));
   assert.equal(t.verify, false);
   assert.equal(t.test, true);
+  // both named → both on
+  const both = resolvePlan(parseSetupArgs(["--verify", "--testing"]));
+  assert.equal(both.verify, true);
+  assert.equal(both.test, true);
+  // --no-* drops one from the default-both
+  const noTest = resolvePlan(parseSetupArgs(["--no-testing"]));
+  assert.equal(noTest.verify, true);
+  assert.equal(noTest.test, false);
 });
 
 test("resolvePlan: --no-gha / --no-plugin / --strict / --target", () => {
@@ -82,7 +111,7 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
   // every choice pinned via flags → nothing to ask
   assert.equal(
     shouldPrompt(
-      parseSetupArgs(["--pillars=both", "--no-gha", "--no-plugin"]),
+      parseSetupArgs(["--verify", "--testing", "--no-gha", "--no-plugin"]),
       true,
     ),
     false,

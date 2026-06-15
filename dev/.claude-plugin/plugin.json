@@ -1,0 +1,11 @@
+{
+  "name": "vigiles-dev",
+  "version": "3.0.0",
+  "description": "Internal vigiles development skills — NOT shipped to consumers (logo generation, PR-comment→rule, rule-format/feedback-loop audits). Loaded only for contributors via `--plugin-dir dev/`.",
+  "author": {
+    "name": "zernie"
+  },
+  "repository": "https://github.com/zernie/vigiles",
+  "license": "MIT",
+  "skills": "./skills/"
+}

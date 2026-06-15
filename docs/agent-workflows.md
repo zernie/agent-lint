@@ -27,7 +27,9 @@ The wizard creates specs for detected targets, generates types, compiles, and ad
 
 ```bash
 npx vigiles init
-npx skills add zernie/vigiles
+# init installs the plugin via the marketplace; to do it by hand in Claude Code:
+#   /plugin marketplace add zernie/vigiles
+#   /plugin install vigiles@vigiles
 ```
 
 **What the plugin does:**
@@ -56,7 +58,7 @@ Codex and GitHub Copilot read `AGENTS.md` directly. There is no plugin or hook s
 2. Run `npx vigiles compile` to regenerate `AGENTS.md`
 3. CI verifies freshness: `npx vigiles audit && npx vigiles generate-types --check`
 
-If you also use Claude Code, install the plugin (`npx skills add zernie/vigiles`) to get auto-recompilation.
+If you also use Claude Code, install the plugin (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or let `vigiles init` do it) to get auto-recompilation.
 
 ## Multi-Agent (Claude + Codex)
 

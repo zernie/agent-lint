@@ -39,14 +39,22 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                           | Effect                                                 |
-| ------------------------------ | ------------------------------------------------------ |
-| `--yes`, `-y`                  | Skip prompts; use defaults (both pillars, CI, plugin)  |
-| `--pillars=both\|verify\|test` | Which pillars to set up (default `both`)               |
-| `--no-gha`                     | Skip wiring CI                                         |
-| `--no-plugin`                  | Skip installing the Claude Code plugin                 |
-| `--strict`                     | Set `require-spec` / `require-skill-spec` to `"error"` |
-| `--target=AGENTS.md`           | Create a bare spec for one file (Pillar 1 only)        |
+| Flag                         | Effect                                                           |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `--yes`, `-y`                | Skip prompts; use defaults (both pillars, CI, plugin)            |
+| `--verify` / `--no-verify`   | Pillar 1 — verify instruction-file references (default on)       |
+| `--testing` / `--no-testing` | Pillar 2 — scaffold a harness test (default on)                  |
+| `--harness=claude,codex`     | Which harness(es) to set up (default: auto-detect from the repo) |
+| `--no-gha`                   | Skip wiring CI                                                   |
+| `--no-plugin`                | Skip installing the Claude Code plugin                           |
+| `--strict`                   | Set `require-spec` / `require-skill-spec` to `"error"`           |
+| `--target=AGENTS.md`         | Create a bare spec for one file (Pillar 1 only)                  |
+
+Passing a single positive pillar flag selects only it (`--verify` = pillar 1
+only); pass both, or neither, for both. `init` also adds `vigiles` to your
+`devDependencies` (moving it out of `dependencies` if it's there) so the
+scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`. (The deprecated
+`--pillars=both|verify|test` still works as an alias.)
 
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).
@@ -162,10 +170,28 @@ On a fork PR (read-only token) the comment step degrades to a warning — the jo
 
 ### Versioning
 
-Pin to the **floating major tag** `@v1` for automatic patch/minor updates (the
-release pipeline keeps `v1` pointed at the latest `1.x`). Pin a full tag
-(`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
-unreleased `HEAD` — use it only to test upcoming changes.
+**The Action tag and the npm version are two separate version lines.** The Action
+is a thin composite that runs the published `npx vigiles@<version>` CLI, so:
+
+- **Action ref** (`uses: zernie/vigiles@v1`) — pin the **floating major tag**
+  `@v1` for automatic patch/minor updates to the _Action wrapper_ (the release
+  pipeline keeps `v1` pointed at the latest `1.x` of the action). Pin a full tag
+  (`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
+  unreleased `HEAD`.
+- **CLI version** (`version:` input, default `latest`) — selects which published
+  `vigiles` npm release the Action runs (currently `3.x`). Leave it `latest`, or
+  pin `version: '3'` / `version: '3.0.0'` to lock the CLI independently of the
+  Action tag.
+
+So `uses: zernie/vigiles@v1` with the default `version: latest` runs the newest
+`vigiles` CLI (3.x today) through the v1 action wrapper. The `@v1` does **not**
+mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: '3' }`.
+
+```yaml
+- uses: zernie/vigiles@v1
+  with:
+    version: "3" # pin the CLI major; @v1 pins the action wrapper
+```
 
 To verify generated types are fresh in CI:
 
@@ -177,16 +203,31 @@ To verify generated types are fresh in CI:
 
 Without the plugin, you're responsible for manually running `compile` and
 `generate-types`. With it, the agent works with fresh instruction files
-automatically.
+automatically, and the consumer skills (`strengthen`, `migrate-to-spec`,
+`test-harness`, `edit-spec`, `generate-rule`) are available.
 
-```bash
-npx skills add zernie/vigiles
+The plugin installs through the **Claude Code plugin marketplace** — globally
+into `~/.claude/plugins/`, **not** vendored into your repo. In a Claude Code
+session:
+
+```
+/plugin marketplace add zernie/vigiles
+/plugin install vigiles@vigiles
 ```
 
-The plugin provides two hooks:
+`vigiles init` does this for you (it runs the non-interactive `claude plugin`
+CLI when available, else prints these two commands). Nothing is written to your
+working tree, so there is nothing to `.gitignore` or accidentally commit.
+
+The plugin provides hooks:
 
 - **PreToolUse** (Edit/Write) — blocks direct edits to compiled `.md` files and redirects the agent to the `.spec.ts` source
-- **PostToolUse** (Edit/Write) — auto-runs `generate-types` on linter config changes, `compile` on `.spec.ts` changes
+- **PostToolUse** (Edit/Write) — auto-runs `generate-types` on linter config changes, `compile` on `.spec.ts` changes; nudges marking unmarked references
+- **SessionStart** — surfaces the project's vigiles state
+
+> Internal vigiles-development skills (`generate-logo`, `pr-to-lint-rule`,
+> `enforce-rules-format`, `audit-feedback-loop`) live under `dev/` and are **not**
+> shipped to consumers. Contributors load them with `--plugin-dir dev/`.
 
 ## Validation rules
 
