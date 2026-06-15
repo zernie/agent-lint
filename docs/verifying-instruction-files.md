@@ -23,11 +23,11 @@ Add a comment to your existing CLAUDE.md and audit it:
 ```
 
 ```bash
-npx vigiles audit CLAUDE.md
+npx vigiles lint CLAUDE.md
 ```
 
 Each rule is checked against your real linter config — typos get closest-match
-suggestions, disabled rules are flagged. `vigiles audit` enforces them in CI.
+suggestions, disabled rules are flagged. `vigiles lint` enforces them in CI.
 Zero install commitment, zero new files.
 
 > **Want editor autocomplete?** Promote the rules into a `vigiles:` YAML
@@ -122,17 +122,17 @@ export default claude({
 });
 ```
 
-There's a small family of inline **marks** that `audit` checks, each binding a
+There's a small family of inline **marks** that `lint` checks, each binding a
 reference to its real source:
 
 - `` `vigiles:symbol file#name` `` — the named file actually **defines** that
   symbol (function, class, method, constant), parsed with
   [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and
-  CSS**. Rename it and `audit` fails; in markdown mode the `refs-hook` **forces
+  CSS**. Rename it and `lint` fails; in markdown mode the `refs-hook` **forces
   the mark**, blocking edits that leave a code reference bare.
   [Details →](../research/symbol-verification.md)
 - `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its
-  server. `audit` reads `.mcp.json`, starts the server, lists its tools, and flags
+  server. `lint` reads `.mcp.json`, starts the server, lists its tools, and flags
   a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP
   server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
@@ -165,7 +165,7 @@ in the loop**, the moment it edits an instruction file. The flow, from save:
      are marked or ignored.
    - **`false` → off.**
 4. **The deterministic backstop:** on commit (a git pre-commit hook) and in CI,
-   `vigiles audit` / `vigiles refs` re-run the same check — the unbypassable
+   `vigiles lint` / `vigiles refs` re-run the same check — the unbypassable
    floor that catches anything the in-loop nudge didn't.
 
 **What it deliberately does not do:** it can't force a _plaintext_ reference
@@ -177,27 +177,27 @@ identifiers, paths, and prose are left to the shipped instructions, not the hook
 
 **Harness note:** the in-loop nudge is a hook, so it works on **Claude Code and
 Codex**. A harness without hooks doesn't get the per-save nudge — it falls back
-to the always-loaded instructions plus the `vigiles audit` CI floor. See the
+to the always-loaded instructions plus the `vigiles lint` CI floor. See the
 [`unmarked-refs` rule](rules/unmarked-refs.md).
 
 ## What changes with vigiles
 
 ### Claude Code
 
-|                                     | Without vigiles              | With vigiles                                                   |
-| ----------------------------------- | ---------------------------- | -------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                      |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                   |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                 |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json                |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                |
-| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types            |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades         |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry         |
-| **CI**                              | Nothing to verify            | `vigiles audit` catches hand-edits, disabled rules, stale refs |
+|                                     | Without vigiles              | With vigiles                                                  |
+| ----------------------------------- | ---------------------------- | ------------------------------------------------------------- |
+| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                     |
+| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                  |
+| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                |
+| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json               |
+| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec               |
+| **Spec / config changes**           | CLAUDE.md drifts out of sync | PostToolUse hooks auto-compile and regenerate types           |
+| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades        |
+| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry        |
+| **CI**                              | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs |
 
 **Codex / AGENTS.md** gets the same compile-time checks and the same
-`vigiles audit` CI pipeline — just no hooks (no plugin system), so you run
+`vigiles lint` CI pipeline — just no hooks (no plugin system), so you run
 `vigiles compile` manually or in CI.
 
 Everything vigiles compiles and audits is **deterministic** — same input, same

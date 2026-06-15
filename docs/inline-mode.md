@@ -3,7 +3,7 @@
 Inline mode lets you adopt vigiles **one rule at a time**, without committing
 to a `.spec.ts` compile step. You add `<!-- vigiles:enforce ... -->` HTML
 comments directly to your existing `CLAUDE.md` / `AGENTS.md`, and
-`vigiles audit` verifies them the same way it verifies spec-declared rules:
+`vigiles lint` verifies them the same way it verifies spec-declared rules:
 linter-backed existence check, closest-match typo suggestions, disabled-rule
 detection, and GitHub Actions annotations.
 
@@ -67,7 +67,7 @@ enforces this automatically.
 
 ## What audit catches
 
-Running `vigiles audit CLAUDE.md` on the above file will:
+Running `vigiles lint CLAUDE.md` on the above file will:
 
 - Verify each `eslint/…`, `ruff/…` reference against your actual linter
   config
@@ -81,7 +81,7 @@ Running `vigiles audit CLAUDE.md` on the above file will:
 - **No type safety at edit time.** The `.spec.ts` path gets TypeScript
   squiggles in the editor because `StrictLinterRule` is a type union of
   every rule in your linters. Inline mode is strings-in-markdown, so
-  typos only surface at `vigiles audit` time. Still catches them before
+  typos only surface at `vigiles lint` time. Still catches them before
   CI, just not in the editor.
 - **No programmatic composition.** You can't reuse a batch of rules from
   a helper. Each comment is its own line.

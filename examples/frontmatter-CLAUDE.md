@@ -17,7 +17,7 @@ vigiles:
 
   This is a plain, hand-written CLAUDE.md — no .spec.ts, no compile step.
   The `vigiles:` frontmatter block above declares enforce rules that
-  `vigiles audit CLAUDE.md` verifies against the project's real linter config
+  `vigiles lint CLAUDE.md` verifies against the project's real linter config
   (rule exists + is enabled, typo suggestions, disabled-rule detection).
 
   The frontmatter must be the very first thing in the file, and the
@@ -42,7 +42,7 @@ A payments service. Keep changes small and well-tested.
 
 Application output goes through `src/logger.ts`, never `console` directly —
 the `eslint/no-console` rule in the frontmatter above is verified on every
-`vigiles audit`, so this line can't quietly go stale.
+`vigiles lint`, so this line can't quietly go stale.
 
 Every promise is awaited or explicitly voided. The
 `@typescript-eslint/no-floating-promises` rule enforces it mechanically.

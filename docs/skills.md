@@ -35,7 +35,7 @@ Fix failures until the suite is green.
 <!-- vigiles:result "npm test" -->
 ```
 
-`vigiles audit` verifies each marker's reference against the project, exactly as
+`vigiles lint` verifies each marker's reference against the project, exactly as
 in inline/frontmatter mode for `CLAUDE.md`. See `docs/markdown-mode.md`.
 
 ### 2. Declarative typed spec — `skill({ … })`

@@ -21,7 +21,7 @@ New here? Start with the [README](../README.md).
   - `vigiles/testing` — Pillar 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
   - `vigiles/claude-code` — the Claude Code-specific adapter (`loadPlugin`, `scriptModel`, the mock).
   - The granular paths (`vigiles/spec`, `vigiles/run-hook`, `vigiles/harness-test`, …) keep working.
-- [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `audit` validation rules.
+- [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `lint` validation rules.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
