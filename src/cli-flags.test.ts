@@ -14,12 +14,12 @@ const base: VigilesConfig = {
 } as VigilesConfig;
 
 test("--max-rules=N sets a positive integer maxRules", () => {
-  const c = applyConfigFlags(base, ["audit", "--max-rules=7"]);
+  const c = applyConfigFlags(base, ["lint", "--max-rules=7"]);
   assert.equal(c.maxRules, 7);
 });
 
 test("--catalog-only sets catalogOnly true", () => {
-  const c = applyConfigFlags(base, ["audit", "--catalog-only"]);
+  const c = applyConfigFlags(base, ["lint", "--catalog-only"]);
   assert.equal(c.catalogOnly, true);
 });
 
@@ -34,7 +34,7 @@ test("both flags compose", () => {
 });
 
 test("absent flags leave config untouched", () => {
-  const c = applyConfigFlags({ ...base, maxRules: 99 }, ["audit"]);
+  const c = applyConfigFlags({ ...base, maxRules: 99 }, ["lint"]);
   assert.equal(c.maxRules, 99);
   assert.equal(c.catalogOnly, undefined);
 });
@@ -46,14 +46,14 @@ test("invalid --max-rules values are ignored (no override)", () => {
     "--max-rules=abc",
     "--max-rules=1.5",
   ]) {
-    const c = applyConfigFlags({ ...base, maxRules: 42 }, ["audit", bad]);
+    const c = applyConfigFlags({ ...base, maxRules: 42 }, ["lint", bad]);
     assert.equal(c.maxRules, 42, `${bad} should not override`);
   }
 });
 
 test("input config is not mutated", () => {
   const input: VigilesConfig = { ...base, maxRules: 5 };
-  applyConfigFlags(input, ["audit", "--max-rules=10", "--catalog-only"]);
+  applyConfigFlags(input, ["lint", "--max-rules=10", "--catalog-only"]);
   assert.equal(input.maxRules, 5);
   assert.equal(input.catalogOnly, undefined);
 });

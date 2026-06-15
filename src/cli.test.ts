@@ -1,7 +1,7 @@
 /**
  * CLI integration tests — spawn the actual vigiles CLI and verify output.
  *
- * These test the full flow: CLI → init/compile/audit → filesystem output.
+ * These test the full flow: CLI → init/compile/lint → filesystem output.
  */
 import { describe, it, beforeAll as before, afterAll as after } from "vitest";
 import assert from "node:assert/strict";
@@ -255,7 +255,7 @@ describe("CLI: vigiles compile", () => {
 // vigiles audit
 // ---------------------------------------------------------------------------
 
-describe("CLI: vigiles audit", () => {
+describe("CLI: vigiles lint", () => {
   let tmpDir: string;
 
   before(() => {
@@ -267,13 +267,13 @@ describe("CLI: vigiles audit", () => {
   });
 
   it("should report when no instruction files are found", () => {
-    const { stdout, exitCode } = run("audit", tmpDir);
+    const { stdout, exitCode } = run("lint", tmpDir);
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("No compiled instruction files found"));
   });
 
   it("should include coverage and strengthen output", () => {
-    const { stdout } = run("audit", tmpDir);
+    const { stdout } = run("lint", tmpDir);
     // audit runs discover + strengthen in addition to verification
     assert.ok(
       stdout.includes("coverage") ||
@@ -302,7 +302,7 @@ export default claude({
 });
 `,
       );
-      const { stdout } = run("audit", dupDir);
+      const { stdout } = run("lint", dupDir);
       // Should detect the two logger rules as near-duplicates
       assert.ok(
         stdout.includes("near-duplicate") || stdout.includes("duplicate"),
@@ -351,7 +351,7 @@ export default claude({
         `compile failed: ${compileResult.stdout}`,
       );
 
-      const { stdout, exitCode } = run("audit CLAUDE.md", specDir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", specDir);
       // Should NOT surface the bogus rule as an inline error.
       assert.ok(
         !stdout.includes("total-nonsense"),
@@ -409,7 +409,7 @@ describe("E2E: inline enforcement", () => {
 All output goes through logger.ts.
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("eslint/no-console"),
       `Expected rule in output, got: ${stdout.slice(0, 600)}`,
@@ -428,7 +428,7 @@ All output goes through logger.ts.
 Some prose.
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("no-consol"),
       `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
@@ -456,7 +456,7 @@ Real rule:
 <!-- vigiles:enforce eslint/no-console "outside fence" -->
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", inlineDir);
     // The bogus rule inside the fence must NOT appear as an error
     assert.ok(
       !stdout.includes("totally-bogus"),
@@ -474,7 +474,7 @@ Real rule:
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/fake-rule-xyz "bad" -->`,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", inlineDir);
     const report = JSON.parse(stdout) as {
       inlineErrors: number;
       inlineRules: number;
@@ -489,7 +489,7 @@ Real rule:
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/fake-rule-xyz "bad" -->`,
     );
-    const { stdout, exitCode } = run("audit --summary CLAUDE.md", inlineDir);
+    const { stdout, exitCode } = run("lint --summary CLAUDE.md", inlineDir);
     assert.ok(
       stdout.includes("inline"),
       `Expected 'inline' in summary, got: ${stdout}`,
@@ -507,7 +507,7 @@ Real rule:
 # Project
 `,
     );
-    const { stdout } = run("audit CLAUDE.md", inlineDir);
+    const { stdout } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
       !stdout.includes("require-spec"),
       `require-spec should be satisfied by inline rules, got: ${stdout.slice(0, 600)}`,
@@ -555,7 +555,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("eslint/no-console"),
       `Expected rule in output, got: ${stdout.slice(0, 600)}`,
@@ -574,7 +574,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("no-consol"),
       `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
@@ -599,7 +599,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", fmDir);
     const report = JSON.parse(stdout) as {
       frontmatterErrors: number;
       frontmatterRules: number;
@@ -620,7 +620,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit --summary CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --summary CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("frontmatter"),
       `Expected 'frontmatter' in summary, got: ${stdout}`,
@@ -640,7 +640,7 @@ vigiles:
 ---
 `,
     );
-    const { stdout, exitCode } = run("audit CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       stdout.includes("Malformed YAML frontmatter"),
       `Expected malformed-YAML report, got: ${stdout.slice(0, 600)}`,
@@ -661,7 +661,7 @@ vigiles:
 # Project
 `,
     );
-    const { stdout } = run("audit CLAUDE.md", fmDir);
+    const { stdout } = run("lint CLAUDE.md", fmDir);
     assert.ok(
       !stdout.includes("require-spec"),
       `require-spec should be satisfied by frontmatter, got: ${stdout.slice(0, 600)}`,
@@ -683,7 +683,7 @@ vigiles:
 <!-- vigiles:enforce eslint/no-console "from inline" -->
 `,
     );
-    const { stdout, exitCode } = run("audit --json CLAUDE.md", fmDir);
+    const { stdout, exitCode } = run("lint --json CLAUDE.md", fmDir);
     const report = JSON.parse(stdout) as {
       inlineRules: number;
       frontmatterRules: number;
@@ -1030,17 +1030,12 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("deprecated --pillars / --verify / --testing aliases still work", () => {
+  it("clean break: old --pillars / --verify flags no longer scope a pillar", () => {
     const dir = freshProject();
     try {
-      // --pillars alias
-      let out = run("init --pillars=test --no-plugin --no-gha", dir).stdout;
-      assert.match(out, /pillars: test/);
-      assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
-      rmSync(join(dir, "vigiles.harness.mjs"));
-      // --verify / --testing aliases map to --lint / --test
-      out = run("init --verify --no-plugin --no-gha", dir).stdout;
-      assert.match(out, /pillars: lint/);
+      // --verify is now an unknown flag — both pillars stay on (the default).
+      const out = run("init --verify --no-plugin --no-gha", dir).stdout;
+      assert.match(out, /pillars: lint \+ test/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1556,7 +1551,7 @@ describe("E2E: fixture project adoption", () => {
   });
 
   it("audit detects CLAUDE.md has no vigiles hash", () => {
-    const { stdout } = run("audit", workDir);
+    const { stdout } = run("lint", workDir);
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
       stdout.includes("no vigiles hash") ||
@@ -1600,7 +1595,7 @@ export default claude({
     assert.ok(content.includes("<!-- vigiles:sha256:"));
 
     // Audit should pass (hash valid, spec exists)
-    const auditResult = run("audit", workDir);
+    const auditResult = run("lint", workDir);
     assert.ok(
       auditResult.stdout.includes("hash valid") || auditResult.exitCode === 0,
     );
@@ -1630,7 +1625,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
       `# P\n\nSee <!-- vigiles:file src/real.ts --> and run <!-- vigiles:cmd "npm run build" -->.\n`,
     );
     try {
-      const { exitCode } = run("audit CLAUDE.md", dir);
+      const { exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1640,7 +1635,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
   it("fails (exit 2) on a stale inline file reference", () => {
     const dir = scaffold(`# P\n\n<!-- vigiles:file src/GONE.ts -->\n`);
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /File not found: "src\/GONE\.ts"/);
     } finally {
@@ -1651,7 +1646,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
   it("fails (exit 2) on a stale inline command reference", () => {
     const dir = scaffold(`# P\n\n<!-- vigiles:cmd "npm run ghost" -->\n`);
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /Script "ghost" not found/);
     } finally {
@@ -1664,7 +1659,7 @@ describe("CLI: markdown-mode file/cmd verification", () => {
       `---\nvigiles:\n  files:\n    - src/real.ts\n    - src/MISSING.ts\n  commands:\n    - npm run build\n    - npm run ghost\n---\n\n# P\n`,
     );
     try {
-      const { stdout, exitCode } = run("audit CLAUDE.md", dir);
+      const { stdout, exitCode } = run("lint CLAUDE.md", dir);
       assert.equal(exitCode, 2);
       assert.match(stdout, /File not found: "src\/MISSING\.ts"/);
       assert.match(stdout, /Script "ghost" not found/);

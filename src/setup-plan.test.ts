@@ -45,22 +45,14 @@ test("parseSetupArgs reads --lint / --no-test / --harness", () => {
   assert.equal(parseSetupArgs([]).test, undefined);
 });
 
-test("parseSetupArgs: --verify/--testing are deprecated aliases for --lint/--test", () => {
-  const p = parseSetupArgs(["--verify", "--no-testing"]);
-  assert.equal(p.lint, true);
-  assert.equal(p.test, false);
-});
-
-test("parseSetupArgs: deprecated --pillars alias maps onto lint/test", () => {
-  const both = parseSetupArgs(["--pillars=both"]);
-  assert.equal(both.lint, true);
-  assert.equal(both.test, true);
-  const v = parseSetupArgs(["--pillars=verify"]);
-  assert.equal(v.lint, true);
-  assert.equal(v.test, false);
-  const bad = parseSetupArgs(["--pillars=nonsense"]);
-  assert.equal(bad.lint, undefined);
-  assert.equal(bad.test, undefined);
+test("parseSetupArgs: the old --verify/--testing/--pillars flags are gone", () => {
+  // Clean break — they no longer select a pillar (treated as unknown flags).
+  const p = parseSetupArgs(["--verify", "--testing"]);
+  assert.equal(p.lint, undefined);
+  assert.equal(p.test, undefined);
+  const q = parseSetupArgs(["--pillars=test"]);
+  assert.equal(q.lint, undefined);
+  assert.equal(q.test, undefined);
 });
 
 test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {

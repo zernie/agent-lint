@@ -53,34 +53,14 @@ function boolFlag(args: readonly string[], name: string): boolean | undefined {
 }
 
 /** Parse `init` args into the choices the user pinned. The two pillars are
- * `--lint` / `--test`; `--verify` / `--testing` are deprecated aliases. */
+ * selected with `--lint` / `--test`. */
 export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
-  // `--lint` is primary; `--verify` is the deprecated alias (and likewise
-  // `--test` / `--testing`). `??` keeps an explicit `--no-*` (false) over an alias.
-  let lint = boolFlag(args, "lint") ?? boolFlag(args, "verify");
-  let test = boolFlag(args, "test") ?? boolFlag(args, "testing");
-
-  // Deprecated alias: `--pillars=verify|test|both` maps onto the two flags.
-  const pillarsRaw = flagValue(args, "--pillars=");
-  if (lint === undefined && test === undefined) {
-    if (pillarsRaw === "verify") {
-      lint = true;
-      test = false;
-    } else if (pillarsRaw === "test") {
-      lint = false;
-      test = true;
-    } else if (pillarsRaw === "both") {
-      lint = true;
-      test = true;
-    }
-  }
-
   return {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
     yes: args.includes("--yes") || args.includes("-y"),
-    lint,
-    test,
+    lint: boolFlag(args, "lint"),
+    test: boolFlag(args, "test"),
     harness: flagValue(args, "--harness="),
     gha: args.includes("--no-gha") ? false : undefined,
     plugin: args.includes("--no-plugin") ? false : undefined,
