@@ -12,14 +12,10 @@
  * `vigiles/e2e`.
  */
 export * from "./harness-assert.js";
-export {
-  runHook,
-  parseHookOutput,
-  decideHook,
-} from "./adapters/claude-code/run-hook.js";
+export { runHook, parseHookOutput, decideHook } from "./run-hook.js";
 export type {
   HookInput,
   HookOutput,
   HookRunResult,
   RunHookOptions,
-} from "./adapters/claude-code/run-hook.js";
+} from "./run-hook.js";
