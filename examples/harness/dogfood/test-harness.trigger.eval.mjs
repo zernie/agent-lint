@@ -35,6 +35,7 @@ const skill = "vigiles:test-harness";
 
 const report = await measureTriggerRate({
   pluginDir,
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // SHOULD fire — harness-testing requests in varied phrasings (>= 10, the
   // diversity gate rejects a too-small or near-duplicate set before any run):
   prompts: [

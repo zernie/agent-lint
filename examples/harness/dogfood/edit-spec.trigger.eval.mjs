@@ -30,6 +30,7 @@ const skill = "vigiles:edit-spec";
 
 const report = await measureTriggerRate({
   pluginDir,
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // SHOULD fire — requests to change the compiled instruction file via its spec
   // (>= 10 varied phrasings; the diversity gate rejects a thin set up front):
   prompts: [

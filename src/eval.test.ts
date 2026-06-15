@@ -22,6 +22,7 @@ import {
   measureTriggerRateWith,
   formatTriggerRateReport,
   packageSkillsDir,
+  stubSkillBody,
   promptDistance,
   checkPromptDiversity,
   assertPromptDiversity,
@@ -335,6 +336,43 @@ test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
   cleanupTmpDir(dir);
 });
 
+test("stubSkillBody keeps frontmatter, drops the body", () => {
+  const out = stubSkillBody(
+    "---\nname: foo\ndescription: does foo\ndisable-model-invocation: false\n---\n\n# Big procedure\nStep 1: read files\nStep 2: run commands\n",
+  );
+  // Frontmatter (the trigger surface) survives verbatim.
+  assert.ok(/^---\nname: foo\ndescription: does foo/.test(out));
+  // The expensive body is gone.
+  assert.ok(!out.includes("Step 1: read files"));
+  assert.ok(out.includes("trigger-test stub"));
+  // No frontmatter → still produces a stub (no crash).
+  assert.ok(stubSkillBody("just a body, no frontmatter").includes("stub"));
+});
+
+test("packageSkillsDir { stub } writes frontmatter-only skills (no body, no references)", () => {
+  const dir = makeTmpDir("pkg-stub");
+  const skills = join(dir, "skills");
+  mkdirSync(join(skills, "foo", "references"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the whole thing\n",
+  );
+  writeFileSync(join(skills, "foo", "references", "big.md"), "x".repeat(5000));
+
+  const pkg = packageSkillsDir(skills, { stub: true, name: "vigiles" });
+  const md = readFileSync(join(pkg, "skills", "foo", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: does foo")); // trigger surface kept
+  assert.ok(!md.includes("run the whole thing")); // body stripped
+  // references/ are not copied in stub mode (the body won't run).
+  assert.ok(!existsSync(join(pkg, "skills", "foo", "references")));
+  // plugin name preserved so `<name>:<skill>` still matches.
+  const manifest = JSON.parse(
+    readFileSync(join(pkg, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles");
+  cleanupTmpDir(dir);
+});
+
 test("packageSkillsDir throws when the dir has no <name>/SKILL.md", () => {
   const dir = makeTmpDir("pkg-empty");
   mkdirSync(join(dir, "skills"), { recursive: true });
@@ -379,6 +417,47 @@ test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir",
   const used = seen[0]?.pluginDir;
   assert.ok(used && used !== skills, "a packaged plugin dir was used");
   assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith stubSkillBodies strips the body in the packaged plugin", async () => {
+  const dir = makeTmpDir("trigger-stub");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  let seenBody = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    // Read the packaged skill DURING the run (before cleanup).
+    if (a.pluginDir)
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      stubSkillBodies: true,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
   cleanupTmpDir(dir);
 });
 

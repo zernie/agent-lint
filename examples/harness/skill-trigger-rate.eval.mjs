@@ -32,8 +32,9 @@ const skill = "superpowers:test-driven-development";
 
 const report = await measureTriggerRate({
   pluginDir,
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
   // Aim for >= 10 varied phrasings — measureTriggerRate runs a deterministic
-  // diversity gate (min count + near-duplicate Levenshtein check) before
+  // diversity gate (min count + near-duplicate NCD check) before
   // spending any tokens, so a thin or copy-pasted set is rejected up front.
   prompts: [
     "Add an `isEven(n)` function to utils.js — write it test-first.",
