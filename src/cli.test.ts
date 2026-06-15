@@ -989,7 +989,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     const dir = freshProject();
     try {
       const { stdout } = run("init --no-plugin", dir);
-      assert.match(stdout, /pillars: verify \+ test/);
+      assert.match(stdout, /pillars: lint \+ test/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
       const wf = join(dir, ".github/workflows/vigiles.yml");
@@ -1002,10 +1002,10 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--testing: only the harness starter, no spec/workflow", () => {
+  it("--test: only the harness starter, no spec/workflow", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --testing --no-plugin --no-gha", dir);
+      const { stdout } = run("init --test --no-plugin --no-gha", dir);
       assert.match(stdout, /pillars: test/);
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
       assert.ok(!existsSync(join(dir, "CLAUDE.md.spec.ts")), "no spec");
@@ -1018,11 +1018,11 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--verify: spec only, no harness", () => {
+  it("--lint: spec only, no harness", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --verify --no-plugin --no-gha", dir);
-      assert.match(stdout, /pillars: verify/);
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      assert.match(stdout, /pillars: lint/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
     } finally {
@@ -1030,12 +1030,17 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("the deprecated --pillars alias still works", () => {
+  it("deprecated --pillars / --verify / --testing aliases still work", () => {
     const dir = freshProject();
     try {
-      const { stdout } = run("init --pillars=test --no-plugin --no-gha", dir);
-      assert.match(stdout, /pillars: test/);
+      // --pillars alias
+      let out = run("init --pillars=test --no-plugin --no-gha", dir).stdout;
+      assert.match(out, /pillars: test/);
       assert.ok(existsSync(join(dir, "vigiles.harness.mjs")), "harness");
+      rmSync(join(dir, "vigiles.harness.mjs"));
+      // --verify / --testing aliases map to --lint / --test
+      out = run("init --verify --no-plugin --no-gha", dir).stdout;
+      assert.match(out, /pillars: lint/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1052,7 +1057,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
           dependencies: { vigiles: "github:zernie/vigiles#abc123" },
         }),
       );
-      run("init --testing --no-plugin --no-gha", dir);
+      run("init --test --no-plugin --no-gha", dir);
       const pkg = JSON.parse(
         readFileSync(join(dir, "package.json"), "utf-8"),
       ) as {
@@ -1076,7 +1081,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     const dir = freshProject();
     try {
       writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n\nKeep me.\n");
-      run("init --verify --no-plugin --no-gha", dir);
+      run("init --lint --no-plugin --no-gha", dir);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec scaffolded");
       // The hand-written file must be untouched (no compile-over).
       const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
@@ -1274,10 +1279,7 @@ describe("CLI: installation smoke test (deterministic)", () => {
       );
       // Ruler is keyed on its .ruler/ source dir; it regenerates CLAUDE.md.
       mkdirSync(join(dir, ".ruler"), { recursive: true });
-      const { stdout, exitCode } = run(
-        "init --verify --no-plugin --no-gha",
-        dir,
-      );
+      const { stdout, exitCode } = run("init --lint --no-plugin --no-gha", dir);
       assert.equal(exitCode, 0, stdout);
       assert.match(stdout, /ruler detected/i);
       // The spec compiles into Ruler's source slot; Ruler distributes from there.

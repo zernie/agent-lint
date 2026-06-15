@@ -11,9 +11,9 @@
 
 /** What `vigiles init` will set up. */
 export interface SetupPlan {
-  /** Pillar 1 — verify instruction files (specs, types, compile, audit, hooks). */
-  verify: boolean;
-  /** Pillar 2 — test the harness (scaffold a starter harness test + CI job). */
+  /** Lint pillar — verify instruction-file references (specs, types, compile, lint/audit, hooks). */
+  lint: boolean;
+  /** Test pillar — test the harness (scaffold a starter harness test + CI job). */
   test: boolean;
   /** Wire CI (the `zernie/vigiles@v1` Action; creates a workflow if none). */
   gha: boolean;
@@ -28,10 +28,10 @@ export interface ParsedSetupArgs {
   target?: string;
   strict: boolean;
   yes: boolean;
-  /** Pillar 1 — `--verify` → true, `--no-verify` → false, absent → undefined. */
-  verify?: boolean;
-  /** Pillar 2 — `--testing` → true, `--no-testing` → false, absent → undefined. */
-  testing?: boolean;
+  /** Lint pillar — `--lint` → true, `--no-lint` → false, absent → undefined. */
+  lint?: boolean;
+  /** Test pillar — `--test` → true, `--no-test` → false, absent → undefined. */
+  test?: boolean;
   /** `--harness=claude,codex` override (empty = auto-detect). */
   harness?: string;
   gha?: boolean;
@@ -52,24 +52,26 @@ function boolFlag(args: readonly string[], name: string): boolean | undefined {
   return undefined;
 }
 
-/** Parse `init` args into the choices the user pinned. */
+/** Parse `init` args into the choices the user pinned. The two pillars are
+ * `--lint` / `--test`; `--verify` / `--testing` are deprecated aliases. */
 export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
-  let verify = boolFlag(args, "verify");
-  let testing = boolFlag(args, "testing");
+  // `--lint` is primary; `--verify` is the deprecated alias (and likewise
+  // `--test` / `--testing`). `??` keeps an explicit `--no-*` (false) over an alias.
+  let lint = boolFlag(args, "lint") ?? boolFlag(args, "verify");
+  let test = boolFlag(args, "test") ?? boolFlag(args, "testing");
 
-  // Deprecated alias: `--pillars=verify|test|both` maps onto the two flags, so
-  // old invocations keep working. The pair of boolean flags is the public API.
+  // Deprecated alias: `--pillars=verify|test|both` maps onto the two flags.
   const pillarsRaw = flagValue(args, "--pillars=");
-  if (verify === undefined && testing === undefined) {
+  if (lint === undefined && test === undefined) {
     if (pillarsRaw === "verify") {
-      verify = true;
-      testing = false;
+      lint = true;
+      test = false;
     } else if (pillarsRaw === "test") {
-      verify = false;
-      testing = true;
+      lint = false;
+      test = true;
     } else if (pillarsRaw === "both") {
-      verify = true;
-      testing = true;
+      lint = true;
+      test = true;
     }
   }
 
@@ -77,8 +79,8 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
     yes: args.includes("--yes") || args.includes("-y"),
-    verify,
-    testing,
+    lint,
+    test,
     harness: flagValue(args, "--harness="),
     gha: args.includes("--no-gha") ? false : undefined,
     plugin: args.includes("--no-plugin") ? false : undefined,
@@ -87,7 +89,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
 
 /** The non-interactive defaults: both pillars, CI, and the plugin. */
 export function defaultPlan(strict = false): SetupPlan {
-  return { verify: true, test: true, gha: true, plugin: true, strict };
+  return { lint: true, test: true, gha: true, plugin: true, strict };
 }
 
 /**
@@ -97,8 +99,7 @@ export function defaultPlan(strict = false): SetupPlan {
  */
 export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
   if (!isTTY || parsed.yes || parsed.target) return false;
-  const pillarsPinned =
-    parsed.verify !== undefined || parsed.testing !== undefined;
+  const pillarsPinned = parsed.lint !== undefined || parsed.test !== undefined;
   const allPinned =
     pillarsPinned && parsed.gha !== undefined && parsed.plugin !== undefined;
   return !allPinned;
@@ -106,31 +107,26 @@ export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "verify" | "test" | "gha" | "plugin">
+  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin">
 >;
 
 /**
- * Resolve the final plan: defaults, then flags, then interactive answers (each
- * layer overrides the previous only where it has an opinion). `--target` pins a
- * bare Pillar-1 spec (no harness scaffold).
- */
-/**
- * Apply the pillar flags. A positive flag (`--verify` and/or `--testing`) is an
+ * Apply the pillar flags. A positive flag (`--lint` and/or `--test`) is an
  * explicit SELECTION — enable exactly the named pillars. Otherwise default to
  * both and let a `--no-*` flag drop one.
  */
 function applyPillarFlags(plan: SetupPlan, parsed: ParsedSetupArgs): void {
-  if (parsed.verify === true || parsed.testing === true) {
-    plan.verify = parsed.verify === true;
-    plan.test = parsed.testing === true;
+  if (parsed.lint === true || parsed.test === true) {
+    plan.lint = parsed.lint === true;
+    plan.test = parsed.test === true;
     return;
   }
-  if (parsed.verify === false) plan.verify = false;
-  if (parsed.testing === false) plan.test = false;
+  if (parsed.lint === false) plan.lint = false;
+  if (parsed.test === false) plan.test = false;
 }
 
 function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
-  if (answers.verify !== undefined) plan.verify = answers.verify;
+  if (answers.lint !== undefined) plan.lint = answers.lint;
   if (answers.test !== undefined) plan.test = answers.test;
   if (answers.gha !== undefined) plan.gha = answers.gha;
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
@@ -223,6 +219,11 @@ export function planPluginInstall(
   });
 }
 
+/**
+ * Resolve the final plan: defaults, then flags, then interactive answers (each
+ * layer overrides the previous only where it has an opinion). `--target` pins a
+ * bare lint-pillar spec (no harness scaffold).
+ */
 export function resolvePlan(
   parsed: ParsedSetupArgs,
   answers?: SetupAnswers,

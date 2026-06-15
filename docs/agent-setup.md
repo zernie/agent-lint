@@ -32,12 +32,12 @@ npx vigiles init        # or `npx vigiles init --yes` to be explicit
 `init` auto-detects a non-TTY (an agent / CI / piped input) and runs
 **non-interactively** — no prompts, no hanging. So a user prompt as simple as
 _"set up vigiles in this repo"_ works: the agent runs `npx vigiles init` and gets
-sensible defaults. With the defaults it sets up **both pillars** — a typed spec +
-types (Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), a
+sensible defaults. With the defaults it sets up **both pillars** — Lint (a typed
+spec + types) and Test (a starter `vigiles.harness.mjs`), a
 `zernie/vigiles@v1` CI workflow (`.github/workflows/vigiles.yml`), `vigiles` added
 to `devDependencies`, and the Claude Code plugin installed via the marketplace.
 
-Scope it with flags when needed: `--verify`, `--testing` (one pillar or both),
+Scope it with flags when needed: `--lint`, `--test` (one pillar or both),
 `--harness=claude,codex`, `--no-gha`, `--no-plugin`, `--strict`. (A human running
 it in a terminal gets interactive prompts instead.)
 
@@ -75,7 +75,7 @@ The agent should read the generated `.spec.ts` file and fill in the project's ac
 
 ```bash
 npx vigiles compile
-npx vigiles audit
+npx vigiles lint
 ```
 
 ## Recommended Agent Prompt

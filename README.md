@@ -27,16 +27,16 @@ deterministic layer for the harness: it **lints** the references your instructio
 files make and **tests** that your hooks and skills actually fire. Two independent
 pillars — adopt either, or both:
 
-|       | Pillar                            | What it does                                                                                                                                                                                                |
-| ----- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **①** | **Verify your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md) |
-| **②** | **Test your harness**             | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key) before you pay for an eval. → [guide](docs/harness-testing.md)                     |
+|       | Pillar                          | What it does                                                                                                                                                                                                |
+| ----- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **①** | **Lint your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md) |
+| **②** | **Test your harness**           | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key) before you pay for an eval. → [guide](docs/harness-testing.md)                     |
 
 Neither pillar depends on the other — pick the one that hurts today. **Works with
 Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) behind a five-port
 adapter; [custom adapters welcome](docs/authoring-an-adapter.md).
 
-## ① Verify — your CLAUDE.md lies to your agent
+## ① Lint — your CLAUDE.md lies to your agent
 
 Your CLAUDE.md says _"enforce `eslint/no-console`."_ But it was switched off
 months ago — and the agent trusts the claim. (Same story for the file path it
@@ -44,7 +44,7 @@ cites that got renamed, and the script that was deleted.)
 
 **Without vigiles:** nobody checks. The agent acts on fiction.
 
-**With vigiles:** `npx vigiles audit` resolves every reference against reality —
+**With vigiles:** `npx vigiles lint` resolves every reference against reality —
 
 ```text
 CLAUDE.md (inline mode):
@@ -118,7 +118,7 @@ It's interactive in a terminal and non-interactive for agents/CI (or with
 `--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
 it installs a model-invocable **`test-harness` skill**, so afterward you can just
 tell your agent _"test my skills"_ and it picks the tier and writes the test.
-Scope `init` with `--verify` / `--testing` (one pillar or both). Or write harness
+Scope `init` with `--lint` / `--test` (one pillar or both). Or write harness
 tests yourself in JS **or** TS (`*.harness.{mjs,ts}`) and run `npx vigiles test`.
 `init` also adds `vigiles` to your `devDependencies` and installs the Claude Code
 plugin (skills + hooks) via the marketplace — globally, never vendored into your
@@ -126,12 +126,12 @@ repo. It wires CI as a `zernie/vigiles@v1` workflow — a composite over the sam
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: zernie/vigiles@v1 # audits by default; posts a sticky PR comment + a `valid` output
+- uses: zernie/vigiles@v1 # lints by default; posts a sticky PR comment + a `valid` output
 ```
 
 ## More
 
-- **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `audit` rules.
+- **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `lint` rules.
 - **[Skills →](docs/skills.md)** — consumer skills (`strengthen`, `migrate-to-spec`, `test-harness`, `edit-spec`, …) installed as a Claude Code plugin: `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles` (or let `vigiles init` do it).
 - **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
 - Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).

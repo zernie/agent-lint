@@ -1400,12 +1400,13 @@ export default claude({${targetLine}
 // ---------------------------------------------------------------------------
 
 /** Full GitHub Actions workflow that wires the production `zernie/vigiles@v1`
- * Action (Pillar 1) and, when Pillar 2 is set up, a deterministic harness job. */
+ * Action (lint pillar) and, when the test pillar is set up, a deterministic
+ * harness job. */
 function vigilesWorkflow(plan: SetupPlan): string {
   const harness = plan.test
     ? `
   harness:
-    # Pillar 2 — run your *.harness.{mjs,ts} tests against the real agent CLI and
+    # Test pillar — run your *.harness.{mjs,ts} tests against the real agent CLI and
     # a scripted mock model (deterministic, no API key). Drop this job if you only
     # author runHook unit tests, or keep it for the deterministic tier.
     runs-on: ubuntu-latest
@@ -1430,9 +1431,9 @@ permissions:
   pull-requests: write # for the sticky PR comment
 
 jobs:
-  verify:
-    # Pillar 1 — verify the references in your instruction files (composite Action
-    # over the published CLI). Posts a sticky PR comment + a \`valid\` output.
+  lint:
+    # Lint pillar — verify the references in your instruction files (composite
+    # Action over the published CLI). Posts a sticky PR comment + a \`valid\` output.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1557,7 +1558,7 @@ async function promptSetup(): Promise<SetupAnswers> {
   const isYes = (s: string): boolean => /^y(es)?$/i.test(s);
   try {
     const pillars = (
-      await ask("Set up which pillars? [both/verify/test] (both): ", "both")
+      await ask("Set up which pillars? [both/lint/test] (both): ", "both")
     ).toLowerCase();
     const gha = isYes(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
     const plugin = isYes(
@@ -1567,8 +1568,8 @@ async function promptSetup(): Promise<SetupAnswers> {
       ),
     );
     return {
-      verify: pillars !== "test",
-      test: pillars !== "verify",
+      lint: pillars !== "test",
+      test: pillars !== "lint" && pillars !== "verify",
       gha,
       plugin,
     };
@@ -2038,7 +2039,7 @@ async function setup(args: string[]): Promise<void> {
     plan = resolvePlan(parsed, await promptSetup());
   }
 
-  const pillars = [plan.verify && "verify", plan.test && "test"]
+  const pillars = [plan.lint && "lint", plan.test && "test"]
     .filter(Boolean)
     .join(" + ");
   console.log(
@@ -2053,10 +2054,10 @@ async function setup(args: string[]): Promise<void> {
   // Files actually written, accumulated for an honest commit hint.
   const written: string[] = [];
 
-  // Pillar 1 — verify instruction files.
+  // Lint pillar — verify instruction-file references.
   let targets: string[] = [];
   let needsMigration: string[] = [];
-  if (plan.verify) {
+  if (plan.lint) {
     console.log("");
     const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
@@ -2064,14 +2065,14 @@ async function setup(args: string[]): Promise<void> {
     written.push(...p1.written);
   }
 
-  // Pillar 2 — test the harness.
+  // Test pillar — test the harness.
   if (plan.test) {
     console.log("");
     written.push(...scaffoldPillar2());
   }
 
   // Add/upgrade the vigiles dev dependency (both pillars import from it).
-  if (plan.verify || plan.test) {
+  if (plan.lint || plan.test) {
     written.push(...ensureVigilesDevDep());
   }
 
@@ -2466,11 +2467,11 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--verify, --testing, --harness=, --strict, --no-gha)",
+    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
-    "  vigiles audit [files...]       Verify, find gaps, suggest improvements",
+    "  vigiles lint [files...]        Verify references, find gaps (alias: audit)",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -2877,8 +2878,9 @@ async function main(): Promise<void> {
       break;
     }
 
+    case "lint": // `lint` is the canonical name for the verify pillar's command
     case "audit": {
-      // audit = verify + discover + guidance count
+      // audit/lint = verify references + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
       const report = await audit(restArgs, flags, config);
       annotateAuditForGitHub(report, flags);

@@ -1,7 +1,7 @@
 # CLI & CI reference
 
 Full command-line surface, the GitHub Action, the Claude Code plugin, and the
-`vigiles audit` validation rules. For the pitch and quick start, see the
+`vigiles lint` validation rules. For the pitch and quick start, see the
 [README](../README.md).
 
 ## Commands
@@ -9,7 +9,7 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles audit [files...]        # Verify hashes + inline/frontmatter/spec rules + symbols + coverage
+npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (alias: audit)
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
@@ -27,8 +27,9 @@ Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
 default; in a CI job that **asserts** the capability is present, add `--no-skip`
 so a skipped tier **fails** (a green-with-skips is untested surface).
 
-By default `init` sets up **both pillars**: it scaffolds a typed spec + types
-(Pillar 1), a starter `vigiles.harness.mjs` (Pillar 2), wires CI as a
+By default `init` sets up **both pillars** — **Lint** (verify instruction-file
+references) and **Test** (test the harness): it scaffolds a typed spec + types
+(Lint), a starter `vigiles.harness.mjs` (Test), wires CI as a
 `zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none
 exists), and installs the Claude Code plugin.
 
@@ -39,22 +40,23 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                         | Effect                                                           |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `--yes`, `-y`                | Skip prompts; use defaults (both pillars, CI, plugin)            |
-| `--verify` / `--no-verify`   | Pillar 1 — verify instruction-file references (default on)       |
-| `--testing` / `--no-testing` | Pillar 2 — scaffold a harness test (default on)                  |
-| `--harness=claude,codex`     | Which harness(es) to set up (default: auto-detect from the repo) |
-| `--no-gha`                   | Skip wiring CI                                                   |
-| `--no-plugin`                | Skip installing the Claude Code plugin                           |
-| `--strict`                   | Set `require-spec` / `require-skill-spec` to `"error"`           |
-| `--target=AGENTS.md`         | Create a bare spec for one file (Pillar 1 only)                  |
+| Flag                     | Effect                                                           |
+| ------------------------ | ---------------------------------------------------------------- |
+| `--yes`, `-y`            | Skip prompts; use defaults (both pillars, CI, plugin)            |
+| `--lint` / `--no-lint`   | Lint pillar — verify instruction-file references (default on)    |
+| `--test` / `--no-test`   | Test pillar — scaffold a harness test (default on)               |
+| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
+| `--no-gha`               | Skip wiring CI                                                   |
+| `--no-plugin`            | Skip installing the Claude Code plugin                           |
+| `--strict`               | Set `require-spec` / `require-skill-spec` to `"error"`           |
+| `--target=AGENTS.md`     | Create a bare spec for one file (Lint pillar only)               |
 
-Passing a single positive pillar flag selects only it (`--verify` = pillar 1
-only); pass both, or neither, for both. `init` also adds `vigiles` to your
+Passing a single positive pillar flag selects only it (`--lint` = the Lint
+pillar only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
-scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`. (The deprecated
-`--pillars=both|verify|test` still works as an alias.)
+scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`. (The old
+`--verify` / `--testing` and `--pillars=both|verify|test` flags still work as
+aliases.)
 
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).
@@ -115,10 +117,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: zernie/vigiles@v1 # runs `audit` by default
+      - uses: zernie/vigiles@v1 # runs `lint` by default
 ```
 
-That's the whole thing — `audit` verifies that every linter rule, file path,
+That's the whole thing — `lint` verifies that every linter rule, file path,
 script, and symbol your `CLAUDE.md` / `AGENTS.md` cites is real and enabled, checks
 the integrity hashes, and reports coverage. Failures appear inline as GitHub
 annotations and fail the job.
@@ -134,16 +136,16 @@ annotations and fail the job.
 
 ### Inputs
 
-| Input               | Default   | Description                                                                                 |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `command`           | `audit`   | `audit` (verify references + integrity + coverage) or `compile` (specs → markdown).         |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `audit`, `.spec.ts` for `compile`. Auto-discovers.  |
-| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
-| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
-| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
-| `working-directory` | `.`       | Directory to run vigiles in.                                                                |
-| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
-| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
+| Input               | Default   | Description                                                                                       |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `command`           | `lint`    | `lint` (verify references + integrity + coverage; alias `audit`) or `compile` (specs → markdown). |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.         |
+| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build.       |
+| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                       |
+| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).        |
+| `working-directory` | `.`       | Directory to run vigiles in.                                                                      |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                        |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                 |
 
 ### Output channels
 
@@ -251,7 +253,7 @@ want compile-on-edit.
 
 ## Validation rules
 
-`vigiles audit` validates instruction files; the refs-hook nudges marking on edit:
+`vigiles lint` validates instruction files; the refs-hook nudges marking on edit:
 
 | Rule                                                | Default  | What it checks                                                                  |
 | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
