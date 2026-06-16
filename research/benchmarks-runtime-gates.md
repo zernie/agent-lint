@@ -85,7 +85,7 @@ A different kind of hook: not a runtime gate on a task outcome, but the
 `<!-- vigiles:ignore -->`. Task: "document these functions in a SKILL.md,
 referencing them by name." `vanilla` has no hook; `gated` blocks any unmarked
 code reference. The payoff metric: after the run, rename a documented function in
-the code — does `vigiles audit` catch the now-broken reference? Harness:
+the code — does `vigiles lint` catch the now-broken reference? Harness:
 `bench/run-refs.sh`. (Run with the `foo(args)` detection fix so the hook
 challenges the dominant function-call form, not just bare identifiers.)
 
@@ -106,7 +106,7 @@ to opt out, and the agent takes it.
 The decisive distinction this benchmark draws:
 
 - **Verification is sound and non-gameable.** `symbol("file", "name")` in a spec
-  (the author writes it deliberately; compile-verified) and `audit` on a real
+  (the author writes it deliberately; compile-verified) and `lint` on a real
   `vigiles:symbol` mark catch a rename deterministically — proven in the unit/E2E
   suite and by the 2/6 gated runs that did mark. The author/spec _declares_;
   vigiles _verifies_. No model behaviour can fake whether a file defines a symbol.
@@ -160,7 +160,7 @@ regardless of model).
    sharpens the line: the deterministic _verification_ of a reference (does this
    file define this symbol / does this rule exist) is the non-gameable win, but
    the _hook that forces the agent to declare references_ is gamed like any gate.
-   Lead with `symbol()` / declared marks and `audit`; treat the forcing hook as
+   Lead with `symbol()` / declared marks and `lint`; treat the forcing hook as
    best-effort, not a guarantee.
 
 ## Caveats

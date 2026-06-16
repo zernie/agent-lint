@@ -1,20 +1,15 @@
 /**
- * `vigiles/e2e` — the **deterministic** end-to-end tier (real sandbox + real
- * network, but a definite pass/fail).
+ * `vigiles/e2e` — DEPRECATED back-compat alias for [`vigiles/integration`](./integration.ts).
  *
- * Re-exports everything in [`vigiles/integration`](./integration.ts) and adds the
- * real-egress capability: `egressRoutes()` (probe whether allowlisted egress can
- * actually route) and — by re-export — `runHook` used with `egress: { allow }`
- * (allowlisted real outbound). Capability contract: needs a **routable rootless
- * sandbox + real network**, and each test self-skips via `egressRoutes()` where
- * that's unavailable. Still a **verification** tier — you assert pass/fail.
+ * There is no separate "e2e" tier: real **egress** is a *capability* of the
+ * harness/integration scope (`egressRoutes()` + `runHook`'s `egress: { allow }`),
+ * not a different kind of test — the old `e2e` barrel added exactly one symbol
+ * over `integration`, which is the definition of a non-tier. It now lives on
+ * `vigiles/integration`; this entry re-exports it unchanged so existing imports
+ * keep working. See `research/testing-api-design.md` Part 4 (two scopes, not
+ * four tiers). Prefer `vigiles/integration`.
  *
- * NOT here: **evals** (`runEval` / `measureTriggerRate` / `judge`). Those are a
- * different axis — **non-deterministic measurement** (real model, mean ± se), run
- * via `vigiles eval` on `*.eval.mjs`. Import them from
- * [`vigiles/eval`](./eval.ts) + [`vigiles/judge`](./judge.ts), not from here.
+ * NOT here: **evals** (`runEval` / `measure` / `measureTriggerRate` / `judge`) —
+ * those are non-deterministic measurement (`vigiles/eval`), a different axis.
  */
 export * from "./integration.js";
-// The real-egress capability probe (the egress-using runHook is already re-exported
-// via the integration→unit chain).
-export { egressRoutes } from "./run-hook.js";

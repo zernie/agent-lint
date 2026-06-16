@@ -191,10 +191,10 @@ a conversation; large files re-verify from scratch.
 ### 4.4 `vigiles verify` CLI command on spec-annotated blocks
 
 New CLI verb that scans the spec for `verify()` rules, extracts the referenced
-proof obligations, runs the chosen prover, and produces an audit report. Same
+proof obligations, runs the chosen prover, and produces an lint report. Same
 shape as `vigiles check`.
 
-Pros: matches vigiles' current audit-at-commit-time model; deterministic; easy
+Pros: matches vigiles' current lint-at-commit-time model; deterministic; easy
 to integrate with CI; does not require Claude at all. Cons: not interactive —
 if verification fails, the user/agent has to loop manually.
 
@@ -400,7 +400,7 @@ vigiles's compiler transforms a spec into markdown. These properties should hold
 
 2. **Differential testing**: generate random specs (fast-check style), run them through both the Lean model and the TypeScript compiler, assert outputs match. This catches implementation bugs without writing Lean proofs for every edge case.
 
-3. **Leanstral for proof authoring**: use Leanstral (via MCP or API) to draft the Lean proofs. Human reviews. This is the "agent writes proofs, kernel checks them, human audits" workflow.
+3. **Leanstral for proof authoring**: use Leanstral (via MCP or API) to draft the Lean proofs. Human reviews. This is the "agent writes proofs, kernel checks them, human lints" workflow.
 
 ### 7.3. What NOT to verify
 

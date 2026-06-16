@@ -62,7 +62,7 @@ compliance" split.
 Three commitment levels, mirroring the existing adoption ladder.
 
 **1 — Marks (manual, Level 0).** Author the orchestrator in a command/agent `.md`
-and annotate it with marks `vigiles audit` verifies (and optionally compiles to
+and annotate it with marks `vigiles lint` verifies (and optionally compiles to
 hooks):
 
     <!-- vigiles:delegate code-reviewer -->     # target subagent must exist

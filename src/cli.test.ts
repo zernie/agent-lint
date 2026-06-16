@@ -65,6 +65,20 @@ describe("CLI: vigiles init", () => {
     assert.ok(existsSync(join(tmpDir, "CLAUDE.md.spec.ts")));
   });
 
+  it("scaffolds a spec that imports ONLY what it uses (no unused-vars under strict ESLint)", () => {
+    run("init --target=LINTSAFE.md", tmpDir);
+    const content = readFileSync(join(tmpDir, "LINTSAFE.md.spec.ts"), "utf-8");
+    // The live import must bring in only `claude` (the one symbol the scaffold
+    // uses); enforce/guidance appear solely in a COMMENTED import. A strict
+    // `no-unused-vars` + `--max-warnings=0` CI would fail otherwise.
+    const liveImport = content.split("\n").find((l) => l.startsWith("import "));
+    assert.equal(liveImport, 'import { claude } from "vigiles/spec";');
+    assert.ok(
+      content.includes("// import { claude, enforce, guidance }"),
+      "shows the fuller import as a comment for when rules are added",
+    );
+  });
+
   it("should not overwrite existing spec", () => {
     // Already created in previous test
     const { stdout } = run("init --no-plugin", tmpDir);
@@ -252,14 +266,14 @@ describe("CLI: vigiles compile", () => {
 });
 
 // ---------------------------------------------------------------------------
-// vigiles audit
+// vigiles lint
 // ---------------------------------------------------------------------------
 
 describe("CLI: vigiles lint", () => {
   let tmpDir: string;
 
   before(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-audit-"));
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-lint-"));
   });
 
   after(() => {
@@ -274,7 +288,7 @@ describe("CLI: vigiles lint", () => {
 
   it("should include coverage and strengthen output", () => {
     const { stdout } = run("lint", tmpDir);
-    // audit runs discover + strengthen in addition to verification
+    // lint runs discover + strengthen in addition to verification
     assert.ok(
       stdout.includes("coverage") ||
         stdout.includes("Linter") ||
@@ -283,7 +297,7 @@ describe("CLI: vigiles lint", () => {
   });
 
   it("should detect duplicate rules via NCD", () => {
-    const dupDir = mkdtempSync(join(tmpdir(), "vigiles-audit-dup-"));
+    const dupDir = mkdtempSync(join(tmpdir(), "vigiles-lint-dup-"));
     try {
       writeFileSync(
         join(dupDir, "package.json"),
@@ -316,11 +330,11 @@ export default claude({
   it("should skip inline verification for spec-managed files", () => {
     // A file with a sibling .spec.ts (and compiled-from header) must
     // not run inline verification, so literal vigiles:enforce snippets
-    // in prose cannot trip audit when the file is spec-managed.
+    // in prose cannot trip lint when the file is spec-managed.
     // We use a sibling-.spec.ts with the spec snippet embedded as a
-    // prose section — compile generates the valid hash, then audit
+    // prose section — compile generates the valid hash, then lint
     // must ignore the inline marker in the output.
-    const specDir = mkdtempSync(join(tmpdir(), "vigiles-audit-spec-skip-"));
+    const specDir = mkdtempSync(join(tmpdir(), "vigiles-lint-spec-skip-"));
     try {
       writeFileSync(
         join(specDir, "package.json"),
@@ -333,7 +347,7 @@ export default claude({
 export default claude({
   sections: {
     // A literal enforce marker embedded in prose — would be picked
-    // up as an inline rule if audit didn't skip spec-managed files.
+    // up as an inline rule if lint did not skip spec-managed files.
     example: 'Example: <!-- vigiles:enforce eslint/total-nonsense "prose" -->',
   },
   rules: {
@@ -763,7 +777,7 @@ describe("CLI: vigiles generate-schema", () => {
 
   it("includes configured custom-linter rules from rulesDir in the enum", () => {
     // A custom linter declared in .vigilesrc.json resolves its rules from a
-    // rulesDir. `vigiles audit` accepts `my-tool/no-foo`, so the schema enum
+    // rulesDir. `vigiles lint` accepts `my-tool/no-foo`, so the schema enum
     // must include it too (otherwise the YAML LSP false-flags a valid rule).
     const customDir = mkdtempSync(join(tmpdir(), "vigiles-schema-custom-"));
     symlinkSync(
@@ -1099,6 +1113,55 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       assert.match(stdout, /STALE/);
       // Not clobbered.
       assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("flags a workflow calling a renamed subcommand (audit→lint), even with the Action present", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      // The v3→v4 trap: an Action reference (so the bare-API heuristic passes)
+      // PLUS a leftover `npx vigiles audit` step that v4 no longer has.
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n" +
+        "      - uses: zernie/vigiles@v1\n" +
+        "      - run: npx vigiles audit\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin", dir);
+      assert.match(stdout, /STALE/);
+      assert.match(stdout, /vigiles audit/);
+      assert.match(stdout, /vigiles lint/);
+      assert.ok(
+        !/already exists \(up to date\)/.test(stdout),
+        "must not claim the stale workflow is up to date",
+      );
+      // Not clobbered — we warn, we don't rewrite.
+      assert.equal(readFileSync(join(wfDir, "vigiles.yml"), "utf-8"), stale);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--force rewrites a renamed-subcommand workflow in place (audit→lint), preserving the rest", () => {
+    const dir = freshProject();
+    try {
+      const wfDir = join(dir, ".github", "workflows");
+      mkdirSync(wfDir, { recursive: true });
+      const stale =
+        "name: vigiles\njobs:\n  v:\n    steps:\n" +
+        "      - uses: actions/checkout@v4\n" +
+        "      - run: npx vigiles audit\n";
+      writeFileSync(join(wfDir, "vigiles.yml"), stale);
+      const { stdout } = run("init --no-plugin --force", dir);
+      assert.match(stdout, /Rewrote/);
+      const after = readFileSync(join(wfDir, "vigiles.yml"), "utf-8");
+      assert.ok(after.includes("npx vigiles lint"), "audit → lint");
+      assert.ok(!after.includes("vigiles audit"), "no stale audit left");
+      // Surgical: the rest of the user's workflow is preserved.
+      assert.ok(after.includes("actions/checkout@v4"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1550,7 +1613,7 @@ describe("E2E: fixture project adoption", () => {
     );
   });
 
-  it("audit detects CLAUDE.md has no vigiles hash", () => {
+  it("lint detects CLAUDE.md has no vigiles hash", () => {
     const { stdout } = run("lint", workDir);
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
@@ -1566,7 +1629,7 @@ describe("E2E: fixture project adoption", () => {
     assert.ok(existsSync(join(workDir, ".vigiles/generated.d.ts")));
   });
 
-  it("full flow: write spec → compile → audit passes", () => {
+  it("full flow: write spec → compile → lint passes", () => {
     // Clean slate: remove any existing CLAUDE.md and spec
     const mdPath = join(workDir, "CLAUDE.md");
     const specPath = join(workDir, "CLAUDE.md.spec.ts");
@@ -1595,9 +1658,9 @@ export default claude({
     assert.ok(content.includes("<!-- vigiles:sha256:"));
 
     // Audit should pass (hash valid, spec exists)
-    const auditResult = run("lint", workDir);
+    const lintResult = run("lint", workDir);
     assert.ok(
-      auditResult.stdout.includes("hash valid") || auditResult.exitCode === 0,
+      lintResult.stdout.includes("hash valid") || lintResult.exitCode === 0,
     );
   });
 });

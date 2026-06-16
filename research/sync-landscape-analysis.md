@@ -57,7 +57,7 @@ examples/
 
 **Worth building?**
 
-- **MCP server mode:** speculative. The use case is "agent introspects the rules at runtime" — but vigiles compiles to markdown the agent already reads. The MCP value would be live audit ("is this rule still enabled in the linter config right now?") rather than spec-time check. Possibly useful for long-running sessions where configs change mid-session. Hold until someone asks for it.
+- **MCP server mode:** speculative. The use case is "agent introspects the rules at runtime" — but vigiles compiles to markdown the agent already reads. The MCP value would be live lint ("is this rule still enabled in the linter config right now?") rather than spec-time check. Possibly useful for long-running sessions where configs change mid-session. Hold until someone asks for it.
 - **Enterprise cascading:** complex and niche. The pattern is real (TypeScript's extends, Prettier's overrides), but the user count for org-level cascade is small. Defer until there's a concrete adopter pulling for it.
 
 ### ai-rules-sync (lbb00) — symlink-based sync across 8 editors

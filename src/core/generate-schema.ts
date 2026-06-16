@@ -27,7 +27,7 @@ export interface GenerateSchemaOptions {
   basePath?: string;
   /**
    * Custom linters from `.vigilesrc.json` (`rulesDir`-backed). These aren't
-   * auto-discovered by `generate-types`, but `vigiles audit` resolves their
+   * auto-discovered by `generate-types`, but `vigiles lint` resolves their
    * rules via `checkLinterRule`, so the schema enum must include them too —
    * otherwise the YAML LSP false-flags a rule that CI accepts.
    */
@@ -48,7 +48,7 @@ export interface GenerateSchemaResult {
 /**
  * Rule references for config-declared custom linters. Mirrors
  * `checkLinterRule`'s rulesDir lookup (any file `<rule>.*` is a rule) so the
- * enum matches what `vigiles audit` accepts for these linters.
+ * enum matches what `vigiles lint` accepts for these linters.
  */
 function customRuleRefs(
   basePath: string,
@@ -116,8 +116,7 @@ export function generateSchema(
         properties: {
           enforce: {
             type: "array",
-            description:
-              "Linter rules to enforce, verified by `vigiles audit`.",
+            description: "Linter rules to enforce, verified by `vigiles lint`.",
             items: {
               type: "object",
               additionalProperties: false,
@@ -139,13 +138,13 @@ export function generateSchema(
           files: {
             type: "array",
             description:
-              "File paths referenced by this instruction file, verified to exist by `vigiles audit`.",
+              "File paths referenced by this instruction file, verified to exist by `vigiles lint`.",
             items: { type: "string" },
           },
           commands: {
             type: "array",
             description:
-              "Commands (npm scripts / script-runner invocations) referenced here, verified by `vigiles audit`.",
+              "Commands (npm scripts / script-runner invocations) referenced here, verified by `vigiles lint`.",
             items: { type: "string" },
           },
         },

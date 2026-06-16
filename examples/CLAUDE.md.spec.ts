@@ -24,7 +24,7 @@ Core modules: \`src/spec.ts\` (types + builders), \`src/compile.ts\` (compiler),
     "src/compile.ts": "Compiler: spec → markdown with SHA-256 hash",
     "src/linters.ts": "Cross-referencing engine (7 catalogs incl. Cedar)",
     "src/generate-types.ts": "Type generator: project state → .d.ts",
-    "src/cli.ts": "CLI: init, compile, audit, test, eval, generate-types",
+    "src/cli.ts": "CLI: init, compile, lint, test, eval, generate-types",
   },
 
   commands: {

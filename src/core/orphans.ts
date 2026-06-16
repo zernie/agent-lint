@@ -13,7 +13,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, posix } from "node:path";
 import { globSync } from "glob";
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,14 @@ const DEFAULT_IGNORE = [
   ".git/**",
 ] as const;
 
+/**
+ * A doc carrying this marker opts out of orphan detection — the inline escape
+ * hatch, mirroring `vigiles-disable require-spec` and `vigiles:ignore-test`.
+ * Use it for an intentionally-unreferenced doc (a changelog, a top-level index)
+ * that nothing else links to but is not rot.
+ */
+const DISABLE_RE = /<!--\s*vigiles-disable\s+orphan-docs\s*-->/;
+
 // Match markdown links ](path.md) or ](path.md#anchor)
 const LINK_RE = /\]\(([^)\s]+\.md)(?:#[^)]*)?\)/g;
 
@@ -68,11 +76,54 @@ function normalizePath(p: string): string {
   return p.replace(/^\.\//, "").replace(/\\/g, "/");
 }
 
+/** True when a doc opts out of orphan detection via the inline disable marker. */
+function isOrphanExempt(absPath: string): boolean {
+  try {
+    return DISABLE_RE.test(readFileSync(absPath, "utf-8"));
+  } catch {
+    return false; // unreadable — treat like any other doc
+  }
+}
+
+/** Discover docs under `include`, dropping any that carry the inline opt-out. */
+function collectDocs(
+  basePath: string,
+  include: readonly string[],
+  ignore: readonly string[],
+): Set<string> {
+  const docs = new Set<string>();
+  for (const pattern of include) {
+    for (const p of globSync(pattern, { cwd: basePath, ignore: [...ignore] })) {
+      if (isOrphanExempt(resolve(basePath, p))) continue;
+      docs.add(normalizePath(p));
+    }
+  }
+  return docs;
+}
+
 function extractRefs(content: string): string[] {
   const refs: string[] = [];
   for (const m of content.matchAll(LINK_RE)) refs.push(normalizePath(m[1]));
   for (const m of content.matchAll(BACKTICK_RE)) refs.push(normalizePath(m[1]));
   return refs;
+}
+
+/**
+ * Repo-root-relative targets a reference could mean, from a given source file.
+ * Markdown links are conventionally **file-relative** (a `[x](foo.md)` in
+ * `research/README.md` points at `research/foo.md`, and `../docs/x.md` walks up),
+ * but docs also write **root-relative** paths (`research/foo.md` from anywhere).
+ * We credit both so a real link is never miscounted as an orphan.
+ */
+function refTargets(sourcePath: string, ref: string): string[] {
+  const targets = new Set<string>([ref]); // root-relative reading
+  const dir = sourcePath.includes("/")
+    ? sourcePath.slice(0, sourcePath.lastIndexOf("/"))
+    : "";
+  // file-relative reading: resolve against the source's directory.
+  const resolved = normalizePath(posix.normalize(dir ? `${dir}/${ref}` : ref));
+  targets.add(resolved);
+  return [...targets];
 }
 
 // ---------------------------------------------------------------------------
@@ -97,11 +148,7 @@ export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
   const userExclude = options.exclude ?? [];
   const ignore = [...DEFAULT_IGNORE, ...userExclude];
 
-  const allDocs = new Set<string>();
-  for (const pattern of include) {
-    const found = globSync(pattern, { cwd: basePath, ignore });
-    for (const p of found) allDocs.add(normalizePath(p));
-  }
+  const allDocs = collectDocs(basePath, include, ignore);
 
   const allMarkdown = globSync("**/*.md", {
     cwd: basePath,
@@ -117,14 +164,16 @@ export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
     } catch {
       continue;
     }
-    for (const target of extractRefs(content)) {
-      if (target === source) continue;
-      let sources = referencedBy.get(target);
-      if (!sources) {
-        sources = new Set();
-        referencedBy.set(target, sources);
+    for (const rawRef of extractRefs(content)) {
+      for (const target of refTargets(source, rawRef)) {
+        if (target === source) continue;
+        let sources = referencedBy.get(target);
+        if (!sources) {
+          sources = new Set();
+          referencedBy.set(target, sources);
+        }
+        sources.add(source);
       }
-      sources.add(source);
     }
   }
 
@@ -152,5 +201,10 @@ export function formatOrphanReport(report: OrphanReport): string {
     `✗ ${String(report.orphans.length)} orphan doc(s) — referenced by no other .md:`,
   ];
   for (const o of report.orphans) lines.push(`    ${o}`);
+  lines.push(
+    "  Fix: link each from another .md (README, a spec's Key Files, or a doc).",
+    "  To silence: add `<!-- vigiles-disable orphan-docs -->` to the doc, or",
+    "  exclude it via .vigilesrc.json → `orphans.exclude` (or narrow `orphans.include`).",
+  );
   return lines.join("\n");
 }

@@ -128,7 +128,7 @@ const IGNORE_LINE = /<!--\s*vigiles:ignore\s*-->/;
 
 /**
  * Whether a span is a **linter-rule reference** that ought to be marked
- * (`enforce()` / inline `<!-- vigiles:enforce -->`) so the audit can verify the
+ * (`enforce()` / inline `<!-- vigiles:enforce -->`) so the lint can verify the
  * rule exists AND is enabled. High-signal only: a slash-scoped name with no file
  * extension. A function-call form `` `foo(args)` `` is reduced to its callee.
  *
@@ -171,7 +171,7 @@ export function collectRefIssues(markdown: string, basePath: string): string[] {
     out.push(
       `line ${String(u.line)}: \`${u.text}\` is an unmarked linter-rule ` +
         `reference — mark it as \`enforce("${u.text}")\` (typed spec) or ` +
-        `\`<!-- vigiles:enforce ${u.text} -->\` (markdown) so audit can verify ` +
+        `\`<!-- vigiles:enforce ${u.text} -->\` (markdown) so lint can verify ` +
         `it exists and is enabled, or add <!-- vigiles:ignore --> if it is prose`,
     );
   }

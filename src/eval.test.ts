@@ -7,7 +7,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { writeFileSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -21,6 +27,19 @@ import {
   isRateLimited,
   measureTriggerRateWith,
   formatTriggerRateReport,
+  measureWith,
+  measureArmsWith,
+  compareCheck,
+  formatCheckReport,
+  assertRates,
+  checkReportToJUnit,
+  type CheckReport,
+  packageSkillsDir,
+  stubbedPluginDir,
+  stubSkillBody,
+  promptDistance,
+  checkPromptDiversity,
+  assertPromptDiversity,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -28,6 +47,7 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
+import { tool, output, turns } from "./check.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -212,6 +232,8 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
     {
       pluginDir: "/some/plugin",
       prompts: ["fire one", "ignore this", "fire two"],
+      minPrompts: 1,
+      minDistance: 0,
       fired: (t) => usedTool(t, "Skill"),
       trials: 2,
       spacingSec: 0,
@@ -230,6 +252,581 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.equal(ignore?.fired, 0);
   assert.equal(ignore?.rate, 0);
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("promptDistance (NCD) is 0 for identical, larger for different, normalized", () => {
+  assert.equal(promptDistance("same text", "same text"), 0);
+  assert.equal(promptDistance("SAME  text", "same text"), 0); // normalized
+  // a one-word-swap template is closer than two unrelated sentences
+  const near = promptDistance(
+    "Update the architecture section of CLAUDE.md.",
+    "Update the testing section of CLAUDE.md.",
+  );
+  const far = promptDistance(
+    "Add a dark-mode toggle to the settings page.",
+    "Why is this regex throwing an exception?",
+  );
+  assert.ok(near < far);
+  assert.ok(near < 0.3, `template pair should be < 0.3, got ${String(near)}`);
+});
+
+test("checkPromptDiversity flags too-few and too-similar sets", () => {
+  // Too few (default min 10)
+  const few = checkPromptDiversity(["a", "b", "c"]);
+  assert.ok(few.some((i) => i.kind === "too-few"));
+
+  // Near-duplicate pair (override min so only the NCD distance is tested)
+  const dup = checkPromptDiversity(
+    [
+      "Write a test for my hook.",
+      "Write a test for my hook!",
+      "Totally different prompt here.",
+    ],
+    { minPrompts: 1 },
+  );
+  assert.ok(dup.some((i) => i.kind === "too-similar"));
+
+  // A genuinely varied set of 10 distinct prompts passes clean.
+  const varied = [
+    "Add a dark-mode toggle to the settings page.",
+    "Why is this regex throwing an exception?",
+    "Rename the chargeCard function across the billing module.",
+    "Write a unit test for the pagination helper.",
+    "Refactor the auth middleware to use async/await.",
+    "Document the public API in the README.",
+    "Investigate the memory leak in the worker pool.",
+    "Set up a GitHub Action that runs the linter on push.",
+    "Convert these CommonJS modules to ESM.",
+    "Optimize the SQL query behind the dashboard.",
+  ];
+  assert.deepEqual(checkPromptDiversity(varied), []);
+});
+
+test("assertPromptDiversity throws with an actionable message", () => {
+  assert.throws(() => {
+    assertPromptDiversity(["one", "two"]);
+  }, /at least 10/);
+});
+
+test("measureTriggerRateWith rejects a too-small prompt set by default (no model run)", async () => {
+  let calls = 0;
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({ code: 0, stdout: "" });
+  };
+  await assert.rejects(
+    measureTriggerRateWith(
+      { pluginDir: "/p", prompts: ["just one"], fired: () => true },
+      runner,
+    ),
+    /not eval-ready|at least 10/,
+  );
+  assert.equal(calls, 0, "must reject before any model run");
+});
+
+test("measureWith scores a check vocabulary across trials (rate ± se, pass^k)", async () => {
+  const stream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", result: "all done", num_turns: 1 });
+
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: stream });
+
+  const report = await measureWith(
+    {
+      task: "do the thing",
+      checks: [tool("Bash"), output("done"), tool("Read")],
+      trials: 3,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 3);
+  const [bash, out, read] = report.perCheck;
+  assert.equal(bash.check.kind, "tool");
+  assert.equal(bash.rate, 1); // Bash used every trial
+  assert.equal(bash.passK, 1);
+  assert.equal(out.rate, 1); // "done" in output every trial
+  assert.equal(read.rate, 0); // Read never used
+  assert.equal(read.passK, 0);
+  assert.ok(formatCheckReport(report).includes("measured 3 run(s)"));
+});
+
+test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", async () => {
+  const dir = makeTmpDir("measure-stub");
+  const skills = join(dir, "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(dir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "myplug", version: "0.0.0" }),
+  );
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  let seenBody = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    if (a.pluginDir)
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureWith(
+    {
+      task: "do foo",
+      pluginDir: dir,
+      stubSkillBodies: true,
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+  // The run saw a STUBBED throwaway plugin (body gone, name preserved), removed after.
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && used !== dir, "a packaged plugin dir was used");
+  assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("measureWith stubSkillBodies without pluginDir throws", async () => {
+  await assert.rejects(
+    measureWith(
+      {
+        task: "x",
+        stubSkillBodies: true,
+        checks: [turns({ min: 1 })],
+        trials: 1,
+      },
+      () => Promise.resolve({ code: 0, stdout: "" }),
+    ),
+    /requires `pluginDir`/,
+  );
+});
+
+test("measureArmsWith scores checks per arm; compareCheck reads significance", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+
+  // `gated` arm (hasSettings) always fires the Skill; `vanilla` never does.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: a.hasSettings ? skillStream : plain });
+
+  const report = await measureArmsWith(
+    {
+      task: "do it",
+      arms: {
+        vanilla: {},
+        gated: { settings: { hooks: {} } },
+      },
+      checks: [tool("Skill")],
+      trials: 4,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.arms.gated.perCheck[0].rate, 1); // fires every trial
+  assert.equal(report.arms.vanilla.perCheck[0].rate, 0); // never
+  const cmp = compareCheck(report, "vanilla", "gated", 0);
+  assert.equal(cmp.delta, 1); // gated − vanilla
+  assert.equal(cmp.significant, true); // a clean 0 → 1 separation
+  assert.throws(() => compareCheck(report, "nope", "gated", 0));
+});
+
+test("measureArmsWith stubSkillBodies stubs each arm's pluginDir (and cleans up)", async () => {
+  const dir = makeTmpDir("arms-stub");
+  // Two arms, each a plugin dir with the same skill but a different description.
+  const make = (suffix: string): string => {
+    const p = join(dir, suffix);
+    mkdirSync(join(p, ".claude-plugin"), { recursive: true });
+    mkdirSync(join(p, "skills", "foo"), { recursive: true });
+    writeFileSync(
+      join(p, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "myplug", version: "0.0.0" }),
+    );
+    writeFileSync(
+      join(p, "skills", "foo", "SKILL.md"),
+      `---\nname: foo\ndescription: variant ${suffix}\n---\n\n# Procedure\nrun the expensive thing ${suffix}\n`,
+    );
+    return p;
+  };
+  const armA = make("a");
+  const armB = make("b");
+
+  const bodies: Record<string, string> = {};
+  const usedDirs: string[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    if (a.pluginDir) {
+      usedDirs.push(a.pluginDir);
+      bodies[a.pluginDir] = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    }
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureArmsWith(
+    {
+      task: "do foo",
+      arms: { a: { pluginDir: armA }, b: { pluginDir: armB }, plain: {} },
+      stubSkillBodies: true,
+      checks: [tool("Skill")],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  // Each arm ran against a STUBBED throwaway (body gone, description kept), not
+  // the original dir, and the throwaways were removed afterward.
+  for (const md of Object.values(bodies)) {
+    assert.ok(md.includes("description: variant"), "description kept");
+    assert.ok(!md.includes("run the expensive thing"), "body stubbed");
+  }
+  for (const used of usedDirs) {
+    assert.ok(used !== armA && used !== armB, "a packaged dir was used");
+    assert.ok(!existsSync(used), "throwaway removed afterward");
+  }
+  cleanupTmpDir(dir);
+});
+
+test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => {
+  const report: CheckReport = {
+    n: 10,
+    perCheck: [
+      {
+        check: { kind: "tool", name: "Bash" },
+        rate: 0.9,
+        se: 0.1,
+        passK: 0,
+        n: 10,
+      },
+      {
+        check: { kind: "skill", id: "vig:x" },
+        rate: 0.4,
+        se: 0.16,
+        passK: 0,
+        n: 10,
+      },
+    ],
+  };
+  // gate: skill at 0.4 is below 0.8 → throws naming it
+  assert.throws(() => {
+    assertRates(report, { min: 0.8 });
+  }, /skill\(vig:x\): 40%/);
+  assertRates(report, { min: 0.3 }); // both above → no throw
+
+  const xml = checkReportToJUnit(report, { min: 0.8, name: "demo" });
+  assert.match(xml, /<testsuite name="demo" tests="2" failures="1">/);
+  assert.match(
+    xml,
+    /<testcase classname="vigiles.checks" name="tool\(Bash\)">/,
+  );
+  assert.match(xml, /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40%/);
+});
+
+test("formatCheckReport labels a no-arg check by its kind alone", () => {
+  // checkLabel's fallback: a check with no name/id/event/path/matcher (e.g.
+  // `turns`) renders as just its kind, not `kind(arg)`.
+  const report: CheckReport = {
+    n: 3,
+    perCheck: [{ check: { kind: "turns" }, rate: 1, se: 0, passK: 1, n: 3 }],
+  };
+  assert.ok(formatCheckReport(report).includes("turns"));
+  assert.ok(!formatCheckReport(report).includes("turns(")); // no arg parens
+});
+
+test("packageSkillsDir throws when the skills dir does not exist", () => {
+  assert.throws(
+    () => packageSkillsDir("/no/such/skills/dir"),
+    /skillsDir not found/,
+  );
+});
+
+test("stubbedPluginDir falls back to .claude/skills and tolerates a missing manifest", () => {
+  const dir = makeTmpDir("stubbed-fallback");
+  // No .claude-plugin/plugin.json (pluginName → undefined) and skills under
+  // .claude/skills/ (skillsDirOf's fallback branch), not skills/.
+  const skills = join(dir, ".claude", "skills", "foo");
+  mkdirSync(skills, { recursive: true });
+  writeFileSync(
+    join(skills, "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun it\n",
+  );
+  // A stray NON-directory entry at the skills root — packageSkillsDir skips it.
+  writeFileSync(join(dir, ".claude", "skills", "README.md"), "not a skill\n");
+  const pkg = stubbedPluginDir(dir);
+  const md = readFileSync(join(pkg, "skills", "foo", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: does foo")); // frontmatter kept
+  assert.ok(!md.includes("run it")); // body stubbed
+  // pluginName returned undefined → packageSkillsDir's default name.
+  const manifest = JSON.parse(
+    readFileSync(join(pkg, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles-loose-skills");
+  rmSync(pkg, { recursive: true, force: true });
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith stubs a real pluginDir's bodies (pluginDir + stub)", async () => {
+  const dir = makeTmpDir("trigger-plugindir-stub");
+  mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(dir, "skills", "foo"), { recursive: true });
+  writeFileSync(
+    join(dir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "myplug", version: "0.0.0" }),
+  );
+  writeFileSync(
+    join(dir, "skills", "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  let seenBody = "";
+  let usedDir = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    if (a.pluginDir) {
+      usedDir = a.pluginDir;
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    }
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureTriggerRateWith(
+    {
+      pluginDir: dir,
+      stubSkillBodies: true,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
+  assert.ok(usedDir && usedDir !== dir, "a packaged throwaway was used");
+  assert.ok(!existsSync(usedDir), "throwaway removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
+  const dir = makeTmpDir("pkg-skills");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo", "references"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  writeFileSync(join(skills, "foo", "references", "extra.md"), "ref\n");
+  // a non-skill dir (no SKILL.md) is skipped
+  mkdirSync(join(skills, "notaskill"), { recursive: true });
+
+  const pluginDir = packageSkillsDir(skills);
+  assert.ok(existsSync(join(pluginDir, ".claude-plugin", "plugin.json")));
+  assert.ok(existsSync(join(pluginDir, "skills", "foo", "SKILL.md")));
+  // recursive copy brings references/ along
+  assert.ok(
+    existsSync(join(pluginDir, "skills", "foo", "references", "extra.md")),
+  );
+  assert.ok(!existsSync(join(pluginDir, "skills", "notaskill")));
+  const manifest = JSON.parse(
+    readFileSync(join(pluginDir, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.ok(manifest.name.length > 0);
+  cleanupTmpDir(dir);
+});
+
+test("stubSkillBody keeps frontmatter, drops the body", () => {
+  const out = stubSkillBody(
+    "---\nname: foo\ndescription: does foo\ndisable-model-invocation: false\n---\n\n# Big procedure\nStep 1: read files\nStep 2: run commands\n",
+  );
+  // Frontmatter (the trigger surface) survives verbatim.
+  assert.ok(/^---\nname: foo\ndescription: does foo/.test(out));
+  // The expensive body is gone.
+  assert.ok(!out.includes("Step 1: read files"));
+  assert.ok(out.includes("trigger-test stub"));
+  // No frontmatter → still produces a stub (no crash).
+  assert.ok(stubSkillBody("just a body, no frontmatter").includes("stub"));
+});
+
+test("packageSkillsDir { stub } writes frontmatter-only skills (no body, no references)", () => {
+  const dir = makeTmpDir("pkg-stub");
+  const skills = join(dir, "skills");
+  mkdirSync(join(skills, "foo", "references"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the whole thing\n",
+  );
+  writeFileSync(join(skills, "foo", "references", "big.md"), "x".repeat(5000));
+
+  const pkg = packageSkillsDir(skills, { stub: true, name: "vigiles" });
+  const md = readFileSync(join(pkg, "skills", "foo", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: does foo")); // trigger surface kept
+  assert.ok(!md.includes("run the whole thing")); // body stripped
+  // references/ are not copied in stub mode (the body won't run).
+  assert.ok(!existsSync(join(pkg, "skills", "foo", "references")));
+  // plugin name preserved so `<name>:<skill>` still matches.
+  const manifest = JSON.parse(
+    readFileSync(join(pkg, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles");
+  cleanupTmpDir(dir);
+});
+
+test("packageSkillsDir throws when the dir has no <name>/SKILL.md", () => {
+  const dir = makeTmpDir("pkg-empty");
+  mkdirSync(join(dir, "skills"), { recursive: true });
+  assert.throws(() => packageSkillsDir(join(dir, "skills")), /No .*SKILL\.md/);
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir", async () => {
+  const dir = makeTmpDir("trigger-skillsdir");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+  // The runner saw a real packaged plugin dir (not the loose skills dir), and
+  // it was cleaned up after the run.
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && used !== skills, "a packaged plugin dir was used");
+  assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith stubSkillBodies strips the body in the packaged plugin", async () => {
+  const dir = makeTmpDir("trigger-stub");
+  const skills = join(dir, ".claude", "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  let seenBody = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    // Read the packaged skill DURING the run (before cleanup).
+    if (a.pluginDir)
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      stubSkillBodies: true,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith rejects both/neither pluginDir and skillsDir", async () => {
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  await assert.rejects(
+    measureTriggerRateWith(
+      {
+        pluginDir: "/p",
+        skillsDir: "/s",
+        prompts: ["x"],
+        fired: () => true,
+        minPrompts: 1,
+        minDistance: 0,
+      },
+      runner,
+    ),
+    /not both/,
+  );
+  await assert.rejects(
+    measureTriggerRateWith(
+      { prompts: ["x"], fired: () => true, minPrompts: 1 },
+      runner,
+    ),
+    /provide `pluginDir` or `skillsDir`/,
+  );
 });
 
 test("measureTriggerRateWith adds precision when irrelevant prompts are given", async () => {
@@ -254,6 +851,8 @@ test("measureTriggerRateWith adds precision when irrelevant prompts are given", 
     {
       pluginDir: "/p",
       prompts: ["fire one", "fire two"], // both should fire → recall 1.0
+      minPrompts: 1,
+      minDistance: 0,
       irrelevantPrompts: ["calm down", "fire wrongly"], // one wrongly fires
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,
@@ -281,6 +880,8 @@ test("measureTriggerRateWith: precision is undefined when nothing fires at all",
     {
       pluginDir: "/p",
       prompts: ["quiet"],
+      minPrompts: 1,
+      minDistance: 0,
       irrelevantPrompts: ["silent"],
       fired: (t) => usedTool(t, "Skill"),
       spacingSec: 0,

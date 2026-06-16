@@ -127,7 +127,7 @@ CLAUDE.md over ~200-300 lines → compliance drops sharply. ETH Zurich study: LL
 
 ### 3. Stale / Broken File References (HIGH FREQUENCY)
 
-Instruction files reference paths moved, renamed, or deleted. One audit found 59 broken references.
+Instruction files reference paths moved, renamed, or deleted. One lint found 59 broken references.
 
 - Sources: [Packmind](https://packmind.com/evaluate-context-ai-coding-agent/), [agents-lint](https://giacomo.github.io/agents-lint/)
 

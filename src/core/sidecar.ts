@@ -4,7 +4,7 @@
  * Used by the post-session audit to know which targets exist and which
  * spec source / inputs each one tracks. The compile pipeline writes
  * these whenever a spec is built; readers (currently only session.ts)
- * consume them at audit time.
+ * consume them at verification time.
  *
  * This module is the ONLY place sidecars live now — the freshness rule
  * doesn't depend on them anymore.

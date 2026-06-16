@@ -279,7 +279,7 @@ vigiles scans for tool references and command patterns:
 - `Write`, `Edit` → `local-fs`
 - `curl`, `git push`, `deploy` → `network`
 
-Mismatch = lint error: `Skill "audit" declares "none" but references Write tool`
+Mismatch = lint error: `Skill "lint" declares "none" but references Write tool`
 
 ---
 

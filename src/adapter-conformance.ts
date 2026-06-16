@@ -189,7 +189,7 @@ export function assertHarnessTestable(adapter: HarnessAdapter): {
     !adapter.modelMock
   ) {
     throw new Error(
-      `Adapter "${adapter.name}" does not support harness testing (pillar 2): it is reference-verification-only (no mockable runtime). Use it for compile/scan/audit, not runHarnessTest/runEval.`,
+      `Adapter "${adapter.name}" does not support harness testing (pillar 2): it is reference-verification-only (no mockable runtime). Use it for compile/scan/lint, not runHarnessTest/runEval.`,
     );
   }
   return { runtime: adapter.runtime, modelMock: adapter.modelMock };

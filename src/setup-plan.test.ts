@@ -17,7 +17,15 @@ test("defaults: both pillars, CI, plugin, non-strict", () => {
     gha: true,
     plugin: true,
     strict: false,
+    force: false,
   });
+});
+
+test("parseSetupArgs reads --force; resolvePlan carries it", () => {
+  assert.equal(parseSetupArgs(["--force"]).force, true);
+  assert.equal(parseSetupArgs([]).force, false);
+  assert.equal(resolvePlan(parseSetupArgs(["--force"])).force, true);
+  assert.equal(resolvePlan(parseSetupArgs([])).force, false);
 });
 
 test("parseSetupArgs reads flags", () => {
@@ -62,6 +70,7 @@ test("resolvePlan: a positive pillar flag selects exactly that pillar", () => {
     gha: true,
     plugin: true,
     strict: false,
+    force: false,
   });
   const t = resolvePlan(parseSetupArgs(["--test"]));
   assert.equal(t.lint, false);

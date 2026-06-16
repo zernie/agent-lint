@@ -52,7 +52,7 @@ Why import over runtime selection:
 - A config string means a runtime lookup and "adapter not found" at runtime —
   the failure class branded types exist to kill.
 
-The **one exception is the CLI.** `vigiles compile|scan|audit` can't ask the user
+The **one exception is the CLI.** `vigiles compile|scan|lint` can't ask the user
 to import — it must **auto-detect** the layout (`.claude-plugin/` present?
 `AGENTS.md`?), with a `vigiles.config` key as an override escape hatch later.
 Programmatic API names the adapter; the CLI detects it. This keeps "zero config

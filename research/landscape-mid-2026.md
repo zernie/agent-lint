@@ -58,7 +58,7 @@ Examples of structural rules vigiles could add:
 
 This is exactly the kind of thing the existing `proofs.ts` monotonicity lattice gestures at but doesn't fully enforce yet. AgentProof is proof-of-concept that DFA-compiled policies are sub-second to evaluate even at 5K nodes — way bigger than any plausible vigiles spec history.
 
-**Proposal:** prototype `vigiles audit --structural`. Walk the Merkle DAG of spec history (or the rule snapshot file from idea 1 in `enforce-over-guidance.md`), apply structural checks, fail on violations. Reuse AgentProof's six structural checks as a starter set.
+**Proposal:** prototype `vigiles lint --structural`. Walk the Merkle DAG of spec history (or the rule snapshot file from idea 1 in `enforce-over-guidance.md`), apply structural checks, fail on violations. Reuse AgentProof's six structural checks as a starter set.
 
 ---
 
@@ -181,7 +181,7 @@ Ranked by leverage (impact / effort). Pick from the top.
 - Concrete: `enforce("cedar/policy-name", "...")` verifies the policy exists in the project's Cedar files. Same shape as existing 6.
 - Also covers Vectimus (Cedar-based) and any future Cedar-using runtime by accident.
 
-### C. Prototype `vigiles audit --structural` over spec evolution
+### C. Prototype `vigiles lint --structural` over spec evolution
 
 - Effort: medium — reuses existing `proofs.ts` Merkle DAG; new check pass.
 - Impact: medium — catches the "rule keeps regressing" pattern AgentProof found in 27% of workflows.
@@ -220,11 +220,11 @@ Start with **A + B together**: rebrand under harness engineering language and sh
 - **B** — shipped. Cedar as 7th cross-referenced catalog, with tests.
 - **E** — shipped. ESLint v9+/v10 via-string update; no functional changes needed.
 - **F** — shipped. Counter-positioning vs "AI-Powered Rule Enforcement" in README and `competitive-landscape.md`.
-- **C** (`vigiles audit --structural`) — **parked.** Useful idea, AgentProof-style structural checks over spec evolution. Honest verdict: regression-of-rules detection is not vigiles's core mission. Save as a known-good direction; revisit if a user pulls for it.
+- **C** (`vigiles lint --structural`) — **parked.** Useful idea, AgentProof-style structural checks over spec evolution. Honest verdict: regression-of-rules detection is not vigiles's core mission. Save as a known-good direction; revisit if a user pulls for it.
 - **Idea 1** from `enforce-over-guidance.md` (snapshot-gated downgrades) — **parked.** Same reasoning as C. Documents the silent `enforce → guidance` regression class clearly, but isn't core to "compile typed specs to instruction files." Keep design ready; don't build until demand surfaces.
 - **Domain preset library** (from `sync-landscape-analysis.md`) — **dropped.** Duplicates what linter shared-configs already do (`@typescript-eslint/strict`, `eslint-config-airbnb`, ruff selects, clippy::pedantic). Bundling them as vigiles presets creates a maintenance treadmill across N upstreams. Maybe one or two `examples/*.spec.ts` showing the _shape_ of a spec, treated as documentation not as a feature.
 - **`block()` rule type** (from `sync-landscape-analysis.md`) — **dropped.** Settings.json is already structured config, not markdown. JSON Schema in VSCode covers what `block()` would add for the single-agent case. Reconsider only if real multi-agent setups appear or AGENTS.md proposal #105 (structured tool permissions) ships.
-- **Fact-drift detector for markdown** (regex sweep of `**/*.md` for "N linter" / "N catalog" patterns vs computed `BuiltinLinter.length`) — **dropped.** Tempted to ship it after hitting one stale-copy sweep in this session, but the mechanism is fuzzy regex over English prose — the same pattern we rejected for keyword-overlap upgrade detection and for `block()`. Hit drift once: not a pattern, a one-off. Manual `grep`+`sed` took 5 minutes. Project rule: "Three similar lines is better than a premature abstraction." Revisit only if fact-drift recurs 2–3 more times. The real takeaway is dogfooding as practice: run `vigiles audit` (and the new orphan check) on the repo before each release, fix what it flags. No new code, use what's there.
+- **Fact-drift detector for markdown** (regex sweep of `**/*.md` for "N linter" / "N catalog" patterns vs computed `BuiltinLinter.length`) — **dropped.** Tempted to ship it after hitting one stale-copy sweep in this session, but the mechanism is fuzzy regex over English prose — the same pattern we rejected for keyword-overlap upgrade detection and for `block()`. Hit drift once: not a pattern, a one-off. Manual `grep`+`sed` took 5 minutes. Project rule: "Three similar lines is better than a premature abstraction." Revisit only if fact-drift recurs 2–3 more times. The real takeaway is dogfooding as practice: run `vigiles lint` (and the new orphan check) on the repo before each release, fix what it flags. No new code, use what's there.
 - **Atomicity rules** (#5 `one-claim-per-rule` and #9 `sections-over-free-prose` from the original 10-proposal pass) — **parked.** Both express the same atomicity principle applied to different fields (rule `why` strings vs. section prose). #9 is already half-mechanical via `maxSectionLines` config; #5 has no equivalent knob yet. Useful idea, low priority — revisit alongside any major spec.ts type-system pass.
 - **D** (mine ContextCov paper for constraint taxonomy) — **read, nothing to ship.** Paper confirmed real (arxiv 2603.00822, Reshabh K Sharma, Feb 2026). Taxonomy is four categories: Process constraints (build commands, package managers — enforced via shell-shim/PATH manipulation), Source constraints (style/naming/API patterns — Tree-sitter AST queries), Architectural-deterministic (module deps/layer boundaries — NetworkX over import graphs), Architectural-semantic (intent-dependent — LLM-as-judge). Honest take on their evaluation: weaker than the headlines. "99.997% syntax validity" measures whether 34,373/34,374 generated scripts parsed, not whether they catch real violations. No precision, recall, or false-positive numbers. Only 24% of generated checks ever fired on any of the 723 repos — ambiguous whether rules are rarely violated or checks are wrong.
 

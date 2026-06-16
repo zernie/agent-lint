@@ -1,5 +1,6 @@
-/* eslint-disable max-params --
-   The matcher signatures mirror the runtime vigilesMatchers (positional args). */
+/* eslint-disable max-params, @typescript-eslint/no-explicit-any --
+   The matcher signatures mirror the runtime vigilesMatchers (positional args);
+   `Check<any>` matches the runtime generic for the type-only augmentation. */
 /**
  * vigiles — jest integration (opt-in).
  *
@@ -17,6 +18,7 @@
  */
 import { expect } from "@jest/globals";
 import { vigilesMatchers } from "./harness-assert.js";
+import type { Check } from "./check.js";
 
 expect.extend(vigilesMatchers);
 
@@ -30,5 +32,7 @@ declare module "@jest/expect" {
       metric: string,
       by?: number,
     ): R;
+    toPass(check: Check<any>): R;
+    toPassAll(checks: readonly Check<any>[]): R;
   }
 }

@@ -75,29 +75,29 @@ A `vigiles init` flag that installs a curated `settings.json` block with:
 
 - **PreToolUse (Edit|Write)** — block direct edits to any compiled markdown file (CLAUDE.md, AGENTS.md, the target of any discovered `.spec.ts`). Force edits through the spec.
 - **PostToolUse (Edit|Write on \*.spec.ts)** — auto-run `vigiles compile` so the markdown is always in sync without the user thinking about it.
-- **SessionStart (matcher: `compact`)** — run `vigiles audit --summary` and inject the result so the model sees stale-reference warnings every session for free.
+- **SessionStart (matcher: `compact`)** — run `vigiles lint --summary` and inject the result so the model sees stale-reference warnings every session for free.
 
 Why this matters: PreToolUse is the only unbypassable enforcement point in the Claude Code harness. Without it, any rule is advisory. With it, vigiles becomes a real floor.
 
-### 2. Package-existence check inside `audit` — DROPPED
+### 2. Package-existence check inside `lint` — DROPPED
 
-Reuse the linter-cross-reference machinery to scan imports in the repo against `package.json`/`requirements.txt`/`Cargo.toml`. Flag any import that (a) is not in the manifest and (b) is not a relative path or builtin. This catches slopsquatting at audit time before it reaches install. Cheap, fully local, zero false positives on builtins.
+Reuse the linter-cross-reference machinery to scan imports in the repo against `package.json`/`requirements.txt`/`Cargo.toml`. Flag any import that (a) is not in the manifest and (b) is not a relative path or builtin. This catches slopsquatting at lint time before it reaches install. Cheap, fully local, zero false positives on builtins.
 
 ### 3. Dead-enforcement detection — SHIPPED (already wired for all 6 linters)
 
 Today `enforce("eslint/no-console")` verifies that `no-console` exists as a rule. It does not verify that it is **enabled** (severity > 0). Extend the linter engine to surface rules the spec claims are enforced but which the linter reports as `"off"`. This is a silent-drift bug that happens every time someone tweaks eslint config without touching the spec.
 
-### 4. Reverse coverage report — SHIPPED (built into `vigiles audit` coverage stage)
+### 4. Reverse coverage report — SHIPPED (built into `vigiles lint` coverage stage)
 
-Right now `audit` tells you which files have no spec coverage. The inverse is just as useful: which **linter rules** are enabled in the project but not mentioned in any spec. Output as a sorted list so users can either add `enforce()` entries (promoting the rule to agent-visible prose) or mark it intentionally out-of-scope. Closes the gap that CodeRabbit's 1.7× issue-density number is mostly made of.
+Right now `lint` tells you which files have no spec coverage. The inverse is just as useful: which **linter rules** are enabled in the project but not mentioned in any spec. Output as a sorted list so users can either add `enforce()` entries (promoting the rule to agent-visible prose) or mark it intentionally out-of-scope. Closes the gap that CodeRabbit's 1.7× issue-density number is mostly made of.
 
-### 5. SessionStart audit injection (compact matcher) — SHIPPED
+### 5. SessionStart lint injection (compact matcher) — SHIPPED
 
 Hook-pack component worth calling out separately: the `compact` SessionStart matcher fires every time context is compacted, which is effectively free in the session's token budget. Injecting a one-line "3 stale file refs, 2 disabled enforced rules, 1 duplicate rule" message at that moment means the model re-notices drift without anyone running a command. This is the single highest-leverage hook integration.
 
 ### 6. Hook validation subcommand — NOT BUILT
 
-`vigiles audit --hooks` parses the user's `settings.json`, runs the listed matchers against known-bad inputs, and reports silent failures (matchers that match nothing, trailing-wildcard regex, missing shell escapes). Directly addresses the silent-matcher-ignore anti-pattern documented in Claude Code's own hook docs. No one else ships this check.
+`vigiles lint --hooks` parses the user's `settings.json`, runs the listed matchers against known-bad inputs, and reports silent failures (matchers that match nothing, trailing-wildcard regex, missing shell escapes). Directly addresses the silent-matcher-ignore anti-pattern documented in Claude Code's own hook docs. No one else ships this check.
 
 ### 7. Token-budget compile-time enforcement — SHIPPED
 
@@ -105,7 +105,7 @@ ETH Zurich's finding was that CLAUDE.md files over ~300 lines actively hurt. Add
 
 ### 8. Instruction diff subcommand — NOT BUILT
 
-`vigiles audit --diff <base>` renders a semantic diff of the compiled markdown: rules added, rules **strengthened** (guidance → enforce), rules **weakened**, rules removed. Attach to every PR that touches a `.spec.ts`. Reviewers currently look at a raw markdown diff which hides the monotonicity property — a strengthen looks identical to a reword unless you read carefully. Semantic diff makes it obvious.
+`vigiles lint --diff <base>` renders a semantic diff of the compiled markdown: rules added, rules **strengthened** (guidance → enforce), rules **weakened**, rules removed. Attach to every PR that touches a `.spec.ts`. Reviewers currently look at a raw markdown diff which hides the monotonicity property — a strengthen looks identical to a reword unless you read carefully. Semantic diff makes it obvious.
 
 ### 9. Snapshot tests for structural changes — PARTIALLY SHIPPED (monotonicity lattice rejects weakening; full `--allow-weaken` flag not yet exposed as CLI)
 
@@ -113,7 +113,7 @@ Compile-time assertion: if a spec change would delete an `enforce()` rule, requi
 
 ### 10. Stale reference detection — DROPPED (compiler's job, not vigiles's)
 
-Generalize the existing path-verification (`file("src/foo.ts")`) to a crawler that, during `audit`, walks every code-fenced path, every backticked identifier that looks like a file, every npm-script reference, every package name, and flags the ones that no longer resolve. The 59-broken-refs example was in a file no one had audited for 8 months. A cheap cron-friendly audit command closes that gap forever.
+Generalize the existing path-verification (`file("src/foo.ts")`) to a crawler that, during `lint`, walks every code-fenced path, every backticked identifier that looks like a file, every npm-script reference, every package name, and flags the ones that no longer resolve. The 59-broken-refs example was in a file no one had audited for 8 months. A cheap cron-friendly lint command closes that gap forever.
 
 ### 11. Adversarial AI review loop — NOT BUILT
 
@@ -121,11 +121,11 @@ Ship a skill that takes a spec diff and runs a second LLM pass (same model, revi
 
 ### 12. Inline-to-spec graduation detector — NOT BUILT
 
-When a markdown file accumulates >N inline `<!-- vigiles:enforce ... -->` comments (default: 5), `audit --summary` includes a "graduate to spec mode" nudge. Bonus: print a ready-to-paste `.spec.ts` template pre-filled with all the inline rules already extracted. The adoption funnel becomes: add one comment → add five → see the nudge → paste the template → you're in spec mode. Zero cliff.
+When a markdown file accumulates >N inline `<!-- vigiles:enforce ... -->` comments (default: 5), `lint --summary` includes a "graduate to spec mode" nudge. Bonus: print a ready-to-paste `.spec.ts` template pre-filled with all the inline rules already extracted. The adoption funnel becomes: add one comment → add five → see the nudge → paste the template → you're in spec mode. Zero cliff.
 
 ### 13. Cross-file rule coherence — NOT BUILT
 
-When a project has multiple specs (e.g., `CLAUDE.md.spec.ts` + `docs/AGENTS.md.spec.ts`), run NCD across specs (not just within) to detect cross-file near-duplicates. Also flag contradictions: spec A enforces `eslint/no-console` while spec B's prose says "use `console.log` for debugging." Today each spec is audited in isolation; coherence requires a cross-spec pass.
+When a project has multiple specs (e.g., `CLAUDE.md.spec.ts` + `docs/AGENTS.md.spec.ts`), run NCD across specs (not just within) to detect cross-file near-duplicates. Also flag contradictions: spec A enforces `eslint/no-console` while spec B's prose says "use `console.log` for debugging." Today each spec is linted in isolation; coherence requires a cross-spec pass.
 
 ## What we are NOT adding
 
@@ -136,9 +136,9 @@ When a project has multiple specs (e.g., `CLAUDE.md.spec.ts` + `docs/AGENTS.md.s
 
 ## Next moves
 
-1. Hook pack (#1) + SessionStart audit injection (#5) — highest impact, lowest effort, unblocks everything else
+1. Hook pack (#1) + SessionStart lint injection (#5) — highest impact, lowest effort, unblocks everything else
 2. Dead-enforcement detection (#3) + reverse coverage report (#4) — extend existing linter engine, no new subsystem
-3. Package-existence check (#2) + stale reference detection (#10) — audit-time crawlers, reuse existing infrastructure
+3. Package-existence check (#2) + stale reference detection (#10) — lint-time crawlers, reuse existing infrastructure
 4. Semantic diff (#8) + snapshot tests (#9) + token budget (#7) — compile-time guardrails
 5. Hook validation (#6) — stretch goal, depends on hook pack being stable first
 

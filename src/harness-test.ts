@@ -173,8 +173,24 @@ export interface Trace {
   readonly modelRequests: readonly ModelRequest[];
   /** Number of model turns. */
   readonly turns: number;
+  /**
+   * Sub-agent (`Task`) runs as nested traces, keyed by `subagent_type`. A
+   * subagent runs its own session; CC tags its events with `parent_tool_use_id`
+   * (= the `Task` tool call) so its tool calls are recovered into a sub-trace
+   * here, lettng a test assert what the subagent DID (not just that `Task` fired).
+   * Empty unless the stream was captured / the harness emits subagent events.
+   */
+  readonly subagents?: readonly SubagentTrace[];
   /** Final contents of a file under the working dir, or null if absent. */
   file(path: string): string | null;
+}
+
+/** A sub-agent (`Task`) run as a nested trace: its name + the tools it used. */
+export interface SubagentTrace {
+  /** The `subagent_type` from the `Task` tool input. */
+  readonly name: string;
+  /** The tools the subagent invoked (events tagged with the Task's id). */
+  readonly toolCalls: readonly ToolCall[];
 }
 
 export interface HarnessTestResult extends Trace {
@@ -240,6 +256,92 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
     resultText: results.get(u.id)?.text ?? "",
     isError: results.get(u.id)?.isError ?? false,
   }));
+}
+
+/**
+ * Recover sub-agent runs as nested traces. A subagent-dispatch tool call (the
+ * `Agent` tool on the live CLI — older docs say `Task` — carrying an
+ * `input.subagent_type`) spawns a subagent whose own events the CLI tags with a
+ * top-level `parent_tool_use_id` = the dispatch tool-use id. We group those
+ * tagged tool calls under their dispatch, keyed by `subagent_type`. **Schema
+ * verified against real claude output** (`parent_tool_use_id` sibling of
+ * `message`, `subagent_type` in the dispatch input; tool named `Agent`) — the
+ * same `message.content` line shape `parseToolCalls` consumes, and we match the
+ * input field NOT the tool name so a future rename can't break it. Pure; empty
+ * for a harness that doesn't emit `parent_tool_use_id` (e.g. Codex).
+ */
+export function parseSubagents(streamJson: string): SubagentTrace[] {
+  const tasks = new Map<string, string>(); // dispatch id → subagent name
+  const byParent = new Map<
+    string,
+    {
+      uses: { id: string; name: string; input: unknown }[];
+      results: Map<string, { text: string; isError: boolean }>;
+    }
+  >();
+  const groupFor = (
+    parent: string,
+  ): {
+    uses: { id: string; name: string; input: unknown }[];
+    results: Map<string, { text: string; isError: boolean }>;
+  } => {
+    let g = byParent.get(parent);
+    if (!g) {
+      g = { uses: [], results: new Map() };
+      byParent.set(parent, g);
+    }
+    return g;
+  };
+
+  for (const line of streamJson.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: { message?: { content?: unknown }; parent_tool_use_id?: unknown };
+    try {
+      evt = JSON.parse(line) as typeof evt;
+    } catch {
+      continue;
+    }
+    const content = evt.message?.content;
+    if (!Array.isArray(content)) continue;
+    const parent =
+      typeof evt.parent_tool_use_id === "string"
+        ? evt.parent_tool_use_id
+        : undefined;
+    for (const b of content as Array<Record<string, unknown>>) {
+      if (b.type === "tool_use" && typeof b.name === "string") {
+        const id = typeof b.id === "string" ? b.id : "";
+        if (!parent) {
+          // A subagent dispatch is any top-level tool_use whose input carries a
+          // `subagent_type` — the dispatch tool is named "Agent" on the live CLI
+          // (older docs say "Task"), so match the input field, NOT the tool name,
+          // to survive the rename. Confirmed against real claude output.
+          const sub = (b.input as { subagent_type?: string })?.subagent_type;
+          if (typeof sub === "string") tasks.set(id, sub);
+        }
+        if (parent)
+          groupFor(parent).uses.push({ id, name: b.name, input: b.input });
+      } else if (b.type === "tool_result" && parent) {
+        const id = typeof b.tool_use_id === "string" ? b.tool_use_id : "";
+        groupFor(parent).results.set(id, {
+          text: contentText(b.content),
+          isError: b.is_error === true,
+        });
+      }
+    }
+  }
+
+  const out: SubagentTrace[] = [];
+  for (const [taskId, name] of tasks) {
+    const g = byParent.get(taskId);
+    const toolCalls = (g?.uses ?? []).map((u) => ({
+      name: u.name,
+      input: u.input,
+      resultText: g?.results.get(u.id)?.text ?? "",
+      isError: g?.results.get(u.id)?.isError ?? false,
+    }));
+    out.push({ name, toolCalls });
+  }
+  return out;
 }
 
 /**
@@ -476,6 +578,7 @@ function makeResult(
     hooks: parsed.hooks,
     output: parsed.output,
     modelRequests,
+    subagents: parseSubagents(out.stdout),
     file: (p: string): string | null => {
       const f = resolve(cwd, p);
       return existsSync(f) ? readFileSync(f, "utf-8") : null;
@@ -579,6 +682,35 @@ export async function runHarnessTest(
   } finally {
     await mock.close();
   }
+}
+
+/**
+ * `runHarness` — the harness-scope entry of the revamped API (Phase 2 of
+ * `research/testing-api-design.md`). The harness has two execution scopes, `hook`
+ * (`runHook`) and `harness` (the whole assembled agent); today's `integration` /
+ * `e2e` / `eval` are all the **harness** scope under realness flags. This entry is
+ * the **deterministic** harness run (`model: "mock"`, the default) — the
+ * workhorse you gate every commit, with no key. A **real-model** harness run is
+ * non-deterministic by definition, so you don't *assert* a single one — you
+ * `measure()` it across trials (the eval scope). `egress` is a capability of this
+ * scope (the e2e tier), not a separate tier.
+ *
+ * Behaviour is identical to `runHarnessTest` (which it wraps); the new name +
+ * `model` flag make the scope/realness explicit and steer real-model runs to the
+ * right tool.
+ */
+export async function runHarness(
+  spec: HarnessTestSpec,
+  opts: RunHarnessTestOptions & { model?: "mock" | "real" } = {},
+): Promise<HarnessTestResult> {
+  if (opts.model === "real") {
+    throw new Error(
+      "runHarness runs the harness DETERMINISTICALLY (model: 'mock'). A real-model " +
+        "harness run is non-deterministic, so a single one can't be asserted — " +
+        "measure it across trials with `measure()` / `runEval` (the eval scope) instead.",
+    );
+  }
+  return runHarnessTest(spec, opts);
 }
 
 /** Pull the pillar-2 driver off an adapter, asserting it supports testing. */

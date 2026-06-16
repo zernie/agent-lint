@@ -12,7 +12,7 @@
 #   ignores      — count of `vigiles:ignore` (Goodhart: did it opt out instead?)
 #   broken       — marks that don't resolve (`vigiles refs`) — correctness
 #   names        — did the SKILL mention chargeCard at all (rename is relevant)
-#   catch        — after renaming chargeCard in the code, does `vigiles audit`
+#   catch        — after renaming chargeCard in the code, does `vigiles lint`
 #                  flag the now-broken reference? (the payoff)
 #   turns        — agent turns
 #
@@ -69,7 +69,7 @@ EOF
     sed -i 's/chargeCard/captureCard/g' src/billing.ts
     # Capture first: audit exits 2 on any error, which under pipefail would mask
     # grep's result if the pipeline were used directly.
-    local aud; aud=$(node "$CLI" audit SKILL.md 2>/dev/null)
+    local aud; aud=$(node "$CLI" lint SKILL.md 2>/dev/null)
     if printf '%s' "$aud" | grep -q '"chargeCard" is not defined'; then
       catch="yes"
     fi

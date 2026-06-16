@@ -32,7 +32,7 @@ and the harness **forces** them to:
   full context — not a project index guessing.
 - **Declared ⇒ error.** Because the mark is deliberately authored (like
   `vigiles:file` / `vigiles:cmd`), a broken file-qualified ref is an **error**
-  (exit 2) in `audit`, not a warning. No false positives: only the unambiguous
+  (exit 2) in `lint`, not a warning. No false positives: only the unambiguous
   `path.ext#symbol` shape is verified.
 - **Engine.** `@ast-grep/napi` + bundled `@ast-grep/lang-*` grammars. Symbol
   extraction is a generic tree-sitter traversal: definitions put their identifier
@@ -90,7 +90,7 @@ proves the claim against that file.
   marked — never a guess about prose.
 - **Escape hatch:** `<!-- vigiles:ignore -->` on the line (or
   `<!-- vigiles:ignore-file -->`) opts a span/file out.
-- **Severity:** a broken file-qualified ref is an **error** (exit 2) in `audit` —
+- **Severity:** a broken file-qualified ref is an **error** (exit 2) in `lint` —
   it is a declaration, like `vigiles:file` / `vigiles:cmd`. The hook enforces the
   mark and verifies it at write time (exit 2 blocks), with context.
 
@@ -137,7 +137,7 @@ Static AST misses runtime-defined symbols (Ruby `define_method`, Python
 1. ✅ **Per-file ast-grep extractor** — `src/symbols.ts` (`definedSymbols`,
    `definedSymbolsInFile`, `fileDefinesSymbol`). No project index.
 2. ✅ **File-qualified verification + enforcement hook** — `src/refs.ts`
-   (`verifySymbolRefs`, `unmarkedCodeRefs`), wired into `audit` (error tier) and
+   (`verifySymbolRefs`, `unmarkedCodeRefs`), wired into `lint` (error tier) and
    the `refs` / `refs-hook` commands. `refs-hook` blocks unmarked code refs.
 3. ✅ Co-located `.rbi` / `.d.ts` fallback in `fileDefinesSymbol` — absorbs
    typed dynamic / ambient symbols without running Sorbet or the TS compiler.

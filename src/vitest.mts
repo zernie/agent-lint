@@ -18,6 +18,7 @@
  */
 import { expect } from "vitest";
 import { vigilesMatchers } from "./harness-assert.js";
+import type { Check } from "./check.js";
 
 expect.extend(vigilesMatchers);
 
@@ -31,5 +32,7 @@ declare module "@vitest/expect" {
       metric: string,
       by?: number,
     ): T;
+    toPass(check: Check<any>): T;
+    toPassAll(checks: readonly Check<any>[]): T;
   }
 }

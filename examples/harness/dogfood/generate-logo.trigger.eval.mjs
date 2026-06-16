@@ -33,17 +33,32 @@ const skill = "vigiles-dev:generate-logo";
 
 const report = await measureTriggerRate({
   pluginDir,
-  // SHOULD fire — logo requests, varied phrasings:
+  stubSkillBodies: true, // trigger = frontmatter only; stub the body to stop at selection
+  // SHOULD fire — logo requests, varied phrasings (>= 10 for the diversity gate):
   prompts: [
     "Regenerate the vigiles logo with a darker palette.",
     "Make a new logo for vigiles.",
     "Iterate on our project logo — try a flatter style.",
+    "Design a wordmark for the vigiles README.",
+    "Produce an SVG brand mark for the project.",
+    "Render the vigiles app icon at 512px.",
+    "Give the logo a monochrome variant.",
+    "Sketch a mascot-style logo for vigiles.",
+    "Update the logo to match our new color scheme.",
+    "Create a square logo for the npm package page.",
   ],
   // should NOT fire — nearby creative/asset work that is NOT the vigiles logo:
   irrelevantPrompts: [
     "Generate a favicon for my blog.",
     "Write the README hero section.",
     "Add an SVG icon to the toolbar.",
+    "Crop and compress the screenshots in docs/.",
+    "Pick a syntax-highlighting theme for the docs site.",
+    "Draw a sequence diagram for the auth flow.",
+    "Add alt text to the images in the changelog.",
+    "Design a social-share preview card for the blog.",
+    "Convert the hero PNG to a WebP.",
+    "Make a 404 illustration for the website.",
   ],
   fired: (t) => skillResolved(t, skill),
   trials,

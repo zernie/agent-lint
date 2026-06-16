@@ -411,19 +411,39 @@ import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
 import { skillResolved, assertTriggerRate } from "vigiles/testing";
 
 const report = await measureTriggerRate({
-  pluginDir: "./my-plugin",
-  prompts: ["…varied tasks the skill should handle…"],
-  irrelevantPrompts: ["…unrelated tasks it should stay quiet on…"], // optional
+  skillsDir: ".claude/skills", // loose repo skills — auto-packaged (or pluginDir: "./my-plugin")
+  stubSkillBodies: true, // measure SELECTION only — stub each body so a run stops
+  // when the skill fires instead of executing its whole procedure (much cheaper)
+  prompts: ["…≥10 varied tasks the skill should handle…"],
+  irrelevantPrompts: ["…≥10 unrelated tasks it should stay quiet on…"], // optional
   fired: (t) => skillResolved(t, "my-plugin:greet"),
   trials: 2,
 });
 console.log(formatTriggerRateReport(report)); // trigger-rate: 80% (10 runs)
-assertTriggerRate(report, { min: 0.6, maxFalsePositive: 0.1 }); // recall + precision
+assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 }); // recall + precision
 ```
 
 `prompts` measures **recall** (does it fire when it should); `irrelevantPrompts`
 adds **precision** (`falsePositiveRate` / `precision`), so a too-broad description
 that hijacks unrelated work fails too.
+
+Three things make this cheap and honest, all on by choice:
+
+- **`skillsDir`** — point at a loose `.claude/skills` dir and vigiles packages it
+  into a throwaway plugin for you (no hand-rolled `plugin.json`). Use `pluginDir`
+  for an already-packaged plugin. Exactly one of the two.
+- **`stubSkillBodies`** — triggering is decided by a skill's **frontmatter** (name
+  - description) _before_ its body loads, so the body is irrelevant to whether it
+    fires. Stubbing it (all descriptions stay, so selection stays faithful) lets a
+    run stop at selection instead of paying to execute a multi-step procedure.
+- **Diversity gate** — before spending a token, `measureTriggerRate` rejects a
+  too-small or near-duplicate prompt set (`minPrompts`, default 10; an NCD
+  near-duplicate check). A rate over 3 copy-pasted prompts is noise; the gate
+  refuses to produce it. Lower `minPrompts` for a genuinely narrow skill.
+
+Measure on the model your users actually run (`model: "sonnet"` for most Claude
+Code users) — the model is part of the harness, so trigger-rate inherits its
+skill-selection behaviour; the default `"haiku"` is a cheap conservative floor.
 
 ### LLM-as-judge for subjective outcomes
 
@@ -464,6 +484,77 @@ test("Stop hook forces more work", async () => {
 });
 ```
 
+### Checks — one vocabulary, two evaluators
+
+The newest surface (`vigiles/check`) is a **declarative check** — data, not a
+throwing assert: `tool("Bash")` is an object that knows how to `eval` itself
+against a `Trace` (or a hook decision) and `toJSON`. The same check is evaluated
+two ways, so you write the assertion once:
+
+```ts
+import { tool, skill, output, hookFired, blocked } from "vigiles/check";
+import { assertChecks } from "vigiles/testing";
+
+// STRICT (deterministic tiers): throws, collecting ALL failures with messages.
+assertChecks(await runHarness(spec), [tool("Bash"), output(/done/)]);
+assertChecks(runHook(cmd, event), [blocked()]);
+
+// SCORED (eval): the SAME checks, as a rate ± se across trials.
+import { measure, assertRates, checkReportToJUnit } from "vigiles/testing";
+const report = await measure({
+  pluginDir: "./my-plugin",
+  task: "…",
+  checks: [skill("vigiles:test-harness")],
+  stubSkillBodies: true, // firing check: stub each body so a selected skill stops
+  // at selection instead of running its (expensive) procedure — a fraction of the
+  // tokens. Don't combine with judged/quality checks — the body is gone.
+  trials: 10,
+  model: "sonnet",
+});
+assertRates(report, { min: 0.8 }); // gate the rate, not one noisy run
+writeFileSync("checks.junit.xml", checkReportToJUnit(report, { min: 0.8 }));
+```
+
+A check's **failure message is the product** (`expected the agent to use tool
+"Bash", but it used [Read, Edit]`), and because it serializes (`toJSON` /
+`toJUnit`), CI reports and regression baselines fall out for free. Raw `Trace`
+fields (`r.toolCalls`, `r.output`, `r.file()`) stay first-class — checks are for
+composition and serialization, not a mandatory wrapper. Under vitest/jest, one
+generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
+`toPassAll([...])`, each carrying the check's own message.
+
+**The vocabulary** (`vigiles/check`):
+
+| Check                      | Holds when…                                       | Over             |
+| -------------------------- | ------------------------------------------------- | ---------------- |
+| `tool(name)`               | the agent used that tool                          | Trace            |
+| `skill(id)`                | a `Skill` resolved to `id` (no error)             | Trace            |
+| `mcp(server, tool)`        | the agent used `mcp__server__tool`                | Trace            |
+| `subagent(name, [checks])` | the `Task` subagent ran + passed nested checks    | Trace (nested)   |
+| `output(str \| /re/)`      | the final answer contains/matches                 | Trace            |
+| `received(str \| /re/)`    | text reached the model (slash-command / injected) | Trace (mock)     |
+| `hookFired(event)`         | a hook fired for that event                       | Trace            |
+| `turns({ min, max })`      | the agent took N turns (multi-turn)               | Trace            |
+| `wrote(path)`              | a file was created                                | Trace            |
+| `judged(rubric, { min })`  | a model grades the output ≥ `min` (LLM rubric)    | Trace (eval)     |
+| `cost/latency/tokens({…})` | the run stayed under budget                       | run usage (eval) |
+| `blocked()` / `allowed()`  | the hook blocked / allowed                        | `runHook` result |
+
+**A/B with significance.** `measureArms({ arms, checks })` scores the same checks
+per arm (a hook/skill/CLAUDE.md rule **on vs off**); `compareCheck(report,
+baseline, arm, i)` returns a Welch verdict — "the gated arm resolves the skill
+significantly more than vanilla" is a p-value, not a vibe. It takes
+`stubSkillBodies` too (every arm with a `pluginDir` is repackaged with bodies
+stripped), so an A/B **firing** comparison — does description variant A fire more
+than B? — is as cheap per-arm as a single `measure`.
+
+**Property-test a hook.** `propertyHook({ seed, mutate, decide, invariants })`
+fuzzes a hook's `(event) → decision` over generated events and shrinks any
+counterexample — for invariants like "a destructive command is always blocked".
+
+See [`research/testing-api-design.md`](../research/testing-api-design.md) for the
+full design.
+
 **vitest / jest matchers.** The `vigilesMatchers` object has an identical contract
 in both, so you can register it by hand:
 
@@ -487,6 +578,29 @@ expect(r).toHaveCreated("DONE");
 expect(r).toBlock();
 expect(report).toBeatBaseline("vanilla", "gated", "caught");
 ```
+
+**Setup, at a glance:**
+
+|                   | vitest                                     | jest                                   |
+| ----------------- | ------------------------------------------ | -------------------------------------- |
+| Register (config) | `test: { setupFiles: ["vigiles/vitest"] }` | `setupFilesAfterEnv: ["vigiles/jest"]` |
+| …or per-file      | `import "vigiles/vitest"`                  | `import "vigiles/jest"`                |
+| Manual (no types) | `expect.extend(vigilesMatchers)`           | `expect.extend(vigilesMatchers)`       |
+
+**The matchers** — `toPass` fronts the whole check vocabulary, so reach for it
+first; the rest are shorthands.
+
+| Matcher                                  | Asserts                                  | Over             |
+| ---------------------------------------- | ---------------------------------------- | ---------------- |
+| `expect(r).toPass(check)`                | the check holds (its own message)        | any result       |
+| `expect(r).toPassAll([checks])`          | every check holds                        | any result       |
+| `expect(r).toHaveCreated(path)`          | a file was created                       | harness result   |
+| `expect(r).toBlock()`                    | the hook blocked                         | `runHook` result |
+| `expect(report).toBeatBaseline(b, a, m)` | arm `a` beats baseline `b` on metric `m` | eval report      |
+
+So `expect(r).toPass(tool("Bash"))`, `toPass(skill("x:y"))`, `toPass(blocked())`,
+`toPass(cost({ maxUsd: 0.05 }))` all work with one matcher and the check's failure
+message. node:test / any runner: use `assertChecks(r, [checks])` instead.
 
 vitest and jest are **optional peer dependencies** — only the entry you import
 pulls one in. This seam is **tested**: the same `vigilesMatchers` is exercised

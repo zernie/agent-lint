@@ -115,7 +115,7 @@ function findSpecs(pattern?: string): string[] {
   return globSync(glob, {
     // `dot: true` so specs that live in a sync tool's source slot (e.g.
     // `.ruler/AGENTS.md.spec.ts`, the redirect target) are discovered by
-    // compile/audit/the recompile hook — not just root-level specs.
+    // compile/lint/the recompile hook — not just root-level specs.
     dot: true,
     ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**"],
     cwd: process.cwd(),
@@ -413,7 +413,7 @@ function verifyHashes(filePaths: string[], silent = false): HashCheckResult {
 
     // If the file doesn't exist at all (typo, deleted), that's an error —
     // not a "no hash" informational message. Without this check, a scoped
-    // audit like `vigiles audit typo.md` would silently exit clean.
+    // lint like `vigiles lint typo.md` would silently exit clean.
     if (!existsSync(fullPath)) {
       log(`\n✗ ${filePath} — file not found`);
       if (!silent) {
@@ -515,7 +515,7 @@ function check(filePaths: string[], silent = false): CombinedCheckResult {
     hashErrors: hashes.errorCount,
     // `validateSpecs` only returns a boolean today, so we collapse
     // failures to 1 until it starts reporting counts. Kept in its own
-    // counter so audit's "stale hash — run vigiles compile" remediation
+    // counter so lint's "stale hash — run vigiles compile" remediation
     // doesn't misreport a require-spec / other validation failure.
     validationErrors: specsValid ? 0 : 1,
   };
@@ -540,7 +540,7 @@ async function findDuplicateRules(
     if (!silent) console.log(msg);
   };
   const allSpecs = findSpecs();
-  // If audit was invoked with explicit file arguments, only scan the specs
+  // If lint was invoked with explicit file arguments, only scan the specs
   // for those files — otherwise an unrelated duplicate elsewhere in the
   // repo would fail a targeted CI check (e.g. `vigiles lint path/foo.md`).
   //
@@ -622,9 +622,9 @@ async function findDuplicateRules(
 }
 
 /**
- * Structured audit report used by --json, --summary, and exit-code logic.
+ * Structured lint report used by --json, --summary, and exit-code logic.
  */
-interface AuditReport {
+interface LintReport {
   hashErrors: number;
   validationErrors: number;
   inlineErrors: number;
@@ -724,7 +724,7 @@ async function verifyMarkdownMcpRefs(
 }
 
 /** Exit codes: 0 clean, 1 warnings only, 2 hard errors. */
-function auditExitCode(report: AuditReport): 0 | 1 | 2 {
+function lintExitCode(report: LintReport): 0 | 1 | 2 {
   if (
     report.hashErrors > 0 ||
     report.validationErrors > 0 ||
@@ -960,7 +960,7 @@ interface MarkdownModeTotals {
  *
  * Spec mode is the source of truth when it exists, so a literal
  * `<!-- vigiles:enforce ... -->` snippet that survived into compiled
- * markdown (or an example in a spec-managed file) must not trip audit. A
+ * markdown (or an example in a spec-managed file) must not trip lint. A
  * file is spec-managed iff it has a sibling `<file>.spec.ts` OR its own
  * `<!-- vigiles:sha256:... compiled from <spec> -->` header. A rule
  * declared both inline and in frontmatter is verified once (inline wins as
@@ -1022,18 +1022,18 @@ function verifyMarkdownModeRules(
 }
 
 /**
- * Unified audit command: verify hashes, report coverage gaps, detect duplicates,
+ * Unified lint command: verify hashes, report coverage gaps, detect duplicates,
  * suggest improvements.
  *
  * Flags:
  *   --summary   Print a single-line summary (for SessionStart hooks)
  *   --json      Print structured JSON report (for CI integration)
  */
-async function audit(
+async function runLint(
   restArgs: string[],
   flags: string[],
   config?: VigilesConfig,
-): Promise<AuditReport> {
+): Promise<LintReport> {
   const summary = flags.includes("--summary");
   const json = flags.includes("--json");
   const silent = summary || json;
@@ -1063,7 +1063,7 @@ async function audit(
   const coverage = discover(silent);
 
   // 3. Duplicate rule detection (NCD). Scope to the requested files when
-  // audit was invoked with explicit paths, so targeted CI checks don't
+  // lint was invoked with explicit paths, so targeted CI checks don't
   // fail on unrelated duplicates elsewhere in the repo.
   if (!silent) console.log("\nDuplicate rule detection:\n");
   const dups = await findDuplicateRules(
@@ -1131,7 +1131,7 @@ async function audit(
   // (only when a .mcp.json declares them). See src/mcp.ts.
   const mcpRefErrors = await verifyMarkdownMcpRefs(files, silent);
 
-  const report: AuditReport = {
+  const report: LintReport = {
     hashErrors: hashResult.hashErrors,
     validationErrors: hashResult.validationErrors,
     inlineErrors,
@@ -1154,7 +1154,7 @@ async function audit(
   };
 
   if (summary) {
-    printAuditSummary(report);
+    printLintSummary(report);
   } else if (json) {
     console.log(JSON.stringify(report, null, 2));
   }
@@ -1162,8 +1162,8 @@ async function audit(
   return report;
 }
 
-/** Single-line audit summary for SessionStart hooks — minimal token cost. */
-function printAuditSummary(report: AuditReport): void {
+/** Single-line lint summary for SessionStart hooks — minimal token cost. */
+function printLintSummary(report: LintReport): void {
   const parts: string[] = [];
   if (report.hashErrors > 0) parts.push(`${String(report.hashErrors)} stale`);
   if (report.validationErrors > 0)
@@ -1356,7 +1356,14 @@ function init(args: string[]): void {
   const targetName = basename(target);
   const targetLine =
     targetName !== "CLAUDE.md" ? `\n  target: "${targetName}",` : "";
-  const template = `import { claude, enforce, guidance } from "vigiles/spec";
+  // Import ONLY what the scaffold uses (`claude`) — a strict ESLint with
+  // \`no-unused-vars\` + \`--max-warnings=0\` (common in CI) would otherwise fail
+  // the moment this is committed, because the enforce()/guidance() examples
+  // below are commented out. The commented import shows what to add when you
+  // write a real rule.
+  const template = `import { claude } from "vigiles/spec";
+// When you add rules below, import the builders you use, e.g.:
+// import { claude, enforce, guidance } from "vigiles/spec";
 
 export default claude({${targetLine}
   sections: {
@@ -1447,7 +1454,7 @@ ${harness}`;
 /**
  * Detect a workflow that drives vigiles through an OLD API — a bare `npx vigiles`
  * (a no-op help screen in v2+) rather than the `zernie/vigiles@` Action or a real
- * subcommand (`audit`/`test`/…). Upgrading users whose workflow predates the
+ * subcommand (`lint`/`test`/…). Upgrading users whose workflow predates the
  * subcommand split silently lose CI validation, so we flag it loudly.
  */
 function workflowUsesStaleApi(content: string): boolean {
@@ -1460,27 +1467,81 @@ function workflowUsesStaleApi(content: string): boolean {
   return !hasModernCmd;
 }
 
+/**
+ * Subcommands removed/renamed across majors → the replacement to suggest. A
+ * workflow that still calls one is a silently-broken CI step (the removed
+ * subcommand exits non-zero / no-ops), and this stays true even when the file
+ * ALSO uses the Action or a modern command — so it is checked independently of
+ * the bare-API heuristic above, which an Action reference short-circuits.
+ */
+const REMOVED_SUBCOMMANDS: Record<string, string> = {
+  audit: "lint", // v3 → v4 rename
+};
+
+/** The first removed/renamed `vigiles <sub>` a workflow still calls, if any. */
+function workflowRemovedSubcommand(
+  content: string,
+): { sub: string; replacement: string } | null {
+  for (const [sub, replacement] of Object.entries(REMOVED_SUBCOMMANDS)) {
+    if (new RegExp(`vigiles\\s+${sub}\\b`).test(content))
+      return { sub, replacement };
+  }
+  return null;
+}
+
+/** Rewrite removed/renamed `vigiles <sub>` invocations in place (audit → lint).
+ * Surgical — preserves the rest of the user's workflow. */
+function rewriteRemovedSubcommands(content: string): string {
+  let out = content;
+  for (const [sub, replacement] of Object.entries(REMOVED_SUBCOMMANDS)) {
+    out = out.replace(
+      new RegExp(`(vigiles\\s+)${sub}\\b`, "g"),
+      `$1${replacement}`,
+    );
+  }
+  return out;
+}
+
 /** Create `.github/workflows/vigiles.yml`. Returns the files it wrote (for the
- * commit hint). An existing workflow is never clobbered, but a STALE one (old
- * bare-`npx vigiles` API) is reported loudly instead of silently skipped. */
+ * commit hint). An existing workflow is never clobbered unless `--force`, but a
+ * STALE one (old bare-`npx vigiles` API, or a removed subcommand) is reported
+ * loudly instead of silently skipped — and rewritten in place with `--force`. */
 function wireGha(plan: SetupPlan): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
+  const rel = ".github/workflows/vigiles.yml";
   if (existsSync(path)) {
     const content = readFileSync(path, "utf-8");
-    if (workflowUsesStaleApi(content)) {
+    const removed = workflowRemovedSubcommand(content);
+    if (removed) {
+      if (plan.force) {
+        writeFileSync(path, rewriteRemovedSubcommands(content));
+        console.log(
+          `✓ Rewrote ${rel} (vigiles ${removed.sub} → ${removed.replacement})`,
+        );
+        return [rel];
+      }
       console.log(
-        "⚠ .github/workflows/vigiles.yml is STALE — it runs a bare `npx vigiles`,\n" +
-          "  which is a no-op help screen now. Replace its run step with the Action +\n" +
-          "  the test job (CI is otherwise silently not validating anything):\n" +
-          "    - uses: zernie/vigiles@v1   # lint pillar — verify references\n" +
-          "    - run: npx vigiles test     # pillar 2 — harness tests\n" +
-          "  Or delete the file and re-run `vigiles init` to regenerate it.",
+        `⚠ ${rel} is STALE — it runs \`vigiles ${removed.sub}\`,\n` +
+          `  which was removed/renamed (now \`vigiles ${removed.replacement}\`). That CI\n` +
+          "  step is silently broken. Fix it:\n" +
+          `    - re-run \`vigiles init --force\` to rewrite it in place (vigiles ${removed.sub} → ${removed.replacement}), or\n` +
+          "    - switch the run step to `uses: zernie/vigiles@v1` (the composite Action).",
+      );
+    } else if (workflowUsesStaleApi(content)) {
+      if (plan.force) {
+        writeFileSync(path, vigilesWorkflow(plan));
+        console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
+        return [rel];
+      }
+      console.log(
+        `⚠ ${rel} is STALE — it runs a bare \`npx vigiles\`,\n` +
+          "  which is a no-op help screen now. CI is silently not validating anything. Fix it:\n" +
+          "    - re-run `vigiles init --force` to regenerate the workflow, or\n" +
+          "    - replace its run step with `uses: zernie/vigiles@v1` + `run: npx vigiles test`.",
       );
     } else {
-      console.log(
-        "✓ .github/workflows/vigiles.yml already exists (up to date)",
-      );
+      console.log(`✓ ${rel} already exists (up to date)`);
     }
     return [];
   }
@@ -1859,6 +1920,57 @@ function harnessBinaryPresent(bin: string): boolean {
   }
 }
 
+type InstallOutcome = "ok" | "failed" | "no-cli";
+
+/** Run a plan's auto-install commands; classify the result. */
+function runInstall(
+  plan: ReturnType<typeof planPluginInstall>[number],
+  exec: typeof import("node:child_process").execSync,
+): InstallOutcome {
+  if (plan.commands.length === 0) return "no-cli";
+  try {
+    for (const cmd of plan.commands) {
+      exec(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 });
+    }
+    return "ok";
+  } catch {
+    return "failed";
+  }
+}
+
+/**
+ * Report a plan's outcome. On anything but success, be LOUD — when an AGENT runs
+ * `init` (no human at the TTY), a quiet "Install vigiles:" hint followed by
+ * `/plugin` slash commands is a trap: the agent can't run a TUI slash command,
+ * so the plugin silently never installs. Surface the failure as a warning AND
+ * lead with the shell-runnable CLI form (which an agent CAN run), keeping the
+ * slash commands clearly labelled as the in-TUI alternative for a human.
+ */
+function reportInstall(
+  plan: ReturnType<typeof planPluginInstall>[number],
+  outcome: InstallOutcome,
+): void {
+  if (outcome === "ok") {
+    console.log(plan.successMessage);
+    for (const note of plan.notes) console.log(`  ${note}`);
+    return;
+  }
+  console.log(
+    outcome === "failed"
+      ? `⚠ vigiles plugin auto-install for ${plan.harness} FAILED — the plugin (hooks + skills) is NOT installed.`
+      : `⚠ vigiles plugin for ${plan.harness} was NOT installed (the ${plan.harness} CLI isn't on PATH here).`,
+  );
+  if (plan.commands.length > 0) {
+    console.log("  Finish from a shell (an agent can run these):");
+    for (const cmd of plan.commands) console.log(`    ${cmd}`);
+  }
+  if (plan.manualSteps.length > 0) {
+    console.log("  Or inside the Claude Code TUI (a human, not an agent):");
+    for (const step of plan.manualSteps) console.log(`    ${step}`);
+  }
+  for (const note of plan.notes) console.log(`  ${note}`);
+}
+
 /**
  * Install vigiles's skills/hooks for the chosen harness(es) via the per-harness
  * `planPluginInstall` decision — Claude Code through the GLOBAL plugin
@@ -1874,23 +1986,7 @@ function installPlugins(harnesses: string[]): void {
 
   for (const plan of plans) {
     console.log("");
-    let installed = false;
-    if (plan.commands.length > 0) {
-      try {
-        for (const cmd of plan.commands) {
-          exec(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 });
-        }
-        console.log(plan.successMessage);
-        installed = true;
-      } catch {
-        // Fall through to the manual instructions below.
-      }
-    }
-    if (!installed) {
-      console.log(`Install vigiles for ${plan.harness}:`);
-      for (const step of plan.manualSteps) console.log(`    ${step}`);
-    }
-    for (const note of plan.notes) console.log(`  ${note}`);
+    reportInstall(plan, runInstall(plan, exec));
   }
 }
 
@@ -2200,7 +2296,7 @@ function checkUntestedSurfaces(
 
 /**
  * Apply the configured coverage thresholds. Returns the number of failing
- * thresholds (so the audit can fail CI when severity is "error").
+ * thresholds (so the lint can fail CI when severity is "error").
  *
  * Loads specs directly via loadSpec() when the scripts threshold is set —
  * avoids depending on a pre-built `dist/` tree, which the setup-generated
@@ -2467,7 +2563,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha)",
+    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
@@ -2510,11 +2606,11 @@ function printUsage(command: string | undefined): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Emit GitHub Actions annotations for an audit report. Skipped when --json or
+ * Emit GitHub Actions annotations for an lint report. Skipped when --json or
  * --summary is active — those modes promise clean machine-readable stdout, and
  * ::error/::warning lines would contaminate output parsed as JSON.
  */
-function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
+function annotateLintForGitHub(report: LintReport, flags: string[]): void {
   const structuredOutput =
     flags.includes("--json") || flags.includes("--summary");
   if (!isGitHubActions() || structuredOutput) return;
@@ -2527,7 +2623,7 @@ function annotateAuditForGitHub(report: AuditReport, flags: string[]): void {
   if (report.validationErrors > 0) {
     ghAnnotate(
       "error",
-      `${String(report.validationErrors)} spec validation failure(s) — see audit output`,
+      `${String(report.validationErrors)} spec validation failure(s) — see lint output`,
     );
   }
   if (report.duplicatePairs > 0) {
@@ -2881,9 +2977,9 @@ async function main(): Promise<void> {
     case "lint": {
       // lint = verify references + discover + guidance count
       const flags = args.slice(1).filter((a) => a.startsWith("--"));
-      const report = await audit(restArgs, flags, config);
-      annotateAuditForGitHub(report, flags);
-      const exitCode = auditExitCode(report);
+      const report = await runLint(restArgs, flags, config);
+      annotateLintForGitHub(report, flags);
+      const exitCode = lintExitCode(report);
       if (exitCode !== 0) {
         process.exit(exitCode);
       }
