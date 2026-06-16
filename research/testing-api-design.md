@@ -419,9 +419,16 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
    - Still open (smaller): driving multiple **user** messages (`--resume`-style
      conversations, unverifiable here) and **per-turn trace slicing** (tool calls
      grouped by turn) — refinements on top of the now-covered observables.
-5. **Trace fidelity on the real-model tier.** `modelRequests` is **mock-tier only**
-   — on a real `runEval` you cannot assert _what reached the model_; no
-   thinking/per-turn capture. Largely inherent to the real API.
+5. **Trace fidelity.** Two known edges, both in the harness internals (not the
+   check API): (a) `modelRequests` is **mock-tier only** — a real `runEval` can't
+   assert _what reached the model_ (inherent to the real API); (b) **mock-tier
+   tool-call capture is config-sensitive** — the established `pluginDir` configs
+   capture tool calls fine (the Skill test passes), but a _bare_ `runHarness` with
+   the current `claude` can desync (a spurious `rate_limit_event`, the scripted
+   tool turn dropped, so `r.toolCalls` is empty while `turns`/`output` are intact).
+   So assert tool _behaviour_ at the eval tier or via the proven `pluginDir`
+   config; `hooks`/`turns`/`output`/`received` are reliable everywhere. A
+   mock-SSE-handshake-vs-current-claude fidelity fix is the backlog item.
 6. **CC-feature drift.** New hook events / surfaces must be tracked in `HookFire`
    parsing + the dialect — ongoing maintenance.
 
