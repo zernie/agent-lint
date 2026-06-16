@@ -11,17 +11,19 @@ vs. a deliberate non-goal. Companion to `research/sync-tool-compatibility.md`
 surfaces behave completely differently. The deciding question for each is **does
 the compiled output actually differ by harness?**
 
-| Surface          | Output differs by harness?                                      | Where it lands                                                | Who fans out                                   |
-| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- |
-| Instruction file | **No** — plain markdown, byte-identical                         | `CLAUDE.md` vs `AGENTS.md` (different name, same bytes)       | sync tool / mirror, else vigiles               |
-| Skill            | **Yes** — frontmatter profile (`claude-code` full vs `minimal`) | `.claude/skills/…` vs `.codex/skills/…` (**different roots**) | vigiles (verify per harness; compile per root) |
-| Subagent         | **N/A** — Codex non-goal                                        | `agents/<name>.md` (CC only)                                  | nobody (single harness)                        |
+| Surface          | Output differs by harness?                                      | Where it lands                                                | Who fans out                                               |
+| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| Instruction file | **No** — plain markdown, byte-identical                         | `CLAUDE.md` vs `AGENTS.md` (different name, same bytes)       | sync tool / mirror, else vigiles                           |
+| Skill            | **Yes** — frontmatter profile (`claude-code` full vs `minimal`) | `.claude/skills/…` vs `.codex/skills/…` (**different roots**) | vigiles (verify per harness; multi-emit deferred — see §3) |
+| Subagent         | **N/A** — Codex non-goal                                        | `agents/<name>.md` (CC only)                                  | nobody (single harness)                                    |
 
 The key correction that collapses the "this is hard" feeling: the two harness
 layouts namespace surfaces under **different `materializeRoot`s** (`.claude` vs
 `.codex` — see `src/adapters/*/layout.ts`). So `skills/` is a _relative_ name
-under each root, not a shared path. There is **no forced collision** — per-harness
-skill output is `.claude/skills/foo/SKILL.md` and `.codex/skills/foo/SKILL.md`.
+under each root, not a shared path — there is **no forced collision** at the
+_layout_ level. (Compile _output_, separately, is co-located with the spec
+today, so per-harness emit is an output-location decision, not a collision
+problem — see §3.)
 
 ## Decisions
 
@@ -94,20 +96,33 @@ exists to catch, so it is on-brand, not a liability:
 - `vigiles compile` rewrites the source **and** refreshes every detected mirror;
   drift only happens on a hand-edit, which lint flags as `integrity`.
 
-### 3. Skills — verify per harness; compile per root
+### 3. Skills — verify per harness (multi-emit deferred)
 
 For the **user's own** custom skills (a pillar-1 concern — not vigiles' three
 shipped skills, whose vendored-vs-global install is a separate `init` decision):
 
-- **Validate (lint)** — references in a `SKILL.md` are **harness-agnostic** (a
-  path is a path, a linter rule is a linter rule). The only harness-specific check
-  is the **frontmatter profile**: does the skill carry the keys each declared
-  harness requires (`claude-code` full vs `minimal`). So `harness: [...]` means
-  "verify this skill satisfies each declared harness" — the array doing
-  _per-harness verification_, squarely vigiles' lane.
-- **Compile** — emit to each declared harness's skills root (`.claude/skills/…`
-  full frontmatter, `.codex/skills/…` minimal). Different roots ⇒ no collision,
-  no install question.
+- **Validate — DONE (the array's real job).** References in a `SKILL.md` are
+  **harness-agnostic** (a path is a path, a linter rule is a linter rule). The one
+  harness-specific surface is the **frontmatter profile**. The profiles diverge
+  only in _optional_ CC-only keys (`disable-model-invocation`, `argument-hint`) —
+  `minimal` is a strict subset of `claude-code`, and `name`/`description` are
+  required by both — so "does it satisfy each harness" is trivially yes. The
+  useful, **assumption-free** check is the inverse: when a declared harness uses
+  the `minimal` profile, it _drops_ those CC-only keys, so a constraint the author
+  set (e.g. `disable-model-invocation`) silently won't apply there. `vigiles
+compile` now warns per declared minimal-profile harness
+  (`src/skill-harness.ts`, `skillFrontmatterDropWarnings`). This states a fact
+  about vigiles's own output, not a guess about another tool's parser tolerance.
+- **Compile (per-root multi-emit) — DEFERRED, on purpose.** Two unresolved
+  premises make N-emit speculative today: (a) skill output is **co-located** with
+  the spec (`SKILL.md.spec.ts` → sibling `SKILL.md`), not organized under
+  per-harness `materializeRoot`s, so "emit to `.codex/skills/`" has no
+  well-defined source location yet; (b) whether a `minimal`-profile harness
+  **tolerates** the CC superset's extra keys (→ a single superset file suffices)
+  vs. needs its own file is an open empirical question. Until both are settled,
+  the single compiled `SKILL.md` (selected profile) + the drop-warning is the
+  honest, correct behavior; multi-emit waits on the tolerance probe + an
+  output-location decision.
 
 ### 4. Subagents — Claude Code only
 
@@ -119,8 +134,8 @@ concurrency table, not a tool-contract file). Single harness, nothing to fan out
 Once split by surface, "multi-target compile" is not one scary feature:
 
 - **Instructions** — sync-tool fan-out (done) + a byte-copy fallback (new, small).
-- **Skills** — per-harness verification (the array's real job) + per-root compile
-  (mechanical; no collision).
+- **Skills** — per-harness verification (the array's real job, shipped) +
+  per-root multi-emit (deferred — output-location + tolerance unresolved).
 - **Subagents** — single harness.
 
 The array's headline value is **per-harness verification**, not N-way emission —
@@ -128,11 +143,14 @@ which keeps vigiles in author+verify and out of the rulesync fan-out business.
 
 ## Implementation slices
 
-1. **Selection** — `harness` in `VigilesConfig`; a pure resolver in
-   `src/adapter-registry.ts` (precedence + alias normalization) with tests;
-   thread the resolved dialect into the two compile helpers; `--harness=` on
-   `compile`/`lint`; `init` writes `harness`. _(no dependency on the others)_
-2. **Copy-mirror** — branch 3 above, in the instruction-file compile path.
-   _(depends only on selection for the declared-harness set)_
-3. **Skills per-harness verify/compile** — frontmatter-profile check across the
-   declared set; per-root emit. _(builds on selection)_
+1. **Selection — DONE.** `harness` in `VigilesConfig`; a pure resolver in
+   `src/adapter-registry.ts` (precedence + alias normalization, discriminated
+   `HarnessSelection`) with tests; the resolved dialect threaded into the compile
+   helpers; `--harness=` on `compile`; `init` writes `harness`.
+2. **Copy-mirror — DONE.** Branch 3 above (`writeInstructionMirrors` in the
+   instruction-file compile path): a byte-identical copy when ≥2 harnesses are
+   declared and no sync tool / existing mirror fans it out; never clobbers a
+   spec-owned target.
+3. **Skills cross-harness verify — DONE; per-root multi-emit — DEFERRED.** The
+   frontmatter-drop warning ships (`src/skill-harness.ts`); N-emit waits on the
+   tolerance probe + output-location decision (see section 3).
