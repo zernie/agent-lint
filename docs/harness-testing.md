@@ -546,6 +546,29 @@ expect(r).toBlock();
 expect(report).toBeatBaseline("vanilla", "gated", "caught");
 ```
 
+**Setup, at a glance:**
+
+|                   | vitest                                     | jest                                   |
+| ----------------- | ------------------------------------------ | -------------------------------------- |
+| Register (config) | `test: { setupFiles: ["vigiles/vitest"] }` | `setupFilesAfterEnv: ["vigiles/jest"]` |
+| …or per-file      | `import "vigiles/vitest"`                  | `import "vigiles/jest"`                |
+| Manual (no types) | `expect.extend(vigilesMatchers)`           | `expect.extend(vigilesMatchers)`       |
+
+**The matchers** — `toPass` fronts the whole check vocabulary, so reach for it
+first; the rest are shorthands.
+
+| Matcher                                  | Asserts                                  | Over             |
+| ---------------------------------------- | ---------------------------------------- | ---------------- |
+| `expect(r).toPass(check)`                | the check holds (its own message)        | any result       |
+| `expect(r).toPassAll([checks])`          | every check holds                        | any result       |
+| `expect(r).toHaveCreated(path)`          | a file was created                       | harness result   |
+| `expect(r).toBlock()`                    | the hook blocked                         | `runHook` result |
+| `expect(report).toBeatBaseline(b, a, m)` | arm `a` beats baseline `b` on metric `m` | eval report      |
+
+So `expect(r).toPass(tool("Bash"))`, `toPass(skill("x:y"))`, `toPass(blocked())`,
+`toPass(cost({ maxUsd: 0.05 }))` all work with one matcher and the check's failure
+message. node:test / any runner: use `assertChecks(r, [checks])` instead.
+
 vitest and jest are **optional peer dependencies** — only the entry you import
 pulls one in. This seam is **tested**: the same `vigilesMatchers` is exercised
 under both runners in [`test/runners/`](../test/runners/) (`matchers.vitest.mjs`
