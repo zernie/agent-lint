@@ -259,17 +259,19 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
 }
 
 /**
- * Recover sub-agent (`Task`) runs as nested traces. A `Task` tool call (with an
+ * Recover sub-agent runs as nested traces. A subagent-dispatch tool call (the
+ * `Agent` tool on the live CLI — older docs say `Task` — carrying an
  * `input.subagent_type`) spawns a subagent whose own events the CLI tags with a
- * top-level `parent_tool_use_id` = the Task's tool-use id. We group those tagged
- * tool calls under their Task, keyed by `subagent_type`. Schema confirmed against
- * Claude Code's stream-json (`parent_tool_use_id` sibling of `message`,
- * `subagent_type` in the Task input) — the same `message.content` line shape
- * `parseToolCalls` consumes. Pure; empty for a harness that doesn't emit
- * `parent_tool_use_id` (e.g. Codex), so it stays harness-agnostic.
+ * top-level `parent_tool_use_id` = the dispatch tool-use id. We group those
+ * tagged tool calls under their dispatch, keyed by `subagent_type`. **Schema
+ * verified against real claude output** (`parent_tool_use_id` sibling of
+ * `message`, `subagent_type` in the dispatch input; tool named `Agent`) — the
+ * same `message.content` line shape `parseToolCalls` consumes, and we match the
+ * input field NOT the tool name so a future rename can't break it. Pure; empty
+ * for a harness that doesn't emit `parent_tool_use_id` (e.g. Codex).
  */
 export function parseSubagents(streamJson: string): SubagentTrace[] {
-  const tasks = new Map<string, string>(); // Task id → subagent name
+  const tasks = new Map<string, string>(); // dispatch id → subagent name
   const byParent = new Map<
     string,
     {
@@ -308,7 +310,11 @@ export function parseSubagents(streamJson: string): SubagentTrace[] {
     for (const b of content as Array<Record<string, unknown>>) {
       if (b.type === "tool_use" && typeof b.name === "string") {
         const id = typeof b.id === "string" ? b.id : "";
-        if (b.name === "Task" && !parent) {
+        if (!parent) {
+          // A subagent dispatch is any top-level tool_use whose input carries a
+          // `subagent_type` — the dispatch tool is named "Agent" on the live CLI
+          // (older docs say "Task"), so match the input field, NOT the tool name,
+          // to survive the rename. Confirmed against real claude output.
           const sub = (b.input as { subagent_type?: string })?.subagent_type;
           if (typeof sub === "string") tasks.set(id, sub);
         }
