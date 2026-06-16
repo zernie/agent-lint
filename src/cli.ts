@@ -27,6 +27,7 @@ import {
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  mergeProjectConfig,
   type SetupPlan,
   type SetupAnswers,
   type ParsedSetupArgs,
@@ -2318,10 +2319,10 @@ function writeProjectConfig(opts: {
 }): void {
   const configPath = resolve(process.cwd(), ".vigilesrc.json");
   const existed = existsSync(configPath);
-  let config: Record<string, unknown> = {};
+  let existing: Record<string, unknown> = {};
   if (existed) {
     try {
-      config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+      existing = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
         string,
         unknown
       >;
@@ -2329,23 +2330,12 @@ function writeProjectConfig(opts: {
       return; // user-owned malformed config — never clobber it
     }
   }
-  let changed = false;
-  if (config.harness === undefined) {
-    config.harness = harnessConfigValue(opts.harnesses);
-    changed = true;
-  }
-  if (opts.strict) {
-    const rules = (config.rules as Record<string, unknown>) ?? {};
-    for (const r of ["require-spec", "require-skill-spec"]) {
-      if (rules[r] === undefined) {
-        rules[r] = "error";
-        changed = true;
-      }
-    }
-    config.rules = rules;
-  }
-  if (!changed) return;
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  const merged = mergeProjectConfig(existing, {
+    harness: harnessConfigValue(opts.harnesses),
+    strict: opts.strict,
+  });
+  if (!merged) return;
+  writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
   console.log(`✓ ${existed ? "Updated" : "Created"} .vigilesrc.json`);
   if (!opts.written.includes(".vigilesrc.json")) {
     opts.written.push(".vigilesrc.json");

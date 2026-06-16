@@ -8,6 +8,7 @@ import {
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  mergeProjectConfig,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -155,5 +156,77 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
       true,
     ),
     false,
+  );
+});
+
+// --- mergeProjectConfig: what `vigiles init` writes to .vigilesrc.json ---
+
+test("mergeProjectConfig: empty config gets the harness", () => {
+  assert.deepEqual(
+    mergeProjectConfig({}, { harness: "claude-code", strict: false }),
+    {
+      harness: "claude-code",
+    },
+  );
+});
+
+test("mergeProjectConfig: array harness is recorded as-is", () => {
+  assert.deepEqual(
+    mergeProjectConfig(
+      {},
+      { harness: ["claude-code", "codex"], strict: false },
+    ),
+    { harness: ["claude-code", "codex"] },
+  );
+});
+
+test("mergeProjectConfig: never clobbers an existing harness (returns null)", () => {
+  assert.equal(
+    mergeProjectConfig(
+      { harness: "codex" },
+      { harness: "claude-code", strict: false },
+    ),
+    null,
+  );
+});
+
+test("mergeProjectConfig: preserves other existing keys while adding harness", () => {
+  assert.deepEqual(
+    mergeProjectConfig({ maxRules: 50 }, { harness: "codex", strict: false }),
+    { maxRules: 50, harness: "codex" },
+  );
+});
+
+test("mergeProjectConfig: strict adds rule severities alongside harness", () => {
+  assert.deepEqual(
+    mergeProjectConfig({}, { harness: "claude-code", strict: true }),
+    {
+      harness: "claude-code",
+      rules: { "require-spec": "error", "require-skill-spec": "error" },
+    },
+  );
+});
+
+test("mergeProjectConfig: strict doesn't overwrite an existing rule severity", () => {
+  const out = mergeProjectConfig(
+    { harness: "codex", rules: { "require-spec": "warn" } },
+    { harness: "codex", strict: true },
+  );
+  assert.deepEqual(out, {
+    harness: "codex",
+    rules: { "require-spec": "warn", "require-skill-spec": "error" },
+  });
+});
+
+test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {
+  assert.equal(
+    mergeProjectConfig(
+      {
+        harness: "codex",
+        rules: { "require-spec": "error", "require-skill-spec": "error" },
+      },
+      { harness: "codex", strict: true },
+    ),
+    null,
   );
 });
