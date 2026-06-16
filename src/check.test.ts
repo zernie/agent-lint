@@ -18,6 +18,7 @@ import {
   blocked,
   allowed,
   evalChecks,
+  assertChecks,
   type Check,
 } from "./check.js";
 import type { Trace, ToolCall, HookFire } from "./harness-test.js";
@@ -154,5 +155,24 @@ test("evalChecks(): evaluates every check, preserving order", () => {
   assert.deepEqual(
     results.map((r) => r.pass),
     [true, true, false],
+  );
+});
+
+test("assertChecks(): passes silently, throws collecting ALL failures", () => {
+  const t = makeTrace({ toolCalls: [toolCall("Bash")], output: "done" });
+  // all pass → no throw
+  assertChecks(t, [tool("Bash"), output("done")]);
+
+  // two fail → one throw listing both messages
+  assert.throws(
+    () => {
+      assertChecks(t, [tool("Bash"), tool("Read"), output("nope")]);
+    },
+    (err: Error) => {
+      assert.match(err.message, /2 of 3 check\(s\) failed/);
+      assert.match(err.message, /use tool "Read"/);
+      assert.match(err.message, /output to contain nope/);
+      return true;
+    },
   );
 });

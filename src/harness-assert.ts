@@ -22,6 +22,7 @@ import {
 } from "./harness-test.js";
 import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult, EgressAttempt } from "./run-hook.js";
+import { evalChecks, type Check } from "./check.js";
 import type { OutputContract } from "./core/spec.js";
 import {
   parseAgentResult,
@@ -804,6 +805,22 @@ export const vigilesMatchers = {
       pass,
       message: () =>
         `expected ${arm} ${pass ? "not " : ""}to beat ${baseline} on ${metric} by > ${String(by)} (got ${delta.toFixed(3)})`,
+    };
+  },
+  // The check-vocabulary veneer (Phase 1): ONE matcher works for EVERY check,
+  // carrying the check's own failure message. `expect(r).toPass(tool("Bash"))`.
+  toPass<T>(received: T, check: Check<T>): MatcherOutput {
+    const r = check.eval(received);
+    return { pass: r.pass, message: () => r.message };
+  },
+  toPassAll<T>(received: T, checks: readonly Check<T>[]): MatcherOutput {
+    const failed = evalChecks(received, checks).filter((x) => !x.pass);
+    return {
+      pass: failed.length === 0,
+      message: () =>
+        failed.length === 0
+          ? "all checks passed"
+          : failed.map((f) => `  ✗ ${f.message}`).join("\n"),
     };
   },
 };
