@@ -59,6 +59,43 @@ scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).
 
+### `compile [files...]` — harness selection
+
+`compile` renders each `.spec.ts` to its instruction file / `SKILL.md` /
+subagent. Which **harness dialect** it renders (the `SKILL.md` frontmatter
+profile, the subagent tool catalog) is resolved deterministically — no cwd
+sniffing:
+
+1. `--harness=<name>` flag — wins (`claude-code`/`codex`; `claude` is an alias).
+2. The **spec's own target** for an instruction file — a `CLAUDE.md.spec.ts` is
+   claude-code, an `AGENTS.md.spec.ts` is codex.
+3. The **`harness` key** in `.vigilesrc.json` (written by `init`):
+   `"codex"`, or `["claude-code", "codex"]` to declare a multi-harness repo (the
+   first is used, with a loud notice; override per run with `--harness=`).
+4. Auto-detect from the repo, warning when it's ambiguous.
+
+```bash
+npx vigiles compile                      # all specs, harness from config/detect
+npx vigiles compile --harness=codex      # force the Codex dialect for this run
+```
+
+Two multi-harness behaviours:
+
+- **Instruction-file mirror.** When `harness` declares ≥2 harnesses and no sync
+  tool (Ruler/rulesync) or existing mirror fans the file out, `compile` writes a
+  **byte-identical** `CLAUDE.md`⇄`AGENTS.md` copy. It carries the source's
+  integrity hash, so a hand-edit of the mirror trips the `integrity` check. It
+  never clobbers a target that has its own spec.
+- **Frontmatter-drop warning.** A skill that sets Claude-Code-only frontmatter
+  (`disable-model-invocation`, `argument-hint`) in a repo that also declares a
+  `minimal`-profile harness (Codex/OpenCode) gets a warning — those keys are
+  dropped there, so the constraint won't apply.
+
+`lint` takes **no** `--harness`: reference verification is harness-agnostic (it
+already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
+one dialect) and `scan` (reports harness-specific structure). See
+[research/multi-harness-compile.md](../research/multi-harness-compile.md).
+
 ### `scan [dir]`
 
 Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
@@ -70,10 +107,17 @@ footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
 forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
 count, and the loader's dangling-ref / surface warnings. `--json` for CI.
 
+`scan` reports **harness-specific structure** (plugin layout, hook resolution),
+so it auto-detects the harness — printing the detected one and warning when a repo
+matches several — and takes `--harness=<name>` to override. (`compile` is
+harness-aware for the same reason; `lint` isn't — reference verification is
+harness-agnostic.)
+
 ```bash
 npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
 npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles scan ./repo --harness=codex # override harness detection
 ```
 
 Pass **more than one directory** and `scan` switches to a **ranked health

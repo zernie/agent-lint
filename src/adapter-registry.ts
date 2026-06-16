@@ -58,9 +58,37 @@ export function detectAdapter(root: string): HarnessAdapter {
   return detectAdapterResult(root).adapter;
 }
 
-/** Look up a registered adapter by `name` (e.g. for a `--harness` override). */
+/**
+ * Short-name aliases accepted anywhere a harness name is supplied (config,
+ * `--harness=`). `init` historically uses `"claude"`; the canonical adapter name
+ * is `"claude-code"`. Normalizing here keeps selection and the registry in sync.
+ */
+const HARNESS_ALIASES: Readonly<Record<string, string>> = {
+  claude: "claude-code",
+};
+
+/** Lower-case, trim, and map a short alias to its canonical adapter name. */
+export function normalizeHarnessName(name: string): string {
+  const n = name.trim().toLowerCase();
+  return HARNESS_ALIASES[n] ?? n;
+}
+
+/** Look up a registered adapter by `name` (alias-aware, e.g. `claude`). */
 export function getAdapter(name: string): HarnessAdapter | undefined {
-  return ADAPTERS.find((a) => a.name === name);
+  const canonical = normalizeHarnessName(name);
+  return ADAPTERS.find((a) => a.name === canonical);
+}
+
+/**
+ * The adapter whose instruction file is `filename` (e.g. `AGENTS.md` → codex,
+ * `CLAUDE.md` → claude-code), if any. The per-spec disambiguation signal: a
+ * `<file>.spec.ts` compiles a `<file>` instruction file, so the filename names
+ * the harness more specifically than config/detect for THAT spec.
+ */
+export function adapterForInstructionFile(
+  filename: string,
+): HarnessAdapter | undefined {
+  return ADAPTERS.find((a) => a.layout.instructionFile === filename);
 }
 
 /**
@@ -69,7 +97,7 @@ export function getAdapter(name: string): HarnessAdapter | undefined {
  * uses so detection + override live in one place.
  */
 export function resolveAdapter(root: string, harness?: string): HarnessAdapter {
-  if (harness !== undefined) {
+  if (harness !== undefined && harness !== "") {
     const a = getAdapter(harness);
     if (!a) {
       const known = ADAPTERS.map((x) => x.name).join(", ");
@@ -78,4 +106,73 @@ export function resolveAdapter(root: string, harness?: string): HarnessAdapter {
     return a;
   }
   return detectAdapter(root);
+}
+
+/** Normalize a config `harness` value (string | string[]) to a canonical list. */
+export function normalizeHarnessList(
+  harness?: string | readonly string[],
+): string[] {
+  if (harness === undefined) return [];
+  const arr = Array.isArray(harness) ? harness : [harness as string];
+  return arr.map(normalizeHarnessName).filter(Boolean);
+}
+
+/**
+ * The adapter chosen for a single-dialect operation. A discriminated union so an
+ * invalid state — a "notice" with no message, or a clean pick carrying a stray
+ * string — is unrepresentable: `kind: "ok"` has no `notice`, `kind: "notice"`
+ * always carries a non-empty one. Both variants carry the `adapter`.
+ */
+export type HarnessSelection =
+  | { readonly kind: "ok"; readonly adapter: HarnessAdapter }
+  | {
+      readonly kind: "notice";
+      readonly adapter: HarnessAdapter;
+      readonly notice: string;
+    };
+
+/**
+ * Resolve the single harness a compile/lint operation should use, with explicit
+ * precedence — the deterministic replacement for sniffing the cwd:
+ *
+ *   1. `--harness=` flag (wins; throws if unknown).
+ *   2. config `harness` resolving to a single entry → use it.
+ *   3. config `harness` with multiple entries → use the first, with a loud notice.
+ *   4. no config → auto-detect, with a loud notice when the repo is ambiguous.
+ *
+ * `configHarness` is parsed once (alias-normalized) at the call site and passed
+ * in; this function re-normalizes idempotently so it's safe either way. Pure
+ * (besides reading `root`'s layout for detection) so the precedence is
+ * unit-testable without a real compile. See research/multi-harness-compile.md.
+ */
+export function resolveHarnessSelection(opts: {
+  root: string;
+  flag?: string;
+  configHarness?: string | readonly string[];
+}): HarnessSelection {
+  const { root, flag, configHarness } = opts;
+  if (flag !== undefined && flag !== "") {
+    return { kind: "ok", adapter: resolveAdapter(root, flag) };
+  }
+  const list = normalizeHarnessList(configHarness);
+  if (list.length === 1) {
+    return { kind: "ok", adapter: resolveAdapter(root, list[0]) };
+  }
+  if (list.length > 1) {
+    const adapter = resolveAdapter(root, list[0]);
+    return {
+      kind: "notice",
+      adapter,
+      notice: `repo targets ${list.join(", ")} — compiling for ${adapter.name}; override with --harness=`,
+    };
+  }
+  const det = detectAdapterResult(root);
+  if (det.ambiguousWith.length > 0) {
+    return {
+      kind: "notice",
+      adapter: det.adapter,
+      notice: `repo matches ${[det.adapter.name, ...det.ambiguousWith].join(", ")} — set "harness" in .vigilesrc.json or use --harness=`,
+    };
+  }
+  return { kind: "ok", adapter: det.adapter };
 }

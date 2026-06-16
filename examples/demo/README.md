@@ -1,5 +1,11 @@
 # vigiles — 60-second demo
 
+> **⚠️ Deprecated — pending a demo revamp.** This curated demo still runs
+> (`npm run demo`), but it's no longer the surfaced front-door demo and isn't
+> actively maintained. It's slated for consolidation into a single, polished
+> demo story alongside `vigiles scan` — tracked on the
+> [roadmap](../../research/roadmap.md) (Demo revamp). Don't build on it.
+
 `INSTRUCTIONS.md` reads fine. But two of its references **lie** — and
 `vigiles lint` catches both, while the two truthful ones pass silently.
 

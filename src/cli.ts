@@ -27,6 +27,7 @@ import {
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  mergeProjectConfig,
   type SetupPlan,
   type SetupAnswers,
   type ParsedSetupArgs,
@@ -40,10 +41,16 @@ import { ruleSeverity, ruleOptions } from "./core/types.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
 import {
-  detectAdapter,
   detectAdapterResult,
   resolveAdapter,
+  resolveHarnessSelection,
+  normalizeHarnessName,
+  normalizeHarnessList,
+  getAdapter,
+  adapterForInstructionFile,
 } from "./adapter-registry.js";
+import type { HarnessDialect } from "./core/dialect.js";
+import { skillFrontmatterDropWarnings } from "./skill-harness.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
@@ -58,12 +65,15 @@ import {
 } from "./core/compile.js";
 import type { CompileError } from "./core/compile.js";
 import type { ClaudeSpec, SkillSpec, AgentSpec, Railway } from "./core/spec.js";
-import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { findSimilarRules } from "./core/proofs.js";
 import { parseInlineRules } from "./core/inline.js";
 import { parseFrontmatterRules } from "./core/frontmatter.js";
 import { generateSchema } from "./core/generate-schema.js";
-import { detectInstructionMirror, composeCollisions } from "./core/compose.js";
+import {
+  detectInstructionMirror,
+  composeCollisions,
+  detectSyncTools,
+} from "./core/compose.js";
 import type { InstructionMirror } from "./core/compose.js";
 import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
@@ -226,12 +236,13 @@ function compileClaudeToFile(
   spec: ClaudeSpec,
   specPath: string,
   config: VigilesConfig,
+  dialect: HarnessDialect,
 ): boolean {
   const basePath = process.cwd();
   const { markdown, errors, linterResults, targets } = compileClaude(spec, {
     basePath,
     specFile: specPath,
-    dialect: claudeCodeDialect,
+    dialect,
     maxRules: config.maxRules,
     maxTokens: config.maxTokens,
     maxSectionLines: config.maxSectionLines,
@@ -264,15 +275,56 @@ function compileClaudeToFile(
   return true;
 }
 
+/**
+ * Branch 3 of the mirror story (research/multi-harness-compile.md): when a repo
+ * declares ≥2 harnesses and nothing else fans out the instruction file, write a
+ * byte-identical copy to each other harness's instruction file (e.g. CLAUDE.md →
+ * AGENTS.md). A copy — not a symlink — because it works everywhere and carries
+ * the source's embedded integrity hash by construction, so a hand-edit of the
+ * mirror trips the existing `integrity` check. Never fights a sync tool or
+ * clobbers a target that owns its own spec.
+ */
+function writeInstructionMirrors(
+  primaryOutput: string,
+  harnesses: string[],
+): void {
+  if (harnesses.length < 2) return;
+  const cwd = process.cwd();
+  // A sync tool (Ruler/rulesync) owns fan-out — don't fight it.
+  if (detectSyncTools(cwd).length > 0) return;
+  const primaryName = basename(primaryOutput);
+  const primaryAbs = resolve(cwd, primaryOutput);
+  if (!existsSync(primaryAbs)) return;
+  const content = readFileSync(primaryAbs, "utf-8");
+  for (const name of harnesses) {
+    const adapter = getAdapter(name);
+    if (!adapter) continue;
+    const target = adapter.layout.instructionFile;
+    if (target === primaryName) continue; // the file we just compiled
+    // Never clobber a target that has its own spec (a genuinely separate file).
+    if (existsSync(resolve(cwd, `${target}.spec.ts`))) continue;
+    const targetAbs = resolve(cwd, target);
+    if (existsSync(targetAbs) && readFileSync(targetAbs, "utf-8") === content) {
+      continue; // already byte-identical
+    }
+    writeFileSync(targetAbs, content);
+    console.log(`  ↳ mirrored ${primaryName} → ${target} (byte-identical)`);
+  }
+}
+
 /** Compile a declarative SkillSpec → SKILL.md. */
-function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
+function compileSkillToFile(
+  spec: SkillSpec,
+  specPath: string,
+  dialect: HarnessDialect,
+): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
   const { markdown, errors } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
-    // Pick the SKILL.md frontmatter profile from the detected harness — a Codex
+    // The SKILL.md frontmatter profile comes from the resolved harness — a Codex
     // repo gets a minimal (name + description) SKILL.md; CC gets the full set.
-    dialect: detectAdapter(process.cwd()).dialect,
+    dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
@@ -285,12 +337,16 @@ function compileSkillToFile(spec: SkillSpec, specPath: string): boolean {
 }
 
 /** Compile a subagent spec → agents/<name>.md (with its result-contract section). */
-function compileAgentToFile(spec: AgentSpec, specPath: string): boolean {
+function compileAgentToFile(
+  spec: AgentSpec,
+  specPath: string,
+  dialect: HarnessDialect,
+): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
   const { markdown, errors } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
-    dialect: detectAdapter(process.cwd()).dialect,
+    dialect,
   });
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
@@ -340,8 +396,21 @@ async function collectAgentNames(): Promise<string[]> {
 async function compile(
   specPaths: string[],
   config: VigilesConfig,
+  opts: { harnessFlag?: string } = {},
 ): Promise<boolean> {
   let allValid = true;
+  // Parse the declared harness set ONCE (alias-normalized) and feed both the
+  // dialect pick and the mirror from it — no re-parsing, no cwd-sniffing in the
+  // helpers. A loud notice (never a silent guess) on a multi-harness or
+  // ambiguous-detection pick.
+  const declaredHarnesses = normalizeHarnessList(config.harness);
+  const selection = resolveHarnessSelection({
+    root: process.cwd(),
+    flag: opts.harnessFlag,
+    configHarness: declaredHarnesses,
+  });
+  if (selection.kind === "notice") console.log(`⚠ ${selection.notice}`);
+  const dialect = selection.adapter.dialect;
   // Resolved lazily on the first railway spec — every delegate() target is
   // checked against the agents defined anywhere in the project.
   let knownAgents: string[] | null = null;
@@ -362,11 +431,37 @@ async function compile(
       continue;
     }
     if (spec._specType === "claude") {
-      if (!compileClaudeToFile(spec, specPath, config)) allValid = false;
+      // Spec-target disambiguation: a CLAUDE.md.spec.ts is a claude-code file, an
+      // AGENTS.md.spec.ts a codex one — the strongest dialect signal for THIS
+      // spec. The flag still overrides; absent one, the spec's own target wins
+      // over config/detect. (Skill/agent targets don't name a harness, so they
+      // keep the run-level dialect.)
+      const targetFile = basename(specPath).replace(/\.spec\.ts$/, "");
+      const specDialect =
+        opts.harnessFlag === undefined
+          ? (adapterForInstructionFile(targetFile)?.dialect ?? dialect)
+          : dialect;
+      if (compileClaudeToFile(spec, specPath, config, specDialect)) {
+        writeInstructionMirrors(
+          specPath.replace(/\.spec\.ts$/, ""),
+          declaredHarnesses,
+        );
+      } else {
+        allValid = false;
+      }
     } else if (spec._specType === "skill") {
-      if (!compileSkillToFile(spec, specPath)) allValid = false;
+      // Cross-harness verify: flag CC-only frontmatter a declared minimal-profile
+      // harness (Codex/OpenCode) would silently drop.
+      const forHarnesses =
+        declaredHarnesses.length > 0
+          ? declaredHarnesses
+          : [selection.adapter.name];
+      for (const w of skillFrontmatterDropWarnings(spec, forHarnesses)) {
+        console.log(`⚠ ${w}`);
+      }
+      if (!compileSkillToFile(spec, specPath, dialect)) allValid = false;
     } else if (spec._specType === "agent") {
-      if (!compileAgentToFile(spec, specPath)) allValid = false;
+      if (!compileAgentToFile(spec, specPath, dialect)) allValid = false;
     } else if (spec._specType === "railway") {
       knownAgents ??= await collectAgentNames();
       if (!compileRailwayToFile(spec, specPath, knownAgents)) allValid = false;
@@ -2199,24 +2294,52 @@ async function setup(args: string[]): Promise<void> {
     console.log("    npm install -D rule-porter");
   }
 
-  // Strict config.
-  if (strict) {
-    const configPath = resolve(process.cwd(), ".vigilesrc.json");
-    if (!existsSync(configPath)) {
-      writeFileSync(
-        configPath,
-        JSON.stringify(
-          { rules: { "require-spec": "error", "require-skill-spec": "error" } },
-          null,
-          2,
-        ) + "\n",
-      );
-      console.log("✓ Created .vigilesrc.json with strict rules");
-      written.push(".vigilesrc.json");
-    }
-  }
+  // Project config — record the harness(es) so compile/lint select the dialect
+  // deterministically (no cwd sniffing), plus strict rule severities on --strict.
+  writeProjectConfig({ harnesses, strict, written });
 
   printSetupSummary({ plan, strict, targets, needsMigration, written });
+}
+
+/** Canonical, de-duplicated harness list → a config value (string when one). */
+function harnessConfigValue(harnesses: string[]): string | string[] {
+  const canon = [...new Set(harnesses.map(normalizeHarnessName))];
+  return canon.length === 1 ? canon[0] : canon;
+}
+
+/**
+ * Merge the resolved harness(es) (and strict rule severities) into
+ * `.vigilesrc.json` without clobbering existing keys — an existing `harness`
+ * stays, a missing one is added, a malformed file is left untouched.
+ */
+function writeProjectConfig(opts: {
+  harnesses: string[];
+  strict: boolean;
+  written: string[];
+}): void {
+  const configPath = resolve(process.cwd(), ".vigilesrc.json");
+  const existed = existsSync(configPath);
+  let existing: Record<string, unknown> = {};
+  if (existed) {
+    try {
+      existing = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return; // user-owned malformed config — never clobber it
+    }
+  }
+  const merged = mergeProjectConfig(existing, {
+    harness: harnessConfigValue(opts.harnesses),
+    strict: opts.strict,
+  });
+  if (!merged) return;
+  writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
+  console.log(`✓ ${existed ? "Updated" : "Created"} .vigilesrc.json`);
+  if (!opts.written.includes(".vigilesrc.json")) {
+    opts.written.push(".vigilesrc.json");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2963,7 +3086,10 @@ async function main(): Promise<void> {
         console.log("Run `vigiles init` to create one.");
         process.exit(0);
       }
-      const valid = await compile(specs, config);
+      const harnessFlag = args
+        .find((a) => a.startsWith("--harness="))
+        ?.slice("--harness=".length);
+      const valid = await compile(specs, config, { harnessFlag });
       console.log("");
       if (valid) {
         console.log("Compilation complete.");
