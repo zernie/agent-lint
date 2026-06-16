@@ -160,6 +160,16 @@ export interface VigilesConfig {
   linters?: Record<string, { rulesDir?: string | string[] }>;
   /** Orphan-docs check configuration. Include/exclude globs, tsconfig-style. */
   orphans?: OrphansConfig;
+  /**
+   * The harness(es) this repo targets — selects the compile dialect / skill
+   * frontmatter profile / instruction-file shape, instead of sniffing the cwd.
+   * A single name (`"codex"`) for the common single-harness repo, or an array
+   * (`["claude-code", "codex"]`) declaring the supported set. Written by
+   * `vigiles init`. Omitted → the CLI auto-detects (backwards-compatible).
+   * Canonical adapter names; `"claude"` is accepted as an alias for
+   * `"claude-code"`. See research/multi-harness-compile.md.
+   */
+  harness?: string | string[];
 }
 
 /** Valid marker types for rule detection. */
