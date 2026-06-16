@@ -21,6 +21,11 @@ import {
   isRateLimited,
   measureTriggerRateWith,
   formatTriggerRateReport,
+  measureWith,
+  formatCheckReport,
+  assertRates,
+  checkReportToJUnit,
+  type CheckReport,
   packageSkillsDir,
   stubSkillBody,
   promptDistance,
@@ -33,6 +38,7 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
+import { tool, output } from "./check.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -307,6 +313,75 @@ test("measureTriggerRateWith rejects a too-small prompt set by default (no model
     /not eval-ready|at least 10/,
   );
   assert.equal(calls, 0, "must reject before any model run");
+});
+
+test("measureWith scores a check vocabulary across trials (rate ± se, pass^k)", async () => {
+  const stream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", result: "all done", num_turns: 1 });
+
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: stream });
+
+  const report = await measureWith(
+    {
+      task: "do the thing",
+      checks: [tool("Bash"), output("done"), tool("Read")],
+      trials: 3,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 3);
+  const [bash, out, read] = report.perCheck;
+  assert.equal(bash.check.kind, "tool");
+  assert.equal(bash.rate, 1); // Bash used every trial
+  assert.equal(bash.passK, 1);
+  assert.equal(out.rate, 1); // "done" in output every trial
+  assert.equal(read.rate, 0); // Read never used
+  assert.equal(read.passK, 0);
+  assert.ok(formatCheckReport(report).includes("measured 3 run(s)"));
+});
+
+test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => {
+  const report: CheckReport = {
+    n: 10,
+    perCheck: [
+      {
+        check: { kind: "tool", name: "Bash" },
+        rate: 0.9,
+        se: 0.1,
+        passK: 0,
+        n: 10,
+      },
+      {
+        check: { kind: "skill", id: "vig:x" },
+        rate: 0.4,
+        se: 0.16,
+        passK: 0,
+        n: 10,
+      },
+    ],
+  };
+  // gate: skill at 0.4 is below 0.8 → throws naming it
+  assert.throws(() => {
+    assertRates(report, { min: 0.8 });
+  }, /skill\(vig:x\): 40%/);
+  assertRates(report, { min: 0.3 }); // both above → no throw
+
+  const xml = checkReportToJUnit(report, { min: 0.8, name: "demo" });
+  assert.match(xml, /<testsuite name="demo" tests="2" failures="1">/);
+  assert.match(
+    xml,
+    /<testcase classname="vigiles.checks" name="tool\(Bash\)">/,
+  );
+  assert.match(xml, /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40%/);
 });
 
 test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
