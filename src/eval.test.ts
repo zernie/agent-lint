@@ -7,7 +7,13 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import {
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -29,6 +35,7 @@ import {
   checkReportToJUnit,
   type CheckReport,
   packageSkillsDir,
+  stubbedPluginDir,
   stubSkillBody,
   promptDistance,
   checkPromptDiversity,
@@ -496,7 +503,7 @@ test("measureArmsWith stubSkillBodies stubs each arm's pluginDir (and cleans up)
   await measureArmsWith(
     {
       task: "do foo",
-      arms: { a: { pluginDir: armA }, b: { pluginDir: armB } },
+      arms: { a: { pluginDir: armA }, b: { pluginDir: armB }, plain: {} },
       stubSkillBodies: true,
       checks: [tool("Skill")],
       trials: 1,
@@ -550,6 +557,98 @@ test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => 
     /<testcase classname="vigiles.checks" name="tool\(Bash\)">/,
   );
   assert.match(xml, /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40%/);
+});
+
+test("formatCheckReport labels a no-arg check by its kind alone", () => {
+  // checkLabel's fallback: a check with no name/id/event/path/matcher (e.g.
+  // `turns`) renders as just its kind, not `kind(arg)`.
+  const report: CheckReport = {
+    n: 3,
+    perCheck: [{ check: { kind: "turns" }, rate: 1, se: 0, passK: 1, n: 3 }],
+  };
+  assert.ok(formatCheckReport(report).includes("turns"));
+  assert.ok(!formatCheckReport(report).includes("turns(")); // no arg parens
+});
+
+test("packageSkillsDir throws when the skills dir does not exist", () => {
+  assert.throws(
+    () => packageSkillsDir("/no/such/skills/dir"),
+    /skillsDir not found/,
+  );
+});
+
+test("stubbedPluginDir falls back to .claude/skills and tolerates a missing manifest", () => {
+  const dir = makeTmpDir("stubbed-fallback");
+  // No .claude-plugin/plugin.json (pluginName → undefined) and skills under
+  // .claude/skills/ (skillsDirOf's fallback branch), not skills/.
+  const skills = join(dir, ".claude", "skills", "foo");
+  mkdirSync(skills, { recursive: true });
+  writeFileSync(
+    join(skills, "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun it\n",
+  );
+  // A stray NON-directory entry at the skills root — packageSkillsDir skips it.
+  writeFileSync(join(dir, ".claude", "skills", "README.md"), "not a skill\n");
+  const pkg = stubbedPluginDir(dir);
+  const md = readFileSync(join(pkg, "skills", "foo", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: does foo")); // frontmatter kept
+  assert.ok(!md.includes("run it")); // body stubbed
+  // pluginName returned undefined → packageSkillsDir's default name.
+  const manifest = JSON.parse(
+    readFileSync(join(pkg, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles-loose-skills");
+  rmSync(pkg, { recursive: true, force: true });
+  cleanupTmpDir(dir);
+});
+
+test("measureTriggerRateWith stubs a real pluginDir's bodies (pluginDir + stub)", async () => {
+  const dir = makeTmpDir("trigger-plugindir-stub");
+  mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(dir, "skills", "foo"), { recursive: true });
+  writeFileSync(
+    join(dir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "myplug", version: "0.0.0" }),
+  );
+  writeFileSync(
+    join(dir, "skills", "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  let seenBody = "";
+  let usedDir = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    if (a.pluginDir) {
+      usedDir = a.pluginDir;
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    }
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureTriggerRateWith(
+    {
+      pluginDir: dir,
+      stubSkillBodies: true,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
+  assert.ok(usedDir && usedDir !== dir, "a packaged throwaway was used");
+  assert.ok(!existsSync(usedDir), "throwaway removed afterward");
+  cleanupTmpDir(dir);
 });
 
 test("packageSkillsDir builds a --plugin-dir from loose .claude/skills", () => {
