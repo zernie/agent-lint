@@ -14,3 +14,8 @@ export * from "./run-hook.js";
 export * from "./harness-test.js";
 export * from "./eval.js";
 export * from "./harness-assert.js";
+// The declarative check vocabulary is now first-class at the front door. Its
+// `hookFired` (a `Check<Trace>`) supersedes the legacy boolean predicate of the
+// same name — the explicit re-export below wins over the two `export *`s.
+export * from "./check.js";
+export { hookFired } from "./check.js";
