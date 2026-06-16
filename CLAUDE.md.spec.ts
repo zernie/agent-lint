@@ -301,6 +301,8 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Dogfood of the new check vocabulary on the DETERMINISTIC tiers (no key, RUNS in CI): assertChecks over a real runHook (blocked/allowed) + a real runHarness mock run (turns/output). Exercises the revamped strict-check path end-to-end, not just unit-tested with fakes",
     "examples/harness/dogfood/skill-quality.eval.mjs":
       "Dogfood of the SCORED check evaluator on vigiles's OWN strengthen skill: measure({ checks: [skill, judged, cost] }) + assertRates — does the skill FIRE, is its suggestion GOOD (model-graded judged), and is the run CHEAP. The promptfoo-class scored path dogfooded; write-don't-run without model auth",
+    "examples/harness/dogfood/skill-firing-cheap.eval.mjs":
+      "Dogfood of the CHEAP firing-only path: measure({ checks: [skill, latency], stubSkillBodies: true }) on vigiles's OWN strengthen skill — the sibling of skill-quality.eval.mjs that stubs each skill BODY (firing is a frontmatter property decided before the body loads) so the run stops AT selection. Measured ~18x cheaper for the SAME firing verdict (rate 1 either way; ~49s stubbed vs ~889s full-body). Stub for skill()/firing checks, NOT judged/quality (the body is gone). Write-don't-run without model auth",
     "examples/harness/subagent.eval.mjs":
       "Dogfood of the subagent nested-trace check on a REAL subagent — the vendored oh-my-claudecode code-reviewer agent (vigiles ships no subagents). measure drives a task that dispatches it via Task; subagent('code-reviewer', [tool('Read')]) asserts what the SUBAGENT did (recovered via parent_tool_use_id). Write-don't-run without model auth",
     "examples/harness/dogfood/generate-logo.trigger.eval.mjs":
