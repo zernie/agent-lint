@@ -107,10 +107,17 @@ footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
 forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
 count, and the loader's dangling-ref / surface warnings. `--json` for CI.
 
+`scan` reports **harness-specific structure** (plugin layout, hook resolution),
+so it auto-detects the harness — printing the detected one and warning when a repo
+matches several — and takes `--harness=<name>` to override. (`compile` is
+harness-aware for the same reason; `lint` isn't — reference verification is
+harness-agnostic.)
+
 ```bash
 npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
 npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles scan ./repo --harness=codex # override harness detection
 ```
 
 Pass **more than one directory** and `scan` switches to a **ranked health
