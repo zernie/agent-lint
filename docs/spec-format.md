@@ -210,13 +210,14 @@ export default defineConfig({
 });
 ```
 
-| Option      | Type      | Description                                             |
-| ----------- | --------- | ------------------------------------------------------- |
-| `specs`     | `string`  | Glob pattern to discover spec files                     |
-| `discover`  | `boolean` | Auto-discover linter rules for coverage reporting       |
-| `maxRules`  | `number`  | Compilation fails if a spec exceeds this rule count     |
-| `maxTokens` | `number`  | Compilation fails if estimated tokens exceed this limit |
-| `orphans`   | `object`  | Orphan-docs scan globs (see below)                      |
+| Option      | Type                   | Description                                                                                                                                                                                                      |
+| ----------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `specs`     | `string`               | Glob pattern to discover spec files                                                                                                                                                                              |
+| `discover`  | `boolean`              | Auto-discover linter rules for coverage reporting                                                                                                                                                                |
+| `maxRules`  | `number`               | Compilation fails if a spec exceeds this rule count                                                                                                                                                              |
+| `maxTokens` | `number`               | Compilation fails if estimated tokens exceed this limit                                                                                                                                                          |
+| `orphans`   | `object`               | Orphan-docs scan globs (see below)                                                                                                                                                                               |
+| `harness`   | `string` \| `string[]` | The harness(es) this repo targets — `"codex"`, or `["claude-code", "codex"]`. Selects the compile dialect; written by `init`. Omitted → auto-detect. See [CLI: compile](cli.md#compile-files--harness-selection) |
 
 ### Orphan-docs configuration
 
