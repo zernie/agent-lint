@@ -358,6 +358,70 @@ checks)` throws collecting **all** failures (Validation-applicative). ONE generi
   `hookFired` collision then). "Additive before breaking" — and the breaking step
   is the one to take slowly.
 
+**Update (2026-06-16): the safe half of Phase 6 shipped.** `vigiles/check` folded
+into `vigiles/testing` + `vigiles/unit` (the check `hookFired` wins via an
+explicit re-export over the two `export *`s); `e2e` collapsed to a deprecated
+alias with egress as a capability of `integration`. The legacy
+predicate/`assert*`/matcher fronts were KEPT — at their true (small) blast radius
+they proved to be context-appropriate surfaces (compose / node:test / vitest-jest)
+unified _under_ the one check vocabulary, not redundancy; deleting them is churn
+with no greatness gain. The full barrel rename stays a major-version cleanup.
+
+## Part 7 — Greatness re-evaluation + the eval-side gaps (post-cleanup)
+
+**Is it great?** On the two things that decide it — yes. (1) _Unification_: one
+`Trace`, one `check` vocabulary, two evaluators (`assertChecks` strict /
+`measure` scored), serialized for free (`toJUnit`), runner- and harness-agnostic.
+(2) _The moat_: the deterministic sub-model tiers (`runHook` / `runHarness`-mock,
+no key) that promptfoo/DeepEval/Inspect structurally can't have, plus pass^k +
+significance and real-harness fidelity. The surface is coherent and discoverable;
+raw `Trace` stays primary; a single matcher (`toPass`) fronts the whole vocabulary.
+
+**Extensibility.** Adding a check is trivial (`Check<T>`); adding a harness is an
+adapter bundle; adding a tier is a capability flag. One real seam to watch: the
+`Check.eval` is **synchronous**. That's fine for deterministic checks and even for
+a `judge()`-backed one (`judge` blocks via `execSync`), but a future _async_
+scorer (a streaming judge, an HTTP grader) would not fit — if that arrives, add an
+`AsyncCheck` (`eval → Promise<CheckResult>`) consumed only by `measure`, never by
+the strict `assertChecks`.
+
+**Gaps — ranked, eval-side first (each closes a CC-feature or promptfoo-parity hole):**
+
+1. **`judged(rubric, { min })` — model-graded check.** `judge()` exists but is NOT
+   a `Check`, so an LLM-rubric can't compose into `measure` / `assertRates` /
+   `toJUnit`. It _fits the sync interface_ (`eval(trace)` → `judge({ output:
+trace.output, rubric })`). Small add, biggest value — closes the #1 parity gap
+   with promptfoo `llm-rubric` / DeepEval `GEval`.
+2. **`cost()` / `latency()` / `tokens()` checks** over `RunContext.usage`. The data
+   is already captured; there's just no check. Trivial; promptfoo has them.
+3. **Checks × A/B arms + significance.** `measure` is single-arm; the harness-A/B
+   moat (`runEval` arms + `assertSignificant`) is a separate path. A `measure` that
+   takes arms and compares each check's rate across them with Welch significance
+   unifies the moat with the check vocabulary. Medium.
+4. **Multi-surface CC eval — the deepest gap.** `Trace` is a _single, flat_
+   session: a tool list + hooks + output. It does **not** capture:
+   - **Subagents (`Task`)** as nested sub-traces — a subagent runs its own session;
+     today it shows only as one `Task` tool call, so you can't assert what the
+     subagent _did_ or score a multi-agent handoff.
+   - **Slash-command expansion** — whether a `commands/` file expands correctly and
+     drives behaviour (pre-model, needs mock-prompt capture).
+   - **Multi-turn conversations** — `measure`/`runEval` give a single task; testing
+     a skill/hook across a back-and-forth isn't expressible.
+   - **MCP-tool use** beyond the flat tool list (an `mcp(server, tool)` check).
+     Each wants a Trace extension (nested traces, per-turn slices) + matching checks.
+5. **Trace fidelity on the real-model tier.** `modelRequests` is **mock-tier only**
+   — on a real `runEval` you cannot assert _what reached the model_ (a
+   SessionStart hook's injected context), only the mock tier can. No
+   thinking/reasoning or per-turn capture either.
+6. **CC-feature drift.** New hook events / surfaces (CC keeps adding) must be
+   tracked in `HookFire` parsing + the dialect; today's set is current but this is
+   ongoing maintenance, not a one-time fix.
+
+**Recommended next bets:** 1 → 2 → 3 are small/medium and high-leverage (they make
+`measure` a real promptfoo-class scored evaluator while keeping our moat). 4 is the
+genuinely new capability surface (nested-trace model) and the right _big_ bet once
+the cheap wins land. 5–6 are fidelity/maintenance, addressed opportunistically.
+
 ## See also
 
 - `research/eval-api-landscape.md` — eval _infra_ features, the scorecard, and the
