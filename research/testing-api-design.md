@@ -454,6 +454,42 @@ seam, not a built-in Codex default), plus a richer Codex `parseRun` so `tool`/
 genuinely new capability — now that 1–3 made `measure` a promptfoo-class scored
 evaluator. 5–6 + the eval-tier adapter convenience are opportunistic.
 
+## Addendum — snapshots: which kind, and what they can catch
+
+A recurring "should we add snapshot testing?" question resolves into **three
+different things**, only one of which prevents regressions in a real-model run:
+
+1. **Output-text snapshot** (jest golden string of the model's prose) — **reject.**
+   Model output changes every run; the snapshot is red for reasons you don't care
+   about. This is why the whole AI-eval field abandoned output snapshots for
+   _assertions_ — the data model this doc already recommends.
+2. **Record/replay cassette** (what `eval-cache.ts` is) — **cannot catch model
+   regressions, by construction.** Replaying a recorded response tests your
+   _scorer_, not the model; the recorded response always passes against itself.
+   Cassettes make scorer iteration free; they are blind to model drift because
+   they don't call the model. Orthogonal to regression prevention.
+3. **Trace-structure snapshot** — capture-and-diff the **deterministic** `Trace`
+   fields (which tools were called, did the hook fire, did the skill trigger, turn
+   count, files written), not the prose. These are stable even when wording
+   varies, so a trace snapshot is genuinely jest-like: it flags structural drift on
+   the **next** run — no statistics, no power analysis, no cost. The `check`
+   vocabulary already reads exactly these fields (`tool`/`skill`/`hookFired`/
+   `turns`/`wrote`/`mcp`/`subagent`); what's missing is a snapshot _mode_ that
+   auto-captures them as a golden and diffs, instead of hand-written `assertChecks`.
+
+The split that falls out: **structural/deterministic trace fields → snapshot**
+(deterministic-tier regression detection); **probabilistic fields** (does a
+description still _fire_ at rate 0.9, did output _quality_ drop) → the statistical
+**eval baseline** (`eval-baseline.ts` + Welch). Snapshotting a rate as a fixed
+golden is the flaky trap; that's where significance testing earns its keep.
+
+The payoff: a lot of what people reach for an eval to do is actually a
+deterministic trace assertion in disguise. A `snapshotTrace` / `--update-snapshots`
+mode over the `check` vocabulary would move those off the costly, noisy real-model
+tier onto the free deterministic one — the "keep the real-model surface thin"
+principle made into a feature. (Conclusion from a 2026-06 design discussion;
+candidate add-on alongside the Option-D property-test for hooks.)
+
 ## See also
 
 - `research/eval-api-landscape.md` — eval _infra_ features, the scorecard, and the
