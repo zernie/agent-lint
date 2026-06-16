@@ -53,6 +53,7 @@ import {
   restoreDir,
   type CacheMode,
 } from "./eval-cache.js";
+import type { Check, CheckJSON } from "./check.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -291,6 +292,192 @@ export async function runEval<M extends Metrics>(
   return runEvalWith(spec, spawnAgent);
 }
 /* v8 ignore stop */
+
+// ---------------------------------------------------------------------------
+// measure() — the SCORED evaluator (Phase 3 of testing-api-design.md)
+// ---------------------------------------------------------------------------
+
+/** A task run N times, scored against a `Trace` check vocabulary. */
+export interface MeasureSpec {
+  /** Base fixture files written for every run (path → contents). */
+  readonly fixture?: Record<string, string>;
+  /** `.claude/settings.json` (hooks/permissions) for the run. */
+  readonly settings?: unknown;
+  /** A real plugin/repo to load (materialized) — see `EvalArm.plugin`. */
+  readonly plugin?: string;
+  /** A complete plugin dir to install natively (`--plugin-dir`) so skills activate. */
+  readonly pluginDir?: string;
+  /** The task prompt given to the agent. */
+  readonly task: string;
+  /** The checks to score across the trials (each a `Trace` check). */
+  readonly checks: readonly Check<Trace>[];
+  /** Trials. Default 5. */
+  readonly trials?: number;
+  /** Model alias. Default "sonnet" — measure on the model your users run. */
+  readonly model?: string;
+  /** Tools the agent may use. */
+  readonly allowedTools?: readonly string[];
+  /** Per-run timeout ms. */
+  readonly timeoutMs?: number;
+  /** Seconds between runs. */
+  readonly spacingSec?: number;
+}
+
+/** One check's measured rate across the trials. */
+export interface CheckRate {
+  readonly check: CheckJSON;
+  /** Fraction of trials the check passed (0..1). */
+  readonly rate: number;
+  /** Standard error of the rate. */
+  readonly se: number;
+  /** pass^k — 1 iff the check passed on EVERY trial. */
+  readonly passK: number;
+  /** Trials observed. */
+  readonly n: number;
+}
+
+export interface CheckReport {
+  readonly n: number;
+  readonly perCheck: readonly CheckRate[];
+}
+
+/**
+ * Score a check vocabulary across trials — the scored counterpart to
+ * `assertChecks` (strict). Each check yields a `rate ± se` and `pass^k` over `n`
+ * runs. Reuses the tested `runEvalWith` aggregation (one arm), so the loop,
+ * cache, concurrency, and stats come for free. Exported with an injectable
+ * `runner` so the orchestration is unit-testable without a model.
+ */
+export async function measureWith(
+  spec: MeasureSpec,
+  runner: AgentRunner,
+): Promise<CheckReport> {
+  const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
+  const report = await runEvalWith(
+    {
+      fixture: spec.fixture,
+      arms: {
+        run: {
+          settings: spec.settings,
+          plugin: spec.plugin,
+          pluginDir: spec.pluginDir,
+        },
+      },
+      task: spec.task,
+      trials: spec.trials ?? 5,
+      model: spec.model ?? "sonnet",
+      allowedTools: spec.allowedTools,
+      timeoutMs: spec.timeoutMs,
+      spacingSec: spec.spacingSec,
+      measure: (ctx) =>
+        Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
+    },
+    runner,
+  );
+  const arm = report.arms.run;
+  return {
+    n: arm?.runs ?? 0,
+    perCheck: keyed.map(([k, c]) => {
+      const s = arm?.stats[k];
+      return {
+        check: c.toJSON(),
+        rate: s?.mean ?? 0,
+        se: s?.se ?? 0,
+        passK: s?.passK ?? 0,
+        n: s?.n ?? 0,
+      };
+    }),
+  };
+}
+
+/* v8 ignore start -- real claude subprocess; thin wrapper over measureWith */
+/** Score a check vocabulary across trials against the real `claude` CLI. */
+export async function measure(spec: MeasureSpec): Promise<CheckReport> {
+  return measureWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
+
+/** A readable label for a check from its serialized form, e.g. `tool(Bash)`. */
+function checkLabel(json: CheckJSON): string {
+  const arg = json.name ?? json.id ?? json.event ?? json.path ?? json.matcher;
+  if (
+    typeof arg === "string" ||
+    typeof arg === "number" ||
+    typeof arg === "boolean"
+  ) {
+    return `${json.kind}(${String(arg)})`;
+  }
+  return json.kind;
+}
+
+/** Format a {@link CheckReport}: one line per check with its rate ± se and pass^k. */
+export function formatCheckReport(report: CheckReport): string {
+  const lines = [`measured ${String(report.n)} run(s):`];
+  for (const c of report.perCheck) {
+    lines.push(
+      `  ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%  ${checkLabel(c.check)}` +
+        `  (pass^k ${String(c.passK)})`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The scored gate (Phase 4): throw if any check's measured rate is below `min` —
+ * the `measure` counterpart to `assertChecks` (strict). Reads the rate, not a
+ * single run, so it never trips on one noisy trial.
+ */
+export function assertRates(report: CheckReport, opts: { min: number }): void {
+  const below = report.perCheck.filter((c) => c.rate < opts.min);
+  if (below.length > 0) {
+    throw new Error(
+      `${String(below.length)} check(s) below the ${(opts.min * 100).toFixed(0)}% min rate:\n` +
+        below
+          .map(
+            (c) =>
+              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%`,
+          )
+          .join("\n"),
+    );
+  }
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Serialize a {@link CheckReport} to JUnit XML (Phase 4) — each check a
+ * `<testcase>`, failing when its rate is below `min`. Because a check is *data*,
+ * this falls out for free: CI test reporters, regression baselines, and a
+ * promptfoo bridge all consume the same shape.
+ */
+export function checkReportToJUnit(
+  report: CheckReport,
+  opts: { min?: number; name?: string } = {},
+): string {
+  const min = opts.min ?? 0;
+  const failures = report.perCheck.filter((c) => c.rate < min).length;
+  const cases = report.perCheck
+    .map((c) => {
+      const name = escapeXml(checkLabel(c.check));
+      const body =
+        c.rate < min
+          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(min * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
+          : "";
+      return `  <testcase classname="vigiles.checks" name="${name}">${body}</testcase>`;
+    })
+    .join("\n");
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<testsuite name="${escapeXml(opts.name ?? "vigiles measure")}" tests="${String(report.perCheck.length)}" failures="${String(failures)}">\n` +
+    `${cases}\n</testsuite>\n`
+  );
+}
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
