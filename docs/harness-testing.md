@@ -518,9 +518,36 @@ A check's **failure message is the product** (`expected the agent to use tool
 fields (`r.toolCalls`, `r.output`, `r.file()`) stay first-class — checks are for
 composition and serialization, not a mandatory wrapper. Under vitest/jest, one
 generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
-`toPassAll([...])`, each carrying the check's own message. See
-[`research/testing-api-design.md`](../research/testing-api-design.md) for the full
-design.
+`toPassAll([...])`, each carrying the check's own message.
+
+**The vocabulary** (`vigiles/check`):
+
+| Check                      | Holds when…                                       | Over             |
+| -------------------------- | ------------------------------------------------- | ---------------- |
+| `tool(name)`               | the agent used that tool                          | Trace            |
+| `skill(id)`                | a `Skill` resolved to `id` (no error)             | Trace            |
+| `mcp(server, tool)`        | the agent used `mcp__server__tool`                | Trace            |
+| `subagent(name, [checks])` | the `Task` subagent ran + passed nested checks    | Trace (nested)   |
+| `output(str \| /re/)`      | the final answer contains/matches                 | Trace            |
+| `received(str \| /re/)`    | text reached the model (slash-command / injected) | Trace (mock)     |
+| `hookFired(event)`         | a hook fired for that event                       | Trace            |
+| `turns({ min, max })`      | the agent took N turns (multi-turn)               | Trace            |
+| `wrote(path)`              | a file was created                                | Trace            |
+| `judged(rubric, { min })`  | a model grades the output ≥ `min` (LLM rubric)    | Trace (eval)     |
+| `cost/latency/tokens({…})` | the run stayed under budget                       | run usage (eval) |
+| `blocked()` / `allowed()`  | the hook blocked / allowed                        | `runHook` result |
+
+**A/B with significance.** `measureArms({ arms, checks })` scores the same checks
+per arm (a hook/skill/CLAUDE.md rule **on vs off**); `compareCheck(report,
+baseline, arm, i)` returns a Welch verdict — "the gated arm resolves the skill
+significantly more than vanilla" is a p-value, not a vibe.
+
+**Property-test a hook.** `propertyHook({ seed, mutate, decide, invariants })`
+fuzzes a hook's `(event) → decision` over generated events and shrinks any
+counterexample — for invariants like "a destructive command is always blocked".
+
+See [`research/testing-api-design.md`](../research/testing-api-design.md) for the
+full design.
 
 **vitest / jest matchers.** The `vigilesMatchers` object has an identical contract
 in both, so you can register it by hand:
