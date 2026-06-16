@@ -12,8 +12,18 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
+test("runHarness steers a real-model run to measure() (no claude needed)", async () => {
+  // The harness scope is deterministic (mock); a real-model run is
+  // non-deterministic, so a single one can't be asserted — runHarness says so.
+  await assert.rejects(
+    runHarness({ model: [], prompt: "go" }, { model: "real" }),
+    /measure\(\)/,
+  );
+});
+
 import {
   runHarnessTest,
+  runHarness,
   scriptModel,
   claudeAvailable,
   parseToolCalls,
