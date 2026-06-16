@@ -85,6 +85,36 @@ export function defaultPlan(strict = false): SetupPlan {
 }
 
 /**
+ * Pure config-merge for what `vigiles init` writes to `.vigilesrc.json`: record
+ * the `harness` if absent, add strict rule severities if `--strict`, NEVER
+ * clobber an existing key. Returns the merged config, or `null` when nothing
+ * changed (so the IO layer skips the write). The IO (read/parse/write + the
+ * malformed-file guard) stays in cli.ts.
+ */
+export function mergeProjectConfig(
+  existing: Record<string, unknown>,
+  opts: { harness: string | string[]; strict: boolean },
+): Record<string, unknown> | null {
+  const config = { ...existing };
+  let changed = false;
+  if (config.harness === undefined) {
+    config.harness = opts.harness;
+    changed = true;
+  }
+  if (opts.strict) {
+    const rules = { ...(config.rules as Record<string, unknown> | undefined) };
+    for (const r of ["require-spec", "require-skill-spec"]) {
+      if (rules[r] === undefined) {
+        rules[r] = "error";
+        changed = true;
+      }
+    }
+    config.rules = rules;
+  }
+  return changed ? config : null;
+}
+
+/**
  * Whether to drop into interactive prompts: a human at a TTY who passed neither
  * `--yes` nor an explicit `--target`, and who hasn't already pinned every choice
  * via flags. Agents / CI / piped input (no TTY) never prompt.

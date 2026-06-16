@@ -62,12 +62,29 @@
 - **MCP-reference conformance** + a typed `mcp()` / `mcpConfig` harness hook —
   "does the cited `server#tool` still exist" via live or `.well-known`.
   [standards #3](standards-conformance.md) · [coverage-matrix](harness-testing-coverage-matrix.md)
+- **Unify `scan` + `lint` on one rule engine** — promote scan's hard-coded
+  structural findings (no-description skill, no-tool-contract agent, missing hook)
+  to documented, configurable, CI-gatable rules; scan becomes inventory + a
+  rule-derived score. The ESLint model: one rule vocabulary, two frontends.
+  [scan-lint-unification](scan-lint-unification.md)
 - **`compile --policy` → Cedar/OPA codegen** — one `tools:` declaration drives the
   dev-loop hook, the prod gate, and the trace check; emit-and-verify only.
   [runtime #3](runtime-guardrails-observability.md) · [landscape-mid-2026](landscape-mid-2026.md)
+- **Multi-harness compile & the mirror story** — `harness` in project config
+  (select-by-config, not just auto-detect), a byte-identical `CLAUDE.md`⇄`AGENTS.md`
+  copy-mirror when no sync tool fans out, and per-harness skill verify/compile.
+  Kills the silent harness-mismatch footgun in `compile`.
+  [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md)
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
+- **Demo revamp (consolidate the deprecated demos)** — `examples/demo/`
+  (`npm run demo`) and `examples/plugin-test-demo.mjs` (`npm run demo:plugin`) are
+  now deprecated. Replace them with ONE polished, reliably-passing front-door demo
+  plus a recorded GIF/asciinema, framed by the three "best"s: the
+  stale-`enforce()` "lies" story as the one-sentence sell, and `vigiles scan` as
+  the zero-setup wedge.
+  [distribution-strategy](distribution-strategy.md) · feature-ideas #14
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
   structural score. [divergent-bets #9](divergent-bets.md)
 - **Harness cost/ROI optimizer** — A/B token-cost eval (full vs trimmed CLAUDE.md);
