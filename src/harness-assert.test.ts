@@ -49,6 +49,7 @@ import {
   vigilesMatchers,
 } from "./harness-assert.js";
 import { result } from "./core/spec.js";
+import type { Check } from "./check.js";
 import type { EvalReport } from "./eval.js";
 import type { HarnessTestResult, HookFire } from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
@@ -405,6 +406,35 @@ test("vigilesMatchers.toBlock + every matcher's message() render both states", (
       .message(),
     /to beat/,
   );
+});
+
+test("vigilesMatchers.toPass / toPassAll evaluate a check, carrying its message", () => {
+  const yes: Check<string> = {
+    kind: "yes",
+    eval: (s) => ({
+      pass: s === "ok",
+      score: s === "ok" ? 1 : 0,
+      message: s === "ok" ? "matched" : "no match",
+    }),
+    toJSON: () => ({ kind: "yes" }),
+  };
+  const no: Check<string> = {
+    kind: "no",
+    eval: () => ({ pass: false, score: 0, message: "always fails" }),
+    toJSON: () => ({ kind: "no" }),
+  };
+  // toPass carries the check's own message on both verdicts.
+  assert.equal(vigilesMatchers.toPass("ok", yes).pass, true);
+  const failed = vigilesMatchers.toPass("nope", yes);
+  assert.equal(failed.pass, false);
+  assert.equal(failed.message(), "no match");
+  // toPassAll: all pass → pass + summary; any fail → fail listing the failures.
+  const all = vigilesMatchers.toPassAll("ok", [yes]);
+  assert.equal(all.pass, true);
+  assert.match(all.message(), /all checks passed/);
+  const some = vigilesMatchers.toPassAll("ok", [yes, no]);
+  assert.equal(some.pass, false);
+  assert.match(some.message(), /✗ always fails/);
 });
 
 test("vigilesMatchers.toBeatBaseline respects the `by` threshold", () => {
