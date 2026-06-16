@@ -95,7 +95,7 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 151 project files. */
+  /** 153 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -145,6 +145,8 @@ declare module "vigiles/generated" {
     | "src/adapters/opencode/model-mock.ts"
     | "src/adapters/opencode/opencode.test.ts"
     | "src/adapters/opencode/runtime.ts"
+    | "src/check.test.ts"
+    | "src/check.ts"
     | "src/claude-code.ts"
     | "src/cli-flags.test.ts"
     | "src/cli-flags.ts"
@@ -368,6 +370,8 @@ declare module "vigiles/spec" {
       | "src/adapters/opencode/model-mock.ts"
       | "src/adapters/opencode/opencode.test.ts"
       | "src/adapters/opencode/runtime.ts"
+      | "src/check.test.ts"
+      | "src/check.ts"
       | "src/claude-code.ts"
       | "src/cli-flags.test.ts"
       | "src/cli-flags.ts"
