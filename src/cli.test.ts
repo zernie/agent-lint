@@ -1048,6 +1048,33 @@ export default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("warns when a declared minimal-profile harness drops a skill's CC-only keys", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-skillwarn-"));
+    try {
+      writeFileSync(
+        join(dir, "SKILL.md.spec.ts"),
+        `import { skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default skill({
+  name: "demo",
+  description: "A demo skill",
+  disableModelInvocation: true,
+  body: instructions\`Do the thing.\`,
+});
+`,
+      );
+      writeFileSync(
+        join(dir, ".vigilesrc.json"),
+        JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+      );
+      const { stdout, exitCode } = run("compile SKILL.md.spec.ts", dir);
+      assert.equal(exitCode, 0);
+      assert.match(stdout, /disable-model-invocation/);
+      assert.match(stdout, /codex/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

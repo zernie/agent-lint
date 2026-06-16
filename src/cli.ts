@@ -48,6 +48,7 @@ import {
   getAdapter,
 } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
+import { skillFrontmatterDropWarnings } from "./skill-harness.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
 import {
@@ -437,6 +438,15 @@ async function compile(
         allValid = false;
       }
     } else if (spec._specType === "skill") {
+      // Cross-harness verify: flag CC-only frontmatter a declared minimal-profile
+      // harness (Codex/OpenCode) would silently drop.
+      const forHarnesses =
+        declaredHarnesses.length > 0
+          ? declaredHarnesses
+          : [selection.adapter.name];
+      for (const w of skillFrontmatterDropWarnings(spec, forHarnesses)) {
+        console.log(`⚠ ${w}`);
+      }
       if (!compileSkillToFile(spec, specPath, dialect)) allValid = false;
     } else if (spec._specType === "agent") {
       if (!compileAgentToFile(spec, specPath, dialect)) allValid = false;
