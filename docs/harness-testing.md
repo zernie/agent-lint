@@ -484,6 +484,44 @@ test("Stop hook forces more work", async () => {
 });
 ```
 
+### Checks — one vocabulary, two evaluators
+
+The newest surface (`vigiles/check`) is a **declarative check** — data, not a
+throwing assert: `tool("Bash")` is an object that knows how to `eval` itself
+against a `Trace` (or a hook decision) and `toJSON`. The same check is evaluated
+two ways, so you write the assertion once:
+
+```ts
+import { tool, skill, output, hookFired, blocked } from "vigiles/check";
+import { assertChecks } from "vigiles/testing";
+
+// STRICT (deterministic tiers): throws, collecting ALL failures with messages.
+assertChecks(await runHarness(spec), [tool("Bash"), output(/done/)]);
+assertChecks(runHook(cmd, event), [blocked()]);
+
+// SCORED (eval): the SAME checks, as a rate ± se across trials.
+import { measure, assertRates, checkReportToJUnit } from "vigiles/testing";
+const report = await measure({
+  pluginDir: "./my-plugin",
+  task: "…",
+  checks: [skill("vigiles:test-harness")],
+  trials: 10,
+  model: "sonnet",
+});
+assertRates(report, { min: 0.8 }); // gate the rate, not one noisy run
+writeFileSync("checks.junit.xml", checkReportToJUnit(report, { min: 0.8 }));
+```
+
+A check's **failure message is the product** (`expected the agent to use tool
+"Bash", but it used [Read, Edit]`), and because it serializes (`toJSON` /
+`toJUnit`), CI reports and regression baselines fall out for free. Raw `Trace`
+fields (`r.toolCalls`, `r.output`, `r.file()`) stay first-class — checks are for
+composition and serialization, not a mandatory wrapper. Under vitest/jest, one
+generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
+`toPassAll([...])`, each carrying the check's own message. See
+[`research/testing-api-design.md`](../research/testing-api-design.md) for the full
+design.
+
 **vitest / jest matchers.** The `vigilesMatchers` object has an identical contract
 in both, so you can register it by hand:
 

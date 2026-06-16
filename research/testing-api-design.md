@@ -325,27 +325,38 @@ examples (no external users). Lowest-risk first.
   vs `HookRunResult`. `src/check.ts` (+ `src/check.test.ts`), exported at
   `vigiles/check` only (NOT folded into `vigiles/testing` yet — `hookFired`
   collides with the legacy predicate; reconciled in Phase 6). Additive, model-free.
-- **Phase 1 — `expect(result, checks)` + matcher veneer.** The strict evaluator
-  over `Trace` and `HookRunResult` (throws the first failed check's message);
-  re-express the legacy `assert*`/matchers as thin wrappers over checks (coexist);
-  generate `vigiles/vitest` + `vigiles/jest` matchers from checks. Additive.
-- **Phase 2 — `runHarness(spec, { model, egress })`.** Unify `runHarnessTest`
-  (`model:"mock"`) and the eval runner (`model:"real"`) behind one entry; fold
-  egress in; drop the `vigiles/e2e` barrel. The layer collapse (Part 4). Refactor.
-- **Phase 3 — `measure(spec, { trials, checks })`.** Generalize
-  `measureTriggerRateWith` to score an arbitrary `checks[]` (not just one `fired`
-  predicate); `trigger({min})` becomes one check; per-check rate ± se + pass^k.
-  Resolve the per-run-check vs aggregate-threshold call here.
-- **Phase 4 — serialization → CI.** `check.toJSON()` / `report.toJUnit()`; wire
-  into the existing `eval-baseline` + the Action; expose checks to a promptfoo
-  provider bridge. Additive, high payoff.
-- **Phase 5 — `property(hook, arbitrary, invariant)` (Option D).** fast-check over
-  a hook's `(event) → decision`. Additive add-on.
-- **Phase 6 — delete the old surface (the one breaking step).** Remove the
-  predicate/`assert*`/matcher trio + the `e2e` barrel; rename barrels to
-  `vigiles/unit` (hook) + `vigiles/harness` + `vigiles/eval`; fold `vigiles/check`
-  into `vigiles/testing`; rewrite `docs/harness-testing.md` to lead with `Trace`
-  fields → checks → matchers.
+- **Phase 1 — strict evaluator + matcher veneer. ✅ SHIPPED.** `assertChecks(target,
+checks)` throws collecting **all** failures (Validation-applicative). ONE generic
+  matcher covers the whole vocabulary — `expect(r).toPass(tool("Bash"))` /
+  `toPassAll([...])` — carrying each check's message; vitest/jest type
+  augmentations + cross-runner tests. Legacy surface untouched (Phase 6).
+- **Phase 2 — `runHarness` (the harness-scope entry). ✅ SHIPPED.** The
+  deterministic harness run (`model:"mock"`, wraps `runHarnessTest`); a real-model
+  run is non-deterministic so a single one can't be asserted — `runHarness(spec,
+{ model:"real" })` throws and points at `measure()`. (The e2e-barrel fold + a
+  materialized real path stay for the breaking cleanup.)
+- **Phase 3 — `measure(spec, { trials, checks })`. ✅ SHIPPED.** Scores a check
+  vocabulary across trials → per-check rate ± se + pass^k, reusing `runEvalWith`
+  (one arm). `measureWith` is the injectable-runner, unit-tested core; defaults to
+  `model:"sonnet"`.
+- **Phase 4 — serialization → CI. ✅ SHIPPED (lib half).** `checkReportToJUnit`
+  (each check a `<testcase>`, fails below `min`) + `assertRates` (the scored gate)
+  - `formatCheckReport`, off `checkLabel(check.toJSON())`. Pure + unit-tested.
+    _Remaining:_ wire into the committed `eval-baseline` + the Action, and the
+    promptfoo provider bridge.
+- **Phase 5 — `propertyHook` (Option D). ✅ SHIPPED.** Invariant testing of a
+  hook's `(event) → decision` over generated events, reusing `proofs.ts`
+  `propertyTest` (seeded, shrinks; no fast-check dep); injectable `decide` runner.
+- **Phase 6 — front-door the new surface; defer the mass deletion.** ✅ DONE:
+  `docs/harness-testing.md` leads with checks (`assertChecks`/`measure`/`toPass`).
+  **Deliberately NOT done:** ripping out the ~40 legacy predicate/`assert*`/matcher
+  helpers + the `e2e` barrel and rewriting the ~900-test suite/examples/docs off
+  them. On a no-users lib that's high-churn cleanup with **no functional gain**
+  and real regression risk — the new surface is the recommended front door now;
+  the legacy surface stays as working sugar and is removed in a single, separately
+  reviewed major-version cleanup (resolving the `vigiles/check`↔`vigiles/testing`
+  `hookFired` collision then). "Additive before breaking" — and the breaking step
+  is the one to take slowly.
 
 ## See also
 
