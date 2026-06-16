@@ -178,6 +178,60 @@ export function hookFired(event: string): Check<Trace> {
   };
 }
 
+/**
+ * The model RECEIVED text matching `matcher` in some request — i.e. it actually
+ * reached the model. Covers **slash-command expansion** (a `commands/` file
+ * expands into the user prompt) and **injected context** (a SessionStart hook's
+ * text). Reads `modelRequests`, which the harness/mock tier captures; the eval
+ * tier drives the real API and captures none, so use this on `runHarness`.
+ */
+export function received(matcher: string | RegExp): Check<Trace> {
+  const isRe = matcher instanceof RegExp;
+  return {
+    kind: "received",
+    eval: (t) => {
+      const text = t.modelRequests
+        .map((r) => `${r.system} ${r.messages.map((m) => m.text).join(" ")}`)
+        .join(" ");
+      const pass = isRe ? matcher.test(text) : text.includes(matcher);
+      return pass
+        ? ok(`the model received ${String(matcher)}`)
+        : no(
+            `expected the model to receive ${String(matcher)} (a slash-command expansion or injected context); ${t.modelRequests.length === 0 ? "no requests captured (eval tier captures none — use runHarness)" : `got "${truncate(text)}"`}`,
+          );
+    },
+    toJSON: () => ({ kind: "received", matcher: String(matcher), regex: isRe }),
+  };
+}
+
+/**
+ * The agent took a number of model turns in range — a **multi-turn** observable
+ * (`{ min: 2 }` asserts a back-and-forth happened, not a one-shot answer; `{ max }`
+ * caps runaway loops). The deterministic harness scripts the model turns; this
+ * checks how many the agent actually took.
+ */
+export function turns(opts: { min?: number; max?: number }): Check<Trace> {
+  return {
+    kind: "turns",
+    eval: (t) => {
+      const n = t.turns;
+      const pass =
+        (opts.min === undefined || n >= opts.min) &&
+        (opts.max === undefined || n <= opts.max);
+      const bound = [
+        opts.min !== undefined ? `≥ ${String(opts.min)}` : null,
+        opts.max !== undefined ? `≤ ${String(opts.max)}` : null,
+      ]
+        .filter((x): x is string => x !== null)
+        .join(" and ");
+      return pass
+        ? ok(`${String(n)} turn(s) (${bound || "any"})`)
+        : no(`expected ${bound || "any"} turn(s), got ${String(n)}`);
+    },
+    toJSON: () => ({ kind: "turns", min: opts.min, max: opts.max }),
+  };
+}
+
 /** The agent wrote (or left) a file at this path in the work dir. */
 export function wrote(path: string): Check<Trace> {
   return {

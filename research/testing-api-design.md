@@ -410,9 +410,15 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
      subagent _did_. `parseSubagents` is unit-tested on synthetic stream-json;
      **wants one real-CC-subagent run to confirm the field names** (`parent_tool_use_id`
      / `subagent_type`) against current output.
-   - Still open: **slash-command expansion** (pre-model; needs mock-prompt
-     capture) and **multi-turn conversations** (`measure`/`runEval` give a single
-     task) — both want per-turn slices.
+   - **Slash-command expansion ✅** — `received(matcher)` checks that the expanded
+     command (or a hook's injected context) actually **reached the model** via
+     `modelRequests` (mock/harness tier). Unit-tested.
+   - **Multi-turn ✅** — `turns({ min, max })` asserts the agent took a
+     back-and-forth (the deterministic harness already scripts multiple model
+     turns via `ModelTurn[]`; this checks how many it took). Unit-tested.
+   - Still open (smaller): driving multiple **user** messages (`--resume`-style
+     conversations, unverifiable here) and **per-turn trace slicing** (tool calls
+     grouped by turn) — refinements on top of the now-covered observables.
 5. **Trace fidelity on the real-model tier.** `modelRequests` is **mock-tier only**
    — on a real `runEval` you cannot assert _what reached the model_; no
    thinking/per-turn capture. Largely inherent to the real API.
