@@ -7,6 +7,7 @@ import {
   normalizeHarnessName,
   normalizeHarnessList,
   resolveHarnessSelection,
+  adapterForInstructionFile,
   type HarnessSelection,
 } from "./adapter-registry.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
@@ -38,6 +39,12 @@ test("normalizeHarnessList normalizes string | string[] | undefined", () => {
     "claude-code",
     "codex",
   ]);
+});
+
+test("adapterForInstructionFile maps a target filename to its harness", () => {
+  assert.equal(adapterForInstructionFile("CLAUDE.md")?.name, "claude-code");
+  assert.equal(adapterForInstructionFile("AGENTS.md")?.name, "codex");
+  assert.equal(adapterForInstructionFile("DOCS.md"), undefined); // not an instruction file
 });
 
 test("resolveHarnessSelection: --harness flag wins over config, kind=ok", () => {
