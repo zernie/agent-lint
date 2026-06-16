@@ -45,12 +45,23 @@ Nothing in `vigiles/testing` changes, and unused adapters tree-shake out.
 Importing the adapter (rather than a `harness:` config key) means the bundle only
 carries the adapter you use, and the choice is type-checked where you write it.
 
-## The CLI auto-detects
+## The CLI auto-detects (or reads project config)
 
 The CLI can't take an import, so `vigiles compile`, `vigiles scan`, and
 `vigiles lint` **detect** the harness from the repo (a `.claude-plugin/`, an
-`AGENTS.md`, …) and work with zero config; a `vigiles.config` override is the
-planned escape hatch if detection is ever ambiguous.
+`AGENTS.md`, …) and work with zero config. When detection is ambiguous, or you
+want a deterministic, committed choice, set it explicitly — both override the
+sniff:
+
+- a **`harness` key** in `.vigilesrc.json` (`"codex"`, or `["claude-code",
+"codex"]` for a repo targeting several), written by `vigiles init`;
+- a **`--harness=<name>`** flag on the command, which wins over the config.
+
+The precedence is `--harness=` → config `harness` → auto-detect, and a
+multi-harness or ambiguous pick prints a loud notice rather than silently
+guessing. A repo declaring several harnesses also gets a byte-identical
+`CLAUDE.md`⇄`AGENTS.md` mirror on compile when no sync tool already fans it out.
+See [research/multi-harness-compile.md](../research/multi-harness-compile.md).
 
 ## What's actually harness-specific (the two axes)
 

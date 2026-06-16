@@ -65,6 +65,11 @@
 - **`compile --policy` → Cedar/OPA codegen** — one `tools:` declaration drives the
   dev-loop hook, the prod gate, and the trace check; emit-and-verify only.
   [runtime #3](runtime-guardrails-observability.md) · [landscape-mid-2026](landscape-mid-2026.md)
+- **Multi-harness compile & the mirror story** — `harness` in project config
+  (select-by-config, not just auto-detect), a byte-identical `CLAUDE.md`⇄`AGENTS.md`
+  copy-mirror when no sync tool fans out, and per-harness skill verify/compile.
+  Kills the silent harness-mismatch footgun in `compile`.
+  [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md)
 
 ## Later — needs model auth (write-don't-run today) or bigger
 

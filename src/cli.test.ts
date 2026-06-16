@@ -903,6 +903,154 @@ export default claude({
 });
 
 // ---------------------------------------------------------------------------
+// Multi-harness: config `harness` selection + the copy-mirror
+// ---------------------------------------------------------------------------
+
+describe("CLI: multi-harness compile", () => {
+  let tmpDir: string;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-harness-"));
+    writeFileSync(
+      join(tmpDir, "CLAUDE.md.spec.ts"),
+      `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default claude({
+  target: "CLAUDE.md",
+  rules: { "test-rule": guidance("Test guidance.") },
+});
+`,
+    );
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mirrors CLAUDE.md → AGENTS.md byte-identically when ≥2 harnesses are declared", () => {
+    writeFileSync(
+      join(tmpDir, ".vigilesrc.json"),
+      JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+    );
+    const { stdout, exitCode } = run("compile CLAUDE.md.spec.ts", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(stdout.includes("mirrored"), "should report the mirror write");
+    assert.ok(existsSync(join(tmpDir, "AGENTS.md")));
+    // Byte-identical — a copy, carrying the source's embedded integrity hash.
+    assert.equal(
+      readFileSync(join(tmpDir, "AGENTS.md"), "utf-8"),
+      readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8"),
+    );
+  });
+
+  it("does NOT mirror for a single declared harness", () => {
+    rmSync(join(tmpDir, "AGENTS.md"), { force: true });
+    writeFileSync(
+      join(tmpDir, ".vigilesrc.json"),
+      JSON.stringify({ harness: "claude-code" }, null, 2) + "\n",
+    );
+    const { exitCode } = run("compile CLAUDE.md.spec.ts", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(
+      !existsSync(join(tmpDir, "AGENTS.md")),
+      "no mirror for one harness",
+    );
+  });
+
+  it("--harness=codex selects the minimal SKILL.md profile (CC-only keys dropped)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-skill-"));
+    try {
+      writeFileSync(
+        join(dir, "SKILL.md.spec.ts"),
+        `import { skill, instructions } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default skill({
+  name: "demo",
+  description: "A demo skill",
+  disableModelInvocation: true,
+  argumentHint: "<x>",
+  body: instructions\`Do the thing.\`,
+});
+`,
+      );
+      // Codex → minimal frontmatter: the CC-only keys are omitted.
+      run("compile --harness=codex SKILL.md.spec.ts", dir);
+      const codex = readFileSync(join(dir, "SKILL.md"), "utf-8");
+      assert.ok(
+        !codex.includes("disable-model-invocation"),
+        "codex: no CC key",
+      );
+      assert.ok(!codex.includes("argument-hint"), "codex: no CC key");
+      // Claude Code → full frontmatter: the same spec keeps the CC-only keys.
+      run("compile --harness=claude-code SKILL.md.spec.ts", dir);
+      const cc = readFileSync(join(dir, "SKILL.md"), "utf-8");
+      assert.ok(
+        cc.includes("disable-model-invocation: true"),
+        "cc: CC key kept",
+      );
+      assert.ok(cc.includes("argument-hint: <x>"), "cc: CC key kept");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("mirror never clobbers a target that owns its own spec", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-twospecs-"));
+    try {
+      const specImport = `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";`;
+      writeFileSync(
+        join(dir, "CLAUDE.md.spec.ts"),
+        `${specImport}\nexport default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });\n`,
+      );
+      writeFileSync(
+        join(dir, "AGENTS.md.spec.ts"),
+        `${specImport}\nexport default claude({ target: "AGENTS.md", rules: { "r": guidance("a") } });\n`,
+      );
+      writeFileSync(
+        join(dir, ".vigilesrc.json"),
+        JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+      );
+      const { stdout } = run("compile", dir);
+      // Each file is its OWN compiled output — the mirror skipped the spec-owned
+      // target rather than overwriting AGENTS.md with a copy of CLAUDE.md.
+      assert.ok(
+        readFileSync(join(dir, "AGENTS.md"), "utf-8").includes("# AGENTS.md"),
+        "AGENTS.md kept its own compiled content",
+      );
+      assert.ok(
+        readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes("# CLAUDE.md"),
+      );
+      assert.ok(!stdout.includes("mirrored"), "no mirror when both own specs");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("mirror defers to a sync tool (.ruler present → no copy written)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-ruler-"));
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md.spec.ts"),
+        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default claude({ target: "CLAUDE.md", rules: { "r": guidance("c") } });
+`,
+      );
+      writeFileSync(
+        join(dir, ".vigilesrc.json"),
+        JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+      );
+      mkdirSync(join(dir, ".ruler")); // Ruler owns fan-out
+      const { stdout } = run("compile CLAUDE.md.spec.ts", dir);
+      assert.ok(
+        !existsSync(join(dir, "AGENTS.md")),
+        "a sync tool owns fan-out — vigiles must not also write the mirror",
+      );
+      assert.ok(!stdout.includes("mirrored"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // vigiles strengthen
 // ---------------------------------------------------------------------------
 
@@ -1274,6 +1422,12 @@ describe("CLI: installation smoke test (deterministic)", () => {
       );
       const md = readFileSync(join(dir, "AGENTS.md"), "utf-8");
       assert.ok(md.includes("Keep this prose."), "AGENTS.md preserved");
+      // The harness is recorded in project config so compile/lint select it
+      // deterministically instead of sniffing the cwd.
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { harness?: unknown };
+      assert.equal(cfg.harness, "codex");
       assertNoVendoring(dir);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -1294,6 +1448,11 @@ describe("CLI: installation smoke test (deterministic)", () => {
       assert.equal(exitCode, 0, stdout);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "CLAUDE spec");
       assert.ok(existsSync(join(dir, "AGENTS.md.spec.ts")), "AGENTS spec");
+      // Both declared harnesses recorded as the supported set (canonical names).
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { harness?: unknown };
+      assert.deepEqual(cfg.harness, ["claude-code", "codex"]);
       assertNoVendoring(dir);
     } finally {
       rmSync(dir, { recursive: true, force: true });
