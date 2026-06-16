@@ -505,6 +505,9 @@ const report = await measure({
   pluginDir: "./my-plugin",
   task: "…",
   checks: [skill("vigiles:test-harness")],
+  stubSkillBodies: true, // firing check: stub each body so a selected skill stops
+  // at selection instead of running its (expensive) procedure — a fraction of the
+  // tokens. Don't combine with judged/quality checks — the body is gone.
   trials: 10,
   model: "sonnet",
 });

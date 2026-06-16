@@ -309,6 +309,15 @@ export interface MeasureSpec {
   readonly plugin?: string;
   /** A complete plugin dir to install natively (`--plugin-dir`) so skills activate. */
   readonly pluginDir?: string;
+  /**
+   * Stub each skill BODY in `pluginDir` (frontmatter/trigger surface kept) before
+   * the run — for checks about whether a skill FIRES (`skill()`), not what it
+   * produces. A selected skill stops at selection instead of running its (often
+   * expensive) procedure, so a description/firing run costs a fraction of the
+   * tokens. Do NOT combine with `judged`/quality checks: the body is gone, so
+   * there's nothing to grade. Requires `pluginDir`. See {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
   /** The task prompt given to the agent. */
   readonly task: string;
   /**
@@ -359,42 +368,52 @@ export async function measureWith(
   spec: MeasureSpec,
   runner: AgentRunner,
 ): Promise<CheckReport> {
-  const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
-  const report = await runEvalWith(
-    {
-      fixture: spec.fixture,
-      arms: {
-        run: {
-          settings: spec.settings,
-          plugin: spec.plugin,
-          pluginDir: spec.pluginDir,
+  if (spec.stubSkillBodies && !spec.pluginDir)
+    throw new Error("measure: `stubSkillBodies` requires `pluginDir`.");
+  const stubbed = spec.stubSkillBodies
+    ? stubbedPluginDir(spec.pluginDir as string)
+    : undefined;
+  const pluginDir = stubbed ?? spec.pluginDir;
+  try {
+    const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
+    const report = await runEvalWith(
+      {
+        fixture: spec.fixture,
+        arms: {
+          run: {
+            settings: spec.settings,
+            plugin: spec.plugin,
+            pluginDir,
+          },
         },
+        task: spec.task,
+        trials: spec.trials ?? 5,
+        model: spec.model ?? "sonnet",
+        allowedTools: spec.allowedTools,
+        timeoutMs: spec.timeoutMs,
+        spacingSec: spec.spacingSec,
+        measure: (ctx) =>
+          Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
       },
-      task: spec.task,
-      trials: spec.trials ?? 5,
-      model: spec.model ?? "sonnet",
-      allowedTools: spec.allowedTools,
-      timeoutMs: spec.timeoutMs,
-      spacingSec: spec.spacingSec,
-      measure: (ctx) =>
-        Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
-    },
-    runner,
-  );
-  const arm = report.arms.run;
-  return {
-    n: arm?.runs ?? 0,
-    perCheck: keyed.map(([k, c]) => {
-      const s = arm?.stats[k];
-      return {
-        check: c.toJSON(),
-        rate: s?.mean ?? 0,
-        se: s?.se ?? 0,
-        passK: s?.passK ?? 0,
-        n: s?.n ?? 0,
-      };
-    }),
-  };
+      runner,
+    );
+    const arm = report.arms.run;
+    return {
+      n: arm?.runs ?? 0,
+      perCheck: keyed.map(([k, c]) => {
+        const s = arm?.stats[k];
+        return {
+          check: c.toJSON(),
+          rate: s?.mean ?? 0,
+          se: s?.se ?? 0,
+          passK: s?.passK ?? 0,
+          n: s?.n ?? 0,
+        };
+      }),
+    };
+  } finally {
+    if (stubbed) rmSync(stubbed, { recursive: true, force: true });
+  }
 }
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureWith */
@@ -1177,6 +1196,20 @@ function pluginName(pluginDir: string): string | undefined {
   }
 }
 
+/**
+ * Build a throwaway plugin dir mirroring `pluginDir`'s skills with their BODIES
+ * stripped (frontmatter kept) — the trigger surface a description/firing check
+ * needs, without paying to run each skill's procedure. Keeps the original plugin
+ * NAME so `<name>:<skill>` ids still match. The caller removes the returned dir.
+ * See {@link stubSkillBody} for why the body is irrelevant to selection.
+ */
+export function stubbedPluginDir(pluginDir: string): string {
+  return packageSkillsDir(skillsDirOf(pluginDir), {
+    stub: true,
+    name: pluginName(pluginDir),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Prompt-set diversity (deterministic, pre-eval) — a trigger rate is only
 // meaningful over ENOUGH and DIFFERENT prompts. Catch a too-small or
@@ -1277,10 +1310,7 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
     if (!stub) return { pluginDir: spec.pluginDir };
     // Stub a real plugin: build a minimal plugin from its skills/ with bodies
     // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
-    const packaged = packageSkillsDir(skillsDirOf(spec.pluginDir), {
-      stub: true,
-      name: pluginName(spec.pluginDir),
-    });
+    const packaged = stubbedPluginDir(spec.pluginDir);
     return { pluginDir: packaged, packaged };
   }
   throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
