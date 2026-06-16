@@ -42,6 +42,7 @@ import {
   parseToolCalls,
   parseResultEvent,
   parseHooks,
+  parseSubagents,
   type ToolCall,
   type Trace,
 } from "./harness-test.js";
@@ -616,6 +617,7 @@ function makeContext(cwd: string, out: RunOut): RunContext {
     toolCalls: parseToolCalls(out.stdout),
     hooks: parseHooks(out.stdout),
     output,
+    subagents: parseSubagents(out.stdout),
     usage: usageFrom(result),
     // The eval tier drives the real API (no mock between claude and the model),
     // so the requests can't be captured here — modelRequests is harness-tier only.

@@ -16,7 +16,12 @@
  * decision shape, from `runHook`) are distinguished at the type level, so
  * `expect(result, checks)` only accepts checks that match the result.
  */
-import type { Trace, ToolCall, HookFire } from "./harness-test.js";
+import type {
+  Trace,
+  ToolCall,
+  HookFire,
+  SubagentTrace,
+} from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
 import { judge as runJudge } from "./judge.js";
 
@@ -182,6 +187,56 @@ export function wrote(path: string): Check<Trace> {
         ? ok(`file "${path}" exists`)
         : no(`expected the agent to create "${path}", but it does not exist`),
     toJSON: () => ({ kind: "wrote", path }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Subagent — a `Task` run as a nested trace. Run checks over what the SUBAGENT
+// did, not just that `Task` fired. Composes the whole vocabulary recursively.
+// ---------------------------------------------------------------------------
+
+/** Wrap a subagent's tool calls as a minimal `Trace` so checks run over it. */
+function subTrace(sub: SubagentTrace): Trace {
+  return {
+    toolCalls: sub.toolCalls,
+    hooks: [],
+    output: "",
+    modelRequests: [],
+    turns: 0,
+    subagents: [],
+    file: () => null,
+  };
+}
+
+/** The named subagent (`Task` `subagent_type`) ran and passed every nested check. */
+export function subagent(
+  name: string,
+  checks: readonly Check<Trace>[],
+): Check<Trace> {
+  return {
+    kind: "subagent",
+    eval: (t) => {
+      const subs = t.subagents ?? [];
+      const sub = subs.find((s) => s.name === name);
+      if (!sub) {
+        return no(
+          `expected subagent "${name}" to run; subagents that ran: ${subs.length > 0 ? `[${subs.map((s) => s.name).join(", ")}]` : "none"}`,
+        );
+      }
+      const failures = checks
+        .map((c) => c.eval(subTrace(sub)))
+        .filter((r) => !r.pass);
+      return failures.length === 0
+        ? ok(`subagent "${name}" passed ${String(checks.length)} check(s)`)
+        : no(
+            `subagent "${name}": ${failures.map((f) => f.message).join("; ")}`,
+          );
+    },
+    toJSON: () => ({
+      kind: "subagent",
+      name,
+      checks: checks.map((c) => c.toJSON()),
+    }),
   };
 }
 
