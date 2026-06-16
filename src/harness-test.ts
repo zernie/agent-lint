@@ -581,6 +581,35 @@ export async function runHarnessTest(
   }
 }
 
+/**
+ * `runHarness` — the harness-scope entry of the revamped API (Phase 2 of
+ * `research/testing-api-design.md`). The harness has two execution scopes, `hook`
+ * (`runHook`) and `harness` (the whole assembled agent); today's `integration` /
+ * `e2e` / `eval` are all the **harness** scope under realness flags. This entry is
+ * the **deterministic** harness run (`model: "mock"`, the default) — the
+ * workhorse you gate every commit, with no key. A **real-model** harness run is
+ * non-deterministic by definition, so you don't *assert* a single one — you
+ * `measure()` it across trials (the eval scope). `egress` is a capability of this
+ * scope (the e2e tier), not a separate tier.
+ *
+ * Behaviour is identical to `runHarnessTest` (which it wraps); the new name +
+ * `model` flag make the scope/realness explicit and steer real-model runs to the
+ * right tool.
+ */
+export async function runHarness(
+  spec: HarnessTestSpec,
+  opts: RunHarnessTestOptions & { model?: "mock" | "real" } = {},
+): Promise<HarnessTestResult> {
+  if (opts.model === "real") {
+    throw new Error(
+      "runHarness runs the harness DETERMINISTICALLY (model: 'mock'). A real-model " +
+        "harness run is non-deterministic, so a single one can't be asserted — " +
+        "measure it across trials with `measure()` / `runEval` (the eval scope) instead.",
+    );
+  }
+  return runHarnessTest(spec, opts);
+}
+
 /** Pull the pillar-2 driver off an adapter, asserting it supports testing. */
 function requireDriver(adapter: HarnessAdapter): HarnessTestDriver {
   assertHarnessTestable(adapter);
