@@ -401,14 +401,18 @@ SHIPPED; the harness axis added.**
 checks })` scores the SAME checks per arm; `compareCheck(report, baseline, arm,
 i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
    ON vs OFF) now reads as a per-check significance, not a hand-fed delta.
-4. **Multi-surface CC eval — the deepest gap (PARTIAL).** `mcp(server, tool)` ✅
-   shipped (matches `mcp__server__tool` in the flat tool list). The rest still
-   needs a `Trace`-model extension and is the big remaining bet:
-   - **Subagents (`Task`)** as nested sub-traces — today a subagent is one `Task`
-     tool call; you can't assert what it _did_ or score a multi-agent handoff.
-   - **Slash-command expansion** — pre-model; needs mock-prompt capture.
-   - **Multi-turn conversations** — `measure`/`runEval` give a single task.
-     Each wants nested traces / per-turn slices + matching checks.
+4. **Multi-surface CC eval — the deepest gap (mostly SHIPPED).**
+   - `mcp(server, tool)` ✅ — matches `mcp__server__tool` in the tool list.
+   - **Subagents (`Task`) as nested traces ✅** — `Trace.subagents` recovers each
+     subagent's tool calls (CC tags them with `parent_tool_use_id`; the `Task`
+     input carries `subagent_type`), and `subagent(name, [checks])` runs the whole
+     vocabulary recursively over that sub-trace, so you can assert what the
+     subagent _did_. `parseSubagents` is unit-tested on synthetic stream-json;
+     **wants one real-CC-subagent run to confirm the field names** (`parent_tool_use_id`
+     / `subagent_type`) against current output.
+   - Still open: **slash-command expansion** (pre-model; needs mock-prompt
+     capture) and **multi-turn conversations** (`measure`/`runEval` give a single
+     task) — both want per-turn slices.
 5. **Trace fidelity on the real-model tier.** `modelRequests` is **mock-tier only**
    — on a real `runEval` you cannot assert _what reached the model_; no
    thinking/per-turn capture. Largely inherent to the real API.

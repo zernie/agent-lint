@@ -12,6 +12,61 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
+test("parseSubagents recovers a Task's nested tool calls by parent_tool_use_id", () => {
+  // CC tags a subagent's events with parent_tool_use_id = the Task tool call id,
+  // and the Task input carries subagent_type. (No claude needed — pure parse.)
+  const stream = [
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Task",
+            input: { subagent_type: "reviewer" },
+          },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "assistant",
+      parent_tool_use_id: "t1",
+      message: {
+        content: [{ type: "tool_use", id: "s1", name: "Read", input: {} }],
+      },
+    }),
+    JSON.stringify({
+      type: "user",
+      parent_tool_use_id: "t1",
+      message: {
+        content: [
+          { type: "tool_result", tool_use_id: "s1", content: "file body" },
+        ],
+      },
+    }),
+    JSON.stringify({
+      type: "assistant",
+      parent_tool_use_id: "t1",
+      message: {
+        content: [{ type: "tool_use", id: "s2", name: "Bash", input: {} }],
+      },
+    }),
+    JSON.stringify({ type: "result", num_turns: 2 }),
+  ].join("\n");
+
+  const subs = parseSubagents(stream);
+  assert.equal(subs.length, 1);
+  assert.equal(subs[0].name, "reviewer");
+  assert.deepEqual(
+    subs[0].toolCalls.map((c) => c.name),
+    ["Read", "Bash"],
+  );
+  assert.equal(subs[0].toolCalls[0].resultText, "file body");
+  // No subagents in a plain stream.
+  assert.deepEqual(parseSubagents('{"type":"result"}'), []);
+});
+
 test("runHarness steers a real-model run to measure() (no claude needed)", async () => {
   // The harness scope is deterministic (mock); a real-model run is
   // non-deterministic, so a single one can't be asserted — runHarness says so.
@@ -29,6 +84,7 @@ import {
   parseToolCalls,
   parseOutput,
   parseHooks,
+  parseSubagents,
   buildClaudeArgs,
 } from "./harness-test.js";
 import {

@@ -18,6 +18,7 @@ import {
   blocked,
   allowed,
   mcp,
+  subagent,
   judged,
   cost,
   latency,
@@ -164,6 +165,29 @@ test("mcp(): matches an mcp__server__tool call", () => {
     server: "github",
     tool: "x",
   });
+});
+
+test("subagent(): runs nested checks over a subagent's sub-trace", () => {
+  const t = makeTrace({
+    toolCalls: [toolCall("Task")],
+    subagents: [
+      { name: "reviewer", toolCalls: [toolCall("Read"), toolCall("Bash")] },
+    ],
+  });
+  // the reviewer subagent used Read + Bash → nested checks pass
+  assert.equal(
+    subagent("reviewer", [tool("Read"), tool("Bash")]).eval(t).pass,
+    true,
+  );
+  // a nested check that fails surfaces in the message
+  const failNested = subagent("reviewer", [tool("Edit")]).eval(t);
+  assert.equal(failNested.pass, false);
+  assert.match(failNested.message, /subagent "reviewer".*use tool "Edit"/s);
+  // a subagent that never ran
+  const missing = subagent("planner", [tool("Read")]).eval(t);
+  assert.equal(missing.pass, false);
+  assert.match(missing.message, /\[reviewer\]/);
+  assert.equal(subagent("x", [tool("Read")]).toJSON().kind, "subagent");
 });
 
 test("judged(): model-graded check with an injectable judge (no real model)", () => {

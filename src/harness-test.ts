@@ -173,8 +173,24 @@ export interface Trace {
   readonly modelRequests: readonly ModelRequest[];
   /** Number of model turns. */
   readonly turns: number;
+  /**
+   * Sub-agent (`Task`) runs as nested traces, keyed by `subagent_type`. A
+   * subagent runs its own session; CC tags its events with `parent_tool_use_id`
+   * (= the `Task` tool call) so its tool calls are recovered into a sub-trace
+   * here, lettng a test assert what the subagent DID (not just that `Task` fired).
+   * Empty unless the stream was captured / the harness emits subagent events.
+   */
+  readonly subagents?: readonly SubagentTrace[];
   /** Final contents of a file under the working dir, or null if absent. */
   file(path: string): string | null;
+}
+
+/** A sub-agent (`Task`) run as a nested trace: its name + the tools it used. */
+export interface SubagentTrace {
+  /** The `subagent_type` from the `Task` tool input. */
+  readonly name: string;
+  /** The tools the subagent invoked (events tagged with the Task's id). */
+  readonly toolCalls: readonly ToolCall[];
 }
 
 export interface HarnessTestResult extends Trace {
@@ -240,6 +256,83 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
     resultText: results.get(u.id)?.text ?? "",
     isError: results.get(u.id)?.isError ?? false,
   }));
+}
+
+/**
+ * Recover sub-agent (`Task`) runs as nested traces. A `Task` tool call (with an
+ * `input.subagent_type`) spawns a subagent whose own events CC tags with
+ * `parent_tool_use_id` = the Task's id. We group those tagged tool calls under
+ * their Task, keyed by `subagent_type`. Pure; empty for a harness that doesn't
+ * emit `parent_tool_use_id` (e.g. Codex), so it stays harness-agnostic.
+ */
+export function parseSubagents(streamJson: string): SubagentTrace[] {
+  const tasks = new Map<string, string>(); // Task id → subagent name
+  const byParent = new Map<
+    string,
+    {
+      uses: { id: string; name: string; input: unknown }[];
+      results: Map<string, { text: string; isError: boolean }>;
+    }
+  >();
+  const groupFor = (
+    parent: string,
+  ): {
+    uses: { id: string; name: string; input: unknown }[];
+    results: Map<string, { text: string; isError: boolean }>;
+  } => {
+    let g = byParent.get(parent);
+    if (!g) {
+      g = { uses: [], results: new Map() };
+      byParent.set(parent, g);
+    }
+    return g;
+  };
+
+  for (const line of streamJson.split("\n")) {
+    if (!line.trim()) continue;
+    let evt: { message?: { content?: unknown }; parent_tool_use_id?: unknown };
+    try {
+      evt = JSON.parse(line) as typeof evt;
+    } catch {
+      continue;
+    }
+    const content = evt.message?.content;
+    if (!Array.isArray(content)) continue;
+    const parent =
+      typeof evt.parent_tool_use_id === "string"
+        ? evt.parent_tool_use_id
+        : undefined;
+    for (const b of content as Array<Record<string, unknown>>) {
+      if (b.type === "tool_use" && typeof b.name === "string") {
+        const id = typeof b.id === "string" ? b.id : "";
+        if (b.name === "Task" && !parent) {
+          const sub = (b.input as { subagent_type?: string })?.subagent_type;
+          if (typeof sub === "string") tasks.set(id, sub);
+        }
+        if (parent)
+          groupFor(parent).uses.push({ id, name: b.name, input: b.input });
+      } else if (b.type === "tool_result" && parent) {
+        const id = typeof b.tool_use_id === "string" ? b.tool_use_id : "";
+        groupFor(parent).results.set(id, {
+          text: contentText(b.content),
+          isError: b.is_error === true,
+        });
+      }
+    }
+  }
+
+  const out: SubagentTrace[] = [];
+  for (const [taskId, name] of tasks) {
+    const g = byParent.get(taskId);
+    const toolCalls = (g?.uses ?? []).map((u) => ({
+      name: u.name,
+      input: u.input,
+      resultText: g?.results.get(u.id)?.text ?? "",
+      isError: g?.results.get(u.id)?.isError ?? false,
+    }));
+    out.push({ name, toolCalls });
+  }
+  return out;
 }
 
 /**
@@ -476,6 +569,7 @@ function makeResult(
     hooks: parsed.hooks,
     output: parsed.output,
     modelRequests,
+    subagents: parseSubagents(out.stdout),
     file: (p: string): string | null => {
       const f = resolve(cwd, p);
       return existsSync(f) ? readFileSync(f, "utf-8") : null;
