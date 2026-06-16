@@ -14,6 +14,8 @@ import {
   skill,
   output,
   hookFired,
+  received,
+  turns,
   wrote,
   blocked,
   allowed,
@@ -133,6 +135,56 @@ test("hookFired(): matches by event, lists fired events on miss", () => {
   const miss = hookFired("PostToolUse").eval(t);
   assert.equal(miss.pass, false);
   assert.match(miss.message, /\[PreToolUse, Stop\]/);
+});
+
+test("received(): a slash-command expansion / injected context reached the model", () => {
+  // modelRequests is what the mock captured reaching the model — a /review
+  // command expands its commands/review.md body into the user message.
+  const t = makeTrace({
+    modelRequests: [
+      {
+        system: "You are Claude.",
+        messages: [
+          {
+            role: "user",
+            text: "Run the full review checklist: lint, tests, types.",
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(received("review checklist").eval(t).pass, true);
+  assert.equal(received(/lint, tests, types/).eval(t).pass, true);
+  const miss = received("deploy to prod").eval(t);
+  assert.equal(miss.pass, false);
+  assert.match(miss.message, /slash-command expansion or injected context/);
+  // eval tier captures no requests → an explicit, actionable message
+  const noReqs = received("x").eval(makeTrace());
+  assert.match(noReqs.message, /no requests captured/);
+  assert.deepEqual(received("x").toJSON(), {
+    kind: "received",
+    matcher: "x",
+    regex: false,
+  });
+});
+
+test("turns(): multi-turn observable (min/max)", () => {
+  assert.equal(turns({ min: 2 }).eval(makeTrace({ turns: 3 })).pass, true);
+  assert.equal(turns({ min: 2 }).eval(makeTrace({ turns: 1 })).pass, false);
+  assert.match(
+    turns({ min: 2 }).eval(makeTrace({ turns: 1 })).message,
+    /expected ≥ 2 turn\(s\), got 1/,
+  );
+  assert.equal(turns({ max: 5 }).eval(makeTrace({ turns: 6 })).pass, false);
+  assert.equal(
+    turns({ min: 2, max: 5 }).eval(makeTrace({ turns: 3 })).pass,
+    true,
+  );
+  assert.deepEqual(turns({ min: 2 }).toJSON(), {
+    kind: "turns",
+    min: 2,
+    max: undefined,
+  });
 });
 
 test("wrote(): checks the work-dir file presence", () => {
