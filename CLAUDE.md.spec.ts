@@ -297,6 +297,12 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Dogfood trigger eval — vigiles's OWN strengthen skill (made model-invocable so the agent reaches for guidance()→enforce() upgrades on its own): fires on strengthen/harden-my-rules requests (recall) AND stays quiet on ordinary linting/coding (precision). Gated by assertTriggerRate({ min, maxFalsePositive }); write-don't-run without model auth",
     "examples/harness/dogfood/edit-spec.trigger.eval.mjs":
       "Dogfood trigger eval — vigiles's OWN edit-spec skill (made model-invocable; the skill the pre-edit hook points at when a direct CLAUDE.md edit is blocked): fires on 'change my CLAUDE.md / add a rule' requests (recall) AND stays quiet on ordinary coding (precision). Gated by assertTriggerRate({ min, maxFalsePositive }); write-don't-run without model auth",
+    "examples/harness/checks-dogfood.harness.mjs":
+      "Dogfood of the new check vocabulary on the DETERMINISTIC tiers (no key, RUNS in CI): assertChecks over a real runHook (blocked/allowed) + a real runHarness mock run (turns/output). Exercises the revamped strict-check path end-to-end, not just unit-tested with fakes",
+    "examples/harness/dogfood/skill-quality.eval.mjs":
+      "Dogfood of the SCORED check evaluator on vigiles's OWN strengthen skill: measure({ checks: [skill, judged, cost] }) + assertRates — does the skill FIRE, is its suggestion GOOD (model-graded judged), and is the run CHEAP. The promptfoo-class scored path dogfooded; write-don't-run without model auth",
+    "examples/harness/subagent.eval.mjs":
+      "Dogfood of the subagent nested-trace check on a REAL subagent — the vendored oh-my-claudecode code-reviewer agent (vigiles ships no subagents). measure drives a task that dispatches it via Task; subagent('code-reviewer', [tool('Read')]) asserts what the SUBAGENT did (recovered via parent_tool_use_id). Write-don't-run without model auth",
     "examples/harness/dogfood/generate-logo.trigger.eval.mjs":
       "Dogfood trigger eval — vigiles's OWN generate-logo skill, an INTERNAL dev-only skill (lives under dev/skills/, NOT shipped to consumers) loaded via --plugin-dir dev/: a NARROW skill, so the risk is recall collapse not over-firing; checks both recall + precision against logo vs nearby-asset prompts",
     "examples/harness/skill-compression.eval.mjs":
