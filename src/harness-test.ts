@@ -260,10 +260,13 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
 
 /**
  * Recover sub-agent (`Task`) runs as nested traces. A `Task` tool call (with an
- * `input.subagent_type`) spawns a subagent whose own events CC tags with
- * `parent_tool_use_id` = the Task's id. We group those tagged tool calls under
- * their Task, keyed by `subagent_type`. Pure; empty for a harness that doesn't
- * emit `parent_tool_use_id` (e.g. Codex), so it stays harness-agnostic.
+ * `input.subagent_type`) spawns a subagent whose own events the CLI tags with a
+ * top-level `parent_tool_use_id` = the Task's tool-use id. We group those tagged
+ * tool calls under their Task, keyed by `subagent_type`. Schema confirmed against
+ * Claude Code's stream-json (`parent_tool_use_id` sibling of `message`,
+ * `subagent_type` in the Task input) — the same `message.content` line shape
+ * `parseToolCalls` consumes. Pure; empty for a harness that doesn't emit
+ * `parent_tool_use_id` (e.g. Codex), so it stays harness-agnostic.
  */
 export function parseSubagents(streamJson: string): SubagentTrace[] {
   const tasks = new Map<string, string>(); // Task id → subagent name

@@ -404,12 +404,12 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
 4. **Multi-surface CC eval — the deepest gap (mostly SHIPPED).**
    - `mcp(server, tool)` ✅ — matches `mcp__server__tool` in the tool list.
    - **Subagents (`Task`) as nested traces ✅** — `Trace.subagents` recovers each
-     subagent's tool calls (CC tags them with `parent_tool_use_id`; the `Task`
-     input carries `subagent_type`), and `subagent(name, [checks])` runs the whole
-     vocabulary recursively over that sub-trace, so you can assert what the
-     subagent _did_. `parseSubagents` is unit-tested on synthetic stream-json;
-     **wants one real-CC-subagent run to confirm the field names** (`parent_tool_use_id`
-     / `subagent_type`) against current output.
+     subagent's tool calls (CC tags them with a top-level `parent_tool_use_id`;
+     the `Task` input carries `subagent_type`), and `subagent(name, [checks])`
+     runs the whole vocabulary recursively over that sub-trace, so you can assert
+     what the subagent _did_. **Schema confirmed** against Claude Code's
+     stream-json (the same `message.content` line shape `parseToolCalls`
+     consumes); unit-tested on synthetic stream-json.
    - **Slash-command expansion ✅** — `received(matcher)` checks that the expanded
      command (or a hook's injected context) actually **reached the model** via
      `modelRequests` (mock/harness tier). Unit-tested.
