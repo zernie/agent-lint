@@ -20,11 +20,46 @@ import {
   runHookWith,
   parseHookOutput,
   decideHook,
+  propertyHook,
   type HookOutput,
   type RunHookDeps,
   type HookSpawnResult,
 } from "./run-hook.js";
 import { sandboxAvailable } from "./sandbox.js";
+
+test("propertyHook: holds for a correct guard, finds a counterexample for a buggy one", () => {
+  const CMDS = ["ls", "rm -rf /", "rm -rf foo", "git status", "cat x"];
+  const mutate = (_e: { command: string }, rng: number) => ({
+    command: CMDS[Math.abs(rng) % CMDS.length],
+  });
+  // invariant: any command containing "rm -rf" must be blocked.
+  const invariants = {
+    "destructive-blocked": (d: { blocked: boolean }, e: { command: string }) =>
+      e.command.includes("rm -rf") ? d.blocked : true,
+  };
+
+  // A CORRECT guard blocks every "rm -rf" → property holds.
+  const good = propertyHook({
+    seed: { command: "ls" },
+    mutate,
+    decide: (e) => ({ blocked: e.command.includes("rm -rf") }),
+    invariants,
+    iterations: 200,
+  });
+  assert.ok(good.passed, "correct guard satisfies the invariant");
+
+  // A BUGGY guard only blocks the exact "rm -rf /" → property finds "rm -rf foo".
+  const buggy = propertyHook({
+    seed: { command: "ls" },
+    mutate,
+    decide: (e) => ({ blocked: e.command === "rm -rf /" }),
+    invariants,
+    iterations: 200,
+  });
+  assert.equal(buggy.passed, false);
+  assert.equal(buggy.failedInvariant, "destructive-blocked");
+  assert.ok(buggy.counterexample?.command.includes("rm -rf"));
+});
 
 test("parseHookOutput parses a JSON decision and ignores plain text", () => {
   assert.deepEqual(parseHookOutput('{"decision":"block","reason":"no"}'), {
