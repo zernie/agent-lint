@@ -12,10 +12,20 @@
  * `vigiles/e2e`.
  */
 export * from "./harness-assert.js";
-export { runHook, parseHookOutput, decideHook } from "./run-hook.js";
+export {
+  runHook,
+  parseHookOutput,
+  decideHook,
+  propertyHook,
+} from "./run-hook.js";
 export type {
   HookInput,
   HookOutput,
   HookRunResult,
   RunHookOptions,
+  HookPropertyResult,
 } from "./run-hook.js";
+// The check vocabulary is part of the base surface (pure, no capability). Its
+// `hookFired` check supersedes the legacy boolean predicate of the same name.
+export * from "./check.js";
+export { hookFired } from "./check.js";
