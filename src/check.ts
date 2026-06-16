@@ -58,6 +58,23 @@ export function evalChecks<T>(
   return checks.map((c) => c.eval(target));
 }
 
+/**
+ * Strict evaluator (Phase 1): throw if any check fails, collecting **all**
+ * failures into one actionable message (Validation-applicative, not
+ * short-circuit). The deterministic-tier verdict — use it in `node:test`, or any
+ * runner, over a `runHook` / `runHarness` result. `measure` (Phase 3) is the
+ * scored counterpart over trials.
+ */
+export function assertChecks<T>(target: T, checks: readonly Check<T>[]): void {
+  const failures = evalChecks(target, checks).filter((r) => !r.pass);
+  if (failures.length > 0) {
+    throw new Error(
+      `${String(failures.length)} of ${String(checks.length)} check(s) failed:\n` +
+        failures.map((f) => `  ✗ ${f.message}`).join("\n"),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
