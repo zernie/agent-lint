@@ -46,6 +46,7 @@ import {
   normalizeHarnessName,
   normalizeHarnessList,
   getAdapter,
+  adapterForInstructionFile,
 } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
@@ -429,7 +430,17 @@ async function compile(
       continue;
     }
     if (spec._specType === "claude") {
-      if (compileClaudeToFile(spec, specPath, config, dialect)) {
+      // Spec-target disambiguation: a CLAUDE.md.spec.ts is a claude-code file, an
+      // AGENTS.md.spec.ts a codex one — the strongest dialect signal for THIS
+      // spec. The flag still overrides; absent one, the spec's own target wins
+      // over config/detect. (Skill/agent targets don't name a harness, so they
+      // keep the run-level dialect.)
+      const targetFile = basename(specPath).replace(/\.spec\.ts$/, "");
+      const specDialect =
+        opts.harnessFlag === undefined
+          ? (adapterForInstructionFile(targetFile)?.dialect ?? dialect)
+          : dialect;
+      if (compileClaudeToFile(spec, specPath, config, specDialect)) {
         writeInstructionMirrors(
           specPath.replace(/\.spec\.ts$/, ""),
           declaredHarnesses,

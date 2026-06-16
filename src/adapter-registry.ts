@@ -80,6 +80,18 @@ export function getAdapter(name: string): HarnessAdapter | undefined {
 }
 
 /**
+ * The adapter whose instruction file is `filename` (e.g. `AGENTS.md` → codex,
+ * `CLAUDE.md` → claude-code), if any. The per-spec disambiguation signal: a
+ * `<file>.spec.ts` compiles a `<file>` instruction file, so the filename names
+ * the harness more specifically than config/detect for THAT spec.
+ */
+export function adapterForInstructionFile(
+  filename: string,
+): HarnessAdapter | undefined {
+  return ADAPTERS.find((a) => a.layout.instructionFile === filename);
+}
+
+/**
  * Resolve the adapter for a command: an explicit `--harness <name>` wins (throws
  * if unknown); otherwise auto-detect from `root`. The single entry point the CLI
  * uses so detection + override live in one place.

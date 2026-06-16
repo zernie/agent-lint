@@ -40,8 +40,10 @@ on every spec. Shape: `harness?: string | string[]`.
 For an operation that needs exactly one dialect (compile), resolve in this order:
 
 1. `--harness=<name>` flag — wins (matches `init`/`scan`, which already have it).
-2. Spec target file when it disambiguates (`CLAUDE.md` → claude-code, `AGENTS.md`
-   → codex).
+2. **Spec target file** when it disambiguates — a `CLAUDE.md.spec.ts` is a
+   claude-code file, an `AGENTS.md.spec.ts` a codex one (`adapterForInstructionFile`,
+   applied per instruction spec). Skill/agent targets don't name a harness, so they
+   take the run-level pick below.
 3. Config `harness` resolving to a single entry → use it.
 4. Config `harness` with multiple entries → use the first, print a **loud notice**
    (`compiling for claude-code — override with --harness=`), never a silent pick.
@@ -49,10 +51,18 @@ For an operation that needs exactly one dialect (compile), resolve in this order
    `scan` does (a repo that matches several harnesses).
 
 This kills the silent-mismatch footgun in `compileSkillToFile`/`compileAgentToFile`
-(which today call `detectAdapter(cwd).dialect` with no override and no warning).
+(which previously called `detectAdapter(cwd).dialect` with no override and no
+warning).
 
 Zero-config stays intact: `compile` still works with just a `.spec.ts` (step 5),
 so the config key is _written by init_ but never _required_ by compile.
+
+**`lint` takes no `--harness` — by design.** Unlike `compile` (picks one dialect
+to render) and `scan` (reports harness-specific structure), reference verification
+is harness-agnostic: "does this linter rule exist / does this path resolve" is the
+same answer on any harness, and the validator already recognizes **both**
+`CLAUDE.md` and `AGENTS.md` (`validate.ts`). So a harness selector on `lint` would
+be cargo-culted surface, not a real knob.
 
 Name reconciliation: `init`'s `resolveHarnesses` uses short names (`"claude"`,
 `"codex"`); adapters are named `"claude-code"`/`"codex"`. The config key uses the
