@@ -40,7 +40,7 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
-import { tool, output } from "./check.js";
+import { tool, output, turns } from "./check.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -349,6 +349,73 @@ test("measureWith scores a check vocabulary across trials (rate ± se, pass^k)",
   assert.equal(read.rate, 0); // Read never used
   assert.equal(read.passK, 0);
   assert.ok(formatCheckReport(report).includes("measured 3 run(s)"));
+});
+
+test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", async () => {
+  const dir = makeTmpDir("measure-stub");
+  const skills = join(dir, "skills");
+  mkdirSync(join(skills, "foo"), { recursive: true });
+  mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(dir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "myplug", version: "0.0.0" }),
+  );
+  writeFileSync(
+    join(skills, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\n\n# Procedure\nrun the expensive thing\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  let seenBody = "";
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    if (a.pluginDir)
+      seenBody = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureWith(
+    {
+      task: "do foo",
+      pluginDir: dir,
+      stubSkillBodies: true,
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+  // The run saw a STUBBED throwaway plugin (body gone, name preserved), removed after.
+  assert.ok(seenBody.includes("description: does foo"), "frontmatter kept");
+  assert.ok(!seenBody.includes("run the expensive thing"), "body stubbed");
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && used !== dir, "a packaged plugin dir was used");
+  assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
+  cleanupTmpDir(dir);
+});
+
+test("measureWith stubSkillBodies without pluginDir throws", async () => {
+  await assert.rejects(
+    measureWith(
+      {
+        task: "x",
+        stubSkillBodies: true,
+        checks: [turns({ min: 1 })],
+        trials: 1,
+      },
+      () => Promise.resolve({ code: 0, stdout: "" }),
+    ),
+    /requires `pluginDir`/,
+  );
 });
 
 test("measureArmsWith scores checks per arm; compareCheck reads significance", async () => {
