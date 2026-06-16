@@ -3,6 +3,11 @@
  *
  *   npm run demo:plugin      (or: node examples/plugin-test-demo.mjs)
  *
+ * ⚠️ DEPRECATED — pending a demo revamp. Still runs, but no longer a surfaced
+ * front-door demo and not actively maintained; slated for consolidation into one
+ * polished demo story alongside `vigiles scan`. See research/roadmap.md
+ * (Demo revamp). Don't build on it.
+ *
  * It narrates, in plain words, what vigiles checks about a third-party plugin —
  * what it ships, what one of its hooks does, and what it phones home to — using a
  * real, popular plugin (oh-my-claudecode, ~36k★) vendored under examples/harness/.

@@ -78,6 +78,12 @@
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
+- **Demo revamp (consolidate the deprecated demos)** — `examples/demo/`
+  (`npm run demo`) and `examples/plugin-test-demo.mjs` (`npm run demo:plugin`) are
+  now deprecated. Replace them with ONE polished, reliably-passing front-door demo
+  - a recorded GIF/asciinema, framed by the three "best"s: the stale-`enforce()`
+    "lies" story as the one-sentence sell, `vigiles scan` as the zero-setup wedge.
+    [distribution-strategy](distribution-strategy.md) · feature-ideas #14
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
   structural score. [divergent-bets #9](divergent-bets.md)
 - **Harness cost/ROI optimizer** — A/B token-cost eval (full vs trimmed CLAUDE.md);
