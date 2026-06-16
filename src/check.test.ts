@@ -17,6 +17,11 @@ import {
   wrote,
   blocked,
   allowed,
+  mcp,
+  judged,
+  cost,
+  latency,
+  tokens,
   evalChecks,
   assertChecks,
   type Check,
@@ -146,6 +151,86 @@ test("blocked()/allowed(): hook-decision checks over HookRunResult", () => {
   assert.equal(allowed().eval(a).pass, true);
   assert.equal(allowed().eval(b).pass, false);
   assert.deepEqual(blocked().toJSON(), { kind: "blocked" });
+});
+
+test("mcp(): matches an mcp__server__tool call", () => {
+  const t = makeTrace({ toolCalls: [toolCall("mcp__github__create_issue")] });
+  assert.equal(mcp("github", "create_issue").eval(t).pass, true);
+  const miss = mcp("github", "list_issues").eval(t);
+  assert.equal(miss.pass, false);
+  assert.match(miss.message, /mcp__github__list_issues/);
+  assert.deepEqual(mcp("github", "x").toJSON(), {
+    kind: "mcp",
+    server: "github",
+    tool: "x",
+  });
+});
+
+test("judged(): model-graded check with an injectable judge (no real model)", () => {
+  const t = makeTrace({ output: "a thorough, well-ordered plan" });
+  const fakeHigh = () => ({ score: 0.9, pass: true, reason: "ordered steps" });
+  const fakeLow = () => ({ score: 0.2, pass: false, reason: "vague" });
+
+  const passC = judged("1 if the plan is concrete", {
+    min: 0.7,
+    judge: fakeHigh,
+  });
+  const r1 = passC.eval(t);
+  assert.equal(r1.pass, true);
+  assert.equal(r1.score, 0.9);
+
+  const failC = judged("1 if concrete", { min: 0.7, judge: fakeLow });
+  const r2 = failC.eval(t);
+  assert.equal(r2.pass, false);
+  assert.match(r2.message, /judge 0.20 < 0.7/);
+  assert.match(r2.message, /vague/);
+  assert.deepEqual(judged("rubric x", { min: 0.6 }).toJSON(), {
+    kind: "judged",
+    rubric: "rubric x",
+    min: 0.6,
+  });
+});
+
+test("cost / latency / tokens checks over a run's usage", () => {
+  const run = {
+    usage: {
+      costUsd: 0.02,
+      durationMs: 1500,
+      inputTokens: 800,
+      outputTokens: 200,
+    },
+  };
+  assert.equal(cost({ maxUsd: 0.05 }).eval(run).pass, true);
+  assert.equal(cost({ maxUsd: 0.01 }).eval(run).pass, false);
+  assert.match(
+    cost({ maxUsd: 0.01 }).eval(run).message,
+    /expected cost ≤ \$0.01/,
+  );
+  assert.equal(latency({ maxMs: 2000 }).eval(run).pass, true);
+  assert.equal(latency({ maxMs: 1000 }).eval(run).pass, false);
+  assert.equal(tokens({ max: 1000 }).eval(run).pass, true); // 800+200 = 1000
+  assert.equal(tokens({ max: 999 }).eval(run).pass, false);
+  assert.deepEqual(cost({ maxUsd: 0.1 }).toJSON(), {
+    kind: "cost",
+    maxUsd: 0.1,
+  });
+});
+
+test("checks are harness-agnostic: they read Trace fields, not a CC shape", () => {
+  // A Codex run produces a Trace with `output` but a deliberately sparse
+  // tool/hook trace (codexDriver doesn't parse JSONL tool events). The checks
+  // must still evaluate correctly — `output` passes, tool/hook checks fail
+  // gracefully (not throw) — because the vocabulary is over the generic Trace.
+  const codexLike = makeTrace({
+    output: "AGENTS.md updated as requested",
+    toolCalls: [], // not captured by this harness
+    hooks: [],
+  });
+  assert.equal(output("AGENTS.md updated").eval(codexLike).pass, true);
+  assert.equal(tool("Bash").eval(codexLike).pass, false); // graceful, not a throw
+  assert.equal(hookFired("Stop").eval(codexLike).pass, false);
+  // assertChecks works over any harness's result — same entry, no CC assumption.
+  assertChecks(codexLike, [output(/AGENTS\.md/)]);
 });
 
 test("evalChecks(): evaluates every check, preserving order", () => {

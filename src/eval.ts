@@ -54,6 +54,7 @@ import {
   type CacheMode,
 } from "./eval-cache.js";
 import type { Check, CheckJSON } from "./check.js";
+import { welchTTest, type Comparison } from "./stats.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -309,8 +310,13 @@ export interface MeasureSpec {
   readonly pluginDir?: string;
   /** The task prompt given to the agent. */
   readonly task: string;
-  /** The checks to score across the trials (each a `Trace` check). */
-  readonly checks: readonly Check<Trace>[];
+  /**
+   * The checks to score across the trials. Any check over the run is accepted:
+   * `Trace` checks (`tool`/`skill`/`output`/`mcp`/`judged`) and resource checks
+   * (`cost`/`latency`/`tokens`, which read the eval-only `usage`) — all fit
+   * `Check<RunContext>`.
+   */
+  readonly checks: readonly Check<RunContext>[];
   /** Trials. Default 5. */
   readonly trials?: number;
   /** Model alias. Default "sonnet" — measure on the model your users run. */
@@ -396,6 +402,105 @@ export async function measure(spec: MeasureSpec): Promise<CheckReport> {
   return measureWith(spec, spawnAgent);
 }
 /* v8 ignore stop */
+
+// ---------------------------------------------------------------------------
+// measureArms — checks × A/B arms + significance. Unifies the harness-A/B moat
+// (a hook/skill/CLAUDE.md ON vs OFF) with the check vocabulary: score the SAME
+// checks per arm, then compare a check's rate across arms with Welch significance
+// (reusing stats.ts) so a gap reads as real-or-noise, not a hand-fed delta.
+// ---------------------------------------------------------------------------
+
+/** A task scored against checks across NAMED arms (the harness variable on/off). */
+export interface ArmsMeasureSpec {
+  readonly fixture?: Record<string, string>;
+  /** The arms to compare (settings / plugin / pluginDir per arm). */
+  readonly arms: Record<string, EvalArm>;
+  readonly task: string;
+  readonly checks: readonly Check<RunContext>[];
+  readonly trials?: number;
+  readonly model?: string;
+  readonly allowedTools?: readonly string[];
+  readonly timeoutMs?: number;
+  readonly spacingSec?: number;
+}
+
+/** Per-arm {@link CheckReport}s — `arms[name].perCheck[i]` aligns across arms. */
+export interface ArmsCheckReport {
+  readonly arms: Record<string, CheckReport>;
+}
+
+/** Score checks across arms (injectable runner). Reuses `runEvalWith`. */
+export async function measureArmsWith(
+  spec: ArmsMeasureSpec,
+  runner: AgentRunner,
+): Promise<ArmsCheckReport> {
+  const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
+  const report = await runEvalWith(
+    {
+      fixture: spec.fixture,
+      arms: spec.arms,
+      task: spec.task,
+      trials: spec.trials ?? 5,
+      model: spec.model ?? "sonnet",
+      allowedTools: spec.allowedTools,
+      timeoutMs: spec.timeoutMs,
+      spacingSec: spec.spacingSec,
+      measure: (ctx) =>
+        Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
+    },
+    runner,
+  );
+  const arms: Record<string, CheckReport> = {};
+  for (const [armName, arm] of Object.entries(report.arms)) {
+    arms[armName] = {
+      n: arm.runs,
+      perCheck: keyed.map(([k, c]) => {
+        const s = arm.stats[k];
+        return {
+          check: c.toJSON(),
+          rate: s?.mean ?? 0,
+          se: s?.se ?? 0,
+          passK: s?.passK ?? 0,
+          n: s?.n ?? 0,
+        };
+      }),
+    };
+  }
+  return { arms };
+}
+
+/* v8 ignore start -- real claude subprocess; thin wrapper over measureArmsWith */
+/** Score checks across arms against the real `claude` CLI. */
+export async function measureArms(
+  spec: ArmsMeasureSpec,
+): Promise<ArmsCheckReport> {
+  return measureArmsWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
+
+/**
+ * Welch significance on one check's rate between two arms (`arm` vs `baseline`),
+ * by index in `perCheck`. So "the gated arm resolves the skill significantly more
+ * than vanilla" is a p-value, not a vibe. Reuses `welchTTest` from stats.ts.
+ */
+export function compareCheck(
+  report: ArmsCheckReport,
+  baseline: string,
+  arm: string,
+  checkIndex: number,
+): Comparison {
+  const b = report.arms[baseline]?.perCheck[checkIndex];
+  const a = report.arms[arm]?.perCheck[checkIndex];
+  if (!a || !b) {
+    throw new Error(
+      `compareCheck: unknown arm or check index (baseline="${baseline}", arm="${arm}", i=${String(checkIndex)})`,
+    );
+  }
+  return welchTTest(
+    { mean: a.rate, se: a.se, n: a.n },
+    { mean: b.rate, se: b.se, n: b.n },
+  );
+}
 
 /** A readable label for a check from its serialized form, e.g. `tool(Bash)`. */
 function checkLabel(json: CheckJSON): string {

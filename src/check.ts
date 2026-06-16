@@ -18,6 +18,7 @@
  */
 import type { Trace, ToolCall, HookFire } from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
+import { judge as runJudge } from "./judge.js";
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -213,5 +214,125 @@ export function allowed(): Check<HookRunResult> {
           )
         : ok("hook allowed the event"),
     toJSON: () => ({ kind: "allowed" }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MCP — a tool call is just a name in the Trace; MCP tools are `mcp__srv__tool`
+// ---------------------------------------------------------------------------
+
+/** The agent used an MCP tool `<server>/<tool>` (CC names it `mcp__server__tool`). */
+export function mcp(server: string, toolName: string): Check<Trace> {
+  const full = `mcp__${server}__${toolName}`;
+  return {
+    kind: "mcp",
+    eval: (t) =>
+      t.toolCalls.some((c) => c.name === full)
+        ? ok(`used MCP tool ${server}/${toolName}`)
+        : no(
+            `expected MCP tool ${server}/${toolName} (${full}), but the agent used ${distinctToolNames(t.toolCalls)}`,
+          ),
+    toJSON: () => ({ kind: "mcp", server, tool: toolName }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Model-graded — `judged` (LLM rubric). Closes the promptfoo `llm-rubric` /
+// DeepEval `GEval` gap: a subjective check that composes into measure/toJUnit
+// like any other. The Check.eval is sync (judge() blocks via spawnSync), so it
+// fits the same interface; the `judge` fn is injectable for testing.
+// ---------------------------------------------------------------------------
+
+/** A model-graded judge: grades `output` against a `rubric` → score in [0,1]. */
+export type JudgeFn = (opts: {
+  output: string;
+  rubric: string;
+  threshold?: number;
+}) => { score: number; pass: boolean; reason?: string };
+
+/**
+ * A model-graded check: the agent's `output` scores ≥ `min` against `rubric`,
+ * judged by a model. Unlike the deterministic checks this one calls a model
+ * (cost), so it's for the scored `measure` tier; the `judge` fn is injectable
+ * (default: the real `judge()`), so the logic is unit-testable with a fake.
+ */
+export function judged(
+  rubric: string,
+  opts: { min?: number; judge?: JudgeFn } = {},
+): Check<Trace> {
+  const min = opts.min ?? 0.5;
+  const judgeFn: JudgeFn = opts.judge ?? ((o) => runJudge(o));
+  return {
+    kind: "judged",
+    eval: (t) => {
+      const r = judgeFn({ output: t.output, rubric, threshold: min });
+      const pass = r.score >= min;
+      const tail = r.reason ? ` — ${r.reason}` : "";
+      return {
+        pass,
+        score: r.score,
+        message: pass
+          ? `judge ${r.score.toFixed(2)} ≥ ${String(min)}${tail}`
+          : `judge ${r.score.toFixed(2)} < ${String(min)} for "${rubric}"${tail}`,
+      };
+    },
+    toJSON: () => ({ kind: "judged", rubric, min }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Resource checks — over a run's usage (cost / latency / tokens). Only the
+// eval tier (`RunContext`) carries usage, so these are `Check<UsageTrace>`,
+// usable in `measure` but not over a plain harness `Trace` (which has none).
+// ---------------------------------------------------------------------------
+
+interface UsageTrace {
+  readonly usage: {
+    readonly costUsd: number;
+    readonly durationMs: number;
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+  };
+}
+
+/** The run cost at most `maxUsd`. */
+export function cost(opts: { maxUsd: number }): Check<UsageTrace> {
+  return {
+    kind: "cost",
+    eval: (t) => {
+      const v = t.usage.costUsd;
+      return v <= opts.maxUsd
+        ? ok(`cost $${v.toFixed(4)} ≤ $${String(opts.maxUsd)}`)
+        : no(`expected cost ≤ $${String(opts.maxUsd)}, got $${v.toFixed(4)}`);
+    },
+    toJSON: () => ({ kind: "cost", maxUsd: opts.maxUsd }),
+  };
+}
+
+/** The run took at most `maxMs` of wall-clock time. */
+export function latency(opts: { maxMs: number }): Check<UsageTrace> {
+  return {
+    kind: "latency",
+    eval: (t) => {
+      const v = t.usage.durationMs;
+      return v <= opts.maxMs
+        ? ok(`latency ${String(v)}ms ≤ ${String(opts.maxMs)}ms`)
+        : no(`expected latency ≤ ${String(opts.maxMs)}ms, got ${String(v)}ms`);
+    },
+    toJSON: () => ({ kind: "latency", maxMs: opts.maxMs }),
+  };
+}
+
+/** The run used at most `max` total (input + output) tokens. */
+export function tokens(opts: { max: number }): Check<UsageTrace> {
+  return {
+    kind: "tokens",
+    eval: (t) => {
+      const v = t.usage.inputTokens + t.usage.outputTokens;
+      return v <= opts.max
+        ? ok(`${String(v)} tokens ≤ ${String(opts.max)}`)
+        : no(`expected ≤ ${String(opts.max)} tokens, got ${String(v)}`);
+    },
+    toJSON: () => ({ kind: "tokens", max: opts.max }),
   };
 }

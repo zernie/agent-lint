@@ -22,6 +22,8 @@ import {
   measureTriggerRateWith,
   formatTriggerRateReport,
   measureWith,
+  measureArmsWith,
+  compareCheck,
   formatCheckReport,
   assertRates,
   checkReportToJUnit,
@@ -347,6 +349,43 @@ test("measureWith scores a check vocabulary across trials (rate ± se, pass^k)",
   assert.equal(read.rate, 0); // Read never used
   assert.equal(read.passK, 0);
   assert.ok(formatCheckReport(report).includes("measured 3 run(s)"));
+});
+
+test("measureArmsWith scores checks per arm; compareCheck reads significance", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+
+  // `gated` arm (hasSettings) always fires the Skill; `vanilla` never does.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: a.hasSettings ? skillStream : plain });
+
+  const report = await measureArmsWith(
+    {
+      task: "do it",
+      arms: {
+        vanilla: {},
+        gated: { settings: { hooks: {} } },
+      },
+      checks: [tool("Skill")],
+      trials: 4,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.arms.gated.perCheck[0].rate, 1); // fires every trial
+  assert.equal(report.arms.vanilla.perCheck[0].rate, 0); // never
+  const cmp = compareCheck(report, "vanilla", "gated", 0);
+  assert.equal(cmp.delta, 1); // gated − vanilla
+  assert.equal(cmp.significant, true); // a clean 0 → 1 separation
+  assert.throws(() => compareCheck(report, "nope", "gated", 0));
 });
 
 test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => {

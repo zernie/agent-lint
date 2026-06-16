@@ -385,42 +385,53 @@ scorer (a streaming judge, an HTTP grader) would not fit — if that arrives, ad
 `AsyncCheck` (`eval → Promise<CheckResult>`) consumed only by `measure`, never by
 the strict `assertChecks`.
 
-**Gaps — ranked, eval-side first (each closes a CC-feature or promptfoo-parity hole):**
+**Gaps — ranked, eval-side first. Update (2026-06-16): 1–3 + the cheap part of 4
+SHIPPED; the harness axis added.**
 
-1. **`judged(rubric, { min })` — model-graded check.** `judge()` exists but is NOT
-   a `Check`, so an LLM-rubric can't compose into `measure` / `assertRates` /
-   `toJUnit`. It _fits the sync interface_ (`eval(trace)` → `judge({ output:
-trace.output, rubric })`). Small add, biggest value — closes the #1 parity gap
-   with promptfoo `llm-rubric` / DeepEval `GEval`.
-2. **`cost()` / `latency()` / `tokens()` checks** over `RunContext.usage`. The data
-   is already captured; there's just no check. Trivial; promptfoo has them.
-3. **Checks × A/B arms + significance.** `measure` is single-arm; the harness-A/B
-   moat (`runEval` arms + `assertSignificant`) is a separate path. A `measure` that
-   takes arms and compares each check's rate across them with Welch significance
-   unifies the moat with the check vocabulary. Medium.
-4. **Multi-surface CC eval — the deepest gap.** `Trace` is a _single, flat_
-   session: a tool list + hooks + output. It does **not** capture:
-   - **Subagents (`Task`)** as nested sub-traces — a subagent runs its own session;
-     today it shows only as one `Task` tool call, so you can't assert what the
-     subagent _did_ or score a multi-agent handoff.
-   - **Slash-command expansion** — whether a `commands/` file expands correctly and
-     drives behaviour (pre-model, needs mock-prompt capture).
-   - **Multi-turn conversations** — `measure`/`runEval` give a single task; testing
-     a skill/hook across a back-and-forth isn't expressible.
-   - **MCP-tool use** beyond the flat tool list (an `mcp(server, tool)` check).
-     Each wants a Trace extension (nested traces, per-turn slices) + matching checks.
+1. **`judged(rubric, { min })` — model-graded check. ✅ SHIPPED.** A `Check<Trace>`
+   that grades `trace.output` against a rubric via an **injectable** `judge` fn
+   (default the real `judge()`, which blocks via `spawnSync`, so it fits the sync
+   `eval`). Composes into `measure`/`assertRates`/`toJUnit` like any check —
+   closes the promptfoo `llm-rubric` / DeepEval `GEval` parity gap. Unit-tested
+   with a fake judge (no model).
+2. **`cost()` / `latency()` / `tokens()` checks. ✅ SHIPPED.** `Check<UsageTrace>`
+   over a run's `usage` (eval tier only), so `measure` can gate `cost({ maxUsd })`
+   etc. alongside behavioural checks. `measure.checks` widened to `Check<RunContext>`.
+3. **Checks × A/B arms + significance. ✅ SHIPPED.** `measureArms(spec, { arms,
+checks })` scores the SAME checks per arm; `compareCheck(report, baseline, arm,
+i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
+   ON vs OFF) now reads as a per-check significance, not a hand-fed delta.
+4. **Multi-surface CC eval — the deepest gap (PARTIAL).** `mcp(server, tool)` ✅
+   shipped (matches `mcp__server__tool` in the flat tool list). The rest still
+   needs a `Trace`-model extension and is the big remaining bet:
+   - **Subagents (`Task`)** as nested sub-traces — today a subagent is one `Task`
+     tool call; you can't assert what it _did_ or score a multi-agent handoff.
+   - **Slash-command expansion** — pre-model; needs mock-prompt capture.
+   - **Multi-turn conversations** — `measure`/`runEval` give a single task.
+     Each wants nested traces / per-turn slices + matching checks.
 5. **Trace fidelity on the real-model tier.** `modelRequests` is **mock-tier only**
-   — on a real `runEval` you cannot assert _what reached the model_ (a
-   SessionStart hook's injected context), only the mock tier can. No
-   thinking/reasoning or per-turn capture either.
-6. **CC-feature drift.** New hook events / surfaces (CC keeps adding) must be
-   tracked in `HookFire` parsing + the dialect; today's set is current but this is
-   ongoing maintenance, not a one-time fix.
+   — on a real `runEval` you cannot assert _what reached the model_; no
+   thinking/per-turn capture. Largely inherent to the real API.
+6. **CC-feature drift.** New hook events / surfaces must be tracked in `HookFire`
+   parsing + the dialect — ongoing maintenance.
 
-**Recommended next bets:** 1 → 2 → 3 are small/medium and high-leverage (they make
-`measure` a real promptfoo-class scored evaluator while keeping our moat). 4 is the
-genuinely new capability surface (nested-trace model) and the right _big_ bet once
-the cheap wins land. 5–6 are fidelity/maintenance, addressed opportunistically.
+**The harness axis (different harnesses). ✅ Verified + documented.** The check
+vocabulary is **harness-agnostic by construction** — every check reads generic
+`Trace` fields (`toolCalls`/`hooks`/`output`/`turns`/`file`), never a Claude-Code
+shape, so it evaluates correctly over a Codex-shaped (sparse) Trace: `output`
+passes, `tool`/`hookFired` fail gracefully rather than throw (a unit test pins
+this). The **runners** already dispatch per-harness via the adapter
+(`runHarness`/`runHarnessTest` take `{ adapter }`); the **eval tier**'s
+convenience (`measure`/`runEval`) defaults to Claude Code, but `measureWith`/
+`measureArmsWith`/`runEvalWith` take an **injectable runner**, so a Codex eval
+injects a Codex `AgentRunner` over the same checks. The one remaining harness-axis
+item: an adapter-dispatched `measure()` convenience (today it's the injectable
+seam, not a built-in Codex default), plus a richer Codex `parseRun` so `tool`/
+`skill` checks have a populated trace there.
+
+**Recommended next bet:** #4's nested-trace `Trace` model (subagents/turns) — the
+genuinely new capability — now that 1–3 made `measure` a promptfoo-class scored
+evaluator. 5–6 + the eval-tier adapter convenience are opportunistic.
 
 ## See also
 
