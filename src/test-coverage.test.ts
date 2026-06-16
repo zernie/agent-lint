@@ -41,6 +41,30 @@ test("skill is covered by a colocated eval", () => {
   cleanupTmpDir(dir);
 });
 
+test("loose skill under .claude/skills is covered by its colocated eval", () => {
+  // Regression: the suggested eval lives under a DOT dir, so a globstar test
+  // glob without `dot:true` never found it and the surface looked untested
+  // even after the user added exactly the file the warning recommended.
+  const dir = makeTmpDir("tc-dotdir");
+  write(dir, ".claude/skills/foo/SKILL.md", skill("foo"));
+  const before = findUntestedSurfaces({ basePath: dir });
+  assert.equal(before.untested.length, 1, "skill is found and flagged first");
+  assert.equal(
+    suggestedTestPath(before.untested[0]),
+    ".claude/skills/foo/foo.eval.mjs",
+  );
+
+  // Add exactly the suggested colocated eval — it must now count as covered.
+  write(dir, ".claude/skills/foo/foo.eval.mjs", "// trigger eval\n");
+  const after = findUntestedSurfaces({ basePath: dir });
+  assert.equal(after.untested.length, 0);
+  assert.deepEqual(
+    after.covered.map((s) => s.name),
+    ["foo"],
+  );
+  cleanupTmpDir(dir);
+});
+
 test("skill is covered by a content-reference anywhere (namespace token)", () => {
   const dir = makeTmpDir("tc-ref");
   write(dir, "skills/foo/SKILL.md", skill("foo"));

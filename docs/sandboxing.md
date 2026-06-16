@@ -49,7 +49,7 @@ for four concrete reasons, each load-bearing:
 3. **Trust follows provenance.** Inline code you authored is trusted; foreign
    `plugin`/`pluginDir` is not — committing it to your repo is the same trust
    decision as taking on a dependency. You already made the call when you vendored
-   it; the sandbox earns its keep on the code you _haven't_ audited.
+   it; the sandbox earns its keep on the code you _haven't_ linted.
 4. **Cost.** A direct `spawnSync` is milliseconds — the whole point of the unit
    tier. The confined path stands up an IO dir, a fresh HOME, before/after tree
    snapshots, and a `bwrap` spawn. Paid on every _trusted_ hook, that defeats the

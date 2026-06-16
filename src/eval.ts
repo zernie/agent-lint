@@ -27,7 +27,9 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
+  cpSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,10 +37,12 @@ import { resolve, join, dirname } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
+import { ncd } from "./core/proofs.js";
 import {
   parseToolCalls,
   parseResultEvent,
   parseHooks,
+  parseSubagents,
   type ToolCall,
   type Trace,
 } from "./harness-test.js";
@@ -50,6 +54,8 @@ import {
   restoreDir,
   type CacheMode,
 } from "./eval-cache.js";
+import type { Check, CheckJSON } from "./check.js";
+import { welchTTest, type Comparison } from "./stats.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -289,6 +295,355 @@ export async function runEval<M extends Metrics>(
 }
 /* v8 ignore stop */
 
+// ---------------------------------------------------------------------------
+// measure() — the SCORED evaluator (Phase 3 of testing-api-design.md)
+// ---------------------------------------------------------------------------
+
+/** A task run N times, scored against a `Trace` check vocabulary. */
+export interface MeasureSpec {
+  /** Base fixture files written for every run (path → contents). */
+  readonly fixture?: Record<string, string>;
+  /** `.claude/settings.json` (hooks/permissions) for the run. */
+  readonly settings?: unknown;
+  /** A real plugin/repo to load (materialized) — see `EvalArm.plugin`. */
+  readonly plugin?: string;
+  /** A complete plugin dir to install natively (`--plugin-dir`) so skills activate. */
+  readonly pluginDir?: string;
+  /**
+   * Stub each skill BODY in `pluginDir` (frontmatter/trigger surface kept) before
+   * the run — for checks about whether a skill FIRES (`skill()`), not what it
+   * produces. A selected skill stops at selection instead of running its (often
+   * expensive) procedure, so a description/firing run costs a fraction of the
+   * tokens. Do NOT combine with `judged`/quality checks: the body is gone, so
+   * there's nothing to grade. Requires `pluginDir`. See {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
+  /** The task prompt given to the agent. */
+  readonly task: string;
+  /**
+   * The checks to score across the trials. Any check over the run is accepted:
+   * `Trace` checks (`tool`/`skill`/`output`/`mcp`/`judged`) and resource checks
+   * (`cost`/`latency`/`tokens`, which read the eval-only `usage`) — all fit
+   * `Check<RunContext>`.
+   */
+  readonly checks: readonly Check<RunContext>[];
+  /** Trials. Default 5. */
+  readonly trials?: number;
+  /** Model alias. Default "sonnet" — measure on the model your users run. */
+  readonly model?: string;
+  /** Tools the agent may use. */
+  readonly allowedTools?: readonly string[];
+  /** Per-run timeout ms. */
+  readonly timeoutMs?: number;
+  /** Seconds between runs. */
+  readonly spacingSec?: number;
+}
+
+/** One check's measured rate across the trials. */
+export interface CheckRate {
+  readonly check: CheckJSON;
+  /** Fraction of trials the check passed (0..1). */
+  readonly rate: number;
+  /** Standard error of the rate. */
+  readonly se: number;
+  /** pass^k — 1 iff the check passed on EVERY trial. */
+  readonly passK: number;
+  /** Trials observed. */
+  readonly n: number;
+}
+
+export interface CheckReport {
+  readonly n: number;
+  readonly perCheck: readonly CheckRate[];
+}
+
+/**
+ * Score a check vocabulary across trials — the scored counterpart to
+ * `assertChecks` (strict). Each check yields a `rate ± se` and `pass^k` over `n`
+ * runs. Reuses the tested `runEvalWith` aggregation (one arm), so the loop,
+ * cache, concurrency, and stats come for free. Exported with an injectable
+ * `runner` so the orchestration is unit-testable without a model.
+ */
+export async function measureWith(
+  spec: MeasureSpec,
+  runner: AgentRunner,
+): Promise<CheckReport> {
+  if (spec.stubSkillBodies && !spec.pluginDir)
+    throw new Error("measure: `stubSkillBodies` requires `pluginDir`.");
+  const stubbed = spec.stubSkillBodies
+    ? stubbedPluginDir(spec.pluginDir as string)
+    : undefined;
+  const pluginDir = stubbed ?? spec.pluginDir;
+  try {
+    const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
+    const report = await runEvalWith(
+      {
+        fixture: spec.fixture,
+        arms: {
+          run: {
+            settings: spec.settings,
+            plugin: spec.plugin,
+            pluginDir,
+          },
+        },
+        task: spec.task,
+        trials: spec.trials ?? 5,
+        model: spec.model ?? "sonnet",
+        allowedTools: spec.allowedTools,
+        timeoutMs: spec.timeoutMs,
+        spacingSec: spec.spacingSec,
+        measure: (ctx) =>
+          Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
+      },
+      runner,
+    );
+    const arm = report.arms.run;
+    return {
+      n: arm?.runs ?? 0,
+      perCheck: keyed.map(([k, c]) => {
+        const s = arm?.stats[k];
+        return {
+          check: c.toJSON(),
+          rate: s?.mean ?? 0,
+          se: s?.se ?? 0,
+          passK: s?.passK ?? 0,
+          n: s?.n ?? 0,
+        };
+      }),
+    };
+  } finally {
+    if (stubbed) rmSync(stubbed, { recursive: true, force: true });
+  }
+}
+
+/* v8 ignore start -- real claude subprocess; thin wrapper over measureWith */
+/** Score a check vocabulary across trials against the real `claude` CLI. */
+export async function measure(spec: MeasureSpec): Promise<CheckReport> {
+  return measureWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
+
+// ---------------------------------------------------------------------------
+// measureArms — checks × A/B arms + significance. Unifies the harness-A/B moat
+// (a hook/skill/CLAUDE.md ON vs OFF) with the check vocabulary: score the SAME
+// checks per arm, then compare a check's rate across arms with Welch significance
+// (reusing stats.ts) so a gap reads as real-or-noise, not a hand-fed delta.
+// ---------------------------------------------------------------------------
+
+/** A task scored against checks across NAMED arms (the harness variable on/off). */
+export interface ArmsMeasureSpec {
+  readonly fixture?: Record<string, string>;
+  /** The arms to compare (settings / plugin / pluginDir per arm). */
+  readonly arms: Record<string, EvalArm>;
+  readonly task: string;
+  readonly checks: readonly Check<RunContext>[];
+  /**
+   * Stub each arm's skill BODIES (frontmatter kept) before the run — the A/B
+   * counterpart to {@link MeasureSpec.stubSkillBodies}. For firing comparisons
+   * (does description variant A fire more than B?), every arm that sets
+   * `pluginDir` is repackaged with bodies stripped so each run stops at
+   * selection — a fraction of the tokens. Arms without a `pluginDir` are left
+   * untouched. Don't combine with `judged`/quality checks. See {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
+  readonly trials?: number;
+  readonly model?: string;
+  readonly allowedTools?: readonly string[];
+  readonly timeoutMs?: number;
+  readonly spacingSec?: number;
+}
+
+/** Per-arm {@link CheckReport}s — `arms[name].perCheck[i]` aligns across arms. */
+export interface ArmsCheckReport {
+  readonly arms: Record<string, CheckReport>;
+}
+
+/** Score checks across arms (injectable runner). Reuses `runEvalWith`. */
+export async function measureArmsWith(
+  spec: ArmsMeasureSpec,
+  runner: AgentRunner,
+): Promise<ArmsCheckReport> {
+  const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
+  const { arms: runArms, temps } = spec.stubSkillBodies
+    ? stubArmPluginDirs(spec.arms)
+    : { arms: spec.arms, temps: [] };
+  try {
+    const report = await runEvalWith(
+      {
+        fixture: spec.fixture,
+        arms: runArms,
+        task: spec.task,
+        trials: spec.trials ?? 5,
+        model: spec.model ?? "sonnet",
+        allowedTools: spec.allowedTools,
+        timeoutMs: spec.timeoutMs,
+        spacingSec: spec.spacingSec,
+        measure: (ctx) =>
+          Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
+      },
+      runner,
+    );
+    const arms: Record<string, CheckReport> = {};
+    for (const [armName, arm] of Object.entries(report.arms)) {
+      arms[armName] = {
+        n: arm.runs,
+        perCheck: keyed.map(([k, c]) => {
+          const s = arm.stats[k];
+          return {
+            check: c.toJSON(),
+            rate: s?.mean ?? 0,
+            se: s?.se ?? 0,
+            passK: s?.passK ?? 0,
+            n: s?.n ?? 0,
+          };
+        }),
+      };
+    }
+    return { arms };
+  } finally {
+    for (const t of temps) rmSync(t, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Repackage every arm that sets a `pluginDir` with its skill bodies stubbed
+ * (frontmatter kept), for an A/B firing comparison. Returns the rewritten arms
+ * plus the throwaway dirs the caller must remove. Arms without a `pluginDir` pass
+ * through unchanged. See {@link stubbedPluginDir}.
+ */
+function stubArmPluginDirs(arms: Record<string, EvalArm>): {
+  arms: Record<string, EvalArm>;
+  temps: string[];
+} {
+  const out: Record<string, EvalArm> = {};
+  const temps: string[] = [];
+  for (const [name, arm] of Object.entries(arms)) {
+    if (arm.pluginDir) {
+      const stubbed = stubbedPluginDir(arm.pluginDir);
+      temps.push(stubbed);
+      out[name] = { ...arm, pluginDir: stubbed };
+    } else {
+      out[name] = arm;
+    }
+  }
+  return { arms: out, temps };
+}
+
+/* v8 ignore start -- real claude subprocess; thin wrapper over measureArmsWith */
+/** Score checks across arms against the real `claude` CLI. */
+export async function measureArms(
+  spec: ArmsMeasureSpec,
+): Promise<ArmsCheckReport> {
+  return measureArmsWith(spec, spawnAgent);
+}
+/* v8 ignore stop */
+
+/**
+ * Welch significance on one check's rate between two arms (`arm` vs `baseline`),
+ * by index in `perCheck`. So "the gated arm resolves the skill significantly more
+ * than vanilla" is a p-value, not a vibe. Reuses `welchTTest` from stats.ts.
+ */
+export function compareCheck(
+  report: ArmsCheckReport,
+  baseline: string,
+  arm: string,
+  checkIndex: number,
+): Comparison {
+  const b = report.arms[baseline]?.perCheck[checkIndex];
+  const a = report.arms[arm]?.perCheck[checkIndex];
+  if (!a || !b) {
+    throw new Error(
+      `compareCheck: unknown arm or check index (baseline="${baseline}", arm="${arm}", i=${String(checkIndex)})`,
+    );
+  }
+  return welchTTest(
+    { mean: a.rate, se: a.se, n: a.n },
+    { mean: b.rate, se: b.se, n: b.n },
+  );
+}
+
+/** A readable label for a check from its serialized form, e.g. `tool(Bash)`. */
+function checkLabel(json: CheckJSON): string {
+  const arg = json.name ?? json.id ?? json.event ?? json.path ?? json.matcher;
+  if (
+    typeof arg === "string" ||
+    typeof arg === "number" ||
+    typeof arg === "boolean"
+  ) {
+    return `${json.kind}(${String(arg)})`;
+  }
+  return json.kind;
+}
+
+/** Format a {@link CheckReport}: one line per check with its rate ± se and pass^k. */
+export function formatCheckReport(report: CheckReport): string {
+  const lines = [`measured ${String(report.n)} run(s):`];
+  for (const c of report.perCheck) {
+    lines.push(
+      `  ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%  ${checkLabel(c.check)}` +
+        `  (pass^k ${String(c.passK)})`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The scored gate (Phase 4): throw if any check's measured rate is below `min` —
+ * the `measure` counterpart to `assertChecks` (strict). Reads the rate, not a
+ * single run, so it never trips on one noisy trial.
+ */
+export function assertRates(report: CheckReport, opts: { min: number }): void {
+  const below = report.perCheck.filter((c) => c.rate < opts.min);
+  if (below.length > 0) {
+    throw new Error(
+      `${String(below.length)} check(s) below the ${(opts.min * 100).toFixed(0)}% min rate:\n` +
+        below
+          .map(
+            (c) =>
+              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%`,
+          )
+          .join("\n"),
+    );
+  }
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Serialize a {@link CheckReport} to JUnit XML (Phase 4) — each check a
+ * `<testcase>`, failing when its rate is below `min`. Because a check is *data*,
+ * this falls out for free: CI test reporters, regression baselines, and a
+ * promptfoo bridge all consume the same shape.
+ */
+export function checkReportToJUnit(
+  report: CheckReport,
+  opts: { min?: number; name?: string } = {},
+): string {
+  const min = opts.min ?? 0;
+  const failures = report.perCheck.filter((c) => c.rate < min).length;
+  const cases = report.perCheck
+    .map((c) => {
+      const name = escapeXml(checkLabel(c.check));
+      const body =
+        c.rate < min
+          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(min * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
+          : "";
+      return `  <testcase classname="vigiles.checks" name="${name}">${body}</testcase>`;
+    })
+    .join("\n");
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<testsuite name="${escapeXml(opts.name ?? "vigiles measure")}" tests="${String(report.perCheck.length)}" failures="${String(failures)}">\n` +
+    `${cases}\n</testsuite>\n`
+  );
+}
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
@@ -321,6 +676,7 @@ function makeContext(cwd: string, out: RunOut): RunContext {
     toolCalls: parseToolCalls(out.stdout),
     hooks: parseHooks(out.stdout),
     output,
+    subagents: parseSubagents(out.stdout),
     usage: usageFrom(result),
     // The eval tier drives the real API (no mock between claude and the model),
     // so the requests can't be captured here — modelRequests is harness-tier only.
@@ -337,7 +693,7 @@ function makeContext(cwd: string, out: RunOut): RunContext {
           stdio: ["ignore", "pipe", "ignore"],
         }).trim();
       } catch (e) {
-        // Return captured stdout even on a non-zero exit (e.g. `audit` exits 2
+        // Return captured stdout even on a non-zero exit (e.g. `lint` exits 2
         // but still prints its findings), rather than swallowing it.
         const out = (e as { stdout?: string }).stdout;
         return typeof out === "string" ? out.trim() : "";
@@ -700,8 +1056,19 @@ export function formatEvalReport(report: EvalReport): string {
  * (reuse the bare predicates, e.g. `(t) => skillResolved(t, "x:y")`).
  */
 export interface TriggerRateSpec {
-  /** Plugin dir installed natively (`--plugin-dir`) so its skills/commands activate. */
-  readonly pluginDir: string;
+  /**
+   * Plugin dir installed natively (`--plugin-dir`) so its skills/commands
+   * activate. Provide this OR {@link skillsDir}, not both.
+   */
+  readonly pluginDir?: string;
+  /**
+   * A directory of LOOSE skills (`<skillsDir>/<name>/SKILL.md`, e.g. a repo's
+   * `.claude/skills`) to trigger-test directly. vigiles packages them into a
+   * throwaway `--plugin-dir` for you and removes it afterward — the one-liner
+   * for repo-local skills that aren't a published plugin. Provide this OR
+   * {@link pluginDir}, not both.
+   */
+  readonly skillsDir?: string;
   /** The varied prompts to test the trigger against. */
   readonly prompts: readonly string[];
   /**
@@ -714,6 +1081,30 @@ export interface TriggerRateSpec {
   readonly irrelevantPrompts?: readonly string[];
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
+  /**
+   * Replace each skill's BODY with a no-op stub (keeping its frontmatter — name +
+   * description) before running. Trigger-rate is decided by the frontmatter alone
+   * (the model selects a skill before its body loads), so stubbing the body can't
+   * change what's measured but stops the run from executing an expensive
+   * procedure once the skill fires — far cheaper, faster, side-effect-free. All
+   * skills' descriptions stay present, so the selection competition is faithful.
+   * Default false (off) for now; recommended `true` for trigger evals. See
+   * {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
+  /**
+   * Minimum number of prompts each set (relevant + irrelevant) must have. A
+   * handful of prompts can't tell a real recall/precision rate from noise, so
+   * the run is rejected before it spends a token. Default 10; lower it
+   * deliberately for a genuinely narrow skill.
+   */
+  readonly minPrompts?: number;
+  /**
+   * Reject the run when two prompts in a set are closer than this in NCD
+   * (gzip-based distance, 0..1; 0 = identical) — near-duplicate prompts inflate
+   * a rate without testing varied phrasings. Default 0.3 (the rule-dup threshold).
+   */
+  readonly minDistance?: number;
   /** Trials per prompt. Default 1. */
   readonly trials?: number;
   /** Model alias. Default "haiku". */
@@ -755,6 +1146,214 @@ export interface TriggerRateReport {
   readonly precision?: number;
   /** Per-prompt stats for the irrelevant set. Present with irrelevant prompts. */
   readonly perIrrelevant?: readonly PromptTriggerStat[];
+}
+
+/**
+ * Package loose `<skillsDir>/<name>/SKILL.md` skills into a throwaway plugin dir
+ * that `claude --plugin-dir` accepts — so repo-local skills (e.g. `.claude/skills`)
+ * can be trigger-tested without hand-rolling a `plugin.json`. Writes a minimal
+ * `.claude-plugin/plugin.json` and copies each `<name>/` (recursively, so
+ * `references/` etc. come along) under `skills/<name>/`. Returns the temp plugin
+ * dir; the caller removes it (`measureTriggerRate` does). Throws if the directory
+ * is missing or holds no `<name>/SKILL.md`.
+ */
+export function packageSkillsDir(
+  skillsDir: string,
+  opts: { name?: string; stub?: boolean } = {},
+): string {
+  const abs = resolve(skillsDir);
+  if (!existsSync(abs))
+    throw new Error(`skillsDir not found: ${skillsDir} (resolved ${abs})`);
+  const root = mkdtempSync(join(tmpdir(), "vigiles-skills-"));
+  mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(root, ".claude-plugin", "plugin.json"),
+    JSON.stringify(
+      { name: opts.name ?? "vigiles-loose-skills", version: "0.0.0" },
+      null,
+      2,
+    ),
+  );
+  const skillsOut = join(root, "skills");
+  mkdirSync(skillsOut, { recursive: true });
+  let copied = 0;
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const srcSkill = join(abs, entry.name, "SKILL.md");
+    if (!existsSync(srcSkill)) continue;
+    const destDir = join(skillsOut, entry.name);
+    if (opts.stub) {
+      // Frontmatter-only: keep the trigger surface (name + description), drop the
+      // body so a selected skill stops instead of running its procedure.
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(
+        join(destDir, "SKILL.md"),
+        stubSkillBody(readFileSync(srcSkill, "utf-8")),
+      );
+    } else {
+      cpSync(join(abs, entry.name), destDir, { recursive: true });
+    }
+    copied++;
+  }
+  if (copied === 0) {
+    rmSync(root, { recursive: true, force: true });
+    throw new Error(`No <name>/SKILL.md skills found under ${skillsDir}`);
+  }
+  return root;
+}
+
+/**
+ * Rewrite a SKILL.md to keep its YAML frontmatter (the trigger surface — name +
+ * description) but replace the body with a no-op stub. Trigger-rate is a property
+ * of the frontmatter ONLY: the model picks a skill from its name + description
+ * before the body is ever loaded, so the body is causally downstream of selection
+ * and irrelevant to whether the skill fires. Stubbing it lets a trigger run stop
+ * AT selection instead of executing an expensive multi-step procedure — cheaper,
+ * faster, and side-effect-free, without changing what's measured. Pure.
+ */
+export function stubSkillBody(skillMd: string): string {
+  const m = /^(---\n[\s\S]*?\n---\n)/.exec(skillMd);
+  const frontmatter = m ? m[1] : "";
+  return `${frontmatter}\nThis skill was selected (trigger-test stub). Acknowledge and stop — do not perform any actions.\n`;
+}
+
+/** The skills directory inside a plugin (`skills/` or `.claude/skills/`). */
+function skillsDirOf(pluginDir: string): string {
+  const direct = join(pluginDir, "skills");
+  if (existsSync(direct)) return direct;
+  return join(pluginDir, ".claude", "skills");
+}
+
+/** A plugin's declared name (from `.claude-plugin/plugin.json`), for the skill
+ * id the `fired` predicate matches (`<name>:<skill>`). */
+function pluginName(pluginDir: string): string | undefined {
+  const manifest = join(pluginDir, ".claude-plugin", "plugin.json");
+  try {
+    return (JSON.parse(readFileSync(manifest, "utf-8")) as { name?: string })
+      .name;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build a throwaway plugin dir mirroring `pluginDir`'s skills with their BODIES
+ * stripped (frontmatter kept) — the trigger surface a description/firing check
+ * needs, without paying to run each skill's procedure. Keeps the original plugin
+ * NAME so `<name>:<skill>` ids still match. The caller removes the returned dir.
+ * See {@link stubSkillBody} for why the body is irrelevant to selection.
+ */
+export function stubbedPluginDir(pluginDir: string): string {
+  return packageSkillsDir(skillsDirOf(pluginDir), {
+    stub: true,
+    name: pluginName(pluginDir),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Prompt-set diversity (deterministic, pre-eval) — a trigger rate is only
+// meaningful over ENOUGH and DIFFERENT prompts. Catch a too-small or
+// near-duplicate set before spending a single model token. We measure
+// "different" with Normalized Compression Distance (gzip) — the SAME engine
+// `findSimilarRules` uses for near-duplicate rule detection — not edit
+// distance: NCD scores shared structure/redundancy (a templated prompt with one
+// word swapped compresses together), which is exactly the lazy-copy-paste set
+// we want to reject, and it's the project's house algorithm for "are these two
+// texts basically the same".
+// ---------------------------------------------------------------------------
+
+/** Normalize for comparison: lowercase, trim, collapse whitespace. */
+function normalizePrompt(s: string): string {
+  return s.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Distance between two prompts in ~0..1 (0 = identical, higher = more
+ * different) via Normalized Compression Distance over the normalized text.
+ * Reuses {@link ncd} from the proof engine.
+ */
+export function promptDistance(a: string, b: string): number {
+  return ncd(normalizePrompt(a), normalizePrompt(b));
+}
+
+export interface PromptDiversityIssue {
+  readonly kind: "too-few" | "too-similar";
+  readonly message: string;
+}
+
+/**
+ * Deterministically check a prompt set is big and varied enough to measure a
+ * trigger rate: at least `minPrompts` entries, and no two closer than
+ * `minDistance` in NCD. Pure — no model. `label` names the set in messages.
+ */
+export function checkPromptDiversity(
+  prompts: readonly string[],
+  opts: { minPrompts?: number; minDistance?: number; label?: string } = {},
+): PromptDiversityIssue[] {
+  const minPrompts = opts.minPrompts ?? 10;
+  const minDistance = opts.minDistance ?? 0.3;
+  const label = opts.label ?? "prompts";
+  const issues: PromptDiversityIssue[] = [];
+  if (prompts.length < minPrompts) {
+    issues.push({
+      kind: "too-few",
+      message: `${label}: ${String(prompts.length)} prompt(s), need at least ${String(minPrompts)} to measure a rate (set minPrompts to override).`,
+    });
+  }
+  for (let i = 0; i < prompts.length; i++) {
+    for (let j = i + 1; j < prompts.length; j++) {
+      const dist = promptDistance(prompts[i], prompts[j]);
+      if (dist < minDistance) {
+        issues.push({
+          kind: "too-similar",
+          message: `${label}: prompts #${String(i + 1)} and #${String(j + 1)} are near-duplicates (NCD ${dist.toFixed(2)} < ${String(minDistance)}) — vary the phrasing:\n    - ${prompts[i]}\n    - ${prompts[j]}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+/** Throw if a prompt set isn't big/varied enough. See {@link checkPromptDiversity}. */
+export function assertPromptDiversity(
+  prompts: readonly string[],
+  opts: { minPrompts?: number; minDistance?: number; label?: string } = {},
+): void {
+  const issues = checkPromptDiversity(prompts, opts);
+  if (issues.length > 0) {
+    throw new Error(
+      `Prompt set is not eval-ready:\n  ${issues.map((i) => i.message).join("\n  ")}`,
+    );
+  }
+}
+
+/**
+ * Resolve the effective `--plugin-dir` for a trigger run: a caller's `pluginDir`
+ * as-is, or a throwaway package built from a loose `skillsDir`. Exactly one must
+ * be set. `packaged` is present only when vigiles built it, so the caller knows
+ * to remove it afterward.
+ */
+function resolveTriggerPluginDir(spec: TriggerRateSpec): {
+  pluginDir: string;
+  packaged?: string;
+} {
+  if (spec.pluginDir && spec.skillsDir)
+    throw new Error(
+      "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
+    );
+  const stub = spec.stubSkillBodies ?? false;
+  if (spec.skillsDir) {
+    const packaged = packageSkillsDir(spec.skillsDir, { stub });
+    return { pluginDir: packaged, packaged };
+  }
+  if (spec.pluginDir) {
+    if (!stub) return { pluginDir: spec.pluginDir };
+    // Stub a real plugin: build a minimal plugin from its skills/ with bodies
+    // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
+    const packaged = stubbedPluginDir(spec.pluginDir);
+    return { pluginDir: packaged, packaged };
+  }
+  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
 }
 
 /** The per-run knobs a trigger set shares (everything but the prompt list). */
@@ -821,36 +1420,56 @@ export async function measureTriggerRateWith(
   spec: TriggerRateSpec,
   runner: AgentRunner,
 ): Promise<TriggerRateReport> {
+  // Deterministic gate FIRST — reject a too-small / near-duplicate prompt set
+  // before spending a token (and before packaging a skillsDir).
+  const diversity = {
+    minPrompts: spec.minPrompts,
+    minDistance: spec.minDistance,
+  };
+  assertPromptDiversity(spec.prompts, { ...diversity, label: "prompts" });
+  if (spec.irrelevantPrompts && spec.irrelevantPrompts.length > 0) {
+    assertPromptDiversity(spec.irrelevantPrompts, {
+      ...diversity,
+      label: "irrelevantPrompts",
+    });
+  }
+
+  const { pluginDir, packaged } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
     model: spec.model ?? "haiku",
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,
-    pluginDir: spec.pluginDir,
+    pluginDir,
     fired: spec.fired,
   };
 
-  const relevant = await runTriggerSet(spec.prompts, cfg, runner);
-  const base: TriggerRateReport = {
-    rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
-    n: relevant.n,
-    perPrompt: relevant.perPrompt,
-  };
-  if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
+  try {
+    const relevant = await runTriggerSet(spec.prompts, cfg, runner);
+    const base: TriggerRateReport = {
+      rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
+      n: relevant.n,
+      perPrompt: relevant.perPrompt,
+    };
+    if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
-  const irrelevant = await runTriggerSet(
-    spec.irrelevantPrompts ?? [],
-    cfg,
-    runner,
-  );
-  const fires = relevant.fired + irrelevant.fired;
-  return {
-    ...base,
-    falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
-    precision: fires > 0 ? relevant.fired / fires : undefined,
-    perIrrelevant: irrelevant.perPrompt,
-  };
+    const irrelevant = await runTriggerSet(
+      spec.irrelevantPrompts ?? [],
+      cfg,
+      runner,
+    );
+    const fires = relevant.fired + irrelevant.fired;
+    return {
+      ...base,
+      falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
+      precision: fires > 0 ? relevant.fired / fires : undefined,
+      perIrrelevant: irrelevant.perPrompt,
+    };
+  } finally {
+    // Remove the throwaway plugin dir we built from a loose `skillsDir`.
+    if (packaged) rmSync(packaged, { recursive: true, force: true });
+  }
 }
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureTriggerRateWith */

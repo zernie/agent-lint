@@ -14,6 +14,7 @@ const {
   assertCreated,
   assertNotCreated,
 } = require("../../dist/harness-assert.js");
+const { tool, output, blocked } = require("../../dist/check.js");
 // Matchers are registered by the `vigiles/jest` entry via setupFilesAfterEnv
 // (jest.config.cjs) — this file asserts that wiring works end-to-end.
 
@@ -41,6 +42,21 @@ test("vigilesMatchers register and work under jest", () => {
   expect(result).not.toHaveCreated("MISSING");
   expect(report).toBeatBaseline("vanilla", "gated", "caught");
   expect(report).not.toBeatBaseline("vanilla", "gated", "caught", 0.9);
+});
+
+test("the check veneer (toPass / toPassAll) works under jest", () => {
+  const trace = {
+    toolCalls: [{ name: "Bash", input: {}, resultText: "", isError: false }],
+    hooks: [],
+    output: "done",
+    modelRequests: [],
+    turns: 1,
+    file: () => null,
+  };
+  expect(trace).toPass(tool("Bash"));
+  expect(trace).not.toPass(tool("Read"));
+  expect(trace).toPassAll([tool("Bash"), output("done")]);
+  expect({ blocked: true, exitCode: 2 }).toPass(blocked());
 });
 
 test("plain helpers work under jest", () => {

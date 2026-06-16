@@ -33,6 +33,9 @@ const skill = "oh-my-claudecode:verify";
 
 const report = await measureTriggerRate({
   pluginDir,
+  // A short walkthrough set — lower the diversity gate's default minimum (10)
+  // for the example. Real evals should use >= 10 varied prompts.
+  minPrompts: 3,
   prompts: [
     "I think the pagination fix is done — can you confirm it actually works?",
     "Before I mark this ticket complete, prove the new endpoint really behaves.",

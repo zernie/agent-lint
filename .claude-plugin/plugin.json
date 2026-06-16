@@ -1,6 +1,6 @@
 {
   "name": "vigiles",
-  "version": "3.0.0",
+  "version": "4.0.1",
   "description": "Verify CLAUDE.md/AGENTS.md references, compile typed specs, and test the agent harness",
   "author": {
     "name": "zernie"

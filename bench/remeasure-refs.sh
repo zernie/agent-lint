@@ -24,7 +24,7 @@ for d in "$WORK"/*/; do
     sed -i 's/chargeCard/captureCard/g' "$d/src/billing.ts"
     # Capture first: `audit` exits 2 on any error, which under pipefail would
     # mask grep's result if piped directly.
-    a=$(cd "$d" && node "$CLI" audit SKILL.md 2>/dev/null)
+    a=$(cd "$d" && node "$CLI" lint SKILL.md 2>/dev/null)
     if printf '%s' "$a" | grep -q '"chargeCard" is not defined'; then catch="yes"; fi
     sed -i 's/captureCard/chargeCard/g' "$d/src/billing.ts"
   fi

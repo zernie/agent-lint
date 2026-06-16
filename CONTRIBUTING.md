@@ -30,7 +30,7 @@ src/
   cli.ts            CLI entry point (arg parsing, output formatting)
   validate.test.ts  Test suite (node:test)
 schemas/            Built-in mdschema YAML presets
-skills/             Shipped consumer skills (test-harness, migrate-to-spec, strengthen, edit-spec, generate-rule, linter-docs)
+skills/             Shipped consumer skills (test-harness, migrate-to-spec, strengthen, edit-spec, linter-docs)
 dev/skills/         Internal dev-only skills, NOT shipped (generate-logo, pr-to-lint-rule, enforce-rules-format, audit-feedback-loop)
 dist/               Compiled JavaScript output (git-ignored)
 ```

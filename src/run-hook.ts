@@ -63,8 +63,62 @@ import {
   type SandboxMode,
   type EgressAttempt,
 } from "./sandbox.js";
+import { propertyTest } from "./core/proofs.js";
 
 export type { EgressAttempt };
+
+// ---------------------------------------------------------------------------
+// propertyHook — invariant testing for a hook's (event) → decision (Phase 5 of
+// research/testing-api-design.md). A hook is a pure-ish function; instead of a
+// few example events, generate MANY (mutate from a seed) and assert invariants
+// hold for every decision — "never both allow and block", "PostToolUse output is
+// always valid JSON", etc. Reuses the deterministic `propertyTest` from
+// proofs.ts (no fast-check dep; seeded, shrinks the counterexample). The `decide`
+// runner is injectable, so the loop is unit-testable with a pure fake; pass
+// `(e) => runHook(cmd, e)` to property-test a real hook.
+// ---------------------------------------------------------------------------
+
+/** Result of {@link propertyHook}: the first shrunk counterexample, if any. */
+export interface HookPropertyResult<E> {
+  readonly passed: boolean;
+  readonly iterations: number;
+  /** The (shrunk) event that broke an invariant — present iff `!passed`. */
+  readonly counterexample?: E;
+  /** Which invariant failed — present iff `!passed`. */
+  readonly failedInvariant?: string;
+}
+
+/**
+ * Property-test a hook's decision over generated events. Throws nothing — returns
+ * a result you assert on (`assert.ok(r.passed)`), so the counterexample is
+ * inspectable. `mutate(event, rng)` produces a variation from the running event;
+ * each named invariant is checked against `decide(event)`.
+ */
+export function propertyHook<E, D>(opts: {
+  readonly seed: E;
+  readonly mutate: (event: E, rng: number) => E;
+  readonly decide: (event: E) => D;
+  readonly invariants: Record<string, (decision: D, event: E) => boolean>;
+  readonly iterations?: number;
+}): HookPropertyResult<E> {
+  const wrapped: Record<string, (e: E) => boolean> = {};
+  for (const [name, inv] of Object.entries(opts.invariants)) {
+    wrapped[name] = (e: E) => inv(opts.decide(e), e);
+  }
+  const r = propertyTest(opts.seed, opts.mutate, wrapped, {
+    iterations: opts.iterations ?? 100,
+    sequenceLength: 1, // each event is independent — no mutation sequence
+    seed: 1,
+  });
+  if (r.passed) return { passed: true, iterations: r.iterations };
+  const last = r.failingSequence?.[r.failingSequence.length - 1];
+  return {
+    passed: false,
+    iterations: r.iterations,
+    counterexample: r.shrunk ?? last,
+    failedInvariant: r.failedInvariant,
+  };
+}
 
 /** A hook event payload (the JSON Claude Code writes to the hook's stdin). */
 export interface HookInput {

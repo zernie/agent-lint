@@ -140,7 +140,7 @@ mode with hand-authored markers in the same file.
 
 When a file uses both Level 0 and Level 1, both are verified. A rule that
 appears in **both** the frontmatter and an inline comment is verified once,
-not twice (the inline declaration wins as the first source), so audit never
+not twice (the inline declaration wins as the first source), so lint never
 double-reports it.
 
 ## `require-spec`

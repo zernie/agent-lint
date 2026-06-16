@@ -32,7 +32,8 @@
       "types": "./dist/vitest.d.mts",
       "default": "./dist/vitest.mjs"
     },
-    "./jest": "./dist/jest.js"
+    "./jest": "./dist/jest.js",
+    "./check": "./dist/check.js"
   },
   "files": [
     "dist/**/*.js",

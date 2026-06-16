@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PostToolUse hook — nudge the agent to express references in instruction files
-# (CLAUDE.md / AGENTS.md / SKILL.md) as vigiles marks, so `vigiles audit` can
+# (CLAUDE.md / AGENTS.md / SKILL.md) as vigiles marks, so `vigiles lint` can
 # actually verify them. Non-blocking by default; set the `unmarked-refs` rule to
 # "error" in .vigilesrc.json to turn the nudge into a hard block, or to false to
 # disable it. Runs as its OWN PostToolUse entry so its stdout stays clean JSON.
