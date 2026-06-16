@@ -403,13 +403,17 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
    ON vs OFF) now reads as a per-check significance, not a hand-fed delta.
 4. **Multi-surface CC eval — the deepest gap (mostly SHIPPED).**
    - `mcp(server, tool)` ✅ — matches `mcp__server__tool` in the tool list.
-   - **Subagents (`Task`) as nested traces ✅** — `Trace.subagents` recovers each
+   - **Subagents as nested traces ✅** — `Trace.subagents` recovers each
      subagent's tool calls (CC tags them with a top-level `parent_tool_use_id`;
-     the `Task` input carries `subagent_type`), and `subagent(name, [checks])`
-     runs the whole vocabulary recursively over that sub-trace, so you can assert
-     what the subagent _did_. **Schema confirmed** against Claude Code's
-     stream-json (the same `message.content` line shape `parseToolCalls`
-     consumes); unit-tested on synthetic stream-json.
+     the dispatch tool's input carries `subagent_type`), and `subagent(name,
+[checks])` runs the whole vocabulary recursively over that sub-trace, so you
+     can assert what the subagent _did_. **Validated against REAL `claude`
+     output** (not just synthetic stream-json): a real subagent dispatch was
+     recovered end-to-end — and that real run caught a genuine drift bug, the
+     dispatch tool is named **`Agent`** on the live CLI, not `Task` as older docs
+     say, so `parseSubagents` matches the `subagent_type` _input field_ (present
+     on the dispatch tool_use regardless of its name), surviving the rename.
+     Unit-tested on synthetic stream-json + confirmed on live output.
    - **Slash-command expansion ✅** — `received(matcher)` checks that the expanded
      command (or a hook's injected context) actually **reached the model** via
      `modelRequests` (mock/harness tier). Unit-tested.

@@ -12,9 +12,11 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-test("parseSubagents recovers a Task's nested tool calls by parent_tool_use_id", () => {
-  // CC tags a subagent's events with parent_tool_use_id = the Task tool call id,
-  // and the Task input carries subagent_type. (No claude needed — pure parse.)
+test("parseSubagents recovers a subagent's nested tool calls by parent_tool_use_id", () => {
+  // Verified against real claude output: the dispatch tool is named "Agent"
+  // (not "Task"), its input carries subagent_type, and the subagent's events are
+  // tagged with parent_tool_use_id = the dispatch id. (No claude needed — pure
+  // parse.) The parser matches on subagent_type, not the tool name.
   const stream = [
     JSON.stringify({
       type: "assistant",
@@ -23,8 +25,12 @@ test("parseSubagents recovers a Task's nested tool calls by parent_tool_use_id",
           {
             type: "tool_use",
             id: "t1",
-            name: "Task",
-            input: { subagent_type: "reviewer" },
+            name: "Agent", // the real subagent-dispatch tool name
+            input: {
+              description: "review",
+              prompt: "review app.js",
+              subagent_type: "reviewer",
+            },
           },
         ],
       },
