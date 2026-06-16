@@ -455,6 +455,68 @@ test("measureArmsWith scores checks per arm; compareCheck reads significance", a
   assert.throws(() => compareCheck(report, "nope", "gated", 0));
 });
 
+test("measureArmsWith stubSkillBodies stubs each arm's pluginDir (and cleans up)", async () => {
+  const dir = makeTmpDir("arms-stub");
+  // Two arms, each a plugin dir with the same skill but a different description.
+  const make = (suffix: string): string => {
+    const p = join(dir, suffix);
+    mkdirSync(join(p, ".claude-plugin"), { recursive: true });
+    mkdirSync(join(p, "skills", "foo"), { recursive: true });
+    writeFileSync(
+      join(p, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "myplug", version: "0.0.0" }),
+    );
+    writeFileSync(
+      join(p, "skills", "foo", "SKILL.md"),
+      `---\nname: foo\ndescription: variant ${suffix}\n---\n\n# Procedure\nrun the expensive thing ${suffix}\n`,
+    );
+    return p;
+  };
+  const armA = make("a");
+  const armB = make("b");
+
+  const bodies: Record<string, string> = {};
+  const usedDirs: string[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    if (a.pluginDir) {
+      usedDirs.push(a.pluginDir);
+      bodies[a.pluginDir] = readFileSync(
+        join(a.pluginDir, "skills", "foo", "SKILL.md"),
+        "utf-8",
+      );
+    }
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  await measureArmsWith(
+    {
+      task: "do foo",
+      arms: { a: { pluginDir: armA }, b: { pluginDir: armB } },
+      stubSkillBodies: true,
+      checks: [tool("Skill")],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  // Each arm ran against a STUBBED throwaway (body gone, description kept), not
+  // the original dir, and the throwaways were removed afterward.
+  for (const md of Object.values(bodies)) {
+    assert.ok(md.includes("description: variant"), "description kept");
+    assert.ok(!md.includes("run the expensive thing"), "body stubbed");
+  }
+  for (const used of usedDirs) {
+    assert.ok(used !== armA && used !== armB, "a packaged dir was used");
+    assert.ok(!existsSync(used), "throwaway removed afterward");
+  }
+  cleanupTmpDir(dir);
+});
+
 test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => {
   const report: CheckReport = {
     n: 10,
