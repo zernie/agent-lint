@@ -1075,6 +1075,72 @@ export default skill({
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("spec-target disambiguation: a target-less AGENTS.md.spec.ts compiles as codex", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-spectarget-"));
+    try {
+      // No `target` field and no config/flag → the spec's filename (AGENTS.md)
+      // selects the codex dialect, whose instructionTargets[0] becomes the
+      // heading. Before the fix this used the hard-coded claude-code dialect.
+      writeFileSync(
+        join(dir, "AGENTS.md.spec.ts"),
+        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default claude({ rules: { r: guidance("a") } });
+`,
+      );
+      const { exitCode } = run("compile AGENTS.md.spec.ts", dir);
+      assert.equal(exitCode, 0);
+      const md = readFileSync(join(dir, "AGENTS.md"), "utf-8");
+      assert.match(md, /^# AGENTS\.md/m, "codex dialect → AGENTS.md heading");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("mirror is idempotent — an already-identical target isn't rewritten", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-idem-"));
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md.spec.ts"),
+        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default claude({ target: "CLAUDE.md", rules: { r: guidance("c") } });
+`,
+      );
+      writeFileSync(
+        join(dir, ".vigilesrc.json"),
+        JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+      );
+      run("compile CLAUDE.md.spec.ts", dir); // first run writes the mirror
+      const second = run("compile CLAUDE.md.spec.ts", dir); // already identical
+      assert.equal(second.exitCode, 0);
+      assert.ok(
+        !second.stdout.includes("mirrored"),
+        "no re-mirror when the target is already byte-identical",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("compile --harness=bogus fails with an actionable error", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-harness-bogus-"));
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md.spec.ts"),
+        `import { claude, guidance } from "${resolve(process.cwd(), "src/core/spec.js")}";
+export default claude({ target: "CLAUDE.md", rules: { r: guidance("c") } });
+`,
+      );
+      const { stdout, stderr, exitCode } = run(
+        "compile --harness=bogus CLAUDE.md.spec.ts",
+        dir,
+      );
+      assert.notEqual(exitCode, 0);
+      assert.match(stdout + stderr, /Unknown harness/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1186,6 +1252,11 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const yaml = readFileSync(wf, "utf-8");
       assert.match(yaml, /uses: zernie\/vigiles@v1/);
       assert.match(yaml, /npx vigiles test/); // the harness job
+      // A greenfield repo (no AGENTS.md) records the default harness.
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { harness?: unknown };
+      assert.equal(cfg.harness, "claude-code");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
