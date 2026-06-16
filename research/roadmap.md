@@ -31,6 +31,13 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **Run the behavioral (eval) tier in CI as a gate** — today `vigiles eval` is
+  manual-only and results are frozen as `FINDING:` comments (a snapshot is
+  documentation, not protection). Wire the _cheap_ tier (`measureTriggerRate` /
+  `measure` with `stubSkillBodies`, dated haiku) as a per-PR gate, then the
+  tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
+  roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
+
 - **#2 Reverse coverage** — "your CLAUDE.md documents 5 of 47 enabled rules": the
   one item that is both moat and a shareable distribution artifact.
   [feature-ideas #2](feature-ideas.md) · **HIGH**

@@ -3,7 +3,10 @@
 Research capturing how vigiles' eval API (`src/eval.ts`, `src/harness-assert.ts`,
 `src/judge.ts`) stacks up against the LLM/agent eval ecosystem, and the roadmap
 that follows. Companion to `research/harness-testing.md` (the three-tier design)
-and `docs/harness-testing.md` (the guide).
+and `docs/harness-testing.md` (the guide). The conceptual model behind the two
+verbs — feature = deterministic TEST + behavioral EVAL, the two gating knobs,
+cost-matched mechanism, and the ranked gap roadmap — lives in
+[`docs/eval-architecture.md`](../docs/eval-architecture.md).
 
 ## Decision (2026-06-15): keep the harness tiers, don't rebuild the eval stack
 
