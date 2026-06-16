@@ -543,7 +543,10 @@ generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
 **A/B with significance.** `measureArms({ arms, checks })` scores the same checks
 per arm (a hook/skill/CLAUDE.md rule **on vs off**); `compareCheck(report,
 baseline, arm, i)` returns a Welch verdict — "the gated arm resolves the skill
-significantly more than vanilla" is a p-value, not a vibe.
+significantly more than vanilla" is a p-value, not a vibe. It takes
+`stubSkillBodies` too (every arm with a `pluginDir` is repackaged with bodies
+stripped), so an A/B **firing** comparison — does description variant A fire more
+than B? — is as cheap per-arm as a single `measure`.
 
 **Property-test a hook.** `propertyHook({ seed, mutate, decide, invariants })`
 fuzzes a hook's `(event) → decision` over generated events and shrinks any

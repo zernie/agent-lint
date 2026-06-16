@@ -437,6 +437,15 @@ export interface ArmsMeasureSpec {
   readonly arms: Record<string, EvalArm>;
   readonly task: string;
   readonly checks: readonly Check<RunContext>[];
+  /**
+   * Stub each arm's skill BODIES (frontmatter kept) before the run — the A/B
+   * counterpart to {@link MeasureSpec.stubSkillBodies}. For firing comparisons
+   * (does description variant A fire more than B?), every arm that sets
+   * `pluginDir` is repackaged with bodies stripped so each run stops at
+   * selection — a fraction of the tokens. Arms without a `pluginDir` are left
+   * untouched. Don't combine with `judged`/quality checks. See {@link stubSkillBody}.
+   */
+  readonly stubSkillBodies?: boolean;
   readonly trials?: number;
   readonly model?: string;
   readonly allowedTools?: readonly string[];
@@ -455,38 +464,69 @@ export async function measureArmsWith(
   runner: AgentRunner,
 ): Promise<ArmsCheckReport> {
   const keyed = spec.checks.map((c, i) => [`c${String(i)}`, c] as const);
-  const report = await runEvalWith(
-    {
-      fixture: spec.fixture,
-      arms: spec.arms,
-      task: spec.task,
-      trials: spec.trials ?? 5,
-      model: spec.model ?? "sonnet",
-      allowedTools: spec.allowedTools,
-      timeoutMs: spec.timeoutMs,
-      spacingSec: spec.spacingSec,
-      measure: (ctx) =>
-        Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
-    },
-    runner,
-  );
-  const arms: Record<string, CheckReport> = {};
-  for (const [armName, arm] of Object.entries(report.arms)) {
-    arms[armName] = {
-      n: arm.runs,
-      perCheck: keyed.map(([k, c]) => {
-        const s = arm.stats[k];
-        return {
-          check: c.toJSON(),
-          rate: s?.mean ?? 0,
-          se: s?.se ?? 0,
-          passK: s?.passK ?? 0,
-          n: s?.n ?? 0,
-        };
-      }),
-    };
+  const { arms: runArms, temps } = spec.stubSkillBodies
+    ? stubArmPluginDirs(spec.arms)
+    : { arms: spec.arms, temps: [] };
+  try {
+    const report = await runEvalWith(
+      {
+        fixture: spec.fixture,
+        arms: runArms,
+        task: spec.task,
+        trials: spec.trials ?? 5,
+        model: spec.model ?? "sonnet",
+        allowedTools: spec.allowedTools,
+        timeoutMs: spec.timeoutMs,
+        spacingSec: spec.spacingSec,
+        measure: (ctx) =>
+          Object.fromEntries(keyed.map(([k, c]) => [k, c.eval(ctx).pass])),
+      },
+      runner,
+    );
+    const arms: Record<string, CheckReport> = {};
+    for (const [armName, arm] of Object.entries(report.arms)) {
+      arms[armName] = {
+        n: arm.runs,
+        perCheck: keyed.map(([k, c]) => {
+          const s = arm.stats[k];
+          return {
+            check: c.toJSON(),
+            rate: s?.mean ?? 0,
+            se: s?.se ?? 0,
+            passK: s?.passK ?? 0,
+            n: s?.n ?? 0,
+          };
+        }),
+      };
+    }
+    return { arms };
+  } finally {
+    for (const t of temps) rmSync(t, { recursive: true, force: true });
   }
-  return { arms };
+}
+
+/**
+ * Repackage every arm that sets a `pluginDir` with its skill bodies stubbed
+ * (frontmatter kept), for an A/B firing comparison. Returns the rewritten arms
+ * plus the throwaway dirs the caller must remove. Arms without a `pluginDir` pass
+ * through unchanged. See {@link stubbedPluginDir}.
+ */
+function stubArmPluginDirs(arms: Record<string, EvalArm>): {
+  arms: Record<string, EvalArm>;
+  temps: string[];
+} {
+  const out: Record<string, EvalArm> = {};
+  const temps: string[] = [];
+  for (const [name, arm] of Object.entries(arms)) {
+    if (arm.pluginDir) {
+      const stubbed = stubbedPluginDir(arm.pluginDir);
+      temps.push(stubbed);
+      out[name] = { ...arm, pluginDir: stubbed };
+    } else {
+      out[name] = arm;
+    }
+  }
+  return { arms: out, temps };
 }
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureArmsWith */
