@@ -153,6 +153,18 @@
     sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
     2026-06-17 section)
 
+- **Single-arm ABSOLUTE behaviour path — is it first-class, or is A/B
+  over-privileged? (NEW — flagged 2026-06-17, this PR)** — testing an _exact_ skill
+  ("following it produces a test-first / root-cause output") wants an **absolute**
+  judged assertion, not an A/B-vs-OFF-arm comparison (A/B is the right oracle only
+  for relative/regression/noise-floor questions). The absolute path exists
+  (single-arm `measure` + `judged` + `assertRates`,
+  `examples/harness/dogfood/skill-quality.eval.mjs`); the open question is whether
+  it's ergonomic + discoverable vs A/B (`runEval`/`measureArms`/`assertSignificant`)
+  being over-privileged in the API surface, README, and the `test-harness` skill.
+  Audit prominence; elevate the absolute path if needed.
+  [testing-api-design §Part 7 #7](testing-api-design.md)
+
 ## Later — needs model auth (write-don't-run today) or bigger
 
 - **Demo revamp (consolidate the deprecated demos)** — `examples/demo/`
