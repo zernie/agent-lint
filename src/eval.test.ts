@@ -42,6 +42,8 @@ import {
   checkPromptDiversity,
   assertPromptDiversity,
   isDatedModel,
+  modelTier,
+  belowModelFloor,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -1216,6 +1218,59 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
   });
   assert.ok(out.includes("isolated"));
   assert.ok(out.toLowerCase().includes("upper bound"));
+});
+
+test("modelTier ranks by family; belowModelFloor is fail-open on unknowns", () => {
+  assert.equal(modelTier("haiku"), 1);
+  assert.equal(modelTier("claude-haiku-4-5-20251001"), 1);
+  assert.equal(modelTier("sonnet"), 2);
+  assert.equal(modelTier("claude-sonnet-4-6"), 2);
+  assert.equal(modelTier("opus"), 3);
+  assert.equal(modelTier("some-future-model"), null); // unrankable
+  // below
+  assert.equal(belowModelFloor("haiku", "sonnet"), true);
+  // equal / above / unknown → never "below" (fail-open)
+  assert.equal(belowModelFloor("sonnet", "sonnet"), false);
+  assert.equal(belowModelFloor("opus", "sonnet"), false);
+  assert.equal(belowModelFloor("mystery", "sonnet"), false);
+  assert.equal(belowModelFloor("haiku", "mystery"), false);
+});
+
+test("measureTriggerRateWith FAILS when the model is below the floor (default sonnet)", async () => {
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  const base = {
+    pluginDir: "/x",
+    prompts: ["a", "b"],
+    minPrompts: 1,
+    minDistance: 0,
+    fired: () => true,
+    spacingSec: 0,
+  };
+  // haiku < default sonnet floor → throws before any run
+  await assert.rejects(
+    () => measureTriggerRateWith({ ...base, model: "haiku" }, runner),
+    /below the minimum "sonnet"/,
+  );
+  // explicitly lowering the floor lets a deliberate cheap run through
+  const ok = await measureTriggerRateWith(
+    { ...base, model: "haiku", minModel: "haiku" },
+    runner,
+  );
+  assert.equal(ok.n, 2); // ran (2 prompts), not blocked by the floor
+
+  // the floor can also be set project-wide via VIGILES_MIN_MODEL
+  const prev = process.env.VIGILES_MIN_MODEL;
+  process.env.VIGILES_MIN_MODEL = "opus";
+  try {
+    await assert.rejects(
+      () => measureTriggerRateWith({ ...base, model: "sonnet" }, runner),
+      /below the minimum "opus"/,
+    );
+  } finally {
+    if (prev === undefined) delete process.env.VIGILES_MIN_MODEL;
+    else process.env.VIGILES_MIN_MODEL = prev;
+  }
 });
 
 test("measureTriggerRateWith counts SIBLING skills as competitors (not just installSet)", async () => {
