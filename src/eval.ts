@@ -847,6 +847,27 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
+ * A model id is "dated" (honestly pinned) when it ends in an 8-digit date stamp,
+ * e.g. `claude-haiku-4-5-20251001`. A floating alias (`haiku`, `sonnet`, or even
+ * `claude-sonnet-4-6` with no date) can change underneath you — so a cached or
+ * baselined result pinned to it can silently hide model drift. See
+ * `docs/eval-architecture.md` (honest model pinning).
+ */
+export function isDatedModel(model: string): boolean {
+  return /\d{8}$/.test(model);
+}
+
+/** Warn (once per run) that replaying/recording a cache on a floating alias hides drift. */
+function warnFloatingModel(model: string): void {
+  const msg =
+    `vigiles: eval cache is on but the model "${model}" is a floating alias — ` +
+    `a replay can serve a result computed against a since-changed model, hiding ` +
+    `drift. Pin a dated id (e.g. ...-20251001) for honest replay.`;
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`);
+  else console.warn(msg);
+}
+
+/**
  * Merge the fake-tool PreToolUse hook into an arm's resolved settings (appending
  * to any existing `PreToolUse` list). Returns the settings unchanged when there
  * are no fakes. The fake list itself rides the `VIGILES_FAKE_TOOLS` env, not the
@@ -1044,6 +1065,9 @@ export async function runEvalWith<M extends Metrics>(
     cache: spec.cache ?? "off",
     cacheDir: spec.cacheDir ?? resolve(process.cwd(), ".vigiles", "eval-cache"),
   };
+  if (cfg.cache !== "off" && !isDatedModel(cfg.model)) {
+    warnFloatingModel(cfg.model);
+  }
   const retrying: AgentRunner = (a) =>
     runWithRetry(a, runner, retries, backoffMs);
 
