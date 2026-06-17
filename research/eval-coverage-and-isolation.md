@@ -145,6 +145,35 @@ reach the no-model tiers; containerized-e2e is faithful but heavy and metered.
 Nobody packages the cheap deterministic + record-replay tiers _with_
 sub-affordability _and_ a clean container hand-off.
 
+## Dogfood results — the three vendored plugins
+
+The model is dogfooded against the three real pinned plugins under
+`examples/harness/vendor/`, with a per-plugin scorecard recording every artifact's
+rung, what a proper eval would need, and whether a free test was written. The
+runnable R1/R2 tests live in `src/adapters/claude-code/vendor-coverage.test.ts`
+(model-free, in CI), complementing `vendor.test.ts` (loadPlugin invariants),
+`agent-runtime.test.ts` (the inherits-all rail), and `run-hook.test.ts` (the
+bwrap-gated OMC egress/fs checks). Scorecards:
+
+- [`../examples/harness/vendor/oh-my-claudecode.COVERAGE.md`](../examples/harness/vendor/oh-my-claudecode.COVERAGE.md)
+  — ~60% free/deterministic, ~33% model-gated, ~7% R3 (live MCP). **Grade B+.**
+- [`../examples/harness/vendor/superpowers.COVERAGE.md`](../examples/harness/vendor/superpowers.COVERAGE.md)
+  — ~50% free, ~50% model-gated (a prose-skills library — its worth is behavioral),
+  ~0% R3. **Grade B.**
+- [`../examples/harness/vendor/wshobson-accessibility.COVERAGE.md`](../examples/harness/vendor/wshobson-accessibility.COVERAGE.md)
+  — ~30% free (incl. the inherits-all agent footgun), ~25% model-gated, ~45% R3 (a
+  real browser / a11y scanner / assistive-tech runtime — the genuine worst case for
+  cheap tiers). **Grade C.**
+
+The honest finding across the three: the cheap tiers comprehensively cover the
+**deterministic spine** (hook decisions, tool-contracts/footguns, structure,
+shell-out logic via PATH stubs) for free; what they cannot substitute for is the
+**behavioral** half (does a description fire, does prose guidance change behavior,
+does the audit find real violations) — model-gated on the subscription for prose
+skills, and genuinely R3 for the accessibility plugin's browser/AT semantics. The
+R3 shortlist collapses to exactly what the model predicts: a headless browser, an
+a11y scanner, and a live MCP endpoint.
+
 ## Verdict for the build
 
 A **PATH-shim / record-replay helper (fake-on-PATH)** is **higher leverage**
