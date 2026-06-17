@@ -58,6 +58,12 @@
 
 ## Next — differentiated, medium effort
 
+- **Near-neighbor trigger-rate tier** — between isolated (cheap, optimistic) and
+  whole-harness (`installSet`, realistic but pricey/noisy), co-install the
+  skill-under-test + its **NCD-nearest competitors** (reuse `proofs.ts` `ncd` /
+  `findSimilarRules`) so a large roster gets faithful precision at a fraction of
+  the cost. Decided + grounded; deliberately deferred (the two existing tiers
+  cover the common cases). [isolated-vs-whole-harness](isolated-vs-whole-harness-eval.md) · **P3 (MED–LOW)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.

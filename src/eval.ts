@@ -898,21 +898,38 @@ export function belowModelFloor(model: string, floor: string): boolean {
   return m !== null && f !== null && m < f;
 }
 
+/**
+ * Reduce a raw `--version` string to the **major.minor** cache-key token. We key
+ * the cache on major.minor, NOT the patch: a patch release rarely changes agent
+ * behaviour, so keying patches would churn the cache on every release for no
+ * signal; a minor/major bump is where the system prompt / tool defs actually move.
+ * (If a specific patch is known to matter, clear the cache or bump
+ * `CACHE_FORMAT_VERSION`.) Falls back to the trimmed raw string when no semver is
+ * found. Pure + tested.
+ */
+export function harnessVersionKey(raw: string): string {
+  const m = /(\d+)\.(\d+)\.\d+/.exec(raw);
+  return m ? `${m[1]}.${m[2]}` : raw.trim();
+}
+
 /* v8 ignore start -- spawns the real harness binary; memoized, cache-path only */
 let cachedHarnessVersion: string | undefined;
 /**
- * The harness binary version (`claude --version`), for the cache key — so a CLI
- * upgrade (new system prompt / tool defs) invalidates a stale replay. Memoized
- * (one spawn per process), resolved only on the cache path, "unknown" if the
- * binary isn't found (then it doesn't partition the key).
+ * The harness binary version (`claude --version`) reduced to major.minor, for the
+ * cache key — so a CLI **minor/major** upgrade (new system prompt / tool defs)
+ * invalidates a stale replay, while patches don't churn it. Memoized (one spawn
+ * per process), resolved only on the cache path, "unknown" if the binary isn't
+ * found (then it doesn't partition the key).
  */
 function harnessVersion(): string {
   if (cachedHarnessVersion === undefined) {
     try {
-      cachedHarnessVersion = execSync(
-        `${claudeCodeRuntime.agentBinary} --version`,
-        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
-      ).trim();
+      cachedHarnessVersion = harnessVersionKey(
+        execSync(`${claudeCodeRuntime.agentBinary} --version`, {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      );
     } catch {
       cachedHarnessVersion = "unknown";
     }
@@ -1260,13 +1277,13 @@ export interface TriggerRateSpec {
   readonly installSet?: readonly string[];
   /**
    * Replace each skill's BODY with a no-op stub (keeping its frontmatter — name +
-   * description) before running. Trigger-rate is decided by the frontmatter alone
-   * (the model selects a skill before its body loads), so stubbing the body can't
-   * change what's measured but stops the run from executing an expensive
-   * procedure once the skill fires — far cheaper, faster, side-effect-free. All
-   * skills' descriptions stay present, so the selection competition is faithful.
-   * Default false (off) for now; recommended `true` for trigger evals. See
-   * {@link stubSkillBody}.
+   * description). Trigger-rate is decided by the frontmatter ALONE (the model
+   * selects a skill before its body loads), so stubbing can't change what's
+   * measured — it just stops the run executing an expensive procedure once the
+   * skill fires. All descriptions stay present, so selection competition is
+   * faithful. **Defaults to `true`** here: testing a description never needs the
+   * body, so it's automated, not a knob you must remember. Set `false` only in the
+   * rare case you want the real body to run. See {@link stubSkillBody}.
    */
   readonly stubSkillBodies?: boolean;
   /**
@@ -1658,7 +1675,7 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
     throw new Error(
       "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
     );
-  const stub = spec.stubSkillBodies ?? false;
+  const stub = spec.stubSkillBodies ?? true; // trigger = frontmatter; body never needed
   const installSet = spec.installSet ?? [];
   let pluginDir: string;
   let packaged: string | undefined;

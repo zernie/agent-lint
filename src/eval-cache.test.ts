@@ -42,26 +42,47 @@ test("cacheKey is stable and order-independent for object inputs", () => {
   assert.equal(k1, k2);
 });
 
-test("cacheKey changes when any model-affecting input changes", () => {
+test("cacheKey changes when ANY key part changes (every field + version axes)", () => {
   const base = cacheKey(baseKey);
-  assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }));
-  assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }));
-  assert.notEqual(base, cacheKey({ ...baseKey, files: { "a.txt": "y" } }));
-  assert.notEqual(base, cacheKey({ ...baseKey, model: "opus" }));
+  // one assertion per CacheKeyInput field — a regression that drops a field from
+  // the key surfaces here.
+  assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }), "trialIndex");
+  assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }), "task");
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, files: { "a.txt": "y" } }),
+    "files",
+  );
   assert.notEqual(
     base,
     cacheKey({ ...baseKey, settings: { hooks: { a: 1 } } }),
+    "settings",
   );
-  assert.notEqual(base, cacheKey({ ...baseKey, env: { X: "1" } }));
-  // the harness binary version: a `claude` upgrade must invalidate (its system
-  // prompt steers behaviour, so a replay across versions would be stale).
-  assert.notEqual(base, cacheKey({ ...baseKey, harnessVersion: "2.1.179" }));
+  assert.notEqual(base, cacheKey({ ...baseKey, env: { X: "1" } }), "env");
   assert.notEqual(
-    cacheKey({ ...baseKey, harnessVersion: "2.1.179" }),
-    cacheKey({ ...baseKey, harnessVersion: "2.2.0" }),
+    base,
+    cacheKey({ ...baseKey, pluginDirHash: "abcd" }),
+    "pluginDirHash",
   );
-  // a different tool SET changes the key (mere reordering does not — see below)
-  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Read"] }));
+  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Read"] }), "tool set");
+
+  // Version axes — different VERSIONS of the model and the harness must each
+  // produce a different key (a stale replay across either would be wrong):
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, model: "opus" }),
+    "model family",
+  );
+  assert.notEqual(
+    cacheKey({ ...baseKey, model: "claude-sonnet-4-6" }),
+    cacheKey({ ...baseKey, model: "claude-sonnet-4-5-20250101" }),
+    "model snapshot version",
+  );
+  assert.notEqual(
+    cacheKey({ ...baseKey, harnessVersion: "2.1" }),
+    cacheKey({ ...baseKey, harnessVersion: "2.2" }),
+    "harness minor version",
+  );
 });
 
 test("cacheKey treats the tool list as a SET (order-insensitive)", () => {
