@@ -102,6 +102,33 @@ function canonical(value: unknown): unknown {
  */
 export const CACHE_FORMAT_VERSION = 2;
 
+/**
+ * Per-run env keys that are PURE NOISE for the cache key — a fresh random path
+ * every run, never model-affecting. The opt-in ephemeral run env
+ * ({@link ephemeralRunEnv} in `eval.ts`) points `HOME`/`TMPDIR` at a throwaway
+ * dir generated per trial, so folding them into the key would make every
+ * ephemeral run unique → the cache could NEVER hit. We drop them here so the
+ * exclusion holds however the env was assembled. A non-ephemeral run normally
+ * carries neither in its per-run `env` (it's an overlay over `process.env`, not
+ * a complete env), so dropping them is a no-op there.
+ */
+const CACHE_KEY_ENV_EXCLUDE: readonly string[] = ["HOME", "TMPDIR"];
+
+/** Strip the per-run-noise env keys ({@link CACHE_KEY_ENV_EXCLUDE}) from a keyed
+ *  env, returning `undefined` when nothing model-affecting remains (so the key is
+ *  byte-identical to a run that had no env at all). */
+function keyedEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (env === undefined) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (CACHE_KEY_ENV_EXCLUDE.includes(k)) continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Deterministic content hash of the key inputs (order-independent). */
 export function cacheKey(input: CacheKeyInput): SHA256Hash {
   const normalized = {
@@ -110,6 +137,8 @@ export function cacheKey(input: CacheKeyInput): SHA256Hash {
     // must hash the same — sort it to avoid phantom-distinct keys. (canonical()
     // already sorts object keys; it deliberately keeps other array order.)
     tools: [...input.tools].sort(),
+    // Drop the throwaway ephemeral HOME/TMPDIR — per-run noise, not model input.
+    env: keyedEnv(input.env),
     cacheFormatVersion: CACHE_FORMAT_VERSION,
   };
   return sha256short(JSON.stringify(canonical(normalized)));

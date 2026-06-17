@@ -101,15 +101,30 @@ cache read ~21.7k tok (caching unaffected). So the **env-var auth path works**: 
 environment's credential rides an allowlisted `ANTHROPIC_*` var, which survives the
 scrub.
 
-**The remaining gap before default-on:** that only covers **env-var** auth. A user
-whose subscription credential lives **only in `~/.claude/.credentials.json`** (a
-file under HOME, the common OAuth case) would **lose it** when HOME is scrubbed —
-`ephemeralRunEnv` injects env vars, not the credential file. So the safe default-on
-flip needs one more step: **inject the harness's own credential file into the
-throwaway HOME** (symlink/copy just `~/.claude` auth, not `~/.gitconfig`/`~/.ssh`).
-Until then the flag stays opt-in. Two smaller follow-ups noted in code: AWS
-static-key auth (region/profile allowed, secret keys dropped) and the
-cache-key↔random-HOME interaction (both moot while default-off).
+**Opt-in path now COMPLETE (still default-off).** Two correctness gaps closed:
+(1) **credential-file injection** — `seedEphemeralHome` COPIES a minimal auth
+allowlist (`EPHEMERAL_HOME_KEEP = [".claude/.credentials.json"]`, copy-not-symlink
+so the run can't write back) from the real HOME into the throwaway HOME when
+present, so a local file-based-OAuth user keeps auth; `.gitconfig`/`.ssh`/`.aws`
+are never carried. (2) **cache-safety** — `HOME`/`TMPDIR` are excluded from the
+eval cache key (`CACHE_KEY_ENV_EXCLUDE`), so the random throwaway HOME no longer
+makes every ephemeral run a cache miss (non-ephemeral keys unchanged).
+
+**State-protection validated end-to-end on the real sub** (haiku, 1 trial,
+`ephemeralEnv: true`, the run _told to_ write `$HOME/PROOF.txt` and probe
+`~/.ssh`): the real `$HOME` (`/root`) was **NOT mutated** (the write landed in the
+throwaway HOME) and the run **still authenticated** (exit 0, $0.0083). So the
+containment property — a model-driven run can't mutate your real state — holds
+empirically, and auth survives the scrub via the host-brokered `CLAUDE_*` allowlist.
+
+**Why the default is still OFF:** the one modality this (host-brokered) environment
+**cannot** run-test is **file-based `~/.claude/.credentials.json` OAuth** — there's
+no such credential here to exercise, and no sandbox can mint a real token (bwrap
+absent here anyway; docker would _break_ the FD-brokered auth, a false negative).
+The credential-file injection is code-reviewed + unit-tested for the copy logic but
+not e2e-validated against a real local credential. So flipping default-on (a
+behavior change for every eval — incl. git-using ones) waits on a local-file-auth
+user validating that path on their machine; the flip is then a one-liner.
 
 ## Why not the obvious shortcuts (findings)
 
