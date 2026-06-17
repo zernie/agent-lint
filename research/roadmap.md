@@ -58,6 +58,17 @@
 
 ## Next — differentiated, medium effort
 
+- **Cross-platform confinement (macOS is a must)** — extract a `vigiles/os-isolation`
+  port and add a `sandbox-exec`/Seatbelt backend beside `bwrap`, so foreign code is
+  confined on Mac (a large share of devs) instead of forcing the refuse-or-`sandbox:false`
+  choice. Per-host egress stays Linux-only (Seatbelt can't packet-filter per host);
+  Mac degrades honestly to deny-all-net. Decided; `srt`/`nono` are documented
+  fallbacks, not the default. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
+- **Verify & test the harness's sandbox config** — `settings.json`'s `sandbox` block
+  is a harness surface: verify `allowedDomains`/`allowWrite` are coherent (flag a hook
+  that phones a blocked domain), and prove the configured sandbox blocks what it claims
+  (reuse `recordEgress`/`egress:{allow}`). The "valid is not true" wedge applied to
+  sandbox policy. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **P3**
 - **Near-neighbor trigger-rate tier** — between isolated (cheap, optimistic) and
   whole-harness (`installSet`, realistic but pricey/noisy), co-install the
   skill-under-test + its **NCD-nearest competitors** (reuse `proofs.ts` `ncd` /
