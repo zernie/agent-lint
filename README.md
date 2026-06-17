@@ -102,6 +102,13 @@ intercept the tool in the real hook layer, so the attempt is caught and the side
 effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
 foreign code (and a real model) safely by default — **[safety model →](docs/safety.md)**
 
+Most of what real plugins do is testable cheaply — fire / trigger / contract /
+safety, plus **record-replay** for the tool/API results a skill consumes (recorded
+once from the real tool, replayed deterministically — no live service, no Docker).
+That covers ~90%+ of real plugin surface on your subscription; the rare case that
+needs a real browser or database **composes with Docker** rather than us
+reinventing the sandbox. **[What we test, how →](research/eval-coverage-and-isolation.md)**
+
 **Affordable by design — the eval you can actually run.** Almost nobody evals
 their harness, because the usual tools (promptfoo, DeepEval, …) hit the API SDK
 and bill **per token on every run**. vigiles inverts that: most questions are

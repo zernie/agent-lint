@@ -39,6 +39,15 @@
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
   roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
 
+- **PATH-shim / record-replay helper (fake-on-PATH)** — the R2 tier: a fake
+  binary earlier on PATH that emits a result **recorded once** from the real tool
+  and replayed deterministically (never model-synthesized — drift → false
+  confidence), reusing the eval cache's record/replay machinery. **Explicitly
+  ahead of real-service/testcontainers provisioning:** a survey of community
+  collections + a ~90-artifact production audit put R1+R2 at ~90%+ of real plugin
+  surface (R3 real-service ≤ ~9%), and every GitHub/issue-tracker/chat/CI/linter/
+  test-runner integration is replayable at R2 with no Docker. Higher leverage than
+  a container integration. [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
 - **Native input/output/cache token + cost measurement** — split `tokens()` into
   `inputTokens`/`outputTokens`, capture cache tokens, and report a per-class A/B
   **delta** gated by Welch significance. A harness change trades input↔output (a
@@ -63,6 +72,12 @@
   [sync-tool-compatibility](sync-tool-compatibility.md)
 - **"Valid is not true" positioning** — one comparison row vs structural linters
   (agnix); pure messaging, no build. [standards-conformance](standards-conformance.md)
+- **Dogfood popular plugins + emit a per-plugin `COVERAGE.md` scorecard** — run the
+  rung classifier over popular community plugin collections and emit a per-plugin
+  `COVERAGE.md` (R1/R2/R3 distribution + the R3 service shortlist + a testability
+  grade). Validates the ~90% R1+R2 claim on real artifacts AND is a shareable
+  distribution artifact (the leaderboard's testability sibling).
+  [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
 - **`scan` → observed-egress column** — boot each hook under `recordEgress`, list
   hosts reached; turns `scan` from static into behavioural, feeding the
   leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md)
