@@ -2860,7 +2860,7 @@ function skillStartCommand(target: string | undefined): void {
  * PreToolUse-hook entrypoint: enforce the active subagent's allowed-tools
  * contract. Reads the tool event on stdin, parses the active agent's compiled
  * `.md` tool rail, and blocks (exit 2 + reason on stderr) any tool outside it —
- * the deterministic boundary `tools:` alone can't provide (Claude Code #54898).
+ * the deterministic boundary `tools:` alone can't provide (Claude Code #4740/#21460, SDK #172).
  */
 function agentHookCommand(): void {
   let raw = "";
