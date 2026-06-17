@@ -22,7 +22,8 @@ Match what you're testing to the cheapest tier that can answer it:
 | "Is the hook actually **wired into** the assembled plugin and does it fire in a real session?"                                         | **Deterministic** | free, no API key (real `claude` + scripted mock) | `runHarnessTest` + `scriptModel`                                                              |
 | "Did the injected context (a SessionStart hook, a `/command`) actually **reach the model**?"                                           | **Deterministic** | free, no API key                                 | `runHarnessTest` → `trace.modelRequests` / `assertRequestContains`                            |
 | "Does this skill's **description trigger** when it should (recall) **and stay quiet** when it shouldn't (precision)?"                  | **Eval**          | **paid** (real model)                            | `measureTriggerRate` (+ `irrelevantPrompts`) → `assertTriggerRate({ min, maxFalsePositive })` |
-| "Does this harness change **move what the agent does**?" (A/B, signal vs noise)                                                        | **Eval**          | **paid** (real model)                            | `runEval` + `assertSignificant`                                                               |
+| "Is this exact skill's **output any good**?" — absolute quality, no on/off baseline (the default for testing one skill)                | **Eval**          | **paid** (real model)                            | `measure({ checks: [judged(rubric)] })` → `assertRates({ min })`                              |
+| "Does this harness change **move what the agent does**, _relative_ to off?" — A/B lift, regression, signal vs noise                    | **Eval**          | **paid** (real model)                            | `runEval` (arms) + `assertSignificant`                                                        |
 
 Most harness questions — block/allow, wired-in, context-landed — never need a
 model. Only "does the model trigger / behave differently" needs the eval tier.
@@ -42,8 +43,10 @@ surface sorts into one of three buckets:
   a skill shells out to (record the real result once, replay it via a PATH stub).
 - **B — Model-gated, on your subscription** (real model, **no metered API**): does a
   skill's description **fire** (`measureTriggerRate`, recall + precision) **and**
-  does its guidance actually **change behavior** (`runEval` A/B on-vs-off + a
-  `judged` quality check). This is the half a **prose / guidance skill** lives in —
+  does its guidance actually **produce good output** (score it directly:
+  `measure({ checks: [judged(rubric)] })` + `assertRates` — the absolute oracle;
+  use a `runEval` A/B on-vs-off only when you need the _relative_ lift). This is
+  the half a **prose / guidance skill** lives in —
   its worth is behavioral, so only a model can judge it. That is **not** "uncovered"
   and **not** free: it's fully testable on the sub. State it that way.
 - **C — Needs a real service** (a real browser / DB / redis / a11y runtime): vigiles
@@ -132,8 +135,29 @@ assertHookFired(r, "SessionStart");
 assertRequestContains(r, "expected injected text"); // did it actually land?
 ```
 
-**Eval (`runEval`)** — A/B the change on vs off across real-model trials, then
-gate on significance, not eyeballing:
+**Eval — absolute (`measure` + `judged`)** — testing _one_ skill, the usual case:
+score its output directly against a rubric. No on/off baseline — this is the
+"is it any good?" oracle (what promptfoo/DeepEval lead with), and the right
+default when there's nothing to compare against:
+
+```ts
+import { measure, judged, skill, assertRates } from "vigiles/testing";
+
+const report = await measure({
+  pluginDir: "./",
+  task: "…a task the skill should handle…",
+  checks: [
+    skill("my-plugin:my-skill"), // it fired
+    judged("the answer correctly does X and avoids Y"), // …and the output is good
+  ],
+  trials: 6,
+});
+assertRates(report, { min: 0.8 }); // each check passes ≥ 80% of trials
+```
+
+**Eval — relative (`runEval` + `assertSignificant`)** — when the question is
+_lift over no-skill_ (regression, or proving a change isn't noise): A/B the
+change on vs off and gate on significance, not eyeballing:
 
 ```ts
 import { runEval, assertSignificant } from "vigiles/testing";

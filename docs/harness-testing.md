@@ -275,6 +275,22 @@ non-deterministic harness.
 
 ## Evals — does the change move behaviour?
 
+There are **two questions** here, and they want **two different oracles** — don't
+default to A/B for both:
+
+- **Absolute — "is this exact skill / output any good?"** Most of the time you're
+  testing _one_ skill, with no on/off variant to compare against. Score the output
+  directly: `measure({ checks: [judged(rubric), …] })` + `assertRates({ min })`.
+  This is the oracle promptfoo/DeepEval lead with, and the right default for a
+  single skill — there's nothing to A/B against. See the `measure` section below.
+- **Relative — "does this change _move_ behaviour vs off?"** When the question is
+  the _lift_ a change buys (regression gating, or proving a gap isn't sampling
+  noise), run an A/B: `runEval` with `off`/`on` arms + `assertSignificant`. The
+  baseline is the point.
+
+The rest of this section covers the **relative** A/B path; the absolute scored path
+is `measure` (below). Both run on the same real-model tier.
+
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
 numbers, **fraction-true** for booleans, with **std / se** so you can tell a
 real gap from noise, plus **pass^k** (τ-bench) — _did the metric succeed on

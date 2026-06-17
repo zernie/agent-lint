@@ -436,7 +436,18 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
 6. **CC-feature drift.** New hook events / surfaces must be tracked in `HookFire`
    parsing + the dialect — ongoing maintenance.
 7. **Behaviour testing is broader than A/B — is the single-arm ABSOLUTE path
-   first-class? (OPEN — flagged 2026-06-17, to resolve in the API review).** We
+   first-class? (RESOLVED 2026-06-17 in the API review — emphasis corrected, no
+   code change needed.)** The audit found the absolute path was implemented but
+   _under-surfaced_: README, `docs/harness-testing.md`, and the `test-harness`
+   skill all led with the A/B `runEval`+`assertSignificant` framing, so "test this
+   one skill behaves right" was being forced into an A/B mould. Fixed by making the
+   absolute oracle the **default** for testing a single skill across every
+   front-door surface: the skill's tier table + Step-3 example now lead with
+   `measure({ checks: [judged(rubric)] })` + `assertRates`, the README and the docs
+   eval section open with the two-oracles distinction (absolute = "is it good",
+   relative = "does it move vs off"), and the CLAUDE.md positioning names both. A/B
+   is now framed as the _specialised_ relative/regression oracle, matching how
+   promptfoo/DeepEval frame it. The original analysis, kept for the record: We
    reach for A/B a lot (`runEval` arms + `measureArms` + `assertSignificant`), but
    A/B is the right oracle only for a _relative_ question — noise-floor / regression
    / "does this change MOVE behaviour vs a baseline arm". For testing an **exact

@@ -153,17 +153,14 @@
     sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
     2026-06-17 section)
 
-- **Single-arm ABSOLUTE behaviour path — is it first-class, or is A/B
-  over-privileged? (NEW — flagged 2026-06-17, this PR)** — testing an _exact_ skill
-  ("following it produces a test-first / root-cause output") wants an **absolute**
-  judged assertion, not an A/B-vs-OFF-arm comparison (A/B is the right oracle only
-  for relative/regression/noise-floor questions). The absolute path exists
-  (single-arm `measure` + `judged` + `assertRates`,
-  `examples/harness/dogfood/skill-quality.eval.mjs`); the open question is whether
-  it's ergonomic + discoverable vs A/B (`runEval`/`measureArms`/`assertSignificant`)
-  being over-privileged in the API surface, README, and the `test-harness` skill.
-  Audit prominence; elevate the absolute path if needed.
-  [testing-api-design §Part 7 #7](testing-api-design.md)
+- **Single-arm ABSOLUTE behaviour path — first-class now (DONE — 2026-06-17, this
+  PR).** Audit found A/B was over-privileged: the absolute path existed (single-arm
+  `measure` + `judged` + `assertRates`, `examples/harness/dogfood/skill-quality.eval.mjs`)
+  but README, `docs/harness-testing.md`, and the `test-harness` skill all led with
+  the A/B `runEval` framing. Fixed (docs/skill only, no code change): the absolute
+  oracle is now the **default** for testing a single skill across every front-door
+  surface, with A/B reframed as the specialised relative/regression oracle (how
+  promptfoo/DeepEval frame it). [testing-api-design §Part 7 #7](testing-api-design.md)
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
