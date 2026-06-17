@@ -56,6 +56,12 @@ import {
 } from "./eval-cache.js";
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
+import {
+  type FakeTool,
+  buildFakeToolSettings,
+  serializeFakeTools,
+  FAKE_TOOLS_ENV,
+} from "./tool-fake.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -77,6 +83,15 @@ export interface EvalArm {
    * an arm be "skill installed" vs "off" to measure real activation.
    */
   readonly pluginDir?: string;
+  /**
+   * Tools to intercept for this arm (the tool-call spy). Each {@link FakeTool} is
+   * denied its real execution by an auto-wired PreToolUse hook — the model still
+   * emits the `tool_use` (so its arguments land in the `Trace` for `toolWith` /
+   * `notTool`), but the side effect (a paid API call, a `git push`, a paid
+   * subagent) never happens. Keeps a real-model eval cheap and safe. See
+   * `src/tool-fake.ts`.
+   */
+  readonly fakeTools?: readonly FakeTool[];
 }
 
 /** Per-run resource use, parsed from the terminal `result` event (0 when absent). */
@@ -232,6 +247,8 @@ export interface AgentRunArgs {
   readonly hasSettings: boolean;
   readonly pluginDir: string | undefined;
   readonly timeoutMs: number;
+  /** Extra env layered over `process.env` for this run (e.g. `VIGILES_FAKE_TOOLS`). */
+  readonly env?: Record<string, string>;
 }
 
 /**
@@ -267,7 +284,7 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
     ];
     const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
-      env: process.env,
+      env: { ...process.env, ...a.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -318,6 +335,8 @@ export interface MeasureSpec {
    * there's nothing to grade. Requires `pluginDir`. See {@link stubSkillBody}.
    */
   readonly stubSkillBodies?: boolean;
+  /** Tools to intercept (the tool-call spy) — see {@link EvalArm.fakeTools}. */
+  readonly fakeTools?: readonly FakeTool[];
   /** The task prompt given to the agent. */
   readonly task: string;
   /**
@@ -384,6 +403,7 @@ export async function measureWith(
             settings: spec.settings,
             plugin: spec.plugin,
             pluginDir,
+            fakeTools: spec.fakeTools,
           },
         },
         task: spec.task,
@@ -793,6 +813,7 @@ async function runWithCache(
     tools: runArgs.tools,
     files: keyParts.files,
     settings: keyParts.settings,
+    env: runArgs.env,
     trialIndex: keyParts.trialIndex,
   });
   const hit = readCache(cfg.cacheDir, key);
@@ -807,6 +828,48 @@ async function runWithCache(
   return out;
 }
 
+/**
+ * The `vigiles fake-tool-hook` command, as an absolute `node <cli> …` invocation
+ * — the eval runs in a throwaway cwd where `npx vigiles` wouldn't resolve, so the
+ * auto-wired PreToolUse hook must point at this CLI's own `cli.js` (resolved from
+ * `__dirname`, the same way `run-hook.ts`/`sandbox.ts` locate their entries).
+ */
+const FAKE_TOOL_HOOK_CLI =
+  [join(__dirname, "cli.js"), join(__dirname, "..", "dist", "cli.js")].find(
+    (p) => existsSync(p),
+  ) ?? join(__dirname, "cli.js");
+const FAKE_TOOL_HOOK_CMD = `"${process.execPath}" "${FAKE_TOOL_HOOK_CLI}" fake-tool-hook`;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object";
+}
+
+/**
+ * Merge the fake-tool PreToolUse hook into an arm's resolved settings (appending
+ * to any existing `PreToolUse` list). Returns the settings unchanged when there
+ * are no fakes. The fake list itself rides the `VIGILES_FAKE_TOOLS` env, not the
+ * settings — see {@link executeTrial}.
+ */
+function withFakeToolHook(
+  settings: unknown,
+  fakes: readonly FakeTool[],
+): unknown {
+  if (fakes.length === 0) return settings;
+  const fake = buildFakeToolSettings(fakes, { command: FAKE_TOOL_HOOK_CMD });
+  const base = isRecord(settings) ? settings : {};
+  const baseHooks = isRecord(base.hooks) ? base.hooks : {};
+  const basePre: unknown[] = Array.isArray(baseHooks.PreToolUse)
+    ? (baseHooks.PreToolUse as unknown[])
+    : [];
+  return {
+    ...base,
+    hooks: {
+      ...baseHooks,
+      PreToolUse: [...basePre, ...fake.hooks.PreToolUse],
+    },
+  };
+}
+
 /** Execute one trial in a fresh sandbox; returns its metric row + usage. */
 async function executeTrial<M extends Metrics>(
   spec: EvalSpec<M>,
@@ -817,11 +880,18 @@ async function executeTrial<M extends Metrics>(
 ): Promise<{ row: M; usage: EvalUsage }> {
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-eval-"));
   try {
-    const { files, settings } = resolveHarness({
+    const resolved = resolveHarness({
       plugin: arm.plugin,
       settings: arm.settings,
       files: { ...spec.fixture, ...arm.files },
     });
+    const { files } = resolved;
+    const fakes = arm.fakeTools ?? [];
+    const settings = withFakeToolHook(resolved.settings, fakes);
+    const env =
+      fakes.length > 0
+        ? { [FAKE_TOOLS_ENV]: serializeFakeTools(fakes) }
+        : undefined;
     writeFiles(cwd, files);
     const hasSettings = settings !== undefined;
     if (hasSettings) {
@@ -839,6 +909,7 @@ async function executeTrial<M extends Metrics>(
         hasSettings,
         pluginDir: arm.pluginDir,
         timeoutMs: cfg.timeoutMs,
+        env,
       },
       { files, settings, trialIndex },
       runner,

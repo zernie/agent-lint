@@ -48,6 +48,7 @@ import {
   assertTriggerRate,
 } from "./harness-assert.js";
 import { tool, output, turns } from "./check.js";
+import { parseFakeTools } from "./tool-fake.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -408,6 +409,87 @@ test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", a
   assert.ok(used && used !== dir, "a packaged plugin dir was used");
   assert.ok(!existsSync(used), "the throwaway plugin dir is removed afterward");
   cleanupTmpDir(dir);
+});
+
+test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", async () => {
+  let seenSettings = "";
+  let seenEnv: Record<string, string> | undefined;
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seenEnv = a.env;
+    seenSettings = a.hasSettings
+      ? readFileSync(join(a.cwd, "settings.json"), "utf-8")
+      : "";
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureWith(
+    {
+      task: "push the release branch",
+      // an arm hook already present → the fake hook APPENDS, never clobbers
+      settings: {
+        hooks: {
+          PreToolUse: [
+            { matcher: "Write", hooks: [{ type: "command", command: "true" }] },
+          ],
+        },
+      },
+      fakeTools: [
+        { tool: "Bash", when: { command: /push origin main/ }, result: "ok" },
+      ],
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+
+  // settings.json keeps the existing hook AND appends the fake-tool hook (Bash).
+  const settings = JSON.parse(seenSettings) as {
+    hooks: { PreToolUse: { matcher: string; hooks: { command: string }[] }[] };
+  };
+  assert.equal(settings.hooks.PreToolUse.length, 2);
+  assert.equal(settings.hooks.PreToolUse[0].matcher, "Write"); // existing, untouched
+  const entry = settings.hooks.PreToolUse[1];
+  assert.equal(entry.matcher, "Bash");
+  assert.match(entry.hooks[0].command, /fake-tool-hook/);
+
+  // the fake list rides VIGILES_FAKE_TOOLS, with the RegExp matcher preserved.
+  const parsed = parseFakeTools(seenEnv?.VIGILES_FAKE_TOOLS ?? "");
+  assert.equal(parsed[0]?.tool, "Bash");
+  assert.equal(parsed[0]?.result, "ok");
+  assert.ok(parsed[0]?.when?.command instanceof RegExp);
+});
+
+test("measureWith without fakeTools sets no fake env or hook", async () => {
+  let seenEnv: Record<string, string> | undefined;
+  let hadSettings = true;
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seenEnv = a.env;
+    hadSettings = a.hasSettings;
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  await measureWith(
+    {
+      task: "do a thing",
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(seenEnv, undefined);
+  assert.equal(hadSettings, false);
 });
 
 test("measureWith stubSkillBodies without pluginDir throws", async () => {
