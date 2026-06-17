@@ -870,6 +870,31 @@ export function isDatedModel(model: string): boolean {
   return /\d{8}$/.test(model);
 }
 
+/**
+ * Capability tier of a model by FAMILY: haiku=1 < sonnet=2 < opus=3 (version is
+ * ignored, so `claude-sonnet-4-6` and a dated Sonnet rank equal). An unrecognized
+ * family returns `null` — unrankable, so the floor never blocks a model we can't
+ * judge (fail-open on ranking). Used by the model floor; aliases and full/dated
+ * ids both work.
+ */
+export function modelTier(id: string): number | null {
+  const s = id.toLowerCase();
+  if (s.includes("haiku")) return 1;
+  if (s.includes("sonnet")) return 2;
+  if (s.includes("opus")) return 3;
+  return null;
+}
+
+/**
+ * Is `model` a weaker tier than `floor`? Both must be rankable (see
+ * {@link modelTier}); an unrankable model/floor is never "below" (fail-open).
+ */
+export function belowModelFloor(model: string, floor: string): boolean {
+  const m = modelTier(model);
+  const f = modelTier(floor);
+  return m !== null && f !== null && m < f;
+}
+
 /** Warn (once per run) that replaying/recording a cache on a floating alias hides drift. */
 function warnFloatingModel(model: string): void {
   const msg =
@@ -1240,6 +1265,15 @@ export interface TriggerRateSpec {
    * 0.50 on haiku vs 0.90 on Sonnet). Override for a cheaper-but-pessimistic run.
    */
   readonly model?: string;
+  /**
+   * Minimum model tier this eval may run on (haiku<sonnet<opus by family). The
+   * run **fails** if the resolved `model` is weaker — trigger-rate under-measures
+   * selection on a too-weak model, so this stops a cheap model from producing
+   * false-negative recall. Default `"sonnet"`; resolves from `minModel` →
+   * `VIGILES_MIN_MODEL` env → `"sonnet"`, so a project sets one floor for ALL
+   * skills (no per-file annotation). Lower it deliberately for a cheap run.
+   */
+  readonly minModel?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash Skill. */
   readonly allowedTools?: readonly string[];
   /** Per-run timeout ms. Default 240000. */
@@ -1715,12 +1749,26 @@ export async function measureTriggerRateWith(
     });
   }
 
+  // Model floor (default Sonnet): trigger-rate under-measures selection on a
+  // weaker model, so FAIL before spending a token rather than report a
+  // false-negative recall. One project-wide knob (VIGILES_MIN_MODEL) covers every
+  // skill; lower `minModel` deliberately for a cheap run. Catches the env-var case
+  // a static lint can't see.
+  const model = spec.model ?? "sonnet";
+  const minModel = spec.minModel ?? process.env.VIGILES_MIN_MODEL ?? "sonnet";
+  if (belowModelFloor(model, minModel))
+    throw new Error(
+      `measureTriggerRate: model "${model}" is below the minimum "${minModel}" — ` +
+        "trigger-rate under-measures selection on a weaker model (raise the model, " +
+        "or lower `minModel` / VIGILES_MIN_MODEL for a deliberately cheap run).",
+    );
+
   const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
     // Sonnet, not haiku: trigger-rate is a selection measurement and haiku
     // under-selects, producing false-negative recall (see TriggerRateSpec.model).
-    model: spec.model ?? "sonnet",
+    model,
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,

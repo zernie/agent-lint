@@ -62,13 +62,14 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Measure trigger-rate on the model your users actually RUN — Sonnet,
           # the default Claude Code selector. NOT haiku: trigger-rate is a
-          # *selection* measurement, and haiku is a much weaker selector, so a
-          # haiku gate falsely fails skills that fire fine on Sonnet (dogfooded:
-          # test-harness scored 0.50 on haiku vs 0.90 on Sonnet). Pin a dated
-          # Sonnet snapshot here once you settle on one (the gate runs cache-off,
-          # so a non-dated alias is acceptable; dated matters for cached/baselined
-          # results). Bump deliberately.
-          VIGILES_GATE_MODEL: claude-sonnet-4-6
+          # *selection* measurement and haiku is a much weaker selector, so a haiku
+          # gate falsely fails skills that fire fine on Sonnet (dogfooded:
+          # test-harness scored 0.50 on haiku vs 0.90 on Sonnet). The ALIAS (not a
+          # dated id) is right here: the gate runs cache-off, so it should track the
+          # current Sonnet without churn — dated ids only matter for cached/
+          # baselined reproducibility. The runtime model floor (default Sonnet)
+          # also fails the run if this is ever set below Sonnet.
+          VIGILES_GATE_MODEL: sonnet
         run: |
           if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "::notice title=Eval gate inert::no CLAUDE_CODE_OAUTH_TOKEN (subscription) or ANTHROPIC_API_KEY (metered) set — the behavioral eval gate is INERT. Add either secret to enable; the subscription token is the cheap path. Passing."
