@@ -86,6 +86,31 @@ side-effect threat that the per-host `nft` wall (Linux-only) does not. Net: ship
 the ephemeral run environment first; it de-risks Mac more than the Seatbelt
 backend does.
 
+### Status + validation (2026-06-17)
+
+**Foundation shipped, default OFF.** `ephemeralRunEnv(base, { home, allow })` (pure,
+tested) + an opt-in `EvalSpec.ephemeralEnv` flag now build a throwaway HOME/TMPDIR +
+an auth-allowlist env (`ANTHROPIC_*`/`CLAUDE_*`/`PATH`/`LC_*` + region/profile),
+dropping `GIT_*`/`GH_TOKEN`/`SSH_*`/AWS secret keys. The default (flag-off) path is
+byte-identical to before (asserted by a test), so it can't break the eval tier's
+auth until we deliberately flip it.
+
+**Auth-survival validated on the real sub** (haiku, 1 trial, `ephemeralEnv: true`):
+the run authenticated through the scrubbed HOME — exit 0, **$0.003**, output `OK.`,
+cache read ~21.7k tok (caching unaffected). So the **env-var auth path works**: this
+environment's credential rides an allowlisted `ANTHROPIC_*` var, which survives the
+scrub.
+
+**The remaining gap before default-on:** that only covers **env-var** auth. A user
+whose subscription credential lives **only in `~/.claude/.credentials.json`** (a
+file under HOME, the common OAuth case) would **lose it** when HOME is scrubbed —
+`ephemeralRunEnv` injects env vars, not the credential file. So the safe default-on
+flip needs one more step: **inject the harness's own credential file into the
+throwaway HOME** (symlink/copy just `~/.claude` auth, not `~/.gitconfig`/`~/.ssh`).
+Until then the flag stays opt-in. Two smaller follow-ups noted in code: AWS
+static-key auth (region/profile allowed, secret keys dropped) and the
+cache-key↔random-HOME interaction (both moot while default-off).
+
 ## Why not the obvious shortcuts (findings)
 
 ### Does a drop-in cross-platform, no-VM, arbitrary-subprocess sandbox exist?
