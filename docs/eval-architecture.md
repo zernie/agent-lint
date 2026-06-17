@@ -262,43 +262,6 @@ The combinatorial tail you can't enumerate: curate **named integration cases** f
 loaded) catch the unanticipated interaction as a metric drop. Prune, don't
 enumerate.
 
-## Reuse vs reinvent (corrected for what's already built)
-
-The instinct "don't rebuild promptfoo" is right. First, a constraint correction:
-the binding rule is **no required SaaS**, _not_ zero dependencies. A local library
-(Apache/MIT) that runs in-process and needs no hosted account is fair game; the
-core stays lean and optional integrations are peer deps (the `vitest`/`jest` seams
-already work this way). So neither Polly.js nor promptfoo is excluded _for being a
-dep_ — the case against each has to stand on its own merits, and it does:
-
-- **Record/replay (Polly.js / nock-back):** vigiles **already has** an input-keyed
-  record/replay cache (`eval-cache.ts`) with filesystem restore, so a second
-  recording layer is redundant — but the deciding reason is deeper: an HTTP-level
-  cassette would _not_ solve the core CI problem. Replaying a recorded run freezes
-  **one** trajectory, which is the same false-green risk as a comment snapshot,
-  regardless of recording format. The only true protection is re-running live
-  (nightly tier). **Don't add Polly** — not because it's a dep, but because the
-  missing layer is _when to invalidate_ (hash-lockfile), not _how to record_.
-- **promptfoo as a grader engine:** vigiles **deliberately PUNTED** promptfoo
-  interop (`eval-api-landscape.md`, Phase E). promptfoo is MIT and runs locally, so
-  "no-SaaS" does **not** rule it out — the punt is **strategic**: don't chase
-  eval-framework parity. The durable edge is cost + safety (the cheap no-model
-  tiers + sandboxing), promptfoo is real-model-only and expensive, and the thin
-  graders we need (precision/recall, a `judge.ts` rubric) already exist. Reverse
-  only on real inbound demand — and if so, as an **optional bridge**, not a core dep.
-
-Where borrowing _is_ still right:
-
-- **Client + agent loop:** the `claude` CLI you already drive (`AgentRunner`).
-- **precision/recall/F1:** ~20 lines, already in-tree — keep it in-tree (trivial,
-  not worth a dep), but adding a dep here was never the objection.
-- **Graders:** `judge.ts` (LLM rubric) exists; deepen only if a dogfood needs it.
-
-Reality check on the norm: most LLM-eval shops **don't gate per-PR at all** — they
-run nightly + threshold + dashboard, and per-PR only cheap deterministic checks.
-The hash-lockfile is cleverer than the norm; reach for it **only** where eval cost
-forces you to.
-
 ## Capability gaps, ranked
 
 The genuinely missing primitives (everything above is shipped). Ranked by
@@ -416,17 +379,10 @@ Consolidated pushback, for the record:
    _strictly more_ drift protection than a lockfile. The lockfile is a cost
    concession for expensive evals **only**, and only safe with the nightly backstop.
    Retrofitting cheap evals onto a lockfile would _remove_ protection.
-4. **Polly.js / promptfoo borrow-suggestions are stale — but not on dep grounds.**
-   The binding constraint is _no required SaaS_, not zero-dep, so a local library
-   is allowed. The real reasons to drop them: the cache already exists and an HTTP
-   cassette doesn't escape the snapshot trap (Polly); and promptfoo (MIT, local)
-   was punted _strategically_ — don't chase eval-framework parity; the edge is the
-   cheap/safe tiers. If promptfoo ever returns, it's an optional bridge, not a core
-   dep. Dropped from the roadmap either way.
-5. **An HTTP cassette does not escape the snapshot problem.** Replaying one recorded
+4. **An HTTP cassette does not escape the snapshot problem.** Replaying one recorded
    trajectory is the same false-green as a frozen comment. Only the nightly live run
    detects model drift. This is a property of _replay_, not of the recording format.
-6. **Everything else in the original thinking holds and is good:** the
+5. **Everything else in the original thinking holds and is good:** the
    feature = test + eval decomposition, the two orthogonal knobs, cost-matched
    mechanism, trigger-rate-as-classifier, `evalApiVersion` as a behavior epoch
    distinct from the CC version, dated-model honesty, the deferred canary, and
