@@ -190,6 +190,24 @@ export interface EvalSpec<M extends Metrics> {
   readonly rateLimitRetries?: number;
   /** Base backoff ms (doubled each retry). Default 1000. */
   readonly retryBackoffMs?: number;
+  /**
+   * **Opt-in, default OFF.** Run each trial in an *ephemeral run environment* — a
+   * throwaway `$HOME` + scrubbed env, re-injecting only the harness's own auth (see
+   * {@link ephemeralRunEnv}). Running a model-driven skill/agent is itself a side
+   * effect (the *model*, not the author, chose the actions), so a `git push` /
+   * write to `~` should land in a disposable HOME, not the real `~/.gitconfig` /
+   * `~/.ssh` / `~/.aws`. This is the cross-platform STATE-protection floor (no
+   * kernel features), orthogonal to the bubblewrap host-confinement in
+   * `src/sandbox.ts`.
+   *
+   * **Ships default-OFF** because a too-narrow auth allowlist would silently break
+   * the real `claude` CLI's authentication; leaving it off keeps every existing
+   * eval (including one running right now) authenticating exactly as before. When
+   * absent / `false`, the per-trial env is byte-identical to today
+   * (`{ ...process.env, ...arm.env }`). See `docs/safety.md` (ephemerality) and
+   * `research/cross-platform-sandboxing.md`.
+   */
+  readonly ephemeralEnv?: boolean;
 }
 
 /** Per-metric summary statistics across an arm's runs. */
@@ -269,6 +287,13 @@ export interface AgentRunArgs {
   readonly timeoutMs: number;
   /** Extra env layered over `process.env` for this run (e.g. `VIGILES_INTERCEPT_TOOLS`). */
   readonly env?: Record<string, string>;
+  /**
+   * When true, `env` is the COMPLETE spawn environment (an ephemeral run env from
+   * {@link ephemeralRunEnv}) — the runner does NOT prepend `process.env`, so the
+   * real `$HOME` / secrets are scrubbed. Default false: `env` is an overlay over
+   * `process.env` (the byte-identical-to-today path). Set only by `ephemeralEnv`.
+   */
+  readonly replaceEnv?: boolean;
 }
 
 /**
@@ -304,7 +329,10 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
     ];
     const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
-      env: { ...process.env, ...a.env },
+      // Default: overlay `a.env` on the real process.env (byte-identical to
+      // before). Ephemeral mode (`replaceEnv`) makes `a.env` the COMPLETE env —
+      // the scrubbed ephemeral run env — so the real $HOME / secrets are dropped.
+      env: a.replaceEnv ? a.env : { ...process.env, ...a.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -989,6 +1017,105 @@ function withInterceptToolHook(
   };
 }
 
+/**
+ * The default allowlist {@link ephemeralRunEnv} passes through from the real
+ * environment. Two groups, both load-bearing for a real-model `claude` run:
+ *
+ * - **Auth** — the harness's OWN credentials. The eval drives the real `claude`
+ *   CLI, which authenticates via the user's subscription (`~/.claude`, reached
+ *   through the fresh HOME's allowed config — see below) OR via these env vars.
+ *   We mirror the auth surface the runtime port already names
+ *   (`ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`, see
+ *   `adapters/claude-code/runtime.ts`) plus the OAuth/token + region variants the
+ *   CLI accepts, so a token-authed user is not broken by a too-narrow list.
+ * - **Runtime** — what any spawned process needs to *function*: `PATH` (resolve
+ *   `node` / `claude`), the locale/terminal vars (`LANG` / `LC_*` / `TERM`), and
+ *   `TMPDIR` (which we override to the fresh HOME). Mirrors what `bwrapArgs` /
+ *   `setenvArgs` in `src/sandbox.ts` set back after `--clearenv`.
+ *
+ * Notably it does NOT pass through `GIT_*`, `GH_TOKEN`, `SSH_*`, `AWS_*`, or any
+ * other non-allowlisted secret-shaped var — those are exactly what an ephemeral
+ * run must not see. `CLAUDE_*` is allowlisted by prefix because the CLI reads
+ * several `CLAUDE_*` knobs (config dir, etc.) and omitting one is the failure
+ * mode this whole guard is conservative against.
+ *
+ * Conservative by design: a too-broad allowlist is safe (it just leaks a benign
+ * var); a too-narrow one silently breaks auth — which is why the feature ships
+ * default-OFF until validated against a real run.
+ */
+const EPHEMERAL_ALLOW: readonly string[] = [
+  // Runtime essentials (mirror sandbox.ts setenv-after-clearenv).
+  "PATH",
+  "LANG",
+  "TERM",
+  // Anthropic / Claude Code auth + endpoint (mirror runtime.ts + CLI auth vars).
+  claudeCodeRuntime.modelApiKeyEnv, // ANTHROPIC_API_KEY
+  claudeCodeRuntime.modelBaseUrlEnv, // ANTHROPIC_BASE_URL
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_URL",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_HEADERS",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  // Cloud-provider auth the CLI uses for Bedrock/Vertex backends (region/profile
+  // only — NOT the secret-shaped AWS_* access keys, which stay dropped).
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
+  "AWS_PROFILE",
+  "CLOUD_ML_REGION",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+];
+
+/** Prefixes passed through wholesale — the CLI reads several `CLAUDE_*` knobs and
+ *  a `LC_*` locale family; allowlist by prefix so omitting one isn't the silent
+ *  auth/locale break this guard exists to avoid. */
+const EPHEMERAL_ALLOW_PREFIXES: readonly string[] = ["CLAUDE_", "LC_"];
+
+/**
+ * Build an **ephemeral run environment** for a model-driven run: a NEW env object
+ * with a *fresh* `HOME` (and `TMPDIR`) pointed at the throwaway `opts.home`, only
+ * an allowlist of auth + runtime vars passed through from `base`, and everything
+ * else DROPPED. Pure — no fs, no spawn.
+ *
+ * The rationale is "fresh HOME + only the harness credential injected, **not** a
+ * blanket wipe": running a model-driven skill/agent is itself a side effect (the
+ * *model*, not the author, chose the actions), so it should not be able to read
+ * the real `~/.gitconfig` / `~/.ssh` / `~/.aws` or write to the real `~`. But the
+ * real `claude` CLI must still AUTHENTICATE, so the harness's own credentials
+ * ({@link EPHEMERAL_ALLOW} — `ANTHROPIC_*`, `CLAUDE_*`, locale/PATH) are
+ * re-injected; a blanket `--clearenv`-style wipe would break every eval. Because
+ * this needs no kernel features, it is the cross-platform STATE-protection floor
+ * (lands on macOS immediately), orthogonal to the Linux bubblewrap HOST
+ * confinement in `src/sandbox.ts`.
+ *
+ * @param base  the source environment to filter (usually `process.env`).
+ * @param opts.home  the throwaway dir to set as `HOME`/`TMPDIR`.
+ * @param opts.allow  extra var NAMES to pass through (e.g. the `VIGILES_*` keys
+ *   the eval already injects). Layered ON TOP of the default allowlist.
+ */
+export function ephemeralRunEnv(
+  base: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  opts: { home: string; allow?: readonly string[] },
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const allowExact = new Set<string>([
+    ...EPHEMERAL_ALLOW,
+    ...(opts.allow ?? []),
+  ]);
+  for (const [k, v] of Object.entries(base)) {
+    if (v === undefined) continue;
+    const allowed =
+      allowExact.has(k) ||
+      EPHEMERAL_ALLOW_PREFIXES.some((p) => k.startsWith(p));
+    if (allowed) out[k] = v;
+  }
+  // Fresh HOME + TMPDIR last so they always win over anything passed through.
+  out.HOME = opts.home;
+  out.TMPDIR = opts.home;
+  return out;
+}
+
 /** Execute one trial in a fresh sandbox; returns its metric row + usage. */
 async function executeTrial<M extends Metrics>(
   spec: EvalSpec<M>,
@@ -1007,10 +1134,29 @@ async function executeTrial<M extends Metrics>(
     const { files } = resolved;
     const intercepts = arm.interceptTools ?? [];
     const settings = withInterceptToolHook(resolved.settings, intercepts);
-    const env =
+    // The eval-injected overlay (VIGILES_INTERCEPT_TOOLS), if any.
+    const overlay =
       intercepts.length > 0
         ? { [INTERCEPT_TOOLS_ENV]: serializeIntercepts(intercepts) }
         : undefined;
+    // Opt-in (default OFF): an ephemeral run env — a throwaway HOME under the
+    // trial's own temp cwd + a scrubbed, auth-only allowlist. The eval's injected
+    // keys (e.g. VIGILES_INTERCEPT_TOOLS) are allowlisted through so interception
+    // still works. When OFF, `env`/`replaceEnv` are exactly as before.
+    const ephemeral = spec.ephemeralEnv === true;
+    let env: Record<string, string> | undefined;
+    let replaceEnv = false;
+    if (ephemeral) {
+      const home = mkdtempSync(join(cwd, "home-"));
+      env = ephemeralRunEnv(process.env, {
+        home,
+        allow: overlay ? Object.keys(overlay) : [],
+      });
+      if (overlay) Object.assign(env, overlay);
+      replaceEnv = true;
+    } else {
+      env = overlay;
+    }
     writeFiles(cwd, files);
     const hasSettings = settings !== undefined;
     if (hasSettings) {
@@ -1030,6 +1176,7 @@ async function executeTrial<M extends Metrics>(
         pluginDir: arm.pluginDir,
         timeoutMs: cfg.timeoutMs,
         env,
+        replaceEnv,
       },
       { files, settings, trialIndex },
       runner,

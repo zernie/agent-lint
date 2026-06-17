@@ -45,6 +45,7 @@ import {
   modelTier,
   belowModelFloor,
   harnessVersionKey,
+  ephemeralRunEnv,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -1876,4 +1877,170 @@ test("formatEvalReport surfaces cost/latency/tokens when usage is present", () =
   });
   assert.match(out, /\$0\.0500 total/);
   assert.match(out, /\$0\.0500 · 1\.5s\/run · 3\.4k tok/);
+});
+
+// --- ephemeral run environment (opt-in, default OFF) -----------------------
+
+test("ephemeralRunEnv sets a fresh HOME/TMPDIR and passes the auth allowlist", () => {
+  const env = ephemeralRunEnv(
+    {
+      HOME: "/Users/real",
+      TMPDIR: "/var/real-tmp",
+      PATH: "/usr/bin:/bin",
+      LANG: "en_US.UTF-8",
+      LC_ALL: "en_US.UTF-8",
+      TERM: "xterm",
+      ANTHROPIC_API_KEY: "sk-real",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+      ANTHROPIC_AUTH_TOKEN: "oauth-tok",
+      CLAUDE_CONFIG_DIR: "/Users/real/.claude",
+    },
+    { home: "/tmp/ephemeral-home" },
+  );
+  // Fresh HOME + TMPDIR, NOT the real ones.
+  assert.equal(env.HOME, "/tmp/ephemeral-home");
+  assert.equal(env.TMPDIR, "/tmp/ephemeral-home");
+  // Runtime essentials survive.
+  assert.equal(env.PATH, "/usr/bin:/bin");
+  assert.equal(env.LANG, "en_US.UTF-8");
+  assert.equal(env.LC_ALL, "en_US.UTF-8"); // LC_* prefix
+  assert.equal(env.TERM, "xterm");
+  // Auth survives — the real `claude` CLI must still authenticate.
+  assert.equal(env.ANTHROPIC_API_KEY, "sk-real");
+  assert.equal(env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, "oauth-tok");
+  assert.equal(env.CLAUDE_CONFIG_DIR, "/Users/real/.claude"); // CLAUDE_* prefix
+});
+
+test("ephemeralRunEnv DROPS git/ssh/aws-secret and other non-allowlisted vars", () => {
+  const env = ephemeralRunEnv(
+    {
+      PATH: "/bin",
+      ANTHROPIC_API_KEY: "sk-real",
+      // Secret-shaped / escape-the-CWD vars that must NOT leak into a run.
+      GIT_AUTHOR_NAME: "real",
+      GIT_SSH_COMMAND: "ssh -i ~/.ssh/id_rsa",
+      GH_TOKEN: "ghp_secret",
+      SSH_AUTH_SOCK: "/run/ssh-agent.sock",
+      AWS_ACCESS_KEY_ID: "AKIA...",
+      AWS_SECRET_ACCESS_KEY: "secret",
+      NPM_TOKEN: "npm_secret",
+      SOME_RANDOM_SECRET: "x",
+    },
+    { home: "/tmp/h" },
+  );
+  // Auth + runtime kept...
+  assert.equal(env.PATH, "/bin");
+  assert.equal(env.ANTHROPIC_API_KEY, "sk-real");
+  // ...everything secret-shaped dropped.
+  for (const k of [
+    "GIT_AUTHOR_NAME",
+    "GIT_SSH_COMMAND",
+    "GH_TOKEN",
+    "SSH_AUTH_SOCK",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "NPM_TOKEN",
+    "SOME_RANDOM_SECRET",
+  ]) {
+    assert.equal(env[k], undefined, `${k} must be dropped`);
+  }
+});
+
+test("ephemeralRunEnv keeps the opts.allow extras (e.g. VIGILES_*)", () => {
+  const env = ephemeralRunEnv(
+    {
+      PATH: "/bin",
+      VIGILES_INTERCEPT_TOOLS: "Bash",
+      VIGILES_OTHER: "y",
+      NOT_ALLOWED: "z",
+    },
+    { home: "/tmp/h", allow: ["VIGILES_INTERCEPT_TOOLS", "VIGILES_OTHER"] },
+  );
+  assert.equal(env.VIGILES_INTERCEPT_TOOLS, "Bash");
+  assert.equal(env.VIGILES_OTHER, "y");
+  // An extra NOT in the allow list is still dropped.
+  assert.equal(env.NOT_ALLOWED, undefined);
+});
+
+test("ephemeralRunEnv ignores undefined values in the base env", () => {
+  const env = ephemeralRunEnv(
+    { PATH: "/bin", ANTHROPIC_API_KEY: undefined },
+    { home: "/tmp/h" },
+  );
+  assert.equal(env.PATH, "/bin");
+  assert.equal("ANTHROPIC_API_KEY" in env, false);
+});
+
+test("ephemeralEnv DEFAULT (off): env is the byte-identical overlay, not scrubbed", async () => {
+  // With the flag OFF (default), the runner is handed the legacy overlay env:
+  // no `replaceEnv`, and only the intercept overlay (or undefined) — proving the
+  // default path is unchanged and DOES NOT scrub the inherited environment.
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} }, // no interceptTools, no ephemeralEnv
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // Default: env overlay is undefined and replaceEnv is falsy — so `spawnAgent`
+  // builds `{ ...process.env }`, exactly as before this feature existed.
+  assert.equal(a.env, undefined);
+  assert.notEqual(a.replaceEnv, true);
+});
+
+test("ephemeralEnv on: runner gets a replaceEnv scrubbed env with auth + allowed extras", async () => {
+  process.env.VIGILES_EPHEMERAL_PROBE_SECRET = "leak-me";
+  try {
+    const seen: AgentRunArgs[] = [];
+    const runner = (
+      a: AgentRunArgs,
+    ): Promise<{ code: number; stdout: string }> => {
+      seen.push(a);
+      return Promise.resolve({
+        code: 0,
+        stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+      });
+    };
+    await runEvalWith(
+      {
+        arms: { a: {} },
+        task: "t",
+        trials: 1,
+        spacingSec: 0,
+        ephemeralEnv: true,
+        measure: () => ({ ok: true }),
+      },
+      runner,
+    );
+    const a = seen[0];
+    assert.ok(a);
+    // Ephemeral mode: env is the COMPLETE replacement env, not an overlay.
+    assert.equal(a.replaceEnv, true);
+    assert.ok(a.env);
+    // HOME is the throwaway dir (under the trial's temp cwd), not the real one.
+    assert.notEqual(a.env.HOME, process.env.HOME);
+    assert.equal(a.env.HOME, a.env.TMPDIR);
+    // Auth + PATH still present (so a real run still authenticates / resolves).
+    assert.equal(a.env.PATH, process.env.PATH);
+    // The non-allowlisted secret we planted in process.env is scrubbed.
+    assert.equal(a.env.VIGILES_EPHEMERAL_PROBE_SECRET, undefined);
+  } finally {
+    delete process.env.VIGILES_EPHEMERAL_PROBE_SECRET;
+  }
 });
