@@ -44,6 +44,7 @@ import {
   isDatedModel,
   modelTier,
   belowModelFloor,
+  harnessVersionKey,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -236,6 +237,7 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/some/plugin",
+      stubSkillBodies: false, // fake dir + fake runner — use the passthrough, no FS
       prompts: ["fire one", "ignore this", "fire two"],
       minPrompts: 1,
       minDistance: 0,
@@ -1220,6 +1222,13 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
   assert.ok(out.toLowerCase().includes("upper bound"));
 });
 
+test("harnessVersionKey reduces to major.minor (patches don't churn the cache)", () => {
+  assert.equal(harnessVersionKey("2.1.179 (Claude Code)"), "2.1");
+  assert.equal(harnessVersionKey("2.1.180 (Claude Code)"), "2.1"); // patch → same key
+  assert.equal(harnessVersionKey("2.2.0"), "2.2"); // minor → different
+  assert.equal(harnessVersionKey("nonsense"), "nonsense"); // fallback
+});
+
 test("modelTier ranks by family; belowModelFloor is fail-open on unknowns", () => {
   assert.equal(modelTier("haiku"), 1);
   assert.equal(modelTier("claude-haiku-4-5-20251001"), 1);
@@ -1241,6 +1250,7 @@ test("measureTriggerRateWith FAILS when the model is below the floor (default so
     Promise.resolve({ code: 0, stdout: "" });
   const base = {
     pluginDir: "/x",
+    stubSkillBodies: false, // fake dir + fake runner — passthrough, no FS
     prompts: ["a", "b"],
     minPrompts: 1,
     minDistance: 0,
@@ -1394,6 +1404,7 @@ test("measureTriggerRateWith adds precision when irrelevant prompts are given", 
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/p",
+      stubSkillBodies: false,
       prompts: ["fire one", "fire two"], // both should fire → recall 1.0
       minPrompts: 1,
       minDistance: 0,
@@ -1423,6 +1434,7 @@ test("measureTriggerRateWith: precision is undefined when nothing fires at all",
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/p",
+      stubSkillBodies: false,
       prompts: ["quiet"],
       minPrompts: 1,
       minDistance: 0,
