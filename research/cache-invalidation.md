@@ -9,9 +9,36 @@
 ## The cache in one line
 
 `cacheKey = SHA-256(task, model, tools-as-a-set, resolved files, settings, env,
-pluginDirHash, trialIndex, CACHE_FORMAT_VERSION)`; the **scoring function is
-deliberately excluded** so editing `measure` re-scores recorded runs for free.
-Replay restores the post-run filesystem so `ctx.file()` / `ctx.sh()` stay sound.
+pluginDirHash, harnessVersion, trialIndex, CACHE_FORMAT_VERSION)`; the **scoring
+function is deliberately excluded** so editing `measure` re-scores recorded runs
+for free. Replay restores the post-run filesystem so `ctx.file()` / `ctx.sh()`
+stay sound.
+
+## Fast-evolution edges (model + harness change underneath you)
+
+A replay cache for agent behaviour has a sharper staleness problem than a build
+cache: the model **and** the harness binary evolve continuously, and a stale
+replay silently changes eval results. The three edges, and where each stands:
+
+- **Harness binary version (the `claude` CLI) — KEYED.** The CLI upgrade changes
+  the system prompt + tool definitions, which steer behaviour as much as the
+  model. `harnessVersion` (`claude --version`, resolved once per run) is in the
+  key, so a CLI upgrade invalidates. Trade-off accepted: frequent CLI patches
+  invalidate often — correct over silently-stale, and the primary use (re-score
+  `measure` within a session) is unaffected since the version is stable then.
+- **Model alias re-points (e.g. `sonnet` → a new snapshot) — WARNED, not
+  auto-invalidated.** No provider exposes a weight hash, so a floating alias keyed
+  as the string `"sonnet"` can't be detected when its weights change. We warn
+  (`isDatedModel` + the floating-alias cache warning) and the sound fix is to pin
+  a dated id when caching (the string then changes with the model). Inherent — the
+  cache can only key on what's knowable before the run.
+- **A brand-new model FAMILY (e.g. a future tier) — fail-open by design.**
+  `modelTier` ranks haiku<sonnet<opus by family and returns `null` for an
+  unrecognized name, so the model floor never blocks a model it can't judge. The
+  implication (and known limitation): a genuinely-new family isn't ranked until
+  `modelTier` is taught about it — so the floor won't catch a new _weak_ model nor
+  gate a new _strong_ one. Tested (fail-open); update `modelTier` when a family
+  ships. The haiku<sonnet<opus ordering is itself an assumption that holds today.
 
 ## Findings → decisions (ranked by how wrong the cache was without each)
 
