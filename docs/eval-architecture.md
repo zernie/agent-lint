@@ -289,20 +289,23 @@ args?)` in `src/check.ts` over a shared, serializable `ArgMatcher`
      (`src/arg-match.ts`; dot-path keys, RegExp = pattern, primitive = exact) —
      assert _how_ a tool was called, and the negative/safety form (#2). These read
      the `Trace` the harness/eval tier already captures.
-   - **Shipped (interception core):** `src/tool-fake.ts` + the `vigiles
-fake-tool-hook` PreToolUse subcommand — declare a `FakeTool` (optionally
-     scoped by an `ArgMatcher`), and the hook denies the real execution (exit 2)
-     while feeding the model a canned result, so a real-model run that _decides_ to
-     hit a paid API / `git push` is cheap and side-effect-free, yet its arguments
-     still land in the `Trace`. Pure decision + settings-builder + env round-trip,
-     fully unit-tested. **Remaining:** the ergonomic `fakeTools:` field on the eval
-     spec (auto-merge the hook settings + the cache-key entry) so it's wired
-     end-to-end from `measure`/`runEval` without hand-editing `settings`.
+   - **Shipped (interception, end-to-end):** declare `fakeTools: [{ tool, when?,
+result? }]` on a `measure` / `runEval` arm. `src/tool-fake.ts` + the `vigiles
+fake-tool-hook` PreToolUse subcommand deny the real execution (exit 2) while
+     feeding the model a canned result, so a real-model run that _decides_ to hit a
+     paid API / `git push` / spawn a paid subagent is cheap and side-effect-free —
+     yet its arguments still land in the `Trace` for `toolWith` / `notTool`. The
+     eval tier auto-merges the hook into the arm's settings (appending, never
+     clobbering), carries the fake list (RegExp matchers intact) in
+     `VIGILES_FAKE_TOOLS`, and keys the cache on it so two fake configs sharing tool
+     names don't collide. Pure core fully unit-tested; the wiring sits under the
+     eval tier's 100% gate.
 2. **Negative / safety assertions** (a mode of #1 — highest value, most
    overlooked). Did **not** call the paid API before approval; did **not** push to
    the wrong branch; did **not** file a security advisory for a model-only repro.
-   Needs a `notTool(name, argsMatcher?)` check in `check.ts` plus the interception
-   from #1. The vocabulary today has no negative check.
+   **Shipped:** `notTool(name, args?)` in `check.ts` + the `fakeTools` interception
+   from #1 — together they assert the agent _didn't_ take a dangerous action,
+   cheaply and for real.
 3. **Outbound HTTP/curl fake + request-body assertion** (the network case of #1).
    Distinct from `egress.ts` (which records/allows at the packet layer) — this
    _fakes_ the endpoint and asserts the request **body** (e.g. the image prompt =
