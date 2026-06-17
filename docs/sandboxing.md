@@ -203,6 +203,9 @@ stays `0` — proving, through the allowlist path, that it reaches the npm regis
 
 ## See also
 
+- [Safety model](safety.md) — the front-door overview: this confinement plus
+  preventing a real model's tool side effects (`interceptTools`/`notTool`), and
+  the one safe-by-default rule that ties them together.
 - [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
 - [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
 - [`src/egress.ts`](../src/egress.ts) — the `egress: { allow }` allowlist: ruleset builder, counter parser, the pure seams.
