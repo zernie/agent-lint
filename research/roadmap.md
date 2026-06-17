@@ -104,6 +104,19 @@
   fresh HOME + scrubbed env (re-inject only the harness's own auth). Needs no
   kernel features → lands on macOS today, ahead of the Seatbelt backend; the
   cheapest cross-platform side-effect protection. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
+- **Move the CC mock + driver physically into the adapter dir (structural cleanup).**
+  `src/mock-model.ts` (the Anthropic-Messages mock) and `claudeCodeDriver` +
+  `buildClaudeArgs`/`parseClaudeRun`/`claudeAvailable` (in `src/harness-test.ts`) are
+  Claude-Code-specific but sit at the composition root, so the directory-based
+  `agnostic-surface ⊄ adapter` lint can't see them by location. Today they're
+  enforced by **glob-classifying `src/mock-model.ts` as `cc-harness`** in
+  `eslint.config.mjs` (works, proven — reintroducing the leak errors). The
+  principled end-state is to physically relocate them under
+  `src/adapters/claude-code/` (mirroring `src/adapters/codex/{mock-model,driver}.ts`)
+  so classification is by directory, not a glob exception — and so the symbol-level
+  leak of `claudeCodeDriver` via a future `export *` is caught too. Bounded refactor
+  (~8 files' relative imports + the `claudeCodeAdapter` wiring); update the eslint
+  classification back to a plain directory pattern afterward. [code-adapter-architecture](code-adapter-architecture.md) · **MEDIUM**
 - **Verify & test the harness's sandbox config** — `settings.json`'s `sandbox` block
   is a harness surface: verify `allowedDomains`/`allowWrite` are coherent (flag a hook
   that phones a blocked domain), and prove the configured sandbox blocks what it claims
