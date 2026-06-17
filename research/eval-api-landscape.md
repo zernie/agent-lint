@@ -127,6 +127,33 @@ to us: they observe/score traffic; we run controlled harness experiments.
 Academic benchmark harnesses (multiple-choice/generation tasks, leaderboards).
 Out of scope: explicitly the thing vigiles does _not_ do.
 
+## New direct competitors + the rigor differentiator (2026-06-17)
+
+Two tools surfaced that are closer to vigiles's exact shape than the broad-field
+profiles above, plus adjacent platforms worth naming.
+
+- **`TribeAI/claude-evals`** — "implements Anthropic's published eval patterns": a
+  50-case golden dataset, deterministic graders + LLM-judge + regression, with
+  hooks (PreToolUse / PostToolUse / SubagentStop). The decisive delta: it uses the
+  **metered Agent SDK / `ANTHROPIC_API_KEY`**, **not** the subscription CLI — so it
+  inherits the same per-token cost objection as promptfoo, and lacks the
+  no-model/no-key cheaper tiers.
+- **`paultyng/testagent`** — "deterministic fake of the `claude` and `codex` CLIs;
+  test hooks and orchestrator integrations locally and in CI without an API key."
+  Same idea as vigiles's mock-model / `runHook` tier, but at **lower-level CLI/JSON
+  fidelity** — it fakes the CLI, not the skill/subagent semantics (no
+  trigger-rate, no assembled-harness skill/subagent checks, no A/B-of-the-harness).
+  Validation that the no-key deterministic tier is a real category, not parity.
+- **Adjacent platforms:** MLflow (experiment tracking + LLM eval), Phoenix v16
+  (sandboxed **Code Evaluators**), Tessl Registry, Braintrust — orthogonal
+  observability/registry/hosted surfaces, not harness-arm A/B.
+
+**Statistical rigor (se / significance / pass^k) is a confirmed differentiator.**
+The HN critique of Vercel's AGENTS.md-vs-skills eval — "could be noise with that
+sample size" — is direct evidence the field publishes deltas without a noise
+floor. vigiles's Welch significance + pass^k (`src/stats.ts`) answer exactly that,
+and neither `claude-evals` nor `testagent` carries it.
+
 ## Scorecard
 
 > The `vigiles` column reflects **shipped state as of 2026-06-17** (the

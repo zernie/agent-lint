@@ -202,6 +202,22 @@ The bottom two rows are the durable edge: `notTool` and `interceptTools` assert
 the agent's _restraint_ — the thing a completion-grading eval structurally cannot
 see, because there is no output to grade when the right behaviour is _not_ acting.
 
+## Update (2026-06-17): promptfoo acquired by OpenAI; DeepEval v4
+
+- **promptfoo was acquired by OpenAI (~$86M, March 2026).** This raises a
+  **vendor-neutrality** concern for grading non-OpenAI models, and it sharpens
+  vigiles's **multi-harness, vendor-neutral, subscription-not-metered**
+  positioning: an eval tool now owned by one model vendor is a weaker neutral
+  arbiter for "does my Claude / Codex harness behave?" than an independent,
+  harness-agnostic tool. Any framing elsewhere in this repo that calls promptfoo
+  "independent" is now **stale** and should be corrected.
+- **DeepEval v4 added a full agentic eval harness** — task-completion,
+  tool-correctness, and step-efficiency metrics — closing more of the
+  trajectory-assertion gap. The "only promptfoo went agentic" framing no longer
+  holds; the durable separators (harness-arm A/B loaded as it ships + the
+  no-model/no-key cheaper tiers + significance/pass^k + the subscription cost
+  model) are unchanged.
+
 ## See also
 
 - `research/eval-api-landscape.md` — the whole eval field scored against our API,
