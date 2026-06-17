@@ -32,6 +32,9 @@ floor); (3) **honest model pinning** for cached/baselined results; and (4) the
 
 ## Positioning & pros/cons (the approach, decided 2026-06-17)
 
+> The canonical positioning **statement** lives in `CLAUDE.md` (`## Positioning`,
+> pillar 2). This section is the **detailed** pros/cons behind it.
+
 **The thesis: the harness eval you can actually afford to run.** Almost nobody
 evals their harness because the usual tools (promptfoo, DeepEval, Braintrust,
 Inspect) hit the model **API SDK** and bill **per token on every run** → real
@@ -140,25 +143,29 @@ every test.
 1. **Reproducibility** — how you make a stochastic run repeatable:
    `exact-assert` | `record/replay cassette` | `hermetic fixture` |
    `live + threshold`.
-2. **Gating** — when CI pays to run it:
-   `every-PR` | `hash-lockfile` | `nightly/manual`.
+2. **When you run it** — the deterministic tiers run **every commit in CI** (free,
+   no model); a real-model eval is **run deliberately** on the subscription, not in
+   CI: `on-demand (a Claude Code session / local)` | `hash-lockfile (replay)` |
+   `nightly/manual`.
 
 The snapshot/hash machinery is **just the `hash-lockfile` value of knob 2** — one
 option most features never pick. Concretely:
 
-- a hook is `(exact-assert, every-PR)` — `runHook`, free;
-- trigger-rate is `(live + threshold, every-PR)` _if cheap_ (haiku, bodies stubbed);
+- a hook is `(exact-assert, every-commit CI)` — `runHook`, free, no model;
+- trigger-rate is `(live + threshold, on-demand)` _if cheap_ (**Sonnet** — the
+  realistic selector — with bodies stubbed); run it in a session, not per-PR;
 - an expensive agent eval is `(cassette, hash-lockfile)` plus a nightly live run.
 
 ## Match the mechanism to the eval's cost
 
 The single rule that drives every gating decision:
 
-- **Cheap eval** (haiku, body stubbed via `stubSkillBodies`, ~pennies): **just run
-  it every PR with a threshold gate.** No snapshot machinery at all. This is the
-  `(live + threshold, every-PR)` cell — and vigiles already has the
-  significance-gated baseline (`eval-baseline.ts`) that makes "did this PR move the
-  number beyond the noise floor?" a real gate, not a bare pass-rate.
+- **Cheap eval** (Sonnet, body stubbed via `stubSkillBodies`, ~pennies on the
+  sub): **run it deliberately with a threshold gate** — in a Claude Code session
+  or locally, when it's worth it, not on every PR. No snapshot machinery at all.
+  vigiles has the significance-gated baseline (`eval-baseline.ts`) that makes "did
+  this change move the number beyond the noise floor?" a real gate, not a bare
+  pass-rate.
 
 - **Expensive eval** (opus, multi-turn, N trials, spawns subagents, clones repos —
   $10s–$100s/run): _pay as few times as possible and amortize._
@@ -219,9 +226,9 @@ evalApiVersion }`.
 vigiles already answers "did this change regress behavior?" with
 `eval-baseline.ts`: it **re-runs the model every time** and fails on a
 _significant_ negative delta vs. a committed baseline. That is the
-`(live + threshold, every-PR)` mechanism — and for a **cheap** eval it gives
+`(live + threshold, on-demand)` mechanism — and for a **cheap** eval it gives
 _strictly more protection_ than a hash-lockfile, because it catches model drift on
-every PR, not just when inputs change.
+every run, not just when inputs change.
 
 The hash-lockfile is **purely a cost concession for expensive evals**: it trades
 away per-PR drift detection (you only re-run when inputs change) in exchange for
@@ -230,9 +237,9 @@ backstop** to catch the drift the lockfile is blind to.
 
 So they are two values of knob 2, both wanted, picked by cost — not competitors:
 
-| Eval cost                    | Reproducibility  | Gating                               | Drift caught by        |
+| Eval cost                    | Reproducibility  | When you run it                      | Drift caught by        |
 | ---------------------------- | ---------------- | ------------------------------------ | ---------------------- |
-| cheap (stubbed, haiku)       | live + threshold | every-PR (`assertRates` / baseline)  | the PR gate itself     |
+| cheap (stubbed, Sonnet)      | live + threshold | on-demand (`assertRates` / baseline) | the run itself         |
 | expensive (opus, multi-turn) | cassette         | hash-lockfile (`--check`/`--update`) | nightly live tier only |
 
 **Do not retrofit cheap evals onto the hash-lockfile** — that would _remove_
@@ -527,7 +534,7 @@ Consolidated pushback, for the record:
    the subprocess golden tier — so #5 is arguably co-equal with the keystone where
    the logic is extractable.
 3. **hash-lockfile vs the existing baseline must be reconciled, not duplicated.**
-   For cheap evals the existing `(live + threshold, every-PR)` baseline gives
+   For cheap evals the existing `(live + threshold, on-demand)` baseline gives
    _strictly more_ drift protection than a lockfile. The lockfile is a cost
    concession for expensive evals **only**, and only safe with the nightly backstop.
    Retrofitting cheap evals onto a lockfile would _remove_ protection.
