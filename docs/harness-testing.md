@@ -792,17 +792,17 @@ answers most harness questions — does this hook block? is it wired in? does th
 skill resolve? — with **no model and no API key at all**, paying for a real model
 only at the eval tier, only when the question needs one.
 
-| Capability                                                    | vigiles                        | promptfoo         | DeepEval | Braintrust | Inspect          |
-| ------------------------------------------------------------- | ------------------------------ | ----------------- | -------- | ---------- | ---------------- |
-| Test a hook/skill with **no model, no API key**               | ✅ `runHook` / mock-model      | ✗ real-model only | ✗        | ✗          | ✗                |
-| Unit under test = the **harness as it ships** (A/B arms)      | ✅ `plugin-loader`             | partial (matrix)  | ✗        | partial    | partial          |
-| Load the **real** plugin.json/hooks/settings/CLAUDE.md        | ✅                             | ✗ SDK from YAML   | ✗        | ✗          | ✗                |
-| **Intercept-and-prevent** a tool in the real harness (safety) | ✅ `fakeTools` + `notTool`     | ✗ (assert only)   | ✗        | ✗          | ✗                |
-| Tool / trajectory + arg assertions                            | ✅ `toolWith`                  | ✅ `trajectory:*` | ✅       | ✅         | ✅               |
-| Is an A/B gap real, not noise? (significance / pass^k)        | ✅ Welch + pass^k              | ✗ pass-rate       | ✗        | partial    | partial (epochs) |
-| Regression gate vs a committed baseline                       | ✅ `assertNoRegression`        | ✗                 | partial  | ✅✅       | ✅               |
-| Run an untrusted harness **confined**                         | ✅ bubblewrap, safe-by-default | ✗                 | ✗        | ✗          | partial          |
-| Dataset / red-team / judge library / web UI                   | ✗ (not our game)               | ✅✅              | ✅✅     | ✅✅       | ✅               |
+| Capability                                                    | vigiles                         | promptfoo         | DeepEval | Braintrust | Inspect          |
+| ------------------------------------------------------------- | ------------------------------- | ----------------- | -------- | ---------- | ---------------- |
+| Test a hook/skill with **no model, no API key**               | ✅ `runHook` / mock-model       | ✗ real-model only | ✗        | ✗          | ✗                |
+| Unit under test = the **harness as it ships** (A/B arms)      | ✅ `plugin-loader`              | partial (matrix)  | ✗        | partial    | partial          |
+| Load the **real** plugin.json/hooks/settings/CLAUDE.md        | ✅                              | ✗ SDK from YAML   | ✗        | ✗          | ✗                |
+| **Intercept-and-prevent** a tool in the real harness (safety) | ✅ `interceptTools` + `notTool` | ✗ (assert only)   | ✗        | ✗          | ✗                |
+| Tool / trajectory + arg assertions                            | ✅ `toolWith`                   | ✅ `trajectory:*` | ✅       | ✅         | ✅               |
+| Is an A/B gap real, not noise? (significance / pass^k)        | ✅ Welch + pass^k               | ✗ pass-rate       | ✗        | partial    | partial (epochs) |
+| Regression gate vs a committed baseline                       | ✅ `assertNoRegression`         | ✗                 | partial  | ✅✅       | ✅               |
+| Run an untrusted harness **confined**                         | ✅ bubblewrap, safe-by-default  | ✗                 | ✗        | ✗          | partial          |
+| Dataset / red-team / judge library / web UI                   | ✗ (not our game)                | ✅✅              | ✅✅     | ✅✅       | ✅               |
 
 Short version: **those tools for prompt/model/dataset/agent evals; vigiles for
 testing the harness cheaply, safely, and as it actually ships.** The full analysis

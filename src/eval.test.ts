@@ -53,7 +53,7 @@ import {
   assertTriggerRate,
 } from "./harness-assert.js";
 import { tool, output, turns } from "./check.js";
-import { parseFakeTools } from "./tool-fake.js";
+import { parseIntercepts } from "./tool-intercept.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -447,7 +447,7 @@ test("runEvalWith honors a per-arm model override (model = a harness arm)", asyn
   assert.ok(byArm("claude-sonnet-4-6"), "prod arm used the eval-level model");
 });
 
-test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", async () => {
+test("measureWith interceptTools: auto-wires the PreToolUse hook + env round-trip", async () => {
   let seenSettings = "";
   let seenEnv: Record<string, string> | undefined;
   const runner = (
@@ -466,7 +466,7 @@ test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", a
   const report = await measureWith(
     {
       task: "push the release branch",
-      // an arm hook already present → the fake hook APPENDS, never clobbers
+      // an arm hook already present → the intercept hook APPENDS, never clobbers
       settings: {
         hooks: {
           PreToolUse: [
@@ -474,8 +474,12 @@ test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", a
           ],
         },
       },
-      fakeTools: [
-        { tool: "Bash", when: { command: /push origin main/ }, result: "ok" },
+      interceptTools: [
+        {
+          tool: "Bash",
+          when: { command: /push origin main/ },
+          denyReason: "ok",
+        },
       ],
       checks: [turns({ min: 1 })],
       trials: 1,
@@ -485,7 +489,7 @@ test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", a
   );
   assert.equal(report.n, 1);
 
-  // settings.json keeps the existing hook AND appends the fake-tool hook (Bash).
+  // settings.json keeps the existing hook AND appends the intercept hook (Bash).
   const settings = JSON.parse(seenSettings) as {
     hooks: { PreToolUse: { matcher: string; hooks: { command: string }[] }[] };
   };
@@ -493,16 +497,16 @@ test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", a
   assert.equal(settings.hooks.PreToolUse[0].matcher, "Write"); // existing, untouched
   const entry = settings.hooks.PreToolUse[1];
   assert.equal(entry.matcher, "Bash");
-  assert.match(entry.hooks[0].command, /fake-tool-hook/);
+  assert.match(entry.hooks[0].command, /intercept-tool-hook/);
 
-  // the fake list rides VIGILES_FAKE_TOOLS, with the RegExp matcher preserved.
-  const parsed = parseFakeTools(seenEnv?.VIGILES_FAKE_TOOLS ?? "");
+  // the intercept list rides VIGILES_INTERCEPT_TOOLS, RegExp matcher preserved.
+  const parsed = parseIntercepts(seenEnv?.VIGILES_INTERCEPT_TOOLS ?? "");
   assert.equal(parsed[0]?.tool, "Bash");
-  assert.equal(parsed[0]?.result, "ok");
+  assert.equal(parsed[0]?.denyReason, "ok");
   assert.ok(parsed[0]?.when?.command instanceof RegExp);
 });
 
-test("measureWith without fakeTools sets no fake env or hook", async () => {
+test("measureWith without interceptTools sets no intercept env or hook", async () => {
   let seenEnv: Record<string, string> | undefined;
   let hadSettings = true;
   const runner = (

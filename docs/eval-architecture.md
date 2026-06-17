@@ -57,7 +57,7 @@ session: a real eval ran with `apiKeySource:"none"`, i.e. on the OAuth sub.)
   YAML-config eval runner reconstructs an agent; it can't host this.
 - **Honesty** — measures in-plugin with real sibling competition (vs others'
   optimistic one-skill isolation), on the realistic selector (Sonnet, not haiku),
-  with significance + `pass^k`; `fakeTools` intercepts-and-prevents a
+  with significance + `pass^k`; `interceptTools` intercepts-and-prevents a
   side-effecting tool in the **real** hook layer (a safety assertion others can't
   make).
 
@@ -381,33 +381,35 @@ args?)` in `src/check.ts` over a shared, serializable `ArgMatcher`
      (`src/arg-match.ts`; dot-path keys, RegExp = pattern, primitive = exact) —
      assert _how_ a tool was called, and the negative/safety form (#2). These read
      the `Trace` the harness/eval tier already captures.
-   - **Shipped (interception, end-to-end):** declare `fakeTools: [{ tool, when?,
-result? }]` on a `measure` / `runEval` arm. `src/tool-fake.ts` + the `vigiles
-fake-tool-hook` PreToolUse subcommand deny the real execution (exit 2), so a
+   - **Shipped (interception, end-to-end):** declare `interceptTools: [{ tool,
+when?, denyReason? }]` on a `measure` / `runEval` arm. `src/tool-intercept.ts` +
+     the `vigiles intercept-tool-hook` PreToolUse subcommand deny the real execution
+     (exit 2), so a
      real-model run that _decides_ to hit a paid API / `git push` / spawn a paid
      subagent is **safe and side-effect-free** — yet its arguments still land in
      the `Trace` for `toolWith` / `notTool`. The eval tier auto-merges the hook
-     into the arm's settings (appending, never clobbering), carries the fake list
-     (RegExp matchers intact) in `VIGILES_FAKE_TOOLS`, and keys the cache on it so
-     two fake configs sharing tool names don't collide. Pure core fully
-     unit-tested; the wiring sits under the eval tier's 100% gate.
+     into the arm's settings (appending, never clobbering), carries the intercept
+     list (RegExp matchers intact) in `VIGILES_INTERCEPT_TOOLS`, and keys the cache
+     on it so two intercept configs sharing tool names don't collide. Pure core
+     fully unit-tested; the wiring sits under the eval tier's 100% gate.
    - **Honest assessment (2026-06-17) — keep, with scope.** Three caveats the
      "keystone" label shouldn't paper over:
      1. **Intercept-and-prevent, not a faithful mock.** CC surfaces the exit-2 deny
         as a _blocked_ call, not a success, so this is sound for "did the agent
         ATTEMPT X" (safety / approval-gate / first-attempt) and unsound for "stub
-        the tool and let a multi-step flow continue as if it returned." There is no
-        CC primitive for "skip execution, return this as success."
+        the tool and let a multi-step flow continue as if it returned" — the call
+        is intercepted (prevented), NOT executed. There is no CC primitive for
+        "skip execution, return this as success."
      2. **Mostly ergonomic on the inspection side.** `toolWith` overlaps the
         existing `toolUsedWith` predicate (`harness-assert.ts`); the genuinely new
         bit is the serializable _negative_ check and the interception. For many
         safety cases the simplest protection — **don't allowlist the tool, then
-        assert the attempt** — needs no new primitive; `fakeTools` earns its keep at
-        the margins (args-scoped faking, faking a tool you otherwise want allowed,
-        and capturing a faked `Task` spawn's args).
+        assert the attempt** — needs no new primitive; `interceptTools` earns its
+        keep at the margins (args-scoped interception, intercepting a tool you
+        otherwise want allowed, and capturing an intercepted `Task` spawn's args).
      3. **One unverified assumption.** Arg-capture-under-deny (the `tool_use` lands
         in the stream _before_ the hook denies) is asserted from CC semantics but
-        not yet proven against a live model. `examples/harness/tool-fake.eval.mjs`
+        not yet proven against a live model. `examples/harness/intercept-tools.eval.mjs`
         is the end-to-end validation (skips without `claude`); run it with a key
         before relying on the spy. Cost is **not** reduced — the model call remains;
         only the side effect is removed.
@@ -418,8 +420,8 @@ fake-tool-hook` PreToolUse subcommand deny the real execution (exit 2), so a
 2. **Negative / safety assertions** (a mode of #1 — highest value, most
    overlooked). Did **not** call the paid API before approval; did **not** push to
    the wrong branch; did **not** file a security advisory for a model-only repro.
-   **Shipped:** `notTool(name, args?)` in `check.ts` + the `fakeTools` interception
-   from #1 — together they assert the agent _didn't_ take a dangerous action,
+   **Shipped:** `notTool(name, args?)` in `check.ts` + the `interceptTools`
+   interception from #1 — together they assert the agent _didn't_ take a dangerous action,
    cheaply and for real.
 3. **Outbound HTTP/curl fake + request-body assertion** (the network case of #1).
    Distinct from `egress.ts` (which records/allows at the packet layer) — this

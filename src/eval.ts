@@ -58,11 +58,11 @@ import {
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
 import {
-  type FakeTool,
-  buildFakeToolSettings,
-  serializeFakeTools,
-  FAKE_TOOLS_ENV,
-} from "./tool-fake.js";
+  type ToolIntercept,
+  buildInterceptSettings,
+  serializeIntercepts,
+  INTERCEPT_TOOLS_ENV,
+} from "./tool-intercept.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -85,16 +85,17 @@ export interface EvalArm {
    */
   readonly pluginDir?: string;
   /**
-   * Tools to intercept for this arm (the tool-call spy). Each {@link FakeTool} is
-   * denied its real execution by an auto-wired PreToolUse hook — the model still
-   * emits the `tool_use` (so its arguments land in the `Trace` for `toolWith` /
-   * `notTool`), but the side effect (a paid API call, a `git push`, a paid
-   * subagent) never happens. This makes a real-model eval **side-effect-free and
+   * Tools to intercept for this arm (the tool-call spy). Each
+   * {@link ToolIntercept} is denied its real execution by an auto-wired PreToolUse
+   * hook — the model still emits the `tool_use` (so its arguments land in the
+   * `Trace` for `toolWith` / `notTool`), but the side effect (a paid API call, a
+   * `git push`, a paid subagent) never happens: the call is intercepted
+   * (prevented), NOT executed. This makes a real-model eval **side-effect-free and
    * safe** (it does NOT cut the model-call cost); and because CC surfaces the
    * denial as a *blocked* call, it's for asserting the agent's ATTEMPT, not for
-   * stubbing a tool to continue a multi-step flow. See `src/tool-fake.ts`.
+   * stubbing a tool to continue a multi-step flow. See `src/tool-intercept.ts`.
    */
-  readonly fakeTools?: readonly FakeTool[];
+  readonly interceptTools?: readonly ToolIntercept[];
   /**
    * Model alias/id for THIS arm, overriding the eval-level `model`. A model
    * comparison IS a harness A/B — `arms: { sonnet: { model: "claude-sonnet-4-6" },
@@ -259,7 +260,7 @@ export interface AgentRunArgs {
   readonly hasSettings: boolean;
   readonly pluginDir: string | undefined;
   readonly timeoutMs: number;
-  /** Extra env layered over `process.env` for this run (e.g. `VIGILES_FAKE_TOOLS`). */
+  /** Extra env layered over `process.env` for this run (e.g. `VIGILES_INTERCEPT_TOOLS`). */
   readonly env?: Record<string, string>;
 }
 
@@ -347,8 +348,8 @@ export interface MeasureSpec {
    * there's nothing to grade. Requires `pluginDir`. See {@link stubSkillBody}.
    */
   readonly stubSkillBodies?: boolean;
-  /** Tools to intercept (the tool-call spy) — see {@link EvalArm.fakeTools}. */
-  readonly fakeTools?: readonly FakeTool[];
+  /** Tools to intercept (the tool-call spy) — see {@link EvalArm.interceptTools}. */
+  readonly interceptTools?: readonly ToolIntercept[];
   /** The task prompt given to the agent. */
   readonly task: string;
   /**
@@ -415,7 +416,7 @@ export async function measureWith(
             settings: spec.settings,
             plugin: spec.plugin,
             pluginDir,
-            fakeTools: spec.fakeTools,
+            interceptTools: spec.interceptTools,
           },
         },
         task: spec.task,
@@ -847,16 +848,17 @@ async function runWithCache(
 }
 
 /**
- * The `vigiles fake-tool-hook` command, as an absolute `node <cli> …` invocation
- * — the eval runs in a throwaway cwd where `npx vigiles` wouldn't resolve, so the
- * auto-wired PreToolUse hook must point at this CLI's own `cli.js` (resolved from
- * `__dirname`, the same way `run-hook.ts`/`sandbox.ts` locate their entries).
+ * The `vigiles intercept-tool-hook` command, as an absolute `node <cli> …`
+ * invocation — the eval runs in a throwaway cwd where `npx vigiles` wouldn't
+ * resolve, so the auto-wired PreToolUse hook must point at this CLI's own `cli.js`
+ * (resolved from `__dirname`, the same way `run-hook.ts`/`sandbox.ts` locate their
+ * entries).
  */
-const FAKE_TOOL_HOOK_CLI =
+const INTERCEPT_TOOL_HOOK_CLI =
   [join(__dirname, "cli.js"), join(__dirname, "..", "dist", "cli.js")].find(
     (p) => existsSync(p),
   ) ?? join(__dirname, "cli.js");
-const FAKE_TOOL_HOOK_CMD = `"${process.execPath}" "${FAKE_TOOL_HOOK_CLI}" fake-tool-hook`;
+const INTERCEPT_TOOL_HOOK_CMD = `"${process.execPath}" "${INTERCEPT_TOOL_HOOK_CLI}" intercept-tool-hook`;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object";
@@ -949,17 +951,19 @@ function warnFloatingModel(model: string): void {
 }
 
 /**
- * Merge the fake-tool PreToolUse hook into an arm's resolved settings (appending
- * to any existing `PreToolUse` list). Returns the settings unchanged when there
- * are no fakes. The fake list itself rides the `VIGILES_FAKE_TOOLS` env, not the
- * settings — see {@link executeTrial}.
+ * Merge the tool-intercept PreToolUse hook into an arm's resolved settings
+ * (appending to any existing `PreToolUse` list). Returns the settings unchanged
+ * when there are no intercepts. The intercept list itself rides the
+ * `VIGILES_INTERCEPT_TOOLS` env, not the settings — see {@link executeTrial}.
  */
-function withFakeToolHook(
+function withInterceptToolHook(
   settings: unknown,
-  fakes: readonly FakeTool[],
+  intercepts: readonly ToolIntercept[],
 ): unknown {
-  if (fakes.length === 0) return settings;
-  const fake = buildFakeToolSettings(fakes, { command: FAKE_TOOL_HOOK_CMD });
+  if (intercepts.length === 0) return settings;
+  const intercept = buildInterceptSettings(intercepts, {
+    command: INTERCEPT_TOOL_HOOK_CMD,
+  });
   const base = isRecord(settings) ? settings : {};
   const baseHooks = isRecord(base.hooks) ? base.hooks : {};
   const basePre: unknown[] = Array.isArray(baseHooks.PreToolUse)
@@ -969,7 +973,7 @@ function withFakeToolHook(
     ...base,
     hooks: {
       ...baseHooks,
-      PreToolUse: [...basePre, ...fake.hooks.PreToolUse],
+      PreToolUse: [...basePre, ...intercept.hooks.PreToolUse],
     },
   };
 }
@@ -990,11 +994,11 @@ async function executeTrial<M extends Metrics>(
       files: { ...spec.fixture, ...arm.files },
     });
     const { files } = resolved;
-    const fakes = arm.fakeTools ?? [];
-    const settings = withFakeToolHook(resolved.settings, fakes);
+    const intercepts = arm.interceptTools ?? [];
+    const settings = withInterceptToolHook(resolved.settings, intercepts);
     const env =
-      fakes.length > 0
-        ? { [FAKE_TOOLS_ENV]: serializeFakeTools(fakes) }
+      intercepts.length > 0
+        ? { [INTERCEPT_TOOLS_ENV]: serializeIntercepts(intercepts) }
         : undefined;
     writeFiles(cwd, files);
     const hasSettings = settings !== undefined;
