@@ -4,7 +4,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -13,6 +13,8 @@ import {
   writeCache,
   snapshotDir,
   restoreDir,
+  hashDir,
+  CACHE_FORMAT_VERSION,
   type CacheKeyInput,
 } from "./eval-cache.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
@@ -45,8 +47,56 @@ test("cacheKey changes when any model-affecting input changes", () => {
   assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }));
   assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }));
   assert.notEqual(base, cacheKey({ ...baseKey, files: { "a.txt": "y" } }));
-  // tool order is significant (arrays keep order)
-  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Edit", "Read"] }));
+  // a different tool SET changes the key (mere reordering does not — see below)
+  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Read"] }));
+});
+
+test("cacheKey treats the tool list as a SET (order-insensitive)", () => {
+  // logically a set — ["Read","Edit"] and ["Edit","Read"] must hash the same,
+  // or you get phantom cache misses on a reordered allowlist.
+  assert.equal(
+    cacheKey({ ...baseKey, tools: ["Read", "Edit"] }),
+    cacheKey({ ...baseKey, tools: ["Edit", "Read"] }),
+  );
+});
+
+test("cacheKey keys on pluginDirHash (a native --plugin-dir's contents)", () => {
+  const none = cacheKey(baseKey);
+  const h1 = cacheKey({ ...baseKey, pluginDirHash: "aaaa" });
+  const h2 = cacheKey({ ...baseKey, pluginDirHash: "bbbb" });
+  assert.notEqual(none, h1); // adding a plugin dir changes the key
+  assert.notEqual(h1, h2); // a different dir digest changes it
+});
+
+test("CACHE_FORMAT_VERSION is a salted integer", () => {
+  assert.equal(typeof CACHE_FORMAT_VERSION, "number");
+});
+
+test("hashDir digests content, sensitive to edit/add, path-aware, skips junk dirs", () => {
+  const dir = makeTmpDir("plugin");
+  mkdirSync(join(dir, "skills", "foo"), { recursive: true });
+  writeFileSync(join(dir, "skills", "foo", "SKILL.md"), "body");
+  const h1 = hashDir(dir);
+  assert.equal(hashDir(dir), h1); // stable: same content → same hash
+
+  writeFileSync(join(dir, "skills", "foo", "SKILL.md"), "body changed");
+  const h2 = hashDir(dir);
+  assert.notEqual(h1, h2); // edit → different
+
+  writeFileSync(join(dir, "skills", "foo", "extra.md"), "x");
+  assert.notEqual(h2, hashDir(dir)); // add → different
+
+  // node_modules / .git are skipped — adding one doesn't change the digest
+  const h3 = hashDir(dir);
+  mkdirSync(join(dir, "node_modules"), { recursive: true });
+  writeFileSync(join(dir, "node_modules", "junk.js"), "lots");
+  assert.equal(hashDir(dir), h3);
+
+  // path-aware: same content at a different path → different digest
+  writeFileSync(join(dir, "skills", "foo", "renamed.md"), "x");
+  rmSync(join(dir, "skills", "foo", "extra.md"));
+  assert.notEqual(hashDir(dir), h3);
+  cleanupTmpDir(dir);
 });
 
 test("readCache returns null on miss and on malformed records", () => {

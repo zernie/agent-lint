@@ -226,7 +226,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/eval.test.ts":
       "Eval aggregation/formatting + variance + usage/cache test suite (node:test)",
     "src/eval-cache.ts":
-      "Eval record/replay cache: cacheKey hashes the model-affecting inputs (task, resolved files+settings, model, tools, trialIndex) but NOT measure, so re-scoring replays for free; snapshotDir/restoreDir round-trip the post-run filesystem so ctx.file()/ctx.sh() stay sound on replay",
+      "Eval record/replay cache: cacheKey hashes the model-affecting inputs (task, resolved files+settings, model, tools-as-a-SET, per-run env, pluginDirHash, trialIndex) but NOT measure, so re-scoring replays for free; snapshotDir/restoreDir round-trip the post-run filesystem so ctx.file()/ctx.sh() stay sound on replay. Invalidation hardened per research/cache-invalidation.md: hashDir folds a native --plugin-dir's CONTENTS (sorted path:contentHash, not the path) into the key so editing a skill invalidates; the tool list is sorted (logical set); a salted CACHE_FORMAT_VERSION makes a format change unreachable (no read-time gate); floating-alias model drift is warned (resolve to a dated id for sound replay)",
     "src/eval-cache.test.ts":
       "Eval-cache test suite (node:test): key stability/sensitivity, record round-trip + malformed-record tolerance, filesystem snapshot/restore",
     "src/stats.ts":

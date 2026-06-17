@@ -52,6 +52,7 @@ import {
   writeCache,
   snapshotDir,
   restoreDir,
+  hashDir,
   type CacheMode,
 } from "./eval-cache.js";
 import type { Check, CheckJSON } from "./check.js";
@@ -816,6 +817,9 @@ async function runWithCache(
     files: keyParts.files,
     settings: keyParts.settings,
     env: runArgs.env,
+    // A native --plugin-dir install isn't in `files`, so hash its CONTENTS into
+    // the key — otherwise editing a skill in it would false-replay.
+    pluginDirHash: runArgs.pluginDir ? hashDir(runArgs.pluginDir) : undefined,
     trialIndex: keyParts.trialIndex,
   });
   const hit = readCache(cfg.cacheDir, key);

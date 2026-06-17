@@ -554,6 +554,42 @@ test("runEvalWith warns when an eval cache rides a floating model alias", async 
   cleanupTmpDir(dir);
 });
 
+test("runEvalWith cache invalidates when a native pluginDir's contents change", async () => {
+  const cacheDir = makeTmpDir();
+  const plugin = makeTmpDir();
+  writeFileSync(join(plugin, "SKILL.md"), "v1");
+  let calls = 0;
+  const counting = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  const spec = (cache: "readwrite" | "read") => ({
+    arms: { a: { pluginDir: plugin } },
+    task: "t",
+    trials: 1,
+    spacingSec: 0,
+    model: "claude-haiku-4-5-20251001", // dated → no floating-alias warning
+    cache,
+    cacheDir,
+    measure: () => ({ ok: true }),
+  });
+
+  await runEvalWith(spec("readwrite"), counting); // record
+  assert.equal(calls, 1);
+  await runEvalWith(spec("read"), counting); // same content → replay, no call
+  assert.equal(calls, 1);
+
+  writeFileSync(join(plugin, "SKILL.md"), "v2"); // edit a skill in the plugin
+  await runEvalWith(spec("read"), counting); // cache miss → runner called again
+  assert.equal(calls, 2);
+
+  cleanupTmpDir(cacheDir);
+  cleanupTmpDir(plugin);
+});
+
 test("measureWith stubSkillBodies without pluginDir throws", async () => {
   await assert.rejects(
     measureWith(
