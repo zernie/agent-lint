@@ -99,14 +99,15 @@ test("hashDir digests content, sensitive to edit/add, path-aware, skips junk dir
   cleanupTmpDir(dir);
 });
 
-test("readCache returns null on miss and on malformed records", () => {
+test("readCache returns null on a miss but THROWS on a corrupt record", () => {
   const dir = makeTmpDir("cache");
   try {
     const key = cacheKey(baseKey);
-    assert.equal(readCache(dir, key), null); // miss
+    assert.equal(readCache(dir, key), null); // miss — normal, run proceeds
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${key}.json`), "{ not json");
-    assert.equal(readCache(dir, key), null); // malformed
+    // a broken cassette must fail loud, not silently re-run (CI gate surfaces it)
+    assert.throws(() => readCache(dir, key), /corrupt record/);
   } finally {
     cleanupTmpDir(dir);
   }

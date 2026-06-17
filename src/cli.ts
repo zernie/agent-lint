@@ -2650,6 +2650,22 @@ function handleRunScripts(
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
 
   const files = discoverScripts(restArgs, defaultGlob, cwd);
+
+  // `--min=N`: a CI gate asserts at least N scripts actually RAN — so a bad path,
+  // a renamed file, or a glob that matched nothing fails LOUD instead of passing
+  // green with zero evals executed. Default 0 (off) keeps local runs ergonomic.
+  const minFlag = args.find((a) => a.startsWith("--min="));
+  const minRequired = minFlag
+    ? Math.max(0, Number.parseInt(minFlag.split("=")[1] ?? "", 10) || 0)
+    : 0;
+  if (files.length < minRequired) {
+    console.error(
+      `✗ vigiles ${kind}: --min=${String(minRequired)} but only ${String(files.length)} ${kind} file(s) matched — ` +
+        "evals never executed (check the paths/globs, or that the run was reached).",
+    );
+    process.exit(1);
+  }
+
   if (files.length === 0) {
     console.log(`No ${defaultGlob} files found.`);
     return;
@@ -2707,7 +2723,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --model=ID)",
+    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --model=ID, --min=N, --no-skip)",
   );
   console.log("");
   console.log("Examples:");

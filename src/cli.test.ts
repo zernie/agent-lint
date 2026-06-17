@@ -1655,6 +1655,26 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("--min fails loudly when fewer evals ran than required (never a silent 0)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-min-"));
+    try {
+      writeFileSync(join(dir, "a.eval.mjs"), "process.exit(0);\n");
+      // a glob/path matching nothing → 0 ran → must fail under --min
+      const none = run("eval --min=1 no-such-*.eval.mjs", dir);
+      assert.equal(none.exitCode, 1);
+      assert.match(none.stderr, /never executed/);
+      // asking for more than exist also fails
+      const tooFew = run("eval --min=2 a.eval.mjs", dir);
+      assert.equal(tooFew.exitCode, 1);
+      assert.match(tooFew.stderr, /--min=2 but only 1/);
+      // enough present → passes the guard (the one script runs and exits 0)
+      const ok = run("eval --min=1 a.eval.mjs", dir);
+      assert.equal(ok.exitCode, 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
