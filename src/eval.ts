@@ -33,7 +33,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { resolve, join, dirname } from "node:path";
+import { resolve, join, dirname, delimiter } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
@@ -63,6 +63,7 @@ import {
   serializeIntercepts,
   INTERCEPT_TOOLS_ENV,
 } from "./tool-intercept.js";
+import { type ToolStub, stubBinDir } from "./tool-stub.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -208,6 +209,21 @@ export interface EvalSpec<M extends Metrics> {
    * `research/cross-platform-sandboxing.md`.
    */
   readonly ephemeralEnv?: boolean;
+  /**
+   * **Tool stubs on PATH (rung R2).** A list of fake binaries to shadow on PATH
+   * for every trial, so a skill/hook/agent that calls a CLI tool (`gh`, `psql`,
+   * `redis-cli`, `z3`, …) and works with its RESULT can be tested against a
+   * **recorded / author-provided canned output** — no live service. vigiles writes
+   * one executable stub per {@link ToolStub} into a bin dir under the trial cwd and
+   * PREPENDS that dir to the run's PATH (both the default and the ephemeral env
+   * path), so the fake wins over the real binary.
+   *
+   * The stubs are author/recorded fixtures, **never** model-synthesized — a
+   * synthesized tool output looks plausible but diverges from the real
+   * tool/version (false confidence). Absent → no change (the PATH is byte-identical
+   * to today). See {@link ToolStub} and `research/eval-coverage-and-isolation.md`.
+   */
+  readonly stubs?: readonly ToolStub[];
 }
 
 /** Per-metric summary statistics across an arm's runs. */
@@ -1182,6 +1198,20 @@ async function executeTrial<M extends Metrics>(
     // trial's own temp cwd + a scrubbed, auth-only allowlist. The eval's injected
     // keys (e.g. VIGILES_INTERCEPT_TOOLS) are allowlisted through so interception
     // still works. When OFF, `env`/`replaceEnv` are exactly as before.
+    // Tool stubs on PATH (rung R2): write the fake binaries into a bin dir under
+    // this trial's cwd; it is PREPENDED to whatever PATH the run uses below, so
+    // the fakes win over the real binaries. Absent → no PATH change.
+    const stubs = spec.stubs ?? [];
+    const stubDir =
+      stubs.length > 0
+        ? stubBinDir(stubs, join(cwd, ".vigiles-stubs"))
+        : undefined;
+    const prependPath = (path: string | undefined): string =>
+      stubDir === undefined
+        ? (path ?? "")
+        : path === undefined || path === ""
+          ? stubDir
+          : `${stubDir}${delimiter}${path}`;
     const ephemeral = spec.ephemeralEnv === true;
     let env: Record<string, string> | undefined;
     let replaceEnv = false;
@@ -1195,9 +1225,16 @@ async function executeTrial<M extends Metrics>(
         allow: overlay ? Object.keys(overlay) : [],
       });
       if (overlay) Object.assign(env, overlay);
+      // ephemeralRunEnv passes PATH through; prepend the stub dir over it.
+      if (stubDir !== undefined) env.PATH = prependPath(env.PATH);
       replaceEnv = true;
     } else {
-      env = overlay;
+      // Legacy overlay path: `spawnAgent` spreads `{ ...process.env, ...env }`, so
+      // set PATH in the overlay to the stub dir prepended over process.env.PATH.
+      env =
+        stubDir !== undefined
+          ? { ...overlay, PATH: prependPath(process.env.PATH) }
+          : overlay;
     }
     writeFiles(cwd, files);
     const hasSettings = settings !== undefined;
