@@ -149,6 +149,14 @@ told the call was _blocked_, not that it _succeeded_.
   breaks. (Claude Code has no "skip-but-return-success" primitive for arbitrary
   tools; deny is the closest safe thing.)
 
+**Testing that an enforcement gate actually holds** — including under an adversarial
+prompt that asks the agent to skip it — is done with `notTool` + `output` checks in
+`measure`. The worked dogfood is
+[`examples/harness/dogfood/adversarial-gate.eval.mjs`](../examples/harness/dogfood/adversarial-gate.eval.mjs).
+When that eval shows a prose gate can be talked out of, the deterministic
+`PreToolUse` hook is the fix — see the eval→enforce bridge note in
+[`eval-architecture.md`](eval-architecture.md#the-adversarial-gate-test--worked-example-and-the-evalenforce-bridge).
+
 ## At a glance — what's confined, per tier
 
 | Tier             | Foreign code       | Model's tool calls    | Default                                          |
