@@ -354,6 +354,56 @@ The combinatorial tail you can't enumerate: curate **named integration cases** f
 loaded) catch the unanticipated interaction as a metric drop. Prune, don't
 enumerate.
 
+## Behavioral / side-effecting eval is the umbrella — the adversarial-gate is one member (note 2026-06-17)
+
+The apex of this pillar is **behavioral, side-effecting** eval — the assembled
+harness run end-to-end against real-but-**disposable** dependencies (the "ephemeral
+integration eval"): does the harness actually DO the task AND not do the dangerous
+thing? The **adversarial-gate test** (ask the agent to skip an enforcement gate;
+assert it refuses — a `notTool`-shaped check) is a high-value **member** of that
+family, **not a replacement** for it. It's cheap and it sets up the **eval→enforce
+bridge** (when the prose gate caves under pressure, vigiles's deterministic
+hook/rail is the fix — pillar 2 hands off to pillar 1), but the broad behavioral
+tier — multiple surfaces firing together, real side effects against ephemeral
+deps, graded by the `Trace`/check vocabulary — is the flagship. Don't let the
+narrow check stand in for the umbrella. See
+[`research/skill-eval-landscape.md`](../research/skill-eval-landscape.md) (gap
+verdict + why behavioral single-skill eval is now table stakes, so the moat is the
+_assembled-harness_ + affordability + rigor intersection) and
+[`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md)
+(the ephemeral run env that makes a side-effecting run safe to repeat).
+
+## Token & cost as a first-class measurement — input / output / cache (decided 2026-06-17)
+
+A harness change moves tokens on **both** sides and usually **trades them off**: a
+skill or CLAUDE.md injection ADDS input every turn; a "compression" skill cuts
+OUTPUT. Net cost = f(fresh-input, cached-input, output). So a single total
+token/cost number can **bless a change that's net-negative** — the dogfood proof is
+SkillBenchmark's Caveman run (cut output yet **2–4×'d total cost** via system-prompt
+injection). Honest cost verification therefore requires the classes **separated**.
+
+State today: `UsageTrace` carries `inputTokens`/`outputTokens`/`costUsd`/`durationMs`
+(from claude's `total_cost_usd` + `usage.input_tokens`/`output_tokens`), but (a) the
+`tokens()` check **collapses** input+output into one number, (b) **cache tokens**
+(`cache_creation_input_tokens`/`cache_read_input_tokens`) aren't captured at all —
+and a large CLAUDE.md/skill is cached (~0.1× input), so omitting them makes the cost
+of exactly the harness changes you'd test misleading, and (c) there's no first-class
+A/B **delta per class**.
+
+Native support (decided):
+
+1. Extend `UsageTrace` to all token classes — `inputTokens` (fresh),
+   `cacheCreationTokens`, `cacheReadTokens`, `outputTokens`, `costUsd` — captured
+   from the CLI usage block.
+2. First-class checks `inputTokens({max})` / `outputTokens({max})` /
+   `cacheTokens({…})` beside `cost`/`tokens` (keep `tokens` as the convenience
+   total).
+3. A/B token/cost **delta per class** in `measureArms`, gated by the existing Welch
+   significance — so "verbose vs caveman" reports input↑ / output↓ / net-cost± with
+   a **p-value**, not an eyeballed CI overlap. This is the cost/ROI optimizer made
+   native and input/output-separated, and the honest-measurement differentiator
+   (competitors report a single total or eyeball CIs).
+
 ## Capability gaps, ranked
 
 The genuinely missing primitives (everything above is shipped). Ranked by
@@ -509,7 +559,18 @@ API). _Validates on:_ the **missing`writing-quality` trigger case\*\*.
    fixture repos, gated by hash-lockfile + nightly live.
 6. **Closure-scoped (observed) invalidation** (#7) — only once there are enough
    expensive evals that an unrelated edit detonating a rebuild is a real pain.
-7. **Whole-harness trigger-rate tier** — `measureTriggerRate` is isolated today
+7. **Native input/output/cache token + cost measurement + A/B delta** — split
+   `tokens()` into `inputTokens`/`outputTokens`, capture cache tokens
+   (`cache_creation`/`cache_read`), and report a per-class A/B delta gated by Welch
+   significance. The honest cost-claim verifier (the Caveman gap: output↓ but net
+   cost↑). _Validates on:_ the `skill-compression` (Caveman) eval — assert output↓
+   AND input/net honestly, with a p-value. **HIGH** (a money story; cheap to build —
+   the data model is half there).
+8. **Adversarial-gate check + the eval→enforce bridge** — a first-class "ask the
+   agent to skip the enforcement gate, assert it refuses" check (the `notTool`
+   shape); when it fails, point at the deterministic rail (pillar 2 → pillar 1).
+   _Validates on:_ an OMC enforcement-skill dogfood.
+9. **Whole-harness trigger-rate tier** — `measureTriggerRate` is isolated today
    (cheap, but it _overstates recall and understates false-positives_ because skill
    selection is competitive and Claude Code evicts least-used skill descriptions
    under a context budget). Add an `installSet`/`withHarness` arm that co-installs

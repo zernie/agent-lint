@@ -39,6 +39,17 @@
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
   roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
 
+- **Native input/output/cache token + cost measurement** — split `tokens()` into
+  `inputTokens`/`outputTokens`, capture cache tokens, and report a per-class A/B
+  **delta** gated by Welch significance. A harness change trades input↔output (a
+  CLAUDE.md/skill injection adds input every turn; a "compression" skill cuts
+  output), so a single total can bless a net-negative change — SkillBenchmark's
+  Caveman cut output yet 2–4×'d cost. The money story, and the data model is half
+  there. [eval-architecture](../docs/eval-architecture.md) · [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
+- **Adversarial-gate check + eval→enforce bridge** — a first-class "ask the agent to
+  skip the enforcement gate, assert it refuses" check (`notTool` shape); when it
+  fails, point at the deterministic rail (pillar 2 → pillar 1). The highest-value
+  behavioral test for an enforcement skill. [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
 - **#2 Reverse coverage** — "your CLAUDE.md documents 5 of 47 enabled rules": the
   one item that is both moat and a shareable distribution artifact.
   [feature-ideas #2](feature-ideas.md) · **HIGH**
