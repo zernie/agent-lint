@@ -264,25 +264,34 @@ enumerate.
 
 ## Reuse vs reinvent (corrected for what's already built)
 
-The instinct "don't rebuild promptfoo" is right, but two of the original
-borrow-suggestions are **already moot or contradict shipped decisions**:
+The instinct "don't rebuild promptfoo" is right. First, a constraint correction:
+the binding rule is **no required SaaS**, _not_ zero dependencies. A local library
+(Apache/MIT) that runs in-process and needs no hosted account is fair game; the
+core stays lean and optional integrations are peer deps (the `vitest`/`jest` seams
+already work this way). So neither Polly.js nor promptfoo is excluded _for being a
+dep_ — the case against each has to stand on its own merits, and it does:
 
 - **Record/replay (Polly.js / nock-back):** vigiles **already has** an input-keyed
-  record/replay cache (`eval-cache.ts`) with filesystem restore. An HTTP-level
-  cassette would _not_ solve the core CI problem — replaying a recorded run freezes
-  **one** trajectory, which is the same false-green risk as a comment snapshot. The
-  only true protection is re-running live (nightly tier). **Don't add Polly.** Keep
-  the input-keyed cache; the missing layer is _when to invalidate_ (hash-lockfile),
-  not _how to record_.
+  record/replay cache (`eval-cache.ts`) with filesystem restore, so a second
+  recording layer is redundant — but the deciding reason is deeper: an HTTP-level
+  cassette would _not_ solve the core CI problem. Replaying a recorded run freezes
+  **one** trajectory, which is the same false-green risk as a comment snapshot,
+  regardless of recording format. The only true protection is re-running live
+  (nightly tier). **Don't add Polly** — not because it's a dep, but because the
+  missing layer is _when to invalidate_ (hash-lockfile), not _how to record_.
 - **promptfoo as a grader engine:** vigiles **deliberately PUNTED** promptfoo
-  interop (`eval-api-landscape.md`, Phase E) — it contradicts the zero-dep / no-SaaS
-  / cheap-tiers positioning, and the 20-line precision/recall + `judge.ts` already
-  exist. Don't reverse this without real inbound demand.
+  interop (`eval-api-landscape.md`, Phase E). promptfoo is MIT and runs locally, so
+  "no-SaaS" does **not** rule it out — the punt is **strategic**: don't chase
+  eval-framework parity. The durable edge is cost + safety (the cheap no-model
+  tiers + sandboxing), promptfoo is real-model-only and expensive, and the thin
+  graders we need (precision/recall, a `judge.ts` rubric) already exist. Reverse
+  only on real inbound demand — and if so, as an **optional bridge**, not a core dep.
 
 Where borrowing _is_ still right:
 
 - **Client + agent loop:** the `claude` CLI you already drive (`AgentRunner`).
-- **precision/recall/F1:** ~20 lines, no dep — done.
+- **precision/recall/F1:** ~20 lines, already in-tree — keep it in-tree (trivial,
+  not worth a dep), but adding a dep here was never the objection.
 - **Graders:** `judge.ts` (LLM rubric) exists; deepen only if a dogfood needs it.
 
 Reality check on the norm: most LLM-eval shops **don't gate per-PR at all** — they
@@ -407,9 +416,13 @@ Consolidated pushback, for the record:
    _strictly more_ drift protection than a lockfile. The lockfile is a cost
    concession for expensive evals **only**, and only safe with the nightly backstop.
    Retrofitting cheap evals onto a lockfile would _remove_ protection.
-4. **Polly.js / promptfoo borrow-suggestions are stale.** The cache exists;
-   promptfoo interop was deliberately punted. Adding either contradicts shipped
-   decisions and the positioning. Dropped from the roadmap.
+4. **Polly.js / promptfoo borrow-suggestions are stale — but not on dep grounds.**
+   The binding constraint is _no required SaaS_, not zero-dep, so a local library
+   is allowed. The real reasons to drop them: the cache already exists and an HTTP
+   cassette doesn't escape the snapshot trap (Polly); and promptfoo (MIT, local)
+   was punted _strategically_ — don't chase eval-framework parity; the edge is the
+   cheap/safe tiers. If promptfoo ever returns, it's an optional bridge, not a core
+   dep. Dropped from the roadmap either way.
 5. **An HTTP cassette does not escape the snapshot problem.** Replaying one recorded
    trajectory is the same false-green as a frozen comment. Only the nightly live run
    detects model drift. This is a property of _replay_, not of the recording format.
