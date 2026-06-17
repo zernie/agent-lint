@@ -80,8 +80,11 @@
   port and add a `sandbox-exec`/Seatbelt backend beside `bwrap`, so foreign code is
   confined on Mac (a large share of devs) instead of forcing the refuse-or-`sandbox:false`
   choice. Per-host egress stays Linux-only (Seatbelt can't packet-filter per host);
-  Mac degrades honestly to deny-all-net. Decided; `srt`/`nono` are documented
-  fallbacks, not the default. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
+  Mac degrades honestly to deny-all-net. **Phased design ready** (interface + layout +
+  capability matrix + 4 green-keeping phases + the Seatbelt-blocks-localhost limitation):
+  [os-isolation-port](os-isolation-port.md). Decided in
+  [cross-platform-sandboxing](cross-platform-sandboxing.md); `srt`/`nono` are documented
+  fallbacks, not the default. · **HIGH**
 - **Verify & test the harness's sandbox config** — `settings.json`'s `sandbox` block
   is a harness surface: verify `allowedDomains`/`allowWrite` are coherent (flag a hook
   that phones a blocked domain), and prove the configured sandbox blocks what it claims
