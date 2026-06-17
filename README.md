@@ -96,7 +96,10 @@ Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`*
 (the real agent CLI against a scripted mock model), **`runEval`** (the real model
 A/B with a significance gate). **Testing a skill?** `measureTriggerRate` checks
 its description actually **fires** across varied prompts (recall) without
-hijacking unrelated ones (precision). **[Full guide →](docs/harness-testing.md)**
+hijacking unrelated ones (precision). **Need a safety property** — that the agent
+**didn't** push to the wrong branch or call a paid API? `notTool` + `fakeTools`
+intercept the tool in the real hook layer, so the attempt is caught and the side
+effect never happens. **[Full guide →](docs/harness-testing.md)**
 
 ## Quick start
 

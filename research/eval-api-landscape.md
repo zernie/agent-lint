@@ -129,25 +129,44 @@ Out of scope: explicitly the thing vigiles does _not_ do.
 
 ## Scorecard
 
-| Dimension                                                 | vigiles                | promptfoo          | DeepEval   | Braintrust | Inspect          |
-| --------------------------------------------------------- | ---------------------- | ------------------ | ---------- | ---------- | ---------------- |
-| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix)   | ✗          | partial    | partial          |
-| pass^k reliability (τ-bench)                              | **✓**                  | ✗                  | ✗          | ✗          | partial (epochs) |
-| Statistical spread (std/se)                               | **✓**                  | ✗                  | ✗          | partial    | ✓ (stderr)       |
-| Significance test (CI / p-value)                          | ✗                      | ✗                  | ✗          | partial    | partial          |
-| Tool / trajectory assertions                              | **✓ strong**           | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
-| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                  | **✓✓**     | ✓          | ✓                |
-| Dataset / scenario primitive                              | ✗                      | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
-| Cost / latency / token metrics                            | ✗                      | ✓                  | ✓          | ✓          | ✓                |
-| Concurrency                                               | ✗ (sequential + sleep) | ✓                  | ✓          | ✓          | ✓                |
-| Caching / record-replay                                   | ✗ (eval tier)          | ✓                  | partial    | ✓          | partial          |
-| Persisted reports / regression gating                     | ✗ (console string)     | ✓                  | partial    | ✓✓         | ✓                |
-| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+> The `vigiles` column reflects **shipped state as of 2026-06-17** (the
+> significance, cost/latency, concurrency, caching, and regression-gating gaps
+> the original analysis flagged have all since shipped — see **Status**).
+> Competitor cells reflect the ecosystem as understood mid-2026; treat them as
+> directional, not contractual.
 
-(Profiles reflect the ecosystem as understood mid-2026; treat specific competitor
-features as directional, not contractual. The `vigiles` column is the state **at
-analysis time** — the cost/latency, concurrency, caching, and significance-test
-gaps below have since been closed; see **Status** for what shipped.)
+| Dimension                                                 | vigiles            | promptfoo          | DeepEval   | Braintrust | Inspect          |
+| --------------------------------------------------------- | ------------------ | ------------------ | ---------- | ---------- | ---------------- |
+| Harness-as-unit-under-test (A/B arms, loaded as it ships) | **✓ native**       | partial (matrix)   | ✗          | partial    | partial          |
+| No-model / no-key cheaper tiers (`runHook`, mock-model)   | **✓✓ unique**      | ✗                  | ✗          | ✗          | ✗                |
+| Intercept-and-prevent a tool in the real harness (safety) | **✓ unique**       | ✗                  | ✗          | ✗          | ✗                |
+| Tool / trajectory assertions (incl. arg matchers)         | **✓ strong**       | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
+| pass^k reliability (τ-bench)                              | **✓**              | ✗                  | ✗          | ✗          | partial (epochs) |
+| Statistical spread (std/se)                               | **✓**              | ✗                  | ✗          | partial    | ✓ (stderr)       |
+| Significance test (Welch p-value)                         | **✓ shipped**      | ✗                  | ✗          | partial    | partial          |
+| Regression gate vs committed baseline                     | **✓ shipped**      | ✗                  | partial    | ✓✓         | ✓                |
+| Cost / latency / token capture                            | **✓ shipped**      | ✓                  | ✓          | ✓          | ✓                |
+| Concurrency + rate-limit backoff                          | **✓ shipped**      | ✓                  | ✓          | ✓          | ✓                |
+| Record / replay cache (+ filesystem restore)              | **✓ shipped**      | ✓                  | partial    | ✓          | partial          |
+| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal            | ✓                  | **✓✓**     | ✓          | ✓                |
+| Dataset / scenario primitive                              | ✗                  | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
+| Red team                                                  | ✗                  | ✓✓                 | partial    | ✗          | partial          |
+| UI / dashboards / web share                               | ✗ (console string) | ✓                  | partial    | ✓✓         | ✓                |
+| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**      | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+
+The three **bolded-unique** rows are the defensible core, and they sharpened in
+2026-06: (1) the **no-model/no-key cheaper tiers** (`runHook` + the mock-model
+`runHarnessTest`) — promptfoo et al. are real-model-only by construction; (2)
+**harness-arm A/B loaded as it ships** (the `plugin-loader` question a YAML-config
+runner structurally cannot host); and (3) the new **tool-call spy** — `toolWith` /
+`notTool` over the trace _plus_ `fakeTools`, which intercepts a tool in the real
+PreToolUse hook layer so a real-model run that decides to `git push` / hit a paid
+API is observed-but-prevented. promptfoo's `trajectory:*` can _assert_ on a trace,
+but it can't _intercept-and-prevent_ inside the real shipped harness. The eval tier
+also now ships as an **inert-until-keyed CI gate** (`.github/workflows/evals.yml`)
+— the thing the kicker said never existed. Honest deltas the other way are
+unchanged: dataset/scenario, red-team, judge depth, and UI remain theirs, and we
+bridge (or skip) rather than chase them.
 
 ## What vigiles already does at a world-class level
 
