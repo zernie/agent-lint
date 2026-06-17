@@ -59,6 +59,7 @@ const report = await measureTriggerRate({
   ],
   fired: (t) => skillResolved(t, skill),
   trials,
+  model: process.env.VIGILES_MODEL, // CI pins a dated id; undefined → default
 });
 
 console.log(formatTriggerRateReport(report));

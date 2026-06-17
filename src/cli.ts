@@ -2665,8 +2665,14 @@ function handleRunScripts(
   }
 
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
+  const modelFlag = args.find((a) => a.startsWith("--model="));
   const env: NodeJS.ProcessEnv = {};
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
+  // Honest model pinning: CI passes a DATED model id (e.g. claude-haiku-4-5-…)
+  // so a gated/baselined result can't drift behind a floating alias. Scripts read
+  // `process.env.VIGILES_MODEL` (like VIGILES_TRIALS); a 404 on a deprecated dated
+  // id is by design — it forces a re-eval onto a current model.
+  if (modelFlag) env.VIGILES_MODEL = modelFlag.split("=")[1];
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
@@ -2701,7 +2707,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N)",
+    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --model=ID)",
   );
   console.log("");
   console.log("Examples:");
