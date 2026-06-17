@@ -348,6 +348,12 @@ fake-tool-hook` PreToolUse subcommand deny the real execution (exit 2), so a
 7. **Closure-scoped (observed) invalidation** — the dependency-closure hashing from
    the section above; layers on top of #6 once there are enough expensive evals to
    warrant it.
+   - **Shipped (cache-key hardening, 2026-06-17):** the record/replay key now
+     content-hashes a native `--plugin-dir` (`hashDir` — editing a skill in it
+     invalidates, where a path-only key false-replayed), treats the tool list as a
+     set, and salts a `CACHE_FORMAT_VERSION`; floating-alias model drift is warned.
+     Full best-practice survey + the shipped/deferred decisions (eviction deferred
+     as disk hygiene) in [`research/cache-invalidation.md`](../research/cache-invalidation.md).
 
 ## Dogfood targets
 

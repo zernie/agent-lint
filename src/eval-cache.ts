@@ -47,6 +47,14 @@ export interface CacheKeyInput {
    * in the env. Omit when there's no model-affecting env.
    */
   readonly env?: Record<string, string>;
+  /**
+   * Content digest of a natively-installed plugin dir (`--plugin-dir`), or
+   * undefined when there is none. Folded in so editing a skill INSIDE the dir
+   * invalidates the entry — a path-only key would false-replay, since the dir's
+   * files are NOT in `files` (that holds only the materialized fixture / `plugin`
+   * arm, not a native install). See {@link hashDir}.
+   */
+  readonly pluginDirHash?: string;
   /** Which trial this is — distinct trials are distinct samples, cached apart. */
   readonly trialIndex: number;
 }
@@ -76,9 +84,27 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Cache record-format version, SALTED into every key (Jest `CACHE_VERSION` /
+ * webpack `cache.version` pattern). Bump when the `CacheRecord` shape — or how a
+ * record is produced in a way the key can't otherwise see — changes, so old
+ * entries become *unreachable* rather than deserializing into a stale shape (no
+ * brittle read-time version gate needed). A major bump means orphaned files on
+ * disk; reclaim them by deleting the cache dir.
+ */
+export const CACHE_FORMAT_VERSION = 2;
+
 /** Deterministic content hash of the key inputs (order-independent). */
 export function cacheKey(input: CacheKeyInput): SHA256Hash {
-  return sha256short(JSON.stringify(canonical(input)));
+  const normalized = {
+    ...input,
+    // The tool list is logically a SET, so ["Read","Bash"] and ["Bash","Read"]
+    // must hash the same — sort it to avoid phantom-distinct keys. (canonical()
+    // already sorts object keys; it deliberately keeps other array order.)
+    tools: [...input.tools].sort(),
+    cacheFormatVersion: CACHE_FORMAT_VERSION,
+  };
+  return sha256short(JSON.stringify(canonical(normalized)));
 }
 
 /** Read a cached record by key, or null on miss / unreadable / malformed. */
@@ -127,4 +153,33 @@ export function restoreDir(cwd: string, files: Record<string, string>): void {
     mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content);
   }
+}
+
+/**
+ * Content digest of a directory: a lexicographically-sorted list of
+ * `relativePath:contentHash` for every file, hashed to one value. Editing,
+ * adding, removing, or moving any file changes the digest. It hashes file
+ * CONTENT (not mtime — CI checkouts reset mtimes, the classic stale-cache
+ * anti-pattern) and includes the relative path (so a rename invalidates and two
+ * files can't swap contents undetected). A flat sorted list, NOT a Merkle tree —
+ * sufficient at plugin-dir scale; the tree's incremental-recompute payoff isn't
+ * worth the complexity here (cf. Bazel/Turborepo hash content per file).
+ */
+export function hashDir(dir: string): SHA256Hash {
+  const root = resolve(dir);
+  const parts: string[] = [];
+  const walk = (d: string): void => {
+    for (const entry of readdirSync(d).sort()) {
+      if (SKIP_DIRS.has(entry)) continue;
+      const full = join(d, entry);
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full);
+      else if (st.isFile())
+        parts.push(
+          `${relative(root, full)}:${sha256short(readFileSync(full))}`,
+        );
+    }
+  };
+  walk(root);
+  return sha256short(parts.join("\n"));
 }
