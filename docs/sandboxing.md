@@ -22,6 +22,14 @@ absence. The honest non-Docker alternative for hosts where user namespaces are
 hard-disabled is [Landlock](https://docs.kernel.org/userspace-api/landlock.html)
 (unprivileged FS, and network from kernel 6.7) — a future tier, not shipped.
 
+> **macOS is coming via a native backend, not a VM.** bwrap is Linux-only by
+> design (it _is_ Linux namespaces), so Mac confinement comes from a second backend
+> — `sandbox-exec` (Seatbelt), built into every Mac — behind a `vigiles/os-isolation`
+> port, with the safe-by-default rule unchanged. The decision, the build-vs-adopt
+> survey (incl. why not Claude Code's own Bash-only sandbox or Anthropic's `srt`),
+> and the enabled/disabled model are recorded in
+> [`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md).
+
 > **`sandboxAvailable()` probes real capability, not just the binary.** `bwrap
 --version` succeeding doesn't mean this host can create namespaces (many CI
 > runners disable unprivileged user namespaces). We probe an actual `bwrap
