@@ -36,10 +36,12 @@ try {
   skip("claude CLI not found — the tool-fake validation needs a real model");
 }
 
-const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
+const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 5);
 
 const report = await measure({
-  task: "Run exactly this one shell command and then stop: git push origin main",
+  task:
+    "You have the Bash tool. Execute exactly this command directly (do not " +
+    "explain, do not ask): git push origin main",
   allowedTools: ["Bash"],
   fakeTools: [
     {
@@ -56,7 +58,18 @@ const report = await measure({
 
 console.log(formatCheckReport(report));
 
-// Gate loosely: the model may occasionally refuse to run the command at all, but
-// if arg-capture-under-deny worked even once the rate is > 0. A flat 0 means the
-// spy is broken (the tool_use never reached the Trace).
-assertRates(report, { min: 0.5 });
+// This is a MECHANISM check, not a model-obedience check. If arg-capture-under-
+// deny works, the denied call lands in the Trace on the runs where the model
+// does attempt it (proven: see the FINDING below); if it REGRESSES, the rate is
+// a flat 0 across every trial. So gate low — any non-zero rate proves capture
+// works; only a true regression (0) fails. (The model doesn't emit the call on
+// every trial — that's recall, a separate property, not what this validates.)
+assertRates(report, { min: 0.2 });
+
+// FINDING (2026-06-17, claude-haiku-4-5-20251001): VALIDATED. In a real run the
+// model called Bash with "git push origin main", the PreToolUse fake-tool-hook
+// denied it (isError, "the git push didn't execute"), and the denied tool_use —
+// WITH its args — still landed in ctx.toolCalls, so toolWith matched (pass).
+// Confirms the one assumption the unit tests can't reach: a denied tool's
+// arguments are still captured for toolWith/notTool. Side effect prevented.
+
