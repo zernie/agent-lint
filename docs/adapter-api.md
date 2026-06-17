@@ -225,8 +225,8 @@ interface DetectResult {
 core. This path is fully supported for third-party adapters today:
 
 ```ts
-import { compileAgent } from "vigiles/compile";
-import { loadPlugin } from "vigiles/plugin-loader";
+import { compileAgent } from "vigiles/linting";
+import { loadPlugin } from "vigiles/claude-code";
 import { myHarnessAdapter } from "./my-harness-adapter.js";
 
 // verify a subagent's tool contract under your dialect
