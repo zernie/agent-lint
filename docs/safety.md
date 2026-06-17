@@ -29,20 +29,20 @@ independent question: **does _running_ it change my state?** A skill or agent is
 nondeterministically. "I trust the code" ≠ "running it is safe to do in my real
 working tree." So there are **two orthogonal questions**, not one:
 
-| Question                                                | Governed by                                                               | Mechanism                     |
-| ------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------- |
-| **Host protection** — can it read my secrets/escape?    | **provenance** (yours → direct, foreign → confined)                       | bwrap / Seatbelt              |
-| **State protection** — does running it mutate my world? | **always ephemeral** (trust is irrelevant — the _model_ chose the action) | disposable env + interception |
+| Question                                                | Governed by                                                               | Mechanism                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------- |
+| **Host protection** — can it read my secrets/escape?    | **provenance** (yours → direct, foreign → confined)                       | bwrap (Linux); Seatbelt (macOS, planned) |
+| **State protection** — does running it mutate my world? | **always ephemeral** (trust is irrelevant — the _model_ chose the action) | disposable env + interception            |
 
 Provenance lets you skip _confinement_; it does **not** let you skip
 _ephemerality_. Side effects sort by **reversibility**, which decides the layer:
 
-| Side effect            | Example                     | Layer                                               | Cross-platform?                             |
-| ---------------------- | --------------------------- | --------------------------------------------------- | ------------------------------------------- |
-| Local, reversible      | file edit, local commit     | **ephemeral CWD** (discard the temp dir)            | ✅ done (`mkdtemp` per run)                 |
-| Local, escapes CWD     | write `~/.gitconfig`, `~/…` | **ephemeral HOME + scrubbed env**                   | ✅ cheap — **gap on the direct path today** |
-| External via network   | `git push`, paid API, exfil | **deny-all / allowlist net** (bwrap+nft / Seatbelt) | ⚠️ Linux strong; Mac deny-all               |
-| Irreversible, specific | push to prod, charge a card | **`interceptTools` deny / `notTool` assert**        | ✅ harness-layer                            |
+| Side effect            | Example                     | Layer                                               | Cross-platform?                                      |
+| ---------------------- | --------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
+| Local, reversible      | file edit, local commit     | **ephemeral CWD** (discard the temp dir)            | ✅ done (`mkdtemp` per run)                          |
+| Local, escapes CWD     | write `~/.gitconfig`, `~/…` | **ephemeral HOME + scrubbed env**                   | ✅ cheap — **gap on the direct path today**          |
+| External via network   | `git push`, paid API, exfil | **deny-all / allowlist net** (bwrap+nft / Seatbelt) | ⚠️ Linux today (bwrap+nft); macOS planned (Seatbelt) |
+| Irreversible, specific | push to prod, charge a card | **`interceptTools` deny / `notTool` assert**        | ✅ harness-layer                                     |
 
 The last row is why ephemerality alone isn't enough: you can throw away a temp
 dir, but you **can't un-push or un-charge** — those escape any box and need
@@ -53,11 +53,17 @@ dir (`cwd`), so local file writes are contained and discarded — but the
 **direct/non-confined path inherits the real `$HOME` and environment**
 (`eval.ts`: `env: { ...process.env }`), so a model-driven `git push` / write to
 `~` still escapes. Closing it is an **ephemeral run environment** (throwaway HOME +
-scrubbed env) **by default for every model-driven run, trusted or not** — with one
-nuance: a real-model eval still needs the harness's _own_ auth (`~/.claude` /
+scrubbed env) for every model-driven run, trusted or not — with one nuance: a
+real-model eval still needs the harness's _own_ auth (`~/.claude` /
 `ANTHROPIC_API_KEY`), so it's "fresh HOME with **only** the harness credential
-injected," not a blanket wipe. This needs **no kernel features**, so it lands on
-macOS immediately, independent of the Seatbelt backend. Tracked in
+injected," not a blanket wipe. **Status: shipped but opt-in today** (`ephemeralEnv:
+true`; default **off**, so existing evals authenticate byte-identically to before).
+Making it the **default** is the committed next step — gated only on validating the
+file-based OAuth (`~/.claude/.credentials.json`) copy path against a real local
+credential; the env-var/host-brokered auth path is already proven. The pure pieces
+(`ephemeralRunEnv` / `seedEphemeralHome`) and the scrubbed-env wiring are unit-tested
+(`eval.test.ts`). This needs **no kernel features**, so it lands on macOS immediately,
+independent of the Seatbelt backend. Tracked in
 [`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md).
 
 ## The one rule: safe by default, never silently unconfined
