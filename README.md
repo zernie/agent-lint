@@ -93,13 +93,16 @@ assert(r.blocked); // a red ✗ here means your hook silently lets it through
 ```
 
 Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
-(the real agent CLI against a scripted mock model), **`runEval`** (the real model
-A/B with a significance gate). **Testing a skill?** Two questions, both covered:
+(the real agent CLI against a scripted mock model), and the real-model scored tier
+(**`measure`** / **`runEval`**). **Testing a skill?** Two questions, both covered:
 does its description **fire** (`measureTriggerRate` — recall across varied prompts
 without hijacking unrelated ones, precision), **and** does its guidance actually
-**change behavior** (`runEval` A/B the skill on vs off + a `judged` quality check —
-does following the prose improve the output, gated by significance). Description
-_and_ behavior, not just one. **Need a safety property** — that the agent
+**work**. For "is this exact skill any good?" score the output directly —
+`measure({ checks: [judged(rubric)] })` + `assertRates` (the **absolute** oracle,
+what promptfoo/DeepEval lead with; no on/off baseline needed). When you need the
+**relative** lift over no-skill — regression, or proving the change isn't noise —
+A/B it on-vs-off with `runEval` + `assertSignificant`. Description _and_ behavior,
+not just one. **Need a safety property** — that the agent
 **didn't** push to the wrong branch or call a paid API? `notTool` + `interceptTools`
 intercept the tool in the real hook layer, so the attempt is caught and the side
 effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
