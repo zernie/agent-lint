@@ -95,6 +95,15 @@ export interface EvalArm {
    * stubbing a tool to continue a multi-step flow. See `src/tool-fake.ts`.
    */
   readonly fakeTools?: readonly FakeTool[];
+  /**
+   * Model alias/id for THIS arm, overriding the eval-level `model`. A model
+   * comparison IS a harness A/B — `arms: { sonnet: { model: "claude-sonnet-4-6" },
+   * opus: { model: "claude-opus-4-8" } }` — so model-as-an-arm answers "does my
+   * harness still hold on the cheaper tier / after a model upgrade?" through the
+   * same significance machinery, with no separate model-matrix runner. Omit to
+   * use the eval-level model. See `docs/eval-architecture.md` (model strategy).
+   */
+  readonly model?: string;
 }
 
 /** Per-run resource use, parsed from the terminal `result` event (0 when absent). */
@@ -931,7 +940,8 @@ async function executeTrial<M extends Metrics>(
       {
         task: spec.task,
         cwd,
-        model: cfg.model,
+        // A model comparison is a harness A/B: an arm may override the model.
+        model: arm.model ?? cfg.model,
         tools: cfg.tools,
         hasSettings,
         pluginDir: arm.pluginDir,

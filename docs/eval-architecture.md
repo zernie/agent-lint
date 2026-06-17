@@ -209,16 +209,43 @@ So no external version is a valid cache key. Keep three honest signals instead:
 (A configurable `major.minor`-only CC key is fine but only tunes the
 precision/recall of the key; the canary below is what truly escapes it.)
 
-## Pin a dated model id
+## Model strategy — measure on what users run; compare models as arms (decided 2026-06-17)
 
-Today the defaults are floating aliases (`runEval` → `"haiku"`, `measure` →
-`"sonnet"`). For a lockfiled/baselined result that is **dishonest**: the alias can
-re-point to a new model while the hash says "unchanged" — a false-green hidden
-behind green. Pin a **dated** id (e.g. `claude-haiku-4-5-20251001`) so the hash is
-honest. A dated id 404ing on deprecation is a **feature** — it forces a re-eval
-onto a current model — as long as the failure is surfaced clearly ("model X
-deprecated, re-eval on a current model"). This is a small, concrete, high-value
-change to the eval defaults/config.
+Which model an eval uses is **not** cosmetic. Dogfooding the shipped `test-harness`
+skill found a 0.50 trigger-rate on `claude-haiku-4-5` vs **0.90 on
+`claude-sonnet-4-6`** — same skill, same prompts. Trigger-rate is a _selection_
+measurement and haiku is a much weaker selector, so a haiku eval gives
+false-negative recall and would fail skills that are fine on the model users
+actually run. Conclusions:
+
+1. **Default to the realistic selector — Sonnet.** `measureTriggerRate` now
+   defaults to `"sonnet"` (was haiku); the CI gate pins a Sonnet id. Haiku stays
+   available as a deliberate, _pessimistic_ override (a lower bound), never the
+   default for a selection measurement.
+2. **No multi-model matrix runner by default.** Running every eval across
+   `[haiku, sonnet, opus]` multiplies cost on every run — promptfoo's "providers"
+   lane, against our keep-the-real-model-surface-thin discipline.
+3. **A model comparison is a harness A/B → model-as-an-arm.** When you _do_ want
+   "does my harness hold on the cheaper tier / after a model upgrade?", set
+   `model` per **arm** (`EvalArm.model`) and let the existing significance
+   machinery read the gap — no separate matrix DSL. `measureTriggerRate` stays
+   single-model (loop it for a matrix). This is the one model feature we built.
+4. **(Considered, not yet built) A model FLOOR.** A configurable `minModel`
+   (default Sonnet) that fails/warns when an eval resolves below it — the runtime
+   guard (post-env) that a static lint can't give, since the haiku footgun entered
+   via an env var. Deferred pending a decision on warn-vs-fail + config source.
+
+### Honest pinning (the orthogonal axis)
+
+Picking the right model (above) is separate from **pinning** it for a
+cached/baselined result. The defaults are floating aliases (`runEval` → `"haiku"`,
+`measure`/`measureTriggerRate` → `"sonnet"`); for a lockfiled/baselined result a
+floating alias is **dishonest** (it can re-point while the hash says "unchanged").
+Pin a **dated** id (e.g. `claude-haiku-4-5-20251001`) so the hash is honest; a
+dated id 404ing on deprecation is a **feature** (forces a re-eval onto a current
+model) as long as the failure is surfaced. `isDatedModel` + the floating-alias
+cache warning already nudge this; the CI gate runs cache-off, so a non-dated
+Sonnet alias there is acceptable.
 
 ## Deferred (YAGNI): canary / ETag scaling optimization
 
