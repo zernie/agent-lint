@@ -21,6 +21,45 @@ model together, including the part `sandboxing.md` doesn't cover — preventing 
 They compose: an eval of an untrusted plugin gets **both** — the plugin code is
 confined, and the model's tool calls are intercepted.
 
+## Running is itself a side effect — ephemerality (orthogonal to trust)
+
+Confinement answers _"can this code touch my host?"_ — but it misses a second,
+independent question: **does _running_ it change my state?** A skill or agent is
+**model-driven**: even a plugin _you wrote_, the model decides the actions,
+nondeterministically. "I trust the code" ≠ "running it is safe to do in my real
+working tree." So there are **two orthogonal questions**, not one:
+
+| Question                                                | Governed by                                                               | Mechanism                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------- |
+| **Host protection** — can it read my secrets/escape?    | **provenance** (yours → direct, foreign → confined)                       | bwrap / Seatbelt              |
+| **State protection** — does running it mutate my world? | **always ephemeral** (trust is irrelevant — the _model_ chose the action) | disposable env + interception |
+
+Provenance lets you skip _confinement_; it does **not** let you skip
+_ephemerality_. Side effects sort by **reversibility**, which decides the layer:
+
+| Side effect            | Example                     | Layer                                               | Cross-platform?                             |
+| ---------------------- | --------------------------- | --------------------------------------------------- | ------------------------------------------- |
+| Local, reversible      | file edit, local commit     | **ephemeral CWD** (discard the temp dir)            | ✅ done (`mkdtemp` per run)                 |
+| Local, escapes CWD     | write `~/.gitconfig`, `~/…` | **ephemeral HOME + scrubbed env**                   | ✅ cheap — **gap on the direct path today** |
+| External via network   | `git push`, paid API, exfil | **deny-all / allowlist net** (bwrap+nft / Seatbelt) | ⚠️ Linux strong; Mac deny-all               |
+| Irreversible, specific | push to prod, charge a card | **`interceptTools` deny / `notTool` assert**        | ✅ harness-layer                            |
+
+The last row is why ephemerality alone isn't enough: you can throw away a temp
+dir, but you **can't un-push or un-charge** — those escape any box and need
+interception or a network wall.
+
+**Where vigiles is today:** every run already executes in a fresh `mkdtemp` temp
+dir (`cwd`), so local file writes are contained and discarded — but the
+**direct/non-confined path inherits the real `$HOME` and environment**
+(`eval.ts`: `env: { ...process.env }`), so a model-driven `git push` / write to
+`~` still escapes. Closing it is an **ephemeral run environment** (throwaway HOME +
+scrubbed env) **by default for every model-driven run, trusted or not** — with one
+nuance: a real-model eval still needs the harness's _own_ auth (`~/.claude` /
+`ANTHROPIC_API_KEY`), so it's "fresh HOME with **only** the harness credential
+injected," not a blanket wipe. This needs **no kernel features**, so it lands on
+macOS immediately, independent of the Seatbelt backend. Tracked in
+[`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md).
+
 ## The one rule: safe by default, never silently unconfined
 
 `decideSandbox` ([`src/sandbox.ts`](../src/sandbox.ts)) is the whole policy, and
