@@ -35,6 +35,7 @@ import {
   checkReportToJUnit,
   type CheckReport,
   packageSkillsDir,
+  packageInstallSet,
   stubbedPluginDir,
   stubSkillBody,
   promptDistance,
@@ -942,6 +943,251 @@ test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir",
   cleanupTmpDir(dir);
 });
 
+test("packageInstallSet merges under-test + competitors (under-test wins a collision)", () => {
+  const base = makeTmpDir("under-test"); // loose skills dir of the skill under test
+  mkdirSync(join(base, "mine"), { recursive: true });
+  writeFileSync(
+    join(base, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nUNDERTEST\n",
+  );
+  mkdirSync(join(base, "dup"), { recursive: true }); // collides with a competitor
+  writeFileSync(
+    join(base, "dup", "SKILL.md"),
+    "---\nname: dup\ndescription: mine\n---\nMINE\n",
+  );
+
+  const comp = makeTmpDir("competitor"); // a plugin-shaped competitor (skills/)
+  const compSkills = join(comp, "skills");
+  mkdirSync(join(compSkills, "rival"), { recursive: true });
+  writeFileSync(
+    join(compSkills, "rival", "SKILL.md"),
+    "---\nname: rival\ndescription: R\n---\nRIVAL\n",
+  );
+  mkdirSync(join(compSkills, "dup"), { recursive: true });
+  writeFileSync(
+    join(compSkills, "dup", "SKILL.md"),
+    "---\nname: dup\ndescription: theirs\n---\nTHEIRS\n",
+  );
+  // junk the merge must skip: a stray file (non-dir) and a dir with no SKILL.md
+  writeFileSync(join(compSkills, "notes.txt"), "not a skill");
+  mkdirSync(join(compSkills, "empty"), { recursive: true });
+
+  const comp2 = makeTmpDir("competitor2"); // a .claude/skills-shaped competitor
+  const cc = join(comp2, ".claude", "skills");
+  mkdirSync(join(cc, "extra"), { recursive: true });
+  writeFileSync(
+    join(cc, "extra", "SKILL.md"),
+    "---\nname: extra\ndescription: E\n---\nEXTRA\n",
+  );
+
+  const { dir, competitors } = packageInstallSet({
+    underTestSrc: base,
+    name: "vigiles",
+    installSet: [comp, comp2],
+    stub: false,
+  });
+  // 'rival' (skills/) + 'extra' (.claude/skills/) added; 'dup' collided → not counted
+  assert.equal(competitors, 2);
+  assert.ok(existsSync(join(dir, "skills", "extra", "SKILL.md")));
+  // named for the under-test plugin so `<name>:<skill>` ids still match `fired`
+  const manifest = JSON.parse(
+    readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles");
+  assert.ok(existsSync(join(dir, "skills", "mine", "SKILL.md")));
+  assert.ok(existsSync(join(dir, "skills", "rival", "SKILL.md")));
+  // the under-test 'dup' won the collision (its body, not the competitor's)
+  assert.match(
+    readFileSync(join(dir, "skills", "dup", "SKILL.md"), "utf-8"),
+    /MINE/,
+  );
+  rmSync(dir, { recursive: true, force: true });
+  cleanupTmpDir(base);
+  cleanupTmpDir(comp);
+  cleanupTmpDir(comp2);
+});
+
+test("packageInstallSet throws (and cleans up) on a missing installSet source", () => {
+  const ut = makeTmpDir("ut-ok");
+  mkdirSync(join(ut, "mine"), { recursive: true });
+  writeFileSync(
+    join(ut, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nbody\n",
+  );
+  assert.throws(
+    () =>
+      packageInstallSet({
+        underTestSrc: ut,
+        name: "n",
+        installSet: ["/no/such/install/source"],
+        stub: false,
+      }),
+    /installSet source not found/,
+  );
+  cleanupTmpDir(ut);
+});
+
+test("packageInstallSet stubs bodies and throws on an empty under-test source", () => {
+  const empty = makeTmpDir("ut-empty"); // no <name>/SKILL.md
+  const comp = makeTmpDir("comp2");
+  mkdirSync(join(comp, "x"), { recursive: true });
+  writeFileSync(
+    join(comp, "x", "SKILL.md"),
+    "---\nname: x\ndescription: X\n---\nbody\n",
+  );
+  assert.throws(
+    () =>
+      packageInstallSet({
+        underTestSrc: empty,
+        name: "n",
+        installSet: [comp],
+        stub: false,
+      }),
+    /skill-under-test/,
+  );
+
+  const ut = makeTmpDir("ut2");
+  mkdirSync(join(ut, "mine"), { recursive: true });
+  writeFileSync(
+    join(ut, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nSECRET BODY\n",
+  );
+  const { dir } = packageInstallSet({
+    underTestSrc: ut,
+    name: "n",
+    installSet: [comp],
+    stub: true,
+  });
+  const md = readFileSync(join(dir, "skills", "mine", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: D") && !md.includes("SECRET BODY"));
+  rmSync(dir, { recursive: true, force: true });
+  cleanupTmpDir(empty);
+  cleanupTmpDir(comp);
+  cleanupTmpDir(ut);
+});
+
+test("measureTriggerRateWith installSet measures the whole-harness tier", async () => {
+  const ut = makeTmpDir("ut-skills");
+  mkdirSync(join(ut, "foo"), { recursive: true });
+  writeFileSync(
+    join(ut, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  const others = makeTmpDir("others");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: ut,
+      installSet: [others],
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 1); // 'bar' co-installed as a competitor
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && !existsSync(used), "combined plugin dir cleaned up after");
+  assert.ok(formatTriggerRateReport(report).includes("whole-harness"));
+  cleanupTmpDir(ut);
+  cleanupTmpDir(others);
+});
+
+test("measureTriggerRateWith installSet works from a pluginDir under-test source", async () => {
+  const plugin = makeTmpDir("ut-plugin"); // a real plugin (manifest + skills/)
+  mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(plugin, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "vig", version: "0.0.0" }),
+  );
+  mkdirSync(join(plugin, "skills", "foo"), { recursive: true });
+  writeFileSync(
+    join(plugin, "skills", "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  const others = makeTmpDir("others-p");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: plugin,
+      installSet: [others],
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 1);
+  cleanupTmpDir(plugin);
+  cleanupTmpDir(others);
+});
+
+test("measureTriggerRateWith installSet still requires a skill-under-test source", async () => {
+  const others = makeTmpDir("others-only");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  await assert.rejects(
+    () =>
+      measureTriggerRateWith(
+        {
+          installSet: [others], // no pluginDir / skillsDir under test
+          prompts: ["a", "b"],
+          minPrompts: 1,
+          minDistance: 0,
+          fired: () => true,
+          spacingSec: 0,
+        },
+        runner,
+      ),
+    /pluginDir.*skillsDir|provide `pluginDir`/,
+  );
+  cleanupTmpDir(others);
+});
+
+test("formatTriggerRateReport labels an isolated run honestly (upper-bound recall)", () => {
+  const out = formatTriggerRateReport({
+    rate: 1,
+    n: 1,
+    perPrompt: [],
+    competitors: 0,
+  });
+  assert.ok(out.includes("isolated"));
+  assert.ok(out.toLowerCase().includes("upper bound"));
+});
+
 test("measureTriggerRateWith stubSkillBodies strips the body in the packaged plugin", async () => {
   const dir = makeTmpDir("trigger-stub");
   const skills = join(dir, ".claude", "skills");
@@ -1291,7 +1537,7 @@ test("runEvalWith aborts when maxCostUsd is exceeded", async () => {
 });
 
 test("assertTriggerRate gates on the minimum rate", () => {
-  const report = { rate: 0.5, n: 4, perPrompt: [] };
+  const report = { rate: 0.5, n: 4, perPrompt: [], competitors: 0 };
   assert.doesNotThrow(() => {
     assertTriggerRate(report, { min: 0.5 });
   });
@@ -1308,6 +1554,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
     falsePositiveRate: 0.5,
     precision: 0.667,
     perIrrelevant: [],
+    competitors: 0,
   };
   // within both thresholds → ok
   assert.doesNotThrow(() => {
@@ -1330,6 +1577,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
         perPrompt: [],
         falsePositiveRate: 0,
         precision: undefined,
+        competitors: 0,
       },
       { minPrecision: 0.5 },
     );

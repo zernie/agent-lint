@@ -1183,6 +1183,21 @@ export interface TriggerRateSpec {
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
   /**
+   * Co-install these skill sources ALONGSIDE the skill-under-test so it competes
+   * for selection as it does in the real harness — the **whole-harness** tier.
+   * Each entry is a plugin dir (`skills/` or `.claude/skills/`) or a loose skills
+   * dir (`<name>/SKILL.md`); their skills are merged into one install under the
+   * under-test plugin's name (the under-test skill wins a name collision, so its
+   * `<name>:<skill>` id still matches `fired`).
+   *
+   * WHY: skill selection is competitive and Claude Code evicts the least-used
+   * skill descriptions under a context budget, so an ISOLATED trigger-rate (the
+   * default, `installSet` absent/empty) **overstates recall and understates
+   * false-positives**. Isolated is the cheap authoring loop; populate the set for
+   * a release gate. See `research/isolated-vs-whole-harness-eval.md`.
+   */
+  readonly installSet?: readonly string[];
+  /**
    * Replace each skill's BODY with a no-op stub (keeping its frontmatter — name +
    * description) before running. Trigger-rate is decided by the frontmatter alone
    * (the model selects a skill before its body loads), so stubbing the body can't
@@ -1247,6 +1262,14 @@ export interface TriggerRateReport {
   readonly precision?: number;
   /** Per-prompt stats for the irrelevant set. Present with irrelevant prompts. */
   readonly perIrrelevant?: readonly PromptTriggerStat[];
+  /**
+   * Competitor skills co-installed via {@link TriggerRateSpec.installSet}. `0`
+   * (the default) means the skill was measured **ISOLATED** — so `rate` is an
+   * UPPER bound on real recall and `falsePositiveRate` a LOWER bound, because
+   * selection is competitive (a populated harness can evict or out-compete the
+   * description). A non-zero count is the whole-harness measurement.
+   */
+  readonly competitors: number;
 }
 
 /**
@@ -1434,25 +1457,145 @@ export function assertPromptDiversity(
  * be set. `packaged` is present only when vigiles built it, so the caller knows
  * to remove it afterward.
  */
+/** The dir holding `<name>/SKILL.md` for a source that may be a plugin (`skills/`
+ *  or `.claude/skills/`) or already a loose skills dir. */
+function collectSkillsSource(dir: string): string {
+  const abs = resolve(dir);
+  const pluginSkills = join(abs, "skills");
+  if (existsSync(pluginSkills)) return pluginSkills;
+  const ccSkills = join(abs, ".claude", "skills");
+  if (existsSync(ccSkills)) return ccSkills;
+  return abs;
+}
+
+/**
+ * Copy each `<name>/SKILL.md` skill from `src` into `skillsOut` (stubbing the body
+ * when asked); skip a skill whose name is already `present` so the under-test
+ * skill wins a collision. Returns how many were newly copied.
+ */
+function copySkillsInto(
+  src: string,
+  skillsOut: string,
+  stub: boolean,
+  present: Set<string>,
+): number {
+  const abs = resolve(src);
+  if (!existsSync(abs))
+    throw new Error(`installSet source not found: ${src} (resolved ${abs})`);
+  let copied = 0;
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    if (!entry.isDirectory() || present.has(entry.name)) continue;
+    const srcSkill = join(abs, entry.name, "SKILL.md");
+    if (!existsSync(srcSkill)) continue;
+    const destDir = join(skillsOut, entry.name);
+    if (stub) {
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(
+        join(destDir, "SKILL.md"),
+        stubSkillBody(readFileSync(srcSkill, "utf-8")),
+      );
+    } else {
+      cpSync(join(abs, entry.name), destDir, { recursive: true });
+    }
+    present.add(entry.name);
+    copied++;
+  }
+  return copied;
+}
+
+/**
+ * Build a combined plugin: the under-test skills PLUS every `installSet` source's
+ * skills, so the skill-under-test competes for selection as in the real harness.
+ * Named after the under-test plugin so `<name>:<skill>` ids still match; the
+ * under-test skills win a name collision. Returns the dir + the count of
+ * COMPETITOR skills added. Caller removes the dir. Pure (filesystem only).
+ */
+export function packageInstallSet(opts: {
+  underTestSrc: string;
+  name: string;
+  installSet: readonly string[];
+  stub: boolean;
+}): { dir: string; competitors: number } {
+  const root = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: opts.name, version: "0.0.0" }, null, 2),
+    );
+    const skillsOut = join(root, "skills");
+    mkdirSync(skillsOut, { recursive: true });
+    const present = new Set<string>();
+    const underTest = copySkillsInto(
+      opts.underTestSrc,
+      skillsOut,
+      opts.stub,
+      present,
+    );
+    if (underTest === 0)
+      throw new Error(
+        `No <name>/SKILL.md skills under the skill-under-test source ${opts.underTestSrc}`,
+      );
+    let competitors = 0;
+    for (const src of opts.installSet)
+      competitors += copySkillsInto(
+        collectSkillsSource(src),
+        skillsOut,
+        opts.stub,
+        present,
+      );
+    return { dir: root, competitors };
+  } catch (e) {
+    rmSync(root, { recursive: true, force: true }); // don't leak the temp dir
+    throw e;
+  }
+}
+
+/** The under-test skills source + plugin name (the namespace `fired` matches). */
+function underTestSource(spec: TriggerRateSpec): { src: string; name: string } {
+  if (spec.skillsDir)
+    return { src: spec.skillsDir, name: "vigiles-loose-skills" };
+  if (spec.pluginDir)
+    return {
+      src: skillsDirOf(spec.pluginDir),
+      name: pluginName(spec.pluginDir) ?? "vigiles-loose-skills",
+    };
+  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
+}
+
 function resolveTriggerPluginDir(spec: TriggerRateSpec): {
   pluginDir: string;
   packaged?: string;
+  competitors: number;
 } {
   if (spec.pluginDir && spec.skillsDir)
     throw new Error(
       "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
     );
   const stub = spec.stubSkillBodies ?? false;
+  const installSet = spec.installSet ?? [];
+  if (installSet.length > 0) {
+    // Whole-harness tier: merge the under-test skills with the install set so
+    // selection is competitive (the realistic, differentiated measurement).
+    const { src, name } = underTestSource(spec);
+    const { dir, competitors } = packageInstallSet({
+      underTestSrc: src,
+      name,
+      installSet,
+      stub,
+    });
+    return { pluginDir: dir, packaged: dir, competitors };
+  }
   if (spec.skillsDir) {
     const packaged = packageSkillsDir(spec.skillsDir, { stub });
-    return { pluginDir: packaged, packaged };
+    return { pluginDir: packaged, packaged, competitors: 0 };
   }
   if (spec.pluginDir) {
-    if (!stub) return { pluginDir: spec.pluginDir };
+    if (!stub) return { pluginDir: spec.pluginDir, competitors: 0 };
     // Stub a real plugin: build a minimal plugin from its skills/ with bodies
     // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
     const packaged = stubbedPluginDir(spec.pluginDir);
-    return { pluginDir: packaged, packaged };
+    return { pluginDir: packaged, packaged, competitors: 0 };
   }
   throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
 }
@@ -1535,7 +1678,7 @@ export async function measureTriggerRateWith(
     });
   }
 
-  const { pluginDir, packaged } = resolveTriggerPluginDir(spec);
+  const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
     model: spec.model ?? "haiku",
@@ -1552,6 +1695,7 @@ export async function measureTriggerRateWith(
       rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
       n: relevant.n,
       perPrompt: relevant.perPrompt,
+      competitors,
     };
     if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
@@ -1605,5 +1749,13 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
       );
     }
   }
+  // Honest labelling: an isolated run measures the skill alone, with no competing
+  // skills to evict or out-compete its description — so recall is an UPPER bound
+  // and false-positive a LOWER bound. Say so, or point at the whole-harness count.
+  lines.push(
+    report.competitors > 0
+      ? `whole-harness: measured against ${String(report.competitors)} competing skill(s)`
+      : "isolated: no competing skills — recall is an upper bound, false-positive a lower bound (populate `installSet` for a release-gate measurement)",
+  );
   return lines.join("\n");
 }
