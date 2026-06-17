@@ -46,7 +46,7 @@ Mechanics that make this a _compiler_ target, not a linter target:
 
 ## The differentiator: declared ≠ enforced
 
-The pivotal finding (Claude Code issue #54898): **`tools:` is not a hard runtime
+The pivotal finding (Claude Code #4740/#21460, claude-agent-sdk-typescript #172): **`tools:` is not a hard runtime
 permission boundary.** Permissions are session-wide, not per-agent; a subagent
 inherits the parent session's `permissions.deny` and the `tools:` field cannot
 grant what the session denies — it filters what's _offered_, but is "functionally
@@ -59,7 +59,7 @@ framing applied to subagents: **compile the typed tool contract into BOTH the
 `tools` allowlist (intent) AND a generated `PreToolUse` hook (enforcement), and
 verify the two agree.** Nobody else compiles a typed subagent spec to the
 manifest while statically resolving tool/MCP/handoff references and wiring the
-deterministic rail. (Caveat: #54898's exact semantics are one reporter's testing
+deterministic rail. (Caveat: these issues' exact semantics are reporter-tested
 and may shift across releases — re-verify against the current build before the
 enforcement layer leans on them.)
 

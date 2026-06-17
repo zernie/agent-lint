@@ -1,7 +1,7 @@
 /**
  * Tests for the agent runtime (src/agent-runtime.ts) — the PreToolUse
  * tool-contract rail. A subagent's `tools:` frontmatter is documentation, not a
- * runtime boundary (Claude Code #54898); this hook turns it into enforcement by
+ * runtime boundary (Claude Code #4740/#21460, SDK #172); this hook turns it into enforcement by
  * blocking any tool outside the active agent's compiled allowlist. Model-free:
  * the decision logic is pure and the runtime ops are plain filesystem.
  */
@@ -240,7 +240,7 @@ test("evaluatePreToolUse allows everything for an inherit-all agent", () => {
 // ---------------------------------------------------------------------------
 
 test("the rail the hook enforces is exactly the declared contract (round-trip)", () => {
-  // The whole point of #54898: the `tools:` field documents intent but doesn't
+  // The whole point of #4740/#21460, SDK #172: the `tools:` field documents intent but doesn't
   // enforce it. vigiles compiles ONE source (spec.tools) into BOTH the
   // frontmatter (intent) AND the list the PreToolUse hook reads (enforcement),
   // so the two cannot drift. Prove it: compile → parse the frontmatter the hook

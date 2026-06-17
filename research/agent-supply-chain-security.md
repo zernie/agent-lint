@@ -99,7 +99,7 @@ gaps fall between them, and both map to OWASP risks the incumbents underserve:
    A skill/agent's `tools:` frontmatter, its MCP tool list, its declared egress
    — these are **documentation**, not a boundary. vigiles already built the rail
    that closes this for subagents (`src/agent-runtime.ts`, the PreToolUse
-   tool-contract hook, issue #54898). The same idea generalizes to "what this
+   tool-contract hook, #4740/#21460, SDK #172). The same idea generalizes to "what this
    plugin _says_ it does vs what it _is observed to_ do."
 
 No incumbent owns "I understand the Claude Code harness model (hooks, skills,
@@ -231,6 +231,6 @@ _capability_, not an identity.
 - [feature-ideas §13](feature-ideas.md) — the sandboxed-untrusted-exec idea this
   builds on.
 - [runtime-enforcement](runtime-enforcement.md) and `src/agent-runtime.ts` —
-  the declared-vs-enforced tool-contract rail (#54898) idea #2 generalizes.
+  the declared-vs-enforced tool-contract rail (#4740/#21460, SDK #172) idea #2 generalizes.
 - [distribution-strategy](distribution-strategy.md) — why the pre-adoption stage
   argues against the security-grade trust bar of a full pivot.
