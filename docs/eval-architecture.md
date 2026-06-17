@@ -387,8 +387,11 @@ Ordered by protection-per-dollar, with the dogfood that validates each step.
    - **Shipped (scaffolding, inert until enabled):** `.github/workflows/evals.yml`
      — an `eval-gate` job (pull_request, cheap dogfood trigger evals at 1 trial on
      a dated model, `--no-skip`) and an `eval-nightly` job (the drift tier). Every
-     model step is guarded on the `ANTHROPIC_API_KEY` secret: with no secret (the
-     default, and all fork PRs) it prints a notice and exits 0 — never reds a PR.
+     model step is guarded on auth being present — `CLAUDE_CODE_OAUTH_TOKEN` (a
+     Claude Pro/Max **subscription**, the cheap flat-cost path, since vigiles drives
+     the real `claude` CLI) **or** `ANTHROPIC_API_KEY` (metered fallback): with
+     neither (the default, and all fork PRs) it prints a notice and exits 0 — never
+     reds a PR.
      The CLI gained `vigiles eval --model=<id>` → `VIGILES_MODEL` (sibling of
      `--trials`), so the gate pins a **dated** id (`claude-haiku-4-5-…`) without
      changing library defaults; scripts read `process.env.VIGILES_MODEL`. And
@@ -414,6 +417,14 @@ Ordered by protection-per-dollar, with the dogfood that validates each step.
    fixture repos, gated by hash-lockfile + nightly live.
 6. **Closure-scoped (observed) invalidation** (#7) — only once there are enough
    expensive evals that an unrelated edit detonating a rebuild is a real pain.
+7. **Whole-harness trigger-rate tier** — `measureTriggerRate` is isolated today
+   (cheap, but it _overstates recall and understates false-positives_ because skill
+   selection is competitive and Claude Code evicts least-used skill descriptions
+   under a context budget). Add an `installSet`/`withHarness` arm that co-installs
+   the skill alongside the user's real set as a **release gate**, plus a
+   near-neighbor middle tier built on the existing `ncd`/`findSimilarRules` engine.
+   This is a genuine wedge — **no existing eval tool populates the install set**.
+   Full decision + evidence in [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
 
 ## Where this design is wrong / open questions
 
