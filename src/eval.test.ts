@@ -46,6 +46,8 @@ import {
   belowModelFloor,
   harnessVersionKey,
   ephemeralRunEnv,
+  seedEphemeralHome,
+  EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -1970,6 +1972,68 @@ test("ephemeralRunEnv ignores undefined values in the base env", () => {
   );
   assert.equal(env.PATH, "/bin");
   assert.equal("ANTHROPIC_API_KEY" in env, false);
+});
+
+test("seedEphemeralHome COPIES the auth credential file into the fresh HOME", () => {
+  const realHome = makeTmpDir();
+  const fakeHome = makeTmpDir();
+  try {
+    // Lay down a credential file under the real HOME (parent dir nested).
+    mkdirSync(join(realHome, ".claude"), { recursive: true });
+    writeFileSync(join(realHome, ".claude", ".credentials.json"), "{tok:1}");
+
+    seedEphemeralHome(fakeHome, realHome);
+
+    // It was COPIED (parent dir created) and the content matches.
+    const dest = join(fakeHome, ".claude", ".credentials.json");
+    assert.equal(existsSync(dest), true);
+    assert.equal(readFileSync(dest, "utf-8"), "{tok:1}");
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
+});
+
+test("seedEphemeralHome skips silently when the credential file is absent", () => {
+  const realHome = makeTmpDir(); // no .claude/.credentials.json
+  const fakeHome = makeTmpDir();
+  try {
+    seedEphemeralHome(fakeHome, realHome); // must not throw
+    assert.equal(
+      existsSync(join(fakeHome, ".claude", ".credentials.json")),
+      false,
+    );
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
+});
+
+test("seedEphemeralHome does NOT carry .gitconfig/.ssh even when present", () => {
+  const realHome = makeTmpDir();
+  const fakeHome = makeTmpDir();
+  try {
+    // The credential is carried; the secret-shaped files must NOT be.
+    mkdirSync(join(realHome, ".claude"), { recursive: true });
+    writeFileSync(join(realHome, ".claude", ".credentials.json"), "{tok:1}");
+    writeFileSync(join(realHome, ".gitconfig"), "[user] name = real");
+    mkdirSync(join(realHome, ".ssh"), { recursive: true });
+    writeFileSync(join(realHome, ".ssh", "id_rsa"), "PRIVATE KEY");
+
+    seedEphemeralHome(fakeHome, realHome);
+
+    assert.equal(
+      existsSync(join(fakeHome, ".claude", ".credentials.json")),
+      true,
+    );
+    assert.equal(existsSync(join(fakeHome, ".gitconfig")), false);
+    assert.equal(existsSync(join(fakeHome, ".ssh", "id_rsa")), false);
+    // The keep-list is exactly the auth allowlist, nothing more.
+    assert.deepEqual(EPHEMERAL_HOME_KEEP, [".claude/.credentials.json"]);
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
 });
 
 test("ephemeralEnv DEFAULT (off): env is the byte-identical overlay, not scrubbed", async () => {

@@ -32,7 +32,7 @@ import {
   cpSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
@@ -1116,6 +1116,45 @@ export function ephemeralRunEnv(
   return out;
 }
 
+/**
+ * Home-relative AUTH files to carry from the real HOME into the throwaway one.
+ *
+ * A local subscription credential (OAuth token) often lives in a FILE under HOME,
+ * not an env var — so scrubbing HOME would lose it and break a local-authed run.
+ * This is the file half of the auth allowlist; {@link EPHEMERAL_ALLOW} covers the
+ * env-var / host-brokered half. Kept a named constant so it's easy to extend, and
+ * deliberately NARROW — only the explicit auth files, never `.gitconfig` / `.ssh`
+ * / `.aws`, which are exactly what an ephemeral run must not see.
+ */
+export const EPHEMERAL_HOME_KEEP: readonly string[] = [
+  ".claude/.credentials.json", // the Claude Code OAuth token
+];
+
+/**
+ * Seed the throwaway HOME with the harness's own auth FILE(s) — best-effort;
+ * covers local file-based OAuth; the env-var/host-brokered path is covered by the
+ * allowlist in {@link ephemeralRunEnv}.
+ *
+ * COPIES (never symlinks) each {@link EPHEMERAL_HOME_KEEP} path from `realHome`
+ * into `throwawayHome`, creating parent dirs as needed; a symlink would let the
+ * model-driven run write back to the real credential file, defeating ephemerality.
+ * A path that doesn't exist in the real HOME is skipped silently (that user auths
+ * via env-var / host broker instead). Pure fs — no env, no spawn.
+ */
+export function seedEphemeralHome(
+  throwawayHome: string,
+  realHome: string,
+  keep: readonly string[] = EPHEMERAL_HOME_KEEP,
+): void {
+  for (const rel of keep) {
+    const src = join(realHome, rel);
+    if (!existsSync(src)) continue; // env-var / host-brokered auth covers this.
+    const dest = join(throwawayHome, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest); // copy, not symlink — keep the real credential read-only.
+  }
+}
+
 /** Execute one trial in a fresh sandbox; returns its metric row + usage. */
 async function executeTrial<M extends Metrics>(
   spec: EvalSpec<M>,
@@ -1148,6 +1187,9 @@ async function executeTrial<M extends Metrics>(
     let replaceEnv = false;
     if (ephemeral) {
       const home = mkdtempSync(join(cwd, "home-"));
+      // Carry the harness's own auth FILE (local OAuth) into the fresh HOME —
+      // env-var/host-brokered auth is covered by ephemeralRunEnv's allowlist.
+      seedEphemeralHome(home, process.env.HOME ?? homedir());
       env = ephemeralRunEnv(process.env, {
         home,
         allow: overlay ? Object.keys(overlay) : [],

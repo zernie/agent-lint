@@ -94,6 +94,38 @@ test("cacheKey treats the tool list as a SET (order-insensitive)", () => {
   );
 });
 
+test("cacheKey EXCLUDES the throwaway ephemeral HOME/TMPDIR (per-run noise)", () => {
+  // The opt-in ephemeral run env points HOME/TMPDIR at a fresh random dir every
+  // run; folding them into the key would make every run unique → the cache could
+  // NEVER hit. Two inputs differing ONLY in HOME/TMPDIR must hash the same.
+  const a = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-aaaa", TMPDIR: "/tmp/home-aaaa" },
+  });
+  const b = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-bbbb", TMPDIR: "/tmp/home-bbbb" },
+  });
+  assert.equal(a, b, "HOME/TMPDIR are per-run noise, excluded from the key");
+  // And an env that is ONLY HOME/TMPDIR keys identically to no env at all (the
+  // residual is empty → undefined), so a non-ephemeral run's key is unchanged.
+  assert.equal(a, cacheKey(baseKey));
+});
+
+test("cacheKey env exclusion is SURGICAL — a real model-affecting var still differs", () => {
+  // Excluding HOME/TMPDIR must not become a blanket env drop: an intercept config
+  // (or any other model-affecting var) alongside the throwaway HOME still partitions.
+  const a = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-aaaa", VIGILES_INTERCEPT_TOOLS: "Bash" },
+  });
+  const b = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-bbbb", VIGILES_INTERCEPT_TOOLS: "Read" },
+  });
+  assert.notEqual(a, b, "the model-affecting var must still change the key");
+});
+
 test("cacheKey keys on pluginDirHash (a native --plugin-dir's contents)", () => {
   const none = cacheKey(baseKey);
   const h1 = cacheKey({ ...baseKey, pluginDirHash: "aaaa" });
