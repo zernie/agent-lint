@@ -113,8 +113,13 @@ export interface EvalUsage {
   readonly costUsd: number;
   /** Wall-clock `duration_ms` of the run. */
   readonly durationMs: number;
+  /** Fresh (uncached) input tokens, billed at full input price. */
   readonly inputTokens: number;
   readonly outputTokens: number;
+  /** Tokens written to the prompt cache this run (~1.25× input price). */
+  readonly cacheCreationTokens: number;
+  /** Tokens served from the prompt cache this run (~0.1× input price). */
+  readonly cacheReadTokens: number;
 }
 
 /**
@@ -213,6 +218,8 @@ export interface ArmUsage {
   readonly meanDurationMs: number;
   readonly totalInputTokens: number;
   readonly totalOutputTokens: number;
+  readonly totalCacheCreationTokens: number;
+  readonly totalCacheReadTokens: number;
 }
 
 export interface ArmReport {
@@ -689,6 +696,8 @@ function usageFrom(result: Record<string, unknown> | null): EvalUsage {
     durationMs: num(result?.duration_ms),
     inputTokens: num(usage.input_tokens),
     outputTokens: num(usage.output_tokens),
+    cacheCreationTokens: num(usage.cache_creation_input_tokens),
+    cacheReadTokens: num(usage.cache_read_input_tokens),
   };
 }
 
@@ -791,6 +800,8 @@ export function aggregateUsage(usages: readonly EvalUsage[]): ArmUsage {
     meanDurationMs: n > 0 ? sum((u) => u.durationMs) / n : 0,
     totalInputTokens: sum((u) => u.inputTokens),
     totalOutputTokens: sum((u) => u.outputTokens),
+    totalCacheCreationTokens: sum((u) => u.cacheCreationTokens),
+    totalCacheReadTokens: sum((u) => u.cacheReadTokens),
   };
 }
 

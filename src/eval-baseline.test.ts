@@ -46,6 +46,8 @@ function mkReport(
         meanDurationMs: 0,
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        totalCacheCreationTokens: 0,
+        totalCacheReadTokens: 0,
       },
     };
   }

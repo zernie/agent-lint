@@ -1474,18 +1474,106 @@ test("parseUsage is all-zero when no result/usage is present", () => {
   assert.equal(u.durationMs, 0);
   assert.equal(u.inputTokens, 0);
   assert.equal(u.outputTokens, 0);
+  assert.equal(u.cacheCreationTokens, 0);
+  assert.equal(u.cacheReadTokens, 0);
+});
+
+test("parseUsage parses cache_creation_input_tokens and cache_read_input_tokens", () => {
+  const resultEvent = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "ok",
+    total_cost_usd: 0.02,
+    duration_ms: 800,
+    usage: {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_creation_input_tokens: 250,
+      cache_read_input_tokens: 400,
+    },
+  });
+  const u = parseUsage(resultEvent);
+  assert.equal(u.cacheCreationTokens, 250);
+  assert.equal(u.cacheReadTokens, 400);
+  assert.equal(u.inputTokens, 100);
+  assert.equal(u.outputTokens, 50);
+});
+
+test("parseUsage yields 0 for cache fields when absent from usage", () => {
+  const resultEvent = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "ok",
+    total_cost_usd: 0.01,
+    duration_ms: 500,
+    usage: { input_tokens: 80, output_tokens: 30 },
+  });
+  const u = parseUsage(resultEvent);
+  assert.equal(u.cacheCreationTokens, 0);
+  assert.equal(u.cacheReadTokens, 0);
 });
 
 test("aggregateUsage totals and averages cost/latency/tokens", () => {
   const u = aggregateUsage([
-    { costUsd: 0.01, durationMs: 1000, inputTokens: 100, outputTokens: 50 },
-    { costUsd: 0.03, durationMs: 2000, inputTokens: 200, outputTokens: 150 },
+    {
+      costUsd: 0.01,
+      durationMs: 1000,
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+    {
+      costUsd: 0.03,
+      durationMs: 2000,
+      inputTokens: 200,
+      outputTokens: 150,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
   ]);
   assert.ok(Math.abs(u.totalCostUsd - 0.04) < 1e-9);
   assert.ok(Math.abs(u.meanCostUsd - 0.02) < 1e-9);
   assert.equal(u.meanDurationMs, 1500);
   assert.equal(u.totalInputTokens, 300);
   assert.equal(u.totalOutputTokens, 200);
+});
+
+test("aggregateUsage sums totalCacheCreationTokens and totalCacheReadTokens", () => {
+  const u = aggregateUsage([
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 300,
+      cacheReadTokens: 100,
+    },
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 200,
+      cacheReadTokens: 400,
+    },
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  ]);
+  assert.equal(u.totalCacheCreationTokens, 500);
+  assert.equal(u.totalCacheReadTokens, 500);
+});
+
+test("aggregateUsage cache totals are zero for no runs", () => {
+  const u = aggregateUsage([]);
+  assert.equal(u.totalCacheCreationTokens, 0);
+  assert.equal(u.totalCacheReadTokens, 0);
 });
 
 test("aggregateUsage is all-zero for no runs", () => {
@@ -1724,6 +1812,8 @@ const NO_USAGE = {
   meanDurationMs: 0,
   totalInputTokens: 0,
   totalOutputTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCacheReadTokens: 0,
 } as const;
 
 test("formatEvalReport renders one line per arm", () => {
@@ -1778,6 +1868,8 @@ test("formatEvalReport surfaces cost/latency/tokens when usage is present", () =
           meanDurationMs: 1500,
           totalInputTokens: 2000,
           totalOutputTokens: 1400,
+          totalCacheCreationTokens: 0,
+          totalCacheReadTokens: 0,
         },
       },
     },
