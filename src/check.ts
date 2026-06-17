@@ -24,6 +24,15 @@ import type {
 } from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
 import { judge as runJudge } from "./judge.js";
+import {
+  type ArgMatcher,
+  matchesArgs,
+  stringifyValue,
+  describeArgs,
+  serializeArgs,
+} from "./arg-match.js";
+
+export type { ArgMatcher };
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -104,69 +113,6 @@ function distinctToolNames(calls: readonly ToolCall[]): string {
 function truncate(s: string, n = 120): string {
   const flat = s.replace(/\s+/g, " ").trim();
   return flat.length > n ? `${flat.slice(0, n)}…` : flat;
-}
-
-/** Render any tool-input value as a string for matching / messages. */
-function stringifyValue(v: unknown): string {
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint")
-    return String(v);
-  if (typeof v === "symbol") return v.toString();
-  if (typeof v === "function") return "[function]";
-  if (v === null || v === undefined) return String(v);
-  try {
-    return JSON.stringify(v) ?? "[object]";
-  } catch {
-    return "[object]";
-  }
-}
-
-/**
- * A declarative matcher over a tool call's `input`, keyed by **dot-path** (e.g.
- * `"body.prompt"`). Each value is matched against the value at that path: a
- * `RegExp` is a pattern over the stringified value (use this for "contains"), and
- * a `string`/`number`/`boolean` is an **exact** match (use this for "equals", e.g.
- * a push target). All keys must match (AND). Serializable, so a check carrying one
- * still round-trips through `toJSON`.
- */
-export type ArgMatcher = Record<string, string | number | boolean | RegExp>;
-
-/** Resolve a dot-path (`"a.b.c"`) within an arbitrary value, or undefined. */
-function getPath(obj: unknown, path: string): unknown {
-  let cur: unknown = obj;
-  for (const part of path.split(".")) {
-    if (cur === null || typeof cur !== "object") return undefined;
-    cur = (cur as Record<string, unknown>)[part];
-  }
-  return cur;
-}
-
-/** Does `input` satisfy every entry of `matcher`? (RegExp = pattern, else exact.) */
-function matchesArgs(input: unknown, matcher: ArgMatcher): boolean {
-  return Object.entries(matcher).every(([key, m]) => {
-    const value = getPath(input, key);
-    return m instanceof RegExp ? m.test(stringifyValue(value)) : value === m;
-  });
-}
-
-/** A human-readable form of a matcher for failure messages. */
-function describeArgs(matcher: ArgMatcher): string {
-  return Object.entries(matcher)
-    .map(
-      ([k, m]) => `${k}=${m instanceof RegExp ? String(m) : JSON.stringify(m)}`,
-    )
-    .join(", ");
-}
-
-/** Serialize a matcher for `toJSON` (RegExp → its string form). */
-function serializeArgs(
-  matcher: ArgMatcher,
-): Record<string, string | number | boolean> {
-  const out: Record<string, string | number | boolean> = {};
-  for (const [k, m] of Object.entries(matcher)) {
-    out[k] = m instanceof RegExp ? String(m) : m;
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
