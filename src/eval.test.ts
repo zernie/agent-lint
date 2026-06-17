@@ -40,6 +40,7 @@ import {
   promptDistance,
   checkPromptDiversity,
   assertPromptDiversity,
+  isDatedModel,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -490,6 +491,67 @@ test("measureWith without fakeTools sets no fake env or hook", async () => {
   );
   assert.equal(seenEnv, undefined);
   assert.equal(hadSettings, false);
+});
+
+test("isDatedModel(): dated id is honest, floating alias is not", () => {
+  assert.equal(isDatedModel("claude-haiku-4-5-20251001"), true);
+  assert.equal(isDatedModel("claude-3-5-sonnet-20241022"), true);
+  assert.equal(isDatedModel("haiku"), false);
+  assert.equal(isDatedModel("claude-sonnet-4-6"), false); // version, not a date
+});
+
+test("runEvalWith warns when an eval cache rides a floating model alias", async () => {
+  const dir = makeTmpDir();
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const base = {
+    arms: { a: {} },
+    task: "t",
+    trials: 1,
+    spacingSec: 0,
+    cache: "readwrite" as const,
+    cacheDir: dir,
+    measure: () => ({ ok: true }),
+  };
+
+  const origEnv = process.env.GITHUB_ACTIONS;
+  const logs: string[] = [];
+  const warns: string[] = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  console.log = (m?: unknown) => logs.push(String(m));
+  console.warn = (m?: unknown) => warns.push(String(m));
+  try {
+    // CI path: a GitHub `::warning::` annotation.
+    process.env.GITHUB_ACTIONS = "true";
+    await runEvalWith({ ...base, model: "haiku" }, runner);
+    assert.ok(
+      logs.some(
+        (l) => l.startsWith("::warning::") && l.includes("floating alias"),
+      ),
+    );
+
+    // Non-CI path: a plain stderr warning.
+    delete process.env.GITHUB_ACTIONS;
+    await runEvalWith({ ...base, model: "sonnet" }, runner);
+    assert.ok(warns.some((w) => w.includes("floating alias")));
+
+    // A dated id is honest → no warning at all.
+    logs.length = 0;
+    warns.length = 0;
+    await runEvalWith({ ...base, model: "claude-haiku-4-5-20251001" }, runner);
+    assert.equal(warns.length, 0);
+    assert.equal(logs.filter((l) => l.startsWith("::warning::")).length, 0);
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+    if (origEnv === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = origEnv;
+  }
+  cleanupTmpDir(dir);
 });
 
 test("measureWith stubSkillBodies without pluginDir throws", async () => {

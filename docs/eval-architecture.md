@@ -385,7 +385,10 @@ Ordered by protection-per-dollar, with the dogfood that validates each step.
      default, and all fork PRs) it prints a notice and exits 0 — never reds a PR.
      The CLI gained `vigiles eval --model=<id>` → `VIGILES_MODEL` (sibling of
      `--trials`), so the gate pins a **dated** id (`claude-haiku-4-5-…`) without
-     changing library defaults; scripts read `process.env.VIGILES_MODEL`.
+     changing library defaults; scripts read `process.env.VIGILES_MODEL`. And
+     `runEvalWith` now warns (`::warning::` under CI, else stderr) when an eval
+     cache rides a **floating** alias (`isDatedModel`) — the exact drift-hiding
+     case the dated pin prevents.
      **Remaining:** add the repo secret + budget to turn it on; the
      `writing-quality` trigger case lives in the separate portfolio repo.
 2. **Cross-field miner/checker golden fixture test.** Near-zero new primitive — the
