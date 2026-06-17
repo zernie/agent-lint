@@ -284,6 +284,12 @@ protection-per-dollar unlocked.
    - Where the logic _can_ be lifted out of the prompt into a script, prefer that
      (gap #5) — it's the free deterministic test, strictly cheaper than any
      model-driven spy.
+   - **Shipped (inspection half):** `toolWith(name, args)` and `notTool(name,
+args?)` in `src/check.ts` — a serializable `ArgMatcher` (dot-path keys; RegExp
+     = pattern, primitive = exact) that asserts _how_ a tool was called, and the
+     negative/safety form (#2). These read the `Trace` the harness/eval tier
+     already captures. The remaining work is the **interception** seam (fake the
+     call, return a canned result, suppress the side effect) at the eval tier.
 2. **Negative / safety assertions** (a mode of #1 — highest value, most
    overlooked). Did **not** call the paid API before approval; did **not** push to
    the wrong branch; did **not** file a security advisory for a model-only repro.

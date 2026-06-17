@@ -106,6 +106,69 @@ function truncate(s: string, n = 120): string {
   return flat.length > n ? `${flat.slice(0, n)}…` : flat;
 }
 
+/** Render any tool-input value as a string for matching / messages. */
+function stringifyValue(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint")
+    return String(v);
+  if (typeof v === "symbol") return v.toString();
+  if (typeof v === "function") return "[function]";
+  if (v === null || v === undefined) return String(v);
+  try {
+    return JSON.stringify(v) ?? "[object]";
+  } catch {
+    return "[object]";
+  }
+}
+
+/**
+ * A declarative matcher over a tool call's `input`, keyed by **dot-path** (e.g.
+ * `"body.prompt"`). Each value is matched against the value at that path: a
+ * `RegExp` is a pattern over the stringified value (use this for "contains"), and
+ * a `string`/`number`/`boolean` is an **exact** match (use this for "equals", e.g.
+ * a push target). All keys must match (AND). Serializable, so a check carrying one
+ * still round-trips through `toJSON`.
+ */
+export type ArgMatcher = Record<string, string | number | boolean | RegExp>;
+
+/** Resolve a dot-path (`"a.b.c"`) within an arbitrary value, or undefined. */
+function getPath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const part of path.split(".")) {
+    if (cur === null || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+/** Does `input` satisfy every entry of `matcher`? (RegExp = pattern, else exact.) */
+function matchesArgs(input: unknown, matcher: ArgMatcher): boolean {
+  return Object.entries(matcher).every(([key, m]) => {
+    const value = getPath(input, key);
+    return m instanceof RegExp ? m.test(stringifyValue(value)) : value === m;
+  });
+}
+
+/** A human-readable form of a matcher for failure messages. */
+function describeArgs(matcher: ArgMatcher): string {
+  return Object.entries(matcher)
+    .map(
+      ([k, m]) => `${k}=${m instanceof RegExp ? String(m) : JSON.stringify(m)}`,
+    )
+    .join(", ");
+}
+
+/** Serialize a matcher for `toJSON` (RegExp → its string form). */
+function serializeArgs(
+  matcher: ArgMatcher,
+): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, m] of Object.entries(matcher)) {
+    out[k] = m instanceof RegExp ? String(m) : m;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Trace checks (an agent run — runHarness / runEval)
 // ---------------------------------------------------------------------------
@@ -121,6 +184,65 @@ export function tool(name: string): Check<Trace> {
             `expected the agent to use tool "${name}", but it used ${distinctToolNames(t.toolCalls)}`,
           ),
     toJSON: () => ({ kind: "tool", name }),
+  };
+}
+
+/**
+ * The agent used tool `name` with at least one call whose `input` matches `args`
+ * — the **argument** half of the tool-call spy. Asserts not just *that* a tool was
+ * reached but *how* it was called (the image-request body carried the style suffix,
+ * the panel spawn requested a non-expert), which a completion grader can't see.
+ */
+export function toolWith(name: string, args: ArgMatcher): Check<Trace> {
+  return {
+    kind: "toolWith",
+    eval: (t) => {
+      const calls = t.toolCalls.filter((c) => c.name === name);
+      const want = describeArgs(args);
+      if (calls.length === 0) {
+        return no(
+          `expected the agent to use tool "${name}" (with ${want}), but it used ${distinctToolNames(t.toolCalls)}`,
+        );
+      }
+      return calls.some((c) => matchesArgs(c.input, args))
+        ? ok(`agent used "${name}" with ${want}`)
+        : no(
+            `agent used "${name}" but never with ${want} (saw ${calls
+              .map((c) => truncate(stringifyValue(c.input), 60))
+              .join("; ")})`,
+          );
+    },
+    toJSON: () => ({ kind: "toolWith", name, args: serializeArgs(args) }),
+  };
+}
+
+/**
+ * The agent did NOT use tool `name` — the **safety / negative** assertion. With
+ * `args`, only calls whose `input` matches are forbidden (so "did not push to
+ * `main`" still allows pushing elsewhere; "no paid API call" forbids it outright).
+ * This is the highest-value, most-overlooked check, and the one a
+ * completion-grading eval structurally cannot make: it sees the agent's *decision*
+ * to act, not just its final text.
+ */
+export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
+  return {
+    kind: "notTool",
+    eval: (t) => {
+      const calls = t.toolCalls.filter((c) => c.name === name);
+      const offending = args
+        ? calls.filter((c) => matchesArgs(c.input, args))
+        : calls;
+      const what = args ? `"${name}" with ${describeArgs(args)}` : `"${name}"`;
+      const first = offending[0];
+      if (!first) return ok(`agent never used ${what}`);
+      return no(
+        `expected the agent NOT to use ${what}, but it did (${truncate(stringifyValue(first.input), 60)})`,
+      );
+    },
+    toJSON: () =>
+      args
+        ? { kind: "notTool", name, args: serializeArgs(args) }
+        : { kind: "notTool", name },
   };
 }
 

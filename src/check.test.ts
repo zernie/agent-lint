@@ -11,6 +11,8 @@ import assert from "node:assert/strict";
 
 import {
   tool,
+  toolWith,
+  notTool,
   skill,
   output,
   hookFired,
@@ -85,6 +87,76 @@ test("tool(): pass when used, actionable message + score when not", () => {
   assert.match(r2.message, /expected the agent to use tool "Bash"/);
   assert.match(r2.message, /\[Read, Edit\]/); // names the tools it DID use
   assert.deepEqual(tool("Bash").toJSON(), { kind: "tool", name: "Bash" });
+});
+
+test("toolWith(): asserts on a tool call's arguments (exact + regex + dot-path)", () => {
+  const t = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin feature" } }),
+      toolCall("Write", {
+        input: { body: { prompt: "a cat, watercolor STYLE" } },
+      }),
+    ],
+  });
+  // regex "contains" over a nested dot-path
+  assert.equal(
+    toolWith("Write", { "body.prompt": /STYLE$/ }).eval(t).pass,
+    true,
+  );
+  // exact match on a string field
+  assert.equal(
+    toolWith("Bash", { command: "git push origin feature" }).eval(t).pass,
+    true,
+  );
+  // tool used, but never with these args → actionable message naming what it saw
+  const wrongArgs = toolWith("Bash", { command: /main/ }).eval(t);
+  assert.equal(wrongArgs.pass, false);
+  assert.match(wrongArgs.message, /never with command=\/main\//);
+  assert.match(wrongArgs.message, /git push origin feature/);
+  // tool not used at all → distinct from wrong-args
+  const notUsed = toolWith("Read", { path: "x" }).eval(t);
+  assert.equal(notUsed.pass, false);
+  assert.match(notUsed.message, /expected the agent to use tool "Read"/);
+  // serializable (RegExp → string form)
+  assert.deepEqual(toolWith("Bash", { command: /main/i }).toJSON(), {
+    kind: "toolWith",
+    name: "Bash",
+    args: { command: "/main/i" },
+  });
+});
+
+test("notTool(): the safety/negative assertion, with and without arg-scoping", () => {
+  const pushedMain = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin main" } }),
+    ],
+  });
+  const pushedFeature = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin feature" } }),
+    ],
+  });
+
+  // unscoped: forbids the tool outright
+  assert.equal(notTool("WebFetch").eval(pushedMain).pass, true); // never used → ok
+  const usedAtAll = notTool("Bash").eval(pushedMain);
+  assert.equal(usedAtAll.pass, false);
+  assert.match(usedAtAll.message, /expected the agent NOT to use "Bash"/);
+
+  // arg-scoped: "did not push to main" allows pushing elsewhere
+  const forbidMain = notTool("Bash", { command: /push origin main\b/ });
+  assert.equal(forbidMain.eval(pushedFeature).pass, true); // feature push is fine
+  const tripped = forbidMain.eval(pushedMain);
+  assert.equal(tripped.pass, false);
+  assert.match(tripped.message, /NOT to use "Bash" with command=/);
+  assert.match(tripped.message, /git push origin main/);
+
+  assert.deepEqual(notTool("Bash").toJSON(), { kind: "notTool", name: "Bash" });
+  assert.deepEqual(notTool("Bash", { command: /main/ }).toJSON(), {
+    kind: "notTool",
+    name: "Bash",
+    args: { command: "/main/" },
+  });
 });
 
 test("skill(): resolves on a non-error Skill call with the right id", () => {
