@@ -31,6 +31,19 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
+  Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
+  refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
+  Extract the `vigiles/os-isolation` port and add a `sandbox-exec`/Seatbelt backend
+  beside `bwrap`. Per-host egress stays Linux-only (Seatbelt can't packet-filter
+  per host); macOS degrades honestly to deny-all-net. **Phased design is ready**
+  (interface + layout + capability matrix + 4 green-keeping phases + the
+  Seatbelt-blocks-localhost limitation): [os-isolation-port](os-isolation-port.md),
+  decided in [cross-platform-sandboxing](cross-platform-sandboxing.md). **Note: the
+  maintainer has no Mac**, so this needs a macOS CI runner (or a Mac-having
+  contributor) to validate the backend end-to-end — the pure policy/args seams can
+  still be unit-tested without one. · **P1**
+
 - **Run the behavioral (eval) tier in CI as a gate** — today `vigiles eval` is
   manual-only and results are frozen as `FINDING:` comments (a snapshot is
   documentation, not protection). Wire the _cheap_ tier (`measureTriggerRate` /
@@ -91,15 +104,6 @@
   fresh HOME + scrubbed env (re-inject only the harness's own auth). Needs no
   kernel features → lands on macOS today, ahead of the Seatbelt backend; the
   cheapest cross-platform side-effect protection. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
-- **Cross-platform confinement (macOS is a must)** — extract a `vigiles/os-isolation`
-  port and add a `sandbox-exec`/Seatbelt backend beside `bwrap`, so foreign code is
-  confined on Mac (a large share of devs) instead of forcing the refuse-or-`sandbox:false`
-  choice. Per-host egress stays Linux-only (Seatbelt can't packet-filter per host);
-  Mac degrades honestly to deny-all-net. **Phased design ready** (interface + layout +
-  capability matrix + 4 green-keeping phases + the Seatbelt-blocks-localhost limitation):
-  [os-isolation-port](os-isolation-port.md). Decided in
-  [cross-platform-sandboxing](cross-platform-sandboxing.md); `srt`/`nono` are documented
-  fallbacks, not the default. · **HIGH**
 - **Verify & test the harness's sandbox config** — `settings.json`'s `sandbox` block
   is a harness surface: verify `allowedDomains`/`allowWrite` are coherent (flag a hook
   that phones a blocked domain), and prove the configured sandbox blocks what it claims

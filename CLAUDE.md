@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:1c685cf5e4d0e6ee compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:158bd517b368d98a compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -336,6 +336,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### No Session Links
 
 **Guidance only** — This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.
+
+### Subagent Model Note
+
+**Guidance only** — When you launch a subagent (the Agent/Task tool), tell the user in one short line WHICH model you chose for it and WHY — e.g. "spawning the Explore agent on Haiku — cheap fan-out read, no synthesis needed" or "using Opus for this one — it has to reconcile conflicting findings across docs". The user wants visibility into the model-selection tradeoff (cost vs capability) you're making on their behalf. Keep it to a clause, not a paragraph; do it at launch, not after.
 
 ### Doc Per Rule
 
