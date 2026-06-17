@@ -473,8 +473,13 @@ interface UsageTrace {
   readonly usage: {
     readonly costUsd: number;
     readonly durationMs: number;
+    /** Fresh (uncached) input tokens, billed at full input price. */
     readonly inputTokens: number;
     readonly outputTokens: number;
+    /** Tokens written to the prompt cache this run (~1.25× input price). */
+    readonly cacheCreationTokens: number;
+    /** Tokens served from the prompt cache this run (~0.1× input price). */
+    readonly cacheReadTokens: number;
   };
 }
 
@@ -517,5 +522,75 @@ export function tokens(opts: { max: number }): Check<UsageTrace> {
         : no(`expected ≤ ${String(opts.max)} tokens, got ${String(v)}`);
     },
     toJSON: () => ({ kind: "tokens", max: opts.max }),
+  };
+}
+
+/**
+ * The run used at most `max` **fresh (uncached) input** tokens. The honest input
+ * side of a cost claim: a skill or CLAUDE.md injection adds input every turn, so
+ * a "compression" win on output can be erased here. (Cache reads are separate —
+ * see `cacheTokens`.)
+ */
+export function inputTokens(opts: { max: number }): Check<UsageTrace> {
+  return {
+    kind: "inputTokens",
+    eval: (t) => {
+      const v = t.usage.inputTokens;
+      return v <= opts.max
+        ? ok(`${String(v)} input tokens ≤ ${String(opts.max)}`)
+        : no(`expected ≤ ${String(opts.max)} input tokens, got ${String(v)}`);
+    },
+    toJSON: () => ({ kind: "inputTokens", max: opts.max }),
+  };
+}
+
+/** The run used at most `max` **output** tokens — the generation side. */
+export function outputTokens(opts: { max: number }): Check<UsageTrace> {
+  return {
+    kind: "outputTokens",
+    eval: (t) => {
+      const v = t.usage.outputTokens;
+      return v <= opts.max
+        ? ok(`${String(v)} output tokens ≤ ${String(opts.max)}`)
+        : no(`expected ≤ ${String(opts.max)} output tokens, got ${String(v)}`);
+    },
+    toJSON: () => ({ kind: "outputTokens", max: opts.max }),
+  };
+}
+
+/**
+ * Bound the prompt-cache token classes a run uses. `maxCreation` caps tokens
+ * **written** to the cache (the ~1.25× write premium — a fresh/cold prompt);
+ * `maxRead` caps tokens **served** from cache (~0.1× input). Each constraint is
+ * checked only when provided; the check passes when every provided bound holds.
+ */
+export function cacheTokens(opts: {
+  maxCreation?: number;
+  maxRead?: number;
+}): Check<UsageTrace> {
+  return {
+    kind: "cacheTokens",
+    eval: (t) => {
+      const created = t.usage.cacheCreationTokens;
+      const read = t.usage.cacheReadTokens;
+      if (opts.maxCreation !== undefined && created > opts.maxCreation) {
+        return no(
+          `expected ≤ ${String(opts.maxCreation)} cache-creation tokens, got ${String(created)}`,
+        );
+      }
+      if (opts.maxRead !== undefined && read > opts.maxRead) {
+        return no(
+          `expected ≤ ${String(opts.maxRead)} cache-read tokens, got ${String(read)}`,
+        );
+      }
+      return ok(
+        `cache tokens within bounds (created ${String(created)}, read ${String(read)})`,
+      );
+    },
+    toJSON: () => ({
+      kind: "cacheTokens",
+      ...(opts.maxCreation !== undefined && { maxCreation: opts.maxCreation }),
+      ...(opts.maxRead !== undefined && { maxRead: opts.maxRead }),
+    }),
   };
 }

@@ -15,10 +15,20 @@
  *   - arm `caveman` — answer in telegraphic style: drop filler, keep every
  *                     technical fact (the compression under test)
  *
- * Metrics: `outputTokens` (the thing being optimized — expect it lower on
- * `caveman`) and `correct` (the fact that must survive — expect it UNCHANGED).
- * The point of the example is the pairing: a token win that silently drops the
- * answer's correctness is not a win, and this is how you'd catch it.
+ * Metrics: `inputTokens` (the injection cost — a SKILL.md adds system-prompt
+ * tokens every turn, so a "compression" win on output can be partially or fully
+ * erased here), `outputTokens` (the thing being optimized — expect it lower on
+ * `caveman`), and `correct` (the fact that must survive — expect it UNCHANGED).
+ *
+ * SkillBenchmark finding: measuring only `outputTokens` (or `tokens` total)
+ * misleads. A skill injected into the system prompt raises `inputTokens` on every
+ * turn, so the net cost delta is (inputDelta + outputDelta), not just outputDelta.
+ * Measuring BOTH sides is what makes the trade-off honest.
+ *
+ * The point of the example is the triple pairing:
+ *   - a token win on output that costs more on input is a partial or null win
+ *   - a token win that silently drops the answer is not a win at all
+ *   - this is how you'd catch either failure mode.
  *
  *   npx vigiles eval --trials=6 examples/harness/skill-compression.eval.mjs
  *   node examples/harness/skill-compression.eval.mjs 6      # standalone
@@ -54,6 +64,7 @@ const report = await runEval({
     const reply = ctx.file("REPLY.txt") ?? "";
     const answer = /ANSWER:\s*([A-Za-z .]+)/i.exec(reply)?.[1]?.trim() ?? "";
     return {
+      inputTokens: ctx.usage.inputTokens, // the injection cost: skill adds system-prompt tokens
       outputTokens: ctx.usage.outputTokens, // the optimization target
       correct: /canberra/i.test(answer) ? 1 : 0, // the fact that must survive
     };
@@ -64,20 +75,32 @@ const report = await runEval({
 
 console.log(formatEvalReport(report));
 
-// The two questions, answered from the arm means (`metrics` = mean per metric):
+// The three questions, answered from the arm means (`metrics` = mean per metric):
 const verbose = report.arms.verbose.metrics;
 const caveman = report.arms.caveman.metrics;
-const saved =
+
+// 1. Output side: did telegraphic style actually cut output tokens?
+const outputSaved =
   verbose.outputTokens > 0
     ? ((verbose.outputTokens - caveman.outputTokens) / verbose.outputTokens) *
       100
     : 0;
 console.log(
-  `\ncaveman output-token saving vs verbose: ${saved.toFixed(0)}% ` +
+  `\ncaveman output-token delta vs verbose: ${outputSaved.toFixed(0)}% ` +
     `(${verbose.outputTokens.toFixed(0)} → ${caveman.outputTokens.toFixed(0)} tok/run)`,
 );
 
-// The behavioural guardrail: a token saving that dropped the answer is not a win.
+// 2. Input side: did injecting the SKILL.md raise input tokens?
+// SkillBenchmark finding: a compression skill injects text into the system prompt
+// every turn, so the net cost delta is (inputDelta + outputDelta). Measure both —
+// a headline output saving is misleading if the injection cost erases it.
+const inputDelta = caveman.inputTokens - verbose.inputTokens;
+console.log(
+  `caveman input-token delta vs verbose: ${inputDelta >= 0 ? "+" : ""}${inputDelta.toFixed(0)} tok/run ` +
+    `(${verbose.inputTokens.toFixed(0)} → ${caveman.inputTokens.toFixed(0)})`,
+);
+
+// 3. The behavioural guardrail: a token saving that dropped the answer is not a win.
 if (caveman.correct < verbose.correct) {
   throw new Error(
     `caveman regressed correctness: ${caveman.correct} < ${verbose.correct} ` +
