@@ -30,6 +30,59 @@ floor); (3) **honest model pinning** for cached/baselined results; and (4) the
 **tool-call spy/fake** for side-effecting skills. See
 [What already exists](#what-already-exists) before building anything.
 
+## Positioning & pros/cons (the approach, decided 2026-06-17)
+
+**The thesis: the harness eval you can actually afford to run.** Almost nobody
+evals their harness because the usual tools (promptfoo, DeepEval, Braintrust,
+Inspect) hit the model **API SDK** and bill **per token on every run** → real
+money on every CI run → so it doesn't get run. vigiles inverts the cost curve two
+ways: (a) **most harness questions need no model at all** — `runHook` + mock-model
+`runHarnessTest` answer "does the hook fire/block/inject?" deterministically,
+free, every commit; (b) when a question **is** irreducibly real-model
+(does a description _fire_, does behaviour _move_), vigiles drives the **`claude`
+CLI**, so the eval runs on the **Pro/Max subscription** the user already pays for —
+in a Claude Code session or locally — not a metered API key in CI. (Confirmed this
+session: a real eval ran with `apiKeySource:"none"`, i.e. on the OAuth sub.)
+
+### Pros (why this is defensible)
+
+- **Cost** — the structural moat. Free deterministic tiers + sub-priced real-model
+  tier vs competitors' per-token-every-run. This is the only reason a small team
+  will _actually_ eval their harness.
+- **Fidelity** — the unit under test is the harness **loaded as it ships**
+  (`plugin-loader`: real `plugin.json`/`hooks`/`settings`/`CLAUDE.md`). A
+  YAML-config eval runner reconstructs an agent; it can't host this.
+- **Honesty** — measures in-plugin with real sibling competition (vs others'
+  optimistic one-skill isolation), on the realistic selector (Sonnet, not haiku),
+  with significance + `pass^k`; `fakeTools` intercepts-and-prevents a
+  side-effecting tool in the **real** hook layer (a safety assertion others can't
+  make).
+
+### Cons / limits (state them honestly)
+
+- **The sub is rate-limited.** This works _because_ the real-model surface is thin
+  by design — it is **not** a license for huge trial counts; heavy volume still
+  wants metered API or a higher tier.
+- **Real-model evals stay non-deterministic** — a statistical rate ± se across
+  trials, never a single-run gate. (The deterministic tiers are the per-commit
+  gate.)
+- **The tool-call spy is intercept-and-prevent, not a faithful mock** — CC
+  surfaces the deny as a _block_, so it asserts the ATTEMPT, not a continued flow.
+- **Trigger-rate must run on the realistic model** — a cheap haiku run
+  under-measures selection (dogfooded: 0.50 haiku vs 0.90 Sonnet). The `minModel`
+  floor enforces this.
+- **Evals aren't a zero-effort CI checkbox** — you run them deliberately in a
+  session, which is a workflow change vs "add a GitHub Action."
+- **No dataset / red-team / scorer-library / web UI** — that's promptfoo's lane;
+  we bridge or skip, not chase.
+
+The full competitor scorecard is in
+[`research/eval-api-landscape.md`](../research/eval-api-landscape.md); the
+caching-invalidation research in
+[`research/cache-invalidation.md`](../research/cache-invalidation.md); the
+isolation decision in
+[`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
+
 ## Core model: every harness feature = a deterministic part + a behavioral part
 
 This is the load-bearing idea. Decompose every harness feature (a skill, a hook,
