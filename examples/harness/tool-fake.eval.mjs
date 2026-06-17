@@ -72,4 +72,3 @@ assertRates(report, { min: 0.2 });
 // WITH its args — still landed in ctx.toolCalls, so toolWith matched (pass).
 // Confirms the one assumption the unit tests can't reach: a denied tool's
 // arguments are still captured for toolWith/notTool. Side effect prevented.
-

@@ -108,7 +108,7 @@ sandbox — live in the per-harness guides:
 - [Coverage](#coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
-- [How this compares to promptfoo](#how-this-compares-to-promptfoo)
+- [How this compares (promptfoo, DeepEval, Braintrust, Inspect)](#how-this-compares-promptfoo-deepeval-braintrust-inspect)
 - [Per-harness guides](#per-harness-guides)
 - [See also](#see-also)
 
@@ -763,31 +763,38 @@ reference adapter):
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
 
-## How this compares to promptfoo
+## How this compares (promptfoo, DeepEval, Braintrust, Inspect)
 
-[promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
-and it's excellent at what it does. vigiles isn't a competing eval framework: it
-tests **the harness** (your hooks / settings / instruction file / skills as they
-ship), and it's built to be **deterministic and cheap** where promptfoo is
-real-model-only. The core difference is cost by construction: every promptfoo run
-is a real model call by design, while vigiles answers most harness questions —
-does this hook block? is it wired in? does the skill resolve? — with **no model
-and no API key at all**, paying for a real model only at the eval tier, only when
-the question needs one.
+The eval ecosystem — [promptfoo](https://github.com/promptfoo/promptfoo),
+[DeepEval](https://github.com/confident-ai/deepeval),
+[Braintrust](https://www.braintrust.dev/),
+[Inspect](https://inspect.aisi.org.uk/) — is excellent at what it does, and
+vigiles is **not** a competing eval framework. They evaluate a **model/agent on a
+dataset**; vigiles tests **the harness** (your hooks / settings / instruction file
+/ skills, loaded exactly as they ship) and is built to be **deterministic and
+cheap** where those tools are real-model-only. The core difference is cost by
+construction: every one of their runs is a real model call by design, while vigiles
+answers most harness questions — does this hook block? is it wired in? does the
+skill resolve? — with **no model and no API key at all**, paying for a real model
+only at the eval tier, only when the question needs one.
 
-| Question you're asking                                     | vigiles                               | promptfoo                      |
-| ---------------------------------------------------------- | ------------------------------------- | ------------------------------ |
-| Does my hook block/allow? Is it wired in?                  | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
-| Unit under test                                            | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
-| Loads the **real shipped** plugin.json/hooks/instructions? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
-| Is an A/B gap real, not noise? (significance / pass^k)     | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
-| Regression vs a committed baseline                         | ✅ `assertNoRegression`               | ✗                              |
-| Run an untrusted harness **confined**                      | ✅ bubblewrap, safe-by-default        | ✗                              |
-| Dataset / red-team / assertion library / web UI            | ✗ (not our game)                      | ✅✅ deep, mature              |
+| Capability                                                    | vigiles                        | promptfoo         | DeepEval | Braintrust | Inspect          |
+| ------------------------------------------------------------- | ------------------------------ | ----------------- | -------- | ---------- | ---------------- |
+| Test a hook/skill with **no model, no API key**               | ✅ `runHook` / mock-model      | ✗ real-model only | ✗        | ✗          | ✗                |
+| Unit under test = the **harness as it ships** (A/B arms)      | ✅ `plugin-loader`             | partial (matrix)  | ✗        | partial    | partial          |
+| Load the **real** plugin.json/hooks/settings/CLAUDE.md        | ✅                             | ✗ SDK from YAML   | ✗        | ✗          | ✗                |
+| **Intercept-and-prevent** a tool in the real harness (safety) | ✅ `fakeTools` + `notTool`     | ✗ (assert only)   | ✗        | ✗          | ✗                |
+| Tool / trajectory + arg assertions                            | ✅ `toolWith`                  | ✅ `trajectory:*` | ✅       | ✅         | ✅               |
+| Is an A/B gap real, not noise? (significance / pass^k)        | ✅ Welch + pass^k              | ✗ pass-rate       | ✗        | partial    | partial (epochs) |
+| Regression gate vs a committed baseline                       | ✅ `assertNoRegression`        | ✗                 | partial  | ✅✅       | ✅               |
+| Run an untrusted harness **confined**                         | ✅ bubblewrap, safe-by-default | ✗                 | ✗        | ✗          | partial          |
+| Dataset / red-team / judge library / web UI                   | ✗ (not our game)               | ✅✅              | ✅✅     | ✅✅       | ✅               |
 
-Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
-the harness cheaply and safely.** The full analysis (and why we don't chase
-parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
+Short version: **those tools for prompt/model/dataset/agent evals; vigiles for
+testing the harness cheaply, safely, and as it actually ships.** The full analysis
+(field profiles, the honest scorecard, and why we don't chase parity) is in
+[`research/eval-api-landscape.md`](../research/eval-api-landscape.md) and the
+promptfoo-specific zoom-in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
 
 ## Per-harness guides
 
