@@ -47,6 +47,128 @@ contract_ framing (vigiles' actual differentiator) is thinner everywhere than th
 mock-model primitive. That's a feature-sized opening, not a pillar-sized one. See
 [Bold verdict](#bold-verdict).
 
+## 2026-06-17 — multi-SDK probe (current evidence)
+
+A primary-source probe across nine SDKs on six dimensions — mock-model /
+tool-contract enforcement / assembled-as-shipped / trigger-rate / sub-affordability
+(can a user run it on their own subscription) / record-replay — **validates and
+sharpens** the prior verdict. The prior "don't retarget the general ecosystem" holds;
+what the probe adds is _where_ vigiles' pillar-2 value actually lands (the Claude
+Agent SDK + Codex, not the code-SDKs) and a concrete borrow-list.
+
+### Per-SDK, the six dimensions
+
+- **Pydantic AI** — ✅ first-party mock: `TestModel` (auto-calls-all-tools smoke
+  floor), `FunctionModel` (`(messages, info) -> ModelResponse`, scripted by history
+  and crucially _sees the agent's tool contract_ via `AgentInfo`), `Agent.override(model=)`,
+  `capture_run_messages()`, the `ALLOW_MODEL_REQUESTS=False` accidental-real-call
+  guard. ❌ no tool-contract enforce/deny. ✅ assembled (model-swap). ❌ no
+  trigger-rate. ❌ metered only. ❌ record/replay internal-only (issue #4051 open).
+  `pydantic_evals` exists (PrecisionRecall/ConfusionMatrix evaluators; `LLMJudge`
+  is metered).
+- **Vercel AI SDK** (v6, LanguageModel V3) — ✅ `MockLanguageModelV3` +
+  `simulateReadableStream({chunks,delays})` + `convertArrayToReadableStream` +
+  `mockId` + `mockValues`; `doGenerate`/`doStream` accept function | single | **array**
+  (auto-indexes per call); `doGenerateCalls` capture. ⚠️ `activeTools` narrows the
+  prompt-time toolset but is **not** a documented deny-rail; no subagent contract;
+  "did NOT call X" is a user assertion. ✅ assembled (`ToolLoopAgent`/`generateText`,
+  model-swapped). ⚠️ multi-call mocks test routing but no recall/precision. ❌
+  metered only. ❌ no VCR.
+- **LangChain / LangGraph** — ✅ free plain-text fakes (`FakeListChatModel`,
+  `GenericFakeChatModel`, `responses=[...]`) + `pytest-socket` network block in the
+  unit tier + the `langchain-tests` capability-flag conformance kit. ⚠️ **confirmed
+  gap: no `bind_tools` on any shipped fake** → scripting a tool-calling agent breaks
+  `create_react_agent`/`create_agent` (discussion #31761); a scripted
+  `AIMessage(tool_calls=[...])` survives `_generate` but you must hand-write a
+  `bind_tools` shim. ❌ no enforce/deny. ✅ assembled (real compiled StateGraph,
+  model-swapped). ❌ no trigger-rate helper. ❌ metered (+ LangSmith metered cloud).
+  ❌ VCR third-party (`vcr-langchain`, `langchain-replay` — the latter does
+  decision-level replay: mock the model's choice, keep tool side effects real).
+- **LlamaIndex** — ✅ `MockLLM` (echo/token-count) + `MockFunctionCallingLLM` (BYO
+  `response_generator`; default calls all tools). ❌ no enforce. ✅ assembled (swap
+  `Settings.llm`). ❌ no trigger-rate. ❌ metered (LLM-judge evaluators). ❌ no VCR.
+- **Google ADK / MS Agent Framework + SK / Mastra** (lighter look) — ADK: no shipped
+  mock model (mock it yourself), but a strong `AgentEvaluator`/`adk eval`
+  golden-trajectory match (post-hoc, not a deny) + mock-tool-outputs in evalsets;
+  metered Gemini. MS: no named mock but mock-first interfaces (`Mock<IChatClient>` /
+  `ChatClientProtocol`), `FunctionInvokingChatClient` tool loop testable with scripted
+  `FunctionCallContent`, mature `Microsoft.Extensions.AI.Evaluation` with response
+  **caching** (replay-adjacent) + deterministic NLP evaluators. Mastra: ships
+  `MockModel` wrapping Vercel's `MockLanguageModelV2/V3` (deterministic, no key;
+  prod-import open bug #5990) + Scorers/`runEvals` in CI. **None enforces a tool
+  allow-list / deny.**
+- **OpenAI Agents SDK** — ⚠️ `FakeModel` exists but **test-internal/undocumented**
+  (`tests/fake_model.py` in Py, `packages/agents-core/test/stubs.ts` in JS); public
+  path = implement the `Model`/`ModelProvider` interface + inject via `Agent(model=)`/
+  `RunConfig`, or `set_default_openai_client(base_url=)`. ✅ **best tool-contract
+  story of the field**: documented guardrails (`@input_guardrail`/`@output_guardrail`,
+  tripwires assertable with `pytest.raises`) + assert via `RunResult.new_items`
+  (`ToolCallItem`); but `tools=[]` is offered-not-hard-denied. ✅ assembled
+  (`Runner.run`). ⚠️ one-route assert via `last_agent`, no recall/precision. ❌
+  metered (no ChatGPT-sub path for the SDK). ❌ no VCR (inline snapshots).
+- **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) — ❌ **no mock model**: it
+  spawns the bundled `claude` CLI subprocess, so there is no in-process model to swap.
+  No-key paths: point the subprocess at your own SSE server via `ANTHROPIC_BASE_URL` +
+  a dummy token (implement `/v1/messages`), the Python-only injectable `Transport` base
+  class, or deterministic tools via `createSdkMcpServer` + `canUseTool`. ❌
+  **tool-contract gap, and actively buggy**: issue **#172 (open**, Feb 2026, label bug,
+  no fix) — `AgentDefinition.tools`/`disallowedTools` are **not** mapped to the
+  subagent child's `--allowedTools`/`--disallowedTools`, so a subagent calls forbidden
+  tools; corroborated by #189 (closed dup; root cause force-allows `Task` before the
+  disallow check), #162, #115. The subagents doc _markets_ this as a safety feature
+  ("limited to specific tools… reducing risk"; "Read-only tools: no Edit/Write/Bash")
+  — a guarantee the runtime doesn't deliver; the repo's documented workaround is a
+  PreToolUse hook returning `permissionDecision:"deny"` = vigiles's `agent-runtime.ts`
+  rail. ⚠️ assembled: `systemPrompt:{preset:"claude_code"}` + `settingSources` load the
+  real CLAUDE.md/skills/commands, **but SDK hooks are in-process callbacks, not the
+  shell-process hooks that ship** (the reason vigiles drives the real CLI). ❌ no
+  trigger-rate (observe `parent_tool_use_id`). ✅ sub-affordability for **your own**
+  tests (the SDK inherits the CLI login; `CLAUDE_CODE_OAUTH_TOKEN` via
+  `claude setup-token`) **but** the SDK overview ToS forbids _third-party products_
+  offering claude.ai login/limits — so running your own tests on your own subscription
+  is fine (vigiles's exact posture), productizing sub-auth is not. ❌ no VCR.
+- **Codex** — ❌ no first-party mock (a fake Responses-API SSE server via
+  `[model_providers]`/`OPENAI_BASE_URL`, drive `codex exec --json` — matches vigiles's
+  proven `src/adapters/codex/mock-model.ts`). ⚠️ real sandbox enforcement
+  (`sandbox_mode`/`approval_policy`) but no per-call assert harness. ✅ assembled
+  (`codex exec`). ❌ no trigger-rate. ✅ "Sign in with ChatGPT" subscription
+  interactively, **but** the CI/programmatic path is API-key-metered. ❌ no VCR
+  (trajectory capture is open issue #2288).
+
+**Caveat on the declared-vs-enforced anchors.** This probe could not re-confirm
+`anthropics/claude-code` #4740/#21460 by number (the GitHub access was scoped to
+`zernie/vigiles`). The verified declared-vs-enforced anchors are now
+claude-agent-sdk-typescript **#172** (+ #189/#162/#115); treat #4740/#21460 as
+needing a direct re-check, with **#172 as the primary verified anchor**.
+
+### Verdict — validated and sharpened
+
+- **The prior verdict holds.** Code-SDKs ship first-party mocks (Pydantic / Vercel /
+  LangGraph / LlamaIndex / Mastra), so a blanket pillar-2 retarget _at code-SDK users_
+  is still unwarranted. **But** the probe relocates the value: the **Claude Agent SDK
+  is the high-relevance target** (no mock + a buggy, unenforced #172 tool contract +
+  sub-affordability + it _is_ the harness vigiles targets), and Codex is similar. So
+  "borrow the tool-contract idea, do a probe" becomes "the probe is done; the Claude
+  Agent SDK + Codex are where pillar-2 value directly applies, and the code-SDKs are
+  borrow-from references."
+- **Universal first-party gaps vigiles uniquely fills** (now evidenced, not asserted):
+  (1) tool-contract _enforcement_ of the assembled agent — the #172 fix as a generated
+  PreToolUse rail; **nobody enforces + asserts a deny**; (2) trigger-rate recall +
+  precision — no analogue anywhere in the field; (3) record/replay caching — a
+  universal first-party gap; (4) sub-affordability for the user's own evals + free CI
+  deterministic tiers (the Claude SDK ToS-restricts _productizing_ sub-auth; Codex CI
+  is metered); (5) a first-party SSE mock for the CLI-agent; (6) testing the **real
+  shipped harness machine** (shell hooks / settings), not just a model-swapped agent.
+- **Borrow-list** (ergonomics worth adopting, none a pillar move): Pydantic
+  `FunctionModel`'s contract-aware `(messages, info) -> ModelResponse` scripting —
+  expose the loaded harness's tool defs to vigiles's `scriptModel` fn; Vercel
+  `simulateReadableStream`'s delay-knob + `convertArrayToReadableStream` + `mockId` +
+  `doGenerate`-accepts-array (a `scriptModel` array shorthand) + `doGenerateCalls`
+  capture (≈ `trace.modelRequests`); LangChain's `langchain-tests` capability-flag
+  conformance (≈ `adapter-conformance`) + `langchain-replay` decision-level replay
+  (mock judgment, keep tool side effects real); Pydantic's `ALLOW_MODEL_REQUESTS=False`
+  accidental-real-call guard; MS's response-caching as replay-adjacent.
+
 ## Landscape 2026 — the code-first SDKs and their adoption
 
 Code-defined agents are genuinely how serious agents ship in 2026 (not just

@@ -186,7 +186,9 @@
 - **Killed:** compiler-not-linter, one-source-many-backends.
   [divergent-bets](divergent-bets.md)
 - **No (researched):** SDK pillar-2 retarget — gap closed by first-party SDK
-  mocks. [sdk-harness-testing.md](sdk-harness-testing.md)
+  mocks; the 2026-06-17 multi-SDK probe relocates pillar-2 value to the Claude
+  Agent SDK + Codex (no mock, unenforced/buggy tool contract) + a mock-ergonomics
+  borrow-list. [sdk-harness-testing.md](sdk-harness-testing.md)
 - **Demoted:** vigiles-as-MCP-oracle → fold into `scan`. [divergent-bets #5](divergent-bets.md)
 - **Punted:** promptfoo interop (E) + dataset/scorer parity (D).
   [eval-api-landscape.md](eval-api-landscape.md) · [promptfoo-deep-dive.md](promptfoo-deep-dive.md)
