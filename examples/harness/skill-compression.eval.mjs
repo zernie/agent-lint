@@ -35,6 +35,18 @@
  *
  * Real model → real cost. Needs the `claude` CLI + model auth and a built dist/.
  * External users import from the package: `from "vigiles/eval"`.
+ *
+ * FINDING (2026-06-17, real haiku, 3 trials/arm, on the Pro/Max subscription —
+ * apiKeySource:"none", $0.1057 total). The cost-metric capture works end-to-end:
+ * `total_cost_usd`, input/output, AND cache tokens all populate from a real run.
+ * The telling number — `inputTokens` read ~42/run (the UNCACHED remainder) while
+ * each run's real volume was ~2.4–2.7k tok; the rest is cache reads. So measuring
+ * `inputTokens` alone (or `tokens` = input+output) understates the real economics
+ * by ~50× here — the cache classes are where the volume lives. Concrete vindication
+ * of splitting the usage into input / output / cache (see `cacheTokens`). And the
+ * compression claim did NOT hold on this task/model: the `caveman` arm's output was
+ * +11% (762 → 842 tok/run) at +$0.002/run, correctness intact on both (Canberra) —
+ * a headline "cuts tokens %" would have lied. Exactly the failure mode this catches.
  */
 import { runEval, formatEvalReport } from "../../dist/eval.js";
 
