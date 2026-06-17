@@ -159,7 +159,7 @@ The three **bolded-unique** rows are the defensible core, and they sharpened in
 `runHarnessTest`) — promptfoo et al. are real-model-only by construction; (2)
 **harness-arm A/B loaded as it ships** (the `plugin-loader` question a YAML-config
 runner structurally cannot host); and (3) the new **tool-call spy** — `toolWith` /
-`notTool` over the trace _plus_ `fakeTools`, which intercepts a tool in the real
+`notTool` over the trace _plus_ `interceptTools`, which intercepts a tool in the real
 PreToolUse hook layer so a real-model run that decides to `git push` / hit a paid
 API is observed-but-prevented. promptfoo's `trajectory:*` can _assert_ on a trace,
 but it can't _intercept-and-prevent_ inside the real shipped harness. The eval tier

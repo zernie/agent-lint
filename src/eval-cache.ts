@@ -41,10 +41,10 @@ export interface CacheKeyInput {
   /** The resolved `.claude/settings.json` for the arm (or undefined). */
   readonly settings: unknown;
   /**
-   * Per-run env that affects model behaviour (e.g. `VIGILES_FAKE_TOOLS`). Keyed
-   * because two fake-tool configs that share tool names — so produce identical
-   * merged `settings` — still differ in their `when`/`result`, which lives only
-   * in the env. Omit when there's no model-affecting env.
+   * Per-run env that affects model behaviour (e.g. `VIGILES_INTERCEPT_TOOLS`).
+   * Keyed because two intercept configs that share tool names — so produce
+   * identical merged `settings` — still differ in their `when`/`denyReason`, which
+   * lives only in the env. Omit when there's no model-affecting env.
    */
   readonly env?: Record<string, string>;
   /**

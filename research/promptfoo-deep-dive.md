@@ -187,6 +187,21 @@ than the doc implies**: it's harness-arm-A/B + the two sub-model tiers +
 significance/pass^k, _not_ "they have no agent/tool support." Keep the comparison
 truthful or it stops being persuasive. (Updated inline in that doc.)
 
+## vigiles check ↔ promptfoo assertion
+
+How the vigiles tool-call checks map onto their nearest promptfoo concept — and
+where promptfoo's completion-grading model can't cheaply express the gap:
+
+| vigiles check               | nearest promptfoo concept                          | gap                                                                                                                                                                                                                                                            |
+| --------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolWith(name, args)`      | `is-valid-function-call` / a `trajectory:*` assert | rough parity — assert a tool was called with these args (≈ DeepEval `ToolCorrectnessMetric`).                                                                                                                                                                  |
+| `notTool(name, args?)`      | _none_                                             | the negative/safety assertion of a **decision NOT to act** — promptfoo grades what the agent DID, not what it correctly refrained from doing.                                                                                                                  |
+| `interceptTools` (eval arm) | _none_                                             | intercept-and-prevent a tool in the **real shipped harness** (PreToolUse exit-2 deny): the call is intercepted, NOT executed, yet its args still land in the trace. promptfoo reconstructs an agent from YAML/SDK and can't intercept inside the real harness. |
+
+The bottom two rows are the durable edge: `notTool` and `interceptTools` assert
+the agent's _restraint_ — the thing a completion-grading eval structurally cannot
+see, because there is no output to grade when the right behaviour is _not_ acting.
+
 ## See also
 
 - `research/eval-api-landscape.md` — the whole eval field scored against our API,

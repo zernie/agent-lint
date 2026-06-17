@@ -97,9 +97,10 @@ Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`*
 A/B with a significance gate). **Testing a skill?** `measureTriggerRate` checks
 its description actually **fires** across varied prompts (recall) without
 hijacking unrelated ones (precision). **Need a safety property** — that the agent
-**didn't** push to the wrong branch or call a paid API? `notTool` + `fakeTools`
+**didn't** push to the wrong branch or call a paid API? `notTool` + `interceptTools`
 intercept the tool in the real hook layer, so the attempt is caught and the side
-effect never happens. **[Full guide →](docs/harness-testing.md)**
+effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
+foreign code (and a real model) safely by default — **[safety model →](docs/safety.md)**
 
 **Affordable by design — the eval you can actually run.** Almost nobody evals
 their harness, because the usual tools (promptfoo, DeepEval, …) hit the API SDK

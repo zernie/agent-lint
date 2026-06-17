@@ -138,6 +138,8 @@ export function tool(name: string): Check<Trace> {
  * — the **argument** half of the tool-call spy. Asserts not just *that* a tool was
  * reached but *how* it was called (the image-request body carried the style suffix,
  * the panel spawn requested a non-expert), which a completion grader can't see.
+ *
+ * Cross-reference: ≈ promptfoo `is-valid-function-call` / DeepEval `ToolCorrectnessMetric`.
  */
 export function toolWith(name: string, args: ArgMatcher): Check<Trace> {
   return {
@@ -169,6 +171,10 @@ export function toolWith(name: string, args: ArgMatcher): Check<Trace> {
  * This is the highest-value, most-overlooked check, and the one a
  * completion-grading eval structurally cannot make: it sees the agent's *decision*
  * to act, not just its final text.
+ *
+ * Cross-reference: this negative/safety assertion of a *decision not to act* has
+ * no promptfoo / DeepEval / Inspect equivalent — they grade what the agent DID,
+ * not what it correctly refrained from doing.
  */
 export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
   return {

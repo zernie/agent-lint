@@ -2,7 +2,7 @@
  * `ArgMatcher` — a small, serializable matcher over a tool call's `input`.
  *
  * Shared by the check vocabulary (`toolWith` / `notTool` in `src/check.ts`) and
- * the tool-fake interception seam (`src/tool-fake.ts`), so "did the agent call
+ * the tool-interception seam (`src/tool-intercept.ts`), so "did the agent call
  * this tool with these arguments?" means the same thing whether you're *asserting*
  * on a captured call or *intercepting* one before it runs. Pure + model-free.
  */
