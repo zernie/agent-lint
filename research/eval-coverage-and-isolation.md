@@ -43,6 +43,61 @@ you don't need the result); **"needs the result to proceed" = R2** (record the
 result once, replay it); **"the real system's behavior is the thing being
 verified" = R3** (you can't fake real SQL semantics or a real browser layout).
 
+## The second axis: the correctness oracle (and where prose skills fit)
+
+The three-rung model answers **one** question — _what does the test need from the
+outside world?_ It does **not** answer a second, orthogonal question that decides
+the **cost**: _what is the correctness oracle — who decides pass/fail?_ Conflating
+the two is the trap that makes a prose skill look "R1, therefore cheaply covered"
+when it isn't. There are two axes:
+
+- **Axis 1 — external dependency (R1/R2/R3):** does anything execute, and if so a
+  recorded result (R2) or a real service (R3)? (the table above.)
+- **Axis 2 — the oracle:** can a **deterministic check** decide the verdict (a hook
+  block/allow, a tool-contract violation, a structural fact — **free, no model, in
+  CI**), or does only a **real model** make the judgment (does a description
+  **fire**? does prose guidance **change behavior**? is the output **good**, judged
+  by rubric — **runs on your subscription**, not metered API)?
+
+We tag a model-gated artifact with the **`-MG` suffix** on its dependency rung:
+**`R1-MG`** = nothing executes _but_ the oracle is a model (the common case — a
+prose skill, a description's trigger-rate, an agent's judged review); **`R2-MG`** =
+the **model** decides to shell out and we replay the result (e.g. a skill the model
+chooses to run that calls `gh`). The suffix is what the dogfood scorecards under
+[`../examples/harness/vendor/`](../examples/harness/vendor/) use.
+
+**Where a prose skill fits (the question that prompted this):** a pure-guidance
+skill (superpowers' TDD/debugging, a "write a good commit message" skill) is
+**`R1-MG`** — dependency-axis **R1** (nothing executes; its description and body
+are just text), oracle-axis **model-gated** (its _worth_ is "does the agent
+actually go test-first / find root cause?", which only a model can judge). It is
+**not** uncovered and it is **not** free: vigiles tests it on your subscription via
+`measureTriggerRate` (does the description fire, recall + precision) and a judged
+behavioral eval (does following the prose move the output). The cheap tiers prove
+it **loads and its hook fires**; proving the **guidance works** is the model-gated
+eval tier — and that is the honest boundary, not a coverage hole.
+
+## What vigiles can and can't test (the three buckets)
+
+Folding both axes together gives the boundary to state plainly — publicly and
+internally — so nobody mistakes "model-gated" for "uncovered":
+
+| Bucket                          | = axes                       | Cost / where it runs                              | vigiles?                           |
+| ------------------------------- | ---------------------------- | ------------------------------------------------- | ---------------------------------- |
+| **A — Free & deterministic**    | R1/R2 + deterministic oracle | free, no model, **every commit / CI**             | ✅ owns it                         |
+| **B — Model-gated on your sub** | (R1/R2)-MG + model oracle    | real model, **no metered API** — your Pro/Max sub | ✅ owns it (the affordability bet) |
+| **C — Needs a real service**    | R3                           | needs Docker; seconds of cold-start               | 🔗 **composes** with a container   |
+
+**A + B = "testable by vigiles"** — free in CI _or_ on the subscription you already
+pay for. **C is the only thing vigiles does not run itself**; it composes with a
+container at the hand-off and does not reinvent the sandbox. So the honest,
+non-confusing way to grade a plugin is **two numbers, not three**: **"% testable at
+all (A + B, free + sub)"** vs **"% that needs a container (C)"**. A prose-skill
+library scores ~100% testable / ~0% needs-a-container (it's just that most of its
+testable surface is bucket B, the sub-priced half); an accessibility/browser plugin
+is the worst case, with a large bucket C. Reporting only the single dependency rung
+hides which half of "testable" is free vs sub-priced — always say the bucket.
+
 ## Record-replay, not LLM-synthesis
 
 The R2 rung is **record-replay (a VCR/cassette pattern), never model-synthesized
@@ -145,6 +200,15 @@ reach the no-model tiers; containerized-e2e is faithful but heavy and metered.
 Nobody packages the cheap deterministic + record-replay tiers _with_
 sub-affordability _and_ a clean container hand-off.
 
+**The sub-affordability story is ToS-clean.** vigiles drives _your own_ `claude`
+CLI to test _your own_ harness on _your own_ subscription — identical to running
+Claude Code yourself. The Claude Agent SDK's ToS restricts _productizing_ claude.ai
+login/limits inside a third-party offering; running your own tests on your own sub
+is the supported posture, not that. So "real-model evals on the subscription" is a
+deliberate, allowed design point, not a loophole. See
+[`sdk-harness-testing.md`](sdk-harness-testing.md) (the 2026-06-17 probe) for the
+ToS detail and the per-SDK affordability column.
+
 ## Dogfood results — the three vendored plugins
 
 The model is dogfooded against the three real pinned plugins under
@@ -164,6 +228,11 @@ bwrap-gated OMC egress/fs checks). Scorecards:
   — ~30% free (incl. the inherits-all agent footgun), ~25% model-gated, ~45% R3 (a
   real browser / a11y scanner / assistive-tech runtime — the genuine worst case for
   cheap tiers). **Grade C.**
+
+Read as the two-number rollup (bucket A+B vs C): OMC ≈ **93% testable / 7%
+needs-a-container**, superpowers ≈ **100% / 0%**, wshobson ≈ **55% / 45%**. The
+container number is the only surface vigiles hands off; the rest splits between free
+(A) and sub-priced (B).
 
 The honest finding across the three: the cheap tiers comprehensively cover the
 **deterministic spine** (hook decisions, tool-contracts/footguns, structure,

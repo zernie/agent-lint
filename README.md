@@ -94,9 +94,12 @@ assert(r.blocked); // a red ✗ here means your hook silently lets it through
 
 Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
 (the real agent CLI against a scripted mock model), **`runEval`** (the real model
-A/B with a significance gate). **Testing a skill?** `measureTriggerRate` checks
-its description actually **fires** across varied prompts (recall) without
-hijacking unrelated ones (precision). **Need a safety property** — that the agent
+A/B with a significance gate). **Testing a skill?** Two questions, both covered:
+does its description **fire** (`measureTriggerRate` — recall across varied prompts
+without hijacking unrelated ones, precision), **and** does its guidance actually
+**change behavior** (`runEval` A/B the skill on vs off + a `judged` quality check —
+does following the prose improve the output, gated by significance). Description
+_and_ behavior, not just one. **Need a safety property** — that the agent
 **didn't** push to the wrong branch or call a paid API? `notTool` + `interceptTools`
 intercept the tool in the real hook layer, so the attempt is caught and the side
 effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
@@ -117,6 +120,12 @@ a real-model eval, vigiles drives your `claude` CLI — so it runs on the **Pro/
 subscription you already pay for**, not metered API billing. CI runs only the free
 deterministic tiers; you run the real-model eval where the subscription already is
 — a Claude Code session or locally — when it's worth it, not on every PR.
+
+This affordability story is **ToS-clean**: vigiles drives _your own_ `claude` CLI
+to test _your own_ harness on _your own_ subscription — the same thing you do when
+you run Claude Code. (The Claude Agent SDK's ToS restricts _productizing_ claude.ai
+login/limits in a third-party offering; running your own tests on your own sub is
+exactly the supported posture, not that.)
 
 ## Quick start
 

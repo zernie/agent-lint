@@ -136,6 +136,22 @@
   copy-mirror when no sync tool fans out, and per-harness skill verify/compile.
   Kills the silent harness-mismatch footgun in `compile`.
   [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md)
+- **Mock-ergonomics borrow-list (NEW — 2026-06-17 multi-SDK probe, this PR)** —
+  concrete ergonomics to adopt from other SDKs' first-party mocks into `scriptModel`
+  / the eval tier, surfaced by the current-evidence probe. Borrow: Pydantic
+  `FunctionModel`'s contract-aware `(messages, info) -> ModelResponse` scripting
+  (expose the loaded harness's tool defs to the mock script); Vercel
+  `simulateReadableStream`'s delay-knob + `convertArrayToReadableStream` + `mockId`
+  - `doGenerate`-accepts-array (a `scriptModel` array shorthand) + `doGenerateCalls`
+    capture (≈ `trace.modelRequests`); LangChain's `langchain-tests` capability-flag
+    conformance (≈ our adapter-conformance kit) + `langchain-replay` decision-level
+    replay (mock the model's judgment, keep tool side effects real); Pydantic's
+    `ALLOW_MODEL_REQUESTS=False` accidental-real-call guard; MS response-caching as
+    replay-adjacent. Each is an ergonomics upgrade, not a retarget — the probe
+    reaffirmed vigiles owns the gaps no SDK fills (tool-contract _enforcement_ of the
+    assembled agent, trigger-rate recall+precision, record/replay caching,
+    sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
+    2026-06-17 section)
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
