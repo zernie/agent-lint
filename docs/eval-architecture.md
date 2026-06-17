@@ -106,6 +106,26 @@ What a test needs from the _outside world_ sorts onto **three rungs**, and you
   what's under test (real SQL vs a real schema, a real browser, a DB/redis/
   analytics engine). _"real semantics under test" → R3._
 
+**A second, orthogonal axis decides the cost: the oracle.** The rungs say _what
+executes_; they do **not** say _who decides pass/fail_. A **deterministic** oracle
+(hook block/allow, tool-contract, a structural fact) is **free, no model, in CI**;
+a **model-gated** oracle (does a description **fire**? does prose guidance **change
+behavior**? is the output good, judged?) needs a **real model — on your
+subscription**, not metered API. We tag the latter `-MG` (e.g. **`R1-MG`** =
+nothing executes but only a model can judge — _the case for any prose skill_).
+Don't read "R1" as "free": a prose guidance skill is **R1-MG** — it's fully
+testable (trigger-rate + a judged behavioral eval), just on the sub, not in CI.
+That's the boundary, not a coverage hole.
+
+**What vigiles can and can't test — three buckets.** Folding both axes:
+**(A) Free & deterministic** (R1/R2 + deterministic oracle — every commit);
+**(B) Model-gated on your sub** (`-MG` + model oracle — no metered API);
+**(C) Needs a real service** (R3 — vigiles **composes** with a container, doesn't
+run it). **A + B is "testable by vigiles"; only C is delegated.** So grade a plugin
+with **two numbers, not three**: **"% testable at all (free + sub)"** vs **"% that
+needs a container"** — and always say which bucket, so "testable" never hides
+whether it's free or sub-priced.
+
 **Distribution (blended, scrubbed).** A survey of popular community plugin
 collections **and** an audit of a ~90-artifact real-world production skill set
 **converge**: **R1 ≈ 48–90%, R2 ≈ 10–43%, R3 ≈ 0–9%.** Net — **R1+R2 covers

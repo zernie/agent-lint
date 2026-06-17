@@ -30,6 +30,35 @@ model. Only "does the model trigger / behave differently" needs the eval tier.
 If the unit and deterministic tiers can both answer it, **prefer unit**: it's
 faster and reaches events the deterministic mock can't drive.
 
+## Step 0.5 — Set honest expectations (what's testable, and at what cost)
+
+Be explicit with the user about which bucket each surface falls into — never let
+"we'll test it" hide whether that's free, sub-priced, or needs a container. Every
+surface sorts into one of three buckets:
+
+- **A — Free & deterministic** (no model, runs in CI on every commit): a hook's
+  block/allow decision (`runHook`), a tool-contract / "did NOT call the forbidden
+  tool" check, structural facts (`vigiles scan`), and **record-replay** of any tool
+  a skill shells out to (record the real result once, replay it via a PATH stub).
+- **B — Model-gated, on your subscription** (real model, **no metered API**): does a
+  skill's description **fire** (`measureTriggerRate`, recall + precision) **and**
+  does its guidance actually **change behavior** (`runEval` A/B on-vs-off + a
+  `judged` quality check). This is the half a **prose / guidance skill** lives in —
+  its worth is behavioral, so only a model can judge it. That is **not** "uncovered"
+  and **not** free: it's fully testable on the sub. State it that way.
+- **C — Needs a real service** (a real browser / DB / redis / a11y runtime): vigiles
+  **composes with a container** here; it does not fake real semantics. Name the
+  service and hand off — don't pretend a cheap tier substitutes for it.
+
+So a prose-skill library is roughly **~100% testable (some free, most on your sub),
+~0% needs-a-container** — not "poorly covered." An accessibility/browser plugin is
+the worst case, with a large bucket C. When you report coverage, give **two
+numbers**: "% testable at all (free + sub)" vs "% that needs a container", and say
+which surfaces are free vs sub-priced. The model-gated half is the **point** of the
+eval pillar (affordable on the sub), not a gap — and testing a prose skill's
+_behavior_ requires a real model for **everyone** (promptfoo, the SDKs, all of it);
+vigiles just does it on your subscription instead of metered API.
+
 ## Step 1 — Ensure vigiles is installed
 
 Check whether `vigiles` is a dependency (`package.json`), and install it as a
