@@ -3,13 +3,19 @@ name: Evals (behavioral tier)
 # The behavioral (real-model) tier of the harness-testing pillar, run as a CI
 # gate instead of frozen as FINDING: comments. See docs/eval-architecture.md.
 #
-# INERT UNTIL ENABLED: every model step is guarded on the ANTHROPIC_API_KEY
-# secret. With no secret (the default, and every fork PR) the job prints a notice
-# and exits 0 — it never reds a PR. To turn the gate on, add the repo secret:
-#   Settings → Secrets and variables → Actions → New repository secret
-#   Name: ANTHROPIC_API_KEY   Value: <a key with a budget you accept>
-# Real model → real cost: the PR gate is the CHEAP tier (trigger evals, bodies
-# stubbed, 1 trial, a DATED model); the nightly job is the fuller drift tier.
+# INERT UNTIL ENABLED: every model step is guarded on auth being present. With
+# no secret (the default, and every fork PR) the job prints a notice and exits 0
+# — it never reds a PR. To turn the gate on, add EITHER repo secret
+# (Settings → Secrets and variables → Actions → New repository secret):
+#   • CLAUDE_CODE_OAUTH_TOKEN — runs on a Claude Pro/Max SUBSCRIPTION (generate
+#     with `claude setup-token`). Flat cost, no metered API billing — the
+#     affordable path, since vigiles drives the real `claude` CLI which auths
+#     exactly like your own CLI does (no per-token API charge).
+#   • ANTHROPIC_API_KEY — the metered API fallback.
+# Cost is kept thin by construction: the PR gate is the CHEAP tier (trigger
+# evals, bodies stubbed, 1 trial, a DATED model); nightly is the fuller drift
+# tier. Most harness questions never reach here — they're answered by the
+# no-model unit/integration tiers in ci.yml for free.
 
 on:
   pull_request:
@@ -47,14 +53,20 @@ jobs:
 
       - name: Behavioral eval gate (cheap tier)
         env:
+          # Auth EITHER way. CLAUDE_CODE_OAUTH_TOKEN runs evals on a Claude
+          # Pro/Max SUBSCRIPTION (generate with `claude setup-token`) — flat cost,
+          # no metered API billing — which is the affordable path for most users;
+          # ANTHROPIC_API_KEY is the metered fallback. vigiles drives the real
+          # `claude` CLI, so it authenticates like the user's own CLI does.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # A DATED model id — honest pinning (a floating alias would let behavior
           # drift while a hash says "unchanged"). A 404 on deprecation is by
           # design: it forces a re-eval onto a current model. Bump deliberately.
           VIGILES_GATE_MODEL: claude-haiku-4-5-20251001
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::notice title=Eval gate inert::ANTHROPIC_API_KEY not set — the behavioral eval gate is INERT (add the secret to enable). Passing."
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice title=Eval gate inert::no CLAUDE_CODE_OAUTH_TOKEN (subscription) or ANTHROPIC_API_KEY (metered) set — the behavioral eval gate is INERT. Add either secret to enable; the subscription token is the cheap path. Passing."
             exit 0
           fi
           # --no-skip: a skipped behavioral check is unprotected surface here, so
@@ -87,10 +99,12 @@ jobs:
 
       - name: Behavioral eval drift tier (full)
         env:
+          # Subscription token (cheap, flat) or metered API key — either works.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::notice title=Nightly evals inert::ANTHROPIC_API_KEY not set — the nightly drift tier is INERT (add the secret to enable). Passing."
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice title=Nightly evals inert::no CLAUDE_CODE_OAUTH_TOKEN (subscription) or ANTHROPIC_API_KEY (metered) set — the nightly drift tier is INERT. Add either secret to enable. Passing."
             exit 0
           fi
           node dist/cli.js eval
