@@ -65,7 +65,7 @@ const report = await measureTriggerRate({
   ],
   fired: (t) => skillResolved(t, skill),
   trials,
-  model: process.env.VIGILES_MODEL, // CI pins a dated id; undefined → default
+  model: process.env.VIGILES_MODEL, // CI passes Sonnet; undefined → Sonnet default
 });
 
 console.log(formatTriggerRateReport(report));
@@ -75,3 +75,9 @@ if (report.n === 0) throw new Error("no runs executed");
 // work at least 80% of the time (recall) and rarely on noise (precision).
 assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.3 });
 console.log(`\n✓ ${skill}: recall + precision within bounds.`);
+
+// FINDING (2026-06-17): MEASURE ON SONNET. On claude-haiku-4-5 this skill scored
+// recall 0.50 (missed every "eval/measure/trigger-rate" phrasing) and FAILED the
+// ≥0.8 bar; on claude-sonnet-4-6 it scored 0.90 and passed — the descriptions are
+// fine, haiku is just a weaker SELECTOR. Trigger-rate is a selection measurement,
+// so it must run on the model users actually run (Sonnet), not a cheap haiku.

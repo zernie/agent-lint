@@ -42,7 +42,10 @@ entry silently changes eval results — so a lax TTL-only approach is too weak.
 `claude-haiku-4-5-20251001`); a dated id keys correctly because the string
 changes when the model does. We can't auto-resolve an alias without an API call
 at key-time, so vigiles **warns** when a cache rides a floating alias
-(`isDatedModel` in `src/eval.ts`) and the CI gate pins a dated id. Deferred: a
+(`isDatedModel` in `src/eval.ts`). (The CI gate pins the realistic _selector_
+model — Sonnet — for trigger-rate, not a cheap haiku; the dated-id concern here is
+about cache/baseline soundness, a separate axis from picking the right model.)
+Deferred: a
 short-TTL backstop for the unpinned case (see #4). Rejected: a canary-probe
 fingerprinting system to detect drift — over-engineering at this scale.
 

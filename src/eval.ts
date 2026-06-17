@@ -1223,7 +1223,12 @@ export interface TriggerRateSpec {
   readonly minDistance?: number;
   /** Trials per prompt. Default 1. */
   readonly trials?: number;
-  /** Model alias. Default "haiku". */
+  /**
+   * Model alias/id. Default `"sonnet"` — the realistic selector most Claude Code
+   * users run. NOT haiku: trigger-rate is a *selection* measurement and haiku is a
+   * much weaker selector, so it under-reports recall (dogfooded: a skill scored
+   * 0.50 on haiku vs 0.90 on Sonnet). Override for a cheaper-but-pessimistic run.
+   */
   readonly model?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash Skill. */
   readonly allowedTools?: readonly string[];
@@ -1507,15 +1512,18 @@ function copySkillsInto(
  * Build a combined plugin: the under-test skills PLUS every `installSet` source's
  * skills, so the skill-under-test competes for selection as in the real harness.
  * Named after the under-test plugin so `<name>:<skill>` ids still match; the
- * under-test skills win a name collision. Returns the dir + the count of
- * COMPETITOR skills added. Caller removes the dir. Pure (filesystem only).
+ * under-test skills win a name collision. Returns the dir + `added` = how many
+ * installSet skills were merged in (excludes collisions). The report's
+ * `competitors` is derived separately from the FULL pool (see `countSkills`), so
+ * sibling skills already in the under-test source count too. Caller removes the
+ * dir. Pure (filesystem only).
  */
 export function packageInstallSet(opts: {
   underTestSrc: string;
   name: string;
   installSet: readonly string[];
   stub: boolean;
-}): { dir: string; competitors: number } {
+}): { dir: string; added: number } {
   const root = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
   try {
     mkdirSync(join(root, ".claude-plugin"), { recursive: true });
@@ -1536,15 +1544,15 @@ export function packageInstallSet(opts: {
       throw new Error(
         `No <name>/SKILL.md skills under the skill-under-test source ${opts.underTestSrc}`,
       );
-    let competitors = 0;
+    let added = 0;
     for (const src of opts.installSet)
-      competitors += copySkillsInto(
+      added += copySkillsInto(
         collectSkillsSource(src),
         skillsOut,
         opts.stub,
         present,
       );
-    return { dir: root, competitors };
+    return { dir: root, added };
   } catch (e) {
     rmSync(root, { recursive: true, force: true }); // don't leak the temp dir
     throw e;
@@ -1563,6 +1571,16 @@ function underTestSource(spec: TriggerRateSpec): { src: string; name: string } {
   throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
 }
 
+/** Number of `<name>/SKILL.md` skills installed in a plugin — the selection pool. */
+function countSkills(pluginDir: string): number {
+  const dir = skillsDirOf(pluginDir);
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true }))
+    if (e.isDirectory() && existsSync(join(dir, e.name, "SKILL.md"))) n++;
+  return n;
+}
+
 function resolveTriggerPluginDir(spec: TriggerRateSpec): {
   pluginDir: string;
   packaged?: string;
@@ -1574,30 +1592,39 @@ function resolveTriggerPluginDir(spec: TriggerRateSpec): {
     );
   const stub = spec.stubSkillBodies ?? false;
   const installSet = spec.installSet ?? [];
+  let pluginDir: string;
+  let packaged: string | undefined;
   if (installSet.length > 0) {
     // Whole-harness tier: merge the under-test skills with the install set so
     // selection is competitive (the realistic, differentiated measurement).
     const { src, name } = underTestSource(spec);
-    const { dir, competitors } = packageInstallSet({
+    ({ dir: pluginDir } = packageInstallSet({
       underTestSrc: src,
       name,
       installSet,
       stub,
-    });
-    return { pluginDir: dir, packaged: dir, competitors };
-  }
-  if (spec.skillsDir) {
-    const packaged = packageSkillsDir(spec.skillsDir, { stub });
-    return { pluginDir: packaged, packaged, competitors: 0 };
-  }
-  if (spec.pluginDir) {
-    if (!stub) return { pluginDir: spec.pluginDir, competitors: 0 };
+    }));
+    packaged = pluginDir;
+  } else if (spec.skillsDir) {
+    packaged = packageSkillsDir(spec.skillsDir, { stub });
+    pluginDir = packaged;
+  } else if (spec.pluginDir) {
     // Stub a real plugin: build a minimal plugin from its skills/ with bodies
     // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
-    const packaged = stubbedPluginDir(spec.pluginDir);
-    return { pluginDir: packaged, packaged, competitors: 0 };
+    packaged = stub ? stubbedPluginDir(spec.pluginDir) : undefined;
+    pluginDir = packaged ?? spec.pluginDir;
+  } else {
+    throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
   }
-  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
+  // `competitors` is the REAL selection pressure: every OTHER skill installed in
+  // the resolved plugin (siblings already in the source + any installSet), not
+  // just the installSet delta — so a multi-skill plugin is never mislabeled
+  // "isolated". `max(0, …)` guards a 0-skill pool.
+  return {
+    pluginDir,
+    packaged,
+    competitors: Math.max(0, countSkills(pluginDir) - 1),
+  };
 }
 
 /** The per-run knobs a trigger set shares (everything but the prompt list). */
@@ -1681,7 +1708,9 @@ export async function measureTriggerRateWith(
   const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
-    model: spec.model ?? "haiku",
+    // Sonnet, not haiku: trigger-rate is a selection measurement and haiku
+    // under-selects, producing false-negative recall (see TriggerRateSpec.model).
+    model: spec.model ?? "sonnet",
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,

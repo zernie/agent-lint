@@ -34,7 +34,8 @@
 - **Run the behavioral (eval) tier in CI as a gate** — today `vigiles eval` is
   manual-only and results are frozen as `FINDING:` comments (a snapshot is
   documentation, not protection). Wire the _cheap_ tier (`measureTriggerRate` /
-  `measure` with `stubSkillBodies`, dated haiku) as a per-PR gate, then the
+  `measure` with `stubSkillBodies`, on **Sonnet** — the realistic selector, not
+  haiku, which under-measures trigger-rate) as a per-PR gate, then the
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
   roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
 

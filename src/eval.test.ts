@@ -980,14 +980,14 @@ test("packageInstallSet merges under-test + competitors (under-test wins a colli
     "---\nname: extra\ndescription: E\n---\nEXTRA\n",
   );
 
-  const { dir, competitors } = packageInstallSet({
+  const { dir, added } = packageInstallSet({
     underTestSrc: base,
     name: "vigiles",
     installSet: [comp, comp2],
     stub: false,
   });
   // 'rival' (skills/) + 'extra' (.claude/skills/) added; 'dup' collided → not counted
-  assert.equal(competitors, 2);
+  assert.equal(added, 2);
   assert.ok(existsSync(join(dir, "skills", "extra", "SKILL.md")));
   // named for the under-test plugin so `<name>:<skill>` ids still match `fired`
   const manifest = JSON.parse(
@@ -1186,6 +1186,42 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
   });
   assert.ok(out.includes("isolated"));
   assert.ok(out.toLowerCase().includes("upper bound"));
+});
+
+test("measureTriggerRateWith counts SIBLING skills as competitors (not just installSet)", async () => {
+  // A multi-skill plugin with NO installSet: the under-test skill still competes
+  // against its siblings, so the run must NOT be mislabeled "isolated" (the bug
+  // the dogfood surfaced — competitors used to count only installSet additions).
+  const dir = makeTmpDir("multi");
+  const skills = join(dir, ".claude", "skills");
+  for (const name of ["foo", "bar", "baz"]) {
+    mkdirSync(join(skills, name), { recursive: true });
+    writeFileSync(
+      join(skills, name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: does ${name}\n---\nbody\n`,
+    );
+  }
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 2); // 3 skills installed − the one under test
+  const out = formatTriggerRateReport(report);
+  assert.ok(out.includes("whole-harness"));
+  assert.ok(!out.includes("isolated"));
+  cleanupTmpDir(dir);
 });
 
 test("measureTriggerRateWith stubSkillBodies strips the body in the packaged plugin", async () => {

@@ -393,8 +393,11 @@ Ordered by protection-per-dollar, with the dogfood that validates each step.
      neither (the default, and all fork PRs) it prints a notice and exits 0 — never
      reds a PR.
      The CLI gained `vigiles eval --model=<id>` → `VIGILES_MODEL` (sibling of
-     `--trials`), so the gate pins a **dated** id (`claude-haiku-4-5-…`) without
-     changing library defaults; scripts read `process.env.VIGILES_MODEL`. And
+     `--trials`), so the gate pins the **realistic selector model** (Sonnet — NOT
+     haiku, which under-measures trigger-rate: a weaker selector falsely fails
+     skills that fire fine on Sonnet; dogfooded at 0.50 haiku vs 0.90 Sonnet for
+     `test-harness`) without changing library defaults; scripts read
+     `process.env.VIGILES_MODEL`. And
      `runEvalWith` now warns (`::warning::` under CI, else stderr) when an eval
      cache rides a **floating** alias (`isDatedModel`) — the exact drift-hiding
      case the dated pin prevents.
