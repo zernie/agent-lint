@@ -55,6 +55,14 @@ export interface CacheKeyInput {
    * arm, not a native install). See {@link hashDir}.
    */
   readonly pluginDirHash?: string;
+  /**
+   * The harness BINARY version (e.g. `claude --version`). The harness evolves
+   * fast — a CLI upgrade changes the system prompt + tool definitions, which steer
+   * behaviour as much as the model does — so a cached result must invalidate when
+   * the binary changes, or a replay silently serves a result from a different
+   * harness. Resolved once per run; omit when unknown (then it doesn't partition).
+   */
+  readonly harnessVersion?: string;
   /** Which trial this is — distinct trials are distinct samples, cached apart. */
   readonly trialIndex: number;
 }

@@ -47,6 +47,19 @@ test("cacheKey changes when any model-affecting input changes", () => {
   assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }));
   assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }));
   assert.notEqual(base, cacheKey({ ...baseKey, files: { "a.txt": "y" } }));
+  assert.notEqual(base, cacheKey({ ...baseKey, model: "opus" }));
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, settings: { hooks: { a: 1 } } }),
+  );
+  assert.notEqual(base, cacheKey({ ...baseKey, env: { X: "1" } }));
+  // the harness binary version: a `claude` upgrade must invalidate (its system
+  // prompt steers behaviour, so a replay across versions would be stale).
+  assert.notEqual(base, cacheKey({ ...baseKey, harnessVersion: "2.1.179" }));
+  assert.notEqual(
+    cacheKey({ ...baseKey, harnessVersion: "2.1.179" }),
+    cacheKey({ ...baseKey, harnessVersion: "2.2.0" }),
+  );
   // a different tool SET changes the key (mere reordering does not — see below)
   assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Read"] }));
 });

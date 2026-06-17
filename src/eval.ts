@@ -829,6 +829,9 @@ async function runWithCache(
     // A native --plugin-dir install isn't in `files`, so hash its CONTENTS into
     // the key — otherwise editing a skill in it would false-replay.
     pluginDirHash: runArgs.pluginDir ? hashDir(runArgs.pluginDir) : undefined,
+    // The harness binary evolves fast; a CLI upgrade must invalidate (stale
+    // replay otherwise serves a result from a different system prompt).
+    harnessVersion: harnessVersion(),
     trialIndex: keyParts.trialIndex,
   });
   const hit = readCache(cfg.cacheDir, key);
@@ -894,6 +897,29 @@ export function belowModelFloor(model: string, floor: string): boolean {
   const f = modelTier(floor);
   return m !== null && f !== null && m < f;
 }
+
+/* v8 ignore start -- spawns the real harness binary; memoized, cache-path only */
+let cachedHarnessVersion: string | undefined;
+/**
+ * The harness binary version (`claude --version`), for the cache key — so a CLI
+ * upgrade (new system prompt / tool defs) invalidates a stale replay. Memoized
+ * (one spawn per process), resolved only on the cache path, "unknown" if the
+ * binary isn't found (then it doesn't partition the key).
+ */
+function harnessVersion(): string {
+  if (cachedHarnessVersion === undefined) {
+    try {
+      cachedHarnessVersion = execSync(
+        `${claudeCodeRuntime.agentBinary} --version`,
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+    } catch {
+      cachedHarnessVersion = "unknown";
+    }
+  }
+  return cachedHarnessVersion;
+}
+/* v8 ignore stop */
 
 /** Warn (once per run) that replaying/recording a cache on a floating alias hides drift. */
 function warnFloatingModel(model: string): void {
