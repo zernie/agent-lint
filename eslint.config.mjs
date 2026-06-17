@@ -14,14 +14,23 @@ import globals from "globals";
 // domain must never import the adapter, so the core stays harness-agnostic for a
 // future src/adapters/<other-harness>. Holds today with zero violations.
 const VERIFY_CORE = "src/core/**/*.ts";
-const CC_HARNESS = "src/adapters/claude-code/**/*.ts";
+// The Claude Code adapter. `src/mock-model.ts` is the Anthropic-Messages SSE mock
+// — Claude-Code-specific in CONTENT even though it sits at the src/ root, so it is
+// classified as part of the CC adapter here. That makes the import-graph boundary
+// rule below FORBID the agnostic surface from re-exporting it (the leak that let
+// `scriptModel` surface from `vigiles/testing`); get the CC mock from
+// `vigiles/claude-code` instead. (The principled end-state is to physically move
+// the file under src/adapters/claude-code/ — tracked in research/roadmap.md — but
+// classifying it enforces the invariant today, with no move required.)
+const CC_HARNESS = ["src/adapters/claude-code/**/*.ts", "src/mock-model.ts"];
 const CODEX_HARNESS = "src/adapters/codex/**/*.ts";
 const OPENCODE_HARNESS = "src/adapters/opencode/**/*.ts";
 // The harness-AGNOSTIC public surface: the pillar-2 entry + the per-tier barrels.
 // These advertise themselves as harness-agnostic, so they must route through the
-// composition-root runner modules (src/{harness-test,run-hook,eval,mock-model}.ts),
-// never reach into a specific adapter — otherwise "agnostic" is a name only. See
-// research/adapter-api-design.md.
+// composition-root runner modules (src/{harness-test,run-hook,eval}.ts) and may
+// re-export ONLY the agnostic names from them — never the Claude-Code transport
+// (`scriptModel`, `claudeCodeDriver`, `loadPlugin`, …), and never a specific
+// adapter. Otherwise "agnostic" is a name only. See research/adapter-api-design.md.
 const AGNOSTIC_SURFACE = "src/{testing,unit,integration,e2e}.ts";
 
 export default [
@@ -124,7 +133,7 @@ export default [
                 },
               },
               message:
-                "Agnostic surface: the harness-agnostic public entry (${file.type}) must not import a specific harness adapter (${dependency.type}). Re-export the composition-root runner modules (src/{harness-test,run-hook,eval,mock-model}.ts) instead, so this surface stays harness-agnostic. See research/adapter-api-design.md.",
+                "Agnostic surface: the harness-agnostic public entry (${file.type}) must not import a specific harness adapter (${dependency.type}) — this includes src/mock-model.ts (the Claude-Code mock). Re-export ONLY the agnostic names from the composition-root runner modules (src/{harness-test,run-hook,eval}.ts); import harness-specific transport (scriptModel, claudeCodeDriver, loadPlugin) from vigiles/claude-code. See research/adapter-api-design.md.",
             },
           ],
         },
