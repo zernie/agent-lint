@@ -1,0 +1,96 @@
+name: Evals (behavioral tier)
+
+# The behavioral (real-model) tier of the harness-testing pillar, run as a CI
+# gate instead of frozen as FINDING: comments. See docs/eval-architecture.md.
+#
+# INERT UNTIL ENABLED: every model step is guarded on the ANTHROPIC_API_KEY
+# secret. With no secret (the default, and every fork PR) the job prints a notice
+# and exits 0 — it never reds a PR. To turn the gate on, add the repo secret:
+#   Settings → Secrets and variables → Actions → New repository secret
+#   Name: ANTHROPIC_API_KEY   Value: <a key with a budget you accept>
+# Real model → real cost: the PR gate is the CHEAP tier (trigger evals, bodies
+# stubbed, 1 trial, a DATED model); the nightly job is the fuller drift tier.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Nightly drift tier — the one thing you can't amortize (did the model move?).
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap, every-PR gate: trigger evals (recall + precision) with skill bodies
+  # stubbed, 1 trial, on a DATED model so a cached/baselined result can't drift
+  # behind a floating alias. This is the (live + threshold, every-PR) cell.
+  eval-gate:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Install claude CLI
+        run: npm i -g @anthropic-ai/claude-code
+      - name: Build
+        run: npm run build
+
+      - name: Behavioral eval gate (cheap tier)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # A DATED model id — honest pinning (a floating alias would let behavior
+          # drift while a hash says "unchanged"). A 404 on deprecation is by
+          # design: it forces a re-eval onto a current model. Bump deliberately.
+          VIGILES_GATE_MODEL: claude-haiku-4-5-20251001
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice title=Eval gate inert::ANTHROPIC_API_KEY not set — the behavioral eval gate is INERT (add the secret to enable). Passing."
+            exit 0
+          fi
+          # --no-skip: a skipped behavioral check is unprotected surface here, so
+          # fail loudly rather than pass green. The three shipped model-invocable
+          # skills' trigger evals are the cheap tier (stubSkillBodies, 1 trial,
+          # dated model). Listed explicitly so the costlier judged/quality evals
+          # in the same dir stay out of the per-PR gate.
+          node dist/cli.js eval --trials=1 --model="$VIGILES_GATE_MODEL" --no-skip \
+            examples/harness/dogfood/test-harness.trigger.eval.mjs \
+            examples/harness/dogfood/strengthen.trigger.eval.mjs \
+            examples/harness/dogfood/edit-spec.trigger.eval.mjs
+
+  # Nightly (+ manual) drift tier: the fuller eval set, each script's own model
+  # and trials. This is the (live, nightly) cell — detecting "did the model get
+  # worse" requires hitting the live model with nothing cached.
+  eval-nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Install claude CLI
+        run: npm i -g @anthropic-ai/claude-code
+      - name: Build
+        run: npm run build
+
+      - name: Behavioral eval drift tier (full)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice title=Nightly evals inert::ANTHROPIC_API_KEY not set — the nightly drift tier is INERT (add the secret to enable). Passing."
+            exit 0
+          fi
+          node dist/cli.js eval

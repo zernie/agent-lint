@@ -51,7 +51,7 @@ const report = await measure({
   // The validation: was the denied call's argument captured in the Trace?
   checks: [toolWith("Bash", { command: /push origin main/ })],
   trials,
-  model: "haiku",
+  model: process.env.VIGILES_MODEL || "haiku",
 });
 
 console.log(formatCheckReport(report));

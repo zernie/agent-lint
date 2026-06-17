@@ -375,10 +375,19 @@ Ordered by protection-per-dollar, with the dogfood that validates each step.
 
 1. **CI wiring + cheap-tier gate (do first, smallest, highest leverage).** Add a CI
    job that runs the _cheap_ behavioral tier (`measureTriggerRate` + `measure` with
-   `stubSkillBodies`, haiku) as a **gate** with `assertRates`/`assertTriggerRate`,
-   and stop snapshotting scores in comments. This is mostly a workflow + a dated
-   `--model` default; it directly kills the kicker for the cheap evals. _Validates
-   on:_ the **missing `writing-quality` trigger case** (add it, gate it).
+   `stubSkillBodies`, a dated model) as a **gate** with `assertRates`/`assertTriggerRate`,
+   and stop snapshotting scores in comments. _Validates on:_ the **missing
+   `writing-quality` trigger case** (add it, gate it).
+   - **Shipped (scaffolding, inert until enabled):** `.github/workflows/evals.yml`
+     — an `eval-gate` job (pull_request, cheap dogfood trigger evals at 1 trial on
+     a dated model, `--no-skip`) and an `eval-nightly` job (the drift tier). Every
+     model step is guarded on the `ANTHROPIC_API_KEY` secret: with no secret (the
+     default, and all fork PRs) it prints a notice and exits 0 — never reds a PR.
+     The CLI gained `vigiles eval --model=<id>` → `VIGILES_MODEL` (sibling of
+     `--trials`), so the gate pins a **dated** id (`claude-haiku-4-5-…`) without
+     changing library defaults; scripts read `process.env.VIGILES_MODEL`.
+     **Remaining:** add the repo secret + budget to turn it on; the
+     `writing-quality` trigger case lives in the separate portfolio repo.
 2. **Cross-field miner/checker golden fixture test.** Near-zero new primitive — the
    code exists; freeze the Lago/Solidus model fixtures and assert it re-flags the
    known pair + trace, zero model. Cheapest real protection available. _Needs:_ a
