@@ -441,9 +441,23 @@ Three things make this cheap and honest, all on by choice:
   near-duplicate check). A rate over 3 copy-pasted prompts is noise; the gate
   refuses to produce it. Lower `minPrompts` for a genuinely narrow skill.
 
-Measure on the model your users actually run (`model: "sonnet"` for most Claude
-Code users) — the model is part of the harness, so trigger-rate inherits its
-skill-selection behaviour; the default `"haiku"` is a cheap conservative floor.
+- **Model — measured on the realistic selector.** `measureTriggerRate` defaults
+  to **`"sonnet"`** (the model most Claude Code users run): trigger-rate is a
+  _selection_ measurement, and a weaker model under-selects (dogfooded: a skill
+  scored 0.50 on haiku vs 0.90 on Sonnet). A **`minModel`** floor (default
+  `"sonnet"`) **fails** the run before spending a token if you point it below —
+  lower it deliberately for a cheap, pessimistic check. The model lives in the
+  spec, not an env override.
+- **Isolated vs whole-harness.** By default the skill competes against the
+  **other skills in the plugin you point at** (honest — selection is competitive).
+  Pass **`installSet: [otherPluginsOrSkillDirs]`** to co-install the rest of the
+  user's harness for a release-gate measurement; the report's `competitors` count
+  tells you how many skills were in the pool (`0` = isolated, an upper bound on
+  recall). See [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
+- **Comparing models is a harness A/B.** For "does my skill still fire on the
+  cheaper tier / after a model upgrade?", set a per-arm `model` in `measureArms` /
+  `runEval` (`arms: { sonnet: { model: … }, opus: { model: … } }`) — no separate
+  multi-model matrix runner.
 
 ### LLM-as-judge for subjective outcomes
 
