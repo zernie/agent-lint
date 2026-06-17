@@ -107,14 +107,22 @@ export function cacheKey(input: CacheKeyInput): SHA256Hash {
   return sha256short(JSON.stringify(canonical(normalized)));
 }
 
-/** Read a cached record by key, or null on miss / unreadable / malformed. */
+/**
+ * Read a cached record by key. A MISS (no file) returns `null` — normal, the run
+ * proceeds. A CORRUPT record (file present but not valid JSON) **throws** instead
+ * of silently degrading to a re-run: a broken cassette is a real failure the CI
+ * gate must surface, not mask. The message tells you how to recover.
+ */
 export function readCache(dir: string, key: SHA256Hash): CacheRecord | null {
   const path = join(dir, `${key}.json`);
   if (!existsSync(path)) return null;
+  const raw = readFileSync(path, "utf-8");
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as CacheRecord;
+    return JSON.parse(raw) as CacheRecord;
   } catch {
-    return null;
+    throw new Error(
+      `eval cache: corrupt record ${path} (invalid JSON) — delete it or clear the cache dir`,
+    );
   }
 }
 
