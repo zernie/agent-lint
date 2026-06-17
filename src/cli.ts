@@ -83,6 +83,11 @@ import {
   clearActiveAgent,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
+  fakeToolHookDecision,
+  parseFakeTools,
+  FAKE_TOOLS_ENV,
+} from "./tool-fake.js";
+import {
   verifySymbolRefs,
   collectRefIssues,
   refsHookAction,
@@ -2858,6 +2863,29 @@ function agentHookCommand(): void {
   }
 }
 
+/**
+ * `vigiles fake-tool-hook` — the PreToolUse interception hook for the tool-call
+ * spy. Reads the fake list from `VIGILES_FAKE_TOOLS`, decides whether the called
+ * tool should be faked, and if so denies the real execution (exit 2) feeding the
+ * canned result back to the model as the call's outcome. Allowing (return) lets
+ * the tool run for real. The model still emits the `tool_use`, so its arguments
+ * land in the Trace for `toolWith` / `notTool` to assert on. See src/tool-fake.ts.
+ */
+function fakeToolHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  const fakes = parseFakeTools(process.env[FAKE_TOOLS_ENV] ?? "");
+  const decision = fakeToolHookDecision(raw, fakes);
+  if (decision.fake) {
+    console.error(decision.result);
+    process.exit(2);
+  }
+}
+
 /** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
 function agentStartCommand(target: string | undefined): void {
   if (!target) {
@@ -2891,6 +2919,9 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "agent-hook":
       agentHookCommand();
+      return true;
+    case "fake-tool-hook":
+      fakeToolHookCommand();
       return true;
     case "action-hook":
       actionHookCommand();

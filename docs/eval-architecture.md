@@ -285,11 +285,19 @@ protection-per-dollar unlocked.
      (gap #5) — it's the free deterministic test, strictly cheaper than any
      model-driven spy.
    - **Shipped (inspection half):** `toolWith(name, args)` and `notTool(name,
-args?)` in `src/check.ts` — a serializable `ArgMatcher` (dot-path keys; RegExp
-     = pattern, primitive = exact) that asserts _how_ a tool was called, and the
-     negative/safety form (#2). These read the `Trace` the harness/eval tier
-     already captures. The remaining work is the **interception** seam (fake the
-     call, return a canned result, suppress the side effect) at the eval tier.
+args?)` in `src/check.ts` over a shared, serializable `ArgMatcher`
+     (`src/arg-match.ts`; dot-path keys, RegExp = pattern, primitive = exact) —
+     assert _how_ a tool was called, and the negative/safety form (#2). These read
+     the `Trace` the harness/eval tier already captures.
+   - **Shipped (interception core):** `src/tool-fake.ts` + the `vigiles
+fake-tool-hook` PreToolUse subcommand — declare a `FakeTool` (optionally
+     scoped by an `ArgMatcher`), and the hook denies the real execution (exit 2)
+     while feeding the model a canned result, so a real-model run that _decides_ to
+     hit a paid API / `git push` is cheap and side-effect-free, yet its arguments
+     still land in the `Trace`. Pure decision + settings-builder + env round-trip,
+     fully unit-tested. **Remaining:** the ergonomic `fakeTools:` field on the eval
+     spec (auto-merge the hook settings + the cache-key entry) so it's wired
+     end-to-end from `measure`/`runEval` without hand-editing `settings`.
 2. **Negative / safety assertions** (a mode of #1 — highest value, most
    overlooked). Did **not** call the paid API before approval; did **not** push to
    the wrong branch; did **not** file a security advisory for a model-only repro.
