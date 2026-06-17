@@ -78,6 +78,27 @@ import, so it **auto-detects** the harness from the repo. For the full
 adapter/import model and the capability matrix, see
 [`docs/harnesses.md`](harnesses.md).
 
+### Canonical imports
+
+There is **one canonical entry point per pillar** — import from these:
+
+| Pillar                   | Canonical import  | What it re-exports                                                                                                                                             |
+| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, `scriptModel`, tool stubs |
+| ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                               |
+
+`vigiles/testing` is the **superset** — reach for it first. Two other groups are
+deliberate, not aliases: the **capability-scoped tier barrels** `vigiles/unit` /
+`vigiles/integration` / `vigiles/e2e` (the Levels table above — the import path
+_is_ the capability contract, so `vigiles/unit` physically can't reach a model or
+the network), and the **module-named paths** `vigiles/run-hook` / `vigiles/eval` /
+`vigiles/check` / `vigiles/spec` / `vigiles/compile`, which are **stable aliases**
+of what `vigiles/testing` (or `vigiles/linting`) already re-exports. Older guides
+and the repo's examples still show the module-named paths; prefer the canonical
+barrel (or a tier barrel when you want the contract) in new code. Runner
+integration is `vigiles/vitest` / `vigiles/jest`; harness selection is
+`vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
+
 The **harness-specific** pieces — the mock wire format, the plugin layout, the
 sandbox — live in the per-harness guides:
 
