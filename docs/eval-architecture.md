@@ -86,6 +86,62 @@ caching-invalidation research in
 isolation decision in
 [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
 
+## Coverage & scope — what we test, what we delegate
+
+> Source of truth: [`research/eval-coverage-and-isolation.md`](../research/eval-coverage-and-isolation.md)
+> (the full blend + the classifier prompt). This is the digest.
+
+What a test needs from the _outside world_ sorts onto **three rungs**, and you
+**pick the lowest rung that faithfully measures the thing**:
+
+- **R1 — cheap / deterministic (nothing executes):** hook-fires (`runHook`),
+  trigger-rate recall+precision (`measureTriggerRate`), tool-contract / `notTool`.
+  No tool, no service, no Docker. _"calls a tool" → R1._
+- **R2 — stub / record-replay:** the deterministic logic consumes a tool/MCP/API
+  **result** that is **recorded ONCE** from a real tool and **replayed** by
+  shadowing the binary on PATH / stubbing the MCP — no live service. **Never**
+  model-synthesized stubs (drift → false confidence); reuse the eval cache's
+  record/replay machinery. _"needs the result" → R2._
+- **R3 — real disposable service/container:** the real system's **semantics** is
+  what's under test (real SQL vs a real schema, a real browser, a DB/redis/
+  analytics engine). _"real semantics under test" → R3._
+
+**Distribution (blended, scrubbed).** A survey of popular community plugin
+collections **and** an audit of a ~90-artifact real-world production skill set
+**converge**: **R1 ≈ 48–90%, R2 ≈ 10–43%, R3 ≈ 0–9%.** Net — **R1+R2 covers
+~90%+** of real plugin surface with **no Docker, on the subscription**; the R3
+apex is **thin** and collapses to a handful of real services. Every common
+SaaS/CLI integration (GitHub / issue-tracker / chat / CI / linters / test-runners)
+is faithfully **replayable at R2**.
+
+**The e2e landscape (honest).** Real side-effecting e2e is mature
+(SWE-bench/Verified, Terminal-Bench, OSWorld, WebArena; the labs' per-task cloud
+sandboxes; AISI Inspect's Docker sandbox) — but **every one runs inside a
+container/VM/cloud sandbox.** There is no "safe reproducible e2e without a
+container," so at R3 vigiles **composes with a container, does not reinvent the
+sandbox, and does not claim containerless e2e.**
+
+**Across the axes.** SAFETY: R1 nothing executes; R2 fake outputs, no real system;
+R3 real side effects only inside an isolated disposable container — layered with
+provenance confinement + the ephemeral run env + `interceptTools`. VIABILITY: R1+R2
+need no Docker, run on the sub (affordable + cross-platform); R3 needs Docker.
+PERFORMANCE: R1/R2 ms-fast deterministic; R3 Docker cold-start is seconds — keep
+thin. **Non-goals:** containerless reproducible e2e; per-host egress on macOS;
+verifying vendor MCP connectors' live semantics (vendor's job); becoming a
+sandbox/orchestrator (compose instead).
+
+**Competitor comparison.** Completion-graders (promptfoo / DeepEval / Braintrust)
+— metered API every run, no real-harness load, no cheap no-model tiers.
+Containerized e2e (SWE-bench / Inspect / Codex) — faithful but heavy / metered /
+infra. vigiles — owns **R1+R2 + sub-affordability + a clean container hand-off at
+R3**. The unclaimed seam is R1+R2 + sub-pricing + compose-with-container, **NOT**
+e2e-without-a-container.
+
+**Build verdict.** A **PATH-shim / record-replay helper (fake-on-PATH)** is
+**higher leverage** than a testcontainers integration — it unlocks the ~43% R2
+with no Docker and covers far more real plugins. Real-service provisioning stays a
+thin, composed apex.
+
 ## Core model: every harness feature = a deterministic part + a behavioral part
 
 This is the load-bearing idea. Decompose every harness feature (a skill, a hook,
