@@ -1269,9 +1269,7 @@ export interface TriggerRateSpec {
    * Minimum model tier this eval may run on (haiku<sonnet<opus by family). The
    * run **fails** if the resolved `model` is weaker — trigger-rate under-measures
    * selection on a too-weak model, so this stops a cheap model from producing
-   * false-negative recall. Default `"sonnet"`; resolves from `minModel` →
-   * `VIGILES_MIN_MODEL` env → `"sonnet"`, so a project sets one floor for ALL
-   * skills (no per-file annotation). Lower it deliberately for a cheap run.
+   * false-negative recall. Default `"sonnet"`. Lower it deliberately for a cheap run.
    */
   readonly minModel?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash Skill. */
@@ -1751,16 +1749,16 @@ export async function measureTriggerRateWith(
 
   // Model floor (default Sonnet): trigger-rate under-measures selection on a
   // weaker model, so FAIL before spending a token rather than report a
-  // false-negative recall. One project-wide knob (VIGILES_MIN_MODEL) covers every
-  // skill; lower `minModel` deliberately for a cheap run. Catches the env-var case
-  // a static lint can't see.
+  // false-negative recall. The floor lives in the spec (`minModel`), not an env
+  // override — model choice is part of the measurement definition. Lower it
+  // deliberately for a cheap run.
   const model = spec.model ?? "sonnet";
-  const minModel = spec.minModel ?? process.env.VIGILES_MIN_MODEL ?? "sonnet";
+  const minModel = spec.minModel ?? "sonnet";
   if (belowModelFloor(model, minModel))
     throw new Error(
       `measureTriggerRate: model "${model}" is below the minimum "${minModel}" — ` +
-        "trigger-rate under-measures selection on a weaker model (raise the model, " +
-        "or lower `minModel` / VIGILES_MIN_MODEL for a deliberately cheap run).",
+        "trigger-rate under-measures selection on a weaker model " +
+        "(raise the model, or lower `minModel` for a deliberately cheap run).",
     );
 
   const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);

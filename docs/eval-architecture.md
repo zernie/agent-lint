@@ -11,22 +11,23 @@
 
 ## The kicker
 
-Real-model evals never run in CI. They're invoked manually (`npm run test:eval`),
-and their results get frozen as `FINDING:` comments baked into the `*.eval.mjs`
-files. **A snapshot of a past run is documentation, not protection** — edit a
-skill description and break its trigger rate, and CI stays green because nothing
-re-ran the classifier. promptfoo et al. run the real model in CI as a gate; we
-don't. This doc is the reevaluation.
+Real-model evals are invoked manually (`npm run test:eval`), and their results get
+frozen as `FINDING:` comments baked into the `*.eval.mjs` files. **A snapshot of a
+past run is documentation, not protection** — edit a skill description and break
+its trigger rate, and nothing re-ran the classifier. This doc is the reevaluation.
 
 The honest scope correction up front: the gap is **narrower than "build an eval
-runner."** vigiles already has `vigiles eval` (discovers + runs `*.eval.mjs`,
-aggregates exit codes), a record/replay cache, a significance-gated committed
-baseline, a declarative check vocabulary scored across trials, and trigger-rate
-with recall **and** precision. What's missing is (1) a **CI job that runs the
-behavioral tier as a gate**, (2) a **cost-appropriate gating policy** so that job
-is affordable, (3) **honest model pinning** so a cached/lockfiled result can't
-hide drift, and (4) a small set of **new assertion primitives** (chiefly the
-tool-call spy/fake) that unlock cheap protection for side-effecting skills. See
+runner,"** and the fix is **not** "add a GitHub Actions eval job." vigiles already
+has `vigiles eval` (discovers + runs `*.eval.mjs`), a record/replay cache, a
+significance-gated baseline, a check vocabulary scored across trials, and
+trigger-rate with recall **and** precision. The real moves are (1) **run the
+real-model eval where the subscription already is** — a Claude Code session (the
+agent loop / web / a scheduled session) or locally, since vigiles drives the
+`claude` CLI; NOT a metered GitHub Actions workflow (CI runs only the free
+deterministic tiers); (2) make `vigiles eval` **fail honestly** so a session run
+can't false-green (`--min`, `--no-skip`, corrupt-cache throw, the Sonnet model
+floor); (3) **honest model pinning** for cached/baselined results; and (4) the
+**tool-call spy/fake** for side-effecting skills. See
 [What already exists](#what-already-exists) before building anything.
 
 ## Core model: every harness feature = a deterministic part + a behavioral part
@@ -219,9 +220,12 @@ false-negative recall and would fail skills that are fine on the model users
 actually run. Conclusions:
 
 1. **Default to the realistic selector — Sonnet.** `measureTriggerRate` now
-   defaults to `"sonnet"` (was haiku); the CI gate pins a Sonnet id. Haiku stays
-   available as a deliberate, _pessimistic_ override (a lower bound), never the
-   default for a selection measurement.
+   defaults to `"sonnet"` (was haiku), and the `minModel` floor (also Sonnet)
+   fails a run that resolves below it. Haiku stays available as a deliberate,
+   _pessimistic_ override (a lower bound), never the default for a selection
+   measurement. The model lives in the **spec** (`model`/`minModel`), not a CLI/env
+   override — it's part of the measurement definition, not a run knob like
+   `--trials`.
 2. **No multi-model matrix runner by default.** Running every eval across
    `[haiku, sonnet, opus]` multiplies cost on every run — promptfoo's "providers"
    lane, against our keep-the-real-model-surface-thin discipline.
@@ -244,8 +248,9 @@ floating alias is **dishonest** (it can re-point while the hash says "unchanged"
 Pin a **dated** id (e.g. `claude-haiku-4-5-20251001`) so the hash is honest; a
 dated id 404ing on deprecation is a **feature** (forces a re-eval onto a current
 model) as long as the failure is surfaced. `isDatedModel` + the floating-alias
-cache warning already nudge this; the CI gate runs cache-off, so a non-dated
-Sonnet alias there is acceptable.
+cache warning already nudge this. A cache-off run (a one-shot session eval) can
+use the plain `sonnet` alias without churn; pin a dated id only when you turn on
+the record/replay cache or a committed baseline.
 
 ## Deferred (YAGNI): canary / ETag scaling optimization
 
@@ -406,29 +411,24 @@ almost no new vigiles capability** — do it first.
 
 Ordered by protection-per-dollar, with the dogfood that validates each step.
 
-1. **CI wiring + cheap-tier gate (do first, smallest, highest leverage).** Add a CI
-   job that runs the _cheap_ behavioral tier (`measureTriggerRate` + `measure` with
-   `stubSkillBodies`, a dated model) as a **gate** with `assertRates`/`assertTriggerRate`,
-   and stop snapshotting scores in comments. _Validates on:_ the **missing
-   `writing-quality` trigger case** (add it, gate it).
-   - **Shipped (scaffolding, inert until enabled):** `.github/workflows/evals.yml`
-     — an `eval-gate` job (pull_request, cheap dogfood trigger evals at 1 trial on
-     a dated model, `--no-skip`) and an `eval-nightly` job (the drift tier). Every
-     model step is guarded on auth being present — `CLAUDE_CODE_OAUTH_TOKEN` (a
-     Claude Pro/Max **subscription**, the cheap flat-cost path, since vigiles drives
-     the real `claude` CLI) **or** `ANTHROPIC_API_KEY` (metered fallback): with
-     neither (the default, and all fork PRs) it prints a notice and exits 0 — never
-     reds a PR.
-     The CLI gained `vigiles eval --model=<id>` → `VIGILES_MODEL` (sibling of
-     `--trials`), so the gate pins the **realistic selector model** (Sonnet — NOT
-     haiku, which under-measures trigger-rate: a weaker selector falsely fails
-     skills that fire fine on Sonnet; dogfooded at 0.50 haiku vs 0.90 Sonnet for
-     `test-harness`) without changing library defaults; scripts read
-     `process.env.VIGILES_MODEL`. And
-     `runEvalWith` now warns (`::warning::` under CI, else stderr) when an eval
-     cache rides a **floating** alias (`isDatedModel`) — the exact drift-hiding
-     case the dated pin prevents.
-     **Remaining:** add the repo secret + budget to turn it on; the
+1. **Run the behavioral tier where the subscription already is — a Claude Code
+   session, NOT GitHub Actions.** The original "wire evals into CI" framing was
+   wrong: real-model evals don't belong in a standalone GitHub Actions workflow
+   that needs a metered (or sub-token-as-secret) credential. CI runs the **free
+   deterministic tiers** (`ci.yml` — `runHook` + mock-model `runHarnessTest`, no
+   token); the **real-model eval** runs on your **subscription** in a Claude Code
+   session (the agent loop / web / a scheduled session) or locally — `vigiles
+drives the `claude`CLI, so it authenticates like your own CLI does (no metered
+API). _Validates on:_ the **missing`writing-quality` trigger case\*\*.
+   - **Shipped (eval robustness, applies wherever `vigiles eval` runs):**
+     `--min=N` (fail if fewer than N evals actually ran — no silent zero),
+     `--no-skip` (a skipped tier fails), a **corrupt-cache throw** (a broken
+     cassette surfaces, not a silent re-run), a **model floor** (`minModel`,
+     default Sonnet — a too-weak selector fails before spending a token), and the
+     floating-alias cache warning. Measure trigger-rate on **Sonnet** (dogfooded:
+     0.50 haiku vs 0.90 Sonnet — haiku under-selects). **Removed:** the speculative
+     `evals.yml` GitHub Actions workflow + the `--model`/`VIGILES_MODEL` env knob
+     (model belongs in the spec, not a hidden override). **Remaining:** the
      `writing-quality` trigger case lives in the separate portfolio repo.
 2. **Cross-field miner/checker golden fixture test.** Near-zero new primitive — the
    code exists; freeze the Lago/Solidus model fixtures and assert it re-flags the
