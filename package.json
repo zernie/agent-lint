@@ -56,10 +56,15 @@
     "test:vitest": "npm run build && vitest run --project runners",
     "test:jest": "npm run build && jest",
     "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json",
-    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs"
+    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs",
+    "api:report": "npm run build && node scripts/api-extractor.mjs --local",
+    "api:check": "npm run build && node scripts/api-extractor.mjs",
+    "docs:api": "npm run api:report && api-documenter markdown -i temp -o api-reference"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@microsoft/api-documenter": "^7.30.7",
+    "@microsoft/api-extractor": "^7.58.9",
     "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^20.19.39",

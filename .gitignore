@@ -10,3 +10,8 @@ logo-v*.png
 examples/demo/.vigiles/
 # eval record/replay cache (recorded model runs)
 .vigiles/eval-cache/
+
+# API Extractor temp output (the committed contract is etc/*.api.md) + the
+# API Documenter reference site (a derived artifact — `npm run docs:api`).
+temp/
+api-reference/

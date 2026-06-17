@@ -7,3 +7,6 @@ coverage/
 # upstreams, not us. See examples/harness/vendor/*/SOURCE.
 examples/harness/vendor/
 examples/demo/.vigiles/
+
+# API Extractor reports (tool-generated, exact format)
+etc/

@@ -114,6 +114,14 @@ jobs:
       - name: Lint compiled files
         run: node dist/cli.js lint
 
+      # Public-API surface gate: API Extractor compares the live .d.ts surface of
+      # every public entry point against the committed etc/*.api.md reports. A PR
+      # that adds/removes/changes a public export (or leaks a Claude-Code symbol
+      # back onto the agnostic surface) fails here until `npm run api:report` is
+      # run and the report diff is reviewed + committed. dist/ is built above.
+      - name: API surface gate
+        run: node scripts/api-extractor.mjs
+
       # Dogfood the shipped GitHub Action itself (composite over the CLI),
       # running the repo's own build via `version: local`. Catches a
       # regression in the action contract that calling the CLI directly
