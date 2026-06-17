@@ -413,6 +413,36 @@ test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", a
   cleanupTmpDir(dir);
 });
 
+test("runEvalWith honors a per-arm model override (model = a harness arm)", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: {
+        cheap: { model: "claude-haiku-4-5-20251001" }, // arm overrides
+        prod: {}, // falls back to the eval-level model
+      },
+      task: "t",
+      trials: 1,
+      model: "claude-sonnet-4-6", // eval-level default
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const byArm = (m: string) => seen.find((a) => a.model === m);
+  assert.ok(byArm("claude-haiku-4-5-20251001"), "cheap arm used its override");
+  assert.ok(byArm("claude-sonnet-4-6"), "prod arm used the eval-level model");
+});
+
 test("measureWith fakeTools: auto-wires the PreToolUse hook + env round-trip", async () => {
   let seenSettings = "";
   let seenEnv: Record<string, string> | undefined;
