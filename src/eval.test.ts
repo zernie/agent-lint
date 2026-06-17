@@ -2068,6 +2068,106 @@ test("ephemeralEnv DEFAULT (off): env is the byte-identical overlay, not scrubbe
   assert.notEqual(a.replaceEnv, true);
 });
 
+test("stubs (default env path): prepends the stub bin dir to the run's PATH", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      stubs: [{ name: "gh", stdout: "PR merged" }],
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // Legacy overlay path: `spawnAgent` spreads `{ ...process.env, ...a.env }`, so
+  // the overlay PATH starts with the stub dir, then the real PATH.
+  assert.ok(a.env, "env overlay set");
+  assert.ok(
+    a.env.PATH?.startsWith(a.cwd),
+    `PATH "${a.env.PATH ?? "<unset>"}" starts with the trial cwd (the stub bin dir is under it)`,
+  );
+  assert.ok(
+    process.env.PATH === undefined || a.env.PATH?.endsWith(process.env.PATH),
+    "the real PATH still follows the stub dir",
+  );
+  assert.notEqual(a.replaceEnv, true);
+});
+
+test("stubs (ephemeral env path): prepends the stub bin dir to the scrubbed PATH", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      ephemeralEnv: true,
+      stubs: [{ name: "psql", stdout: "row" }],
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  assert.equal(a.replaceEnv, true);
+  assert.ok(a.env);
+  // The stub dir (under the trial cwd) is prepended ahead of the passed-through
+  // real PATH in the ephemeral env.
+  assert.ok(
+    a.env.PATH?.startsWith(a.cwd),
+    `scrubbed PATH "${a.env.PATH ?? "<unset>"}" starts with the trial cwd`,
+  );
+});
+
+test("stubs absent: PATH is unchanged (env overlay undefined)", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // No stubs, no intercepts, no ephemeral → overlay undefined (byte-identical).
+  assert.equal(a.env, undefined);
+});
+
 test("ephemeralEnv on: runner gets a replaceEnv scrubbed env with auth + allowed extras", async () => {
   process.env.VIGILES_EPHEMERAL_PROBE_SECRET = "leak-me";
   try {

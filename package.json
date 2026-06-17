@@ -33,7 +33,8 @@
       "default": "./dist/vitest.mjs"
     },
     "./jest": "./dist/jest.js",
-    "./check": "./dist/check.js"
+    "./check": "./dist/check.js",
+    "./tool-stub": "./dist/tool-stub.js"
   },
   "files": [
     "dist/**/*.js",

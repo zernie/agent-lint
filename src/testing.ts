@@ -19,3 +19,5 @@ export * from "./harness-assert.js";
 // same name — the explicit re-export below wins over the two `export *`s.
 export * from "./check.js";
 export { hookFired } from "./check.js";
+// Tool stubs on PATH (rung R2): shadow a CLI tool with a recorded canned result.
+export * from "./tool-stub.js";
