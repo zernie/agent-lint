@@ -57,6 +57,35 @@ code is _actually confined_ on Mac, so the cell reads "Yes" everywhere. The fix
 doesn't change the safety rule; it makes the safe option **available** so nobody is
 pushed to the unsafe one.
 
+## Ephemerality is a separate axis (and it helps Mac most)
+
+Confinement (above) is **host protection** — provenance-keyed (your code direct,
+foreign confined). It misses a second, orthogonal axis: **state protection** —
+_running_ a skill/agent mutates state, and it's **model-driven**, so even a plugin
+you wrote produces nondeterministic side effects. Trust does **not** make a run
+side-effect-free. So ephemerality is **unconditional** for model-driven runs,
+independent of the confinement decision.
+
+Side effects sort by reversibility → layer:
+
+- **local + reversible** (file edit, local commit) → **ephemeral CWD** (we already
+  `mkdtemp` a fresh `cwd` per run and discard it).
+- **local but escapes CWD** (`~/.gitconfig`, `~/.ssh`) → **ephemeral HOME +
+  scrubbed env**. **Gap today:** the direct/non-bwrap path does
+  `env: { ...process.env }` (`eval.ts`), inheriting real HOME + git/ssh/aws creds.
+- **external via network** (`git push`, paid API, exfil) → deny-all / allowlist
+  net (the confinement backends).
+- **irreversible/specific** (push to prod, charge a card) → `interceptTools` /
+  `notTool` — you can discard a temp dir, but you can't un-push.
+
+**Why this matters for the Mac decision:** an ephemeral run environment (temp CWD +
+temp HOME + scrubbed env, only the harness's own auth re-injected) needs **no
+kernel features**, so it works on macOS **today**, before the Seatbelt backend
+ships. It's the cheapest, most cross-platform protection and covers the
+side-effect threat that the per-host `nft` wall (Linux-only) does not. Net: ship
+the ephemeral run environment first; it de-risks Mac more than the Seatbelt
+backend does.
+
 ## Why not the obvious shortcuts (findings)
 
 ### Does a drop-in cross-platform, no-VM, arbitrary-subprocess sandbox exist?

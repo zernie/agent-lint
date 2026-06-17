@@ -58,6 +58,13 @@
 
 ## Next — differentiated, medium effort
 
+- **Ephemeral run environment (not just CWD)** — every model-driven run already
+  uses a throwaway `cwd`, but the direct/non-bwrap path inherits the real `$HOME` +
+  env, so a model-driven `git push` / write to `~` escapes — even for a trusted
+  plugin (the model, not the author, chose the action). Default every run to a
+  fresh HOME + scrubbed env (re-inject only the harness's own auth). Needs no
+  kernel features → lands on macOS today, ahead of the Seatbelt backend; the
+  cheapest cross-platform side-effect protection. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
 - **Cross-platform confinement (macOS is a must)** — extract a `vigiles/os-isolation`
   port and add a `sandbox-exec`/Seatbelt backend beside `bwrap`, so foreign code is
   confined on Mac (a large share of devs) instead of forcing the refuse-or-`sandbox:false`
