@@ -31,7 +31,7 @@ question:
 | **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
 | **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
 | **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
-| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/eval`        | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
+| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/testing`     | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
 
 **refs + unit + integration + e2e are deterministic verification** — you assert
 pass/fail, they run on every commit. **eval is a different axis: non-deterministic
@@ -82,22 +82,20 @@ adapter/import model and the capability matrix, see
 
 There is **one canonical entry point per pillar** — import from these:
 
-| Pillar                   | Canonical import  | What it re-exports                                                                                                                                             |
-| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, `scriptModel`, tool stubs |
-| ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                               |
+| Pillar                   | Canonical import  | What it re-exports                                                                                                                              |
+| ------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, tool stubs |
+| ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                |
 
 `vigiles/testing` is the **superset** — reach for it first. Two other groups are
-deliberate, not aliases: the **capability-scoped tier barrels** `vigiles/unit` /
-`vigiles/integration` / `vigiles/e2e` (the Levels table above — the import path
-_is_ the capability contract, so `vigiles/unit` physically can't reach a model or
-the network), and the **module-named paths** `vigiles/run-hook` / `vigiles/eval` /
-`vigiles/check` / `vigiles/spec` / `vigiles/compile`, which are **stable aliases**
-of what `vigiles/testing` (or `vigiles/linting`) already re-exports. Older guides
-and the repo's examples still show the module-named paths; prefer the canonical
-barrel (or a tier barrel when you want the contract) in new code. Runner
-integration is `vigiles/vitest` / `vigiles/jest`; harness selection is
-`vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
+deliberate surfaces, not aliases: the **capability-scoped tier barrels**
+`vigiles/unit` / `vigiles/integration` / `vigiles/e2e` (the Levels table above —
+the import path _is_ the capability contract, so `vigiles/unit` physically can't
+reach a model or the network), and `vigiles/spec` (the authoring surface — spec
+builders for `.spec.ts` files). CC-specific transport — `scriptModel`, `loadPlugin`,
+`resolveHarness`, and the type `LoadedPlugin` — lives in `vigiles/claude-code`, not
+`vigiles/testing`. Runner integration is `vigiles/vitest` / `vigiles/jest`; harness
+selection is `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
 
 The **harness-specific** pieces — the mock wire format, the plugin layout, the
 sandbox — live in the per-harness guides:
@@ -326,7 +324,7 @@ end-state files — reuse the bare predicates above (`usedTool`, `skillResolved`
 …) to compute them.
 
 ```ts
-import { runEval, formatEvalReport } from "vigiles/eval";
+import { runEval, formatEvalReport } from "vigiles/testing";
 
 const report = await runEval({
   fixture: { "src/billing.ts": "export function chargeCard() {}" },
@@ -444,8 +442,12 @@ deterministic tier proves the _wiring_; this proves the _activation_).
 varied prompts, reporting how often a `Trace` predicate holds:
 
 ```ts
-import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
-import { skillResolved, assertTriggerRate } from "vigiles/testing";
+import {
+  measureTriggerRate,
+  formatTriggerRateReport,
+  skillResolved,
+  assertTriggerRate,
+} from "vigiles/testing";
 
 const report = await measureTriggerRate({
   skillsDir: ".claude/skills", // loose repo skills — auto-packaged (or pluginDir: "./my-plugin")
@@ -504,7 +506,7 @@ shells out via the harness CLI):
 <!-- vigiles:ignore -->
 
 ```ts
-import { judge } from "vigiles/judge";
+import { judge } from "vigiles/testing";
 
 measure: (ctx) => {
   const v = judge({
@@ -537,13 +539,13 @@ test("Stop hook forces more work", async () => {
 
 ### Checks — one vocabulary, two evaluators
 
-The newest surface (`vigiles/check`) is a **declarative check** — data, not a
-throwing assert: `tool("Bash")` is an object that knows how to `eval` itself
-against a `Trace` (or a hook decision) and `toJSON`. The same check is evaluated
-two ways, so you write the assertion once:
+The newest surface is a **declarative check** — data, not a throwing assert:
+`tool("Bash")` is an object that knows how to `eval` itself against a `Trace` (or
+a hook decision) and `toJSON`. The same check is evaluated two ways, so you write
+the assertion once:
 
 ```ts
-import { tool, skill, output, hookFired, blocked } from "vigiles/check";
+import { tool, skill, output, hookFired, blocked } from "vigiles/testing";
 import { assertChecks } from "vigiles/testing";
 
 // STRICT (deterministic tiers): throws, collecting ALL failures with messages.
@@ -574,7 +576,7 @@ composition and serialization, not a mandatory wrapper. Under vitest/jest, one
 generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
 `toPassAll([...])`, each carrying the check's own message.
 
-**The vocabulary** (`vigiles/check`):
+**The vocabulary** (from `vigiles/testing`):
 
 | Check                      | Holds when…                                       | Over             |
 | -------------------------- | ------------------------------------------------- | ---------------- |

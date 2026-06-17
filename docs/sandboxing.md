@@ -92,7 +92,7 @@ touched in its work dir (`r.filesWritten`, relative paths) — so you can assert
 hook stayed in its lane:
 
 ```ts
-import { assertWroteOnly, assertNoWrite } from "vigiles/harness-assert";
+import { assertWroteOnly, assertNoWrite } from "vigiles/testing";
 
 const r = runHook(thirdPartyHookCmd, event, { trusted: false });
 // r.filesWritten → [".omc/state/ultrawork-state.json"]
@@ -117,8 +117,8 @@ question — "what does this skill phone home to / which registry would its inst
 hit?" — turn on recording:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
-import { assertNoEgress, assertEgressOnly } from "vigiles/harness-assert";
+import { runHook } from "vigiles/testing";
+import { assertNoEgress, assertEgressOnly } from "vigiles/testing";
 
 const r = runHook(thirdPartyHookCmd, event, { recordEgress: true });
 // r.egress → [{ host: "registry.npmjs.org", port: 443, ts }]   (recorded)
@@ -152,7 +152,7 @@ expect?", a wall (record or not) can't answer it — the install has to succeed.
 packet layer**:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
+import { runHook } from "vigiles/testing";
 
 const r = runHook(installHookCmd, event, {
   egress: { allow: ["registry.npmjs.org"] },

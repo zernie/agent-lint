@@ -20,7 +20,8 @@ New here? Start with the [README](../README.md).
   - `vigiles/linting` — Pillar 1: the spec builders + compiler (`claude`, `enforce`, `guidance`, `file`, `cmd`, `symbol`, …).
   - `vigiles/testing` — Pillar 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
   - `vigiles/claude-code` — the Claude Code-specific adapter (`loadPlugin`, `scriptModel`, the mock).
-  - The granular paths (`vigiles/spec`, `vigiles/run-hook`, `vigiles/harness-test`, …) keep working.
+  - `vigiles/spec` — the authoring surface (the spec builders; also the module-augmentation target for generated types).
+  - Per-tier barrels `vigiles/unit` / `vigiles/integration` / `vigiles/e2e` make a test's capability legible from its import.
 - [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `lint` validation rules.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.

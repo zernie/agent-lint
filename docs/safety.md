@@ -125,7 +125,7 @@ what to do. To test "the agent **didn't** push to `main` / call a paid API / spa
 a paid subagent" **safely**, vigiles intercepts the tool:
 
 ```ts
-import { measure, notTool } from "vigiles/eval";
+import { measure, notTool } from "vigiles/testing";
 
 const report = measure(spec, {
   trials: 5,
