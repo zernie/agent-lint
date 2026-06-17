@@ -88,8 +88,10 @@ export interface EvalArm {
    * denied its real execution by an auto-wired PreToolUse hook — the model still
    * emits the `tool_use` (so its arguments land in the `Trace` for `toolWith` /
    * `notTool`), but the side effect (a paid API call, a `git push`, a paid
-   * subagent) never happens. Keeps a real-model eval cheap and safe. See
-   * `src/tool-fake.ts`.
+   * subagent) never happens. This makes a real-model eval **side-effect-free and
+   * safe** (it does NOT cut the model-call cost); and because CC surfaces the
+   * denial as a *blocked* call, it's for asserting the agent's ATTEMPT, not for
+   * stubbing a tool to continue a multi-step flow. See `src/tool-fake.ts`.
    */
   readonly fakeTools?: readonly FakeTool[];
 }

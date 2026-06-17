@@ -20,7 +20,15 @@
  *   matchers) the hook subprocess reads back.
  *
  * The hook denies via exit 2 + a stderr message (the same block mechanism the
- * agent rail uses), so the canned result reaches the model as the call's outcome.
+ * agent rail uses). IMPORTANT — Claude Code surfaces that to the model as a
+ * *blocked* call, NOT a successful return. So this is **intercept-and-prevent +
+ * observe the attempt**, not a faithful tool mock: it's sound for "did the agent
+ * ATTEMPT X / call it with these args / push to the wrong branch" (first-attempt
+ * questions, where what happens after doesn't matter), and unsound for "stub the
+ * tool and let the trajectory continue as if it succeeded" (the model is told it
+ * was blocked, so a multi-step flow that needs the real result will derail). CC
+ * exposes no "skip execution but return this as success" primitive for arbitrary
+ * tools, so deny+reason is the closest available — with that ceiling.
  */
 import { type ArgMatcher, matchesArgs } from "./arg-match.js";
 
@@ -37,26 +45,28 @@ export interface FakeTool {
    */
   readonly when?: ArgMatcher;
   /**
-   * The synthetic result fed back to the model in place of the real output.
-   * Default a neutral marker — enough for the agent to continue without the side
-   * effect actually happening.
+   * The denial reason shown to the model when the call is intercepted. This is a
+   * *block* message (CC surfaces it as a denied call), not a successful return —
+   * so phrase it as "this was prevented; don't retry", not "here's your result".
+   * Defaults to {@link DEFAULT_FAKE_RESULT}.
    */
   readonly result?: string;
 }
 
-/** The synthetic result used when a fake doesn't specify one. */
+/** The default denial reason — honest that the call was prevented, not faked-success. */
 export const DEFAULT_FAKE_RESULT =
-  "(intercepted by vigiles — tool not executed; assume success)";
+  "vigiles intercepted this tool call for testing — it was NOT executed. " +
+  "Do not retry it; treat the tool as unavailable and continue.";
 
-/** The decision for one tool call: fake it (deny + canned result), or let it run. */
+/** The decision for one tool call: intercept it (deny + reason), or let it run. */
 export type FakeDecision =
   | { readonly fake: true; readonly result: string }
   | { readonly fake: false };
 
 /**
- * Decide whether a tool call should be faked. Returns the first matching fake's
- * result (denying real execution), or `{ fake: false }` to let the call run for
- * real. Pure — the same logic `vigiles fake-tool-hook` runs in the subprocess.
+ * Decide whether a tool call should be intercepted. Returns the first matching
+ * fake's denial reason (preventing real execution), or `{ fake: false }` to let
+ * the call run for real. Pure — the same logic `vigiles fake-tool-hook` runs.
  */
 export function decideFakeTool(
   toolName: string,
