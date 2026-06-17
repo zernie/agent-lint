@@ -163,10 +163,10 @@ runner structurally cannot host); and (3) the new **tool-call spy** — `toolWit
 PreToolUse hook layer so a real-model run that decides to `git push` / hit a paid
 API is observed-but-prevented. promptfoo's `trajectory:*` can _assert_ on a trace,
 but it can't _intercept-and-prevent_ inside the real shipped harness. The eval tier
-also now ships as an **inert-until-keyed CI gate** (`.github/workflows/evals.yml`)
-— the thing the kicker said never existed. Honest deltas the other way are
-unchanged: dataset/scenario, red-team, judge depth, and UI remain theirs, and we
-bridge (or skip) rather than chase them.
+runs on your **subscription** in a Claude Code session (vigiles drives the `claude`
+CLI), not a metered GitHub Actions job — the affordable path competitors lack.
+Honest deltas the other way are unchanged: dataset/scenario, red-team, judge
+depth, and UI remain theirs, and we bridge (or skip) rather than chase them.
 
 ## What vigiles already does at a world-class level
 

@@ -1259,18 +1259,15 @@ test("measureTriggerRateWith FAILS when the model is below the floor (default so
   );
   assert.equal(ok.n, 2); // ran (2 prompts), not blocked by the floor
 
-  // the floor can also be set project-wide via VIGILES_MIN_MODEL
-  const prev = process.env.VIGILES_MIN_MODEL;
-  process.env.VIGILES_MIN_MODEL = "opus";
-  try {
-    await assert.rejects(
-      () => measureTriggerRateWith({ ...base, model: "sonnet" }, runner),
-      /below the minimum "opus"/,
-    );
-  } finally {
-    if (prev === undefined) delete process.env.VIGILES_MIN_MODEL;
-    else process.env.VIGILES_MIN_MODEL = prev;
-  }
+  // raising the floor catches an otherwise-fine model
+  await assert.rejects(
+    () =>
+      measureTriggerRateWith(
+        { ...base, model: "sonnet", minModel: "opus" },
+        runner,
+      ),
+    /below the minimum "opus"/,
+  );
 });
 
 test("measureTriggerRateWith counts SIBLING skills as competitors (not just installSet)", async () => {

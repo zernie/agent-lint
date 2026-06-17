@@ -96,10 +96,10 @@ This dovetails with the subscription-cost thesis (`docs/eval-architecture.md`):
 isolated = small context = cheapest; near-neighbor = bounded; whole-harness =
 priciest, so it's a **release gate you run deliberately** — not the per-PR loop.
 
-Be precise about "gate," because evals do **not** run in CI by default: the per-PR
-/ per-commit CI is the **free deterministic tiers** (`runHook`, mock-model
-`runHarnessTest`), and the real-model eval workflow (`.github/workflows/evals.yml`)
-stays **inert until you add a token**. So "release gate" means _run it
-deliberately_ — locally before a release (cheapest, on your subscription), or as
-the **opt-in** nightly job if you choose to wire it. Whole-harness is the
-priciest tier, so it's exactly the one you'd run least often and never on every PR.
+Be precise about "gate," because evals do **not** run in (GitHub Actions) CI: the
+per-PR / per-commit CI is the **free deterministic tiers** (`runHook`, mock-model
+`runHarnessTest`, no token). The real-model eval runs where the **subscription**
+already is — a **Claude Code session** (the agent loop / web / a scheduled
+session) or locally — since vigiles drives the `claude` CLI. So "release gate"
+means _run it deliberately_ on your sub, not a standalone CI workflow needing a
+token. Whole-harness is the priciest tier, so it's the one you run least often.

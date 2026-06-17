@@ -65,7 +65,6 @@ const report = await measureTriggerRate({
   ],
   fired: (t) => skillResolved(t, skill),
   trials,
-  model: process.env.VIGILES_MODEL, // CI passes Sonnet; undefined → Sonnet default
 });
 
 console.log(formatTriggerRateReport(report));

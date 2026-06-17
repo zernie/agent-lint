@@ -106,8 +106,9 @@ their harness, because the usual tools (promptfoo, DeepEval, …) hit the API SD
 and bill **per token on every run**. vigiles inverts that: most questions are
 answered with **no model at all** (free, every commit), and when you do reach for
 a real-model eval, vigiles drives your `claude` CLI — so it runs on the **Pro/Max
-subscription you already pay for**, not metered API billing. Evals never run in CI
-by default; you run them when it's worth it (locally, or an opt-in nightly job).
+subscription you already pay for**, not metered API billing. CI runs only the free
+deterministic tiers; you run the real-model eval where the subscription already is
+— a Claude Code session or locally — when it's worth it, not on every PR.
 
 ## Quick start
 

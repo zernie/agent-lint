@@ -2680,20 +2680,13 @@ function handleRunScripts(
     );
   }
 
+  // `--trials=N` (a run knob: cost/precision, doesn't change WHAT is measured) is
+  // forwarded to scripts via env. The MODEL is deliberately NOT a CLI/env knob —
+  // it's part of the measurement definition, so it belongs in the spec
+  // (`model` / `minModel`), version-controlled, not a hidden override.
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
-  const modelFlag = args.find((a) => a.startsWith("--model="));
   const env: NodeJS.ProcessEnv = {};
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
-  // Honest model pinning: CI passes a DATED model id (e.g. claude-haiku-4-5-…)
-  // so a gated/baselined result can't drift behind a floating alias. Scripts read
-  // `process.env.VIGILES_MODEL` (like VIGILES_TRIALS); a 404 on a deprecated dated
-  // id is by design — it forces a re-eval onto a current model.
-  if (modelFlag) env.VIGILES_MODEL = modelFlag.split("=")[1];
-  // Project-wide model floor (default Sonnet): trigger-rate evals FAIL below it,
-  // so a too-weak selector can't report false-negative recall. One knob for all
-  // skills (the runtime guard a static lint can't give — it sees env-var models).
-  const minModelFlag = args.find((a) => a.startsWith("--min-model="));
-  if (minModelFlag) env.VIGILES_MIN_MODEL = minModelFlag.split("=")[1];
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
   const results = runScripts(files, cwd, env);
@@ -2728,7 +2721,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --model=ID, --min-model=ID, --min=N, --no-skip)",
+    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
   );
   console.log("");
   console.log("Examples:");
