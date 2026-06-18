@@ -70,6 +70,64 @@ the "MUST"-imperative framing with concrete situational cues ("when the user
 describes a feature vaguely / says 'not sure what' / asks to explore options")
 and re-measure. That tuning loop is what `measureTriggerRate` exists to close.
 
+## Finding 2 — superpowers recall sweep: concrete skills fire, exploratory ones don't
+
+Run via `vigiles scan <superpowers> --trigger` (the behavioral column) across the
+six **opening-move** skills it's fair to test from a cold prompt — 10 prompts
+each, 1 trial. The state-dependent skills (verification-before-completion,
+receiving/requesting-code-review, finishing-a-development-branch,
+executing-plans, using-git-worktrees, using-superpowers) were left **unmeasured**
+on purpose: their trigger is a mid-session state a cold prompt can't reproduce, so
+a low number there would be an artifact, not a bug (see the empty-context section).
+
+| Skill                       | Recall (10) |     |
+| --------------------------- | ----------- | --- |
+| test-driven-development     | **100%**    | ✓   |
+| writing-skills              | **100%**    | ✓   |
+| writing-plans               | 40%         | ⚠   |
+| brainstorming               | 10%         | ⚠   |
+| systematic-debugging        | 10%         | ⚠   |
+| dispatching-parallel-agents | 0%          | ⚠   |
+
+**The pattern is the finding.** Skills that wrap a **concrete imperative task**
+("write X test-first", "write a skill that…") fire reliably (100%). Skills that
+gate **exploratory or orchestration** work — brainstorming, debugging,
+fan-out — barely fire from the natural phrasing of their own use case. The
+biggest surprise is `systematic-debugging` at 10%: prompts like "the app crashes
+intermittently — track it down" overwhelmingly did NOT select it; the model just
+started debugging directly. Every one of these is structurally green — the column
+is the only thing that sees it.
+
+Caveats stack with Finding 1: n=10/1-trial, **directional** (brainstorming read
+10% here vs 20–30% earlier — same noise band); recall is an upper bound on the
+real rate (only as good as the prompt set). The value is the rank-ordering and
+the 0–10% vs 100% gap, not the second digit.
+
+## Finding 3 — fleytman/haretrail: structurally clean, behavioral risks in the descriptions
+
+A Codex/`AGENTS.md` skill pack (8 skills: task, research, summary, postmortem,
+debrief, lessons, doc-write, contribution-log). `vigiles scan` (auto-detected
+`codex`): **no structural issues** — every skill has a description, no agents /
+hooks / broken refs. 8 untested surfaces (ships no tests — typical).
+
+The structural pass is clean; the **description-level** read surfaces behavioral
+risks the trigger column would quantify:
+
+- **Descriptions are in Russian.** Selection is driven by the description, so on
+  **English** prompts these may under-fire — a real cross-language trigger risk
+  (or fine, if the audience is Russian-speaking; worth measuring, not assuming).
+- **Literal `{data-repo}` placeholder** appears unsubstituted in several
+  descriptions — harmless for selection, but a templating smell.
+- **Overlapping domains** → precision/collision risk: debrief vs lessons vs
+  postmortem all touch retrospective/lessons content; task vs research both create
+  task-folders. Which one fires is exactly a precision question.
+- **Good practice to keep:** debrief and lessons enumerate concrete trigger
+  phrases, and postmortem ships a negative cue ("Не использовать для обычных
+  session debriefs") — explicit recall + precision steering.
+
+Behavioral probe not yet run (it needs language-matched prompt sets — and the
+English-vs-Russian recall gap is itself worth measuring). Offered as next.
+
 ## Not run here — observed egress
 
 The other behavioral column, observed-egress (`src/egress.ts` / `src/sandbox.ts`),
