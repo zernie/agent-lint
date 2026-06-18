@@ -110,13 +110,26 @@ Same 10 brainstorming prompts, two arms — empty cwd vs a seeded Node project
 (`package.json` + `src/` + README), 2 trials/prompt (40 runs, ≈$0.75
 API-equiv / $0 on the sub):
 
-> _Deferred — the original 40-run probe ran serially (each `measure()` call
-> re-stubs + installs the plugin) and overran the wall-clock budget. Now
-> re-runnable cheaply: `TriggerRateSpec` gained **`fixture`** (seed the repo) and
-> **`concurrency`** (parallelize the grid), so the comparison is two
-> `measureTriggerRate` calls (empty vs `fixture`) with `concurrency`, install-once,
-> no `measure()` loop. Expectation is still little movement (brainstorming keys
-> off the request, not the repo). Number to be appended._
+Re-run via the new `fixture` + `concurrency` (two `measureTriggerRate` calls,
+install-once, parallel — no `measure()` loop, ~90s total):
+
+| Arm                     | Recall (10 runs) |
+| ----------------------- | ---------------- |
+| EMPTY cwd               | 0.00             |
+| SEEDED repo (`fixture`) | 0.20             |
+
+**Verdict: inconclusive at this N — and that's the real lesson.** The +20pt delta
+looks like movement, but empty-context recall itself measured **0.0 / 0.2 / 0.3
+across three independent 10-run samples** — the seeded 0.20 sits squarely inside
+that noise band (a 0/10 vs 2/10 split is not significant, Fisher p≈0.5). So a
+seeded repo does **not** demonstrably move brainstorming's recall — consistent
+with the prediction (it's an opening-move skill, keyed off the request, not the
+repo). The sharper takeaway is statistical: **at n=10, run-to-run noise (±~30pts)
+swamps a candidate 20pt effect.** Resolving an effect that size needs ~100 runs
+(see the CI table in the cost discussion) — exactly why the default-`n` question
+matters. The `fixture` capability is the right primitive; the way to use it is on
+a state-dependent skill (where the effect should be large) with enough trials to
+clear the noise floor.
 
 ### Landscape — how others handle context
 
