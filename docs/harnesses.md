@@ -120,8 +120,12 @@ codexAdapter })` drives real `codex exec` against the OpenAI **Responses** mock
 per-harness `HarnessTestDriver` (argv + mock + parse) behind the `wireMock` runtime
 seam, with Claude Code as the default and its behaviour byte-identical. A gated
 `harness-test.test.ts` runs the real-codex turn (request shape + SSE captured from
-live traffic, not guessed). Lint is format-correct per ¹; `runEval` follows the
-same driver seam (the documented follow-on).
+live traffic, not guessed). Lint is format-correct per ¹. `runEval` /
+trigger-rate for Codex is **in progress** (not usable end-to-end yet): the eval
+tier's trace parsing is now an injectable `ModelOutputParser`, so a Codex parser
+can plug in; the Codex `codex exec --json` runner + parser + `{ adapter }`
+dispatch are pending validation against the live binary. See the spike +
+checklist in [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md).
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't

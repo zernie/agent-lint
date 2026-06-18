@@ -115,15 +115,15 @@ for how the recipe was proven.
 
 ## What maps, and what doesn't
 
-| Surface               | Codex                                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Instructions          | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical      |
-| Skills                | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                 |
-| Deterministic harness | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)        |
-| Hook veto             | ✅ same wire level as CC — block via exit 2                                               |
-| Plugin/MCP manifest   | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                   |
-| Subagents             | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract |
-| `runEval`             | documented follow-on (same driver seam), not yet shipped — don't gate on it               |
+| Surface                  | Codex                                                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Instructions             | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical                                                                               |
+| Skills                   | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                                                                                          |
+| Deterministic harness    | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)                                                                                 |
+| Hook veto                | ✅ same wire level as CC — block via exit 2                                                                                                                        |
+| Plugin/MCP manifest      | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                                                                                            |
+| Subagents                | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract                                                                          |
+| `runEval` / trigger-rate | 🚧 **in progress** — the eval tier's trace-parser seam landed; the Codex runner + JSONL parser + `{ adapter }` dispatch are pending live-binary validation (below) |
 
 **Subagents are a boundary, not a gap.** A Codex subagent is an `[agents.<name>]`
 TOML concurrency table (`max_threads` / `max_depth`), not a tool-contract file —
@@ -137,11 +137,27 @@ assistant text into `output`; `toolCalls` and `hooks` are left empty (the codex
 JSONL schema isn't parsed for the output check). A test that needs to assert on
 tool sequences or hook firing uses Claude Code today.
 
-**`runEval` for Codex is a documented follow-on**, not shipped — it rides the same
-`HarnessTestDriver` seam as `runHarnessTest`, but the path isn't wired or proven
-yet. Use Claude Code for evals; use Codex for the deterministic
-`runHarnessTest` tier. (This matches the [`docs/harnesses.md`](harnesses.md)
-matrix footnote ² — don't over-promise it.)
+**`runEval` / trigger-rate for Codex is in progress** — not yet usable
+end-to-end, so use Claude Code for evals today. What's done: the eval tier's
+trace parsing is now an injectable `ModelOutputParser` (default
+`parseClaudeRun`), so a Codex parser can plug in without touching the Claude path.
+What's left, gated on validating against the live `codex` binary:
+
+1. a `codex exec --json` `AgentRunner` + a `parseCodexEvalRun` over Codex's CLI
+   JSONL (today `parseCodexRun` returns `toolCalls: []` by design, so the eval
+   tier can't yet detect a Codex tool/skill call);
+2. `{ adapter }` dispatch on `measureTriggerRate` / `runEval` (mirrors
+   `runHarnessTest`);
+3. **the open question only the binary can answer:** Claude trigger-rate keys on
+   an explicit `Skill` tool_use — Codex skills are progressive-disclosure
+   `SKILL.md` instructions, and whether a skill activation surfaces as a discrete
+   `codex exec --json` event is unconfirmed. If it doesn't, the Codex "fired"
+   predicate becomes a behavioral/judged check rather than a trace predicate.
+
+See the spike + env-validation checklist in
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
+(2026-06-18 update). (Matches the [`docs/harnesses.md`](harnesses.md) matrix
+footnote ² — still don't gate on it.)
 
 ## See also
 

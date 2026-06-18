@@ -820,21 +820,53 @@ export function parseUsage(stdout: string): EvalUsage {
   return usageFrom(parseResultEvent(stdout));
 }
 
-function makeContext(cwd: string, out: RunOut): RunContext {
+/**
+ * The harness-specific half of a run trace: how a real model's raw stdout maps
+ * to the common fields. Claude Code's `parseClaudeRun` reads its stream-json; a
+ * second harness (Codex) supplies its own parser of `codex exec --json` JSONL, so
+ * the eval tier (`measureTriggerRate`/`runEval`) isn't bound to Claude's format.
+ * The non-harness fields (cwd/exitCode/stdout/file/sh) stay in `makeContext`.
+ */
+export interface ParsedModelRun {
+  readonly turns: number;
+  readonly output: string;
+  readonly toolCalls: ReturnType<typeof parseToolCalls>;
+  readonly hooks: ReturnType<typeof parseHooks>;
+  readonly subagents: ReturnType<typeof parseSubagents>;
+  readonly usage: EvalUsage;
+}
+export type ModelOutputParser = (out: RunOut) => ParsedModelRun;
+
+/** Parse Claude Code's stream-json stdout into the common trace fields. */
+export function parseClaudeRun(out: RunOut): ParsedModelRun {
   const result = parseResultEvent(out.stdout);
-  const turns = typeof result?.num_turns === "number" ? result.num_turns : 0;
-  const output = typeof result?.result === "string" ? result.result : "";
+  return {
+    turns: typeof result?.num_turns === "number" ? result.num_turns : 0,
+    output: typeof result?.result === "string" ? result.result : "",
+    toolCalls: parseToolCalls(out.stdout),
+    hooks: parseHooks(out.stdout),
+    subagents: parseSubagents(out.stdout),
+    usage: usageFrom(result),
+  };
+}
+
+function makeContext(
+  cwd: string,
+  out: RunOut,
+  parse: ModelOutputParser = parseClaudeRun,
+): RunContext {
+  const p = parse(out);
   return {
     cwd,
     exitCode: out.code,
     stdout: out.stdout,
-    turns,
-    toolCalls: parseToolCalls(out.stdout),
-    hooks: parseHooks(out.stdout),
-    output,
-    subagents: parseSubagents(out.stdout),
-    usage: usageFrom(result),
-    // The eval tier drives the real API (no mock between claude and the model),
+    turns: p.turns,
+    toolCalls: p.toolCalls,
+    hooks: p.hooks,
+    output: p.output,
+    subagents: p.subagents,
+    usage: p.usage,
+    // The eval tier drives the real API (no mock between the agent and the model),
     // so the requests can't be captured here — modelRequests is harness-tier only.
     modelRequests: [],
     file: (p) => {
@@ -2052,6 +2084,8 @@ interface TriggerRunConfig {
   readonly fixture?: Record<string, string>;
   /** Parallel runs across the prompts × trials grid (default 1). */
   readonly concurrency: number;
+  /** How to parse the runner's stdout into a trace (default Claude stream-json). */
+  readonly parse: ModelOutputParser;
 }
 
 /** Run one prompt set × trials through `runner`, aggregating fired counts. */
@@ -2073,7 +2107,7 @@ async function runTriggerTrial(
       pluginDir: cfg.pluginDir,
       timeoutMs: cfg.timeoutMs,
     });
-    return cfg.fired(makeContext(cwd, out)) ? 1 : 0;
+    return cfg.fired(makeContext(cwd, out, cfg.parse)) ? 1 : 0;
   } finally {
     rmSync(cwd, { recursive: true, force: true });
     await sleep(cfg.spacing);
@@ -2123,6 +2157,7 @@ async function runTriggerSet(
 export async function measureTriggerRateWith(
   spec: TriggerRateSpec,
   runner: AgentRunner,
+  parse: ModelOutputParser = parseClaudeRun,
 ): Promise<TriggerRateReport> {
   // Deterministic gate FIRST — reject a too-small / near-duplicate prompt set
   // before spending a token (and before packaging a skillsDir).
@@ -2165,6 +2200,7 @@ export async function measureTriggerRateWith(
     fired: spec.fired,
     fixture: spec.fixture,
     concurrency: Math.max(1, spec.concurrency ?? 1),
+    parse,
   };
 
   try {
