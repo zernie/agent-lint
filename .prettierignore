@@ -6,7 +6,12 @@ coverage/
 # Vendored third-party plugin snapshots (dogfood fixtures) — formatted by their
 # upstreams, not us. See examples/harness/vendor/*/SOURCE.
 examples/harness/vendor/
-examples/demo/.vigiles/
 
 # API Extractor reports (tool-generated, exact format)
 etc/
+
+# The root CLAUDE.md is a vigiles-COMPILED artifact: `vigiles compile` owns its
+# exact bytes (an integrity hash over the output gates it in CI). Prettier would
+# re-escape markdown (e.g. `skills/*` → `skills/\*`) and desync that hash, so the
+# two gates would fight forever. The spec (CLAUDE.md.spec.ts) IS prettier-checked.
+/CLAUDE.md

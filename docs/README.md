@@ -4,7 +4,7 @@ How-to and reference docs for using vigiles. (The thinking _behind_ vigiles —
 design docs, benchmarks, landscape — lives in [`../research/`](../research/README.md).)
 New here? Start with the [README](../README.md).
 
-## Verify your instruction files (pillar 1)
+## Verify your instruction files (layer 1)
 
 - [`verifying-instruction-files.md`](verifying-instruction-files.md) — the full guide: the markdown→typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references + marks, and the before/after tables.
 
@@ -17,8 +17,8 @@ New here? Start with the [README](../README.md).
 ## Reference
 
 - **Library entry points** (grouped by concern, so a future non-Claude-Code harness can sit beside the current one):
-  - `vigiles/linting` — Pillar 1: the spec builders + compiler (`claude`, `enforce`, `guidance`, `file`, `cmd`, `symbol`, …).
-  - `vigiles/testing` — Pillar 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
+  - `vigiles/linting` — Layer 1: the spec builders + compiler (`claude`, `enforce`, `guidance`, `file`, `cmd`, `symbol`, …).
+  - `vigiles/testing` — Layer 2: the three tiers (`runHook`, `runHarnessTest`, `runEval`) + the runner-agnostic assertions.
   - `vigiles/claude-code` — the Claude Code-specific adapter (`loadPlugin`, `scriptModel`, the mock).
   - `vigiles/spec` — the authoring surface (the spec builders; also the module-augmentation target for generated types).
   - Per-tier barrels `vigiles/unit` / `vigiles/integration` / `vigiles/e2e` make a test's capability legible from its import.
@@ -28,7 +28,7 @@ New here? Start with the [README](../README.md).
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
 - **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-agent`](rules/untested-agent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
 
-## Test your harness (pillar 2)
+## Test your harness (layer 2)
 
 - [`harness-testing.md`](harness-testing.md) — the harness-agnostic core: the four layers (verify-refs / hook-unit / deterministic / eval), the `Trace` model, runner-agnostic usage (node:test / vitest / jest), the CLI fallback, per-level CI.
   - [`harness-testing-claude-code.md`](harness-testing-claude-code.md) — Claude Code specifics: the oh-my-claudecode walkthrough, `${CLAUDE_PLUGIN_ROOT}` / `pluginDir` / the `Skill` tool, `scriptModel`, the bubblewrap sandbox.

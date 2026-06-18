@@ -7,7 +7,7 @@ and the harness-specific pieces live behind a swappable **adapter**.
 
 > **Supported today: Claude Code and Codex.** Codex (`vigiles/codex`) is
 > auto-detected by the CLI, **verifies** references, **compiles** Codex-shaped
-> instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs **Test**-pillar
+> instructions (`AGENTS.md`) and skills (minimal `SKILL.md`), and runs **Test**-layer
 > harness tests against the real `codex` binary (keyless, OpenAI-Responses mock) via
 > `runHarnessTest({ adapter: codexAdapter })`. Subagents are a deliberate boundary
 > (a Codex subagent is concurrency config, not a tool-contract file — see the
@@ -85,11 +85,11 @@ adapters that hang or no-op. Each adapter therefore declares an
 **requires a transport port only for the capability the adapter claims** — so a
 reference-only harness is a first-class adapter, not a broken one.
 
-| Capability                                   | Descriptor flag                         | Needs ports             | What it unlocks                                         |
-| -------------------------------------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------- |
-| **Lint** (pillar 1) — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `lint` — verify refs, tools, paths |
-| **Test** (pillar 2) — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model) |
-| **Shell-hook tier**                          | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)      |
+| Capability                                  | Descriptor flag                         | Needs ports             | What it unlocks                                         |
+| ------------------------------------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------- |
+| **Lint** (layer 1) — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `lint` — verify refs, tools, paths |
+| **Test** (layer 2) — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model) |
+| **Shell-hook tier**                         | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)      |
 
 Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
 

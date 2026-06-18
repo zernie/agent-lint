@@ -190,13 +190,12 @@ assertRates`) is the recommended path for testing one skill, but
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
-- **Demo revamp (consolidate the deprecated demos)** — `examples/demo/`
-  (`npm run demo`) and `examples/plugin-test-demo.mjs` (`npm run demo:plugin`) are
-  now deprecated. Replace them with ONE polished, reliably-passing front-door demo
-  plus a recorded GIF/asciinema, framed by the three "best"s: the
-  stale-`enforce()` "lies" story as the one-sentence sell, and `vigiles scan` as
-  the zero-setup wedge.
-  [distribution-strategy](distribution-strategy.md) · feature-ideas #14
+- **Build the ONE polished front-door demo** — the deprecated demos (`examples/demo/`
+  - `examples/plugin-test-demo.mjs` and their `demo`/`demo:plugin` scripts) have
+    been **deleted**. What's still needed: ONE polished, reliably-passing demo plus a
+    recorded GIF/asciinema, framed by the three "best"s — the stale-`enforce()`
+    "lies" story as the one-sentence sell, and `vigiles scan` as the zero-setup wedge.
+    [distribution-strategy](distribution-strategy.md) · feature-ideas #14
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
   structural score. [divergent-bets #9](divergent-bets.md)
 - **Harness cost/ROI optimizer** — A/B token-cost eval (full vs trimmed CLAUDE.md);
@@ -247,6 +246,17 @@ assertRates`) is the recommended path for testing one skill, but
   agent-config linter (agnix lane), AI PR reviewer. [strategic-synthesis](strategic-synthesis-2026-06.md)
 - **Parked:** measure model × harness (overlaps "CI for model upgrades").
   [divergent-bets #11](divergent-bets.md)
+- **No (evaluated 2026-06-18):** [Sogen](https://sogen.dev/) as a sandbox backend
+  — it's a syscall-level Windows/Linux _binary emulator_ (Unicorn/icicle/Hyper-V)
+  for malware/DRM research, and its own docs say host isolation "might not be
+  perfect". Wrong workload (we confine **Node + shell**, not compiled binaries),
+  wrong guarantee (we need the containment to BE the boundary), wrong gap (our hole
+  is macOS Seatbelt of native processes). The one transferable idea — **snapshot +
+  deterministic replay** of full execution state — we already do at the right
+  altitude (filesystem/trace: the eval record/replay cache, `snapshotDir` /
+  `restoreDir`). Backend decisions live in
+  [cross-platform-sandboxing](cross-platform-sandboxing.md) ·
+  [egress-sandbox-tooling](egress-sandbox-tooling.md).
 
 ## See also
 

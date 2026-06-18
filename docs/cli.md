@@ -27,14 +27,14 @@ Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
 default; in a CI job that **asserts** the capability is present, add `--no-skip`
 so a skipped tier **fails** (a green-with-skips is untested surface).
 
-By default `init` sets up **both pillars** — **Lint** (verify instruction-file
+By default `init` sets up **both layers** — **Lint** (verify instruction-file
 references) and **Test** (test the harness): it scaffolds a typed spec + types
 (Lint), a starter `vigiles.harness.mjs` (Test), wires CI as a
 `zernie/vigiles@v1` workflow (creating `.github/workflows/vigiles.yml` when none
 exists), and installs the Claude Code plugin.
 
 **Interactive vs non-interactive:** run in a terminal (a TTY), `init` prompts for
-which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
+which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 (no TTY) — or with `--yes` — it skips the prompts and applies the defaults. So
 "set up vigiles" from a Claude Code / Codex prompt Just Works without hanging.
 
@@ -42,17 +42,17 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 | Flag                     | Effect                                                           |
 | ------------------------ | ---------------------------------------------------------------- |
-| `--yes`, `-y`            | Skip prompts; use defaults (both pillars, CI, plugin)            |
-| `--lint` / `--no-lint`   | Lint pillar — verify instruction-file references (default on)    |
-| `--test` / `--no-test`   | Test pillar — scaffold a harness test (default on)               |
+| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, plugin)             |
+| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)     |
+| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                |
 | `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
 | `--no-gha`               | Skip wiring CI                                                   |
 | `--no-plugin`            | Skip installing the Claude Code plugin                           |
 | `--strict`               | Set `require-spec` to `"error"`                                  |
-| `--target=AGENTS.md`     | Create a bare spec for one file (Lint pillar only)               |
+| `--target=AGENTS.md`     | Create a bare spec for one file (Lint layer only)                |
 
-Passing a single positive pillar flag selects only it (`--lint` = the Lint
-pillar only); pass both, or neither, for both. `init` also adds `vigiles` to your
+Passing a single positive layer flag selects only it (`--lint` = the Lint
+layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
 scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
 
