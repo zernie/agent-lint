@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:b53496def4c3b914 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:2d7d14491cb62127 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -310,6 +310,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Dont Reimplement Linters
 
 **Guidance only** — Architectural linting belongs in ast-grep/Dependency Cruiser/Steiger. Per-file code rules belong in ESLint/Ruff/Clippy. vigiles owns: spec compilation, linter cross-referencing, type generation, stale reference detection, and proof-based spec evolution.
+
+### One Detector No Drift
+
+**Guidance only** — A DETERMINISTIC structural check has ONE home: a single pure detector reused by BOTH `lint` (the per-commit, severity-configurable gate) and `scan` (the read-only report) — never reimplemented in each, so the two surfaces can't drift. The detectors already shared this way: untested-surface (`src/test-coverage.ts`), dangling-ref (`danglingRefs` in `src/plugin-loader.ts`), and non-Latin description / cross-language trigger risk (`src/scan.ts`). When a deterministic signal earns a `lint` rule, the rule and `scan` must call the SAME function (plus a `docs/rules/<name>.md` per the doc-per-rule rule). The model-gated BEHAVIORAL column (`scan --trigger` / `runEval` trigger-rate, observed egress) is the deliberate EXCEPTION: it's LLM-based — needs model auth, costs tokens, is non-deterministic — so it lives ONLY in the scan/eval tier and is NEVER promoted to a `lint` rule (lint stays deterministic, free, runnable on every commit with no key). The dividing line is the tool's core axis: cheap deterministic DETECTION can be a lint rule; expensive model-gated CONFIRMATION cannot. So a non-Latin description is flagged deterministically (lint/scan), but whether it actually under-fires is measured only by `--trigger`.
 
 ### Compose With Sync Tools
 
