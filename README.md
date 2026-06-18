@@ -33,6 +33,48 @@ Pick the one that hurts today. **Works with Claude Code and Codex**
 ([`vigiles/codex`](docs/harnesses.md)) behind a five-port adapter;
 [custom adapters welcome](docs/authoring-an-adapter.md).
 
+## Quick start
+
+**Paste into Claude Code or Codex:**
+
+```text
+Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
+references and show me what's stale, then write and run a harness test for one
+of my hooks or skills. Use good defaults (lint + test, non-interactive), but
+ask me first whether to gate it in CI, whether to add a real-model eval, and
+whether to enforce strictly (--strict).
+```
+
+Or do it yourself:
+
+```bash
+npx vigiles init   # sets up lint + test: spec + harness test + CI + plugin
+```
+
+It's interactive in a terminal and non-interactive for agents/CI (or with
+`--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
+it installs a model-invocable **`test-harness` skill**, so afterward you can just
+tell your agent _"test my skills"_ and it picks the tier and writes the test.
+
+<details>
+<summary>What <code>init</code> sets up</summary>
+
+- **Both lint and test** by default; scope with `--lint` / `--test` (one or both).
+- Adds `vigiles` to your `devDependencies`.
+- Installs the Claude Code plugin (skills + hooks) via the marketplace —
+  globally, never vendored into your repo.
+- Wires CI as a `zernie/vigiles@v1` workflow (a composite over the same CLI):
+
+  ```yaml
+  - uses: actions/checkout@v4
+  - uses: zernie/vigiles@v1 # lints by default; posts a sticky PR comment + a `valid` output
+  ```
+
+Prefer to write tests yourself? They can be JS **or** TS
+(`*.harness.{mjs,ts}`) — run them with `npx vigiles test`.
+
+</details>
+
 ## ① Lint — your CLAUDE.md lies to your agent
 
 Your CLAUDE.md points the agent at `src/auth/login.ts` and tells it to run
@@ -87,48 +129,6 @@ no API key** — milliseconds, on every commit. The rest drive your own `claude`
 
 That's why you can eval your harness on every change, not just once.
 **[How it works →](docs/harness-testing.md)** · **[Why it's affordable →](docs/eval-architecture.md)** · **[Safety model →](docs/safety.md)**
-
-## Quick start
-
-**Paste into Claude Code or Codex:**
-
-```text
-Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
-references and show me what's stale, then write and run a harness test for one
-of my hooks or skills. Use good defaults (lint + test, non-interactive), but
-ask me first whether to gate it in CI, whether to add a real-model eval, and
-whether to enforce strictly (--strict).
-```
-
-Or do it yourself:
-
-```bash
-npx vigiles init   # sets up lint + test: spec + harness test + CI + plugin
-```
-
-It's interactive in a terminal and non-interactive for agents/CI (or with
-`--yes`), so "set up vigiles" from a Claude Code / Codex prompt Just Works — and
-it installs a model-invocable **`test-harness` skill**, so afterward you can just
-tell your agent _"test my skills"_ and it picks the tier and writes the test.
-
-<details>
-<summary>What <code>init</code> sets up</summary>
-
-- **Both lint and test** by default; scope with `--lint` / `--test` (one or both).
-- Adds `vigiles` to your `devDependencies`.
-- Installs the Claude Code plugin (skills + hooks) via the marketplace —
-  globally, never vendored into your repo.
-- Wires CI as a `zernie/vigiles@v1` workflow (a composite over the same CLI):
-
-  ```yaml
-  - uses: actions/checkout@v4
-  - uses: zernie/vigiles@v1 # lints by default; posts a sticky PR comment + a `valid` output
-  ```
-
-Prefer to write tests yourself? They can be JS **or** TS
-(`*.harness.{mjs,ts}`) — run them with `npx vigiles test`.
-
-</details>
 
 ## More
 
