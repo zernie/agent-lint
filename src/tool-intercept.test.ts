@@ -7,6 +7,8 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   decideIntercept,
@@ -18,6 +20,7 @@ import {
   INTERCEPT_TOOLS_ENV,
   type ToolIntercept,
 } from "./tool-intercept.js";
+import { runHook } from "./run-hook.js";
 
 test("decideIntercept(): unconditional intercept returns the deny reason (or default)", () => {
   const intercepts: ToolIntercept[] = [
@@ -168,6 +171,63 @@ test("parseIntercepts(): tolerant of junk", () => {
     { tool: "Bash", denyReason: undefined, when: undefined },
   ]);
 });
+
+// End-to-end PREVENTION proof: the pure decision is covered above, but the rail's
+// value is that the real `vigiles intercept-tool-hook` CLI, wired as a PreToolUse
+// hook, actually BLOCKS a matched call before it can run. Drive the real built CLI
+// through runHook (no model) and assert the block/allow outcome — a regression in
+// the subcommand's env-read or deny format (which the pure tests can't see) fails
+// here. Runs when dist/ is built (npm test / CI); skips loudly otherwise.
+const CLI = resolve("dist/cli.js");
+const interceptHookTest = existsSync(CLI) ? test : test.skip;
+interceptHookTest(
+  "intercept-tool-hook (real CLI): BLOCKS a matched call, ALLOWS the rest",
+  () => {
+    const env = {
+      [INTERCEPT_TOOLS_ENV]: serializeIntercepts([
+        {
+          tool: "Bash",
+          when: { command: /git push/ },
+          denyReason: "no pushes",
+        },
+      ]),
+    };
+    const cmd = `node ${CLI} intercept-tool-hook`;
+    // A matched call (Bash `git push`) is PREVENTED — the hook blocks it.
+    const blocked = runHook(
+      cmd,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push origin main" },
+      },
+      { env },
+    );
+    assert.equal(blocked.blocked, true, "a matched tool call must be blocked");
+    // A non-matching Bash command is allowed (the `when` scopes the intercept).
+    const allowedArgs = runHook(
+      cmd,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "ls -la" },
+      },
+      { env },
+    );
+    assert.equal(allowedArgs.blocked, false, "a non-matching command runs");
+    // A different tool entirely is allowed.
+    const allowedTool = runHook(
+      cmd,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        tool_input: { file_path: "x" },
+      },
+      { env },
+    );
+    assert.equal(allowedTool.blocked, false, "an un-intercepted tool runs");
+  },
+);
 
 test("INTERCEPT_TOOLS_ENV is the documented var name", () => {
   assert.equal(INTERCEPT_TOOLS_ENV, "VIGILES_INTERCEPT_TOOLS");
