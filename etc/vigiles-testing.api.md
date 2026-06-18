@@ -810,6 +810,9 @@ export function renderToolStub(stub: ToolStub): string;
 export function requestContains(trace: Trace, needle: string | RegExp): boolean;
 
 // @public
+export function resolveSpawnEnv(a: Pick<AgentRunArgs, "env" | "replaceEnv">, base?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
+
+// @public
 export interface RunContext extends Trace {
     // (undocumented)
     readonly cwd: string;

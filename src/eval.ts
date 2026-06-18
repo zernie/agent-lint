@@ -320,6 +320,23 @@ export interface AgentRunArgs {
  */
 export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
 
+/**
+ * Resolve the environment a trial's subprocess actually runs with — the
+ * SECURITY-CRITICAL decision behind `ephemeralEnv`. When `replaceEnv` is set, the
+ * scrubbed `env` is the COMPLETE environment, so the real `$HOME` and inherited
+ * secrets are DROPPED; otherwise `env` is an overlay on `base` (byte-identical to
+ * the pre-ephemeral behaviour). Extracted from the `v8 ignore`d `spawnAgent` so
+ * the one line that enforces the scrub is both unit- and behaviourally-tested — a
+ * regression to an always-merge would otherwise silently defeat ephemerality and
+ * leak the host environment into an untrusted, model-driven run.
+ */
+export function resolveSpawnEnv(
+  a: Pick<AgentRunArgs, "env" | "replaceEnv">,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
+}
+
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
 function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
   return new Promise((resolvePromise) => {
@@ -345,10 +362,9 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
     ];
     const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
-      // Default: overlay `a.env` on the real process.env (byte-identical to
-      // before). Ephemeral mode (`replaceEnv`) makes `a.env` the COMPLETE env —
-      // the scrubbed ephemeral run env — so the real $HOME / secrets are dropped.
-      env: a.replaceEnv ? a.env : { ...process.env, ...a.env },
+      // The security-critical env resolution (overlay vs. scrubbed replacement)
+      // lives in the tested `resolveSpawnEnv` seam above, not inline here.
+      env: resolveSpawnEnv(a),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
