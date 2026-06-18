@@ -10,7 +10,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { scanPlugin, formatScanReport, expandMarketplace } from "./scan.js";
+import {
+  scanPlugin,
+  formatScanReport,
+  expandMarketplace,
+  unexpectedScript,
+} from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function write(dir: string, rel: string, content: string): void {
@@ -118,6 +123,19 @@ test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
   cleanupTmpDir(dir);
 });
 
+test("unexpectedScript: expected is a configurable default (Latin), not hardcoded", () => {
+  const ru = "Создавать и обновлять task-folders в репозитории";
+  const en = "Create and update task folders in the repo";
+  // Default expectation is Latin → Cyrillic text is the mismatch, English isn't.
+  assert.equal(unexpectedScript(ru), "Cyrillic");
+  assert.equal(unexpectedScript(en), null);
+  // A Cyrillic-targeted pack flips it: its Russian descriptions pass, English flags.
+  assert.equal(unexpectedScript(ru, "Cyrillic"), null);
+  assert.equal(unexpectedScript(en, "Cyrillic"), "Latin");
+  // No alphabetic content → nothing to judge.
+  assert.equal(unexpectedScript("1234 — !!! ***"), null);
+});
+
 test("scanPlugin flags a non-Latin description as a cross-language trigger risk", () => {
   const dir = makeTmpDir("scan-lang");
   // Cyrillic description (fleytman/haretrail shape) — the selector is
@@ -149,7 +167,7 @@ test("scanPlugin flags a non-Latin description as a cross-language trigger risk"
     text,
     /ru \(description in Cyrillic — cross-language trigger risk\)/,
   );
-  assert.match(text, /1 skill\(s\) have non-Latin descriptions/); // only ru
+  assert.match(text, /1 skill\(s\) have descriptions in an unexpected script/); // only ru
   cleanupTmpDir(dir);
 });
 
