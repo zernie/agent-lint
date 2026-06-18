@@ -138,6 +138,19 @@
   declared trigger phrases so it's measured in the state it claims to fire on.
   Preset SELECTION on explicit cues, not prose synthesis (stays out of the
   undecidable-prose trap). [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
+- **Per-model trigger-rate + context-rot curve** — two parts. (a) Report
+  trigger-rate **per model** wherever we report it — already a capability
+  (`EvalArm.model` makes a model comparison a harness A/B; Sonnet default +
+  `minModel` floor), so this is "make it a standard column", near-free. (b) The
+  study: measure how recall **rots as the skill roster grows** (5 → 20 → 80
+  skills) and whether a stronger model rots slower — the concrete form of
+  `divergent-bets` #11 (measure model × harness) and the buyer question "how many
+  skills can I install before they stop firing, on model X?". A roster × model ×
+  prompt matrix, so opt-in study, not a default gate; rides the existing isolated
+  → near-neighbor → whole-harness (`installSet`) tiers crossed with model arms.
+  Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
+  (~20 stubbed runs) to confirm the curve is real + model-dependent before any
+  matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
