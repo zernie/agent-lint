@@ -48,7 +48,7 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 | `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
 | `--no-gha`               | Skip wiring CI                                                   |
 | `--no-plugin`            | Skip installing the Claude Code plugin                           |
-| `--strict`               | Set `require-spec` / `require-skill-spec` to `"error"`           |
+| `--strict`               | Set `require-spec` to `"error"`                                  |
 | `--target=AGENTS.md`     | Create a bare spec for one file (Lint pillar only)               |
 
 Passing a single positive pillar flag selects only it (`--lint` = the Lint
@@ -300,7 +300,7 @@ want compile-on-edit.
 | Rule                                                | Default  | What it checks                                                                  |
 | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
 | [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                                 |
+| [`require-skill-spec`](rules/require-skill-spec.md) | `false`  | **Deprecated** (skills can be hand-written) — use `untested-surface` instead    |
 | [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
 | [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                       |
 | [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                       |

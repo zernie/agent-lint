@@ -197,25 +197,25 @@ test("mergeProjectConfig: preserves other existing keys while adding harness", (
   );
 });
 
-test("mergeProjectConfig: strict adds rule severities alongside harness", () => {
+test("mergeProjectConfig: strict tightens require-spec alongside harness", () => {
+  // `require-skill-spec` is deprecated, so --strict tightens only `require-spec`.
   assert.deepEqual(
     mergeProjectConfig({}, { harness: "claude-code", strict: true }),
     {
       harness: "claude-code",
-      rules: { "require-spec": "error", "require-skill-spec": "error" },
+      rules: { "require-spec": "error" },
     },
   );
 });
 
-test("mergeProjectConfig: strict doesn't overwrite an existing rule severity", () => {
+test("mergeProjectConfig: strict leaves an already-set require-spec alone", () => {
+  // require-spec already defined and the only rule --strict touches → nothing to
+  // tighten → no write.
   const out = mergeProjectConfig(
     { harness: "codex", rules: { "require-spec": "warn" } },
     { harness: "codex", strict: true },
   );
-  assert.deepEqual(out, {
-    harness: "codex",
-    rules: { "require-spec": "warn", "require-skill-spec": "error" },
-  });
+  assert.equal(out, null);
 });
 
 test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {

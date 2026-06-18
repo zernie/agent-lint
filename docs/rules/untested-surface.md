@@ -2,6 +2,8 @@
 
 Flag harness _surfaces_ — skills, subagents, and hooks — that ship without a test or eval. The third gap detector alongside `integrity` (hand-edits) and orphan-docs (unreferenced docs): a surface with no test is a probabilistic-compliance gap hiding in the deterministic layer — nothing measures whether it still does what it claims.
 
+This is the canonical **skill-coverage** rule — it supersedes the deprecated [`require-skill-spec`](require-skill-spec.md). A skill doesn't need a `.spec.ts` (hand-written prose is a supported on-ramp); it needs a way to know it still _works_ — a trigger eval, a harness test, or a colocated `*.{harness,eval}.mjs`. User-invoked (disable-model-invocation) skills are exempt by default, and any surface can opt out with `vigiles:ignore-test`.
+
 ## Configuration
 
 ```json

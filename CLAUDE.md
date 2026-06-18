@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:9b14c43b23462f43 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:3031ba1880ff0f05 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -244,7 +244,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 - `docs/linter-support.md` — Linter support details (7 catalogs + generate-types/generate-schema)
 - `docs/comparison.md` — Before/after tables (Claude Code, Codex), determinism breakdown, flow diagram
 - `docs/rules/require-spec.md` — Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md
-- `docs/rules/require-skill-spec.md` — Rule doc: require .spec.ts for SKILL.md files
+- `docs/rules/require-skill-spec.md` — Rule doc: require-skill-spec — DEPRECATED (default off). Skills are legitimately hand-written, so requiring a .spec.ts per SKILL.md was the wrong constraint; superseded by untested-surface (every skill ships a test/eval). Implementation kept; --strict no longer promotes it
 - `docs/rules/integrity.md` — Rule doc: integrity check (SHA-256 hash verification for compiled markdown)
 - `docs/rules/coverage.md` — Rule doc: spec coverage thresholds (scripts, linter rules)
 - `docs/inline-mode.md` — Inline mode: `<!-- vigiles:enforce ... -->` comments for gradual adoption without a .spec.ts
