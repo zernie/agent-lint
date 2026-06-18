@@ -427,7 +427,9 @@ describe("loadConfig", () => {
       "require-skill-spec": false,
       integrity: "warn",
       coverage: false,
-      "untested-surface": "warn",
+      "untested-skill": "warn",
+      "untested-agent": "warn",
+      "untested-hook": "warn",
       "unmarked-refs": "warn",
     });
   });

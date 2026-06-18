@@ -184,11 +184,15 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/core/compose.test.ts":
       "Sync-tool detector test suite (node:test): ruler/rulesync detection (dir + ruler.toml keys), source-slot paths, CLAUDE.md/AGENTS.md collision incl. path-qualified target match by filename, no-tool and non-overlapping no-collision, both-tools-present",
     "src/test-coverage.ts":
-      "Untested-surface detector (vigiles/untested-surface rule): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). EVERY skill/agent/hook is held to it — invocation mode does NOT exempt (a command-only skill still does something worth testing); the only opt-out is an explicit vigiles:ignore-test marker, reported as exempt so the skip is visible. Warning-by-default, surfaced by vigiles lint",
+      "Untested-surface detector (the per-kind vigiles/untested-skill + untested-agent + untested-hook rules — replacing the old umbrella untested-surface): finds skills/agents/hooks that ship with no test or eval — the third gap detector beside orphan-docs. Two OR'd detectors decide 'tested': colocation (a `*.{harness,eval}.mjs` next to the surface) + content-reference (any test, incl. `*.test.ts`, naming it by path or :namespace). EVERY skill/agent/hook is held to it (each kind gated by its own rule severity) — invocation mode does NOT exempt (a command-only skill still does something worth testing); the only opt-out is an explicit vigiles:ignore-test marker, reported as exempt so the skip is visible. Warning-by-default, surfaced by vigiles lint",
     "src/test-coverage.test.ts":
       "Untested-surface detector test suite (vitest): colocation + content-reference coverage, command-only skills held to the requirement (no invocation-mode exemption), vigiles:ignore-test opt-out (counted as exempt), agent sibling match, hook-script discovery from plugin.json, kind toggles, report formatting + suggestedTestPath",
-    "docs/rules/untested-surface.md":
-      "Rule doc: untested-surface — config, severity, options, the two coverage detectors, exemptions, why",
+    "docs/rules/untested-skill.md":
+      "Rule doc: untested-skill — a SKILL.md must ship with a test/eval; config, severity, scope (skills/*), the two coverage detectors, the explicit vigiles:ignore-test opt-out, why. Sibling of untested-agent/untested-hook (the per-kind split of the old untested-surface)",
+    "docs/rules/untested-agent.md":
+      "Rule doc: untested-agent — a subagent (agents/*.md) must ship with a test/eval; the agent's contract (tool-contract / outcome) is what's tested, distinct from a skill's trigger",
+    "docs/rules/untested-hook.md":
+      "Rule doc: untested-hook — a file-backed hook script must ship with a test/eval (a runHook unit test is the natural one); scope = hooks referenced from plugin.json/settings.json",
     "docs/rules/unmarked-refs.md":
       "Rule doc: unmarked-refs — the PostToolUse refs-hook that nudges the agent to MARK code-shaped references in instruction files (warn → non-blocking nudge, error → block, false → off); what it checks, opt-outs, where it runs, and the undecidable plaintext floor",
     "src/core/doc-refs.ts":
@@ -431,7 +435,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "docs/rules/require-spec.md":
       "Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md",
     "docs/rules/require-skill-spec.md":
-      "Rule doc: require-skill-spec — DEPRECATED (default off). Skills are legitimately hand-written, so requiring a .spec.ts per SKILL.md was the wrong constraint; superseded by untested-surface (every skill ships a test/eval). Implementation kept; --strict no longer promotes it",
+      "Rule doc: require-skill-spec — DEPRECATED (default off). Skills are legitimately hand-written, so requiring a .spec.ts per SKILL.md was the wrong constraint; superseded by untested-skill (every skill ships a test/eval). Implementation kept; --strict no longer promotes it",
     "docs/rules/integrity.md":
       "Rule doc: integrity check (SHA-256 hash verification for compiled markdown)",
     "docs/rules/coverage.md":

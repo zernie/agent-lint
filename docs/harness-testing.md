@@ -748,8 +748,9 @@ harness's** test coverage (do your skills/hooks/subagents each have a test?) and
 
 A harness grows surfaces faster than tests — a new skill, hook, or subagent
 lands and nothing tells you it shipped untested. `vigiles lint` closes that gap
-with the [`untested-surface`](rules/untested-surface.md) rule: it reports any
-skill, subagent, or hook that has **no test or eval**. A surface counts as
+with the per-kind [`untested-skill`](rules/untested-skill.md) /
+[`untested-agent`](rules/untested-agent.md) / [`untested-hook`](rules/untested-hook.md)
+rules: they report any skill, subagent, or hook that has **no test or eval**. A surface counts as
 covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention
 the warning suggests) **or** any test — including a `*.test.ts` — references it
 by path (`skills/foo`, `hooks/x.sh`) or namespace (`plugin:foo`). It's
