@@ -26,20 +26,33 @@ import { findUntestedSurfaces } from "./test-coverage.js";
 // Types
 // ---------------------------------------------------------------------------
 
+/** A named writing system. The label `unexpectedScript` reports + the config's expectation parse into this. */
+export type Script =
+  | "Latin"
+  | "Cyrillic"
+  | "Han"
+  | "Japanese"
+  | "Korean"
+  | "Arabic"
+  | "Hebrew"
+  | "Greek"
+  | "Devanagari"
+  | "Thai";
+
 export interface ScanSkill {
   readonly name: string;
   readonly path: string;
   readonly hasDescription: boolean;
   readonly userInvoked: boolean;
   /**
-   * Dominant non-Latin script of the description (e.g. "Cyrillic", "Han"), or
-   * null when the description is Latin/English-ish. The model's skill-selection
-   * context is English-centric, so a non-Latin description carries a
-   * cross-language trigger risk — it may under-fire on English prompts. A RISK
-   * flag, not a defect (a language-matched audience is fine); measure the real
-   * gap with `scan --trigger`.
+   * The description's dominant script when it DIFFERS from the expected one
+   * (default `"Latin"`), else null. The model's skill-selection context is
+   * English-centric, so a description in another script carries a cross-language
+   * trigger risk — it may under-fire on English prompts. A RISK flag, not a
+   * defect (a language-matched audience is fine); measure the real gap with
+   * `scan --trigger`.
    */
-  readonly descriptionScript: string | null;
+  readonly descriptionScript: Script | null;
 }
 
 export interface ScanAgent {
@@ -144,11 +157,12 @@ function skillName(path: string): string {
   );
 }
 
-// Non-Latin scripts worth naming in a cross-language trigger-risk flag. Uses
-// Unicode \p{Script=…} (Node native, no dependency). Latin is the baseline the
-// English-centric selector expects; a description dominated by one of these may
-// under-fire on English prompts.
-const NON_LATIN_SCRIPTS: readonly [string, string][] = [
+// [Unicode \p{Script=…} property value (Node native, no dependency), our Script
+// label]. Japanese kana fold to "Japanese". Latin is the DEFAULT expectation (the
+// selector is English-centric), but it's just a default — a language-matched pack
+// can declare a different expectation, and then the OTHER script is the mismatch.
+const SCRIPTS: readonly [string, Script][] = [
+  ["Latin", "Latin"],
   ["Cyrillic", "Cyrillic"],
   ["Han", "Han"],
   ["Hiragana", "Japanese"],
@@ -161,23 +175,41 @@ const NON_LATIN_SCRIPTS: readonly [string, string][] = [
   ["Thai", "Thai"],
 ];
 
-/**
- * The dominant non-Latin script of `text`, or null when it's Latin/English-ish.
- * Flags when ≥20% of the alphabetic characters are one non-Latin script — enough
- * to catch a Russian/Chinese/… description (the cross-language trigger risk)
- * without tripping on a stray foreign word or symbol.
- */
-function dominantNonLatinScript(text: string): string | null {
-  const latin = (text.match(/\p{Script=Latin}/gu) ?? []).length;
-  let best: { label: string; count: number } | null = null;
-  for (const [script, label] of NON_LATIN_SCRIPTS) {
-    const count = (text.match(new RegExp(`\\p{Script=${script}}`, "gu")) ?? [])
+/** Letter counts per named script label (Japanese kana folded together). */
+function scriptCounts(text: string): Map<Script, number> {
+  const counts = new Map<Script, number>();
+  for (const [script, label] of SCRIPTS) {
+    const n = (text.match(new RegExp(`\\p{Script=${script}}`, "gu")) ?? [])
       .length;
-    if (count > 0 && (!best || count > best.count)) best = { label, count };
+    if (n > 0) counts.set(label, (counts.get(label) ?? 0) + n);
   }
-  if (!best) return null;
-  const total = latin + best.count;
-  return total > 0 && best.count / total >= 0.2 ? best.label : null;
+  return counts;
+}
+
+/**
+ * The description's dominant alphabetic script when it DIFFERS from `expected`
+ * (default `"Latin"`) — the cross-language trigger-risk signal. The model's
+ * skill-selection context is English-centric, so a description written mostly in
+ * another script may under-fire on English prompts. `expected` is a configurable
+ * default, not a value judgement: a Russian-targeted pack sets it to `"Cyrillic"`
+ * so its Cyrillic descriptions pass and an English one is flagged instead.
+ * Returns null when the dominant script IS the expected one (or there's no
+ * alphabetic content). Shared by `scan` and the future lint rule (one detector,
+ * no drift). The ≥20% guard avoids a near-empty string tripping on one letter.
+ */
+export function unexpectedScript(
+  text: string,
+  expected: Script = "Latin",
+): Script | null {
+  const counts = scriptCounts(text);
+  let total = 0;
+  let dominant: { label: Script; count: number } | null = null;
+  for (const [label, count] of counts) {
+    total += count;
+    if (!dominant || count > dominant.count) dominant = { label, count };
+  }
+  if (!dominant || dominant.label === expected) return null;
+  return dominant.count / total >= 0.2 ? dominant.label : null;
 }
 
 function scanSkills(files: Record<string, string>): ScanSkill[] {
@@ -191,7 +223,7 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
       hasDescription: Boolean(fm.description && fm.description.length >= 20),
       userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
       descriptionScript: fm.description
-        ? dominantNonLatinScript(fm.description)
+        ? unexpectedScript(fm.description)
         : null,
     });
   }
@@ -392,10 +424,10 @@ export function formatScanReport(r: ScanReport): string {
   // Cross-language trigger risk is a RISK, not a structural defect (a
   // language-matched audience is fine), so it's reported separately from the
   // verdict — it points at the behavioral column, it doesn't fail the scan.
-  const nonLatin = r.skills.filter((s) => s.descriptionScript);
-  if (nonLatin.length > 0) {
+  const mismatched = r.skills.filter((s) => s.descriptionScript);
+  if (mismatched.length > 0) {
     out.push(
-      `⚠ ${String(nonLatin.length)} skill(s) have non-Latin descriptions (cross-language trigger risk) — measure with \`scan --trigger\``,
+      `⚠ ${String(mismatched.length)} skill(s) have descriptions in an unexpected script (cross-language trigger risk) — measure with \`scan --trigger\``,
       "",
     );
   }

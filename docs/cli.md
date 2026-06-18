@@ -102,8 +102,9 @@ Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
 of what it ships and what's structurally broken — **no model, no API key**. It
 re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
 `findUntestedSurfaces`): per-skill description presence + user-invoked flag +
-**non-Latin description** detection (a Cyrillic/CJK/… description carries a
-cross-language trigger risk — the selector is English-centric, so it may
+**description-script** detection (a description whose dominant script differs from
+the expected one — **default Latin, configurable** — carries a cross-language
+trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
 under-fire on English prompts; a RISK flag, not a defect — measure it with
 `--trigger`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
