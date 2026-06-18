@@ -268,6 +268,97 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
 });
 
+test("measureTriggerRateWith seeds `fixture` files into each run's cwd", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+  // The skill "fires" iff the fixture file is on disk in the run cwd — proving
+  // the context was seeded BEFORE the agent ran.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: existsSync(join(a.cwd, "package.json")) ? skillStream : plain,
+    });
+
+  const withFixture = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => usedTool(t, "Skill"),
+      trials: 1,
+      spacingSec: 0,
+      fixture: { "package.json": "{}", "src/index.js": "x" },
+    },
+    runner,
+  );
+  assert.equal(withFixture.rate, 1); // fixture present → every run fires
+
+  const without = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => usedTool(t, "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(without.rate, 0); // empty cwd → never fires
+});
+
+test("measureTriggerRateWith runs the grid in parallel when concurrency > 1", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const runner = async (): Promise<{ code: number; stdout: string }> => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((r) => setTimeout(r, 5));
+    active--;
+    return {
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    };
+  };
+
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c", "d"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => false,
+      trials: 2,
+      spacingSec: 0,
+      concurrency: 4,
+    },
+    runner,
+  );
+
+  assert.equal(report.n, 8); // 4 prompts × 2 trials all executed
+  assert.deepEqual(
+    report.perPrompt.map((p) => p.prompt),
+    ["a", "b", "c", "d"], // aggregation preserves input order despite parallelism
+  );
+  assert.ok(
+    maxActive > 1,
+    `expected parallel runs, max concurrent was ${maxActive}`,
+  );
+});
+
 test("promptDistance (NCD) is 0 for identical, larger for different, normalized", () => {
   assert.equal(promptDistance("same text", "same text"), 0);
   assert.equal(promptDistance("SAME  text", "same text"), 0); // normalized
