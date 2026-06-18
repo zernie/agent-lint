@@ -118,6 +118,41 @@ test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags a non-Latin description as a cross-language trigger risk", () => {
+  const dir = makeTmpDir("scan-lang");
+  // Cyrillic description (fleytman/haretrail shape) — the selector is
+  // English-centric, so flag it; an English description must NOT be flagged.
+  write(
+    dir,
+    "skills/ru/SKILL.md",
+    "---\nname: ru\ndescription: Создавать и обновлять task-folders в репозитории когда пользователь хочет начать работу\n---\n# ru\n",
+  );
+  write(
+    dir,
+    "skills/en/SKILL.md",
+    "---\nname: en\ndescription: Create and update task folders in the repo when the user wants to start work\n---\n# en\n",
+  );
+  // mostly-English with one foreign word → below threshold, not flagged
+  write(
+    dir,
+    "skills/mixed/SKILL.md",
+    "---\nname: mixed\ndescription: Generate a résumé summary for the candidate from their work history here\n---\n# mixed\n",
+  );
+  const byName = Object.fromEntries(
+    scanPlugin(dir).skills.map((s) => [s.name, s]),
+  );
+  assert.equal(byName.ru.descriptionScript, "Cyrillic");
+  assert.equal(byName.en.descriptionScript, null);
+  assert.equal(byName.mixed.descriptionScript, null);
+  const text = formatScanReport(scanPlugin(dir));
+  assert.match(
+    text,
+    /ru \(description in Cyrillic — cross-language trigger risk\)/,
+  );
+  assert.match(text, /1 skill\(s\) have non-Latin descriptions/); // only ru
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);

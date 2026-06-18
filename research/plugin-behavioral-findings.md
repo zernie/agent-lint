@@ -116,6 +116,10 @@ risks the trigger column would quantify:
 - **Descriptions are in Russian.** Selection is driven by the description, so on
   **English** prompts these may under-fire — a real cross-language trigger risk
   (or fine, if the audience is Russian-speaking; worth measuring, not assuming).
+  **Now auto-flagged:** `scan` detects a non-Latin description (deterministic
+  Unicode-script check) and prints "cross-language trigger risk" per skill — all 8
+  haretrail skills trip it. Cheap/deterministic detection in `scan`; the actual
+  under-fire gap is the model-gated `--trigger` measurement.
 - **Literal `{data-repo}` placeholder** appears unsubstituted in several
   descriptions — harmless for selection, but a templating smell.
 - **Overlapping domains** → precision/collision risk: debrief vs lessons vs

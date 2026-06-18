@@ -101,8 +101,11 @@ one dialect) and `scan` (reports harness-specific structure). See
 Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
 of what it ships and what's structurally broken — **no model, no API key**. It
 re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
-`findUntestedSurfaces`): per-skill description presence + user-invoked flag,
-per-agent tool contract (and the "no `tools:` line → inherits every tool"
+`findUntestedSurfaces`): per-skill description presence + user-invoked flag +
+**non-Latin description** detection (a Cyrillic/CJK/… description carries a
+cross-language trigger risk — the selector is English-centric, so it may
+under-fire on English prompts; a RISK flag, not a defect — measure it with
+`--trigger`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
 forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
 counts, and the loader's dangling-ref / surface warnings. `--json` for CI.
