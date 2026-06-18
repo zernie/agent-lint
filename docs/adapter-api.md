@@ -119,15 +119,15 @@ module; this descriptor names the wire facts the bundle and tooling read.)
 ### `HarnessAdapter`
 
 The bundle. `name` + a `capabilities` descriptor + the ports + a `detect`. The
-two pillar-1 ports (`dialect`, `layout`) are always required; the transport ports
+two layer-1 ports (`dialect`, `layout`) are always required; the transport ports
 are **optional and gated by `capabilities`** — present iff the matching capability
 is declared, so a reference-only or code-module-hook harness isn't forced to ship
 a fake transport (the conformance kit enforces this both ways).
 
 ```ts
 interface AdapterCapabilities {
-  readonly referenceVerification: true; // pillar 1 — always
-  readonly harnessTesting: boolean; // pillar 2 — needs runtime + modelMock
+  readonly referenceVerification: true; // layer 1 — always
+  readonly harnessTesting: boolean; // layer 2 — needs runtime + modelMock
   readonly shellHooks: boolean; // shell-process hooks — needs hookProtocol
 }
 
@@ -144,7 +144,7 @@ interface HarnessAdapter {
 }
 ```
 
-`assertHarnessTestable(adapter)` is the guard the pillar-2 runners call to refuse
+`assertHarnessTestable(adapter)` is the guard the layer-2 runners call to refuse
 a non-`harnessTesting` adapter up front (returning its narrowed `runtime`+`modelMock`).
 
 **`detect` contract.** Return `0` when `root` is not this harness; otherwise a

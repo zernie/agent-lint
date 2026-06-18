@@ -8,7 +8,7 @@ adapter** (`vigiles/codex`) — how you point the deterministic tier at real
 
 Codex is **shipped**: registered in `ADAPTERS` (the CLI auto-detects a
 `.codex/config.toml` or `AGENTS.md` repo) and exported as `vigiles/codex`. The
-pillar-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter })`
+layer-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter })`
 — is full and proven against the real `codex` binary. See the capability matrix in
 [`docs/harnesses.md`](harnesses.md) for where Codex sits relative to Claude Code.
 
@@ -32,7 +32,7 @@ import { codexAdapter } from "vigiles/codex";
 const r = await runHarnessTest(spec, { adapter: codexAdapter });
 ```
 
-`codexAdapter` carries Codex's five ports plus the pillar-2 `HarnessTestDriver`
+`codexAdapter` carries Codex's five ports plus the layer-2 `HarnessTestDriver`
 (argv + mock + parse), so `runHarnessTest` dispatches through it without the
 agnostic surface importing the adapter — exactly the seam Claude Code rides. The
 adapter must declare `capabilities.harnessTesting` and carry a

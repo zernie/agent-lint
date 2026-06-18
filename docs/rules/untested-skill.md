@@ -65,7 +65,7 @@ the skip is visible, never silent.
 
 ## Why
 
-vigiles's second pillar is testing the harness as the assembled machine it ships
+vigiles's second layer is testing the harness as the assembled machine it ships
 as. This rule closes the loop for skills: every activatable skill should have
 _something_ that measures it. Warning-by-default keeps adoption gradual; flip to
 `"error"` to gate CI.
