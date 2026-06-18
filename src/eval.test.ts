@@ -59,7 +59,7 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
-import { tool, output, turns } from "./check.js";
+import { tool, output, turns, judged } from "./check.js";
 import { parseIntercepts } from "./tool-intercept.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
@@ -823,6 +823,31 @@ test("assertRates: `per` overrides the threshold by check kind", () => {
     /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40% below min 50%/,
   );
   assert.match(xml, /name="tool\(Bash\)"><\/testcase>/);
+});
+
+test("assertRates: throws on an empty report (a green that tested nothing)", () => {
+  assert.throws(() => {
+    assertRates({ n: 5, perCheck: [] }, { min: 0.9 });
+  }, /no checks to gate/);
+});
+
+test("measure: rejects stubSkillBodies paired with a judged check", async () => {
+  // The runner must never be reached — the guard throws first.
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    throw new Error("runner should not run");
+  };
+  await assert.rejects(
+    measureWith(
+      {
+        pluginDir: "/tmp/does-not-matter",
+        stubSkillBodies: true,
+        task: "t",
+        checks: [judged("is it good")],
+      },
+      runner,
+    ),
+    /stubSkillBodies` is for firing/,
+  );
 });
 
 test("formatCheckReport labels a no-arg check by its kind alone", () => {

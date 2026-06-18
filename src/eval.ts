@@ -469,6 +469,18 @@ export async function measureWith(
 ): Promise<CheckReport> {
   if (spec.stubSkillBodies && !spec.pluginDir)
     throw new Error("measure: `stubSkillBodies` requires `pluginDir`.");
+  // stubSkillBodies replaces each skill BODY with a no-op (the run stops at
+  // selection), so there is no output to grade — a `judged` check would score an
+  // empty body and mislead. The docs warn against this pairing; enforce it.
+  if (
+    spec.stubSkillBodies &&
+    spec.checks.some((c) => c.toJSON().kind === "judged")
+  )
+    throw new Error(
+      "measure: `stubSkillBodies` is for firing/`skill()` checks only — it stubs " +
+        "the skill body, so there's no output for a `judged` check to grade. Drop " +
+        "`stubSkillBodies`, or remove the `judged` check.",
+    );
   const stubbed = spec.stubSkillBodies
     ? stubbedPluginDir(spec.pluginDir as string)
     : undefined;
@@ -715,6 +727,14 @@ export function assertRates(
   report: CheckReport,
   opts: { min: number; per?: Readonly<Record<string, number>> },
 ): void {
+  // An empty report gates nothing — a green that tested NOTHING (the silent-pass
+  // the no-silent-skips rule forbids). Fail loudly instead of vacuously passing.
+  if (report.perCheck.length === 0) {
+    throw new Error(
+      "assertRates: the report has no checks to gate — did you call " +
+        "`measure({ checks: [...] })` with an empty list? An empty gate is a silent pass.",
+    );
+  }
   const thresholdFor = (c: CheckRate): number =>
     checkRateThreshold(c.check, opts.min, opts.per);
   const below = report.perCheck.filter((c) => c.rate < thresholdFor(c));
