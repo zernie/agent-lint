@@ -71,7 +71,6 @@
     "lint": "eslint src/",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
-    "demo": "npm run build && bash examples/demo/run.sh",
     "test:unit": "npm run build && vitest run --project unit",
     "test:integration": "npm run build && vitest run --project integration",
     "test:e2e": "npm run build && vitest run --project e2e",
@@ -81,7 +80,6 @@
     "test:vitest": "npm run build && vitest run --project runners",
     "test:jest": "npm run build && jest",
     "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json",
-    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs",
     "api:report": "npm run build && node scripts/api-extractor.mjs --local",
     "api:check": "npm run build && node scripts/api-extractor.mjs",
     "docs:api": "npm run api:report && api-documenter markdown -i temp -o api-reference"

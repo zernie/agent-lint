@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 20 npm scripts from package.json. */
+  /** 18 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -83,7 +83,6 @@ declare module "vigiles/generated" {
     | "lint"
     | "fmt"
     | "fmt:check"
-    | "demo"
     | "test:unit"
     | "test:integration"
     | "test:e2e"
@@ -93,7 +92,6 @@ declare module "vigiles/generated" {
     | "test:vitest"
     | "test:jest"
     | "test:types"
-    | "demo:plugin"
     | "api:report"
     | "api:check"
     | "docs:api";
@@ -505,7 +503,6 @@ declare module "vigiles/spec" {
       | "lint"
       | "fmt"
       | "fmt:check"
-      | "demo"
       | "test:unit"
       | "test:integration"
       | "test:e2e"
@@ -515,7 +512,6 @@ declare module "vigiles/spec" {
       | "test:vitest"
       | "test:jest"
       | "test:types"
-      | "demo:plugin"
       | "api:report"
       | "api:check"
       | "docs:api";
