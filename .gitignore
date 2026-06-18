@@ -5,6 +5,9 @@ coverage/
 logo-v*.png
 .idea
 
+# oh-my-claudecode transient session state (never committed)
+.omc/
+
 # vigiles transient skill-runtime state
 .vigiles/active-skill.json
 # eval record/replay cache (recorded model runs)
