@@ -53,9 +53,11 @@ import {
   resolveSpawnEnv,
   EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
+  type ParsedModelRun,
 } from "./eval.js";
 import {
   usedTool,
+  skillResolved,
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
@@ -266,6 +268,61 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.equal(ignore?.fired, 0);
   assert.equal(ignore?.rate, 0);
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("measureTriggerRateWith accepts a custom ModelOutputParser (non-Claude trace)", async () => {
+  // Prove the trace-parser seam: a runner emitting a NON-Claude format + a custom
+  // parser that understands it → firing is detected without any Claude stream-json.
+  // This is the seam a Codex `codex exec --json` parser plugs into.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    // a deliberately un-Claude-like line protocol
+    Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("fire") ? "CALLED:Skill:demo:test\n" : "NOOP\n",
+    });
+  const codexLikeParser = (out: {
+    code: number;
+    stdout: string;
+  }): ParsedModelRun => {
+    const calls = [...out.stdout.matchAll(/^CALLED:Skill:(\S+)$/gm)].map(
+      (m) => ({
+        name: "Skill",
+        input: { skill: m[1] },
+        resultText: "",
+        isError: false,
+      }),
+    );
+    return {
+      turns: calls.length,
+      output: out.stdout,
+      toolCalls: calls,
+      hooks: [],
+      subagents: [],
+      usage: {
+        costUsd: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+      },
+    };
+  };
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["fire one", "ignore this", "fire two"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => skillResolved(t, "demo:test"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+    codexLikeParser,
+  );
+  assert.ok(Math.abs(report.rate - 2 / 3) < 1e-9); // 2 of 3 fired, via the custom parser
 });
 
 test("measureTriggerRateWith seeds `fixture` files into each run's cwd", async () => {

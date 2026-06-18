@@ -137,3 +137,59 @@ to Codex is a non-goal (above), not on this list.
 The boundary holds for the prototype too: `src/adapters/codex/**` is a
 `codex-harness` element in `eslint.config.mjs`, and `verify-core` may import
 neither it nor `cc-harness`.
+
+## UPDATE (2026-06-18): native Codex EVAL tier — spike + increment 1
+
+The behavioral eval tier (`measureTriggerRate` / `runEval`) is **Claude-only**
+today: it hardcodes the `claude` runner (`spawnAgent`) AND parses Claude's
+stream-json (`makeContext`). Pointing it at a Codex plugin (e.g. fleytman/haretrail,
+an `AGENTS.md` skill pack) required wrapping it as a Claude plugin. This records
+the spike (done from code, no live binary in the build env) and the build plan.
+
+### Spike findings (code + docs, no live `codex`)
+
+1. **Spawn side — solved.** `codexDriver` already runs real `codex exec`
+   (`buildCodexArgs` + the keyless `-c model_provider=mock` recipe). The
+   per-adapter spawn machinery exists and is proven for layer 2.
+2. **Trace side — not built, by design.** `parseCodexRun` returns
+   `{ toolCalls: [], hooks: [], output: stdout.trim() }` — the JSONL tool-call
+   stream is unparsed. So today the eval tier literally cannot detect a Codex
+   tool/skill call: every `fired`/`skillResolved` predicate reads an empty
+   `toolCalls` → recall always 0 (false). This is THE long pole.
+3. **The gating unknown (needs the binary).** Claude trigger-rate detects an
+   explicit `Skill` tool_use. Codex skills are `SKILL.md` instructions surfaced
+   via progressive disclosure — it is UNCONFIRMED whether a skill activation
+   appears as a discrete event in `codex exec --json` at all. If it does not,
+   "trigger-rate" has no Codex trace analog and "did the skill fire" becomes a
+   behavioral/judged check, not a trace predicate. **This is the one thing that
+   genuinely needs a live `codex` run to settle.**
+
+### Increment 1 — SHIPPED (env-independent): the trace-parser seam
+
+`makeContext` now takes an injectable `ModelOutputParser` (default
+`parseClaudeRun`, extracted from the old inline body); `measureTriggerRateWith`
+accepts it as a 3rd arg and threads it through `TriggerRunConfig.parse`. Proven
+by a unit test that drives a NON-Claude line protocol + a custom parser end-to-end
+through `measureTriggerRateWith` and detects firing — exactly the slot a Codex
+parser plugs into. Zero behavior change for Claude (default param).
+
+### Remaining increments (increment 2 scaffolds now; 3 needs env)
+
+2. **Codex eval runner + parser.** A `codex exec --json` `AgentRunner` (v8-ignored
+   real-subprocess) + `parseCodexEvalRun(out): ParsedModelRun` over codex's CLI
+   JSONL. Buildable against documented Responses output-item shapes + synthetic
+   fixtures, but the exact `codex exec --json` line schema is unverified.
+3. **`{ adapter }` dispatch** on `measureTriggerRate`/`runEval` (mirrors
+   `runHarnessTest`), selecting `{ runner, parse }` per adapter.
+
+### Env-validation checklist (when the `codex` binary lands)
+
+- [ ] Capture `codex exec --json` JSONL for (a) a plain text turn, (b) a
+      tool-calling turn, (c) a skill-activating turn → confirm the line schema.
+- [ ] Answer the gating unknown: is a skill activation a discrete event? If yes,
+      its shape; if no, redefine the Codex "fired" predicate as behavioral/judged.
+- [ ] Finish `parseCodexEvalRun` against the real schema; replace the synthetic
+      fixtures with captured ones.
+- [ ] Wire `codexAdapter` → `{ runner, parse }` and validate end-to-end against a
+      real Codex skill pack (re-run the haretrail EN-vs-RU cross-language eval
+      NATIVELY instead of via the Claude wrapper).
