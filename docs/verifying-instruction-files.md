@@ -1,13 +1,12 @@
 # Verifying your instruction files
 
-Pillar 1 of vigiles — the **linting layer** for agentic coding. It checks that
-every reference your CLAUDE.md / AGENTS.md makes is real: each linter rule exists
-**and** is enabled, every file path and script resolves, and every referenced
-code symbol actually exists in the file that defines it. Stale references can't
-silently mislead the agent.
-
-The [README](../README.md) has the 30-second pitch;
-this is the full guide.
+vigiles's **linting layer** for agentic coding — it checks that every reference
+your CLAUDE.md / AGENTS.md makes is real: each linter rule exists **and** is
+enabled, every file path and script resolves, and every referenced code symbol
+actually exists in the file that defines it. Stale references can't silently
+mislead the agent. The [README](../README.md) has the 30-second pitch; this is
+the full guide. For the testing layer, see
+[Testing your harness](harness-testing.md).
 
 ## Two on-ramps: markdown, then typed spec
 

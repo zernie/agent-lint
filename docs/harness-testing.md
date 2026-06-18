@@ -1,5 +1,11 @@
 # Testing your harness
 
+vigiles's **testing layer** — your hooks, settings, skills, and instruction file
+are code, so vigiles tests they do their job: hooks block, skills fire (recall +
+precision), the assembled agent does the task without the dangerous thing. The
+[README](../README.md) has the 30-second pitch; this is the full guide. For the
+linting layer, see [Verifying your instruction files](verifying-instruction-files.md).
+
 > **Try it now — paste this into Claude Code, in any repo:**
 >
 > > Install vigiles and use its **`test-harness`** skill to write and run a
