@@ -6,7 +6,6 @@ coverage/
 # Vendored third-party plugin snapshots (dogfood fixtures) — formatted by their
 # upstreams, not us. See examples/harness/vendor/*/SOURCE.
 examples/harness/vendor/
-examples/demo/.vigiles/
 
 # API Extractor reports (tool-generated, exact format)
 etc/

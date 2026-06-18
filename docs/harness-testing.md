@@ -20,10 +20,6 @@ linting layer, see [Verifying your instruction files](verifying-instruction-file
 > `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
 > model) discover and run `*.harness.mjs` / `*.eval.mjs`.
 
-> **Just want to see it?** `npm run demo:plugin` runs vigiles against a real
-> third-party plugin and narrates what it ships, whether its hook works, and what
-> it phones home to ([`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs)).
-
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, the
 instruction file — is code, and code should be tested. vigiles gives the harness
 **clear levels**, and a test's level is legible three ways at once — its **import
