@@ -246,6 +246,17 @@ assertRates`) is the recommended path for testing one skill, but
   agent-config linter (agnix lane), AI PR reviewer. [strategic-synthesis](strategic-synthesis-2026-06.md)
 - **Parked:** measure model × harness (overlaps "CI for model upgrades").
   [divergent-bets #11](divergent-bets.md)
+- **No (evaluated 2026-06-18):** [Sogen](https://sogen.dev/) as a sandbox backend
+  — it's a syscall-level Windows/Linux _binary emulator_ (Unicorn/icicle/Hyper-V)
+  for malware/DRM research, and its own docs say host isolation "might not be
+  perfect". Wrong workload (we confine **Node + shell**, not compiled binaries),
+  wrong guarantee (we need the containment to BE the boundary), wrong gap (our hole
+  is macOS Seatbelt of native processes). The one transferable idea — **snapshot +
+  deterministic replay** of full execution state — we already do at the right
+  altitude (filesystem/trace: the eval record/replay cache, `snapshotDir` /
+  `restoreDir`). Backend decisions live in
+  [cross-platform-sandboxing](cross-platform-sandboxing.md) ·
+  [egress-sandbox-tooling](egress-sandbox-tooling.md).
 
 ## See also
 
