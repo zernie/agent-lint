@@ -785,6 +785,36 @@ test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => 
   assert.match(xml, /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40%/);
 });
 
+test("assertRates: `per` overrides the threshold by check kind", () => {
+  const report: CheckReport = {
+    n: 10,
+    perCheck: [
+      {
+        check: { kind: "tool", name: "Bash" },
+        rate: 0.9,
+        se: 0.1,
+        passK: 0,
+        n: 10,
+      },
+      {
+        check: { kind: "skill", id: "vig:x" },
+        rate: 0.4,
+        se: 0.16,
+        passK: 0,
+        n: 10,
+      },
+    ],
+  };
+  // A stricter per-kind threshold trips a check the global `min` would pass, and
+  // the failure message reports that check's own min.
+  assert.throws(() => {
+    assertRates(report, { min: 0.3, per: { skill: 0.5 } });
+  }, /skill\(vig:x\): 40% ± 16% \(min 50%\)/);
+  // A laxer per-kind threshold lets a low check pass while a strict global `min`
+  // still gates the others — one call, two thresholds.
+  assertRates(report, { min: 0.8, per: { skill: 0.3 } });
+});
+
 test("formatCheckReport labels a no-arg check by its kind alone", () => {
   // checkLabel's fallback: a check with no name/id/event/path/matcher (e.g.
   // `turns`) renders as just its kind, not `kind(arg)`.

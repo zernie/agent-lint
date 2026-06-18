@@ -688,19 +688,30 @@ export function formatCheckReport(report: CheckReport): string {
 }
 
 /**
- * The scored gate (Phase 4): throw if any check's measured rate is below `min` —
- * the `measure` counterpart to `assertChecks` (strict). Reads the rate, not a
- * single run, so it never trips on one noisy trial.
+ * The scored gate (Phase 4): throw if any check's measured rate is below its
+ * threshold — the `measure` counterpart to `assertChecks` (strict). Reads the
+ * rate, not a single run, so it never trips on one noisy trial.
+ *
+ * `min` is the default threshold for every check. `per` overrides it for a check
+ * KIND (e.g. `{ min: 0.8, per: { skill: 1.0 } }` — "every check ≥ 80%, but the
+ * skill must FIRE on every trial"), so a strict firing/safety check and a
+ * lenient quality check gate in one call — the single-skill absolute oracle
+ * (`measure({ checks: [skill(), judged()] }) + assertRates`) needs exactly this.
  */
-export function assertRates(report: CheckReport, opts: { min: number }): void {
-  const below = report.perCheck.filter((c) => c.rate < opts.min);
+export function assertRates(
+  report: CheckReport,
+  opts: { min: number; per?: Readonly<Record<string, number>> },
+): void {
+  const thresholdFor = (c: CheckRate): number =>
+    opts.per?.[c.check.kind] ?? opts.min;
+  const below = report.perCheck.filter((c) => c.rate < thresholdFor(c));
   if (below.length > 0) {
     throw new Error(
-      `${String(below.length)} check(s) below the ${(opts.min * 100).toFixed(0)}% min rate:\n` +
+      `${String(below.length)} check(s) below their min rate:\n` +
         below
           .map(
             (c) =>
-              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%`,
+              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}% (min ${(thresholdFor(c) * 100).toFixed(0)}%)`,
           )
           .join("\n"),
     );

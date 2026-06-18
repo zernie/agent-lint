@@ -170,14 +170,14 @@
     sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
     2026-06-17 section)
 
-- **Per-check rate thresholds in `assertRates` (NEW — flagged 2026-06-17, API
-  review; small, additive, non-breaking).** Now that the absolute oracle
-  (`measure({ checks }) + assertRates`) is the recommended path for testing one
-  skill, `assertRates({ min })` applies a single rate floor across _all_ checks —
-  you can't say "`judged` ≥ 0.8 AND `skill` ≥ 0.95" in one call (today: two filtered
-  calls). Let `min` also accept a per-check mapping (by index or check `kind`). The
-  `judged` check's own `min` is a per-_run_ score threshold (orthogonal — keep it).
-  [testing-api-design §Part 7](testing-api-design.md)
+- **Per-check rate thresholds in `assertRates` (DONE — 2026-06-17, API review;
+  additive, non-breaking).** The absolute oracle (`measure({ checks }) +
+assertRates`) is the recommended path for testing one skill, but
+  `assertRates({ min })` applied a single rate floor across _all_ checks. Now
+  `assertRates({ min, per })` takes a per-check-KIND override, so "`skill` must
+  fire every trial AND `judged` ≥ 0.8" gates in one call; the failure message
+  reports each check's own min. The `judged` check's own `min` is a per-_run_
+  score threshold (orthogonal — kept). [testing-api-design §Part 7](testing-api-design.md)
 
 - **Single-arm ABSOLUTE behaviour path — first-class now (DONE — 2026-06-17, this
   PR).** Audit found A/B was over-privileged: the absolute path existed (single-arm
