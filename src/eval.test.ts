@@ -6,14 +6,17 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 
 import {
   writeFileSync,
   mkdirSync,
+  mkdtempSync,
   existsSync,
   readFileSync,
   rmSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -47,6 +50,7 @@ import {
   harnessVersionKey,
   ephemeralRunEnv,
   seedEphemeralHome,
+  resolveSpawnEnv,
   EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
 } from "./eval.js";
@@ -2206,5 +2210,67 @@ test("ephemeralEnv on: runner gets a replaceEnv scrubbed env with auth + allowed
     assert.equal(a.env.VIGILES_EPHEMERAL_PROBE_SECRET, undefined);
   } finally {
     delete process.env.VIGILES_EPHEMERAL_PROBE_SECRET;
+  }
+});
+
+// The security-critical env resolution behind `ephemeralEnv` — the one line that
+// actually drops the host environment — lives in `resolveSpawnEnv` (extracted
+// from the v8-ignored real-spawn path so it's testable). These two tests pin the
+// DECISION (pure) and the BEHAVIOUR (a real child honours the scrub).
+test("resolveSpawnEnv: replaceEnv replaces (drops base), default overlays", () => {
+  const base = { SECRET: "leak", PATH: "/bin", HOME: "/real" };
+  // replaceEnv → EXACTLY the scrubbed env; the base (incl. SECRET) is dropped.
+  const scrubbed = { PATH: "/bin", HOME: "/tmp/throwaway" };
+  assert.deepEqual(resolveSpawnEnv({ env: scrubbed, replaceEnv: true }, base), {
+    PATH: "/bin",
+    HOME: "/tmp/throwaway",
+  });
+  // default (overlay) → base merged under the overlay (the pre-ephemeral path).
+  const overlay = resolveSpawnEnv({ env: { X: "1" }, replaceEnv: false }, base);
+  assert.equal(overlay.SECRET, "leak");
+  assert.equal(overlay.X, "1");
+});
+
+test("resolveSpawnEnv: a REAL subprocess honours the scrub (secret gone, HOME redirected, ~/.ssh unreachable)", () => {
+  const realHome = mkdtempSync(join(tmpdir(), "vig-realhome-"));
+  const throwaway = mkdtempSync(join(tmpdir(), "vig-throwaway-"));
+  try {
+    // Plant a secret in the 'real' env and a private key under the real HOME.
+    mkdirSync(join(realHome, ".ssh"), { recursive: true });
+    writeFileSync(join(realHome, ".ssh", "id_rsa"), "PRIVATE-KEY");
+    const base = {
+      ...process.env,
+      HOME: realHome,
+      VIG_PROBE_SECRET: "leak-me",
+    };
+    const scrubbed = ephemeralRunEnv(base, { home: throwaway });
+    const env = resolveSpawnEnv({ env: scrubbed, replaceEnv: true }, base);
+    // A real node child reports what it can actually see with that env.
+    const probe =
+      "const fs=require('fs'),p=require('path');" +
+      "process.stdout.write(JSON.stringify({" +
+      "secret: process.env.VIG_PROBE_SECRET ?? null," +
+      "home: process.env.HOME," +
+      "sshReadable: fs.existsSync(p.join(process.env.HOME||'','.ssh','id_rsa'))" +
+      "}))";
+    const out = spawnSync(process.execPath, ["-e", probe], {
+      env,
+      encoding: "utf8",
+    });
+    const seen = JSON.parse(out.stdout) as {
+      secret: string | null;
+      home: string;
+      sshReadable: boolean;
+    };
+    assert.equal(seen.secret, null, "planted secret must be scrubbed");
+    assert.equal(seen.home, throwaway, "HOME must be the throwaway dir");
+    assert.equal(
+      seen.sshReadable,
+      false,
+      "HOME redirection must make the real ~/.ssh unreachable",
+    );
+  } finally {
+    rmSync(realHome, { recursive: true, force: true });
+    rmSync(throwaway, { recursive: true, force: true });
   }
 });
