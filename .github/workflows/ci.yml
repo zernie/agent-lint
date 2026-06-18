@@ -111,7 +111,30 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Lint compiled files
+      # Dogfood the shipped GitHub Action FIRST — it's the primary lint gate
+      # users actually rely on, so run the composite over the repo's own build
+      # (`version: local`) ahead of the redundant direct CLI call below. The
+      # action emits per-line `::error file=,line=::` annotations (rendered inline
+      # on the PR diff) and posts a sticky PR comment. See the prod-grade-gha-cli
+      # rule. Running it first means a lint failure surfaces THROUGH the action
+      # (comment + annotations), not a bare CLI step before it.
+      - name: Dogfood the vigiles GitHub Action (primary lint gate)
+        id: vigiles-action
+        uses: ./
+        with:
+          command: lint
+          version: local
+
+      - name: Assert the action reported success
+        run: |
+          got="${{ steps.vigiles-action.outputs.valid }}"
+          if [ "$got" != "true" ]; then
+            echo "expected the vigiles action output valid=true, got '$got'"
+            exit 1
+          fi
+          echo "vigiles action output: valid=$got"
+
+      - name: Lint compiled files (direct CLI — redundant safety)
         run: node dist/cli.js lint
 
       # Public-API surface gate: API Extractor compares the live .d.ts surface of
@@ -129,26 +152,6 @@ jobs:
       # generator can't silently rot. Upgrade to a Pages deploy when a site lands.
       - name: API reference generates (smoke, no publish)
         run: npx api-documenter markdown -i temp -o api-reference
-
-      # Dogfood the shipped GitHub Action itself (composite over the CLI),
-      # running the repo's own build via `version: local`. Catches a
-      # regression in the action contract that calling the CLI directly
-      # would miss. See the `prod-grade-gha-cli` rule.
-      - name: Dogfood the vigiles GitHub Action
-        id: vigiles-action
-        uses: ./
-        with:
-          command: lint
-          version: local
-
-      - name: Assert the action reported success
-        run: |
-          got="${{ steps.vigiles-action.outputs.valid }}"
-          if [ "$got" != "true" ]; then
-            echo "expected the vigiles action output valid=true, got '$got'"
-            exit 1
-          fi
-          echo "vigiles action output: valid=$got"
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic
