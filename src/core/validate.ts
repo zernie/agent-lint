@@ -64,7 +64,13 @@ const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
   "require-spec": "warn",
-  "require-skill-spec": "warn",
+  // DEPRECATED — default OFF. Skills are legitimately hand-written (Level 0/1),
+  // so requiring a .spec.ts per SKILL.md was the wrong constraint and only added
+  // noise (it also nagged about vendored/fixture/bench skills). Use
+  // `untested-surface` instead — "every skill/agent/hook ships with a test or
+  // eval" is the coverage rule that matters. The implementation is kept: setting
+  // `require-skill-spec` explicitly still works for anyone who wants it.
+  "require-skill-spec": false,
   integrity: "warn",
   coverage: false,
   "untested-surface": "warn",

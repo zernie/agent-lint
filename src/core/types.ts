@@ -101,7 +101,11 @@ export interface TestCoverageConfig {
 export interface RulesConfig {
   /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
   "require-spec"?: RuleSeverity;
-  /** Require .spec.ts for SKILL.md files. Default: false. */
+  /**
+   * @deprecated Skills are legitimately hand-written; use `untested-surface`
+   * ("every skill ships with a test/eval") instead. Default: false (off). The
+   * check still runs if you set this explicitly.
+   */
   "require-skill-spec"?: RuleSeverity;
   /** Detect hand-edits to compiled markdown via SHA-256 hash. Default: "warn". */
   integrity?: RuleSeverity;

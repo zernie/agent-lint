@@ -431,7 +431,7 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "docs/rules/require-spec.md":
       "Rule doc: require .spec.ts for CLAUDE.md/AGENTS.md",
     "docs/rules/require-skill-spec.md":
-      "Rule doc: require .spec.ts for SKILL.md files",
+      "Rule doc: require-skill-spec — DEPRECATED (default off). Skills are legitimately hand-written, so requiring a .spec.ts per SKILL.md was the wrong constraint; superseded by untested-surface (every skill ships a test/eval). Implementation kept; --strict no longer promotes it",
     "docs/rules/integrity.md":
       "Rule doc: integrity check (SHA-256 hash verification for compiled markdown)",
     "docs/rules/coverage.md":
