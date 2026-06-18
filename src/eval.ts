@@ -688,6 +688,19 @@ export function formatCheckReport(report: CheckReport): string {
 }
 
 /**
+ * The min rate a check must clear: its per-KIND override in `per`, else the
+ * default `min`. Shared by `assertRates` (the throwing gate) and
+ * `checkReportToJUnit` (the XML report) so the two never diverge on thresholds.
+ */
+function checkRateThreshold(
+  check: CheckJSON,
+  min: number,
+  per?: Readonly<Record<string, number>>,
+): number {
+  return per?.[check.kind] ?? min;
+}
+
+/**
  * The scored gate (Phase 4): throw if any check's measured rate is below its
  * threshold — the `measure` counterpart to `assertChecks` (strict). Reads the
  * rate, not a single run, so it never trips on one noisy trial.
@@ -703,7 +716,7 @@ export function assertRates(
   opts: { min: number; per?: Readonly<Record<string, number>> },
 ): void {
   const thresholdFor = (c: CheckRate): number =>
-    opts.per?.[c.check.kind] ?? opts.min;
+    checkRateThreshold(c.check, opts.min, opts.per);
   const below = report.perCheck.filter((c) => c.rate < thresholdFor(c));
   if (below.length > 0) {
     throw new Error(
@@ -728,22 +741,30 @@ function escapeXml(s: string): string {
 
 /**
  * Serialize a {@link CheckReport} to JUnit XML (Phase 4) — each check a
- * `<testcase>`, failing when its rate is below `min`. Because a check is *data*,
- * this falls out for free: CI test reporters, regression baselines, and a
- * promptfoo bridge all consume the same shape.
+ * `<testcase>`, failing when its rate is below its threshold. `min` is the
+ * default; `per` overrides it by check KIND, matching `assertRates` exactly (one
+ * shared threshold helper) so the gate and the report can never disagree about
+ * which checks failed. Because a check is *data*, this falls out for free: CI
+ * test reporters, regression baselines, and a promptfoo bridge all consume it.
  */
 export function checkReportToJUnit(
   report: CheckReport,
-  opts: { min?: number; name?: string } = {},
+  opts: {
+    min?: number;
+    per?: Readonly<Record<string, number>>;
+    name?: string;
+  } = {},
 ): string {
   const min = opts.min ?? 0;
-  const failures = report.perCheck.filter((c) => c.rate < min).length;
+  const thr = (c: CheckRate): number =>
+    checkRateThreshold(c.check, min, opts.per);
+  const failures = report.perCheck.filter((c) => c.rate < thr(c)).length;
   const cases = report.perCheck
     .map((c) => {
       const name = escapeXml(checkLabel(c.check));
       const body =
-        c.rate < min
-          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(min * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
+        c.rate < thr(c)
+          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(thr(c) * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
           : "";
       return `  <testcase classname="vigiles.checks" name="${name}">${body}</testcase>`;
     })

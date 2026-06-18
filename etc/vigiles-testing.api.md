@@ -290,6 +290,7 @@ export interface CheckReport {
 // @public
 export function checkReportToJUnit(report: CheckReport, opts?: {
     min?: number;
+    per?: Readonly<Record<string, number>>;
     name?: string;
 }): string;
 
