@@ -122,6 +122,14 @@ jobs:
       - name: API surface gate
         run: node scripts/api-extractor.mjs
 
+      # Smoke-check the API reference GENERATOR (API Documenter) — it reuses the
+      # doc models the gate just wrote to temp/, so no extra extractor run. We
+      # don't publish the output (api-reference/ is gitignored; there's no docs
+      # site yet) — this only proves `npm run docs:api` still builds, so the
+      # generator can't silently rot. Upgrade to a Pages deploy when a site lands.
+      - name: API reference generates (smoke, no publish)
+        run: npx api-documenter markdown -i temp -o api-reference
+
       # Dogfood the shipped GitHub Action itself (composite over the CLI),
       # running the repo's own build via `version: local`. Catches a
       # regression in the action contract that calling the CLI directly
