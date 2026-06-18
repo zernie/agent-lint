@@ -17,3 +17,6 @@ export * from "./adapters/codex/model-mock.js";
 export * from "./adapters/codex/mock-model.js";
 export * from "./adapters/codex/driver.js";
 export * from "./adapters/codex/adapter.js";
+// Eval-tier transport (increment 2 — scaffold, pending live-binary validation):
+// parseCodexEvalRun (the ModelOutputParser for `codex exec --json`) + codexEvalRunner.
+export * from "./adapters/codex/eval.js";

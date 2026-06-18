@@ -173,14 +173,25 @@ by a unit test that drives a NON-Claude line protocol + a custom parser end-to-e
 through `measureTriggerRateWith` and detects firing — exactly the slot a Codex
 parser plugs into. Zero behavior change for Claude (default param).
 
-### Remaining increments (increment 2 scaffolds now; 3 needs env)
+### Increment 2 — SCAFFOLDED (env-independent), pending live-binary validation
 
-2. **Codex eval runner + parser.** A `codex exec --json` `AgentRunner` (v8-ignored
-   real-subprocess) + `parseCodexEvalRun(out): ParsedModelRun` over codex's CLI
-   JSONL. Buildable against documented Responses output-item shapes + synthetic
-   fixtures, but the exact `codex exec --json` line schema is unverified.
-3. **`{ adapter }` dispatch** on `measureTriggerRate`/`runEval` (mirrors
-   `runHarnessTest`), selecting `{ runner, parse }` per adapter.
+`src/adapters/codex/eval.ts` (exported on `vigiles/codex`).
+`parseCodexEvalRun(out): ParsedModelRun` is a TOLERANT, multi-shape parser that
+probes BOTH plausible Codex JSONL models (the older `{msg:{type,…}}` event stream
+and the newer `{type:"item.*", item:{…}}` thread/item stream), degrading to
+empty / `output = trimmed stdout` on anything unrecognised — each extractor
+isolated so finishing against captured JSONL is a field-name edit, not a rewrite.
+`codexEvalRunner` spawns `codex exec --json` (v8-ignored; flags + skill-install
+wiring are best-guess pending the binary). Unit-tested over synthetic fixtures for
+both shapes (`src/adapters/codex/eval.test.ts`). Deliberately NOT wired into the
+public dispatch yet (increment 3) so an unvalidated parser can't silently report
+recall 0 under the public API.
+
+### Increment 3 — needs env
+
+**`{ adapter }` dispatch** on `measureTriggerRate`/`runEval` (mirrors
+`runHarnessTest`), selecting `{ runner, parse }` per adapter — wired only after the
+schema (and the skill-selection question) is confirmed against the binary.
 
 ### Env-validation checklist (when the `codex` binary lands)
 
