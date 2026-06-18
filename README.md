@@ -30,19 +30,18 @@ deterministic layer for it, and does two independent things — adopt either, or
 | **🧪 Test** | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
 
 Pick the one that hurts today. **Works with Claude Code and Codex**
-([`vigiles/codex`](docs/harnesses.md)) behind a five-port adapter;
-[custom adapters welcome](docs/authoring-an-adapter.md).
+([`vigiles/codex`](docs/harnesses.md)), and you can
+[teach it your own harness](docs/authoring-an-adapter.md).
 
 ## Quick start
 
 **Paste into Claude Code or Codex:**
 
 ```text
-Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
-references and show me what's stale, then write and run a harness test for one
-of my hooks or skills. Use good defaults (lint + test, non-interactive), but
-ask me first whether to gate it in CI, whether to add a real-model eval, and
-whether to enforce strictly (--strict).
+Set up vigiles in this repo with good defaults (lint + test, non-interactive).
+Verify my CLAUDE.md / AGENTS.md references and show me what's stale, then write
+and run a harness test for one of my hooks or skills. Ask me first before gating
+it in CI, adding a real-model eval, or enforcing strictly (--strict).
 ```
 
 Or do it yourself:
