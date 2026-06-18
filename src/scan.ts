@@ -73,10 +73,16 @@ function frontmatter(md: string): { name?: string; description?: string } {
   return { name, description };
 }
 
-const isSkill = (f: string): boolean => /skills\/[^/]+\/SKILL\.md$/.test(f);
+// Anchor each surface on a real path boundary (start-of-path or a `/`), so a
+// directory whose NAME merely ends in the keyword isn't misclassified — e.g.
+// the skill `skills/dispatching-parallel-agents/SKILL.md` must NOT register as
+// an agent named "SKILL" (the `-agents/` substring), which real plugins like
+// obra/superpowers ship. See scan.test.ts for the regression cases.
+const isSkill = (f: string): boolean =>
+  /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(f);
 const isAgent = (f: string): boolean =>
-  /agents\/[^/]+\.md$/.test(f) && !f.endsWith(".spec.ts");
-const isCommand = (f: string): boolean => /commands\/.+\.md$/.test(f);
+  /(?:^|\/)agents\/[^/]+\.md$/.test(f) && !f.endsWith(".spec.ts");
+const isCommand = (f: string): boolean => /(?:^|\/)commands\/.+\.md$/.test(f);
 
 function skillName(path: string): string {
   return (

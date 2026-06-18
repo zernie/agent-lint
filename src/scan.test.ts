@@ -106,6 +106,32 @@ test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin does not misclassify a '-agents' skill dir as an agent", () => {
+  // Regression: obra/superpowers ships skills/dispatching-parallel-agents/SKILL.md.
+  // The old unanchored /agents\/[^/]+\.md$/ matched the `-agents/SKILL.md`
+  // substring and reported a phantom agent named "SKILL".
+  const dir = makeTmpDir("scan-boundary");
+  write(
+    dir,
+    "skills/dispatching-parallel-agents/SKILL.md",
+    "---\nname: dispatching-parallel-agents\ndescription: Dispatch many subagents in parallel for fan-out work\n---\n# x\n",
+  );
+  write(
+    dir,
+    "skills/my-commands/SKILL.md",
+    "---\nname: my-commands\ndescription: A skill whose directory ends in commands here\n---\n# y\n",
+  );
+  write(dir, "agents/real.md", "---\nname: real\ntools: Read\n---\nbody\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["real"],
+  );
+  assert.equal(r.skills.length, 2);
+  assert.equal(r.commands, 0); // the `my-commands` skill dir is not a command
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin resolves hook scripts: ok / missing / unresolved", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
