@@ -1223,6 +1223,21 @@ async function runLint(
       console.log(`  ${line}`);
     }
   }
+  // Per-line GitHub annotations for each broken doc ref — each carries file+line,
+  // so GitHub renders it INLINE on the PR diff (not just in the summary blob).
+  // Previously this check reported to stdout only; the inline/spec checks already
+  // annotate per-line, so this closes the gap that left doc-ref findings invisible
+  // on the PR. CI-only (isGitHubActions); skipped under --json/--summary.
+  if (isGitHubActions() && !silent) {
+    for (const e of docRefReport.errors) {
+      ghAnnotate(
+        "error",
+        `${e.kind}("${e.value}") — ${e.message}`,
+        e.file,
+        e.line,
+      );
+    }
+  }
 
   // 9. Verify code-shaped symbol references live (see src/refs.ts).
   const symbolRefErrors = verifyMarkdownSymbols(files, silent);
