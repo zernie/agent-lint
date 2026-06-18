@@ -46,6 +46,6 @@ Every agent is held to this; the only opt-out is an explicit
 
 ## Why
 
-Same as the skill rule: the second pillar tests the assembled harness. A subagent
+Same as the skill rule: the second layer tests the assembled harness. A subagent
 is a high-risk surface (it acts with tools), so leaving it unmeasured is exactly
 the gap this family closes. Warning-by-default; flip to `"error"` to gate CI.

@@ -45,6 +45,6 @@ Every file-backed hook is held to this; the only opt-out is an explicit
 
 ## Why
 
-The second pillar tests the assembled harness. A hook's block/allow logic is the
+The second layer tests the assembled harness. A hook's block/allow logic is the
 cheapest thing to test (the `runHook` unit tier needs no model), so an untested
 hook is low-hanging fruit. Warning-by-default; flip to `"error"` to gate CI.

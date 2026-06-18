@@ -210,4 +210,4 @@ compilation pipeline. [Determinism breakdown and flow diagram →](comparison.md
 - [Spec format reference](spec-format.md) — every section and rule kind.
 - [Linter support](linter-support.md) — the 7 catalogs + `generate-types` / `generate-schema`.
 - [CLI & CI reference](cli.md) · [Agent setup](agent-setup.md).
-- [Testing your harness](harness-testing.md) — Pillar 2.
+- [Testing your harness](harness-testing.md) — Layer 2.

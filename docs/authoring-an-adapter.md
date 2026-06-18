@@ -150,7 +150,7 @@ in the compiler, the hook **decision-decode** beyond exit-code/values, and the
 model-mock **HTTP server** (the `ModelMock` descriptor names the wire format; the
 SSE renderer is per-harness). For a harness whose model can't be pointed at a
 custom endpoint (a closed, hosted agent), the mock-backed test tiers don't apply
-— you still get the full **reference-verification** pillar.
+— you still get the full **reference-verification** layer.
 
 ## See also
 
