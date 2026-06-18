@@ -77,6 +77,89 @@ needs `bubblewrap` + `slirp4netns`, which were absent in this environment (`nft`
 alone is present). It degrades honestly to "unavailable" rather than a fake pass.
 Re-run where the rootless-network stack is installed (CI's `e2e` job).
 
+## Is "empty context" a valid condition?
+
+Each trigger run gets a **fresh empty cwd, no prior conversation turns, no fixture
+files** — just the system prompt + the 14 skill descriptions + one user prompt
+(confirmed: `TriggerRateSpec` has no `fixture`/history field; the runner mkdtemps
+an empty dir). Two things to know about that.
+
+**It's the field standard, not a shortcut.** AWS's `sample-agent-skill-eval` —
+the reference vigiles modeled trigger-rate on
+([skill-eval-landscape](skill-eval-landscape.md)) — tests activation with single
+relevant/irrelevant queries in a fresh context. A cold single prompt is what
+**isolates the description→activation mapping**: context is a confound, and empty
+context controls it, so the number reflects the _description's_ trigger quality
+(the thing an author tunes), not leftover state.
+
+**It's faithful for opening-move skills, biased-low for state-dependent ones.**
+
+| Skill's real trigger                                                        | Empty-context test        | Why                                                       |
+| --------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------- |
+| Start-of-task (describe a feature, ask to debug)                            | **Faithful**              | the opening prompt _is_ the real condition                |
+| Mid-session state (about to claim done; a review arrived; repo in conflict) | **Biased low — artifact** | a cold prompt in an empty repo can't reproduce that state |
+
+`brainstorming` is an opening-move skill by its own text ("before any creative
+work"), so its 20–30% recall is a real signal, not an empty-context artifact. A
+"before you claim complete" skill, by contrast, would show ~0% from a cold prompt
+— which is why that probe was deliberately skipped.
+
+### Sensitivity check — does a non-empty context move the number?
+
+Same 10 brainstorming prompts, two arms — empty cwd vs a seeded Node project
+(`package.json` + `src/` + README), 2 trials/prompt (40 runs, ≈$0.75
+API-equiv / $0 on the sub):
+
+> _Deferred — the 40-run probe ran serially (each `measure()` call re-stubs +
+> installs the plugin) and overran the wall-clock budget here. The cheap fix is
+> bounded concurrency; expectation is still little movement, since brainstorming
+> keys off the request, not the repo. The probe lives at
+> `examples/harness/` shape; re-run with `concurrency` to get the delta._
+
+### Landscape — how others handle context
+
+| Tool                      | Default                          | Context handling                                                                                                                                                           |
+| ------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS skill-eval            | single relevant/irrelevant query | none — pure query activation (same as vigiles trigger-rate)                                                                                                                |
+| promptfoo                 | single prompt + assertions       | context is **user-injected** (`vars`/scenarios); multi-turn via `beforeEach`/`afterEach` hooks — opt-in, never auto-seeded ([promptfoo-deep-dive](promptfoo-deep-dive.md)) |
+| DeepEval                  | single test case                 | `ConversationalTestCase` + user-supplied RAG context                                                                                                                       |
+| Inspect / SWE-bench-class | seeded sandbox + real repo       | the only class that seeds filesystem state — because the _task_ is stateful, not to test activation                                                                        |
+
+The pattern across the field: **nobody auto-reconstructs a skill's mid-session
+trigger state.** Query tools push context onto the user; sandbox harnesses seed a
+repo only when the task demands it. Empty context is the norm; "make it non-empty"
+means "the user supplies it."
+
+## Idea — auto-apply known context for state-dependent skills
+
+A roadmap idea this probe surfaced. The empty-context weakness (state-dependent
+skills under-measured) is shared by the whole query-based field, AWS included. The
+field's only fix is _manual_ context injection. vigiles could go further and make
+the accurate number the DEFAULT:
+
+1. **Enabling primitive — add `fixture` / a prior-turn field to
+   `TriggerRateSpec`.** `measure()`/`runEval` already take `fixture`; trigger-rate
+   doesn't (this probe had to drop to `measure()` to seed a repo). This alone
+   reaches parity with the user-injected-context tools.
+2. **The differentiator — auto-derive the context from the skill's declared
+   trigger.** A description already encodes its trigger _state_: "when about to
+   claim work complete", "after a code review arrives", "starting feature work
+   needing isolation". Match those against a small **curated preset library of
+   known contexts** — a seeded repo, a "work just finished" prior turn, a "review
+   received" message, an "in a dirty git tree" fixture — and apply the matching
+   preset automatically before measuring. The skill is then tested _in the state
+   it claims to trigger on_, so the recall number is honest instead of an artifact
+   of the cold start.
+
+Why it's defensible (and where the line is): this is preset SELECTION on explicit
+cues, **not** NLP that synthesizes a scenario from prose — that stays the
+undecidable-prose trap vigiles refuses
+([reference-verification-limits](reference-verification-limits.md)). Curated,
+opt-in, matched on declared trigger phrases; a skill with no recognized cue falls
+back to the cold-prompt default (honest about what it can't seed). Net position:
+query-based like AWS **+** state-seeding like Inspect **+** automatic from the
+skill's own contract — which none of the three do at the activation layer.
+
 ## Caveats — read before quoting a number
 
 - **n = 10, 1 trial.** The 20% vs 30% spread between two runs is sampling noise

@@ -128,6 +128,16 @@
   `findSimilarRules`) so a large roster gets faithful precision at a fraction of
   the cost. Decided + grounded; deliberately deferred (the two existing tiers
   cover the common cases). [isolated-vs-whole-harness](isolated-vs-whole-harness-eval.md) · **P3 (MED–LOW)**
+- **Auto-applied known context for trigger-rate** — empty-context activation
+  measurement is faithful for opening-move skills but biased-low for
+  state-dependent ones (fires only mid-session — "about to claim done", "review
+  arrived", "dirty git tree"), a blind spot the whole query-based field (AWS
+  skill-eval included) shares. Two steps: (1) add a `fixture`/prior-turn field to
+  `TriggerRateSpec` (parity — `measure()`/`runEval` already have it); (2) the
+  differentiator — auto-select a **curated preset context** from the skill's
+  declared trigger phrases so it's measured in the state it claims to fire on.
+  Preset SELECTION on explicit cues, not prose synthesis (stays out of the
+  undecidable-prose trap). [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
