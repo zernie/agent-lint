@@ -5,12 +5,11 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <em>Quis custodiet ipsos custodes?</em> — Who watches the watchmen?
+  <strong>Lint &amp; test the harness your AI agent runs on.</strong>
 </p>
 
 <p align="center">
-  <strong>The missing linting + testing layer for agentic coding.</strong><br />
-  vigiles <strong>lints</strong> the references your instruction files make — linter rules, file paths, scripts, code symbols — and <strong>tests</strong> whether your hooks, skills, and CLAUDE.md actually change what the agent does.
+  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, and nothing tests they <em>work</em>. vigiles does both.
 </p>
 
 <p align="center">
@@ -22,58 +21,43 @@
 ---
 
 `Agent = Model + Harness`. You'd never ship an app without a linter and a test
-suite — yet an AI agent steering your repo is trusted on vibes. vigiles is the
-deterministic layer for the harness: it **lints** the references your instruction
-files make and **tests** that your hooks and skills actually fire. Two independent
-pillars — adopt either, or both:
+suite — yet the harness steering your agent runs on vibes. vigiles[^name] is the
+deterministic layer for it, and does two independent things — adopt either, or both:
 
-|       | Pillar                          | What it does                                                                                                                                                                                                                                                              |
-| ----- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **①** | **Lint your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md)                                                               |
-| **②** | **Test your harness**           | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key); and when a question _does_ need a real-model eval, it runs on your **Claude subscription**, not metered API. → [guide](docs/harness-testing.md) |
+|             |                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **🔎 Lint** | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)**                      |
+| **🧪 Test** | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
 
-Neither pillar depends on the other — pick the one that hurts today. **Works with
-Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) behind a five-port
-adapter; [custom adapters welcome](docs/authoring-an-adapter.md).
+Pick the one that hurts today. **Works with Claude Code and Codex**
+([`vigiles/codex`](docs/harnesses.md)) behind a five-port adapter;
+[custom adapters welcome](docs/authoring-an-adapter.md).
 
 ## ① Lint — your CLAUDE.md lies to your agent
 
-Your CLAUDE.md says _"enforce `eslint/no-console`."_ But it was switched off
-months ago — and the agent trusts the claim. (Same story for the file path it
-cites that got renamed, and the script that was deleted.)
+Your CLAUDE.md points the agent at `src/auth/login.ts` and tells it to run
+`npm run check`. But the file moved to `src/auth/session.ts` six commits ago, and
+the script was renamed. The agent trusts the stale claim and acts on fiction.
 
-**Without vigiles:** nobody checks. The agent acts on fiction.
-
-**With vigiles:** `npx vigiles lint` resolves every reference against reality —
+`npx vigiles lint` resolves every reference against reality:
 
 ```text
-CLAUDE.md (inline mode):
-  ✗ line 1: Rule "eslint/no-console" exists but is disabled in eslint config
-  ✓ line 2: eslint/eqeqeq
-  ✗ line 3: Rule "no-consoel" not found in eslint. Did you mean: "eslint/no-console"?
+CLAUDE.md:
+  ✗ src/auth/login.ts — no such file (renamed or moved?)
+  ✗ npm run check — not in package.json. Did you mean: "check:types"?
+  ✓ @typescript-eslint/no-floating-promises — exists and enabled in eslint config
 ```
 
-It resolves rule names across **7 linter catalogs** — the rule exists **and is
-enabled** — and checks file paths, scripts, and code symbols the same way. Start
-with one comment, no new files:
+File paths, scripts, and code symbols — plus linter rules across **7 catalogs**
+(the rule exists **and is enabled**). Start with one inline comment, no new files;
+step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade) when you want
+it. **[Full guide →](docs/verifying-instruction-files.md)**
 
-```md
-<!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
-```
+## ② Test — does your harness do its job?
 
-Step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade) when you
-want it. **[Full guide →](docs/verifying-instruction-files.md)**
-
-## ② Test — does your harness actually fire?
-
-A hook can be wired wrong, a skill's description can fail to trigger, injected
-context can never reach the model — silently, all passing a naive "did it run?"
-check.
-
-**Without vigiles:** you assume your `--no-verify` guard blocks. You don't know.
-
-**With vigiles:** a deterministic test proves it — no model, no API key,
-milliseconds:
+A hook can be wired wrong. A skill's description can fail to trigger — or hijack
+unrelated prompts. Injected context can never reach the model. All of it passes a
+naive "did it run?" check. vigiles tests the assembled harness for real:
 
 ```typescript
 import { runHook } from "vigiles/testing";
@@ -83,52 +67,22 @@ const r = runHook(guard, {
   tool_name: "Bash",
   tool_input: { command: "git commit --no-verify" },
 });
-assert(r.blocked); // a red ✗ here means your hook silently lets it through
+assert(r.blocked); // a red ✗ means your guard silently lets it through
 ```
 
-```text
-  ✓ guard blocks --no-verify and allows a clean commit
+It goes well past _"did it fire?"_:
 
-2 passed.
-```
+- **Hooks block** what they must — `runHook`, or the real agent CLI via `runHarnessTest`.
+- **Skills trigger** on the right prompts and stay quiet on the wrong ones — recall _and_ precision (`measureTriggerRate`).
+- **Behaviour is good** — score a skill's output directly, or A/B it on-vs-off for the real lift over no-skill (`measure` / `runEval`, with significance testing).
+- **Safety holds** — the agent _didn't_ push to the wrong branch or hit a paid API; `interceptTools` catches the attempt so the side effect never happens.
 
-Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
-(the real agent CLI against a scripted mock model), and the real-model scored tier
-(**`measure`** / **`runEval`**). **Testing a skill?** Two questions, both covered:
-does its description **fire** (`measureTriggerRate` — recall across varied prompts
-without hijacking unrelated ones, precision), **and** does its guidance actually
-**work**. For "is this exact skill any good?" score the output directly —
-`measure({ checks: [judged(rubric)] })` + `assertRates` (the **absolute** oracle,
-what promptfoo/DeepEval lead with; no on/off baseline needed). When you need the
-**relative** lift over no-skill — regression, or proving the change isn't noise —
-A/B it on-vs-off with `runEval` + `assertSignificant`. Description _and_ behavior,
-not just one. **Need a safety property** — that the agent
-**didn't** push to the wrong branch or call a paid API? `notTool` + `interceptTools`
-intercept the tool in the real hook layer, so the attempt is caught and the side
-effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
-foreign code (and a real model) safely by default — **[safety model →](docs/safety.md)**
-
-Most of what real plugins do is testable cheaply — fire / trigger / contract /
-safety, plus **record-replay** for the tool/API results a skill consumes (recorded
-once from the real tool, replayed deterministically — no live service, no Docker).
-That covers ~90%+ of real plugin surface on your subscription; the rare case that
-needs a real browser or database **composes with Docker** rather than us
-reinventing the sandbox. **[What we test, how →](research/eval-coverage-and-isolation.md)**
-
-**Affordable by design — the eval you can actually run.** Almost nobody evals
-their harness, because the usual tools (promptfoo, DeepEval, …) hit the API SDK
-and bill **per token on every run**. vigiles inverts that: most questions are
-answered with **no model at all** (free, every commit), and when you do reach for
-a real-model eval, vigiles drives your `claude` CLI — so it runs on the **Pro/Max
-subscription you already pay for**, not metered API billing. CI runs only the free
-deterministic tiers; you run the real-model eval where the subscription already is
-— a Claude Code session or locally — when it's worth it, not on every PR.
-
-This affordability story is **ToS-clean**: vigiles drives _your own_ `claude` CLI
-to test _your own_ harness on _your own_ subscription — the same thing you do when
-you run Claude Code. (The Claude Agent SDK's ToS restricts _productizing_ claude.ai
-login/limits in a third-party offering; running your own tests on your own sub is
-exactly the supported posture, not that.)
+**Deterministic and free.** Almost every tier runs with **no model and no API
+key** — milliseconds, on every commit. The one question that genuinely needs a
+real model (does a description fire? did behaviour move?) drives your own `claude`
+CLI, so evals run on the **Claude Pro/Max subscription you already pay for — never
+metered API tokens**. That's the whole reason you can actually afford to eval your
+harness at all. **[How it works →](docs/harness-testing.md)** · **[Why it's affordable →](docs/eval-architecture.md)** · **[Safety model →](docs/safety.md)**
 
 ## Quick start
 
@@ -137,7 +91,7 @@ exactly the supported posture, not that.)
 ```text
 Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
 references and show me what's stale, then write and run a harness test for one
-of my hooks or skills. Use good defaults (both pillars, non-interactive), but
+of my hooks or skills. Use good defaults (lint + test, non-interactive), but
 ask me first whether to gate it in CI, whether to add a real-model eval, and
 whether to enforce strictly (--strict).
 ```
@@ -145,7 +99,7 @@ whether to enforce strictly (--strict).
 Or do it yourself:
 
 ```bash
-npx vigiles init   # sets up BOTH pillars: spec + harness test + CI + plugin
+npx vigiles init   # sets up lint + test: spec + harness test + CI + plugin
 ```
 
 It's interactive in a terminal and non-interactive for agents/CI (or with
@@ -156,7 +110,7 @@ tell your agent _"test my skills"_ and it picks the tier and writes the test.
 <details>
 <summary>What <code>init</code> sets up</summary>
 
-- **Both pillars** by default; scope with `--lint` / `--test` (one or both).
+- **Both lint and test** by default; scope with `--lint` / `--test` (one or both).
 - Adds `vigiles` to your `devDependencies`.
 - Installs the Claude Code plugin (skills + hooks) via the marketplace —
   globally, never vendored into your repo.
@@ -182,3 +136,5 @@ Prefer to write tests yourself? They can be JS **or** TS
 ## License
 
 [MIT](LICENSE)
+
+[^name]: **vigiles** — the watchmen of ancient Rome, who guarded the city (and fought its fires) by night. _Quis custodiet ipsos custodes?_ — "who watches the watchmen?" (Juvenal, _Satire VI_).
