@@ -813,6 +813,16 @@ test("assertRates: `per` overrides the threshold by check kind", () => {
   // A laxer per-kind threshold lets a low check pass while a strict global `min`
   // still gates the others — one call, two thresholds.
   assertRates(report, { min: 0.8, per: { skill: 0.3 } });
+
+  // checkReportToJUnit shares the same threshold helper, so `per` marks exactly
+  // the same testcase failed — the gate and the XML can't disagree.
+  const xml = checkReportToJUnit(report, { min: 0.3, per: { skill: 0.5 } });
+  assert.match(xml, /failures="1"/);
+  assert.match(
+    xml,
+    /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40% below min 50%/,
+  );
+  assert.match(xml, /name="tool\(Bash\)"><\/testcase>/);
 });
 
 test("formatCheckReport labels a no-arg check by its kind alone", () => {
