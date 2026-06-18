@@ -319,3 +319,9 @@ Configure in `.vigilesrc.json`:
 ```
 
 Disable per-file with `<!-- vigiles-disable require-spec -->` at the top of the markdown.
+
+<!-- GHA per-line annotation smoke test — DELIBERATE broken ref, remove before merge -->
+
+```ts
+file("this/path/does/not/exist.ts");
+```
