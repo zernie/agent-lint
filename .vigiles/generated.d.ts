@@ -75,7 +75,7 @@ declare module "vigiles/generated" {
   /** All enabled linter rules across all detected linters. */
   export type LinterRule = EslintRule;
 
-  /** 17 npm scripts from package.json. */
+  /** 20 npm scripts from package.json. */
   export type NpmScript = 
     | "build"
     | "test"
@@ -93,9 +93,12 @@ declare module "vigiles/generated" {
     | "test:vitest"
     | "test:jest"
     | "test:types"
-    | "demo:plugin";
+    | "demo:plugin"
+    | "api:report"
+    | "api:check"
+    | "docs:api";
 
-  /** 161 project files. */
+  /** 162 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
@@ -128,6 +131,7 @@ declare module "vigiles/generated" {
     | "src/adapters/claude-code/skill-runtime.test.ts"
     | "src/adapters/claude-code/skill-runtime.ts"
     | "src/adapters/claude-code/skills-dogfood.test.ts"
+    | "src/adapters/claude-code/vendor-coverage.test.ts"
     | "src/adapters/claude-code/vendor.test.ts"
     | "src/adapters/codex/adapter.ts"
     | "src/adapters/codex/codex.test.ts"
@@ -361,6 +365,7 @@ declare module "vigiles/spec" {
       | "src/adapters/claude-code/skill-runtime.test.ts"
       | "src/adapters/claude-code/skill-runtime.ts"
       | "src/adapters/claude-code/skills-dogfood.test.ts"
+      | "src/adapters/claude-code/vendor-coverage.test.ts"
       | "src/adapters/claude-code/vendor.test.ts"
       | "src/adapters/codex/adapter.ts"
       | "src/adapters/codex/codex.test.ts"
@@ -510,6 +515,9 @@ declare module "vigiles/spec" {
       | "test:vitest"
       | "test:jest"
       | "test:types"
-      | "demo:plugin";
+      | "demo:plugin"
+      | "api:report"
+      | "api:check"
+      | "docs:api";
   }
 }
