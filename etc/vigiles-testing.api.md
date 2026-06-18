@@ -161,6 +161,7 @@ export function assertPromptDiversity(prompts: readonly string[], opts?: {
 // @public
 export function assertRates(report: CheckReport, opts: {
     min: number;
+    per?: Readonly<Record<string, number>>;
 }): void;
 
 // @public
