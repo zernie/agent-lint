@@ -111,14 +111,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Lint compiled files
-        run: node dist/cli.js lint
-
-      # Dogfood the shipped GitHub Action itself (composite over the CLI),
-      # running the repo's own build via `version: local`. Catches a
-      # regression in the action contract that calling the CLI directly
-      # would miss. See the `prod-grade-gha-cli` rule.
-      - name: Dogfood the vigiles GitHub Action
+      # Dogfood the shipped GitHub Action FIRST — it's the primary lint gate
+      # users actually rely on, so run the composite over the repo's own build
+      # (`version: local`) ahead of the redundant direct CLI call below. The
+      # action emits per-line `::error file=,line=::` annotations (rendered inline
+      # on the PR diff) and posts a sticky PR comment. See the prod-grade-gha-cli
+      # rule. Running it first means a lint failure surfaces THROUGH the action
+      # (comment + annotations), not a bare CLI step before it.
+      - name: Dogfood the vigiles GitHub Action (primary lint gate)
         id: vigiles-action
         uses: ./
         with:
@@ -133,6 +133,25 @@ jobs:
             exit 1
           fi
           echo "vigiles action output: valid=$got"
+
+      - name: Lint compiled files (direct CLI — redundant safety)
+        run: node dist/cli.js lint
+
+      # Public-API surface gate: API Extractor compares the live .d.ts surface of
+      # every public entry point against the committed etc/*.api.md reports. A PR
+      # that adds/removes/changes a public export (or leaks a Claude-Code symbol
+      # back onto the agnostic surface) fails here until `npm run api:report` is
+      # run and the report diff is reviewed + committed. dist/ is built above.
+      - name: API surface gate
+        run: node scripts/api-extractor.mjs
+
+      # Smoke-check the API reference GENERATOR (API Documenter) — it reuses the
+      # doc models the gate just wrote to temp/, so no extra extractor run. We
+      # don't publish the output (api-reference/ is gitignored; there's no docs
+      # site yet) — this only proves `npm run docs:api` still builds, so the
+      # generator can't silently rot. Upgrade to a Pages deploy when a site lands.
+      - name: API reference generates (smoke, no publish)
+        run: npx api-documenter markdown -i temp -o api-reference
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic

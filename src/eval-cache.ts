@@ -40,6 +40,29 @@ export interface CacheKeyInput {
   readonly files: Record<string, string>;
   /** The resolved `.claude/settings.json` for the arm (or undefined). */
   readonly settings: unknown;
+  /**
+   * Per-run env that affects model behaviour (e.g. `VIGILES_INTERCEPT_TOOLS`).
+   * Keyed because two intercept configs that share tool names — so produce
+   * identical merged `settings` — still differ in their `when`/`denyReason`, which
+   * lives only in the env. Omit when there's no model-affecting env.
+   */
+  readonly env?: Record<string, string>;
+  /**
+   * Content digest of a natively-installed plugin dir (`--plugin-dir`), or
+   * undefined when there is none. Folded in so editing a skill INSIDE the dir
+   * invalidates the entry — a path-only key would false-replay, since the dir's
+   * files are NOT in `files` (that holds only the materialized fixture / `plugin`
+   * arm, not a native install). See {@link hashDir}.
+   */
+  readonly pluginDirHash?: string;
+  /**
+   * The harness BINARY version (e.g. `claude --version`). The harness evolves
+   * fast — a CLI upgrade changes the system prompt + tool definitions, which steer
+   * behaviour as much as the model does — so a cached result must invalidate when
+   * the binary changes, or a replay silently serves a result from a different
+   * harness. Resolved once per run; omit when unknown (then it doesn't partition).
+   */
+  readonly harnessVersion?: string;
   /** Which trial this is — distinct trials are distinct samples, cached apart. */
   readonly trialIndex: number;
 }
@@ -69,19 +92,74 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-/** Deterministic content hash of the key inputs (order-independent). */
-export function cacheKey(input: CacheKeyInput): SHA256Hash {
-  return sha256short(JSON.stringify(canonical(input)));
+/**
+ * Cache record-format version, SALTED into every key (Jest `CACHE_VERSION` /
+ * webpack `cache.version` pattern). Bump when the `CacheRecord` shape — or how a
+ * record is produced in a way the key can't otherwise see — changes, so old
+ * entries become *unreachable* rather than deserializing into a stale shape (no
+ * brittle read-time version gate needed). A major bump means orphaned files on
+ * disk; reclaim them by deleting the cache dir.
+ */
+export const CACHE_FORMAT_VERSION = 2;
+
+/**
+ * Per-run env keys that are PURE NOISE for the cache key — a fresh random path
+ * every run, never model-affecting. The opt-in ephemeral run env
+ * ({@link ephemeralRunEnv} in `eval.ts`) points `HOME`/`TMPDIR` at a throwaway
+ * dir generated per trial, so folding them into the key would make every
+ * ephemeral run unique → the cache could NEVER hit. We drop them here so the
+ * exclusion holds however the env was assembled. A non-ephemeral run normally
+ * carries neither in its per-run `env` (it's an overlay over `process.env`, not
+ * a complete env), so dropping them is a no-op there.
+ */
+const CACHE_KEY_ENV_EXCLUDE: readonly string[] = ["HOME", "TMPDIR"];
+
+/** Strip the per-run-noise env keys ({@link CACHE_KEY_ENV_EXCLUDE}) from a keyed
+ *  env, returning `undefined` when nothing model-affecting remains (so the key is
+ *  byte-identical to a run that had no env at all). */
+function keyedEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (env === undefined) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (CACHE_KEY_ENV_EXCLUDE.includes(k)) continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** Read a cached record by key, or null on miss / unreadable / malformed. */
+/** Deterministic content hash of the key inputs (order-independent). */
+export function cacheKey(input: CacheKeyInput): SHA256Hash {
+  const normalized = {
+    ...input,
+    // The tool list is logically a SET, so ["Read","Bash"] and ["Bash","Read"]
+    // must hash the same — sort it to avoid phantom-distinct keys. (canonical()
+    // already sorts object keys; it deliberately keeps other array order.)
+    tools: [...input.tools].sort(),
+    // Drop the throwaway ephemeral HOME/TMPDIR — per-run noise, not model input.
+    env: keyedEnv(input.env),
+    cacheFormatVersion: CACHE_FORMAT_VERSION,
+  };
+  return sha256short(JSON.stringify(canonical(normalized)));
+}
+
+/**
+ * Read a cached record by key. A MISS (no file) returns `null` — normal, the run
+ * proceeds. A CORRUPT record (file present but not valid JSON) **throws** instead
+ * of silently degrading to a re-run: a broken cassette is a real failure the CI
+ * gate must surface, not mask. The message tells you how to recover.
+ */
 export function readCache(dir: string, key: SHA256Hash): CacheRecord | null {
   const path = join(dir, `${key}.json`);
   if (!existsSync(path)) return null;
+  const raw = readFileSync(path, "utf-8");
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as CacheRecord;
+    return JSON.parse(raw) as CacheRecord;
   } catch {
-    return null;
+    throw new Error(
+      `eval cache: corrupt record ${path} (invalid JSON) — delete it or clear the cache dir`,
+    );
   }
 }
 
@@ -120,4 +198,33 @@ export function restoreDir(cwd: string, files: Record<string, string>): void {
     mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content);
   }
+}
+
+/**
+ * Content digest of a directory: a lexicographically-sorted list of
+ * `relativePath:contentHash` for every file, hashed to one value. Editing,
+ * adding, removing, or moving any file changes the digest. It hashes file
+ * CONTENT (not mtime — CI checkouts reset mtimes, the classic stale-cache
+ * anti-pattern) and includes the relative path (so a rename invalidates and two
+ * files can't swap contents undetected). A flat sorted list, NOT a Merkle tree —
+ * sufficient at plugin-dir scale; the tree's incremental-recompute payoff isn't
+ * worth the complexity here (cf. Bazel/Turborepo hash content per file).
+ */
+export function hashDir(dir: string): SHA256Hash {
+  const root = resolve(dir);
+  const parts: string[] = [];
+  const walk = (d: string): void => {
+    for (const entry of readdirSync(d).sort()) {
+      if (SKIP_DIRS.has(entry)) continue;
+      const full = join(d, entry);
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full);
+      else if (st.isFile())
+        parts.push(
+          `${relative(root, full)}:${sha256short(readFileSync(full))}`,
+        );
+    }
+  };
+  walk(root);
+  return sha256short(parts.join("\n"));
 }

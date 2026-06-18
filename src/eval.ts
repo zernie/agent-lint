@@ -32,8 +32,8 @@ import {
   cpSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { resolve, join, dirname } from "node:path";
+import { tmpdir, homedir } from "node:os";
+import { resolve, join, dirname, delimiter } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
@@ -52,10 +52,18 @@ import {
   writeCache,
   snapshotDir,
   restoreDir,
+  hashDir,
   type CacheMode,
 } from "./eval-cache.js";
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
+import {
+  type ToolIntercept,
+  buildInterceptSettings,
+  serializeIntercepts,
+  INTERCEPT_TOOLS_ENV,
+} from "./tool-intercept.js";
+import { type ToolStub, stubBinDir } from "./tool-stub.js";
 
 /** One arm of the comparison: fixture overrides + settings (hooks) for this arm. */
 export interface EvalArm {
@@ -77,6 +85,27 @@ export interface EvalArm {
    * an arm be "skill installed" vs "off" to measure real activation.
    */
   readonly pluginDir?: string;
+  /**
+   * Tools to intercept for this arm (the tool-call spy). Each
+   * {@link ToolIntercept} is denied its real execution by an auto-wired PreToolUse
+   * hook — the model still emits the `tool_use` (so its arguments land in the
+   * `Trace` for `toolWith` / `notTool`), but the side effect (a paid API call, a
+   * `git push`, a paid subagent) never happens: the call is intercepted
+   * (prevented), NOT executed. This makes a real-model eval **side-effect-free and
+   * safe** (it does NOT cut the model-call cost); and because CC surfaces the
+   * denial as a *blocked* call, it's for asserting the agent's ATTEMPT, not for
+   * stubbing a tool to continue a multi-step flow. See `src/tool-intercept.ts`.
+   */
+  readonly interceptTools?: readonly ToolIntercept[];
+  /**
+   * Model alias/id for THIS arm, overriding the eval-level `model`. A model
+   * comparison IS a harness A/B — `arms: { sonnet: { model: "claude-sonnet-4-6" },
+   * opus: { model: "claude-opus-4-8" } }` — so model-as-an-arm answers "does my
+   * harness still hold on the cheaper tier / after a model upgrade?" through the
+   * same significance machinery, with no separate model-matrix runner. Omit to
+   * use the eval-level model. See `docs/eval-architecture.md` (model strategy).
+   */
+  readonly model?: string;
 }
 
 /** Per-run resource use, parsed from the terminal `result` event (0 when absent). */
@@ -85,8 +114,13 @@ export interface EvalUsage {
   readonly costUsd: number;
   /** Wall-clock `duration_ms` of the run. */
   readonly durationMs: number;
+  /** Fresh (uncached) input tokens, billed at full input price. */
   readonly inputTokens: number;
   readonly outputTokens: number;
+  /** Tokens written to the prompt cache this run (~1.25× input price). */
+  readonly cacheCreationTokens: number;
+  /** Tokens served from the prompt cache this run (~0.1× input price). */
+  readonly cacheReadTokens: number;
 }
 
 /**
@@ -157,6 +191,39 @@ export interface EvalSpec<M extends Metrics> {
   readonly rateLimitRetries?: number;
   /** Base backoff ms (doubled each retry). Default 1000. */
   readonly retryBackoffMs?: number;
+  /**
+   * **Opt-in, default OFF.** Run each trial in an *ephemeral run environment* — a
+   * throwaway `$HOME` + scrubbed env, re-injecting only the harness's own auth (see
+   * {@link ephemeralRunEnv}). Running a model-driven skill/agent is itself a side
+   * effect (the *model*, not the author, chose the actions), so a `git push` /
+   * write to `~` should land in a disposable HOME, not the real `~/.gitconfig` /
+   * `~/.ssh` / `~/.aws`. This is the cross-platform STATE-protection floor (no
+   * kernel features), orthogonal to the bubblewrap host-confinement in
+   * `src/sandbox.ts`.
+   *
+   * **Ships default-OFF** because a too-narrow auth allowlist would silently break
+   * the real `claude` CLI's authentication; leaving it off keeps every existing
+   * eval (including one running right now) authenticating exactly as before. When
+   * absent / `false`, the per-trial env is byte-identical to today
+   * (`{ ...process.env, ...arm.env }`). See `docs/safety.md` (ephemerality) and
+   * `research/cross-platform-sandboxing.md`.
+   */
+  readonly ephemeralEnv?: boolean;
+  /**
+   * **Tool stubs on PATH (rung R2).** A list of fake binaries to shadow on PATH
+   * for every trial, so a skill/hook/agent that calls a CLI tool (`gh`, `psql`,
+   * `redis-cli`, `z3`, …) and works with its RESULT can be tested against a
+   * **recorded / author-provided canned output** — no live service. vigiles writes
+   * one executable stub per {@link ToolStub} into a bin dir under the trial cwd and
+   * PREPENDS that dir to the run's PATH (both the default and the ephemeral env
+   * path), so the fake wins over the real binary.
+   *
+   * The stubs are author/recorded fixtures, **never** model-synthesized — a
+   * synthesized tool output looks plausible but diverges from the real
+   * tool/version (false confidence). Absent → no change (the PATH is byte-identical
+   * to today). See {@link ToolStub} and `research/eval-coverage-and-isolation.md`.
+   */
+  readonly stubs?: readonly ToolStub[];
 }
 
 /** Per-metric summary statistics across an arm's runs. */
@@ -185,6 +252,8 @@ export interface ArmUsage {
   readonly meanDurationMs: number;
   readonly totalInputTokens: number;
   readonly totalOutputTokens: number;
+  readonly totalCacheCreationTokens: number;
+  readonly totalCacheReadTokens: number;
 }
 
 export interface ArmReport {
@@ -232,6 +301,15 @@ export interface AgentRunArgs {
   readonly hasSettings: boolean;
   readonly pluginDir: string | undefined;
   readonly timeoutMs: number;
+  /** Extra env layered over `process.env` for this run (e.g. `VIGILES_INTERCEPT_TOOLS`). */
+  readonly env?: Record<string, string>;
+  /**
+   * When true, `env` is the COMPLETE spawn environment (an ephemeral run env from
+   * {@link ephemeralRunEnv}) — the runner does NOT prepend `process.env`, so the
+   * real `$HOME` / secrets are scrubbed. Default false: `env` is an overlay over
+   * `process.env` (the byte-identical-to-today path). Set only by `ephemeralEnv`.
+   */
+  readonly replaceEnv?: boolean;
 }
 
 /**
@@ -241,6 +319,23 @@ export interface AgentRunArgs {
  * stream-json) and a custom runtime can be plugged in.
  */
 export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
+
+/**
+ * Resolve the environment a trial's subprocess actually runs with — the
+ * SECURITY-CRITICAL decision behind `ephemeralEnv`. When `replaceEnv` is set, the
+ * scrubbed `env` is the COMPLETE environment, so the real `$HOME` and inherited
+ * secrets are DROPPED; otherwise `env` is an overlay on `base` (byte-identical to
+ * the pre-ephemeral behaviour). Extracted from the `v8 ignore`d `spawnAgent` so
+ * the one line that enforces the scrub is both unit- and behaviourally-tested — a
+ * regression to an always-merge would otherwise silently defeat ephemerality and
+ * leak the host environment into an untrusted, model-driven run.
+ */
+export function resolveSpawnEnv(
+  a: Pick<AgentRunArgs, "env" | "replaceEnv">,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return a.replaceEnv ? (a.env ?? {}) : { ...base, ...a.env };
+}
 
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
 function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
@@ -267,7 +362,9 @@ function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
     ];
     const child = spawn(claudeCodeRuntime.agentBinary, args, {
       cwd: a.cwd,
-      env: process.env,
+      // The security-critical env resolution (overlay vs. scrubbed replacement)
+      // lives in the tested `resolveSpawnEnv` seam above, not inline here.
+      env: resolveSpawnEnv(a),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -318,6 +415,8 @@ export interface MeasureSpec {
    * there's nothing to grade. Requires `pluginDir`. See {@link stubSkillBody}.
    */
   readonly stubSkillBodies?: boolean;
+  /** Tools to intercept (the tool-call spy) — see {@link EvalArm.interceptTools}. */
+  readonly interceptTools?: readonly ToolIntercept[];
   /** The task prompt given to the agent. */
   readonly task: string;
   /**
@@ -370,6 +469,18 @@ export async function measureWith(
 ): Promise<CheckReport> {
   if (spec.stubSkillBodies && !spec.pluginDir)
     throw new Error("measure: `stubSkillBodies` requires `pluginDir`.");
+  // stubSkillBodies replaces each skill BODY with a no-op (the run stops at
+  // selection), so there is no output to grade — a `judged` check would score an
+  // empty body and mislead. The docs warn against this pairing; enforce it.
+  if (
+    spec.stubSkillBodies &&
+    spec.checks.some((c) => c.toJSON().kind === "judged")
+  )
+    throw new Error(
+      "measure: `stubSkillBodies` is for firing/`skill()` checks only — it stubs " +
+        "the skill body, so there's no output for a `judged` check to grade. Drop " +
+        "`stubSkillBodies`, or remove the `judged` check.",
+    );
   const stubbed = spec.stubSkillBodies
     ? stubbedPluginDir(spec.pluginDir as string)
     : undefined;
@@ -384,6 +495,7 @@ export async function measureWith(
             settings: spec.settings,
             plugin: spec.plugin,
             pluginDir,
+            interceptTools: spec.interceptTools,
           },
         },
         task: spec.task,
@@ -588,19 +700,51 @@ export function formatCheckReport(report: CheckReport): string {
 }
 
 /**
- * The scored gate (Phase 4): throw if any check's measured rate is below `min` —
- * the `measure` counterpart to `assertChecks` (strict). Reads the rate, not a
- * single run, so it never trips on one noisy trial.
+ * The min rate a check must clear: its per-KIND override in `per`, else the
+ * default `min`. Shared by `assertRates` (the throwing gate) and
+ * `checkReportToJUnit` (the XML report) so the two never diverge on thresholds.
  */
-export function assertRates(report: CheckReport, opts: { min: number }): void {
-  const below = report.perCheck.filter((c) => c.rate < opts.min);
+function checkRateThreshold(
+  check: CheckJSON,
+  min: number,
+  per?: Readonly<Record<string, number>>,
+): number {
+  return per?.[check.kind] ?? min;
+}
+
+/**
+ * The scored gate (Phase 4): throw if any check's measured rate is below its
+ * threshold — the `measure` counterpart to `assertChecks` (strict). Reads the
+ * rate, not a single run, so it never trips on one noisy trial.
+ *
+ * `min` is the default threshold for every check. `per` overrides it for a check
+ * KIND (e.g. `{ min: 0.8, per: { skill: 1.0 } }` — "every check ≥ 80%, but the
+ * skill must FIRE on every trial"), so a strict firing/safety check and a
+ * lenient quality check gate in one call — the single-skill absolute oracle
+ * (`measure({ checks: [skill(), judged()] }) + assertRates`) needs exactly this.
+ */
+export function assertRates(
+  report: CheckReport,
+  opts: { min: number; per?: Readonly<Record<string, number>> },
+): void {
+  // An empty report gates nothing — a green that tested NOTHING (the silent-pass
+  // the no-silent-skips rule forbids). Fail loudly instead of vacuously passing.
+  if (report.perCheck.length === 0) {
+    throw new Error(
+      "assertRates: the report has no checks to gate — did you call " +
+        "`measure({ checks: [...] })` with an empty list? An empty gate is a silent pass.",
+    );
+  }
+  const thresholdFor = (c: CheckRate): number =>
+    checkRateThreshold(c.check, opts.min, opts.per);
+  const below = report.perCheck.filter((c) => c.rate < thresholdFor(c));
   if (below.length > 0) {
     throw new Error(
-      `${String(below.length)} check(s) below the ${(opts.min * 100).toFixed(0)}% min rate:\n` +
+      `${String(below.length)} check(s) below their min rate:\n` +
         below
           .map(
             (c) =>
-              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}%`,
+              `  ✗ ${checkLabel(c.check)}: ${(c.rate * 100).toFixed(0)}% ± ${(c.se * 100).toFixed(0)}% (min ${(thresholdFor(c) * 100).toFixed(0)}%)`,
           )
           .join("\n"),
     );
@@ -617,22 +761,30 @@ function escapeXml(s: string): string {
 
 /**
  * Serialize a {@link CheckReport} to JUnit XML (Phase 4) — each check a
- * `<testcase>`, failing when its rate is below `min`. Because a check is *data*,
- * this falls out for free: CI test reporters, regression baselines, and a
- * promptfoo bridge all consume the same shape.
+ * `<testcase>`, failing when its rate is below its threshold. `min` is the
+ * default; `per` overrides it by check KIND, matching `assertRates` exactly (one
+ * shared threshold helper) so the gate and the report can never disagree about
+ * which checks failed. Because a check is *data*, this falls out for free: CI
+ * test reporters, regression baselines, and a promptfoo bridge all consume it.
  */
 export function checkReportToJUnit(
   report: CheckReport,
-  opts: { min?: number; name?: string } = {},
+  opts: {
+    min?: number;
+    per?: Readonly<Record<string, number>>;
+    name?: string;
+  } = {},
 ): string {
   const min = opts.min ?? 0;
-  const failures = report.perCheck.filter((c) => c.rate < min).length;
+  const thr = (c: CheckRate): number =>
+    checkRateThreshold(c.check, min, opts.per);
+  const failures = report.perCheck.filter((c) => c.rate < thr(c)).length;
   const cases = report.perCheck
     .map((c) => {
       const name = escapeXml(checkLabel(c.check));
       const body =
-        c.rate < min
-          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(min * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
+        c.rate < thr(c)
+          ? `\n    <failure message="rate ${(c.rate * 100).toFixed(0)}% below min ${(thr(c) * 100).toFixed(0)}% (n=${String(c.n)})"/>\n  `
           : "";
       return `  <testcase classname="vigiles.checks" name="${name}">${body}</testcase>`;
     })
@@ -656,6 +808,8 @@ function usageFrom(result: Record<string, unknown> | null): EvalUsage {
     durationMs: num(result?.duration_ms),
     inputTokens: num(usage.input_tokens),
     outputTokens: num(usage.output_tokens),
+    cacheCreationTokens: num(usage.cache_creation_input_tokens),
+    cacheReadTokens: num(usage.cache_read_input_tokens),
   };
 }
 
@@ -758,6 +912,8 @@ export function aggregateUsage(usages: readonly EvalUsage[]): ArmUsage {
     meanDurationMs: n > 0 ? sum((u) => u.durationMs) / n : 0,
     totalInputTokens: sum((u) => u.inputTokens),
     totalOutputTokens: sum((u) => u.outputTokens),
+    totalCacheCreationTokens: sum((u) => u.cacheCreationTokens),
+    totalCacheReadTokens: sum((u) => u.cacheReadTokens),
   };
 }
 
@@ -793,6 +949,13 @@ async function runWithCache(
     tools: runArgs.tools,
     files: keyParts.files,
     settings: keyParts.settings,
+    env: runArgs.env,
+    // A native --plugin-dir install isn't in `files`, so hash its CONTENTS into
+    // the key — otherwise editing a skill in it would false-replay.
+    pluginDirHash: runArgs.pluginDir ? hashDir(runArgs.pluginDir) : undefined,
+    // The harness binary evolves fast; a CLI upgrade must invalidate (stale
+    // replay otherwise serves a result from a different system prompt).
+    harnessVersion: harnessVersion(),
     trialIndex: keyParts.trialIndex,
   });
   const hit = readCache(cfg.cacheDir, key);
@@ -807,6 +970,275 @@ async function runWithCache(
   return out;
 }
 
+/**
+ * The `vigiles intercept-tool-hook` command, as an absolute `node <cli> …`
+ * invocation — the eval runs in a throwaway cwd where `npx vigiles` wouldn't
+ * resolve, so the auto-wired PreToolUse hook must point at this CLI's own `cli.js`
+ * (resolved from `__dirname`, the same way `run-hook.ts`/`sandbox.ts` locate their
+ * entries).
+ */
+const INTERCEPT_TOOL_HOOK_CLI =
+  [join(__dirname, "cli.js"), join(__dirname, "..", "dist", "cli.js")].find(
+    (p) => existsSync(p),
+  ) ?? join(__dirname, "cli.js");
+const INTERCEPT_TOOL_HOOK_CMD = `"${process.execPath}" "${INTERCEPT_TOOL_HOOK_CLI}" intercept-tool-hook`;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object";
+}
+
+/**
+ * A model id is "dated" (honestly pinned) when it ends in an 8-digit date stamp,
+ * e.g. `claude-haiku-4-5-20251001`. A floating alias (`haiku`, `sonnet`, or even
+ * `claude-sonnet-4-6` with no date) can change underneath you — so a cached or
+ * baselined result pinned to it can silently hide model drift. See
+ * `docs/eval-architecture.md` (honest model pinning).
+ */
+export function isDatedModel(model: string): boolean {
+  return /\d{8}$/.test(model);
+}
+
+/**
+ * Capability tier of a model by FAMILY: haiku=1 < sonnet=2 < opus=3 (version is
+ * ignored, so `claude-sonnet-4-6` and a dated Sonnet rank equal). An unrecognized
+ * family returns `null` — unrankable, so the floor never blocks a model we can't
+ * judge (fail-open on ranking). Used by the model floor; aliases and full/dated
+ * ids both work.
+ */
+export function modelTier(id: string): number | null {
+  const s = id.toLowerCase();
+  if (s.includes("haiku")) return 1;
+  if (s.includes("sonnet")) return 2;
+  if (s.includes("opus")) return 3;
+  return null;
+}
+
+/**
+ * Is `model` a weaker tier than `floor`? Both must be rankable (see
+ * {@link modelTier}); an unrankable model/floor is never "below" (fail-open).
+ */
+export function belowModelFloor(model: string, floor: string): boolean {
+  const m = modelTier(model);
+  const f = modelTier(floor);
+  return m !== null && f !== null && m < f;
+}
+
+/**
+ * Reduce a raw `--version` string to the **major.minor** cache-key token. We key
+ * the cache on major.minor, NOT the patch: a patch release rarely changes agent
+ * behaviour, so keying patches would churn the cache on every release for no
+ * signal; a minor/major bump is where the system prompt / tool defs actually move.
+ * (If a specific patch is known to matter, clear the cache or bump
+ * `CACHE_FORMAT_VERSION`.) Falls back to the trimmed raw string when no semver is
+ * found. Pure + tested.
+ */
+export function harnessVersionKey(raw: string): string {
+  const m = /(\d+)\.(\d+)\.\d+/.exec(raw);
+  return m ? `${m[1]}.${m[2]}` : raw.trim();
+}
+
+/* v8 ignore start -- spawns the real harness binary; memoized, cache-path only */
+let cachedHarnessVersion: string | undefined;
+/**
+ * The harness binary version (`claude --version`) reduced to major.minor, for the
+ * cache key — so a CLI **minor/major** upgrade (new system prompt / tool defs)
+ * invalidates a stale replay, while patches don't churn it. Memoized (one spawn
+ * per process), resolved only on the cache path, "unknown" if the binary isn't
+ * found (then it doesn't partition the key).
+ */
+function harnessVersion(): string {
+  if (cachedHarnessVersion === undefined) {
+    try {
+      cachedHarnessVersion = harnessVersionKey(
+        execSync(`${claudeCodeRuntime.agentBinary} --version`, {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      );
+    } catch {
+      cachedHarnessVersion = "unknown";
+    }
+  }
+  return cachedHarnessVersion;
+}
+/* v8 ignore stop */
+
+/** Warn (once per run) that replaying/recording a cache on a floating alias hides drift. */
+function warnFloatingModel(model: string): void {
+  const msg =
+    `vigiles: eval cache is on but the model "${model}" is a floating alias — ` +
+    `a replay can serve a result computed against a since-changed model, hiding ` +
+    `drift. Pin a dated id (e.g. ...-20251001) for honest replay.`;
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning::${msg}`);
+  else console.warn(msg);
+}
+
+/**
+ * Merge the tool-intercept PreToolUse hook into an arm's resolved settings
+ * (appending to any existing `PreToolUse` list). Returns the settings unchanged
+ * when there are no intercepts. The intercept list itself rides the
+ * `VIGILES_INTERCEPT_TOOLS` env, not the settings — see {@link executeTrial}.
+ */
+function withInterceptToolHook(
+  settings: unknown,
+  intercepts: readonly ToolIntercept[],
+): unknown {
+  if (intercepts.length === 0) return settings;
+  const intercept = buildInterceptSettings(intercepts, {
+    command: INTERCEPT_TOOL_HOOK_CMD,
+  });
+  const base = isRecord(settings) ? settings : {};
+  const baseHooks = isRecord(base.hooks) ? base.hooks : {};
+  const basePre: unknown[] = Array.isArray(baseHooks.PreToolUse)
+    ? (baseHooks.PreToolUse as unknown[])
+    : [];
+  return {
+    ...base,
+    hooks: {
+      ...baseHooks,
+      PreToolUse: [...basePre, ...intercept.hooks.PreToolUse],
+    },
+  };
+}
+
+/**
+ * The default allowlist {@link ephemeralRunEnv} passes through from the real
+ * environment. Two groups, both load-bearing for a real-model `claude` run:
+ *
+ * - **Auth** — the harness's OWN credentials. The eval drives the real `claude`
+ *   CLI, which authenticates via the user's subscription (`~/.claude`, reached
+ *   through the fresh HOME's allowed config — see below) OR via these env vars.
+ *   We mirror the auth surface the runtime port already names
+ *   (`ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`, see
+ *   `adapters/claude-code/runtime.ts`) plus the OAuth/token + region variants the
+ *   CLI accepts, so a token-authed user is not broken by a too-narrow list.
+ * - **Runtime** — what any spawned process needs to *function*: `PATH` (resolve
+ *   `node` / `claude`), the locale/terminal vars (`LANG` / `LC_*` / `TERM`), and
+ *   `TMPDIR` (which we override to the fresh HOME). Mirrors what `bwrapArgs` /
+ *   `setenvArgs` in `src/sandbox.ts` set back after `--clearenv`.
+ *
+ * Notably it does NOT pass through `GIT_*`, `GH_TOKEN`, `SSH_*`, `AWS_*`, or any
+ * other non-allowlisted secret-shaped var — those are exactly what an ephemeral
+ * run must not see. `CLAUDE_*` is allowlisted by prefix because the CLI reads
+ * several `CLAUDE_*` knobs (config dir, etc.) and omitting one is the failure
+ * mode this whole guard is conservative against.
+ *
+ * Conservative by design: a too-broad allowlist is safe (it just leaks a benign
+ * var); a too-narrow one silently breaks auth — which is why the feature ships
+ * default-OFF until validated against a real run.
+ */
+const EPHEMERAL_ALLOW: readonly string[] = [
+  // Runtime essentials (mirror sandbox.ts setenv-after-clearenv).
+  "PATH",
+  "LANG",
+  "TERM",
+  // Anthropic / Claude Code auth + endpoint (mirror runtime.ts + CLI auth vars).
+  claudeCodeRuntime.modelApiKeyEnv, // ANTHROPIC_API_KEY
+  claudeCodeRuntime.modelBaseUrlEnv, // ANTHROPIC_BASE_URL
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_URL",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_HEADERS",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  // Cloud-provider auth the CLI uses for Bedrock/Vertex backends (region/profile
+  // only — NOT the secret-shaped AWS_* access keys, which stay dropped).
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
+  "AWS_PROFILE",
+  "CLOUD_ML_REGION",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+];
+
+/** Prefixes passed through wholesale — the CLI reads several `CLAUDE_*` knobs and
+ *  a `LC_*` locale family; allowlist by prefix so omitting one isn't the silent
+ *  auth/locale break this guard exists to avoid. */
+const EPHEMERAL_ALLOW_PREFIXES: readonly string[] = ["CLAUDE_", "LC_"];
+
+/**
+ * Build an **ephemeral run environment** for a model-driven run: a NEW env object
+ * with a *fresh* `HOME` (and `TMPDIR`) pointed at the throwaway `opts.home`, only
+ * an allowlist of auth + runtime vars passed through from `base`, and everything
+ * else DROPPED. Pure — no fs, no spawn.
+ *
+ * The rationale is "fresh HOME + only the harness credential injected, **not** a
+ * blanket wipe": running a model-driven skill/agent is itself a side effect (the
+ * *model*, not the author, chose the actions), so it should not be able to read
+ * the real `~/.gitconfig` / `~/.ssh` / `~/.aws` or write to the real `~`. But the
+ * real `claude` CLI must still AUTHENTICATE, so the harness's own credentials
+ * ({@link EPHEMERAL_ALLOW} — `ANTHROPIC_*`, `CLAUDE_*`, locale/PATH) are
+ * re-injected; a blanket `--clearenv`-style wipe would break every eval. Because
+ * this needs no kernel features, it is the cross-platform STATE-protection floor
+ * (lands on macOS immediately), orthogonal to the Linux bubblewrap HOST
+ * confinement in `src/sandbox.ts`.
+ *
+ * @param base  the source environment to filter (usually `process.env`).
+ * @param opts.home  the throwaway dir to set as `HOME`/`TMPDIR`.
+ * @param opts.allow  extra var NAMES to pass through (e.g. the `VIGILES_*` keys
+ *   the eval already injects). Layered ON TOP of the default allowlist.
+ */
+export function ephemeralRunEnv(
+  base: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  opts: { home: string; allow?: readonly string[] },
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const allowExact = new Set<string>([
+    ...EPHEMERAL_ALLOW,
+    ...(opts.allow ?? []),
+  ]);
+  for (const [k, v] of Object.entries(base)) {
+    if (v === undefined) continue;
+    const allowed =
+      allowExact.has(k) ||
+      EPHEMERAL_ALLOW_PREFIXES.some((p) => k.startsWith(p));
+    if (allowed) out[k] = v;
+  }
+  // Fresh HOME + TMPDIR last so they always win over anything passed through.
+  out.HOME = opts.home;
+  out.TMPDIR = opts.home;
+  return out;
+}
+
+/**
+ * Home-relative AUTH files to carry from the real HOME into the throwaway one.
+ *
+ * A local subscription credential (OAuth token) often lives in a FILE under HOME,
+ * not an env var — so scrubbing HOME would lose it and break a local-authed run.
+ * This is the file half of the auth allowlist; {@link EPHEMERAL_ALLOW} covers the
+ * env-var / host-brokered half. Kept a named constant so it's easy to extend, and
+ * deliberately NARROW — only the explicit auth files, never `.gitconfig` / `.ssh`
+ * / `.aws`, which are exactly what an ephemeral run must not see.
+ */
+export const EPHEMERAL_HOME_KEEP: readonly string[] = [
+  ".claude/.credentials.json", // the Claude Code OAuth token
+];
+
+/**
+ * Seed the throwaway HOME with the harness's own auth FILE(s) — best-effort;
+ * covers local file-based OAuth; the env-var/host-brokered path is covered by the
+ * allowlist in {@link ephemeralRunEnv}.
+ *
+ * COPIES (never symlinks) each {@link EPHEMERAL_HOME_KEEP} path from `realHome`
+ * into `throwawayHome`, creating parent dirs as needed; a symlink would let the
+ * model-driven run write back to the real credential file, defeating ephemerality.
+ * A path that doesn't exist in the real HOME is skipped silently (that user auths
+ * via env-var / host broker instead). Pure fs — no env, no spawn.
+ */
+export function seedEphemeralHome(
+  throwawayHome: string,
+  realHome: string,
+  keep: readonly string[] = EPHEMERAL_HOME_KEEP,
+): void {
+  for (const rel of keep) {
+    const src = join(realHome, rel);
+    if (!existsSync(src)) continue; // env-var / host-brokered auth covers this.
+    const dest = join(throwawayHome, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest); // copy, not symlink — keep the real credential read-only.
+  }
+}
+
 /** Execute one trial in a fresh sandbox; returns its metric row + usage. */
 async function executeTrial<M extends Metrics>(
   spec: EvalSpec<M>,
@@ -817,11 +1249,61 @@ async function executeTrial<M extends Metrics>(
 ): Promise<{ row: M; usage: EvalUsage }> {
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-eval-"));
   try {
-    const { files, settings } = resolveHarness({
+    const resolved = resolveHarness({
       plugin: arm.plugin,
       settings: arm.settings,
       files: { ...spec.fixture, ...arm.files },
     });
+    const { files } = resolved;
+    const intercepts = arm.interceptTools ?? [];
+    const settings = withInterceptToolHook(resolved.settings, intercepts);
+    // The eval-injected overlay (VIGILES_INTERCEPT_TOOLS), if any.
+    const overlay =
+      intercepts.length > 0
+        ? { [INTERCEPT_TOOLS_ENV]: serializeIntercepts(intercepts) }
+        : undefined;
+    // Opt-in (default OFF): an ephemeral run env — a throwaway HOME under the
+    // trial's own temp cwd + a scrubbed, auth-only allowlist. The eval's injected
+    // keys (e.g. VIGILES_INTERCEPT_TOOLS) are allowlisted through so interception
+    // still works. When OFF, `env`/`replaceEnv` are exactly as before.
+    // Tool stubs on PATH (rung R2): write the fake binaries into a bin dir under
+    // this trial's cwd; it is PREPENDED to whatever PATH the run uses below, so
+    // the fakes win over the real binaries. Absent → no PATH change.
+    const stubs = spec.stubs ?? [];
+    const stubDir =
+      stubs.length > 0
+        ? stubBinDir(stubs, join(cwd, ".vigiles-stubs"))
+        : undefined;
+    const prependPath = (path: string | undefined): string =>
+      stubDir === undefined
+        ? (path ?? "")
+        : path === undefined || path === ""
+          ? stubDir
+          : `${stubDir}${delimiter}${path}`;
+    const ephemeral = spec.ephemeralEnv === true;
+    let env: Record<string, string> | undefined;
+    let replaceEnv = false;
+    if (ephemeral) {
+      const home = mkdtempSync(join(cwd, "home-"));
+      // Carry the harness's own auth FILE (local OAuth) into the fresh HOME —
+      // env-var/host-brokered auth is covered by ephemeralRunEnv's allowlist.
+      seedEphemeralHome(home, process.env.HOME ?? homedir());
+      env = ephemeralRunEnv(process.env, {
+        home,
+        allow: overlay ? Object.keys(overlay) : [],
+      });
+      if (overlay) Object.assign(env, overlay);
+      // ephemeralRunEnv passes PATH through; prepend the stub dir over it.
+      if (stubDir !== undefined) env.PATH = prependPath(env.PATH);
+      replaceEnv = true;
+    } else {
+      // Legacy overlay path: `spawnAgent` spreads `{ ...process.env, ...env }`, so
+      // set PATH in the overlay to the stub dir prepended over process.env.PATH.
+      env =
+        stubDir !== undefined
+          ? { ...overlay, PATH: prependPath(process.env.PATH) }
+          : overlay;
+    }
     writeFiles(cwd, files);
     const hasSettings = settings !== undefined;
     if (hasSettings) {
@@ -834,11 +1316,14 @@ async function executeTrial<M extends Metrics>(
       {
         task: spec.task,
         cwd,
-        model: cfg.model,
+        // A model comparison is a harness A/B: an arm may override the model.
+        model: arm.model ?? cfg.model,
         tools: cfg.tools,
         hasSettings,
         pluginDir: arm.pluginDir,
         timeoutMs: cfg.timeoutMs,
+        env,
+        replaceEnv,
       },
       { files, settings, trialIndex },
       runner,
@@ -971,6 +1456,9 @@ export async function runEvalWith<M extends Metrics>(
     cache: spec.cache ?? "off",
     cacheDir: spec.cacheDir ?? resolve(process.cwd(), ".vigiles", "eval-cache"),
   };
+  if (cfg.cache !== "off" && !isDatedModel(cfg.model)) {
+    warnFloatingModel(cfg.model);
+  }
   const retrying: AgentRunner = (a) =>
     runWithRetry(a, runner, retries, backoffMs);
 
@@ -1082,14 +1570,29 @@ export interface TriggerRateSpec {
   /** Did the behaviour fire on this run? e.g. `(t) => skillResolved(t, "x:y")`. */
   readonly fired: (trace: Trace) => boolean;
   /**
+   * Co-install these skill sources ALONGSIDE the skill-under-test so it competes
+   * for selection as it does in the real harness — the **whole-harness** tier.
+   * Each entry is a plugin dir (`skills/` or `.claude/skills/`) or a loose skills
+   * dir (`<name>/SKILL.md`); their skills are merged into one install under the
+   * under-test plugin's name (the under-test skill wins a name collision, so its
+   * `<name>:<skill>` id still matches `fired`).
+   *
+   * WHY: skill selection is competitive and Claude Code evicts the least-used
+   * skill descriptions under a context budget, so an ISOLATED trigger-rate (the
+   * default, `installSet` absent/empty) **overstates recall and understates
+   * false-positives**. Isolated is the cheap authoring loop; populate the set for
+   * a release gate. See `research/isolated-vs-whole-harness-eval.md`.
+   */
+  readonly installSet?: readonly string[];
+  /**
    * Replace each skill's BODY with a no-op stub (keeping its frontmatter — name +
-   * description) before running. Trigger-rate is decided by the frontmatter alone
-   * (the model selects a skill before its body loads), so stubbing the body can't
-   * change what's measured but stops the run from executing an expensive
-   * procedure once the skill fires — far cheaper, faster, side-effect-free. All
-   * skills' descriptions stay present, so the selection competition is faithful.
-   * Default false (off) for now; recommended `true` for trigger evals. See
-   * {@link stubSkillBody}.
+   * description). Trigger-rate is decided by the frontmatter ALONE (the model
+   * selects a skill before its body loads), so stubbing can't change what's
+   * measured — it just stops the run executing an expensive procedure once the
+   * skill fires. All descriptions stay present, so selection competition is
+   * faithful. **Defaults to `true`** here: testing a description never needs the
+   * body, so it's automated, not a knob you must remember. Set `false` only in the
+   * rare case you want the real body to run. See {@link stubSkillBody}.
    */
   readonly stubSkillBodies?: boolean;
   /**
@@ -1107,8 +1610,20 @@ export interface TriggerRateSpec {
   readonly minDistance?: number;
   /** Trials per prompt. Default 1. */
   readonly trials?: number;
-  /** Model alias. Default "haiku". */
+  /**
+   * Model alias/id. Default `"sonnet"` — the realistic selector most Claude Code
+   * users run. NOT haiku: trigger-rate is a *selection* measurement and haiku is a
+   * much weaker selector, so it under-reports recall (dogfooded: a skill scored
+   * 0.50 on haiku vs 0.90 on Sonnet). Override for a cheaper-but-pessimistic run.
+   */
   readonly model?: string;
+  /**
+   * Minimum model tier this eval may run on (haiku<sonnet<opus by family). The
+   * run **fails** if the resolved `model` is weaker — trigger-rate under-measures
+   * selection on a too-weak model, so this stops a cheap model from producing
+   * false-negative recall. Default `"sonnet"`. Lower it deliberately for a cheap run.
+   */
+  readonly minModel?: string;
   /** Tools the agent may use. Default: Read Edit Write Bash Skill. */
   readonly allowedTools?: readonly string[];
   /** Per-run timeout ms. Default 240000. */
@@ -1146,6 +1661,14 @@ export interface TriggerRateReport {
   readonly precision?: number;
   /** Per-prompt stats for the irrelevant set. Present with irrelevant prompts. */
   readonly perIrrelevant?: readonly PromptTriggerStat[];
+  /**
+   * Competitor skills co-installed via {@link TriggerRateSpec.installSet}. `0`
+   * (the default) means the skill was measured **ISOLATED** — so `rate` is an
+   * UPPER bound on real recall and `falsePositiveRate` a LOWER bound, because
+   * selection is competitive (a populated harness can evict or out-compete the
+   * description). A non-zero count is the whole-harness measurement.
+   */
+  readonly competitors: number;
 }
 
 /**
@@ -1333,27 +1856,169 @@ export function assertPromptDiversity(
  * be set. `packaged` is present only when vigiles built it, so the caller knows
  * to remove it afterward.
  */
+/** The dir holding `<name>/SKILL.md` for a source that may be a plugin (`skills/`
+ *  or `.claude/skills/`) or already a loose skills dir. */
+function collectSkillsSource(dir: string): string {
+  const abs = resolve(dir);
+  const pluginSkills = join(abs, "skills");
+  if (existsSync(pluginSkills)) return pluginSkills;
+  const ccSkills = join(abs, ".claude", "skills");
+  if (existsSync(ccSkills)) return ccSkills;
+  return abs;
+}
+
+/**
+ * Copy each `<name>/SKILL.md` skill from `src` into `skillsOut` (stubbing the body
+ * when asked); skip a skill whose name is already `present` so the under-test
+ * skill wins a collision. Returns how many were newly copied.
+ */
+function copySkillsInto(
+  src: string,
+  skillsOut: string,
+  stub: boolean,
+  present: Set<string>,
+): number {
+  const abs = resolve(src);
+  if (!existsSync(abs))
+    throw new Error(`installSet source not found: ${src} (resolved ${abs})`);
+  let copied = 0;
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    if (!entry.isDirectory() || present.has(entry.name)) continue;
+    const srcSkill = join(abs, entry.name, "SKILL.md");
+    if (!existsSync(srcSkill)) continue;
+    const destDir = join(skillsOut, entry.name);
+    if (stub) {
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(
+        join(destDir, "SKILL.md"),
+        stubSkillBody(readFileSync(srcSkill, "utf-8")),
+      );
+    } else {
+      cpSync(join(abs, entry.name), destDir, { recursive: true });
+    }
+    present.add(entry.name);
+    copied++;
+  }
+  return copied;
+}
+
+/**
+ * Build a combined plugin: the under-test skills PLUS every `installSet` source's
+ * skills, so the skill-under-test competes for selection as in the real harness.
+ * Named after the under-test plugin so `<name>:<skill>` ids still match; the
+ * under-test skills win a name collision. Returns the dir + `added` = how many
+ * installSet skills were merged in (excludes collisions). The report's
+ * `competitors` is derived separately from the FULL pool (see `countSkills`), so
+ * sibling skills already in the under-test source count too. Caller removes the
+ * dir. Pure (filesystem only).
+ */
+export function packageInstallSet(opts: {
+  underTestSrc: string;
+  name: string;
+  installSet: readonly string[];
+  stub: boolean;
+}): { dir: string; added: number } {
+  const root = mkdtempSync(join(tmpdir(), "vigiles-harness-"));
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: opts.name, version: "0.0.0" }, null, 2),
+    );
+    const skillsOut = join(root, "skills");
+    mkdirSync(skillsOut, { recursive: true });
+    const present = new Set<string>();
+    const underTest = copySkillsInto(
+      opts.underTestSrc,
+      skillsOut,
+      opts.stub,
+      present,
+    );
+    if (underTest === 0)
+      throw new Error(
+        `No <name>/SKILL.md skills under the skill-under-test source ${opts.underTestSrc}`,
+      );
+    let added = 0;
+    for (const src of opts.installSet)
+      added += copySkillsInto(
+        collectSkillsSource(src),
+        skillsOut,
+        opts.stub,
+        present,
+      );
+    return { dir: root, added };
+  } catch (e) {
+    rmSync(root, { recursive: true, force: true }); // don't leak the temp dir
+    throw e;
+  }
+}
+
+/** The under-test skills source + plugin name (the namespace `fired` matches). */
+function underTestSource(spec: TriggerRateSpec): { src: string; name: string } {
+  if (spec.skillsDir)
+    return { src: spec.skillsDir, name: "vigiles-loose-skills" };
+  if (spec.pluginDir)
+    return {
+      src: skillsDirOf(spec.pluginDir),
+      name: pluginName(spec.pluginDir) ?? "vigiles-loose-skills",
+    };
+  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
+}
+
+/** Number of `<name>/SKILL.md` skills installed in a plugin — the selection pool. */
+function countSkills(pluginDir: string): number {
+  const dir = skillsDirOf(pluginDir);
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true }))
+    if (e.isDirectory() && existsSync(join(dir, e.name, "SKILL.md"))) n++;
+  return n;
+}
+
 function resolveTriggerPluginDir(spec: TriggerRateSpec): {
   pluginDir: string;
   packaged?: string;
+  competitors: number;
 } {
   if (spec.pluginDir && spec.skillsDir)
     throw new Error(
       "measureTriggerRate: set `pluginDir` OR `skillsDir`, not both.",
     );
-  const stub = spec.stubSkillBodies ?? false;
-  if (spec.skillsDir) {
-    const packaged = packageSkillsDir(spec.skillsDir, { stub });
-    return { pluginDir: packaged, packaged };
-  }
-  if (spec.pluginDir) {
-    if (!stub) return { pluginDir: spec.pluginDir };
+  const stub = spec.stubSkillBodies ?? true; // trigger = frontmatter; body never needed
+  const installSet = spec.installSet ?? [];
+  let pluginDir: string;
+  let packaged: string | undefined;
+  if (installSet.length > 0) {
+    // Whole-harness tier: merge the under-test skills with the install set so
+    // selection is competitive (the realistic, differentiated measurement).
+    const { src, name } = underTestSource(spec);
+    ({ dir: pluginDir } = packageInstallSet({
+      underTestSrc: src,
+      name,
+      installSet,
+      stub,
+    }));
+    packaged = pluginDir;
+  } else if (spec.skillsDir) {
+    packaged = packageSkillsDir(spec.skillsDir, { stub });
+    pluginDir = packaged;
+  } else if (spec.pluginDir) {
     // Stub a real plugin: build a minimal plugin from its skills/ with bodies
     // stripped — keep the original plugin NAME so `<name>:<skill>` still matches.
-    const packaged = stubbedPluginDir(spec.pluginDir);
-    return { pluginDir: packaged, packaged };
+    packaged = stub ? stubbedPluginDir(spec.pluginDir) : undefined;
+    pluginDir = packaged ?? spec.pluginDir;
+  } else {
+    throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
   }
-  throw new Error("measureTriggerRate: provide `pluginDir` or `skillsDir`.");
+  // `competitors` is the REAL selection pressure: every OTHER skill installed in
+  // the resolved plugin (siblings already in the source + any installSet), not
+  // just the installSet delta — so a multi-skill plugin is never mislabeled
+  // "isolated". `max(0, …)` guards a 0-skill pool.
+  return {
+    pluginDir,
+    packaged,
+    competitors: Math.max(0, countSkills(pluginDir) - 1),
+  };
 }
 
 /** The per-run knobs a trigger set shares (everything but the prompt list). */
@@ -1434,10 +2099,26 @@ export async function measureTriggerRateWith(
     });
   }
 
-  const { pluginDir, packaged } = resolveTriggerPluginDir(spec);
+  // Model floor (default Sonnet): trigger-rate under-measures selection on a
+  // weaker model, so FAIL before spending a token rather than report a
+  // false-negative recall. The floor lives in the spec (`minModel`), not an env
+  // override — model choice is part of the measurement definition. Lower it
+  // deliberately for a cheap run.
+  const model = spec.model ?? "sonnet";
+  const minModel = spec.minModel ?? "sonnet";
+  if (belowModelFloor(model, minModel))
+    throw new Error(
+      `measureTriggerRate: model "${model}" is below the minimum "${minModel}" — ` +
+        "trigger-rate under-measures selection on a weaker model " +
+        "(raise the model, or lower `minModel` for a deliberately cheap run).",
+    );
+
+  const { pluginDir, packaged, competitors } = resolveTriggerPluginDir(spec);
   const cfg: TriggerRunConfig = {
     trials: spec.trials ?? 1,
-    model: spec.model ?? "haiku",
+    // Sonnet, not haiku: trigger-rate is a selection measurement and haiku
+    // under-selects, producing false-negative recall (see TriggerRateSpec.model).
+    model,
     tools: spec.allowedTools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
     timeoutMs: spec.timeoutMs ?? 240000,
     spacing: (spec.spacingSec ?? 4) * 1000,
@@ -1451,6 +2132,7 @@ export async function measureTriggerRateWith(
       rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
       n: relevant.n,
       perPrompt: relevant.perPrompt,
+      competitors,
     };
     if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
@@ -1504,5 +2186,13 @@ export function formatTriggerRateReport(report: TriggerRateReport): string {
       );
     }
   }
+  // Honest labelling: an isolated run measures the skill alone, with no competing
+  // skills to evict or out-compete its description — so recall is an UPPER bound
+  // and false-positive a LOWER bound. Say so, or point at the whole-harness count.
+  lines.push(
+    report.competitors > 0
+      ? `whole-harness: measured against ${String(report.competitors)} competing skill(s)`
+      : "isolated: no competing skills — recall is an upper bound, false-positive a lower bound (populate `installSet` for a release-gate measurement)",
+  );
   return lines.join("\n");
 }

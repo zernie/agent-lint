@@ -27,10 +27,10 @@ deterministic layer for the harness: it **lints** the references your instructio
 files make and **tests** that your hooks and skills actually fire. Two independent
 pillars — adopt either, or both:
 
-|       | Pillar                          | What it does                                                                                                                                                                                                |
-| ----- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **①** | **Lint your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md) |
-| **②** | **Test your harness**           | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key) before you pay for an eval. → [guide](docs/harness-testing.md)                     |
+|       | Pillar                          | What it does                                                                                                                                                                                                                                                              |
+| ----- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **①** | **Lint your instruction files** | Every linter rule, file path, script, and code symbol your CLAUDE.md cites is checked against reality, so stale references can't silently mislead the agent. → [guide](docs/verifying-instruction-files.md)                                                               |
+| **②** | **Test your harness**           | Your hooks and skills are code — vigiles tests they actually fire, **deterministically and free** (no model, no API key); and when a question _does_ need a real-model eval, it runs on your **Claude subscription**, not metered API. → [guide](docs/harness-testing.md) |
 
 Neither pillar depends on the other — pick the one that hurts today. **Works with
 Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) behind a five-port
@@ -93,10 +93,42 @@ assert(r.blocked); // a red ✗ here means your hook silently lets it through
 ```
 
 Three tiers, cheapest first: **`runHook`** (a hook's logic), **`runHarnessTest`**
-(the real agent CLI against a scripted mock model), **`runEval`** (the real model
-A/B with a significance gate). **Testing a skill?** `measureTriggerRate` checks
-its description actually **fires** across varied prompts (recall) without
-hijacking unrelated ones (precision). **[Full guide →](docs/harness-testing.md)**
+(the real agent CLI against a scripted mock model), and the real-model scored tier
+(**`measure`** / **`runEval`**). **Testing a skill?** Two questions, both covered:
+does its description **fire** (`measureTriggerRate` — recall across varied prompts
+without hijacking unrelated ones, precision), **and** does its guidance actually
+**work**. For "is this exact skill any good?" score the output directly —
+`measure({ checks: [judged(rubric)] })` + `assertRates` (the **absolute** oracle,
+what promptfoo/DeepEval lead with; no on/off baseline needed). When you need the
+**relative** lift over no-skill — regression, or proving the change isn't noise —
+A/B it on-vs-off with `runEval` + `assertSignificant`. Description _and_ behavior,
+not just one. **Need a safety property** — that the agent
+**didn't** push to the wrong branch or call a paid API? `notTool` + `interceptTools`
+intercept the tool in the real hook layer, so the attempt is caught and the side
+effect never happens. **[Full guide →](docs/harness-testing.md)** · vigiles runs
+foreign code (and a real model) safely by default — **[safety model →](docs/safety.md)**
+
+Most of what real plugins do is testable cheaply — fire / trigger / contract /
+safety, plus **record-replay** for the tool/API results a skill consumes (recorded
+once from the real tool, replayed deterministically — no live service, no Docker).
+That covers ~90%+ of real plugin surface on your subscription; the rare case that
+needs a real browser or database **composes with Docker** rather than us
+reinventing the sandbox. **[What we test, how →](research/eval-coverage-and-isolation.md)**
+
+**Affordable by design — the eval you can actually run.** Almost nobody evals
+their harness, because the usual tools (promptfoo, DeepEval, …) hit the API SDK
+and bill **per token on every run**. vigiles inverts that: most questions are
+answered with **no model at all** (free, every commit), and when you do reach for
+a real-model eval, vigiles drives your `claude` CLI — so it runs on the **Pro/Max
+subscription you already pay for**, not metered API billing. CI runs only the free
+deterministic tiers; you run the real-model eval where the subscription already is
+— a Claude Code session or locally — when it's worth it, not on every PR.
+
+This affordability story is **ToS-clean**: vigiles drives _your own_ `claude` CLI
+to test _your own_ harness on _your own_ subscription — the same thing you do when
+you run Claude Code. (The Claude Agent SDK's ToS restricts _productizing_ claude.ai
+login/limits in a third-party offering; running your own tests on your own sub is
+exactly the supported posture, not that.)
 
 ## Quick start
 

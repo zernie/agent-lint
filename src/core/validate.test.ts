@@ -423,10 +423,13 @@ describe("loadConfig", () => {
     assert.deepEqual(config.ruleMarkers, ["headings", "checkboxes"]);
     assert.deepEqual(config.rules, {
       "require-spec": "warn",
-      "require-skill-spec": "warn",
+      // deprecated → default off
+      "require-skill-spec": false,
       integrity: "warn",
       coverage: false,
-      "untested-surface": "warn",
+      "untested-skill": "warn",
+      "untested-agent": "warn",
+      "untested-hook": "warn",
       "unmarked-refs": "warn",
     });
   });

@@ -11,6 +11,8 @@ import assert from "node:assert/strict";
 
 import {
   tool,
+  toolWith,
+  notTool,
   skill,
   output,
   hookFired,
@@ -25,6 +27,9 @@ import {
   cost,
   latency,
   tokens,
+  inputTokens,
+  outputTokens,
+  cacheTokens,
   evalChecks,
   assertChecks,
   type Check,
@@ -85,6 +90,76 @@ test("tool(): pass when used, actionable message + score when not", () => {
   assert.match(r2.message, /expected the agent to use tool "Bash"/);
   assert.match(r2.message, /\[Read, Edit\]/); // names the tools it DID use
   assert.deepEqual(tool("Bash").toJSON(), { kind: "tool", name: "Bash" });
+});
+
+test("toolWith(): asserts on a tool call's arguments (exact + regex + dot-path)", () => {
+  const t = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin feature" } }),
+      toolCall("Write", {
+        input: { body: { prompt: "a cat, watercolor STYLE" } },
+      }),
+    ],
+  });
+  // regex "contains" over a nested dot-path
+  assert.equal(
+    toolWith("Write", { "body.prompt": /STYLE$/ }).eval(t).pass,
+    true,
+  );
+  // exact match on a string field
+  assert.equal(
+    toolWith("Bash", { command: "git push origin feature" }).eval(t).pass,
+    true,
+  );
+  // tool used, but never with these args → actionable message naming what it saw
+  const wrongArgs = toolWith("Bash", { command: /main/ }).eval(t);
+  assert.equal(wrongArgs.pass, false);
+  assert.match(wrongArgs.message, /never with command=\/main\//);
+  assert.match(wrongArgs.message, /git push origin feature/);
+  // tool not used at all → distinct from wrong-args
+  const notUsed = toolWith("Read", { path: "x" }).eval(t);
+  assert.equal(notUsed.pass, false);
+  assert.match(notUsed.message, /expected the agent to use tool "Read"/);
+  // serializable (RegExp → string form)
+  assert.deepEqual(toolWith("Bash", { command: /main/i }).toJSON(), {
+    kind: "toolWith",
+    name: "Bash",
+    args: { command: "/main/i" },
+  });
+});
+
+test("notTool(): the safety/negative assertion, with and without arg-scoping", () => {
+  const pushedMain = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin main" } }),
+    ],
+  });
+  const pushedFeature = makeTrace({
+    toolCalls: [
+      toolCall("Bash", { input: { command: "git push origin feature" } }),
+    ],
+  });
+
+  // unscoped: forbids the tool outright
+  assert.equal(notTool("WebFetch").eval(pushedMain).pass, true); // never used → ok
+  const usedAtAll = notTool("Bash").eval(pushedMain);
+  assert.equal(usedAtAll.pass, false);
+  assert.match(usedAtAll.message, /expected the agent NOT to use "Bash"/);
+
+  // arg-scoped: "did not push to main" allows pushing elsewhere
+  const forbidMain = notTool("Bash", { command: /push origin main\b/ });
+  assert.equal(forbidMain.eval(pushedFeature).pass, true); // feature push is fine
+  const tripped = forbidMain.eval(pushedMain);
+  assert.equal(tripped.pass, false);
+  assert.match(tripped.message, /NOT to use "Bash" with command=/);
+  assert.match(tripped.message, /git push origin main/);
+
+  assert.deepEqual(notTool("Bash").toJSON(), { kind: "notTool", name: "Bash" });
+  assert.deepEqual(notTool("Bash", { command: /main/ }).toJSON(), {
+    kind: "notTool",
+    name: "Bash",
+    args: { command: "/main/" },
+  });
 });
 
 test("skill(): resolves on a non-error Skill call with the right id", () => {
@@ -274,6 +349,8 @@ test("cost / latency / tokens checks over a run's usage", () => {
       durationMs: 1500,
       inputTokens: 800,
       outputTokens: 200,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
     },
   };
   assert.equal(cost({ maxUsd: 0.05 }).eval(run).pass, true);
@@ -289,6 +366,134 @@ test("cost / latency / tokens checks over a run's usage", () => {
   assert.deepEqual(cost({ maxUsd: 0.1 }).toJSON(), {
     kind: "cost",
     maxUsd: 0.1,
+  });
+});
+
+test("inputTokens check: pass/fail, score, message, toJSON", () => {
+  const run = {
+    usage: {
+      costUsd: 0.01,
+      durationMs: 500,
+      inputTokens: 800,
+      outputTokens: 200,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  };
+  // passing case
+  assert.equal(inputTokens({ max: 800 }).eval(run).pass, true);
+  assert.equal(inputTokens({ max: 800 }).eval(run).score, 1);
+  assert.match(
+    inputTokens({ max: 800 }).eval(run).message,
+    /800 input tokens ≤ 800/,
+  );
+  // failing case
+  assert.equal(inputTokens({ max: 799 }).eval(run).pass, false);
+  assert.equal(inputTokens({ max: 799 }).eval(run).score, 0);
+  assert.match(
+    inputTokens({ max: 799 }).eval(run).message,
+    /expected ≤ 799 input tokens, got 800/,
+  );
+  // toJSON round-trip
+  assert.deepEqual(inputTokens({ max: 500 }).toJSON(), {
+    kind: "inputTokens",
+    max: 500,
+  });
+});
+
+test("outputTokens check: pass/fail, score, message, toJSON", () => {
+  const run = {
+    usage: {
+      costUsd: 0.01,
+      durationMs: 500,
+      inputTokens: 800,
+      outputTokens: 200,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  };
+  // passing case
+  assert.equal(outputTokens({ max: 200 }).eval(run).pass, true);
+  assert.equal(outputTokens({ max: 200 }).eval(run).score, 1);
+  assert.match(
+    outputTokens({ max: 200 }).eval(run).message,
+    /200 output tokens ≤ 200/,
+  );
+  // failing case
+  assert.equal(outputTokens({ max: 199 }).eval(run).pass, false);
+  assert.equal(outputTokens({ max: 199 }).eval(run).score, 0);
+  assert.match(
+    outputTokens({ max: 199 }).eval(run).message,
+    /expected ≤ 199 output tokens, got 200/,
+  );
+  // toJSON round-trip
+  assert.deepEqual(outputTokens({ max: 150 }).toJSON(), {
+    kind: "outputTokens",
+    max: 150,
+  });
+});
+
+test("cacheTokens check: maxCreation-only, maxRead-only, both, pass-within-bounds, toJSON", () => {
+  const run = {
+    usage: {
+      costUsd: 0.02,
+      durationMs: 600,
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationTokens: 400,
+      cacheReadTokens: 300,
+    },
+  };
+  // maxCreation-only: pass
+  assert.equal(cacheTokens({ maxCreation: 400 }).eval(run).pass, true);
+  assert.equal(cacheTokens({ maxCreation: 400 }).eval(run).score, 1);
+  // maxCreation-only: fail
+  assert.equal(cacheTokens({ maxCreation: 399 }).eval(run).pass, false);
+  assert.equal(cacheTokens({ maxCreation: 399 }).eval(run).score, 0);
+  assert.match(
+    cacheTokens({ maxCreation: 399 }).eval(run).message,
+    /expected ≤ 399 cache-creation tokens, got 400/,
+  );
+  // maxRead-only: pass
+  assert.equal(cacheTokens({ maxRead: 300 }).eval(run).pass, true);
+  // maxRead-only: fail
+  assert.equal(cacheTokens({ maxRead: 299 }).eval(run).pass, false);
+  assert.match(
+    cacheTokens({ maxRead: 299 }).eval(run).message,
+    /expected ≤ 299 cache-read tokens, got 300/,
+  );
+  // both constraints: pass when both within bounds
+  assert.equal(
+    cacheTokens({ maxCreation: 400, maxRead: 300 }).eval(run).pass,
+    true,
+  );
+  assert.match(
+    cacheTokens({ maxCreation: 400, maxRead: 300 }).eval(run).message,
+    /cache tokens within bounds/,
+  );
+  // both constraints: creation fails first
+  assert.equal(
+    cacheTokens({ maxCreation: 399, maxRead: 300 }).eval(run).pass,
+    false,
+  );
+  assert.match(
+    cacheTokens({ maxCreation: 399, maxRead: 300 }).eval(run).message,
+    /cache-creation/,
+  );
+  // toJSON round-trips both optional fields
+  assert.deepEqual(cacheTokens({ maxCreation: 500, maxRead: 200 }).toJSON(), {
+    kind: "cacheTokens",
+    maxCreation: 500,
+    maxRead: 200,
+  });
+  // toJSON with only one field set
+  assert.deepEqual(cacheTokens({ maxCreation: 500 }).toJSON(), {
+    kind: "cacheTokens",
+    maxCreation: 500,
+  });
+  assert.deepEqual(cacheTokens({ maxRead: 200 }).toJSON(), {
+    kind: "cacheTokens",
+    maxRead: 200,
   });
 });
 

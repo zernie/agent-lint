@@ -48,7 +48,7 @@ which pillars, CI, and the plugin. Run by an agent, in CI, or with piped input
 | `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
 | `--no-gha`               | Skip wiring CI                                                   |
 | `--no-plugin`            | Skip installing the Claude Code plugin                           |
-| `--strict`               | Set `require-spec` / `require-skill-spec` to `"error"`           |
+| `--strict`               | Set `require-spec` to `"error"`                                  |
 | `--target=AGENTS.md`     | Create a bare spec for one file (Lint pillar only)               |
 
 Passing a single positive pillar flag selects only it (`--lint` = the Lint
@@ -105,7 +105,7 @@ re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
 per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
 forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
-count, and the loader's dangling-ref / surface warnings. `--json` for CI.
+counts, and the loader's dangling-ref / surface warnings. `--json` for CI.
 
 `scan` reports **harness-specific structure** (plugin layout, hook resolution),
 so it auto-detects the harness — printing the detected one and warning when a repo
@@ -300,10 +300,12 @@ want compile-on-edit.
 | Rule                                                | Default  | What it checks                                                                  |
 | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
 | [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `"warn"` | Every SKILL.md has a `.spec.ts`                                                 |
+| [`require-skill-spec`](rules/require-skill-spec.md) | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead      |
 | [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
 | [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                       |
-| [`untested-surface`](rules/untested-surface.md)     | `"warn"` | Every skill/agent/hook has a test or eval                                       |
+| [`untested-skill`](rules/untested-skill.md)         | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                              |
+| [`untested-agent`](rules/untested-agent.md)         | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                        |
+| [`untested-hook`](rules/untested-hook.md)           | `"warn"` | Every file-backed hook script ships with a test or eval                         |
 | [`unmarked-refs`](rules/unmarked-refs.md)           | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
 
 Configure in `.vigilesrc.json`:

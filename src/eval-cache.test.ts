@@ -4,7 +4,7 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -13,6 +13,8 @@ import {
   writeCache,
   snapshotDir,
   restoreDir,
+  hashDir,
+  CACHE_FORMAT_VERSION,
   type CacheKeyInput,
 } from "./eval-cache.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
@@ -40,23 +42,138 @@ test("cacheKey is stable and order-independent for object inputs", () => {
   assert.equal(k1, k2);
 });
 
-test("cacheKey changes when any model-affecting input changes", () => {
+test("cacheKey changes when ANY key part changes (every field + version axes)", () => {
   const base = cacheKey(baseKey);
-  assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }));
-  assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }));
-  assert.notEqual(base, cacheKey({ ...baseKey, files: { "a.txt": "y" } }));
-  // tool order is significant (arrays keep order)
-  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Edit", "Read"] }));
+  // one assertion per CacheKeyInput field — a regression that drops a field from
+  // the key surfaces here.
+  assert.notEqual(base, cacheKey({ ...baseKey, trialIndex: 1 }), "trialIndex");
+  assert.notEqual(base, cacheKey({ ...baseKey, task: "other" }), "task");
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, files: { "a.txt": "y" } }),
+    "files",
+  );
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, settings: { hooks: { a: 1 } } }),
+    "settings",
+  );
+  assert.notEqual(base, cacheKey({ ...baseKey, env: { X: "1" } }), "env");
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, pluginDirHash: "abcd" }),
+    "pluginDirHash",
+  );
+  assert.notEqual(base, cacheKey({ ...baseKey, tools: ["Read"] }), "tool set");
+
+  // Version axes — different VERSIONS of the model and the harness must each
+  // produce a different key (a stale replay across either would be wrong):
+  assert.notEqual(
+    base,
+    cacheKey({ ...baseKey, model: "opus" }),
+    "model family",
+  );
+  assert.notEqual(
+    cacheKey({ ...baseKey, model: "claude-sonnet-4-6" }),
+    cacheKey({ ...baseKey, model: "claude-sonnet-4-5-20250101" }),
+    "model snapshot version",
+  );
+  assert.notEqual(
+    cacheKey({ ...baseKey, harnessVersion: "2.1" }),
+    cacheKey({ ...baseKey, harnessVersion: "2.2" }),
+    "harness minor version",
+  );
 });
 
-test("readCache returns null on miss and on malformed records", () => {
+test("cacheKey treats the tool list as a SET (order-insensitive)", () => {
+  // logically a set — ["Read","Edit"] and ["Edit","Read"] must hash the same,
+  // or you get phantom cache misses on a reordered allowlist.
+  assert.equal(
+    cacheKey({ ...baseKey, tools: ["Read", "Edit"] }),
+    cacheKey({ ...baseKey, tools: ["Edit", "Read"] }),
+  );
+});
+
+test("cacheKey EXCLUDES the throwaway ephemeral HOME/TMPDIR (per-run noise)", () => {
+  // The opt-in ephemeral run env points HOME/TMPDIR at a fresh random dir every
+  // run; folding them into the key would make every run unique → the cache could
+  // NEVER hit. Two inputs differing ONLY in HOME/TMPDIR must hash the same.
+  const a = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-aaaa", TMPDIR: "/tmp/home-aaaa" },
+  });
+  const b = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-bbbb", TMPDIR: "/tmp/home-bbbb" },
+  });
+  assert.equal(a, b, "HOME/TMPDIR are per-run noise, excluded from the key");
+  // And an env that is ONLY HOME/TMPDIR keys identically to no env at all (the
+  // residual is empty → undefined), so a non-ephemeral run's key is unchanged.
+  assert.equal(a, cacheKey(baseKey));
+});
+
+test("cacheKey env exclusion is SURGICAL — a real model-affecting var still differs", () => {
+  // Excluding HOME/TMPDIR must not become a blanket env drop: an intercept config
+  // (or any other model-affecting var) alongside the throwaway HOME still partitions.
+  const a = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-aaaa", VIGILES_INTERCEPT_TOOLS: "Bash" },
+  });
+  const b = cacheKey({
+    ...baseKey,
+    env: { HOME: "/tmp/home-bbbb", VIGILES_INTERCEPT_TOOLS: "Read" },
+  });
+  assert.notEqual(a, b, "the model-affecting var must still change the key");
+});
+
+test("cacheKey keys on pluginDirHash (a native --plugin-dir's contents)", () => {
+  const none = cacheKey(baseKey);
+  const h1 = cacheKey({ ...baseKey, pluginDirHash: "aaaa" });
+  const h2 = cacheKey({ ...baseKey, pluginDirHash: "bbbb" });
+  assert.notEqual(none, h1); // adding a plugin dir changes the key
+  assert.notEqual(h1, h2); // a different dir digest changes it
+});
+
+test("CACHE_FORMAT_VERSION is a salted integer", () => {
+  assert.equal(typeof CACHE_FORMAT_VERSION, "number");
+});
+
+test("hashDir digests content, sensitive to edit/add, path-aware, skips junk dirs", () => {
+  const dir = makeTmpDir("plugin");
+  mkdirSync(join(dir, "skills", "foo"), { recursive: true });
+  writeFileSync(join(dir, "skills", "foo", "SKILL.md"), "body");
+  const h1 = hashDir(dir);
+  assert.equal(hashDir(dir), h1); // stable: same content → same hash
+
+  writeFileSync(join(dir, "skills", "foo", "SKILL.md"), "body changed");
+  const h2 = hashDir(dir);
+  assert.notEqual(h1, h2); // edit → different
+
+  writeFileSync(join(dir, "skills", "foo", "extra.md"), "x");
+  assert.notEqual(h2, hashDir(dir)); // add → different
+
+  // node_modules / .git are skipped — adding one doesn't change the digest
+  const h3 = hashDir(dir);
+  mkdirSync(join(dir, "node_modules"), { recursive: true });
+  writeFileSync(join(dir, "node_modules", "junk.js"), "lots");
+  assert.equal(hashDir(dir), h3);
+
+  // path-aware: same content at a different path → different digest
+  writeFileSync(join(dir, "skills", "foo", "renamed.md"), "x");
+  rmSync(join(dir, "skills", "foo", "extra.md"));
+  assert.notEqual(hashDir(dir), h3);
+  cleanupTmpDir(dir);
+});
+
+test("readCache returns null on a miss but THROWS on a corrupt record", () => {
   const dir = makeTmpDir("cache");
   try {
     const key = cacheKey(baseKey);
-    assert.equal(readCache(dir, key), null); // miss
+    assert.equal(readCache(dir, key), null); // miss — normal, run proceeds
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${key}.json`), "{ not json");
-    assert.equal(readCache(dir, key), null); // malformed
+    // a broken cassette must fail loud, not silently re-run (CI gate surfaces it)
+    assert.throws(() => readCache(dir, key), /corrupt record/);
   } finally {
     cleanupTmpDir(dir);
   }

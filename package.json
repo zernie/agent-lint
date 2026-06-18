@@ -9,31 +9,20 @@
   "types": "./dist/core/spec.d.ts",
   "exports": {
     ".": "./dist/core/spec.js",
+    "./spec": "./dist/core/spec.js",
+    "./linting": "./dist/linting.js",
+    "./testing": "./dist/testing.js",
     "./unit": "./dist/unit.js",
     "./integration": "./dist/integration.js",
     "./e2e": "./dist/e2e.js",
-    "./linting": "./dist/linting.js",
-    "./testing": "./dist/testing.js",
     "./claude-code": "./dist/claude-code.js",
     "./codex": "./dist/codex.js",
     "./adapter": "./dist/adapter.js",
-    "./spec": "./dist/core/spec.js",
-    "./compile": "./dist/core/compile.js",
-    "./linters": "./dist/core/linters.js",
-    "./eval": "./dist/eval.js",
-    "./harness-test": "./dist/harness-test.js",
-    "./harness-assert": "./dist/harness-assert.js",
-    "./run-hook": "./dist/run-hook.js",
-    "./plugin-loader": "./dist/adapters/claude-code/plugin-loader.js",
-    "./mcp": "./dist/core/mcp.js",
-    "./judge": "./dist/judge.js",
-    "./mock-model": "./dist/mock-model.js",
     "./vitest": {
       "types": "./dist/vitest.d.mts",
       "default": "./dist/vitest.mjs"
     },
-    "./jest": "./dist/jest.js",
-    "./check": "./dist/check.js"
+    "./jest": "./dist/jest.js"
   },
   "files": [
     "dist/**/*.js",
@@ -67,10 +56,15 @@
     "test:vitest": "npm run build && vitest run --project runners",
     "test:jest": "npm run build && jest",
     "test:types": "npm run build && tsc --noEmit -p test/types/tsconfig.json",
-    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs"
+    "demo:plugin": "npm run build && node examples/plugin-test-demo.mjs",
+    "api:report": "npm run build && node scripts/api-extractor.mjs --local",
+    "api:check": "npm run build && node scripts/api-extractor.mjs",
+    "docs:api": "npm run api:report && api-documenter markdown -i temp -o api-reference"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@microsoft/api-documenter": "^7.30.7",
+    "@microsoft/api-extractor": "^7.58.9",
     "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^20.19.39",

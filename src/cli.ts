@@ -36,8 +36,10 @@ import type {
   VigilesConfig,
   CoverageThresholds,
   TestCoverageConfig,
+  RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
+import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
 import {
@@ -82,6 +84,11 @@ import {
   setActiveAgent,
   clearActiveAgent,
 } from "./adapters/claude-code/agent-runtime.js";
+import {
+  interceptHookDecision,
+  parseIntercepts,
+  INTERCEPT_TOOLS_ENV,
+} from "./tool-intercept.js";
 import {
   verifySymbolRefs,
   collectRefIssues,
@@ -1203,8 +1210,8 @@ async function runLint(
   }
 
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
-  // eval. Warning by default (a nudge, exit 0); set rules.untested-surface to
-  // "error" to gate CI. See src/test-coverage.ts and docs/rules/untested-surface.md.
+  // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
+  // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   const untested = checkUntestedSurfaces(config, silent);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
@@ -1216,6 +1223,21 @@ async function runLint(
   if (!silent) {
     for (const line of formatDocRefReport(docRefReport).split("\n")) {
       console.log(`  ${line}`);
+    }
+  }
+  // Per-line GitHub annotations for each broken doc ref — each carries file+line,
+  // so GitHub renders it INLINE on the PR diff (not just in the summary blob).
+  // Previously this check reported to stdout only; the inline/spec checks already
+  // annotate per-line, so this closes the gap that left doc-ref findings invisible
+  // on the PR. CI-only (isGitHubActions); skipped under --json/--summary.
+  if (isGitHubActions() && !silent) {
+    for (const e of docRefReport.errors) {
+      ghAnnotate(
+        "error",
+        `${e.kind}("${e.value}") — ${e.message}`,
+        e.file,
+        e.line,
+      );
     }
   }
 
@@ -2380,22 +2402,39 @@ function checkIntegrityForFiles(
 }
 
 /**
- * Apply the `untested-surface` rule: find skills/agents/hooks with no test or
- * eval (see src/test-coverage.ts). Returns the raw untested count plus the
- * severity-gated error count — "warn" prints but never fails CI (errors=0),
- * "error" fails (exit 2), mirroring the integrity check.
+ * Apply the per-kind `untested-skill` / `untested-agent` / `untested-hook` rules:
+ * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
+ * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
+ * "warn" prints but never fails CI; "error" fails (exit 2). Returns the raw
+ * untested count plus the severity-gated error count.
  */
 function checkUntestedSurfaces(
   config: VigilesConfig | undefined,
   silent: boolean,
 ): { untested: number; errors: number } {
-  const severity = ruleSeverity(config?.rules["untested-surface"]);
-  if (!severity) return { untested: 0, errors: 0 };
+  const rules = config?.rules;
+  const skillSev = ruleSeverity(rules?.["untested-skill"]);
+  const agentSev = ruleSeverity(rules?.["untested-agent"]);
+  const hookSev = ruleSeverity(rules?.["untested-hook"]);
+  if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
+  const sevFor = (kind: SurfaceKind): RuleSeverity =>
+    kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev;
 
-  const opts = ruleOptions<TestCoverageConfig>(
-    config?.rules["untested-surface"],
-  );
-  const report = findUntestedSurfaces({ basePath: process.cwd(), ...opts });
+  // Test-discovery options (testGlobs/exclude) are shared; merge them from
+  // whichever of the three rules carries them.
+  const opts: TestCoverageConfig = {
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-agent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
+  };
+  const report = findUntestedSurfaces({
+    basePath: process.cwd(),
+    skills: skillSev !== false,
+    agents: agentSev !== false,
+    hooks: hookSev !== false,
+    testGlobs: opts.testGlobs,
+    exclude: opts.exclude,
+  });
 
   if (!silent) {
     console.log("\nUntested surfaces:\n");
@@ -2404,7 +2443,7 @@ function checkUntestedSurfaces(
     }
     for (const s of report.untested) {
       ghAnnotate(
-        severity === "error" ? "error" : "warning",
+        sevFor(s.kind) === "error" ? "error" : "warning",
         `${s.kind} ${s.path} ships without a test or eval`,
         s.path,
       );
@@ -2413,7 +2452,7 @@ function checkUntestedSurfaces(
 
   return {
     untested: report.untested.length,
-    errors: severity === "error" ? report.untested.length : 0,
+    errors: report.untested.filter((s) => sevFor(s.kind) === "error").length,
   };
 }
 
@@ -2645,6 +2684,22 @@ function handleRunScripts(
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
 
   const files = discoverScripts(restArgs, defaultGlob, cwd);
+
+  // `--min=N`: a CI gate asserts at least N scripts actually RAN — so a bad path,
+  // a renamed file, or a glob that matched nothing fails LOUD instead of passing
+  // green with zero evals executed. Default 0 (off) keeps local runs ergonomic.
+  const minFlag = args.find((a) => a.startsWith("--min="));
+  const minRequired = minFlag
+    ? Math.max(0, Number.parseInt(minFlag.split("=")[1] ?? "", 10) || 0)
+    : 0;
+  if (files.length < minRequired) {
+    console.error(
+      `✗ vigiles ${kind}: --min=${String(minRequired)} but only ${String(files.length)} ${kind} file(s) matched — ` +
+        "evals never executed (check the paths/globs, or that the run was reached).",
+    );
+    process.exit(1);
+  }
+
   if (files.length === 0) {
     console.log(`No ${defaultGlob} files found.`);
     return;
@@ -2659,6 +2714,10 @@ function handleRunScripts(
     );
   }
 
+  // `--trials=N` (a run knob: cost/precision, doesn't change WHAT is measured) is
+  // forwarded to scripts via env. The MODEL is deliberately NOT a CLI/env knob —
+  // it's part of the measurement definition, so it belongs in the spec
+  // (`model` / `minModel`), version-controlled, not a hidden override.
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
   const env: NodeJS.ProcessEnv = {};
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
@@ -2696,7 +2755,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
-    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N)",
+    "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
   );
   console.log("");
   console.log("Examples:");
@@ -2835,7 +2894,7 @@ function skillStartCommand(target: string | undefined): void {
  * PreToolUse-hook entrypoint: enforce the active subagent's allowed-tools
  * contract. Reads the tool event on stdin, parses the active agent's compiled
  * `.md` tool rail, and blocks (exit 2 + reason on stderr) any tool outside it —
- * the deterministic boundary `tools:` alone can't provide (Claude Code #54898).
+ * the deterministic boundary `tools:` alone can't provide (Claude Code #4740/#21460, SDK #172).
  */
 function agentHookCommand(): void {
   let raw = "";
@@ -2854,6 +2913,30 @@ function agentHookCommand(): void {
   const decision = evaluatePreToolUse(process.cwd(), tool);
   if (!decision.allow) {
     console.error(decision.message);
+    process.exit(2);
+  }
+}
+
+/**
+ * `vigiles intercept-tool-hook` — the PreToolUse interception hook for the
+ * tool-call spy. Reads the intercept list from `VIGILES_INTERCEPT_TOOLS`, decides
+ * whether the called tool should be intercepted, and if so denies the real
+ * execution (exit 2) with a block message — the call is intercepted (prevented),
+ * NOT executed. Allowing (return) lets the tool run for real. The model still
+ * emits the `tool_use`, so its arguments land in the Trace for `toolWith` /
+ * `notTool` to assert on. See src/tool-intercept.ts.
+ */
+function interceptToolHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  const intercepts = parseIntercepts(process.env[INTERCEPT_TOOLS_ENV] ?? "");
+  const decision = interceptHookDecision(raw, intercepts);
+  if (decision.intercept) {
+    console.error(decision.denyReason);
     process.exit(2);
   }
 }
@@ -2891,6 +2974,9 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "agent-hook":
       agentHookCommand();
+      return true;
+    case "intercept-tool-hook":
+      interceptToolHookCommand();
       return true;
     case "action-hook":
       actionHookCommand();
