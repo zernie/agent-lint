@@ -1,7 +1,32 @@
 {
   "name": "vigiles",
   "version": "0.0.0-semantically-released",
-  "description": "Compile .spec.ts files to instruction files (CLAUDE.md, AGENTS.md) with linter cross-referencing",
+  "description": "Lint & test the harness your AI agent runs on — verify the references in your CLAUDE.md / AGENTS.md and test that your hooks and skills actually work.",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "agents",
+    "agentic",
+    "ai",
+    "llm",
+    "harness",
+    "hooks",
+    "skills",
+    "claude",
+    "agents-md",
+    "eval",
+    "testing",
+    "linter"
+  ],
+  "homepage": "https://github.com/zernie/vigiles#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zernie/vigiles.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zernie/vigiles/issues"
+  },
+  "license": "MIT",
   "bin": {
     "vigiles": "dist/cli.js"
   },
