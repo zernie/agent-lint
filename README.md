@@ -30,8 +30,8 @@ deterministic layer for it, and does two independent things — adopt either, or
 | **🧪 Test** | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
 
 Pick the one that hurts today. **Works with Claude Code and Codex**
-([`vigiles/codex`](docs/harnesses.md)) behind a five-port adapter;
-[custom adapters welcome](docs/authoring-an-adapter.md).
+([`vigiles/codex`](docs/harnesses.md)), and you can
+[teach it your own harness](docs/authoring-an-adapter.md).
 
 ## Quick start
 
