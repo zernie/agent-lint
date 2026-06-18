@@ -97,6 +97,27 @@ test("scanPlugin reports skills with description + user-invoked flags", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
+  // Regression: wshobson/agents skills commonly write `description: >` / `>-`
+  // folded blocks. The naive regex captured only the indicator, mislabeling a
+  // richly-described skill as "no usable description".
+  const dir = makeTmpDir("scan-blockscalar");
+  write(
+    dir,
+    "skills/folded/SKILL.md",
+    "---\nname: folded\ndescription: >\n  A folded multi-line description that is plenty long enough\n  to be a usable trigger surface for the model.\n---\n# folded\n",
+  );
+  write(
+    dir,
+    "skills/chomped/SKILL.md",
+    "---\nname: chomped\ndescription: >-\n  Another folded description, chomped variant, also well over\n  the twenty character minimum.\n---\n# chomped\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skills.length, 2);
+  assert.ok(r.skills.every((s) => s.hasDescription));
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
@@ -162,14 +183,22 @@ test("formatScanReport flags the missing hook + the no-description skill", () =>
   cleanupTmpDir(dir);
 });
 
-test("scanPlugin surfaces a dangling intra-plugin reference as a structural issue", () => {
+test("scanPlugin surfaces a dangling ref from a hook script, but ignores prose mentions", () => {
   const dir = makeTmpDir("scan-dangling");
-  // A skill body that points at a sibling skill file which doesn't exist —
-  // the partial-vendor / broken-path class (obra/superpowers hit this twice).
+  // A hook SCRIPT that reads a sibling skill file which doesn't exist — the
+  // real partial-vendor / broken-path class (obra/superpowers' hooks/session-start
+  // reads skills/using-superpowers/SKILL.md). Executable → a real file op.
   write(
     dir,
-    "skills/using-x/SKILL.md",
-    "---\nname: using-x\ndescription: read skills/missing-helper/SKILL.md for the details here\n---\nSee skills/missing-helper/SKILL.md\n",
+    "hooks/session-start.sh",
+    "#!/usr/bin/env bash\ncat skills/missing-helper/SKILL.md\n",
+  );
+  // A SKILL.md that merely MENTIONS a missing path in prose is NOT a real ref
+  // (it's an example / template) and must NOT be flagged — the doc-mention trap.
+  write(
+    dir,
+    "skills/docs/SKILL.md",
+    "---\nname: docs\ndescription: A skill mentioning skills/not-real/SKILL.md as an example here\n---\nSee skills/not-real/SKILL.md\n",
   );
   const r = scanPlugin(dir);
   assert.deepEqual(r.danglingRefs, ["skills/missing-helper/SKILL.md"]);
