@@ -21,6 +21,7 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     inlineHooks: 0,
     commands: 0,
     mcp: false,
+    danglingRefs: [],
     warnings: [],
     untested: 0,
     ...over,
@@ -70,6 +71,17 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
     ).score,
     88,
   );
+});
+
+test("penalty: broken intra-plugin reference -8 each", () => {
+  const { score, issues } = scoreReport(
+    report({
+      hooks: [{ script: "h.sh", status: "ok" }],
+      danglingRefs: ["skills/using-x/SKILL.md", "agents/missing.md"],
+    }),
+  );
+  assert.equal(score, 84); // 100 - 2*8
+  assert.ok(issues.some((i) => i.includes("broken intra-plugin reference")));
 });
 
 test("score clamps at 0 and an empty machine is not healthy", () => {

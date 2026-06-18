@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { scanPlugin, formatScanReport } from "./scan.js";
+import { scanPlugin, formatScanReport, expandMarketplace } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function write(dir: string, rel: string, content: string): void {
@@ -159,5 +159,53 @@ test("formatScanReport flags the missing hook + the no-description skill", () =>
   assert.ok(text.includes("structural issue")); // absent.sh + nodesc
   assert.ok(/✗ .*hooks\/absent\.sh/.test(text));
   assert.ok(text.includes("inherits all")); // the notools agent footgun
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin surfaces a dangling intra-plugin reference as a structural issue", () => {
+  const dir = makeTmpDir("scan-dangling");
+  // A skill body that points at a sibling skill file which doesn't exist —
+  // the partial-vendor / broken-path class (obra/superpowers hit this twice).
+  write(
+    dir,
+    "skills/using-x/SKILL.md",
+    "---\nname: using-x\ndescription: read skills/missing-helper/SKILL.md for the details here\n---\nSee skills/missing-helper/SKILL.md\n",
+  );
+  const r = scanPlugin(dir);
+  assert.deepEqual(r.danglingRefs, ["skills/missing-helper/SKILL.md"]);
+  const text = formatScanReport(r);
+  assert.ok(text.includes("Broken references"));
+  assert.ok(/✗ skills\/missing-helper\/SKILL\.md/.test(text));
+  assert.ok(text.includes("structural issue")); // counted in the verdict
+  // shown once (as a ✗), not duplicated in the free-text Warnings block
+  assert.ok(!text.includes("intra-plugin file(s) that don't exist"));
+  cleanupTmpDir(dir);
+});
+
+test("expandMarketplace expands a marketplace root into member plugin dirs", () => {
+  const dir = makeTmpDir("scan-mp");
+  write(
+    dir,
+    ".claude-plugin/marketplace.json",
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "a", source: "./plugins/a" },
+        { name: "b", source: "./plugins/b" },
+        { name: "gone", source: "./plugins/gone" }, // dir doesn't exist → skipped
+        { name: "ext", source: { source: "github", repo: "x/y" } }, // not on disk → skipped
+      ],
+    }),
+  );
+  write(dir, "plugins/a/skills/sa/SKILL.md", "---\nname: sa\n---\n# sa\n");
+  write(dir, "plugins/b/skills/sb/SKILL.md", "---\nname: sb\n---\n# sb\n");
+  const members = expandMarketplace(dir);
+  assert.ok(members);
+  assert.equal(members.length, 2); // gone + ext skipped
+  assert.ok(
+    members.every((m) => m.endsWith("plugins/a") || m.endsWith("plugins/b")),
+  );
+  // a non-marketplace dir returns null
+  assert.equal(expandMarketplace(join(dir, "plugins/a")), null);
   cleanupTmpDir(dir);
 });

@@ -41,7 +41,7 @@ import type {
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
-import { scanPlugin, formatScanReport } from "./scan.js";
+import { scanPlugin, formatScanReport, expandMarketplace } from "./scan.js";
 import {
   detectAdapterResult,
   resolveAdapter,
@@ -3209,14 +3209,19 @@ async function main(): Promise<void> {
     case "scan": {
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
-      if (dirs.length > 1) {
+      // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
+      // under one marketplace.json) expands into its members and ranks them.
+      const members =
+        dirs.length === 1 ? expandMarketplace(resolve(dirs[0])) : null;
+      const targets = members && members.length > 0 ? members : dirs;
+      if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine).
-        const scores = rankPlugins(dirs);
+        const scores = rankPlugins(targets);
         console.log(
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
       } else {
-        const root = resolve(dirs[0]);
+        const root = resolve(targets[0]);
         const harnessFlag = args
           .find((a) => a.startsWith("--harness="))
           ?.slice("--harness=".length);
@@ -3224,7 +3229,7 @@ async function main(): Promise<void> {
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
           : det.adapter;
-        const report = scanPlugin(dirs[0], adapter.layout);
+        const report = scanPlugin(targets[0], adapter.layout);
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
           if (!harnessFlag && det.ambiguousWith.length > 0) {

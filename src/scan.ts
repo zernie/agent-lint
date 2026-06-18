@@ -12,10 +12,12 @@
  * stack on top later; this core stays pure so it runs anywhere in CI for free.
  */
 
-import { existsSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { danglingRefs } from "./plugin-loader.js";
 import type { PluginLayout } from "./core/layout.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
@@ -55,6 +57,13 @@ export interface ScanReport {
   readonly inlineHooks: number;
   readonly commands: number;
   readonly mcp: boolean;
+  /**
+   * Intra-plugin file references (hook scripts, skill bodies) pointing at files
+   * that don't exist on disk — the broken-path / partial-vendor class. A
+   * first-class structural finding, not just a free-text warning, so the verdict
+   * and the leaderboard can count it.
+   */
+  readonly danglingRefs: readonly string[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -167,7 +176,8 @@ function scanHooks(
 
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
-  const loaded = loadPlugin(dir, layout);
+  const lay = layout ?? claudeCodeLayout;
+  const loaded = loadPlugin(dir, lay);
   const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
   return {
     dir,
@@ -177,9 +187,43 @@ export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
     inlineHooks: inline,
     commands: Object.keys(loaded.files).filter(isCommand).length,
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
+    danglingRefs: danglingRefs(resolve(dir), lay),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
+}
+
+/**
+ * If `dir` is a plugin MARKETPLACE (a `marketplace.json` beside the layout's
+ * plugin manifest, e.g. `.claude-plugin/marketplace.json`), expand it into the
+ * absolute dirs of its member plugins, resolving each entry's relative `source`.
+ * Returns `null` when there's no marketplace. Entries with a non-string source
+ * (external git/github plugins, which aren't on disk) are skipped, as are member
+ * dirs that don't exist. Used by `vigiles scan` to rank a whole marketplace —
+ * wshobson/agents alone ships 80+ plugins under one `marketplace.json`.
+ */
+export function expandMarketplace(
+  dir: string,
+  layout: PluginLayout = claudeCodeLayout,
+): string[] | null {
+  const mpPath = join(dir, dirname(layout.manifestPath), "marketplace.json");
+  if (!existsSync(mpPath)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(mpPath, "utf-8"));
+  } catch {
+    return null;
+  }
+  const plugins = (parsed as { plugins?: unknown }).plugins;
+  if (!Array.isArray(plugins)) return null;
+  const dirs: string[] = [];
+  for (const entry of plugins) {
+    const source = (entry as { source?: unknown }).source;
+    if (typeof source !== "string") continue; // external plugin, not on disk
+    const abs = resolve(dir, source);
+    if (existsSync(abs) && statSync(abs).isDirectory()) dirs.push(abs);
+  }
+  return dirs;
 }
 
 function section(title: string, lines: readonly string[]): string[] {
@@ -239,19 +283,32 @@ export function formatScanReport(r: ScanReport): string {
   }
   out.push(...section("Hooks", hookLines));
 
+  out.push(
+    ...section(
+      "Broken references",
+      r.danglingRefs.map((ref) => `  ✗ ${ref} (referenced but MISSING)`),
+    ),
+  );
+
   const facts: string[] = [];
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
   facts.push(`Untested surfaces: ${String(r.untested)}`);
   out.push(...facts, "");
 
-  if (r.warnings.length > 0) {
-    out.push("Warnings:", ...r.warnings.map((w) => `  - ${w}`), "");
+  // The dangling-ref warning is now shown as a first-class ✗ section above, so
+  // drop it from the free-text list to avoid saying the same thing twice.
+  const warnings = r.warnings.filter(
+    (w) => !w.includes("intra-plugin file(s) that don't exist"),
+  );
+  if (warnings.length > 0) {
+    out.push("Warnings:", ...warnings.map((w) => `  - ${w}`), "");
   }
 
   const broken =
     r.hooks.filter((h) => h.status === "missing").length +
-    r.skills.filter((s) => !s.hasDescription).length;
+    r.skills.filter((s) => !s.hasDescription).length +
+    r.danglingRefs.length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"

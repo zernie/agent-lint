@@ -29,6 +29,7 @@ export interface PluginScore {
 // Penalty weights — broken-at-runtime costs most, footguns less, nudges least.
 const W_MISSING_HOOK = 15; // a hook script that doesn't exist → never runs
 const W_NO_DESCRIPTION = 10; // a skill with no usable description → can't trigger
+const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 const W_NO_CONTRACT = 5; // an agent with no `tools:` line → inherits everything
 const W_UNTESTED = 3; // a surface with no test/eval → warning-tier
 
@@ -64,6 +65,11 @@ export function scoreReport(r: ScanReport): {
       n: noDesc,
       weight: W_NO_DESCRIPTION,
       label: "skill(s) with no usable description",
+    },
+    {
+      n: r.danglingRefs.length,
+      weight: W_DANGLING_REF,
+      label: "broken intra-plugin reference(s)",
     },
     {
       n: noContract,
@@ -120,7 +126,8 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
   out.push(
     "",
     "Structural health only (no model). Weights: missing hook -15, no-description",
-    "skill -10, agent-without-tool-contract -5, untested surface -3.",
+    "skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5,",
+    "untested surface -3.",
   );
   return out.join("\n");
 }

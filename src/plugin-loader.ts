@@ -265,7 +265,7 @@ function intraRefRe(layout: PluginLayout): RegExp {
  * and report the ones missing on disk. A static check that would have caught a
  * bug the dogfood hit twice. Best-effort: a warning, not an error.
  */
-function danglingRefs(root: string, layout: PluginLayout): string[] {
+export function danglingRefs(root: string, layout: PluginLayout): string[] {
   const missing = new Set<string>();
   const seen = new Set<string>();
   const re = intraRefRe(layout);
