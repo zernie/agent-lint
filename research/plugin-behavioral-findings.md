@@ -110,11 +110,13 @@ Same 10 brainstorming prompts, two arms — empty cwd vs a seeded Node project
 (`package.json` + `src/` + README), 2 trials/prompt (40 runs, ≈$0.75
 API-equiv / $0 on the sub):
 
-> _Deferred — the 40-run probe ran serially (each `measure()` call re-stubs +
-> installs the plugin) and overran the wall-clock budget here. The cheap fix is
-> bounded concurrency; expectation is still little movement, since brainstorming
-> keys off the request, not the repo. The probe lives at
-> `examples/harness/` shape; re-run with `concurrency` to get the delta._
+> _Deferred — the original 40-run probe ran serially (each `measure()` call
+> re-stubs + installs the plugin) and overran the wall-clock budget. Now
+> re-runnable cheaply: `TriggerRateSpec` gained **`fixture`** (seed the repo) and
+> **`concurrency`** (parallelize the grid), so the comparison is two
+> `measureTriggerRate` calls (empty vs `fixture`) with `concurrency`, install-once,
+> no `measure()` loop. Expectation is still little movement (brainstorming keys
+> off the request, not the repo). Number to be appended._
 
 ### Landscape — how others handle context
 
@@ -138,9 +140,11 @@ field's only fix is _manual_ context injection. vigiles could go further and mak
 the accurate number the DEFAULT:
 
 1. **Enabling primitive — add `fixture` / a prior-turn field to
-   `TriggerRateSpec`.** `measure()`/`runEval` already take `fixture`; trigger-rate
-   doesn't (this probe had to drop to `measure()` to seed a repo). This alone
-   reaches parity with the user-injected-context tools.
+   `TriggerRateSpec`.** _Shipped (`fixture` + `concurrency`)._ `measure()`/`runEval`
+   already took `fixture`; trigger-rate now does too, so a state-dependent skill
+   can be seeded into the condition it claims to fire on — parity with the
+   user-injected-context tools. (Prior-turn / conversation history is the
+   remaining half, still open.)
 2. **The differentiator — auto-derive the context from the skill's declared
    trigger.** A description already encodes its trigger _state_: "when about to
    claim work complete", "after a code review arrives", "starting feature work

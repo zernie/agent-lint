@@ -1630,6 +1630,22 @@ export interface TriggerRateSpec {
   readonly timeoutMs?: number;
   /** Seconds to wait between runs (avoid rate-limit bursts). Default 4. */
   readonly spacingSec?: number;
+  /**
+   * Files (path → contents) seeded into every run's cwd before the prompt — the
+   * filesystem CONTEXT the skill is measured in. The default empty cwd is faithful
+   * for opening-move skills ("describe a feature", "debug this") but biased-low for
+   * skills whose trigger is a repo STATE ("in a git repo", "dirty tree"); seed that
+   * state here so recall is honest instead of an artifact of the cold start. Mirrors
+   * `MeasureSpec.fixture`. See `research/plugin-behavioral-findings.md`.
+   */
+  readonly fixture?: Record<string, string>;
+  /**
+   * How many runs to execute in parallel across the whole prompts × trials grid.
+   * Default 1 (serial, the politest to rate limits). Raise it to cut wall-clock on
+   * a large prompt set or roster sweep — the `spacingSec` pause still applies per
+   * run, so it stays best-effort polite. Mirrors `EvalSpec.concurrency`.
+   */
+  readonly concurrency?: number;
 }
 
 /** Per-prompt trigger result: how many of its trials fired. */
@@ -2030,47 +2046,68 @@ interface TriggerRunConfig {
   readonly spacing: number;
   readonly pluginDir: string;
   readonly fired: (trace: Trace) => boolean;
+  /** Files seeded into each run's cwd (the skill's measured context). */
+  readonly fixture?: Record<string, string>;
+  /** Parallel runs across the prompts × trials grid (default 1). */
+  readonly concurrency: number;
 }
 
 /** Run one prompt set × trials through `runner`, aggregating fired counts. */
+/** Run one trigger trial in a throwaway cwd (fixture seeded) → fired 0/1. */
+async function runTriggerTrial(
+  prompt: string,
+  cfg: TriggerRunConfig,
+  runner: AgentRunner,
+): Promise<number> {
+  const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
+  try {
+    if (cfg.fixture) writeFiles(cwd, cfg.fixture);
+    const out = await runner({
+      task: prompt,
+      cwd,
+      model: cfg.model,
+      tools: cfg.tools,
+      hasSettings: false,
+      pluginDir: cfg.pluginDir,
+      timeoutMs: cfg.timeoutMs,
+    });
+    return cfg.fired(makeContext(cwd, out)) ? 1 : 0;
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+    await sleep(cfg.spacing);
+  }
+}
+
 async function runTriggerSet(
   prompts: readonly string[],
   cfg: TriggerRunConfig,
   runner: AgentRunner,
 ): Promise<{ perPrompt: PromptTriggerStat[]; fired: number; n: number }> {
-  const perPrompt: PromptTriggerStat[] = [];
-  let firedTotal = 0;
-  let n = 0;
-  for (const prompt of prompts) {
-    let fired = 0;
-    for (let t = 0; t < cfg.trials; t++) {
-      const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
-      try {
-        const out = await runner({
-          task: prompt,
-          cwd,
-          model: cfg.model,
-          tools: cfg.tools,
-          hasSettings: false,
-          pluginDir: cfg.pluginDir,
-          timeoutMs: cfg.timeoutMs,
-        });
-        if (cfg.fired(makeContext(cwd, out))) fired++;
-      } finally {
-        rmSync(cwd, { recursive: true, force: true });
-        await sleep(cfg.spacing);
-      }
-    }
-    perPrompt.push({
-      prompt,
-      fired,
-      trials: cfg.trials,
-      rate: cfg.trials > 0 ? fired / cfg.trials : 0,
-    });
-    firedTotal += fired;
-    n += cfg.trials;
-  }
-  return { perPrompt, fired: firedTotal, n };
+  // Flatten prompts × trials into one work list so concurrency spans both.
+  const jobs = prompts.flatMap((prompt, promptIndex) =>
+    Array.from({ length: cfg.trials }, () => ({ prompt, promptIndex })),
+  );
+  const outcomes = await runPool(jobs, cfg.concurrency, (job) =>
+    runTriggerTrial(job.prompt, cfg, runner),
+  );
+  // Re-aggregate per prompt, preserving the input order.
+  const firedBy = new Array<number>(prompts.length).fill(0);
+  const trialsBy = new Array<number>(prompts.length).fill(0);
+  jobs.forEach((job, i) => {
+    firedBy[job.promptIndex] += outcomes[i];
+    trialsBy[job.promptIndex] += 1;
+  });
+  const perPrompt: PromptTriggerStat[] = prompts.map((prompt, i) => ({
+    prompt,
+    fired: firedBy[i],
+    trials: trialsBy[i],
+    rate: trialsBy[i] > 0 ? firedBy[i] / trialsBy[i] : 0,
+  }));
+  return {
+    perPrompt,
+    fired: firedBy.reduce((a, b) => a + b, 0),
+    n: trialsBy.reduce((a, b) => a + b, 0),
+  };
 }
 
 /**
@@ -2124,6 +2161,8 @@ export async function measureTriggerRateWith(
     spacing: (spec.spacingSec ?? 4) * 1000,
     pluginDir,
     fired: spec.fired,
+    fixture: spec.fixture,
+    concurrency: Math.max(1, spec.concurrency ?? 1),
   };
 
   try {

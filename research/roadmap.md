@@ -132,12 +132,13 @@
   measurement is faithful for opening-move skills but biased-low for
   state-dependent ones (fires only mid-session — "about to claim done", "review
   arrived", "dirty git tree"), a blind spot the whole query-based field (AWS
-  skill-eval included) shares. Two steps: (1) add a `fixture`/prior-turn field to
-  `TriggerRateSpec` (parity — `measure()`/`runEval` already have it); (2) the
-  differentiator — auto-select a **curated preset context** from the skill's
-  declared trigger phrases so it's measured in the state it claims to fire on.
-  Preset SELECTION on explicit cues, not prose synthesis (stays out of the
-  undecidable-prose trap). [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
+  skill-eval included) shares. Two steps: (1) **DONE** — `TriggerRateSpec` gained
+  `fixture` (seed repo state) + `concurrency` (parallelize the grid), reaching
+  parity with the user-injected-context tools (prior-turn/history still open);
+  (2) the differentiator, still open — auto-select a **curated preset context**
+  from the skill's declared trigger phrases so it's measured in the state it
+  claims to fire on. Preset SELECTION on explicit cues, not prose synthesis (stays
+  out of the undecidable-prose trap). [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
 - **Per-model trigger-rate + context-rot curve** — two parts. (a) Report
   trigger-rate **per model** wherever we report it — already a capability
   (`EvalArm.model` makes a model comparison a harness A/B; Sonnet default +
