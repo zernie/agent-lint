@@ -31,7 +31,13 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
 test("a structurally clean plugin scores 100", () => {
   const r = report({
     skills: [
-      { name: "s", path: "p", hasDescription: true, userInvoked: false },
+      {
+        name: "s",
+        path: "p",
+        hasDescription: true,
+        userInvoked: false,
+        descriptionScript: null,
+      },
     ],
     hooks: [{ script: "h.sh", status: "ok" }],
   });
@@ -49,7 +55,13 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
     scoreReport(
       report({
         skills: [
-          { name: "s", path: "p", hasDescription: false, userInvoked: false },
+          {
+            name: "s",
+            path: "p",
+            hasDescription: false,
+            userInvoked: false,
+            descriptionScript: null,
+          },
         ],
       }),
     ).score,
@@ -64,7 +76,13 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
     scoreReport(
       report({
         skills: [
-          { name: "s", path: "p", hasDescription: true, userInvoked: false },
+          {
+            name: "s",
+            path: "p",
+            hasDescription: true,
+            userInvoked: false,
+            descriptionScript: null,
+          },
         ],
         untested: 4,
       }),

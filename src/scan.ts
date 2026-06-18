@@ -31,6 +31,15 @@ export interface ScanSkill {
   readonly path: string;
   readonly hasDescription: boolean;
   readonly userInvoked: boolean;
+  /**
+   * Dominant non-Latin script of the description (e.g. "Cyrillic", "Han"), or
+   * null when the description is Latin/English-ish. The model's skill-selection
+   * context is English-centric, so a non-Latin description carries a
+   * cross-language trigger risk — it may under-fire on English prompts. A RISK
+   * flag, not a defect (a language-matched audience is fine); measure the real
+   * gap with `scan --trigger`.
+   */
+  readonly descriptionScript: string | null;
 }
 
 export interface ScanAgent {
@@ -135,6 +144,42 @@ function skillName(path: string): string {
   );
 }
 
+// Non-Latin scripts worth naming in a cross-language trigger-risk flag. Uses
+// Unicode \p{Script=…} (Node native, no dependency). Latin is the baseline the
+// English-centric selector expects; a description dominated by one of these may
+// under-fire on English prompts.
+const NON_LATIN_SCRIPTS: readonly [string, string][] = [
+  ["Cyrillic", "Cyrillic"],
+  ["Han", "Han"],
+  ["Hiragana", "Japanese"],
+  ["Katakana", "Japanese"],
+  ["Hangul", "Korean"],
+  ["Arabic", "Arabic"],
+  ["Hebrew", "Hebrew"],
+  ["Greek", "Greek"],
+  ["Devanagari", "Devanagari"],
+  ["Thai", "Thai"],
+];
+
+/**
+ * The dominant non-Latin script of `text`, or null when it's Latin/English-ish.
+ * Flags when ≥20% of the alphabetic characters are one non-Latin script — enough
+ * to catch a Russian/Chinese/… description (the cross-language trigger risk)
+ * without tripping on a stray foreign word or symbol.
+ */
+function dominantNonLatinScript(text: string): string | null {
+  const latin = (text.match(/\p{Script=Latin}/gu) ?? []).length;
+  let best: { label: string; count: number } | null = null;
+  for (const [script, label] of NON_LATIN_SCRIPTS) {
+    const count = (text.match(new RegExp(`\\p{Script=${script}}`, "gu")) ?? [])
+      .length;
+    if (count > 0 && (!best || count > best.count)) best = { label, count };
+  }
+  if (!best) return null;
+  const total = latin + best.count;
+  return total > 0 && best.count / total >= 0.2 ? best.label : null;
+}
+
 function scanSkills(files: Record<string, string>): ScanSkill[] {
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
@@ -145,6 +190,9 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
       path,
       hasDescription: Boolean(fm.description && fm.description.length >= 20),
       userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
+      descriptionScript: fm.description
+        ? dominantNonLatinScript(fm.description)
+        : null,
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -264,24 +312,27 @@ function section(title: string, lines: readonly string[]): string[] {
   return [`${title} (${String(lines.length)}):`, ...lines, ""];
 }
 
+/** One skill's report line: ✓/⚠ + name + notes (no-trigger, user-invoked, language risk). */
+function skillLine(s: ScanSkill): string {
+  if (!s.hasDescription) {
+    return `  ⚠ ${s.name} (missing/short description — can't trigger)`;
+  }
+  const notes: string[] = [];
+  if (s.userInvoked) notes.push("user-invoked");
+  if (s.descriptionScript) {
+    notes.push(
+      `description in ${s.descriptionScript} — cross-language trigger risk`,
+    );
+  }
+  const mark = s.descriptionScript ? "⚠" : "✓";
+  return `  ${mark} ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
+}
+
 /** Format a scan report as human-readable text. */
 export function formatScanReport(r: ScanReport): string {
   const out: string[] = [`Scan: ${r.dir}`, ""];
 
-  out.push(
-    ...section(
-      "Skills",
-      r.skills.map((s) => {
-        const mark = s.hasDescription ? "✓" : "⚠";
-        const note = s.hasDescription
-          ? s.userInvoked
-            ? "(user-invoked)"
-            : ""
-          : "(missing/short description — can't trigger)";
-        return `  ${mark} ${s.name} ${note}`.trimEnd();
-      }),
-    ),
-  );
+  out.push(...section("Skills", r.skills.map(skillLine)));
 
   out.push(
     ...section(
@@ -336,6 +387,17 @@ export function formatScanReport(r: ScanReport): string {
   );
   if (warnings.length > 0) {
     out.push("Warnings:", ...warnings.map((w) => `  - ${w}`), "");
+  }
+
+  // Cross-language trigger risk is a RISK, not a structural defect (a
+  // language-matched audience is fine), so it's reported separately from the
+  // verdict — it points at the behavioral column, it doesn't fail the scan.
+  const nonLatin = r.skills.filter((s) => s.descriptionScript);
+  if (nonLatin.length > 0) {
+    out.push(
+      `⚠ ${String(nonLatin.length)} skill(s) have non-Latin descriptions (cross-language trigger risk) — measure with \`scan --trigger\``,
+      "",
+    );
   }
 
   const broken =
