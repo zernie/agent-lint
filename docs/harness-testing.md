@@ -1,5 +1,11 @@
 # Testing your harness
 
+vigiles's **testing layer** — your hooks, settings, skills, and instruction file
+are code, so vigiles tests they do their job: hooks block, skills fire (recall +
+precision), the assembled agent does the task without the dangerous thing. The
+[README](../README.md) has the 30-second pitch; this is the full guide. For the
+linting layer, see [Verifying your instruction files](verifying-instruction-files.md).
+
 > **Try it now — paste this into Claude Code, in any repo:**
 >
 > > Install vigiles and use its **`test-harness`** skill to write and run a
@@ -14,10 +20,6 @@
 > `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
 > model) discover and run `*.harness.mjs` / `*.eval.mjs`.
 
-> **Just want to see it?** `npm run demo:plugin` runs vigiles against a real
-> third-party plugin and narrates what it ships, whether its hook works, and what
-> it phones home to ([`examples/plugin-test-demo.mjs`](../examples/plugin-test-demo.mjs)).
-
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, the
 instruction file — is code, and code should be tested. vigiles gives the harness
 **clear levels**, and a test's level is legible three ways at once — its **import
@@ -25,18 +27,18 @@ path**, its **file suffix**, and its **CI job** — so you can't accidentally hi
 network e2e test inside the unit gate. Pick the cheapest level that answers your
 question:
 
-| Level                 | Answers                                                  | Import                | File                    | Runner               | Needs                          |
-| --------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | ------------------------------ |
-| **refs** _(pillar 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                        |
-| **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
-| **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
-| **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
-| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/testing`     | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
+| Level                | Answers                                                  | Import                | File                    | Runner               | Needs                          |
+| -------------------- | -------------------------------------------------------- | --------------------- | ----------------------- | -------------------- | ------------------------------ |
+| **refs** _(layer 1)_ | are the rules/files/scripts it cites real?               | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                        |
+| **unit**             | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
+| **integration**      | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
+| **e2e**              | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
+| **eval**             | does this change _move what the agent does_, measurably? | `vigiles/testing`     | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
 
 **refs + unit + integration + e2e are deterministic verification** — you assert
 pass/fail, they run on every commit. **eval is a different axis: non-deterministic
 measurement** — you read a mean ± se across trials, run it occasionally on a keyed
-job, and never gate a single run (see [Two pillars or three?](#two-pillars-or-three-where-eval-sits)).
+job, and never gate a single run (see [Two layers or three?](#two-layers-or-three-where-eval-sits)).
 
 The import path **is** the capability contract: `vigiles/unit` exposes nothing
 that needs a model, bubblewrap, or the network; higher tiers re-export the lower
@@ -80,9 +82,9 @@ adapter/import model and the capability matrix, see
 
 ### Canonical imports
 
-There is **one canonical entry point per pillar** — import from these:
+There is **one canonical entry point per layer** — import from these:
 
-| Pillar                   | Canonical import  | What it re-exports                                                                                                                              |
+| Layer                    | Canonical import  | What it re-exports                                                                                                                              |
 | ------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, tool stubs |
 | ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                |
@@ -123,7 +125,7 @@ sandbox — live in the per-harness guides:
 - [Use it in your runner (node:test / vitest / jest)](#use-it-in-your-runner-nodetest--vitest--jest)
 - [CLI fallback (no runner, CI-friendly)](#cli-fallback-no-runner-ci-friendly)
 - [Per-level CI (the reusable action)](#per-level-ci-the-reusable-action)
-- [Two pillars or three? (where eval sits)](#two-pillars-or-three-where-eval-sits)
+- [Two layers or three? (where eval sits)](#two-layers-or-three-where-eval-sits)
 - [Coverage](#coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
@@ -718,24 +720,24 @@ model / API key) — run it on a keyed job with `npm run test:eval`, not on ever
 > locally / on capable runners). Switching the connector to **pasta** is in
 > progress — see [`research/egress-sandbox-tooling.md`](../research/egress-sandbox-tooling.md).
 
-## Two pillars or three? (where eval sits)
+## Two layers or three? (where eval sits)
 
-vigiles has **two pillars** — (1) verify the references, (2) test the harness —
-and **eval stays inside pillar 2**, as its non-deterministic top axis. A _pillar_
+vigiles has **two layers** — (1) verify the references, (2) test the harness —
+and **eval stays inside layer 2**, as its non-deterministic top axis. A _layer_
 is a distinct concern: "the references are real" vs "the harness behaves." Eval
-isn't a third concern — it's the deepest way of answering the **same** pillar-2
+isn't a third concern — it's the deepest way of answering the **same** layer-2
 question ("does the harness behave?"), just with different epistemics: it
 **measures** (mean ± se, significance, pass^k) where unit/integration/e2e
 **assert** (pass/fail). So in the docs it's drawn as a clearly distinct _axis_
-(non-deterministic, keyed, read-don't-gate) — but not a separate pillar, because
+(non-deterministic, keyed, read-don't-gate) — but not a separate layer, because
 splitting it would imply eval delivers a different value than "test the harness,"
 which it doesn't.
 
-The one future where eval graduates to a third pillar: if vigiles builds the
+The one future where eval graduates to a third layer: if vigiles builds the
 **self-improving harness** (auto-tune skills/hooks by measured evolution — see
 [`research/divergent-bets.md`](../research/divergent-bets.md) #7), eval stops being
 "a way to test" and becomes "a way to _optimize_" — a genuinely distinct concern
-worth its own pillar. Until then: two pillars, four levels (refs · unit ·
+worth its own layer. Until then: two layers, four levels (refs · unit ·
 integration · e2e) + the eval axis.
 
 ## Coverage
