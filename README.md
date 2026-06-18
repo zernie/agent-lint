@@ -77,12 +77,16 @@ It goes well past _"did it fire?"_:
 - **Behaviour is good** — score a skill's output directly, or A/B it on-vs-off for the real lift over no-skill (`measure` / `runEval`, with significance testing).
 - **Safety holds** — the agent _didn't_ push to the wrong branch or hit a paid API; `interceptTools` catches the attempt so the side effect never happens.
 
-**Deterministic and free.** Almost every tier runs with **no model and no API
-key** — milliseconds, on every commit. The one question that genuinely needs a
-real model (does a description fire? did behaviour move?) drives your own `claude`
-CLI, so evals run on the **Claude Pro/Max subscription you already pay for — never
-metered API tokens**. That's the whole reason you can actually afford to eval your
-harness at all. **[How it works →](docs/harness-testing.md)** · **[Why it's affordable →](docs/eval-architecture.md)** · **[Safety model →](docs/safety.md)**
+**The eval you can actually afford.** Almost every tier runs with **no model and
+no API key** — milliseconds, on every commit. The rest drive your own `claude` CLI:
+
+|                        | Runs on                 | Cost                                        |
+| ---------------------- | ----------------------- | ------------------------------------------- |
+| promptfoo, DeepEval, … | metered API SDK         | billed **per token, every run**             |
+| **vigiles**            | your Claude Pro/Max sub | **$0 extra** — and most tiers need no model |
+
+That's why you can eval your harness on every change, not just once.
+**[How it works →](docs/harness-testing.md)** · **[Why it's affordable →](docs/eval-architecture.md)** · **[Safety model →](docs/safety.md)**
 
 ## Quick start
 

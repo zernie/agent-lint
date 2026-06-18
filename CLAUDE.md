@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:54a5a69219e0153a compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:219434209e6e880b compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -349,7 +349,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 
 ### Readme Brevity
 
-**Guidance only** — README.md should be a concise pitch + quick start, not a reference manual. Extract detailed sections into docs/ and link with `[Details →](docs/X.md)`. Target ~300 lines max.
+**Guidance only** — README.md is the FRONT DOOR and a marketing asset, not a reference manual — it must land a WOW in the first screen for someone who already lives in agentic-coding tools (Claude Code, Codex, Cursor). Optimize for FAST SCANNING by a human skimming on a phone: SHORT (target ~140 lines, hard cap ~200), NO walls of text (a paragraph is ≤ ~3 lines; break dense prose into bullets, tables, or a one-line + `[Details →]` link), and GREAT FORMATTING (a punchy one-line tagline, a tight 2-row Lint/Test table, runnable code blocks, bold lead-ins on bullets, em-dashes not semicolons). Lead with the sell, not jargon (no "pillar"; footnote the Latin). Push every detail into docs/ and LINK it (`[Details →](docs/X.md)`) the moment a section runs long — the README states WHAT and WHY, the docs hold HOW. The evals section MUST include the promptfoo comparison as the differentiator: competitors (promptfoo, DeepEval, …) hit the API SDK and bill PER TOKEN every run, while vigiles answers most questions deterministically (no model, no key) and runs real-model evals on YOUR Claude subscription — keep it to a crisp contrast (a sentence or a small table row), not a wall, with `[Why it's affordable →]` for the rest. Every claim that needs proof links out; nothing load-bearing is buried in prose.
 
 ### Ts Essentials
 
