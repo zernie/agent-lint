@@ -7,9 +7,9 @@ plugin layout (`${CLAUDE_PLUGIN_ROOT}`, `hooks/hooks.json`, `plugin` / `pluginDi
 the `Skill` tool), the scriptable Anthropic Messages mock (`scriptModel`), and the
 safe-by-default bubblewrap sandbox + egress.
 
-Imports here come from the adapter surface `vigiles/claude-code` (or the granular
-paths `vigiles/mock-model`, `vigiles/plugin-loader`, `vigiles/judge`); the runners
-and assertions come from the agnostic `vigiles/testing` (or the tier barrels
+Imports here come from the adapter surface `vigiles/claude-code` (CC-specific
+transport: `scriptModel`, `loadPlugin`, `resolveHarness`); the runners and
+assertions come from the agnostic `vigiles/testing` (or the tier barrels
 `vigiles/unit` / `vigiles/integration` / `vigiles/e2e`). Claude Code is the
 **default** adapter — `runHarnessTest(spec)` with no `{ adapter }` drives it.
 
@@ -46,7 +46,7 @@ what's actually there. `loadPlugin` parses the manifest + `hooks/hooks.json`,
 materializes skills/agents, and flags the surfaces only a real model can drive:
 
 ```ts
-import { loadPlugin } from "vigiles/plugin-loader";
+import { loadPlugin } from "vigiles/claude-code";
 
 const p = loadPlugin("examples/harness/vendor/oh-my-claudecode@deee3a4");
 // p.settings.hooks → { UserPromptSubmit: [...] }   (hooks surface)
@@ -65,7 +65,7 @@ OMC's `keyword-detector` is a `UserPromptSubmit` hook: it scans the prompt for a
 an event and check the decision — no `claude`, no model, milliseconds:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
+import { runHook } from "vigiles/testing";
 
 const hit = runHook(keywordDetectorCmd, {
   hook_event_name: "UserPromptSubmit",
@@ -95,8 +95,12 @@ model's request (`trace.modelRequests`) — the "fired ≠ landed" check a "did 
 run?" test can't make:
 
 ```ts
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
-import { assertHookFired, assertRequestContains } from "vigiles/harness-assert";
+import {
+  runHarnessTest,
+  assertHookFired,
+  assertRequestContains,
+} from "vigiles/testing";
+import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
   settings: {
@@ -127,8 +131,7 @@ answer. Install OMC natively (`pluginDir`) and measure how reliably its `verify`
 skill fires on prompts about confirming a change works:
 
 ```ts
-import { measureTriggerRate } from "vigiles/eval";
-import { skillResolved } from "vigiles/harness-assert";
+import { measureTriggerRate, skillResolved } from "vigiles/testing";
 
 const report = await measureTriggerRate({
   pluginDir: "examples/harness/vendor/oh-my-claudecode@deee3a4",
@@ -154,7 +157,8 @@ your repo) and the real harness is loaded from `.claude-plugin/plugin.json` (or
 scripts, plus its CLAUDE.md and skills:
 
 ```ts
-import { runHarnessTest, scriptModel } from "vigiles/harness-test";
+import { runHarnessTest } from "vigiles/testing";
+import { scriptModel } from "vigiles/claude-code";
 
 const r = await runHarnessTest({
   plugin: "./", // load THIS repo's real hooks + CLAUDE.md + skills
@@ -177,7 +181,7 @@ a plugin ships, so "load the whole plugin" never silently tests an empty machine
 (e.g. a subagents-only plugin with no hooks):
 
 ```ts
-import { loadPlugin } from "vigiles/plugin-loader";
+import { loadPlugin } from "vigiles/claude-code";
 const { warnings } = loadPlugin("./some-plugin");
 if (warnings.length) console.warn(warnings.join("\n"));
 // ⚠ plugin defines 2 subagent file(s) under agents/ — test at the eval tier…
@@ -194,7 +198,7 @@ internal references). Add `transcript: true` to capture the event stream so you
 can assert the skill's body was injected:
 
 ```ts
-import { assertSkillResolved, assertToolNotUsed } from "vigiles/harness-assert";
+import { assertSkillResolved, assertToolNotUsed } from "vigiles/testing";
 
 const r = await runHarnessTest({
   pluginDir: "./path/to/a/whole/plugin", // installs natively; skills activate
@@ -229,7 +233,7 @@ in the core guide.
 ## The scripted Anthropic Messages mock (`scriptModel`)
 
 `runHarnessTest` spawns the real `claude` CLI against a **scripted mock model**
-(`vigiles/mock-model`) — real hooks fire, model turns are fixed, outcome is
+(`scriptModel` from `vigiles/claude-code`) — real hooks fire, model turns are fixed, outcome is
 reproducible. No key, no cost. `claude` is pointed at the in-process mock via
 `ANTHROPIC_BASE_URL` + a dummy `ANTHROPIC_API_KEY` (the mock ignores auth);
 `{cwd}` in a hook command is substituted with the sandbox dir.
@@ -286,7 +290,7 @@ and messages), captured by the scripted mock, and `assertRequestContains` assert
 your text is in it:
 
 ```ts
-import { assertRequestContains } from "vigiles/harness-assert";
+import { assertRequestContains } from "vigiles/testing";
 
 assertRequestContains(r, "You have superpowers"); // the injected context is really there
 ```

@@ -435,6 +435,37 @@ i)` returns a Welch `Comparison` (reuses `stats.ts`). The harness-A/B moat (hook
    mock-SSE-handshake-vs-current-claude fidelity fix is the backlog item.
 6. **CC-feature drift.** New hook events / surfaces must be tracked in `HookFire`
    parsing + the dialect — ongoing maintenance.
+7. **Behaviour testing is broader than A/B — is the single-arm ABSOLUTE path
+   first-class? (RESOLVED 2026-06-17 in the API review — emphasis corrected, no
+   code change needed.)** The audit found the absolute path was implemented but
+   _under-surfaced_: README, `docs/harness-testing.md`, and the `test-harness`
+   skill all led with the A/B `runEval`+`assertSignificant` framing, so "test this
+   one skill behaves right" was being forced into an A/B mould. Fixed by making the
+   absolute oracle the **default** for testing a single skill across every
+   front-door surface: the skill's tier table + Step-3 example now lead with
+   `measure({ checks: [judged(rubric)] })` + `assertRates`, the README and the docs
+   eval section open with the two-oracles distinction (absolute = "is it good",
+   relative = "does it move vs off"), and the CLAUDE.md positioning names both. A/B
+   is now framed as the _specialised_ relative/regression oracle, matching how
+   promptfoo/DeepEval frame it. The original analysis, kept for the record: We
+   reach for A/B a lot (`runEval` arms + `measureArms` + `assertSignificant`), but
+   A/B is the right oracle only for a _relative_ question — noise-floor / regression
+   / "does this change MOVE behaviour vs a baseline arm". For testing an **exact
+   skill** ("following this skill produces a test-first / root-cause output"), the
+   correct oracle is an **absolute** judged assertion, not a comparison to an OFF
+   arm — an A/B framing there is awkward or meaningless. The absolute path already
+   exists — single-arm `measure(spec, { checks })` + `judged()` + `assertRates`
+   (see `examples/harness/dogfood/skill-quality.eval.mjs`) — so the question is NOT
+   "do we have it" but "is it **first-class, ergonomic, and discoverable**, or is
+   A/B over-privileged in the API surface + README + the `test-harness` skill so
+   that 'test this skill behaves right' gets forced into an A/B mould?" The eval
+   field mostly frames behaviour as absolute single-output (promptfoo
+   assertions/scorers, DeepEval metrics), with A/B as a specialised regression mode
+   — vigiles may have the emphasis inverted. Action: audit `measure` vs `runEval`
+   prominence; decide when A/B is genuinely correct (relative/regression) vs when an
+   absolute judged assertion is (exact-skill behaviour); elevate/clarify the
+   single-arm path accordingly. Grounds review #1 in `research/roadmap.md`'s next
+   session.
 
 **The harness axis (different harnesses). ✅ Verified + documented.** The check
 vocabulary is **harness-agnostic by construction** — every check reads generic

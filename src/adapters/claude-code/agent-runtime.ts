@@ -3,7 +3,7 @@
  *
  * A subagent declares an allowed-tools contract in its frontmatter (`tools:`).
  * But that field is documentation, not a hard runtime boundary (Claude Code
- * issue #54898): permissions are session-wide, a subagent inherits the parent
+ * #4740/#21460, SDK #172): permissions are session-wide, a subagent inherits the parent
  * session's grants, and `tools:` only filters what's *offered* — it can't deny
  * what the session allows. The deterministic layer that actually closes the gap
  * is a **PreToolUse hook** that blocks any tool the active agent's contract

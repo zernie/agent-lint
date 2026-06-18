@@ -105,6 +105,13 @@ export interface HarnessTestSpec {
    * `plugin` still layer on top. Resolved to an absolute path.
    */
   readonly pluginDir?: string;
+  // TODO(R2): wire `stubs?: readonly ToolStub[]` here too — write the fake
+  // binaries into a bin dir under the temp cwd and PREPEND it to the spawned
+  // agent's PATH. Deferred from the eval tier because the harness-test spawn goes
+  // through the per-harness `HarnessTestDriver` seam (buildArgs/startMock/wireMock,
+  // env built per-driver as `{ ...process.env, ...wired.env }`), so threading a
+  // PATH overlay cleanly means touching that port — out of scope for the MVP,
+  // which lands the helper on the eval tier. See `src/tool-stub.ts`.
   /** The scripted model turns the agent will take. */
   readonly model: readonly ModelTurn[];
   /** The user prompt. Default: "go". */

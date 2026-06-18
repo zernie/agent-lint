@@ -1,13 +1,19 @@
 /**
  * `vigiles/integration` — the **deterministic, assembled-machine** tier.
  *
- * Re-exports everything in [`vigiles/unit`](./unit.ts) and adds the runners that
- * drive the real `claude` CLI against a **scripted mock model** plus structural
- * assembly: `runHarnessTest` / `withHarness` (real hooks fire, outcome
- * reproducible), `scriptModel` (the mock), and `loadPlugin` / `resolveHarness`
- * (the plugin loader). Capability contract: needs the **`claude` binary and
- * bubblewrap**, but **no API key and no network**. A `*.integration.test.ts`
- * imports from here.
+ * Re-exports everything in [`vigiles/unit`](./unit.ts) and adds the
+ * harness-agnostic runners for the assembled machine: `runHarnessTest` /
+ * `runHarness` (real hooks fire, outcome reproducible) plus the generic trace
+ * parsers and the sandbox policy. Capability contract: needs the **`claude`
+ * binary and bubblewrap**, but **no API key and no network**. A
+ * `*.integration.test.ts` imports from here.
+ *
+ * The Claude-Code **transport** — the scripted mock (`scriptModel`) and the
+ * plugin loader (`loadPlugin` / `resolveHarness`) — is harness-specific, so it is
+ * NOT re-exported here (this surface stays agnostic, enforced by the
+ * `agnostic-surface ⊄ adapter` boundary lint). Import it from
+ * [`vigiles/claude-code`](./claude-code.ts):
+ * `import { scriptModel, loadPlugin } from "vigiles/claude-code"`.
  *
  * Real **egress** is a CAPABILITY of this scope (the former `e2e` tier), not a
  * separate tier: `egressRoutes()` probes whether allowlisted egress can route,
@@ -17,7 +23,31 @@
  * `research/testing-api-design.md` Part 4.
  */
 export * from "./unit.js";
-export * from "./harness-test.js";
-export * from "./mock-model.js";
-export type { LoadedPlugin } from "./plugin-loader.js";
+// The harness-test tier — AGNOSTIC SURFACE ONLY (CC transport lives in
+// vigiles/claude-code; see the module doc above).
+export {
+  runHarnessTest,
+  runHarness,
+  parseToolCalls,
+  parseSubagents,
+  parseResultEvent,
+  parseOutput,
+  parseHooks,
+  decideSandbox,
+  specTrusted,
+  sandboxAvailable,
+} from "./harness-test.js";
+export type {
+  HarnessTestSpec,
+  Trace,
+  SubagentTrace,
+  HarnessTestResult,
+  RunHarnessTestOptions,
+  ModelTurn,
+  ModelRequest,
+  ToolCall,
+  HookFire,
+  HarnessTestDriver,
+  SandboxMode,
+} from "./harness-test.js";
 export { egressRoutes } from "./run-hook.js";

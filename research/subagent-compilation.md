@@ -46,7 +46,7 @@ Mechanics that make this a _compiler_ target, not a linter target:
 
 ## The differentiator: declared ≠ enforced
 
-The pivotal finding (Claude Code issue #54898): **`tools:` is not a hard runtime
+The pivotal finding (Claude Code #4740/#21460, claude-agent-sdk-typescript #172): **`tools:` is not a hard runtime
 permission boundary.** Permissions are session-wide, not per-agent; a subagent
 inherits the parent session's `permissions.deny` and the `tools:` field cannot
 grant what the session denies — it filters what's _offered_, but is "functionally
@@ -59,9 +59,109 @@ framing applied to subagents: **compile the typed tool contract into BOTH the
 `tools` allowlist (intent) AND a generated `PreToolUse` hook (enforcement), and
 verify the two agree.** Nobody else compiles a typed subagent spec to the
 manifest while statically resolving tool/MCP/handoff references and wiring the
-deterministic rail. (Caveat: #54898's exact semantics are one reporter's testing
+deterministic rail. (Caveat: these issues' exact semantics are reporter-tested
 and may shift across releases — re-verify against the current build before the
 enforcement layer leans on them.)
+
+## Demand evidence — mid-2026 issue survey (2026-06-17)
+
+A ranked survey of open/closed issues across `anthropics/claude-code`,
+`anthropics/claude-agent-sdk-typescript`, and `openai/codex` to ground the
+roadmap in what users actually ask for. Themes are ordered by signal strength.
+
+1. **Tool contract `tools:` is documentation, not enforcement (declared ≠
+   enforced)** — STRONGEST. Verified anchors:
+   - **claude-code #4740** — "[BUG] Sub-agents use tools without permission": an
+     empty `tools:` still ran 7 tool calls; closed not-planned.
+   - **claude-code #21460** — "PreToolUse hooks not enforced on subagent tool
+     calls": the Task subagent bypasses hooks; closed.
+   - **claude-agent-sdk-typescript #172** — OPEN — "AgentDefinition.tools and
+     disallowedTools are not enforced for subagent child processes." The
+     reporter's requested workaround is literally vigiles's rail: "users must
+     manually implement a PreToolUse hook to block Task calls… should be handled
+     natively."
+   - NOTE: the old code comment cited a phantom **#54898** — that has been
+     corrected to these three anchors; #54898 was **unverifiable**.
+2. **Orchestration / handoff / passing results** — claude-code #8775 ("Agent
+   Output Limit Handoffs and Multi-Agent Task Orchestration", closed dup),
+   claude-code #8093 ("Enable Subagents to Pass Follow-up Commands to the Main
+   Agent", closed not-planned), codex #9846 ("High-Quality Sub-Agent
+   Collaboration Built into Codex", closed dup), codex Discussion #3898.
+3. **Structured output contracts** — claude-code #20625 ("Support structured
+   output schemas for subagents", closed not-planned) — wants frontmatter
+   `structured_output` + retry on schema-validation failure.
+4. **Dispatch/triggering reliability + discovery** — claude-code #20931 (agents
+   not loaded as Task types, closed dup), claude-code #49559 (skill
+   `context: fork` + `agent:` not honored), codex #18823 (OPEN — custom agent
+   requests misroute to skills), codex #15250 (OPEN — `spawn_agent` can't spawn a
+   _named_ custom agent).
+5. **Per-subagent MCP / context isolation** — claude-code #24054 ("Scoped MCP
+   servers for skills and subagents", closed).
+6. **Observability (tools/tokens/side effects) + skill usage tracking** —
+   claude-code #11008 (token usage in hook inputs), claude-code #35319 (OPEN —
+   "Skill invocation tracking and usage analytics"; "no way to know which skills
+   are actually being used", 0/183 tracked), claude-code #12142 (visibility into
+   skills a subagent invokes).
+7. **Per-subagent model / reasoning-effort + cost** — codex #11701 (closed —
+   per-agent model + reasoning_effort), claude-code #13434 (wrong default
+   subagent model).
+8. **Determinism for automation** — claude-code #58933 (OPEN — "no in-session
+   determinism mechanism, forcing automation users onto the metered Agent SDK
+   path"; "Determinism requires code, not prose").
+9. **Skill / hook firing reliability** — claude-code #35053 (skill triggers
+   ignored), #21947 (skill not auto-triggering), #19225 (Stop hooks in Skills
+   never fire), #17688 (skill-scoped hooks in plugins not triggered), #20265
+   (hooks don't always fire).
+10. **Nesting / silent no-op** — claude-code #19077 (sub-agents can't create
+    sub-sub-agents), claude-code #59968 (closed not-planned — "when dispatch
+    silently no-ops, the failure is invisible… the verdict gets cited downstream
+    as if cross-verified").
+
+Status caveat: issues #21947 / #19225 / #17688 / #20265 / #12142 / #47191 had
+their open/closed status from search text only (a `WebFetch` 404'd on the HTML) —
+mark **unverified**.
+
+### The tooling ecosystem is AUTHORING + OBSERVABILITY, almost no verification
+
+| Tool                                                 | What it is                          |
+| ---------------------------------------------------- | ----------------------------------- |
+| `wshobson/agents`                                    | 83+ subagents, multi-harness        |
+| `VoltAgent/awesome-claude-code-subagents`            | collection                          |
+| `rohitg00/awesome-claude-code-toolkit`               | collection/toolkit                  |
+| `dsifry/metaswarm`                                   | orchestration + gating              |
+| `barkain/claude-code-workflow-orchestration`         | orchestration (DAG/wave scheduler)  |
+| `disler/claude-code-hooks-multi-agent-observability` | observability                       |
+| `simple10/agents-observe`                            | observability (Claude Code + Codex) |
+| `getagentseal/codeburn`                              | cost TUI + A–F health               |
+| `tintinweb/pi-subagents`                             | subagents                           |
+
+The ecosystem is overwhelmingly **authoring + observability** — almost **no**
+verification/testing of the subagent contract. That white space is exactly
+vigiles's lane.
+
+### Codex vs Claude Code delta — enforcement is a Claude-Code-shaped problem
+
+Codex custom agents are `.codex/agents/*.toml` with `developer_instructions`,
+manager-worker concurrency (default 6 threads, `max_depth: 1`), and **NO**
+per-agent `tools:` whitelist file — so the enforce-the-contract problem is a
+**Claude-Code-shaped** problem, NOT a Codex one. This **confirms** that vigiles
+treating Codex subagents as a deliberate non-goal is correct (see
+`research/codex-prototype-findings.md`). Codex's loud wants are
+dispatch/discoverability (#18823 / #15250, both open), not enforcement.
+
+### Map to vigiles (honest)
+
+- **Tool-contract rail — ALREADY ADDRESSES** (strongest fit; the literal native
+  ask in SDK #172). See the differentiator section above.
+- **Output contracts (`result()` / railway) — ALREADY ADDRESSES** (#20625).
+- **Trigger-rate eval — ALREADY ADDRESSES** (#35319 / #35053 firing demand).
+- **Orchestration — PARTIAL**: railway covers deterministic sequencing, NOT
+  dynamic auto-decomposition (and shouldn't).
+- **Silent-no-op #59968 — PARTIAL**: testability — assert the subagent fired via
+  the nested Trace `subagent()` check.
+- **Observability, per-agent MCP isolation, per-agent model routing,
+  auto-decomposition — OUT OF SCOPE**: harness-runtime responsibilities,
+  correctly not chased.
 
 ## Prior art on agent contracts (what to steal)
 

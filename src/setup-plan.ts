@@ -103,7 +103,9 @@ export function mergeProjectConfig(
   }
   if (opts.strict) {
     const rules = { ...(config.rules as Record<string, unknown> | undefined) };
-    for (const r of ["require-spec", "require-skill-spec"]) {
+    // `require-skill-spec` is deprecated (skills can be hand-written), so --strict
+    // no longer promotes it; it tightens only `require-spec` (instruction files).
+    for (const r of ["require-spec"]) {
       if (rules[r] === undefined) {
         rules[r] = "error";
         changed = true;

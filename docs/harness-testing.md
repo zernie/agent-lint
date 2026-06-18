@@ -31,7 +31,7 @@ question:
 | **unit**              | does my hook block/allow this event?                     | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
 | **integration**       | is it wired into the assembled machine + does it fire?   | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
 | **e2e**               | does it really reach / block the network, end-to-end?    | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
-| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/eval`        | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
+| **eval**              | does this change _move what the agent does_, measurably? | `vigiles/testing`     | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
 
 **refs + unit + integration + e2e are deterministic verification** — you assert
 pass/fail, they run on every commit. **eval is a different axis: non-deterministic
@@ -78,6 +78,25 @@ import, so it **auto-detects** the harness from the repo. For the full
 adapter/import model and the capability matrix, see
 [`docs/harnesses.md`](harnesses.md).
 
+### Canonical imports
+
+There is **one canonical entry point per pillar** — import from these:
+
+| Pillar                   | Canonical import  | What it re-exports                                                                                                                              |
+| ------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, tool stubs |
+| ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                |
+
+`vigiles/testing` is the **superset** — reach for it first. Two other groups are
+deliberate surfaces, not aliases: the **capability-scoped tier barrels**
+`vigiles/unit` / `vigiles/integration` / `vigiles/e2e` (the Levels table above —
+the import path _is_ the capability contract, so `vigiles/unit` physically can't
+reach a model or the network), and `vigiles/spec` (the authoring surface — spec
+builders for `.spec.ts` files). CC-specific transport — `scriptModel`, `loadPlugin`,
+`resolveHarness`, and the type `LoadedPlugin` — lives in `vigiles/claude-code`, not
+`vigiles/testing`. Runner integration is `vigiles/vitest` / `vigiles/jest`; harness
+selection is `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
+
 The **harness-specific** pieces — the mock wire format, the plugin layout, the
 sandbox — live in the per-harness guides:
 
@@ -108,7 +127,7 @@ sandbox — live in the per-harness guides:
 - [Coverage](#coverage)
 - [Canonical examples](#canonical-examples)
 - [What's covered today — surface × tier](#whats-covered-today--surface--tier)
-- [How this compares to promptfoo](#how-this-compares-to-promptfoo)
+- [How this compares (promptfoo, DeepEval, Braintrust, Inspect)](#how-this-compares-promptfoo-deepeval-braintrust-inspect)
 - [Per-harness guides](#per-harness-guides)
 - [See also](#see-also)
 
@@ -275,6 +294,22 @@ non-deterministic harness.
 
 ## Evals — does the change move behaviour?
 
+There are **two questions** here, and they want **two different oracles** — don't
+default to A/B for both:
+
+- **Absolute — "is this exact skill / output any good?"** Most of the time you're
+  testing _one_ skill, with no on/off variant to compare against. Score the output
+  directly: `measure({ checks: [judged(rubric), …] })` + `assertRates({ min })`.
+  This is the oracle promptfoo/DeepEval lead with, and the right default for a
+  single skill — there's nothing to A/B against. See the `measure` section below.
+- **Relative — "does this change _move_ behaviour vs off?"** When the question is
+  the _lift_ a change buys (regression gating, or proving a gap isn't sampling
+  noise), run an A/B: `runEval` with `off`/`on` arms + `assertSignificant`. The
+  baseline is the point.
+
+The rest of this section covers the **relative** A/B path; the absolute scored path
+is `measure` (below). Both run on the same real-model tier.
+
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
 numbers, **fraction-true** for booleans, with **std / se** so you can tell a
 real gap from noise, plus **pass^k** (τ-bench) — _did the metric succeed on
@@ -289,7 +324,7 @@ end-state files — reuse the bare predicates above (`usedTool`, `skillResolved`
 …) to compute them.
 
 ```ts
-import { runEval, formatEvalReport } from "vigiles/eval";
+import { runEval, formatEvalReport } from "vigiles/testing";
 
 const report = await runEval({
   fixture: { "src/billing.ts": "export function chargeCard() {}" },
@@ -407,8 +442,12 @@ deterministic tier proves the _wiring_; this proves the _activation_).
 varied prompts, reporting how often a `Trace` predicate holds:
 
 ```ts
-import { measureTriggerRate, formatTriggerRateReport } from "vigiles/eval";
-import { skillResolved, assertTriggerRate } from "vigiles/testing";
+import {
+  measureTriggerRate,
+  formatTriggerRateReport,
+  skillResolved,
+  assertTriggerRate,
+} from "vigiles/testing";
 
 const report = await measureTriggerRate({
   skillsDir: ".claude/skills", // loose repo skills — auto-packaged (or pluginDir: "./my-plugin")
@@ -441,9 +480,23 @@ Three things make this cheap and honest, all on by choice:
   near-duplicate check). A rate over 3 copy-pasted prompts is noise; the gate
   refuses to produce it. Lower `minPrompts` for a genuinely narrow skill.
 
-Measure on the model your users actually run (`model: "sonnet"` for most Claude
-Code users) — the model is part of the harness, so trigger-rate inherits its
-skill-selection behaviour; the default `"haiku"` is a cheap conservative floor.
+- **Model — measured on the realistic selector.** `measureTriggerRate` defaults
+  to **`"sonnet"`** (the model most Claude Code users run): trigger-rate is a
+  _selection_ measurement, and a weaker model under-selects (dogfooded: a skill
+  scored 0.50 on haiku vs 0.90 on Sonnet). A **`minModel`** floor (default
+  `"sonnet"`) **fails** the run before spending a token if you point it below —
+  lower it deliberately for a cheap, pessimistic check. The model lives in the
+  spec, not an env override.
+- **Isolated vs whole-harness.** By default the skill competes against the
+  **other skills in the plugin you point at** (honest — selection is competitive).
+  Pass **`installSet: [otherPluginsOrSkillDirs]`** to co-install the rest of the
+  user's harness for a release-gate measurement; the report's `competitors` count
+  tells you how many skills were in the pool (`0` = isolated, an upper bound on
+  recall). See [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
+- **Comparing models is a harness A/B.** For "does my skill still fire on the
+  cheaper tier / after a model upgrade?", set a per-arm `model` in `measureArms` /
+  `runEval` (`arms: { sonnet: { model: … }, opus: { model: … } }`) — no separate
+  multi-model matrix runner.
 
 ### LLM-as-judge for subjective outcomes
 
@@ -453,7 +506,7 @@ shells out via the harness CLI):
 <!-- vigiles:ignore -->
 
 ```ts
-import { judge } from "vigiles/judge";
+import { judge } from "vigiles/testing";
 
 measure: (ctx) => {
   const v = judge({
@@ -486,13 +539,13 @@ test("Stop hook forces more work", async () => {
 
 ### Checks — one vocabulary, two evaluators
 
-The newest surface (`vigiles/check`) is a **declarative check** — data, not a
-throwing assert: `tool("Bash")` is an object that knows how to `eval` itself
-against a `Trace` (or a hook decision) and `toJSON`. The same check is evaluated
-two ways, so you write the assertion once:
+The newest surface is a **declarative check** — data, not a throwing assert:
+`tool("Bash")` is an object that knows how to `eval` itself against a `Trace` (or
+a hook decision) and `toJSON`. The same check is evaluated two ways, so you write
+the assertion once:
 
 ```ts
-import { tool, skill, output, hookFired, blocked } from "vigiles/check";
+import { tool, skill, output, hookFired, blocked } from "vigiles/testing";
 import { assertChecks } from "vigiles/testing";
 
 // STRICT (deterministic tiers): throws, collecting ALL failures with messages.
@@ -523,7 +576,7 @@ composition and serialization, not a mandatory wrapper. Under vitest/jest, one
 generic matcher covers the whole vocabulary: `expect(r).toPass(tool("Bash"))` /
 `toPassAll([...])`, each carrying the check's own message.
 
-**The vocabulary** (`vigiles/check`):
+**The vocabulary** (from `vigiles/testing`):
 
 | Check                      | Holds when…                                       | Over             |
 | -------------------------- | ------------------------------------------------- | ---------------- |
@@ -695,14 +748,15 @@ harness's** test coverage (do your skills/hooks/subagents each have a test?) and
 
 A harness grows surfaces faster than tests — a new skill, hook, or subagent
 lands and nothing tells you it shipped untested. `vigiles lint` closes that gap
-with the [`untested-surface`](rules/untested-surface.md) rule: it reports any
-skill, subagent, or hook that has **no test or eval**. A surface counts as
+with the per-kind [`untested-skill`](rules/untested-skill.md) /
+[`untested-agent`](rules/untested-agent.md) / [`untested-hook`](rules/untested-hook.md)
+rules: they report any skill, subagent, or hook that has **no test or eval**. A surface counts as
 covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention
 the warning suggests) **or** any test — including a `*.test.ts` — references it
 by path (`skills/foo`, `hooks/x.sh`) or namespace (`plugin:foo`). It's
-warning-by-default (a nudge; set it to `"error"` to fail CI), and user-invoked
-(`disable-model-invocation`) skills are exempt because they can't auto-trigger —
-flip `includeUserInvokedSkills` to demand an outcome test for them.
+warning-by-default (a nudge; set it to `"error"` to fail CI). Every skill, agent,
+and hook is held to it — invocation mode doesn't exempt anything; the only opt-out
+is an explicit `<!-- vigiles:ignore-test -->` marker on the surface.
 
 Beneath that gate sits a free, model-free **conformance floor**: load your own
 plugin and assert every skill resolves with a usable `description` — the surface
@@ -763,31 +817,38 @@ reference adapter):
 
 ✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap: [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
 
-## How this compares to promptfoo
+## How this compares (promptfoo, DeepEval, Braintrust, Inspect)
 
-[promptfoo](https://github.com/promptfoo/promptfoo) is the popular eval runner —
-and it's excellent at what it does. vigiles isn't a competing eval framework: it
-tests **the harness** (your hooks / settings / instruction file / skills as they
-ship), and it's built to be **deterministic and cheap** where promptfoo is
-real-model-only. The core difference is cost by construction: every promptfoo run
-is a real model call by design, while vigiles answers most harness questions —
-does this hook block? is it wired in? does the skill resolve? — with **no model
-and no API key at all**, paying for a real model only at the eval tier, only when
-the question needs one.
+The eval ecosystem — [promptfoo](https://github.com/promptfoo/promptfoo),
+[DeepEval](https://github.com/confident-ai/deepeval),
+[Braintrust](https://www.braintrust.dev/),
+[Inspect](https://inspect.aisi.org.uk/) — is excellent at what it does, and
+vigiles is **not** a competing eval framework. They evaluate a **model/agent on a
+dataset**; vigiles tests **the harness** (your hooks / settings / instruction file
+/ skills, loaded exactly as they ship) and is built to be **deterministic and
+cheap** where those tools are real-model-only. The core difference is cost by
+construction: every one of their runs is a real model call by design, while vigiles
+answers most harness questions — does this hook block? is it wired in? does the
+skill resolve? — with **no model and no API key at all**, paying for a real model
+only at the eval tier, only when the question needs one.
 
-| Question you're asking                                     | vigiles                               | promptfoo                      |
-| ---------------------------------------------------------- | ------------------------------------- | ------------------------------ |
-| Does my hook block/allow? Is it wired in?                  | ✅ **no model, no API key** (Lvl 1–2) | ✗ every run hits a real model  |
-| Unit under test                                            | the **harness** (hook/rule/skill A/B) | a **provider/model**           |
-| Loads the **real shipped** plugin.json/hooks/instructions? | ✅ (`plugin-loader`)                  | ✗ configures the SDK from YAML |
-| Is an A/B gap real, not noise? (significance / pass^k)     | ✅ Welch t-test + pass^k              | ✗ pass-rate only               |
-| Regression vs a committed baseline                         | ✅ `assertNoRegression`               | ✗                              |
-| Run an untrusted harness **confined**                      | ✅ bubblewrap, safe-by-default        | ✗                              |
-| Dataset / red-team / assertion library / web UI            | ✗ (not our game)                      | ✅✅ deep, mature              |
+| Capability                                                    | vigiles                         | promptfoo         | DeepEval | Braintrust | Inspect          |
+| ------------------------------------------------------------- | ------------------------------- | ----------------- | -------- | ---------- | ---------------- |
+| Test a hook/skill with **no model, no API key**               | ✅ `runHook` / mock-model       | ✗ real-model only | ✗        | ✗          | ✗                |
+| Unit under test = the **harness as it ships** (A/B arms)      | ✅ `plugin-loader`              | partial (matrix)  | ✗        | partial    | partial          |
+| Load the **real** plugin.json/hooks/settings/CLAUDE.md        | ✅                              | ✗ SDK from YAML   | ✗        | ✗          | ✗                |
+| **Intercept-and-prevent** a tool in the real harness (safety) | ✅ `interceptTools` + `notTool` | ✗ (assert only)   | ✗        | ✗          | ✗                |
+| Tool / trajectory + arg assertions                            | ✅ `toolWith`                   | ✅ `trajectory:*` | ✅       | ✅         | ✅               |
+| Is an A/B gap real, not noise? (significance / pass^k)        | ✅ Welch + pass^k               | ✗ pass-rate       | ✗        | partial    | partial (epochs) |
+| Regression gate vs a committed baseline                       | ✅ `assertNoRegression`         | ✗                 | partial  | ✅✅       | ✅               |
+| Run an untrusted harness **confined**                         | ✅ bubblewrap, safe-by-default  | ✗                 | ✗        | ✗          | partial          |
+| Dataset / red-team / judge library / web UI                   | ✗ (not our game)                | ✅✅              | ✅✅     | ✅✅       | ✅               |
 
-Short version: **promptfoo for prompt/model/dataset evals; vigiles for testing
-the harness cheaply and safely.** The full analysis (and why we don't chase
-parity) is in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
+Short version: **those tools for prompt/model/dataset/agent evals; vigiles for
+testing the harness cheaply, safely, and as it actually ships.** The full analysis
+(field profiles, the honest scorecard, and why we don't chase parity) is in
+[`research/eval-api-landscape.md`](../research/eval-api-landscape.md) and the
+promptfoo-specific zoom-in [`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
 
 ## Per-harness guides
 

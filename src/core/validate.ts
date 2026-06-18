@@ -64,10 +64,19 @@ const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
   "require-spec": "warn",
-  "require-skill-spec": "warn",
+  // DEPRECATED — default OFF. Skills are legitimately hand-written (Level 0/1),
+  // so requiring a .spec.ts per SKILL.md was the wrong constraint and only added
+  // noise (it also nagged about vendored/fixture/bench skills). Use the
+  // `untested-*` rules instead — "every skill/agent/hook ships with a test or
+  // eval" is the coverage that matters. The implementation is kept: setting
+  // `require-skill-spec` explicitly still works for anyone who wants it.
+  "require-skill-spec": false,
   integrity: "warn",
   coverage: false,
-  "untested-surface": "warn",
+  // Per-kind surface-coverage: a skill/agent/hook must ship with a test or eval.
+  "untested-skill": "warn",
+  "untested-agent": "warn",
+  "untested-hook": "warn",
   "unmarked-refs": "warn",
 };
 
@@ -254,7 +263,9 @@ export function validate(
       }
     }
 
-    // --- require-skill-spec (SKILL.md) ---
+    // --- require-skill-spec (SKILL.md) — DEPRECATED but still honored when a
+    // user sets it explicitly, so reading the deprecated key here is intentional.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     const skillSeverity = activeRules["require-skill-spec"];
     if (skillSeverity && isSkill && !disableComment.test(content)) {
       const specPath = filePath + ".spec.ts";

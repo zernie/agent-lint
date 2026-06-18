@@ -6,14 +6,17 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 
 import {
   writeFileSync,
   mkdirSync,
+  mkdtempSync,
   existsSync,
   readFileSync,
   rmSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -35,11 +38,20 @@ import {
   checkReportToJUnit,
   type CheckReport,
   packageSkillsDir,
+  packageInstallSet,
   stubbedPluginDir,
   stubSkillBody,
   promptDistance,
   checkPromptDiversity,
   assertPromptDiversity,
+  isDatedModel,
+  modelTier,
+  belowModelFloor,
+  harnessVersionKey,
+  ephemeralRunEnv,
+  seedEphemeralHome,
+  resolveSpawnEnv,
+  EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
 } from "./eval.js";
 import {
@@ -47,7 +59,8 @@ import {
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
-import { tool, output, turns } from "./check.js";
+import { tool, output, turns, judged } from "./check.js";
+import { parseIntercepts } from "./tool-intercept.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 test("aggregateStats reports mean, sample std, se, and n", () => {
@@ -231,6 +244,7 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/some/plugin",
+      stubSkillBodies: false, // fake dir + fake runner — use the passthrough, no FS
       prompts: ["fire one", "ignore this", "fire two"],
       minPrompts: 1,
       minDistance: 0,
@@ -410,6 +424,218 @@ test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", a
   cleanupTmpDir(dir);
 });
 
+test("runEvalWith honors a per-arm model override (model = a harness arm)", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: {
+        cheap: { model: "claude-haiku-4-5-20251001" }, // arm overrides
+        prod: {}, // falls back to the eval-level model
+      },
+      task: "t",
+      trials: 1,
+      model: "claude-sonnet-4-6", // eval-level default
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const byArm = (m: string) => seen.find((a) => a.model === m);
+  assert.ok(byArm("claude-haiku-4-5-20251001"), "cheap arm used its override");
+  assert.ok(byArm("claude-sonnet-4-6"), "prod arm used the eval-level model");
+});
+
+test("measureWith interceptTools: auto-wires the PreToolUse hook + env round-trip", async () => {
+  let seenSettings = "";
+  let seenEnv: Record<string, string> | undefined;
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seenEnv = a.env;
+    seenSettings = a.hasSettings
+      ? readFileSync(join(a.cwd, "settings.json"), "utf-8")
+      : "";
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+
+  const report = await measureWith(
+    {
+      task: "push the release branch",
+      // an arm hook already present → the intercept hook APPENDS, never clobbers
+      settings: {
+        hooks: {
+          PreToolUse: [
+            { matcher: "Write", hooks: [{ type: "command", command: "true" }] },
+          ],
+        },
+      },
+      interceptTools: [
+        {
+          tool: "Bash",
+          when: { command: /push origin main/ },
+          denyReason: "ok",
+        },
+      ],
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.n, 1);
+
+  // settings.json keeps the existing hook AND appends the intercept hook (Bash).
+  const settings = JSON.parse(seenSettings) as {
+    hooks: { PreToolUse: { matcher: string; hooks: { command: string }[] }[] };
+  };
+  assert.equal(settings.hooks.PreToolUse.length, 2);
+  assert.equal(settings.hooks.PreToolUse[0].matcher, "Write"); // existing, untouched
+  const entry = settings.hooks.PreToolUse[1];
+  assert.equal(entry.matcher, "Bash");
+  assert.match(entry.hooks[0].command, /intercept-tool-hook/);
+
+  // the intercept list rides VIGILES_INTERCEPT_TOOLS, RegExp matcher preserved.
+  const parsed = parseIntercepts(seenEnv?.VIGILES_INTERCEPT_TOOLS ?? "");
+  assert.equal(parsed[0]?.tool, "Bash");
+  assert.equal(parsed[0]?.denyReason, "ok");
+  assert.ok(parsed[0]?.when?.command instanceof RegExp);
+});
+
+test("measureWith without interceptTools sets no intercept env or hook", async () => {
+  let seenEnv: Record<string, string> | undefined;
+  let hadSettings = true;
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seenEnv = a.env;
+    hadSettings = a.hasSettings;
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  await measureWith(
+    {
+      task: "do a thing",
+      checks: [turns({ min: 1 })],
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(seenEnv, undefined);
+  assert.equal(hadSettings, false);
+});
+
+test("isDatedModel(): dated id is honest, floating alias is not", () => {
+  assert.equal(isDatedModel("claude-haiku-4-5-20251001"), true);
+  assert.equal(isDatedModel("claude-3-5-sonnet-20241022"), true);
+  assert.equal(isDatedModel("haiku"), false);
+  assert.equal(isDatedModel("claude-sonnet-4-6"), false); // version, not a date
+});
+
+test("runEvalWith warns when an eval cache rides a floating model alias", async () => {
+  const dir = makeTmpDir();
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const base = {
+    arms: { a: {} },
+    task: "t",
+    trials: 1,
+    spacingSec: 0,
+    cache: "readwrite" as const,
+    cacheDir: dir,
+    measure: () => ({ ok: true }),
+  };
+
+  const origEnv = process.env.GITHUB_ACTIONS;
+  const logs: string[] = [];
+  const warns: string[] = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  console.log = (m?: unknown) => logs.push(String(m));
+  console.warn = (m?: unknown) => warns.push(String(m));
+  try {
+    // CI path: a GitHub `::warning::` annotation.
+    process.env.GITHUB_ACTIONS = "true";
+    await runEvalWith({ ...base, model: "haiku" }, runner);
+    assert.ok(
+      logs.some(
+        (l) => l.startsWith("::warning::") && l.includes("floating alias"),
+      ),
+    );
+
+    // Non-CI path: a plain stderr warning.
+    delete process.env.GITHUB_ACTIONS;
+    await runEvalWith({ ...base, model: "sonnet" }, runner);
+    assert.ok(warns.some((w) => w.includes("floating alias")));
+
+    // A dated id is honest → no warning at all.
+    logs.length = 0;
+    warns.length = 0;
+    await runEvalWith({ ...base, model: "claude-haiku-4-5-20251001" }, runner);
+    assert.equal(warns.length, 0);
+    assert.equal(logs.filter((l) => l.startsWith("::warning::")).length, 0);
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+    if (origEnv === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = origEnv;
+  }
+  cleanupTmpDir(dir);
+});
+
+test("runEvalWith cache invalidates when a native pluginDir's contents change", async () => {
+  const cacheDir = makeTmpDir();
+  const plugin = makeTmpDir();
+  writeFileSync(join(plugin, "SKILL.md"), "v1");
+  let calls = 0;
+  const counting = (): Promise<{ code: number; stdout: string }> => {
+    calls++;
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  const spec = (cache: "readwrite" | "read") => ({
+    arms: { a: { pluginDir: plugin } },
+    task: "t",
+    trials: 1,
+    spacingSec: 0,
+    model: "claude-haiku-4-5-20251001", // dated → no floating-alias warning
+    cache,
+    cacheDir,
+    measure: () => ({ ok: true }),
+  });
+
+  await runEvalWith(spec("readwrite"), counting); // record
+  assert.equal(calls, 1);
+  await runEvalWith(spec("read"), counting); // same content → replay, no call
+  assert.equal(calls, 1);
+
+  writeFileSync(join(plugin, "SKILL.md"), "v2"); // edit a skill in the plugin
+  await runEvalWith(spec("read"), counting); // cache miss → runner called again
+  assert.equal(calls, 2);
+
+  cleanupTmpDir(cacheDir);
+  cleanupTmpDir(plugin);
+});
+
 test("measureWith stubSkillBodies without pluginDir throws", async () => {
   await assert.rejects(
     measureWith(
@@ -557,6 +783,71 @@ test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => 
     /<testcase classname="vigiles.checks" name="tool\(Bash\)">/,
   );
   assert.match(xml, /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40%/);
+});
+
+test("assertRates: `per` overrides the threshold by check kind", () => {
+  const report: CheckReport = {
+    n: 10,
+    perCheck: [
+      {
+        check: { kind: "tool", name: "Bash" },
+        rate: 0.9,
+        se: 0.1,
+        passK: 0,
+        n: 10,
+      },
+      {
+        check: { kind: "skill", id: "vig:x" },
+        rate: 0.4,
+        se: 0.16,
+        passK: 0,
+        n: 10,
+      },
+    ],
+  };
+  // A stricter per-kind threshold trips a check the global `min` would pass, and
+  // the failure message reports that check's own min.
+  assert.throws(() => {
+    assertRates(report, { min: 0.3, per: { skill: 0.5 } });
+  }, /skill\(vig:x\): 40% ± 16% \(min 50%\)/);
+  // A laxer per-kind threshold lets a low check pass while a strict global `min`
+  // still gates the others — one call, two thresholds.
+  assertRates(report, { min: 0.8, per: { skill: 0.3 } });
+
+  // checkReportToJUnit shares the same threshold helper, so `per` marks exactly
+  // the same testcase failed — the gate and the XML can't disagree.
+  const xml = checkReportToJUnit(report, { min: 0.3, per: { skill: 0.5 } });
+  assert.match(xml, /failures="1"/);
+  assert.match(
+    xml,
+    /name="skill\(vig:x\)">[\s\S]*<failure message="rate 40% below min 50%/,
+  );
+  assert.match(xml, /name="tool\(Bash\)"><\/testcase>/);
+});
+
+test("assertRates: throws on an empty report (a green that tested nothing)", () => {
+  assert.throws(() => {
+    assertRates({ n: 5, perCheck: [] }, { min: 0.9 });
+  }, /no checks to gate/);
+});
+
+test("measure: rejects stubSkillBodies paired with a judged check", async () => {
+  // The runner must never be reached — the guard throws first.
+  const runner = (): Promise<{ code: number; stdout: string }> => {
+    throw new Error("runner should not run");
+  };
+  await assert.rejects(
+    measureWith(
+      {
+        pluginDir: "/tmp/does-not-matter",
+        stubSkillBodies: true,
+        task: "t",
+        checks: [judged("is it good")],
+      },
+      runner,
+    ),
+    /stubSkillBodies` is for firing/,
+  );
 });
 
 test("formatCheckReport labels a no-arg check by its kind alone", () => {
@@ -762,6 +1053,345 @@ test("measureTriggerRateWith accepts skillsDir, packaging it into a plugin dir",
   cleanupTmpDir(dir);
 });
 
+test("packageInstallSet merges under-test + competitors (under-test wins a collision)", () => {
+  const base = makeTmpDir("under-test"); // loose skills dir of the skill under test
+  mkdirSync(join(base, "mine"), { recursive: true });
+  writeFileSync(
+    join(base, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nUNDERTEST\n",
+  );
+  mkdirSync(join(base, "dup"), { recursive: true }); // collides with a competitor
+  writeFileSync(
+    join(base, "dup", "SKILL.md"),
+    "---\nname: dup\ndescription: mine\n---\nMINE\n",
+  );
+
+  const comp = makeTmpDir("competitor"); // a plugin-shaped competitor (skills/)
+  const compSkills = join(comp, "skills");
+  mkdirSync(join(compSkills, "rival"), { recursive: true });
+  writeFileSync(
+    join(compSkills, "rival", "SKILL.md"),
+    "---\nname: rival\ndescription: R\n---\nRIVAL\n",
+  );
+  mkdirSync(join(compSkills, "dup"), { recursive: true });
+  writeFileSync(
+    join(compSkills, "dup", "SKILL.md"),
+    "---\nname: dup\ndescription: theirs\n---\nTHEIRS\n",
+  );
+  // junk the merge must skip: a stray file (non-dir) and a dir with no SKILL.md
+  writeFileSync(join(compSkills, "notes.txt"), "not a skill");
+  mkdirSync(join(compSkills, "empty"), { recursive: true });
+
+  const comp2 = makeTmpDir("competitor2"); // a .claude/skills-shaped competitor
+  const cc = join(comp2, ".claude", "skills");
+  mkdirSync(join(cc, "extra"), { recursive: true });
+  writeFileSync(
+    join(cc, "extra", "SKILL.md"),
+    "---\nname: extra\ndescription: E\n---\nEXTRA\n",
+  );
+
+  const { dir, added } = packageInstallSet({
+    underTestSrc: base,
+    name: "vigiles",
+    installSet: [comp, comp2],
+    stub: false,
+  });
+  // 'rival' (skills/) + 'extra' (.claude/skills/) added; 'dup' collided → not counted
+  assert.equal(added, 2);
+  assert.ok(existsSync(join(dir, "skills", "extra", "SKILL.md")));
+  // named for the under-test plugin so `<name>:<skill>` ids still match `fired`
+  const manifest = JSON.parse(
+    readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf-8"),
+  ) as { name: string };
+  assert.equal(manifest.name, "vigiles");
+  assert.ok(existsSync(join(dir, "skills", "mine", "SKILL.md")));
+  assert.ok(existsSync(join(dir, "skills", "rival", "SKILL.md")));
+  // the under-test 'dup' won the collision (its body, not the competitor's)
+  assert.match(
+    readFileSync(join(dir, "skills", "dup", "SKILL.md"), "utf-8"),
+    /MINE/,
+  );
+  rmSync(dir, { recursive: true, force: true });
+  cleanupTmpDir(base);
+  cleanupTmpDir(comp);
+  cleanupTmpDir(comp2);
+});
+
+test("packageInstallSet throws (and cleans up) on a missing installSet source", () => {
+  const ut = makeTmpDir("ut-ok");
+  mkdirSync(join(ut, "mine"), { recursive: true });
+  writeFileSync(
+    join(ut, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nbody\n",
+  );
+  assert.throws(
+    () =>
+      packageInstallSet({
+        underTestSrc: ut,
+        name: "n",
+        installSet: ["/no/such/install/source"],
+        stub: false,
+      }),
+    /installSet source not found/,
+  );
+  cleanupTmpDir(ut);
+});
+
+test("packageInstallSet stubs bodies and throws on an empty under-test source", () => {
+  const empty = makeTmpDir("ut-empty"); // no <name>/SKILL.md
+  const comp = makeTmpDir("comp2");
+  mkdirSync(join(comp, "x"), { recursive: true });
+  writeFileSync(
+    join(comp, "x", "SKILL.md"),
+    "---\nname: x\ndescription: X\n---\nbody\n",
+  );
+  assert.throws(
+    () =>
+      packageInstallSet({
+        underTestSrc: empty,
+        name: "n",
+        installSet: [comp],
+        stub: false,
+      }),
+    /skill-under-test/,
+  );
+
+  const ut = makeTmpDir("ut2");
+  mkdirSync(join(ut, "mine"), { recursive: true });
+  writeFileSync(
+    join(ut, "mine", "SKILL.md"),
+    "---\nname: mine\ndescription: D\n---\nSECRET BODY\n",
+  );
+  const { dir } = packageInstallSet({
+    underTestSrc: ut,
+    name: "n",
+    installSet: [comp],
+    stub: true,
+  });
+  const md = readFileSync(join(dir, "skills", "mine", "SKILL.md"), "utf-8");
+  assert.ok(md.includes("description: D") && !md.includes("SECRET BODY"));
+  rmSync(dir, { recursive: true, force: true });
+  cleanupTmpDir(empty);
+  cleanupTmpDir(comp);
+  cleanupTmpDir(ut);
+});
+
+test("measureTriggerRateWith installSet measures the whole-harness tier", async () => {
+  const ut = makeTmpDir("ut-skills");
+  mkdirSync(join(ut, "foo"), { recursive: true });
+  writeFileSync(
+    join(ut, "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  const others = makeTmpDir("others");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  };
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: ut,
+      installSet: [others],
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 1); // 'bar' co-installed as a competitor
+  const used = seen[0]?.pluginDir;
+  assert.ok(used && !existsSync(used), "combined plugin dir cleaned up after");
+  assert.ok(formatTriggerRateReport(report).includes("whole-harness"));
+  cleanupTmpDir(ut);
+  cleanupTmpDir(others);
+});
+
+test("measureTriggerRateWith installSet works from a pluginDir under-test source", async () => {
+  const plugin = makeTmpDir("ut-plugin"); // a real plugin (manifest + skills/)
+  mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(plugin, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "vig", version: "0.0.0" }),
+  );
+  mkdirSync(join(plugin, "skills", "foo"), { recursive: true });
+  writeFileSync(
+    join(plugin, "skills", "foo", "SKILL.md"),
+    "---\nname: foo\ndescription: does foo\n---\nbody\n",
+  );
+  const others = makeTmpDir("others-p");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: plugin,
+      installSet: [others],
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 1);
+  cleanupTmpDir(plugin);
+  cleanupTmpDir(others);
+});
+
+test("measureTriggerRateWith installSet still requires a skill-under-test source", async () => {
+  const others = makeTmpDir("others-only");
+  mkdirSync(join(others, "bar"), { recursive: true });
+  writeFileSync(
+    join(others, "bar", "SKILL.md"),
+    "---\nname: bar\ndescription: does bar\n---\nbody\n",
+  );
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  await assert.rejects(
+    () =>
+      measureTriggerRateWith(
+        {
+          installSet: [others], // no pluginDir / skillsDir under test
+          prompts: ["a", "b"],
+          minPrompts: 1,
+          minDistance: 0,
+          fired: () => true,
+          spacingSec: 0,
+        },
+        runner,
+      ),
+    /pluginDir.*skillsDir|provide `pluginDir`/,
+  );
+  cleanupTmpDir(others);
+});
+
+test("formatTriggerRateReport labels an isolated run honestly (upper-bound recall)", () => {
+  const out = formatTriggerRateReport({
+    rate: 1,
+    n: 1,
+    perPrompt: [],
+    competitors: 0,
+  });
+  assert.ok(out.includes("isolated"));
+  assert.ok(out.toLowerCase().includes("upper bound"));
+});
+
+test("harnessVersionKey reduces to major.minor (patches don't churn the cache)", () => {
+  assert.equal(harnessVersionKey("2.1.179 (Claude Code)"), "2.1");
+  assert.equal(harnessVersionKey("2.1.180 (Claude Code)"), "2.1"); // patch → same key
+  assert.equal(harnessVersionKey("2.2.0"), "2.2"); // minor → different
+  assert.equal(harnessVersionKey("nonsense"), "nonsense"); // fallback
+});
+
+test("modelTier ranks by family; belowModelFloor is fail-open on unknowns", () => {
+  assert.equal(modelTier("haiku"), 1);
+  assert.equal(modelTier("claude-haiku-4-5-20251001"), 1);
+  assert.equal(modelTier("sonnet"), 2);
+  assert.equal(modelTier("claude-sonnet-4-6"), 2);
+  assert.equal(modelTier("opus"), 3);
+  assert.equal(modelTier("some-future-model"), null); // unrankable
+  // below
+  assert.equal(belowModelFloor("haiku", "sonnet"), true);
+  // equal / above / unknown → never "below" (fail-open)
+  assert.equal(belowModelFloor("sonnet", "sonnet"), false);
+  assert.equal(belowModelFloor("opus", "sonnet"), false);
+  assert.equal(belowModelFloor("mystery", "sonnet"), false);
+  assert.equal(belowModelFloor("haiku", "mystery"), false);
+});
+
+test("measureTriggerRateWith FAILS when the model is below the floor (default sonnet)", async () => {
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: "" });
+  const base = {
+    pluginDir: "/x",
+    stubSkillBodies: false, // fake dir + fake runner — passthrough, no FS
+    prompts: ["a", "b"],
+    minPrompts: 1,
+    minDistance: 0,
+    fired: () => true,
+    spacingSec: 0,
+  };
+  // haiku < default sonnet floor → throws before any run
+  await assert.rejects(
+    () => measureTriggerRateWith({ ...base, model: "haiku" }, runner),
+    /below the minimum "sonnet"/,
+  );
+  // explicitly lowering the floor lets a deliberate cheap run through
+  const ok = await measureTriggerRateWith(
+    { ...base, model: "haiku", minModel: "haiku" },
+    runner,
+  );
+  assert.equal(ok.n, 2); // ran (2 prompts), not blocked by the floor
+
+  // raising the floor catches an otherwise-fine model
+  await assert.rejects(
+    () =>
+      measureTriggerRateWith(
+        { ...base, model: "sonnet", minModel: "opus" },
+        runner,
+      ),
+    /below the minimum "opus"/,
+  );
+});
+
+test("measureTriggerRateWith counts SIBLING skills as competitors (not just installSet)", async () => {
+  // A multi-skill plugin with NO installSet: the under-test skill still competes
+  // against its siblings, so the run must NOT be mislabeled "isolated" (the bug
+  // the dogfood surfaced — competitors used to count only installSet additions).
+  const dir = makeTmpDir("multi");
+  const skills = join(dir, ".claude", "skills");
+  for (const name of ["foo", "bar", "baz"]) {
+    mkdirSync(join(skills, name), { recursive: true });
+    writeFileSync(
+      join(skills, name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: does ${name}\n---\nbody\n`,
+    );
+  }
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    });
+  const report = await measureTriggerRateWith(
+    {
+      skillsDir: skills,
+      prompts: ["do foo"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => true,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(report.competitors, 2); // 3 skills installed − the one under test
+  const out = formatTriggerRateReport(report);
+  assert.ok(out.includes("whole-harness"));
+  assert.ok(!out.includes("isolated"));
+  cleanupTmpDir(dir);
+});
+
 test("measureTriggerRateWith stubSkillBodies strips the body in the packaged plugin", async () => {
   const dir = makeTmpDir("trigger-stub");
   const skills = join(dir, ".claude", "skills");
@@ -850,6 +1480,7 @@ test("measureTriggerRateWith adds precision when irrelevant prompts are given", 
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/p",
+      stubSkillBodies: false,
       prompts: ["fire one", "fire two"], // both should fire → recall 1.0
       minPrompts: 1,
       minDistance: 0,
@@ -879,6 +1510,7 @@ test("measureTriggerRateWith: precision is undefined when nothing fires at all",
   const report = await measureTriggerRateWith(
     {
       pluginDir: "/p",
+      stubSkillBodies: false,
       prompts: ["quiet"],
       minPrompts: 1,
       minDistance: 0,
@@ -914,18 +1546,106 @@ test("parseUsage is all-zero when no result/usage is present", () => {
   assert.equal(u.durationMs, 0);
   assert.equal(u.inputTokens, 0);
   assert.equal(u.outputTokens, 0);
+  assert.equal(u.cacheCreationTokens, 0);
+  assert.equal(u.cacheReadTokens, 0);
+});
+
+test("parseUsage parses cache_creation_input_tokens and cache_read_input_tokens", () => {
+  const resultEvent = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "ok",
+    total_cost_usd: 0.02,
+    duration_ms: 800,
+    usage: {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_creation_input_tokens: 250,
+      cache_read_input_tokens: 400,
+    },
+  });
+  const u = parseUsage(resultEvent);
+  assert.equal(u.cacheCreationTokens, 250);
+  assert.equal(u.cacheReadTokens, 400);
+  assert.equal(u.inputTokens, 100);
+  assert.equal(u.outputTokens, 50);
+});
+
+test("parseUsage yields 0 for cache fields when absent from usage", () => {
+  const resultEvent = JSON.stringify({
+    type: "result",
+    num_turns: 1,
+    result: "ok",
+    total_cost_usd: 0.01,
+    duration_ms: 500,
+    usage: { input_tokens: 80, output_tokens: 30 },
+  });
+  const u = parseUsage(resultEvent);
+  assert.equal(u.cacheCreationTokens, 0);
+  assert.equal(u.cacheReadTokens, 0);
 });
 
 test("aggregateUsage totals and averages cost/latency/tokens", () => {
   const u = aggregateUsage([
-    { costUsd: 0.01, durationMs: 1000, inputTokens: 100, outputTokens: 50 },
-    { costUsd: 0.03, durationMs: 2000, inputTokens: 200, outputTokens: 150 },
+    {
+      costUsd: 0.01,
+      durationMs: 1000,
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+    {
+      costUsd: 0.03,
+      durationMs: 2000,
+      inputTokens: 200,
+      outputTokens: 150,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
   ]);
   assert.ok(Math.abs(u.totalCostUsd - 0.04) < 1e-9);
   assert.ok(Math.abs(u.meanCostUsd - 0.02) < 1e-9);
   assert.equal(u.meanDurationMs, 1500);
   assert.equal(u.totalInputTokens, 300);
   assert.equal(u.totalOutputTokens, 200);
+});
+
+test("aggregateUsage sums totalCacheCreationTokens and totalCacheReadTokens", () => {
+  const u = aggregateUsage([
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 300,
+      cacheReadTokens: 100,
+    },
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 200,
+      cacheReadTokens: 400,
+    },
+    {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  ]);
+  assert.equal(u.totalCacheCreationTokens, 500);
+  assert.equal(u.totalCacheReadTokens, 500);
+});
+
+test("aggregateUsage cache totals are zero for no runs", () => {
+  const u = aggregateUsage([]);
+  assert.equal(u.totalCacheCreationTokens, 0);
+  assert.equal(u.totalCacheReadTokens, 0);
 });
 
 test("aggregateUsage is all-zero for no runs", () => {
@@ -1111,7 +1831,7 @@ test("runEvalWith aborts when maxCostUsd is exceeded", async () => {
 });
 
 test("assertTriggerRate gates on the minimum rate", () => {
-  const report = { rate: 0.5, n: 4, perPrompt: [] };
+  const report = { rate: 0.5, n: 4, perPrompt: [], competitors: 0 };
   assert.doesNotThrow(() => {
     assertTriggerRate(report, { min: 0.5 });
   });
@@ -1128,6 +1848,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
     falsePositiveRate: 0.5,
     precision: 0.667,
     perIrrelevant: [],
+    competitors: 0,
   };
   // within both thresholds → ok
   assert.doesNotThrow(() => {
@@ -1150,6 +1871,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
         perPrompt: [],
         falsePositiveRate: 0,
         precision: undefined,
+        competitors: 0,
       },
       { minPrecision: 0.5 },
     );
@@ -1162,6 +1884,8 @@ const NO_USAGE = {
   meanDurationMs: 0,
   totalInputTokens: 0,
   totalOutputTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCacheReadTokens: 0,
 } as const;
 
 test("formatEvalReport renders one line per arm", () => {
@@ -1216,10 +1940,402 @@ test("formatEvalReport surfaces cost/latency/tokens when usage is present", () =
           meanDurationMs: 1500,
           totalInputTokens: 2000,
           totalOutputTokens: 1400,
+          totalCacheCreationTokens: 0,
+          totalCacheReadTokens: 0,
         },
       },
     },
   });
   assert.match(out, /\$0\.0500 total/);
   assert.match(out, /\$0\.0500 · 1\.5s\/run · 3\.4k tok/);
+});
+
+// --- ephemeral run environment (opt-in, default OFF) -----------------------
+
+test("ephemeralRunEnv sets a fresh HOME/TMPDIR and passes the auth allowlist", () => {
+  const env = ephemeralRunEnv(
+    {
+      HOME: "/Users/real",
+      TMPDIR: "/var/real-tmp",
+      PATH: "/usr/bin:/bin",
+      LANG: "en_US.UTF-8",
+      LC_ALL: "en_US.UTF-8",
+      TERM: "xterm",
+      ANTHROPIC_API_KEY: "sk-real",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+      ANTHROPIC_AUTH_TOKEN: "oauth-tok",
+      CLAUDE_CONFIG_DIR: "/Users/real/.claude",
+    },
+    { home: "/tmp/ephemeral-home" },
+  );
+  // Fresh HOME + TMPDIR, NOT the real ones.
+  assert.equal(env.HOME, "/tmp/ephemeral-home");
+  assert.equal(env.TMPDIR, "/tmp/ephemeral-home");
+  // Runtime essentials survive.
+  assert.equal(env.PATH, "/usr/bin:/bin");
+  assert.equal(env.LANG, "en_US.UTF-8");
+  assert.equal(env.LC_ALL, "en_US.UTF-8"); // LC_* prefix
+  assert.equal(env.TERM, "xterm");
+  // Auth survives — the real `claude` CLI must still authenticate.
+  assert.equal(env.ANTHROPIC_API_KEY, "sk-real");
+  assert.equal(env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, "oauth-tok");
+  assert.equal(env.CLAUDE_CONFIG_DIR, "/Users/real/.claude"); // CLAUDE_* prefix
+});
+
+test("ephemeralRunEnv DROPS git/ssh/aws-secret and other non-allowlisted vars", () => {
+  const env = ephemeralRunEnv(
+    {
+      PATH: "/bin",
+      ANTHROPIC_API_KEY: "sk-real",
+      // Secret-shaped / escape-the-CWD vars that must NOT leak into a run.
+      GIT_AUTHOR_NAME: "real",
+      GIT_SSH_COMMAND: "ssh -i ~/.ssh/id_rsa",
+      GH_TOKEN: "ghp_secret",
+      SSH_AUTH_SOCK: "/run/ssh-agent.sock",
+      AWS_ACCESS_KEY_ID: "AKIA...",
+      AWS_SECRET_ACCESS_KEY: "secret",
+      NPM_TOKEN: "npm_secret",
+      SOME_RANDOM_SECRET: "x",
+    },
+    { home: "/tmp/h" },
+  );
+  // Auth + runtime kept...
+  assert.equal(env.PATH, "/bin");
+  assert.equal(env.ANTHROPIC_API_KEY, "sk-real");
+  // ...everything secret-shaped dropped.
+  for (const k of [
+    "GIT_AUTHOR_NAME",
+    "GIT_SSH_COMMAND",
+    "GH_TOKEN",
+    "SSH_AUTH_SOCK",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "NPM_TOKEN",
+    "SOME_RANDOM_SECRET",
+  ]) {
+    assert.equal(env[k], undefined, `${k} must be dropped`);
+  }
+});
+
+test("ephemeralRunEnv keeps the opts.allow extras (e.g. VIGILES_*)", () => {
+  const env = ephemeralRunEnv(
+    {
+      PATH: "/bin",
+      VIGILES_INTERCEPT_TOOLS: "Bash",
+      VIGILES_OTHER: "y",
+      NOT_ALLOWED: "z",
+    },
+    { home: "/tmp/h", allow: ["VIGILES_INTERCEPT_TOOLS", "VIGILES_OTHER"] },
+  );
+  assert.equal(env.VIGILES_INTERCEPT_TOOLS, "Bash");
+  assert.equal(env.VIGILES_OTHER, "y");
+  // An extra NOT in the allow list is still dropped.
+  assert.equal(env.NOT_ALLOWED, undefined);
+});
+
+test("ephemeralRunEnv ignores undefined values in the base env", () => {
+  const env = ephemeralRunEnv(
+    { PATH: "/bin", ANTHROPIC_API_KEY: undefined },
+    { home: "/tmp/h" },
+  );
+  assert.equal(env.PATH, "/bin");
+  assert.equal("ANTHROPIC_API_KEY" in env, false);
+});
+
+test("seedEphemeralHome COPIES the auth credential file into the fresh HOME", () => {
+  const realHome = makeTmpDir();
+  const fakeHome = makeTmpDir();
+  try {
+    // Lay down a credential file under the real HOME (parent dir nested).
+    mkdirSync(join(realHome, ".claude"), { recursive: true });
+    writeFileSync(join(realHome, ".claude", ".credentials.json"), "{tok:1}");
+
+    seedEphemeralHome(fakeHome, realHome);
+
+    // It was COPIED (parent dir created) and the content matches.
+    const dest = join(fakeHome, ".claude", ".credentials.json");
+    assert.equal(existsSync(dest), true);
+    assert.equal(readFileSync(dest, "utf-8"), "{tok:1}");
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
+});
+
+test("seedEphemeralHome skips silently when the credential file is absent", () => {
+  const realHome = makeTmpDir(); // no .claude/.credentials.json
+  const fakeHome = makeTmpDir();
+  try {
+    seedEphemeralHome(fakeHome, realHome); // must not throw
+    assert.equal(
+      existsSync(join(fakeHome, ".claude", ".credentials.json")),
+      false,
+    );
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
+});
+
+test("seedEphemeralHome does NOT carry .gitconfig/.ssh even when present", () => {
+  const realHome = makeTmpDir();
+  const fakeHome = makeTmpDir();
+  try {
+    // The credential is carried; the secret-shaped files must NOT be.
+    mkdirSync(join(realHome, ".claude"), { recursive: true });
+    writeFileSync(join(realHome, ".claude", ".credentials.json"), "{tok:1}");
+    writeFileSync(join(realHome, ".gitconfig"), "[user] name = real");
+    mkdirSync(join(realHome, ".ssh"), { recursive: true });
+    writeFileSync(join(realHome, ".ssh", "id_rsa"), "PRIVATE KEY");
+
+    seedEphemeralHome(fakeHome, realHome);
+
+    assert.equal(
+      existsSync(join(fakeHome, ".claude", ".credentials.json")),
+      true,
+    );
+    assert.equal(existsSync(join(fakeHome, ".gitconfig")), false);
+    assert.equal(existsSync(join(fakeHome, ".ssh", "id_rsa")), false);
+    // The keep-list is exactly the auth allowlist, nothing more.
+    assert.deepEqual(EPHEMERAL_HOME_KEEP, [".claude/.credentials.json"]);
+  } finally {
+    cleanupTmpDir(realHome);
+    cleanupTmpDir(fakeHome);
+  }
+});
+
+test("ephemeralEnv DEFAULT (off): env is the byte-identical overlay, not scrubbed", async () => {
+  // With the flag OFF (default), the runner is handed the legacy overlay env:
+  // no `replaceEnv`, and only the intercept overlay (or undefined) — proving the
+  // default path is unchanged and DOES NOT scrub the inherited environment.
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} }, // no interceptTools, no ephemeralEnv
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // Default: env overlay is undefined and replaceEnv is falsy — so `spawnAgent`
+  // builds `{ ...process.env }`, exactly as before this feature existed.
+  assert.equal(a.env, undefined);
+  assert.notEqual(a.replaceEnv, true);
+});
+
+test("stubs (default env path): prepends the stub bin dir to the run's PATH", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      stubs: [{ name: "gh", stdout: "PR merged" }],
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // Legacy overlay path: `spawnAgent` spreads `{ ...process.env, ...a.env }`, so
+  // the overlay PATH starts with the stub dir, then the real PATH.
+  assert.ok(a.env, "env overlay set");
+  assert.ok(
+    a.env.PATH?.startsWith(a.cwd),
+    `PATH "${a.env.PATH ?? "<unset>"}" starts with the trial cwd (the stub bin dir is under it)`,
+  );
+  assert.ok(
+    process.env.PATH === undefined || a.env.PATH?.endsWith(process.env.PATH),
+    "the real PATH still follows the stub dir",
+  );
+  assert.notEqual(a.replaceEnv, true);
+});
+
+test("stubs (ephemeral env path): prepends the stub bin dir to the scrubbed PATH", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      ephemeralEnv: true,
+      stubs: [{ name: "psql", stdout: "row" }],
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  assert.equal(a.replaceEnv, true);
+  assert.ok(a.env);
+  // The stub dir (under the trial cwd) is prepended ahead of the passed-through
+  // real PATH in the ephemeral env.
+  assert.ok(
+    a.env.PATH?.startsWith(a.cwd),
+    `scrubbed PATH "${a.env.PATH ?? "<unset>"}" starts with the trial cwd`,
+  );
+});
+
+test("stubs absent: PATH is unchanged (env overlay undefined)", async () => {
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: {} },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  // No stubs, no intercepts, no ephemeral → overlay undefined (byte-identical).
+  assert.equal(a.env, undefined);
+});
+
+test("ephemeralEnv on: runner gets a replaceEnv scrubbed env with auth + allowed extras", async () => {
+  process.env.VIGILES_EPHEMERAL_PROBE_SECRET = "leak-me";
+  try {
+    const seen: AgentRunArgs[] = [];
+    const runner = (
+      a: AgentRunArgs,
+    ): Promise<{ code: number; stdout: string }> => {
+      seen.push(a);
+      return Promise.resolve({
+        code: 0,
+        stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+      });
+    };
+    await runEvalWith(
+      {
+        arms: { a: {} },
+        task: "t",
+        trials: 1,
+        spacingSec: 0,
+        ephemeralEnv: true,
+        measure: () => ({ ok: true }),
+      },
+      runner,
+    );
+    const a = seen[0];
+    assert.ok(a);
+    // Ephemeral mode: env is the COMPLETE replacement env, not an overlay.
+    assert.equal(a.replaceEnv, true);
+    assert.ok(a.env);
+    // HOME is the throwaway dir (under the trial's temp cwd), not the real one.
+    assert.notEqual(a.env.HOME, process.env.HOME);
+    assert.equal(a.env.HOME, a.env.TMPDIR);
+    // Auth + PATH still present (so a real run still authenticates / resolves).
+    assert.equal(a.env.PATH, process.env.PATH);
+    // The non-allowlisted secret we planted in process.env is scrubbed.
+    assert.equal(a.env.VIGILES_EPHEMERAL_PROBE_SECRET, undefined);
+  } finally {
+    delete process.env.VIGILES_EPHEMERAL_PROBE_SECRET;
+  }
+});
+
+// The security-critical env resolution behind `ephemeralEnv` — the one line that
+// actually drops the host environment — lives in `resolveSpawnEnv` (extracted
+// from the v8-ignored real-spawn path so it's testable). These two tests pin the
+// DECISION (pure) and the BEHAVIOUR (a real child honours the scrub).
+test("resolveSpawnEnv: replaceEnv replaces (drops base), default overlays", () => {
+  const base = { SECRET: "leak", PATH: "/bin", HOME: "/real" };
+  // replaceEnv → EXACTLY the scrubbed env; the base (incl. SECRET) is dropped.
+  const scrubbed = { PATH: "/bin", HOME: "/tmp/throwaway" };
+  assert.deepEqual(resolveSpawnEnv({ env: scrubbed, replaceEnv: true }, base), {
+    PATH: "/bin",
+    HOME: "/tmp/throwaway",
+  });
+  // default (overlay) → base merged under the overlay (the pre-ephemeral path).
+  const overlay = resolveSpawnEnv({ env: { X: "1" }, replaceEnv: false }, base);
+  assert.equal(overlay.SECRET, "leak");
+  assert.equal(overlay.X, "1");
+});
+
+test("resolveSpawnEnv: a REAL subprocess honours the scrub (secret gone, HOME redirected, ~/.ssh unreachable)", () => {
+  const realHome = mkdtempSync(join(tmpdir(), "vig-realhome-"));
+  const throwaway = mkdtempSync(join(tmpdir(), "vig-throwaway-"));
+  try {
+    // Plant a secret in the 'real' env and a private key under the real HOME.
+    mkdirSync(join(realHome, ".ssh"), { recursive: true });
+    writeFileSync(join(realHome, ".ssh", "id_rsa"), "PRIVATE-KEY");
+    const base = {
+      ...process.env,
+      HOME: realHome,
+      VIG_PROBE_SECRET: "leak-me",
+    };
+    const scrubbed = ephemeralRunEnv(base, { home: throwaway });
+    const env = resolveSpawnEnv({ env: scrubbed, replaceEnv: true }, base);
+    // A real node child reports what it can actually see with that env.
+    const probe =
+      "const fs=require('fs'),p=require('path');" +
+      "process.stdout.write(JSON.stringify({" +
+      "secret: process.env.VIG_PROBE_SECRET ?? null," +
+      "home: process.env.HOME," +
+      "sshReadable: fs.existsSync(p.join(process.env.HOME||'','.ssh','id_rsa'))" +
+      "}))";
+    const out = spawnSync(process.execPath, ["-e", probe], {
+      env,
+      encoding: "utf8",
+    });
+    const seen = JSON.parse(out.stdout) as {
+      secret: string | null;
+      home: string;
+      sshReadable: boolean;
+    };
+    assert.equal(seen.secret, null, "planted secret must be scrubbed");
+    assert.equal(seen.home, throwaway, "HOME must be the throwaway dir");
+    assert.equal(
+      seen.sshReadable,
+      false,
+      "HOME redirection must make the real ~/.ssh unreachable",
+    );
+  } finally {
+    rmSync(realHome, { recursive: true, force: true });
+    rmSync(throwaway, { recursive: true, force: true });
+  }
 });

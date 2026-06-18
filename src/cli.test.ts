@@ -24,6 +24,7 @@ const CLI = resolve(__dirname, "..", "dist", "cli.js");
 function run(
   args: string,
   cwd: string,
+  env?: Record<string, string>,
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
     const stdout = execSync(`node ${CLI} ${args}`, {
@@ -31,6 +32,7 @@ function run(
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
+      env: env ? { ...process.env, ...env } : process.env,
     });
     return { stdout, stderr: "", exitCode: 0 };
   } catch (e: unknown) {
@@ -379,6 +381,26 @@ export default claude({
       );
     } finally {
       rmSync(specDir, { recursive: true, force: true });
+    }
+  });
+
+  it("emits a per-line GitHub annotation for a broken doc ref (PR inline)", () => {
+    // The dogfooded GitHub Action surfaces lint findings INLINE on the PR diff
+    // via `::error file=,line=::` workflow annotations. A broken `file()` ref in
+    // a markdown code block must produce one (it carries file+line) — this is
+    // what makes the Action leave per-line feedback, not just a summary blob.
+    const dir = mkdtempSync(join(tmpdir(), "vig-gha-annot-"));
+    try {
+      writeFileSync(
+        join(dir, "doc.md"),
+        '# Doc\n\n```ts\nfile("does/not/exist.ts")\n```\n',
+      );
+      const { stdout } = run("lint", dir, { GITHUB_ACTIONS: "true" });
+      // The annotation names the file and the exact line (4) of the bad ref.
+      assert.match(stdout, /::error file=.*doc\.md,line=4::/);
+      assert.match(stdout, /File not found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
@@ -1651,6 +1673,26 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
       const strict = run("test --no-skip s.harness.mjs p.harness.mjs", dir);
       assert.equal(strict.exitCode, 1); // a skip is untested surface here
       assert.match(strict.stdout, /SKIPPED — untested surface/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--min fails loudly when fewer evals ran than required (never a silent 0)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-min-"));
+    try {
+      writeFileSync(join(dir, "a.eval.mjs"), "process.exit(0);\n");
+      // a glob/path matching nothing → 0 ran → must fail under --min
+      const none = run("eval --min=1 no-such-*.eval.mjs", dir);
+      assert.equal(none.exitCode, 1);
+      assert.match(none.stderr, /never executed/);
+      // asking for more than exist also fails
+      const tooFew = run("eval --min=2 a.eval.mjs", dir);
+      assert.equal(tooFew.exitCode, 1);
+      assert.match(tooFew.stderr, /--min=2 but only 1/);
+      // enough present → passes the guard (the one script runs and exits 0)
+      const ok = run("eval --min=1 a.eval.mjs", dir);
+      assert.equal(ok.exitCode, 0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

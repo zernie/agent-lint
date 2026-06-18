@@ -22,6 +22,14 @@ absence. The honest non-Docker alternative for hosts where user namespaces are
 hard-disabled is [Landlock](https://docs.kernel.org/userspace-api/landlock.html)
 (unprivileged FS, and network from kernel 6.7) — a future tier, not shipped.
 
+> **macOS is coming via a native backend, not a VM.** bwrap is Linux-only by
+> design (it _is_ Linux namespaces), so Mac confinement comes from a second backend
+> — `sandbox-exec` (Seatbelt), built into every Mac — behind a `vigiles/os-isolation`
+> port, with the safe-by-default rule unchanged. The decision, the build-vs-adopt
+> survey (incl. why not Claude Code's own Bash-only sandbox or Anthropic's `srt`),
+> and the enabled/disabled model are recorded in
+> [`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md).
+
 > **`sandboxAvailable()` probes real capability, not just the binary.** `bwrap
 --version` succeeding doesn't mean this host can create namespaces (many CI
 > runners disable unprivileged user namespaces). We probe an actual `bwrap
@@ -84,7 +92,7 @@ touched in its work dir (`r.filesWritten`, relative paths) — so you can assert
 hook stayed in its lane:
 
 ```ts
-import { assertWroteOnly, assertNoWrite } from "vigiles/harness-assert";
+import { assertWroteOnly, assertNoWrite } from "vigiles/testing";
 
 const r = runHook(thirdPartyHookCmd, event, { trusted: false });
 // r.filesWritten → [".omc/state/ultrawork-state.json"]
@@ -109,8 +117,8 @@ question — "what does this skill phone home to / which registry would its inst
 hit?" — turn on recording:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
-import { assertNoEgress, assertEgressOnly } from "vigiles/harness-assert";
+import { runHook } from "vigiles/testing";
+import { assertNoEgress, assertEgressOnly } from "vigiles/testing";
 
 const r = runHook(thirdPartyHookCmd, event, { recordEgress: true });
 // r.egress → [{ host: "registry.npmjs.org", port: 443, ts }]   (recorded)
@@ -144,7 +152,7 @@ expect?", a wall (record or not) can't answer it — the install has to succeed.
 packet layer**:
 
 ```ts
-import { runHook } from "vigiles/run-hook";
+import { runHook } from "vigiles/testing";
 
 const r = runHook(installHookCmd, event, {
   egress: { allow: ["registry.npmjs.org"] },
@@ -203,6 +211,9 @@ stays `0` — proving, through the allowlist path, that it reaches the npm regis
 
 ## See also
 
+- [Safety model](safety.md) — the front-door overview: this confinement plus
+  preventing a real model's tool side effects (`interceptTools`/`notTool`), and
+  the one safe-by-default rule that ties them together.
 - [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
 - [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
 - [`src/egress.ts`](../src/egress.ts) — the `egress: { allow }` allowlist: ruleset builder, counter parser, the pure seams.

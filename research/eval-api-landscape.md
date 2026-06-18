@@ -3,7 +3,10 @@
 Research capturing how vigiles' eval API (`src/eval.ts`, `src/harness-assert.ts`,
 `src/judge.ts`) stacks up against the LLM/agent eval ecosystem, and the roadmap
 that follows. Companion to `research/harness-testing.md` (the three-tier design)
-and `docs/harness-testing.md` (the guide).
+and `docs/harness-testing.md` (the guide). The conceptual model behind the two
+verbs — feature = deterministic TEST + behavioral EVAL, the two gating knobs,
+cost-matched mechanism, and the ranked gap roadmap — lives in
+[`docs/eval-architecture.md`](../docs/eval-architecture.md).
 
 ## Decision (2026-06-15): keep the harness tiers, don't rebuild the eval stack
 
@@ -124,27 +127,73 @@ to us: they observe/score traffic; we run controlled harness experiments.
 Academic benchmark harnesses (multiple-choice/generation tasks, leaderboards).
 Out of scope: explicitly the thing vigiles does _not_ do.
 
+## New direct competitors + the rigor differentiator (2026-06-17)
+
+Two tools surfaced that are closer to vigiles's exact shape than the broad-field
+profiles above, plus adjacent platforms worth naming.
+
+- **`TribeAI/claude-evals`** — "implements Anthropic's published eval patterns": a
+  50-case golden dataset, deterministic graders + LLM-judge + regression, with
+  hooks (PreToolUse / PostToolUse / SubagentStop). The decisive delta: it uses the
+  **metered Agent SDK / `ANTHROPIC_API_KEY`**, **not** the subscription CLI — so it
+  inherits the same per-token cost objection as promptfoo, and lacks the
+  no-model/no-key cheaper tiers.
+- **`paultyng/testagent`** — "deterministic fake of the `claude` and `codex` CLIs;
+  test hooks and orchestrator integrations locally and in CI without an API key."
+  Same idea as vigiles's mock-model / `runHook` tier, but at **lower-level CLI/JSON
+  fidelity** — it fakes the CLI, not the skill/subagent semantics (no
+  trigger-rate, no assembled-harness skill/subagent checks, no A/B-of-the-harness).
+  Validation that the no-key deterministic tier is a real category, not parity.
+- **Adjacent platforms:** MLflow (experiment tracking + LLM eval), Phoenix v16
+  (sandboxed **Code Evaluators**), Tessl Registry, Braintrust — orthogonal
+  observability/registry/hosted surfaces, not harness-arm A/B.
+
+**Statistical rigor (se / significance / pass^k) is a confirmed differentiator.**
+The HN critique of Vercel's AGENTS.md-vs-skills eval — "could be noise with that
+sample size" — is direct evidence the field publishes deltas without a noise
+floor. vigiles's Welch significance + pass^k (`src/stats.ts`) answer exactly that,
+and neither `claude-evals` nor `testagent` carries it.
+
 ## Scorecard
 
-| Dimension                                                 | vigiles                | promptfoo          | DeepEval   | Braintrust | Inspect          |
-| --------------------------------------------------------- | ---------------------- | ------------------ | ---------- | ---------- | ---------------- |
-| Harness-as-unit-under-test (A/B arms)                     | **✓ native**           | partial (matrix)   | ✗          | partial    | partial          |
-| pass^k reliability (τ-bench)                              | **✓**                  | ✗                  | ✗          | ✗          | partial (epochs) |
-| Statistical spread (std/se)                               | **✓**                  | ✗                  | ✗          | partial    | ✓ (stderr)       |
-| Significance test (CI / p-value)                          | ✗                      | ✗                  | ✗          | partial    | partial          |
-| Tool / trajectory assertions                              | **✓ strong**           | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
-| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal                | ✓                  | **✓✓**     | ✓          | ✓                |
-| Dataset / scenario primitive                              | ✗                      | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
-| Cost / latency / token metrics                            | ✗                      | ✓                  | ✓          | ✓          | ✓                |
-| Concurrency                                               | ✗ (sequential + sleep) | ✓                  | ✓          | ✓          | ✓                |
-| Caching / record-replay                                   | ✗ (eval tier)          | ✓                  | partial    | ✓          | partial          |
-| Persisted reports / regression gating                     | ✗ (console string)     | ✓                  | partial    | ✓✓         | ✓                |
-| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**          | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+> The `vigiles` column reflects **shipped state as of 2026-06-17** (the
+> significance, cost/latency, concurrency, caching, and regression-gating gaps
+> the original analysis flagged have all since shipped — see **Status**).
+> Competitor cells reflect the ecosystem as understood mid-2026; treat them as
+> directional, not contractual.
 
-(Profiles reflect the ecosystem as understood mid-2026; treat specific competitor
-features as directional, not contractual. The `vigiles` column is the state **at
-analysis time** — the cost/latency, concurrency, caching, and significance-test
-gaps below have since been closed; see **Status** for what shipped.)
+| Dimension                                                 | vigiles            | promptfoo          | DeepEval   | Braintrust | Inspect          |
+| --------------------------------------------------------- | ------------------ | ------------------ | ---------- | ---------- | ---------------- |
+| Harness-as-unit-under-test (A/B arms, loaded as it ships) | **✓ native**       | partial (matrix)   | ✗          | partial    | partial          |
+| No-model / no-key cheaper tiers (`runHook`, mock-model)   | **✓✓ unique**      | ✗                  | ✗          | ✗          | ✗                |
+| Intercept-and-prevent a tool in the real harness (safety) | **✓ unique**       | ✗                  | ✗          | ✗          | ✗                |
+| Tool / trajectory assertions (incl. arg matchers)         | **✓ strong**       | ✓ (`trajectory:*`) | ✓          | ✓          | ✓                |
+| pass^k reliability (τ-bench)                              | **✓**              | ✗                  | ✗          | ✗          | partial (epochs) |
+| Statistical spread (std/se)                               | **✓**              | ✗                  | ✗          | partial    | ✓ (stderr)       |
+| Significance test (Welch p-value)                         | **✓ shipped**      | ✗                  | ✗          | partial    | partial          |
+| Regression gate vs committed baseline                     | **✓ shipped**      | ✗                  | partial    | ✓✓         | ✓                |
+| Cost / latency / token capture                            | **✓ shipped**      | ✓                  | ✓          | ✓          | ✓                |
+| Concurrency + rate-limit backoff                          | **✓ shipped**      | ✓                  | ✓          | ✓          | ✓                |
+| Record / replay cache (+ filesystem restore)              | **✓ shipped**      | ✓                  | partial    | ✓          | partial          |
+| LLM-judge depth (G-Eval/pairwise/multi-criteria)          | minimal            | ✓                  | **✓✓**     | ✓          | ✓                |
+| Dataset / scenario primitive                              | ✗                  | ✓✓                 | ✓✓         | ✓✓         | ✓✓               |
+| Red team                                                  | ✗                  | ✓✓                 | partial    | ✗          | partial          |
+| UI / dashboards / web share                               | ✗ (console string) | ✓                  | partial    | ✓✓         | ✓                |
+| Runner-agnostic lib (node/vitest/jest), zero-dep, no SaaS | **✓✓ unique**      | ✓ (CLI)            | ✓ (pytest) | ✗ (SaaS)   | ✓                |
+
+The three **bolded-unique** rows are the defensible core, and they sharpened in
+2026-06: (1) the **no-model/no-key cheaper tiers** (`runHook` + the mock-model
+`runHarnessTest`) — promptfoo et al. are real-model-only by construction; (2)
+**harness-arm A/B loaded as it ships** (the `plugin-loader` question a YAML-config
+runner structurally cannot host); and (3) the new **tool-call spy** — `toolWith` /
+`notTool` over the trace _plus_ `interceptTools`, which intercepts a tool in the real
+PreToolUse hook layer so a real-model run that decides to `git push` / hit a paid
+API is observed-but-prevented. promptfoo's `trajectory:*` can _assert_ on a trace,
+but it can't _intercept-and-prevent_ inside the real shipped harness. The eval tier
+runs on your **subscription** in a Claude Code session (vigiles drives the `claude`
+CLI), not a metered GitHub Actions job — the affordable path competitors lack.
+Honest deltas the other way are unchanged: dataset/scenario, red-team, judge
+depth, and UI remain theirs, and we bridge (or skip) rather than chase them.
 
 ## What vigiles already does at a world-class level
 

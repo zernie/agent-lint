@@ -95,12 +95,13 @@ declare module "vigiles/generated" {
     | "test:types"
     | "demo:plugin";
 
-  /** 153 project files. */
+  /** 161 project files. */
   export type ProjectFile = 
     | "src/action-gate.test.ts"
     | "src/action-gate.ts"
     | "src/action-yml.test.ts"
     | "src/adapter-conformance.ts"
+    | "src/adapter-registry.test.ts"
     | "src/adapter-registry.ts"
     | "src/adapter.ts"
     | "src/adapters/claude-code/adapter.test.ts"
@@ -145,6 +146,7 @@ declare module "vigiles/generated" {
     | "src/adapters/opencode/model-mock.ts"
     | "src/adapters/opencode/opencode.test.ts"
     | "src/adapters/opencode/runtime.ts"
+    | "src/arg-match.ts"
     | "src/check.test.ts"
     | "src/check.ts"
     | "src/claude-code.ts"
@@ -241,6 +243,8 @@ declare module "vigiles/generated" {
     | "src/scan.ts"
     | "src/setup-plan.test.ts"
     | "src/setup-plan.ts"
+    | "src/skill-harness.test.ts"
+    | "src/skill-harness.ts"
     | "src/skill-test.test.ts"
     | "src/skill-test.ts"
     | "src/stats.test.ts"
@@ -248,6 +252,10 @@ declare module "vigiles/generated" {
     | "src/test-coverage.test.ts"
     | "src/test-coverage.ts"
     | "src/testing.ts"
+    | "src/tool-intercept.test.ts"
+    | "src/tool-intercept.ts"
+    | "src/tool-stub.test.ts"
+    | "src/tool-stub.ts"
     | "src/unit.ts"
     | "src/vitest.mts";
 }
@@ -326,6 +334,7 @@ declare module "vigiles/spec" {
       | "src/action-gate.ts"
       | "src/action-yml.test.ts"
       | "src/adapter-conformance.ts"
+      | "src/adapter-registry.test.ts"
       | "src/adapter-registry.ts"
       | "src/adapter.ts"
       | "src/adapters/claude-code/adapter.test.ts"
@@ -370,6 +379,7 @@ declare module "vigiles/spec" {
       | "src/adapters/opencode/model-mock.ts"
       | "src/adapters/opencode/opencode.test.ts"
       | "src/adapters/opencode/runtime.ts"
+      | "src/arg-match.ts"
       | "src/check.test.ts"
       | "src/check.ts"
       | "src/claude-code.ts"
@@ -466,6 +476,8 @@ declare module "vigiles/spec" {
       | "src/scan.ts"
       | "src/setup-plan.test.ts"
       | "src/setup-plan.ts"
+      | "src/skill-harness.test.ts"
+      | "src/skill-harness.ts"
       | "src/skill-test.test.ts"
       | "src/skill-test.ts"
       | "src/stats.test.ts"
@@ -473,6 +485,10 @@ declare module "vigiles/spec" {
       | "src/test-coverage.test.ts"
       | "src/test-coverage.ts"
       | "src/testing.ts"
+      | "src/tool-intercept.test.ts"
+      | "src/tool-intercept.ts"
+      | "src/tool-stub.test.ts"
+      | "src/tool-stub.ts"
       | "src/unit.ts"
       | "src/vitest.mts";
   }

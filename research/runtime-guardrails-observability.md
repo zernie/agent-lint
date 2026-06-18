@@ -48,7 +48,7 @@ Everything else — injection detection, PII, toxicity, topic denial — is a cl
 
 Both markets answer "what is the agent doing right now?" Neither answers **"does what the agent is doing match the declared, version-controlled contract that was tested at commit time?"**
 
-- Guardrails enforce **a policy**, but that policy is authored separately from the instruction file / spec. Nothing guarantees the online tool-allowlist equals the `tools:` contract the subagent was tested against. The declared-vs-enforced gap (#54898) that `agent-runtime.ts` closes _in the dev loop_ re-opens _in production_ under a different engine.
+- Guardrails enforce **a policy**, but that policy is authored separately from the instruction file / spec. Nothing guarantees the online tool-allowlist equals the `tools:` contract the subagent was tested against. The declared-vs-enforced gap (#4740/#21460, SDK #172) that `agent-runtime.ts` closes _in the dev loop_ re-opens _in production_ under a different engine.
 - Observability records **what happened**, but the trace is interpreted by humans/dashboards. There is no machine check that the trace conforms to the spec — no "this run touched a tool outside the contract" assertion derived from the same source of truth the tests used.
 
 The whitespace is the **contract that both downstream layers should share**: one declaration that (a) the dev-loop hook enforces, (b) the production policy engine enforces, and (c) the production trace is verified against. vigiles already owns (a) and owns the source of truth. Nobody owns the _binding_ between commit-time truth and runtime reality.

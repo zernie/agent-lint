@@ -24,6 +24,15 @@ import type {
 } from "./harness-test.js";
 import type { HookRunResult } from "./run-hook.js";
 import { judge as runJudge } from "./judge.js";
+import {
+  type ArgMatcher,
+  matchesArgs,
+  stringifyValue,
+  describeArgs,
+  serializeArgs,
+} from "./arg-match.js";
+
+export type { ArgMatcher };
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -121,6 +130,71 @@ export function tool(name: string): Check<Trace> {
             `expected the agent to use tool "${name}", but it used ${distinctToolNames(t.toolCalls)}`,
           ),
     toJSON: () => ({ kind: "tool", name }),
+  };
+}
+
+/**
+ * The agent used tool `name` with at least one call whose `input` matches `args`
+ * — the **argument** half of the tool-call spy. Asserts not just *that* a tool was
+ * reached but *how* it was called (the image-request body carried the style suffix,
+ * the panel spawn requested a non-expert), which a completion grader can't see.
+ *
+ * Cross-reference: ≈ promptfoo `is-valid-function-call` / DeepEval `ToolCorrectnessMetric`.
+ */
+export function toolWith(name: string, args: ArgMatcher): Check<Trace> {
+  return {
+    kind: "toolWith",
+    eval: (t) => {
+      const calls = t.toolCalls.filter((c) => c.name === name);
+      const want = describeArgs(args);
+      if (calls.length === 0) {
+        return no(
+          `expected the agent to use tool "${name}" (with ${want}), but it used ${distinctToolNames(t.toolCalls)}`,
+        );
+      }
+      return calls.some((c) => matchesArgs(c.input, args))
+        ? ok(`agent used "${name}" with ${want}`)
+        : no(
+            `agent used "${name}" but never with ${want} (saw ${calls
+              .map((c) => truncate(stringifyValue(c.input), 60))
+              .join("; ")})`,
+          );
+    },
+    toJSON: () => ({ kind: "toolWith", name, args: serializeArgs(args) }),
+  };
+}
+
+/**
+ * The agent did NOT use tool `name` — the **safety / negative** assertion. With
+ * `args`, only calls whose `input` matches are forbidden (so "did not push to
+ * `main`" still allows pushing elsewhere; "no paid API call" forbids it outright).
+ * This is the highest-value, most-overlooked check, and the one a
+ * completion-grading eval structurally cannot make: it sees the agent's *decision*
+ * to act, not just its final text.
+ *
+ * Cross-reference: this negative/safety assertion of a *decision not to act* has
+ * no promptfoo / DeepEval / Inspect equivalent — they grade what the agent DID,
+ * not what it correctly refrained from doing.
+ */
+export function notTool(name: string, args?: ArgMatcher): Check<Trace> {
+  return {
+    kind: "notTool",
+    eval: (t) => {
+      const calls = t.toolCalls.filter((c) => c.name === name);
+      const offending = args
+        ? calls.filter((c) => matchesArgs(c.input, args))
+        : calls;
+      const what = args ? `"${name}" with ${describeArgs(args)}` : `"${name}"`;
+      const first = offending[0];
+      if (!first) return ok(`agent never used ${what}`);
+      return no(
+        `expected the agent NOT to use ${what}, but it did (${truncate(stringifyValue(first.input), 60)})`,
+      );
+    },
+    toJSON: () =>
+      args
+        ? { kind: "notTool", name, args: serializeArgs(args) }
+        : { kind: "notTool", name },
   };
 }
 
@@ -399,8 +473,13 @@ interface UsageTrace {
   readonly usage: {
     readonly costUsd: number;
     readonly durationMs: number;
+    /** Fresh (uncached) input tokens, billed at full input price. */
     readonly inputTokens: number;
     readonly outputTokens: number;
+    /** Tokens written to the prompt cache this run (~1.25× input price). */
+    readonly cacheCreationTokens: number;
+    /** Tokens served from the prompt cache this run (~0.1× input price). */
+    readonly cacheReadTokens: number;
   };
 }
 
@@ -443,5 +522,75 @@ export function tokens(opts: { max: number }): Check<UsageTrace> {
         : no(`expected ≤ ${String(opts.max)} tokens, got ${String(v)}`);
     },
     toJSON: () => ({ kind: "tokens", max: opts.max }),
+  };
+}
+
+/**
+ * The run used at most `max` **fresh (uncached) input** tokens. The honest input
+ * side of a cost claim: a skill or CLAUDE.md injection adds input every turn, so
+ * a "compression" win on output can be erased here. (Cache reads are separate —
+ * see `cacheTokens`.)
+ */
+export function inputTokens(opts: { max: number }): Check<UsageTrace> {
+  return {
+    kind: "inputTokens",
+    eval: (t) => {
+      const v = t.usage.inputTokens;
+      return v <= opts.max
+        ? ok(`${String(v)} input tokens ≤ ${String(opts.max)}`)
+        : no(`expected ≤ ${String(opts.max)} input tokens, got ${String(v)}`);
+    },
+    toJSON: () => ({ kind: "inputTokens", max: opts.max }),
+  };
+}
+
+/** The run used at most `max` **output** tokens — the generation side. */
+export function outputTokens(opts: { max: number }): Check<UsageTrace> {
+  return {
+    kind: "outputTokens",
+    eval: (t) => {
+      const v = t.usage.outputTokens;
+      return v <= opts.max
+        ? ok(`${String(v)} output tokens ≤ ${String(opts.max)}`)
+        : no(`expected ≤ ${String(opts.max)} output tokens, got ${String(v)}`);
+    },
+    toJSON: () => ({ kind: "outputTokens", max: opts.max }),
+  };
+}
+
+/**
+ * Bound the prompt-cache token classes a run uses. `maxCreation` caps tokens
+ * **written** to the cache (the ~1.25× write premium — a fresh/cold prompt);
+ * `maxRead` caps tokens **served** from cache (~0.1× input). Each constraint is
+ * checked only when provided; the check passes when every provided bound holds.
+ */
+export function cacheTokens(opts: {
+  maxCreation?: number;
+  maxRead?: number;
+}): Check<UsageTrace> {
+  return {
+    kind: "cacheTokens",
+    eval: (t) => {
+      const created = t.usage.cacheCreationTokens;
+      const read = t.usage.cacheReadTokens;
+      if (opts.maxCreation !== undefined && created > opts.maxCreation) {
+        return no(
+          `expected ≤ ${String(opts.maxCreation)} cache-creation tokens, got ${String(created)}`,
+        );
+      }
+      if (opts.maxRead !== undefined && read > opts.maxRead) {
+        return no(
+          `expected ≤ ${String(opts.maxRead)} cache-read tokens, got ${String(read)}`,
+        );
+      }
+      return ok(
+        `cache tokens within bounds (created ${String(created)}, read ${String(read)})`,
+      );
+    },
+    toJSON: () => ({
+      kind: "cacheTokens",
+      ...(opts.maxCreation !== undefined && { maxCreation: opts.maxCreation }),
+      ...(opts.maxRead !== undefined && { maxRead: opts.maxRead }),
+    }),
   };
 }

@@ -31,6 +31,47 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
+  Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
+  refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
+  Extract the `vigiles/os-isolation` port and add a `sandbox-exec`/Seatbelt backend
+  beside `bwrap`. Per-host egress stays Linux-only (Seatbelt can't packet-filter
+  per host); macOS degrades honestly to deny-all-net. **Phased design is ready**
+  (interface + layout + capability matrix + 4 green-keeping phases + the
+  Seatbelt-blocks-localhost limitation): [os-isolation-port](os-isolation-port.md),
+  decided in [cross-platform-sandboxing](cross-platform-sandboxing.md). **Note: the
+  maintainer has no Mac**, so this needs a macOS CI runner (or a Mac-having
+  contributor) to validate the backend end-to-end — the pure policy/args seams can
+  still be unit-tested without one. · **P1**
+
+- **Run the behavioral (eval) tier in CI as a gate** — today `vigiles eval` is
+  manual-only and results are frozen as `FINDING:` comments (a snapshot is
+  documentation, not protection). Wire the _cheap_ tier (`measureTriggerRate` /
+  `measure` with `stubSkillBodies`, on **Sonnet** — the realistic selector, not
+  haiku, which under-measures trigger-rate) as a per-PR gate, then the
+  tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
+  roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
+
+- **PATH-shim / record-replay helper (fake-on-PATH)** — the R2 tier: a fake
+  binary earlier on PATH that emits a result **recorded once** from the real tool
+  and replayed deterministically (never model-synthesized — drift → false
+  confidence), reusing the eval cache's record/replay machinery. **Explicitly
+  ahead of real-service/testcontainers provisioning:** a survey of community
+  collections + a ~90-artifact production audit put R1+R2 at ~90%+ of real plugin
+  surface (R3 real-service ≤ ~9%), and every GitHub/issue-tracker/chat/CI/linter/
+  test-runner integration is replayable at R2 with no Docker. Higher leverage than
+  a container integration. [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
+- **Native input/output/cache token + cost measurement** — split `tokens()` into
+  `inputTokens`/`outputTokens`, capture cache tokens, and report a per-class A/B
+  **delta** gated by Welch significance. A harness change trades input↔output (a
+  CLAUDE.md/skill injection adds input every turn; a "compression" skill cuts
+  output), so a single total can bless a net-negative change — SkillBenchmark's
+  Caveman cut output yet 2–4×'d cost. The money story, and the data model is half
+  there. [eval-architecture](../docs/eval-architecture.md) · [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
+- **Adversarial-gate check + eval→enforce bridge** — a first-class "ask the agent to
+  skip the enforcement gate, assert it refuses" check (`notTool` shape); when it
+  fails, point at the deterministic rail (pillar 2 → pillar 1). The highest-value
+  behavioral test for an enforcement skill. [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
 - **#2 Reverse coverage** — "your CLAUDE.md documents 5 of 47 enabled rules": the
   one item that is both moat and a shareable distribution artifact.
   [feature-ideas #2](feature-ideas.md) · **HIGH**
@@ -44,12 +85,49 @@
   [sync-tool-compatibility](sync-tool-compatibility.md)
 - **"Valid is not true" positioning** — one comparison row vs structural linters
   (agnix); pure messaging, no build. [standards-conformance](standards-conformance.md)
+- **Dogfood popular plugins + emit a per-plugin `COVERAGE.md` scorecard** — run the
+  rung classifier over popular community plugin collections and emit a per-plugin
+  `COVERAGE.md` (R1/R2/R3 distribution + the R3 service shortlist + a testability
+  grade). Validates the ~90% R1+R2 claim on real artifacts AND is a shareable
+  distribution artifact (the leaderboard's testability sibling).
+  [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
 - **`scan` → observed-egress column** — boot each hook under `recordEgress`, list
   hosts reached; turns `scan` from static into behavioural, feeding the
   leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md)
 
 ## Next — differentiated, medium effort
 
+- **Ephemeral run environment (not just CWD)** — every model-driven run already
+  uses a throwaway `cwd`, but the direct/non-bwrap path inherits the real `$HOME` +
+  env, so a model-driven `git push` / write to `~` escapes — even for a trusted
+  plugin (the model, not the author, chose the action). Default every run to a
+  fresh HOME + scrubbed env (re-inject only the harness's own auth). Needs no
+  kernel features → lands on macOS today, ahead of the Seatbelt backend; the
+  cheapest cross-platform side-effect protection. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **HIGH**
+- **Move the CC mock + driver physically into the adapter dir (structural cleanup).**
+  `src/mock-model.ts` (the Anthropic-Messages mock) and `claudeCodeDriver` +
+  `buildClaudeArgs`/`parseClaudeRun`/`claudeAvailable` (in `src/harness-test.ts`) are
+  Claude-Code-specific but sit at the composition root, so the directory-based
+  `agnostic-surface ⊄ adapter` lint can't see them by location. Today they're
+  enforced by **glob-classifying `src/mock-model.ts` as `cc-harness`** in
+  `eslint.config.mjs` (works, proven — reintroducing the leak errors). The
+  principled end-state is to physically relocate them under
+  `src/adapters/claude-code/` (mirroring `src/adapters/codex/{mock-model,driver}.ts`)
+  so classification is by directory, not a glob exception — and so the symbol-level
+  leak of `claudeCodeDriver` via a future `export *` is caught too. Bounded refactor
+  (~8 files' relative imports + the `claudeCodeAdapter` wiring); update the eslint
+  classification back to a plain directory pattern afterward. [code-adapter-architecture](code-adapter-architecture.md) · **MEDIUM**
+- **Verify & test the harness's sandbox config** — `settings.json`'s `sandbox` block
+  is a harness surface: verify `allowedDomains`/`allowWrite` are coherent (flag a hook
+  that phones a blocked domain), and prove the configured sandbox blocks what it claims
+  (reuse `recordEgress`/`egress:{allow}`). The "valid is not true" wedge applied to
+  sandbox policy. [cross-platform-sandboxing](cross-platform-sandboxing.md) · **P3**
+- **Near-neighbor trigger-rate tier** — between isolated (cheap, optimistic) and
+  whole-harness (`installSet`, realistic but pricey/noisy), co-install the
+  skill-under-test + its **NCD-nearest competitors** (reuse `proofs.ts` `ncd` /
+  `findSimilarRules`) so a large roster gets faithful precision at a fraction of
+  the cost. Decided + grounded; deliberately deferred (the two existing tiers
+  cover the common cases). [isolated-vs-whole-harness](isolated-vs-whole-harness-eval.md) · **P3 (MED–LOW)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
@@ -75,6 +153,40 @@
   copy-mirror when no sync tool fans out, and per-harness skill verify/compile.
   Kills the silent harness-mismatch footgun in `compile`.
   [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md)
+- **Mock-ergonomics borrow-list (NEW — 2026-06-17 multi-SDK probe, this PR)** —
+  concrete ergonomics to adopt from other SDKs' first-party mocks into `scriptModel`
+  / the eval tier, surfaced by the current-evidence probe. Borrow: Pydantic
+  `FunctionModel`'s contract-aware `(messages, info) -> ModelResponse` scripting
+  (expose the loaded harness's tool defs to the mock script); Vercel
+  `simulateReadableStream`'s delay-knob + `convertArrayToReadableStream` + `mockId`
+  - `doGenerate`-accepts-array (a `scriptModel` array shorthand) + `doGenerateCalls`
+    capture (≈ `trace.modelRequests`); LangChain's `langchain-tests` capability-flag
+    conformance (≈ our adapter-conformance kit) + `langchain-replay` decision-level
+    replay (mock the model's judgment, keep tool side effects real); Pydantic's
+    `ALLOW_MODEL_REQUESTS=False` accidental-real-call guard; MS response-caching as
+    replay-adjacent. Each is an ergonomics upgrade, not a retarget — the probe
+    reaffirmed vigiles owns the gaps no SDK fills (tool-contract _enforcement_ of the
+    assembled agent, trigger-rate recall+precision, record/replay caching,
+    sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
+    2026-06-17 section)
+
+- **Per-check rate thresholds in `assertRates` (DONE — 2026-06-17, API review;
+  additive, non-breaking).** The absolute oracle (`measure({ checks }) +
+assertRates`) is the recommended path for testing one skill, but
+  `assertRates({ min })` applied a single rate floor across _all_ checks. Now
+  `assertRates({ min, per })` takes a per-check-KIND override, so "`skill` must
+  fire every trial AND `judged` ≥ 0.8" gates in one call; the failure message
+  reports each check's own min. The `judged` check's own `min` is a per-_run_
+  score threshold (orthogonal — kept). [testing-api-design §Part 7](testing-api-design.md)
+
+- **Single-arm ABSOLUTE behaviour path — first-class now (DONE — 2026-06-17, this
+  PR).** Audit found A/B was over-privileged: the absolute path existed (single-arm
+  `measure` + `judged` + `assertRates`, `examples/harness/dogfood/skill-quality.eval.mjs`)
+  but README, `docs/harness-testing.md`, and the `test-harness` skill all led with
+  the A/B `runEval` framing. Fixed (docs/skill only, no code change): the absolute
+  oracle is now the **default** for testing a single skill across every front-door
+  surface, with A/B reframed as the specialised relative/regression oracle (how
+  promptfoo/DeepEval frame it). [testing-api-design §Part 7 #7](testing-api-design.md)
 
 ## Later — needs model auth (write-don't-run today) or bigger
 
@@ -125,7 +237,9 @@
 - **Killed:** compiler-not-linter, one-source-many-backends.
   [divergent-bets](divergent-bets.md)
 - **No (researched):** SDK pillar-2 retarget — gap closed by first-party SDK
-  mocks. [sdk-harness-testing.md](sdk-harness-testing.md)
+  mocks; the 2026-06-17 multi-SDK probe relocates pillar-2 value to the Claude
+  Agent SDK + Codex (no mock, unenforced/buggy tool contract) + a mock-ergonomics
+  borrow-list. [sdk-harness-testing.md](sdk-harness-testing.md)
 - **Demoted:** vigiles-as-MCP-oracle → fold into `scan`. [divergent-bets #5](divergent-bets.md)
 - **Punted:** promptfoo interop (E) + dataset/scorer parity (D).
   [eval-api-landscape.md](eval-api-landscape.md) · [promptfoo-deep-dive.md](promptfoo-deep-dive.md)
