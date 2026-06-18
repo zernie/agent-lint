@@ -82,14 +82,13 @@ export interface OrphansConfig {
   exclude?: readonly string[];
 }
 
-/** Options for the untested-surface check. */
+/**
+ * Shared options for the per-kind untested-* rules (`untested-skill` /
+ * `untested-agent` / `untested-hook`). Which kinds are scanned is controlled by
+ * each rule's severity (set a rule to `false` to skip that kind), so only the
+ * test-discovery knobs live here.
+ */
 export interface TestCoverageConfig {
-  /** Scan skills. Default true. */
-  skills?: boolean;
-  /** Scan subagents. Default true. */
-  agents?: boolean;
-  /** Scan hook scripts referenced from plugin.json / settings.json. Default true. */
-  hooks?: boolean;
   /** Globs of test files that count as coverage. */
   testGlobs?: readonly string[];
   /** Extra ignore globs. */
@@ -100,7 +99,7 @@ export interface RulesConfig {
   /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
   "require-spec"?: RuleSeverity;
   /**
-   * @deprecated Skills are legitimately hand-written; use `untested-surface`
+   * @deprecated Skills are legitimately hand-written; use `untested-skill`
    * ("every skill ships with a test/eval") instead. Default: false (off). The
    * check still runs if you set this explicitly.
    */
@@ -109,8 +108,12 @@ export interface RulesConfig {
   integrity?: RuleSeverity;
   /** Enforce minimum spec coverage thresholds. Default: false. ESLint-style: ["warn", { scripts: 50 }]. */
   coverage?: RuleWithOptions<CoverageThresholds>;
-  /** Flag skills/agents/hooks with no test or eval. Default: "warn". */
-  "untested-surface"?: RuleWithOptions<TestCoverageConfig>;
+  /** Flag a skill (SKILL.md) that ships with no test or eval. Default: "warn". */
+  "untested-skill"?: RuleWithOptions<TestCoverageConfig>;
+  /** Flag a subagent (agents/*.md) that ships with no test or eval. Default: "warn". */
+  "untested-agent"?: RuleWithOptions<TestCoverageConfig>;
+  /** Flag a hook script that ships with no test or eval. Default: "warn". */
+  "untested-hook"?: RuleWithOptions<TestCoverageConfig>;
   /**
    * Nudge (or block) when an instruction file has code-shaped references that
    * aren't expressed as vigiles marks (so the lint can't verify them), or a

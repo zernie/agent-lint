@@ -2,7 +2,6 @@
   "rules": {
     "require-spec": "error",
     "integrity": "warn",
-    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }],
-    "untested-surface": "warn"
+    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }

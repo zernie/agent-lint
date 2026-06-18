@@ -36,8 +36,10 @@ import type {
   VigilesConfig,
   CoverageThresholds,
   TestCoverageConfig,
+  RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
+import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport } from "./scan.js";
 import {
@@ -1208,8 +1210,8 @@ async function runLint(
   }
 
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
-  // eval. Warning by default (a nudge, exit 0); set rules.untested-surface to
-  // "error" to gate CI. See src/test-coverage.ts and docs/rules/untested-surface.md.
+  // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
+  // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   const untested = checkUntestedSurfaces(config, silent);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
@@ -2400,22 +2402,39 @@ function checkIntegrityForFiles(
 }
 
 /**
- * Apply the `untested-surface` rule: find skills/agents/hooks with no test or
- * eval (see src/test-coverage.ts). Returns the raw untested count plus the
- * severity-gated error count — "warn" prints but never fails CI (errors=0),
- * "error" fails (exit 2), mirroring the integrity check.
+ * Apply the per-kind `untested-skill` / `untested-agent` / `untested-hook` rules:
+ * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
+ * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
+ * "warn" prints but never fails CI; "error" fails (exit 2). Returns the raw
+ * untested count plus the severity-gated error count.
  */
 function checkUntestedSurfaces(
   config: VigilesConfig | undefined,
   silent: boolean,
 ): { untested: number; errors: number } {
-  const severity = ruleSeverity(config?.rules["untested-surface"]);
-  if (!severity) return { untested: 0, errors: 0 };
+  const rules = config?.rules;
+  const skillSev = ruleSeverity(rules?.["untested-skill"]);
+  const agentSev = ruleSeverity(rules?.["untested-agent"]);
+  const hookSev = ruleSeverity(rules?.["untested-hook"]);
+  if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
+  const sevFor = (kind: SurfaceKind): RuleSeverity =>
+    kind === "skill" ? skillSev : kind === "agent" ? agentSev : hookSev;
 
-  const opts = ruleOptions<TestCoverageConfig>(
-    config?.rules["untested-surface"],
-  );
-  const report = findUntestedSurfaces({ basePath: process.cwd(), ...opts });
+  // Test-discovery options (testGlobs/exclude) are shared; merge them from
+  // whichever of the three rules carries them.
+  const opts: TestCoverageConfig = {
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-agent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
+  };
+  const report = findUntestedSurfaces({
+    basePath: process.cwd(),
+    skills: skillSev !== false,
+    agents: agentSev !== false,
+    hooks: hookSev !== false,
+    testGlobs: opts.testGlobs,
+    exclude: opts.exclude,
+  });
 
   if (!silent) {
     console.log("\nUntested surfaces:\n");
@@ -2424,7 +2443,7 @@ function checkUntestedSurfaces(
     }
     for (const s of report.untested) {
       ghAnnotate(
-        severity === "error" ? "error" : "warning",
+        sevFor(s.kind) === "error" ? "error" : "warning",
         `${s.kind} ${s.path} ships without a test or eval`,
         s.path,
       );
@@ -2433,7 +2452,7 @@ function checkUntestedSurfaces(
 
   return {
     untested: report.untested.length,
-    errors: severity === "error" ? report.untested.length : 0,
+    errors: report.untested.filter((s) => sevFor(s.kind) === "error").length,
   };
 }
 

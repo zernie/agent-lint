@@ -26,7 +26,7 @@ New here? Start with the [README](../README.md).
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
-- **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-surface`](rules/untested-surface.md) · [`unmarked-refs`](rules/unmarked-refs.md).
+- **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-agent`](rules/untested-agent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
 
 ## Test your harness (pillar 2)
 
