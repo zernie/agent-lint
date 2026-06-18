@@ -2210,6 +2210,42 @@ test("stubs (ephemeral env path): prepends the stub bin dir to the scrubbed PATH
   );
 });
 
+test("ephemeral env + interceptTools: the intercept overlay survives the scrub", async () => {
+  // The one path where both features compose: a scrubbed ephemeral run env must
+  // STILL carry the eval-injected VIGILES_INTERCEPT_TOOLS overlay, otherwise
+  // tool interception silently breaks under `ephemeralEnv`. Proves the overlay
+  // is merged onto the fresh env (eval.ts — `if (overlay) Object.assign(...)`).
+  const seen: AgentRunArgs[] = [];
+  const runner = (
+    a: AgentRunArgs,
+  ): Promise<{ code: number; stdout: string }> => {
+    seen.push(a);
+    return Promise.resolve({
+      code: 0,
+      stdout: JSON.stringify({ type: "result", result: "r", num_turns: 1 }),
+    });
+  };
+  await runEvalWith(
+    {
+      arms: { a: { interceptTools: [{ tool: "Bash", denyReason: "no" }] } },
+      task: "t",
+      trials: 1,
+      spacingSec: 0,
+      ephemeralEnv: true,
+      measure: () => ({ ok: true }),
+    },
+    runner,
+  );
+  const a = seen[0];
+  assert.ok(a);
+  assert.equal(a.replaceEnv, true); // the ephemeral (scrubbed) path
+  assert.ok(a.env);
+  // the intercept overlay was Object.assign'd onto the scrubbed env, not lost.
+  const parsed = parseIntercepts(a.env.VIGILES_INTERCEPT_TOOLS ?? "");
+  assert.equal(parsed[0]?.tool, "Bash");
+  assert.equal(parsed[0]?.denyReason, "no");
+});
+
 test("stubs absent: PATH is unchanged (env overlay undefined)", async () => {
   const seen: AgentRunArgs[] = [];
   const runner = (
