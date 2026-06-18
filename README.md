@@ -38,11 +38,10 @@ Pick the one that hurts today. **Works with Claude Code and Codex**
 **Paste into Claude Code or Codex:**
 
 ```text
-Install vigiles in this repo and run it. Verify my CLAUDE.md / AGENTS.md
-references and show me what's stale, then write and run a harness test for one
-of my hooks or skills. Use good defaults (lint + test, non-interactive), but
-ask me first whether to gate it in CI, whether to add a real-model eval, and
-whether to enforce strictly (--strict).
+Set up vigiles in this repo with good defaults (lint + test, non-interactive).
+Verify my CLAUDE.md / AGENTS.md references and show me what's stale, then write
+and run a harness test for one of my hooks or skills. Ask me first before gating
+it in CI, adding a real-model eval, or enforcing strictly (--strict).
 ```
 
 Or do it yourself:
