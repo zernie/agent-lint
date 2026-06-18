@@ -74,12 +74,45 @@ export interface ScanReport {
 
 const SCRIPT_RE = /\S+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
 
+/** A YAML block-scalar indicator: `>`/`|` with optional chomp (`+`/`-`) + indent digit. */
+const BLOCK_SCALAR_RE = /^[|>][+-]?\d*$/;
+
+/**
+ * Read a top-level frontmatter field, handling YAML block scalars. A naive
+ * `description:\s*(.+)` captures only the `>` / `>-` indicator when a skill
+ * writes its description as a folded block — real plugins (wshobson/agents)
+ * commonly do, and the regex parser then mislabels a richly-described skill as
+ * "no description". When the inline value is a block indicator, gather the
+ * following more-indented lines.
+ */
+function readField(block: string, key: string): string | undefined {
+  const lines = block.split(/\r?\n/);
+  const idx = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
+  if (idx === -1) return undefined;
+  const keyIndent = /^(\s*)/.exec(lines[idx])?.[1].length ?? 0;
+  const inline = (
+    new RegExp(`^${key}:[ \\t]*(.*)$`).exec(lines[idx])?.[1] ?? ""
+  ).trim();
+  if (!BLOCK_SCALAR_RE.test(inline)) {
+    return inline.replace(/^["']|["']$/g, "").trim() || undefined;
+  }
+  const collected: string[] = [];
+  for (let i = idx + 1; i < lines.length; i++) {
+    if (lines[i].trim() === "") continue;
+    const indent = /^(\s*)/.exec(lines[i])?.[1].length ?? 0;
+    if (indent <= keyIndent) break;
+    collected.push(lines[i].trim());
+  }
+  return collected.join(" ").trim() || undefined;
+}
+
 function frontmatter(md: string): { name?: string; description?: string } {
   const m = /(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/.exec(md);
   if (!m) return {};
-  const name = /^name:\s*(.+)$/m.exec(m[1])?.[1]?.trim();
-  const description = /^description:\s*(.+)$/m.exec(m[1])?.[1]?.trim();
-  return { name, description };
+  return {
+    name: readField(m[1], "name"),
+    description: readField(m[1], "description"),
+  };
 }
 
 // Anchor each surface on a real path boundary (start-of-path or a `/`), so a
