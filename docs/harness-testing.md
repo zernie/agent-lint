@@ -753,9 +753,9 @@ skill, subagent, or hook that has **no test or eval**. A surface counts as
 covered when a `*.{harness,eval}.mjs` sits beside it (the colocation convention
 the warning suggests) **or** any test — including a `*.test.ts` — references it
 by path (`skills/foo`, `hooks/x.sh`) or namespace (`plugin:foo`). It's
-warning-by-default (a nudge; set it to `"error"` to fail CI), and user-invoked
-(`disable-model-invocation`) skills are exempt because they can't auto-trigger —
-flip `includeUserInvokedSkills` to demand an outcome test for them.
+warning-by-default (a nudge; set it to `"error"` to fail CI). Every skill, agent,
+and hook is held to it — invocation mode doesn't exempt anything; the only opt-out
+is an explicit `<!-- vigiles:ignore-test -->` marker on the surface.
 
 Beneath that gate sits a free, model-free **conformance floor**: load your own
 plugin and assert every skill resolves with a usable `description` — the surface

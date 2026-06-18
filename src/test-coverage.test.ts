@@ -84,27 +84,24 @@ test("skill with no test is flagged", () => {
   cleanupTmpDir(dir);
 });
 
-test("user-invoked skill is exempt by default, included when requested", () => {
+test("a command-only (disable-model-invocation) skill is NOT exempt — it still needs a test", () => {
   const dir = makeTmpDir("tc-userinvoked");
   write(
     dir,
     "skills/cmd/SKILL.md",
     skill("cmd", "disable-model-invocation: true\n"),
   );
-  const exempt = findUntestedSurfaces({ basePath: dir });
-  assert.equal(exempt.total, 0);
-  assert.equal(exempt.exempt, 1);
-  assert.equal(exempt.untested.length, 0);
-
-  const included = findUntestedSurfaces({
-    basePath: dir,
-    includeUserInvokedSkills: true,
-  });
-  assert.equal(included.untested.length, 1);
+  const r = findUntestedSurfaces({ basePath: dir });
+  // Invocation mode no longer exempts anything: the command-only skill is held
+  // to the requirement like any other and flagged when it has no test.
+  assert.equal(r.total, 1);
+  assert.equal(r.exempt, 0);
+  assert.equal(r.untested.length, 1);
+  assert.equal(r.untested[0].name, "cmd");
   cleanupTmpDir(dir);
 });
 
-test("vigiles:ignore-test marker exempts a surface", () => {
+test("vigiles:ignore-test marker is the only exemption (and is counted)", () => {
   const dir = makeTmpDir("tc-ignore");
   write(
     dir,
@@ -112,7 +109,8 @@ test("vigiles:ignore-test marker exempts a surface", () => {
     skill("foo") + "\n<!-- vigiles:ignore-test -->\n",
   );
   const r = findUntestedSurfaces({ basePath: dir });
-  assert.equal(r.total, 0);
+  assert.equal(r.total, 0); // nothing held to the requirement
+  assert.equal(r.exempt, 1); // the explicit opt-out is visible, not silent
   assert.equal(r.untested.length, 0);
   cleanupTmpDir(dir);
 });

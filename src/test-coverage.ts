@@ -15,10 +15,11 @@
  *      surface by PATH (`skills/foo`, `hooks/pre-edit.sh`) or NAMESPACE
  *      (`vigiles:foo`). Not bare-name — too fuzzy.
  *
- * Warning-by-default (a nudge, not a gate). User-invoked skills
- * (`disable-model-invocation: true`) can't auto-trigger, so they're exempt by
- * default; flip `includeUserInvokedSkills` to demand an outcome test for them.
- * Per-surface opt-out: a `vigiles:ignore-test` marker in the surface file.
+ * Warning-by-default (a nudge, not a gate). EVERY skill, agent, and hook is held
+ * to the requirement — invocation mode does NOT exempt anything (a command-only
+ * skill still DOES something when invoked, and that behaviour is worth a test).
+ * The only opt-out is explicit: a `vigiles:ignore-test` marker in the surface
+ * file, which is reported as `exempt` so the skip is visible, never silent.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -39,8 +40,8 @@ export interface Surface {
   readonly name: string;
   /** Substrings a test may reference to "cover" this surface (path / namespace). */
   readonly tokens: readonly string[];
-  /** True for skills with `disable-model-invocation: true`. */
-  readonly userInvoked: boolean;
+  /** Explicitly opted out of the test requirement via `vigiles:ignore-test`. */
+  readonly ignored: boolean;
 }
 
 export interface UntestedReport {
@@ -48,7 +49,7 @@ export interface UntestedReport {
   readonly total: number;
   readonly covered: readonly Surface[];
   readonly untested: readonly Surface[];
-  /** Surfaces skipped (user-invoked skills, `vigiles:ignore-test`). */
+  /** Surfaces explicitly opted out via `vigiles:ignore-test`. */
   readonly exempt: number;
 }
 
@@ -61,8 +62,6 @@ export interface TestCoverageOptions {
   readonly agents?: boolean;
   /** Scan hook scripts referenced from plugin.json / settings.json. Default true. */
   readonly hooks?: boolean;
-  /** Require a test for user-invoked (disable-model-invocation) skills. Default false. */
-  readonly includeUserInvokedSkills?: boolean;
   /** Globs of test files that count as coverage. */
   readonly testGlobs?: readonly string[];
   /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */
@@ -103,11 +102,6 @@ function read(path: string): string {
   }
 }
 
-/** A SKILL.md is user-invoked when its frontmatter sets disable-model-invocation. */
-function isUserInvoked(content: string): boolean {
-  return /^\s*disable-model-invocation:\s*true\s*$/m.test(content);
-}
-
 function discoverSkills(basePath: string, ignore: string[]): Surface[] {
   const out: Surface[] = [];
   const found = globSync(["skills/*/SKILL.md", ".claude/skills/*/SKILL.md"], {
@@ -117,13 +111,12 @@ function discoverSkills(basePath: string, ignore: string[]): Surface[] {
   for (const path of found.sort()) {
     const name = basename(dirname(path));
     const content = read(join(basePath, path));
-    if (content.includes(IGNORE_MARKER)) continue;
     out.push({
       kind: "skill",
       path,
       name,
       tokens: [`skills/${name}`, `:${name}`],
-      userInvoked: isUserInvoked(content),
+      ignored: content.includes(IGNORE_MARKER),
     });
   }
   return out;
@@ -138,7 +131,6 @@ function discoverAgents(basePath: string, ignore: string[]): Surface[] {
   for (const path of found.sort()) {
     if (path.endsWith(".spec.ts")) continue;
     const content = read(join(basePath, path));
-    if (content.includes(IGNORE_MARKER)) continue;
     const name = basename(path, ".md");
     const dir = dirname(path);
     out.push({
@@ -146,7 +138,7 @@ function discoverAgents(basePath: string, ignore: string[]): Surface[] {
       path,
       name,
       tokens: [`${dir}/${name}`],
-      userInvoked: false,
+      ignored: content.includes(IGNORE_MARKER),
     });
   }
   return out;
@@ -189,7 +181,7 @@ function discoverHooks(basePath: string): Surface[] {
     path,
     name: basename(path).replace(/\.[^.]+$/, ""),
     tokens: [path],
-    userInvoked: false,
+    ignored: false,
   }));
 }
 
@@ -241,9 +233,9 @@ function isCovered(surface: Surface, tests: readonly TestFile[]): boolean {
 /**
  * Find harness surfaces (skills / agents / hooks) that no test or eval covers.
  * A surface is covered by a colocated `*.{harness,eval}.mjs` OR any discovered
- * test that references its path/namespace. User-invoked skills are exempt unless
- * `includeUserInvokedSkills` is set; any surface with a `vigiles:ignore-test`
- * marker is exempt.
+ * test that references its path/namespace. EVERY skill, agent, and hook is held
+ * to this — the only exemption is an explicit `vigiles:ignore-test` marker in the
+ * surface file (counted as `exempt`).
  */
 export function findUntestedSurfaces(
   options: TestCoverageOptions = {},
@@ -259,10 +251,9 @@ export function findUntestedSurfaces(
     surfaces.push(...discoverAgents(basePath, ignore));
   if (options.hooks !== false) surfaces.push(...discoverHooks(basePath));
 
-  const considered = surfaces.filter(
-    (s) =>
-      !s.userInvoked || s.kind !== "skill" || options.includeUserInvokedSkills,
-  );
+  // Every skill/agent/hook is held to the requirement — only an explicit
+  // `vigiles:ignore-test` marker exempts a surface (a visible, deliberate skip).
+  const considered = surfaces.filter((s) => !s.ignored);
   const exempt = surfaces.length - considered.length;
 
   const tests = discoverTests(basePath, globs, ignore);
