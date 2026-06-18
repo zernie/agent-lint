@@ -90,8 +90,6 @@ export interface TestCoverageConfig {
   agents?: boolean;
   /** Scan hook scripts referenced from plugin.json / settings.json. Default true. */
   hooks?: boolean;
-  /** Require a test for user-invoked (disable-model-invocation) skills. Default false. */
-  includeUserInvokedSkills?: boolean;
   /** Globs of test files that count as coverage. */
   testGlobs?: readonly string[];
   /** Extra ignore globs. */

@@ -2,7 +2,7 @@
 
 Flag harness _surfaces_ — skills, subagents, and hooks — that ship without a test or eval. The third gap detector alongside `integrity` (hand-edits) and orphan-docs (unreferenced docs): a surface with no test is a probabilistic-compliance gap hiding in the deterministic layer — nothing measures whether it still does what it claims.
 
-This is the canonical **skill-coverage** rule — it supersedes the deprecated [`require-skill-spec`](require-skill-spec.md). A skill doesn't need a `.spec.ts` (hand-written prose is a supported on-ramp); it needs a way to know it still _works_ — a trigger eval, a harness test, or a colocated `*.{harness,eval}.mjs`. User-invoked (disable-model-invocation) skills are exempt by default, and any surface can opt out with `vigiles:ignore-test`.
+This is the canonical **skill-coverage** rule — it supersedes the deprecated [`require-skill-spec`](require-skill-spec.md). A skill doesn't need a `.spec.ts` (hand-written prose is a supported on-ramp); it needs a way to know it still _works_ — a trigger eval, a harness test, or a colocated `*.{harness,eval}.mjs`. **Every** skill, agent, and hook is held to this regardless of invocation mode; the only way out is an explicit `vigiles:ignore-test` marker.
 
 ## Configuration
 
@@ -19,10 +19,7 @@ With options (ESLint-style tuple):
 ```json
 {
   "rules": {
-    "untested-surface": [
-      "warn",
-      { "hooks": false, "includeUserInvokedSkills": true }
-    ]
+    "untested-surface": ["warn", { "hooks": false }]
   }
 }
 ```
@@ -37,14 +34,13 @@ With options (ESLint-style tuple):
 
 ### Options
 
-| Option                     | Type     | Default | Description                                                       |
-| -------------------------- | -------- | ------- | ----------------------------------------------------------------- |
-| `skills`                   | boolean  | `true`  | Scan `skills/*/SKILL.md` and `.claude/skills/*/SKILL.md`          |
-| `agents`                   | boolean  | `true`  | Scan `agents/*.md` and `.claude/agents/*.md`                      |
-| `hooks`                    | boolean  | `true`  | Scan hook scripts referenced from `plugin.json` / `settings.json` |
-| `includeUserInvokedSkills` | boolean  | `false` | Also require a test for `disable-model-invocation` skills         |
-| `testGlobs`                | string[] | —       | Override which files count as tests                               |
-| `exclude`                  | string[] | —       | Extra ignore globs                                                |
+| Option      | Type     | Default | Description                                                       |
+| ----------- | -------- | ------- | ----------------------------------------------------------------- |
+| `skills`    | boolean  | `true`  | Scan `skills/*/SKILL.md` and `.claude/skills/*/SKILL.md`          |
+| `agents`    | boolean  | `true`  | Scan `agents/*.md` and `.claude/agents/*.md`                      |
+| `hooks`     | boolean  | `true`  | Scan hook scripts referenced from `plugin.json` / `settings.json` |
+| `testGlobs` | string[] | —       | Override which files count as tests                               |
+| `exclude`   | string[] | —       | Extra ignore globs                                                |
 
 ## What counts as "tested"
 
@@ -58,8 +54,8 @@ Two detectors, OR'd — so a test placed **anywhere** counts, not just colocated
 
 ## Exemptions
 
-- **User-invoked skills.** A skill with `disable-model-invocation: true` is a slash command the model can't auto-trigger, so a trigger eval is meaningless for it — exempt by default. Set `includeUserInvokedSkills: true` to demand an outcome test instead.
-- **Per-surface opt-out.** Add a `<!-- vigiles:ignore-test -->` marker to a surface file to exempt it explicitly.
+- **Every skill, agent, and hook is held to this.** Invocation mode does **not** exempt anything: a command-only skill (`disable-model-invocation: true`) still _does_ something when invoked, and that behaviour is worth a test. (A trigger eval is meaningless for a command-only skill — but a behavioural/outcome test isn't.)
+- **The only opt-out is explicit.** Add a `<!-- vigiles:ignore-test -->` marker to a surface file to exempt it; the skip is reported as `exempt` so it's visible, never silent.
 - **Inline hooks.** Hooks defined as a shell one-liner (no script file) have nowhere to colocate; only file-backed hook scripts are scanned.
 
 ## Example output
