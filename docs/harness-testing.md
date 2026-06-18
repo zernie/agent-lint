@@ -511,6 +511,13 @@ Three things make this cheap and honest, all on by choice:
   `runEval` (`arms: { sonnet: { model: … }, opus: { model: … } }`) — no separate
   multi-model matrix runner.
 
+> **Probing a whole plugin at once:** `vigiles scan <plugin> --trigger
+--prompts=<file.json>` is the batch front-end to `measureTriggerRate` — it
+> measures recall/precision for every model-invocable skill in a plugin and prints
+> it as the behavioral column of the scan report. See
+> [`docs/cli.md`](cli.md#behavioral-column--scan---trigger). Per-skill API control
+> (this section) vs whole-plugin one-shot (scan) — same engine.
+
 ### LLM-as-judge for subjective outcomes
 
 When the metric isn't a regex, grade with a model inside `measure` (synchronous,

@@ -43,6 +43,11 @@ import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport, expandMarketplace } from "./scan.js";
 import {
+  probePluginTriggers,
+  formatBehavioralReport,
+  type TriggerPromptSet,
+} from "./scan-behavioral.js";
+import {
   detectAdapterResult,
   resolveAdapter,
   resolveHarnessSelection,
@@ -2554,6 +2559,55 @@ function findInstructionFiles(restArgs: string[]): string[] {
   return files;
 }
 
+/** Value of a `--flag=value` arg (the `=` form, so it never collides with a positional). */
+function flagValue(args: string[], name: string): string | undefined {
+  return args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+/**
+ * The `scan --trigger` behavioral column: load the author-supplied per-skill
+ * prompt sets, probe the plugin's model-invocable skills, print the column.
+ * Model-gated and opt-in — the structural scan above stays deterministic.
+ */
+async function handleScanTrigger(
+  root: string,
+  args: string[],
+  json: boolean,
+): Promise<void> {
+  const promptsPath = flagValue(args, "--prompts");
+  if (!promptsPath) {
+    console.error(
+      "scan --trigger needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  let promptSet: TriggerPromptSet;
+  try {
+    promptSet = JSON.parse(
+      readFileSync(resolve(promptsPath), "utf-8"),
+    ) as TriggerPromptSet;
+  } catch (e) {
+    console.error(
+      `scan --trigger: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const concurrencyRaw = flagValue(args, "--concurrency");
+  const minPromptsRaw = flagValue(args, "--min-prompts");
+  const report = await probePluginTriggers(root, promptSet, {
+    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
+    minPrompts: minPromptsRaw ? Number(minPromptsRaw) : undefined,
+    model: flagValue(args, "--model"),
+  });
+  console.log(
+    json
+      ? JSON.stringify(report, null, 2)
+      : `\n${formatBehavioralReport(report)}`,
+  );
+}
+
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
   const checkOnly = args.includes("--check");
   const outPath = restArgs[0] ?? ".vigiles/generated.d.ts";
@@ -3214,12 +3268,18 @@ async function main(): Promise<void> {
       const members =
         dirs.length === 1 ? expandMarketplace(resolve(dirs[0])) : null;
       const targets = members && members.length > 0 ? members : dirs;
+      const wantTrigger = args.includes("--trigger");
       if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine).
         const scores = rankPlugins(targets);
         console.log(
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
+        if (wantTrigger) {
+          console.log(
+            "\n⚠ --trigger (behavioral column) runs per single plugin; not yet wired into the leaderboard. Scan one plugin dir to probe it.",
+          );
+        }
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = args
@@ -3242,6 +3302,7 @@ async function main(): Promise<void> {
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );
+        if (wantTrigger) await handleScanTrigger(root, args, json);
       }
       break;
     }
