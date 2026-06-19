@@ -63,6 +63,9 @@ const layout: PluginLayout = {
   settingsFormat: "json", // or "toml" (e.g. Codex's config.toml [hooks])
   instructionFile: "AGENTS.md",
   surfaceDirs: ["skills", "agents"],
+  skillDir: "skills", // <dir>/<name>/SKILL.md
+  agentDir: "agents", // subagent dir; "" if the harness has no subagents
+  commandDir: "commands", // <dir>/<name>.md
   materializeRoot: ".myagent",
   pluginRootToken: "${MY_PLUGIN_ROOT}",
   mcpConfigFile: ".mcp.json",
@@ -93,6 +96,15 @@ const modelMock: ModelMock = {
 
 export const myHarnessAdapter: HarnessAdapter = {
   name: "my-harness",
+  // What this harness can drive — gates which transport ports are required, and
+  // which surface lint rules apply. `subagents:false` makes the subagent rules
+  // (subagent-tool-contract, …) report n/a instead of running.
+  capabilities: {
+    referenceVerification: true, // always
+    harnessTesting: true, // needs runtime + modelMock
+    shellHooks: true, // needs hookProtocol
+    subagents: true, // has a subagent surface (layout.agentDir)
+  },
   dialect,
   layout,
   runtime,

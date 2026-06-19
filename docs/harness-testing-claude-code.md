@@ -83,7 +83,7 @@ bubblewrap (no egress, cleared env). Full file:
 `runHook` is harness-agnostic at the API level (it's in `vigiles/testing` /
 `vigiles/unit`), but its event shape and the bubblewrap confinement are
 Claude-Code-specific. See
-[`vigiles/unit`](harness-testing.md#unit-test-a-hooks-logic-runhook) for the
+[`vigiles/unit`](harness-testing.md#test-a-hook-in-isolation-runhook) for the
 agnostic contract.
 
 ### Tier 2 — deterministic: fired _and_ landed (`runHarnessTest`)
@@ -227,8 +227,8 @@ tier.
 
 The action/sequence/argument assertions over `r.toolCalls` (`assertToolSequence`,
 `assertToolCount`, `assertToolUsedWith`, `assertToolCalls`) are harness-agnostic —
-see the [`Trace` model](harness-testing.md#one-trace-two-consumers--predicates-and-assertions)
-in the core guide.
+see the [`Trace` model](testing-api.md#the-trace-model)
+in the testing API reference.
 
 ## The scripted Anthropic Messages mock (`scriptModel`)
 

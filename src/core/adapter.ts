@@ -49,6 +49,16 @@ export interface AdapterCapabilities {
    * tier and the `HookProtocol` port do not apply.
    */
   readonly shellHooks: boolean;
+  /**
+   * The harness has **subagents** — a named, model-dispatched delegate with its
+   * own tool contract and frontmatter (Claude Code's `agents/*.md`, OpenCode's
+   * agent surface). Gates the subagent-surface lint rules (`subagent-tool-contract`,
+   * `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves`): where this
+   * is `false` those rules report **n/a** rather than running. `false` for Codex,
+   * whose `[agents]` TOML is a concurrency table, not a tool-contract file — a
+   * wholly different concept that deliberately shares the word.
+   */
+  readonly subagents: boolean;
 }
 
 export interface HarnessAdapter {

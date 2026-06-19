@@ -29,6 +29,9 @@ export const codexAdapter: HarnessAdapter = {
     referenceVerification: true,
     harnessTesting: true,
     shellHooks: true,
+    // Codex `[agents]` is a concurrency table, not a subagent tool-contract file
+    // — the subagent-surface rules report n/a here (a deliberate non-goal).
+    subagents: false,
   },
   dialect: codexDialect,
   layout: codexLayout,

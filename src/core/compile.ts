@@ -870,7 +870,7 @@ export function compileSkill(
 
 /** Verify a subagent's allowed-tools contract — the rails are real tools. The
  * detection lives in the shared `verifyToolContract` detector (one-detector-no-
- * drift: compile + scan + the agent-tool-contract lint rule call the same code). */
+ * drift: compile + scan + the subagent-tool-contract lint rule call the same code). */
 function validateAgentTools(
   tools: readonly string[],
   dialect: HarnessDialect,

@@ -29,6 +29,19 @@ export interface PluginLayout {
   readonly instructionFile: string;
   /** Surface dirs materialized into the sandbox, e.g. skills/agents/commands. */
   readonly surfaceDirs: readonly string[];
+  // Where each model surface lives, by KIND — repo-relative dir names so the
+  // scan/lint surface classifiers and the subagent-rule globs are layout-driven,
+  // not hard-coded to Claude Code's `skills`/`agents`/`commands`. A harness that
+  // names them differently (OpenCode's `.opencode/agent`, Codex's `prompts`)
+  // declares its own, so adding a harness needs no change to the classifiers. A
+  // harness without a surface still names a dir (it's simply never matched — the
+  // subagent rules gate on `capabilities.subagents`).
+  /** Skills dir, holding the nested `<dir>/<name>/SKILL.md`, e.g. `skills`. */
+  readonly skillDir: string;
+  /** Subagents dir, holding flat `<dir>/<name>.md`, e.g. `agents` (`""` = none). */
+  readonly agentDir: string;
+  /** Slash-commands dir, holding flat `<dir>/<name>.md`, e.g. `commands`. */
+  readonly commandDir: string;
   /** Dir the surfaces are materialized under, e.g. `.claude`. */
   readonly materializeRoot: string;
   /** Env token expanded to the plugin's absolute root in hook commands. */
