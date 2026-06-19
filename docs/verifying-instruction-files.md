@@ -36,25 +36,28 @@ Zero install commitment, zero new files.
 
 ### Typed spec — compiler-grade guarantees
 
-Markdown mode already squiggles typos at edit time (the YAML schema `init`
-generates), so edit-time feedback is _not_ what a spec buys you. A typed spec is
-better in ways markdown structurally can't reach:
+**Markdown mode is not a lesser tier for verification.** It squiggles rule typos
+at edit time (the YAML schema `init` generates), and its inline marks —
+`vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file
+paths, scripts, symbols, and linter rules _woven into the prose_, exactly like the
+spec. If you have one instruction file and don't need to generate or share rules,
+stay in markdown; you give up nothing on reference verification.
 
-- **More gets verified.** Markdown frontmatter only checks `enforce` rule _names_
-  against the catalog — its schema is an enum of rule names, nothing more. The
-  spec also verifies file paths, npm scripts, and code symbols, so a missing path
-  or renamed symbol is a hard error, not silent prose.
-- **References live in the prose.** `file()`, `cmd()`, `symbol()`, and `ref()`
-  bind verified references _inside the instruction text itself_ — not just
-  standalone enforce declarations — so a renamed file mentioned mid-sentence fails
-  the build. Markdown's body is unchecked free text.
-- **The output can't drift.** `compile` stamps the emitted CLAUDE.md with an
-  integrity hash, making it a build artifact: a hand-edit or silent drift is
-  caught, and the spec stays the single source of truth. In markdown mode the file
-  _is_ the source — there's nothing to detect drift against.
-- **It's code.** Compose and share rules across specs, fan one source out to a
-  byte-identical CLAUDE.md and AGENTS.md, and get the monotonicity proof system
-  below (a rule can be strengthened but never silently weakened).
+A typed spec adds one thing markdown can't: **rules and instructions become
+composable, type-checked code.**
+
+- **Compose and reuse.** Share a rule-set across many files or repos, generate
+  rules programmatically, and let `tsc` make a stale reference _unrepresentable_ as
+  you author — not just flagged on `lint`.
+- **One hashed source.** `compile` stamps the emitted CLAUDE.md with an integrity
+  hash, so the agent edits the spec and hand-edits to the artifact are caught.
+  (This only matters once you've chosen the spec-as-source model — in markdown the
+  file _is_ the source, so there's no drift to detect.)
+- **Monotonicity proofs.** A rule can be strengthened (`guidance` → `enforce`) but
+  never silently weakened or removed, gated by the proof system below.
+
+So: reach for the spec when you're standardizing rules across a codebase or
+generating them; otherwise markdown is the destination, not a stepping stone.
 
 ```typescript
 // CLAUDE.md.spec.ts
