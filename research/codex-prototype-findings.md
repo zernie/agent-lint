@@ -195,6 +195,12 @@ schema (and the skill-selection question) is confirmed against the binary.
 
 ### Env-validation checklist (when the `codex` binary lands)
 
+- [x] Install + auth: `npm i -g @openai/codex` (validated 0.141.0); auth in a
+      remote/headless box via `codex login --device-auth` (URL + one-time code, no
+      `localhost` callback — the only flow that works in a sandbox), or
+      `printenv OPENAI_API_KEY | codex login --with-api-key`. Deterministic tier is
+      keyless; only the eval tier needs this + network egress. See the auth section
+      in `docs/harness-testing-codex.md`.
 - [ ] Capture `codex exec --json` JSONL for (a) a plain text turn, (b) a
       tool-calling turn, (c) a skill-activating turn → confirm the line schema.
 - [ ] Answer the gating unknown: is a skill activation a discrete event? If yes,
