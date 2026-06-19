@@ -431,6 +431,7 @@ describe("loadConfig", () => {
       "untested-agent": "warn",
       "untested-hook": "warn",
       "unmarked-refs": "warn",
+      "agent-tool-contract": "warn",
     });
   });
 

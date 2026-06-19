@@ -68,9 +68,14 @@ export function parseAgentTools(markdown: string): string[] | null {
   if (fm === null) return null;
   const match = /^tools:[ \t]*(.*)$/m.exec(fm);
   if (!match) return null;
+  // Handle the inline ARRAY form too (`tools: [Read, Bash]` / `["Read","Bash"]`),
+  // not just the bare comma list — strip surrounding brackets, then per-token
+  // quotes. Without this a contract reads `[Read` / `Bash]`, which both breaks the
+  // PreToolUse rail (it would block `Read`) and trips the tool-contract check.
   return match[1]
+    .replace(/^\[|\]$/g, "")
     .split(",")
-    .map((t) => t.trim())
+    .map((t) => t.trim().replace(/^["']|["']$/g, ""))
     .filter((t) => t.length > 0);
 }
 

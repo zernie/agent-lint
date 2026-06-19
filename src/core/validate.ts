@@ -78,6 +78,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "untested-agent": "warn",
   "untested-hook": "warn",
   "unmarked-refs": "warn",
+  // High-precision (never-available + close typos only), so on by default at warn.
+  "agent-tool-contract": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

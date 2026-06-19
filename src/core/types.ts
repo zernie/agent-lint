@@ -122,6 +122,14 @@ export interface RulesConfig {
    * block the edit, false → off.
    */
   "unmarked-refs"?: RuleSeverity;
+  /**
+   * Cross-reference each subagent's `tools:` rail against the harness tool
+   * catalog — flag a never-available tool or a close typo (the moat). Only
+   * high-confidence issues are reported (a bare unrecognized tool is likely
+   * plugin/MCP-provided, never flagged). Off unless set; "warn" surfaces,
+   * "error" gates CI. Same detector as `scan` + `compileAgent`.
+   */
+  "agent-tool-contract"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

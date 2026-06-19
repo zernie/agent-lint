@@ -277,6 +277,46 @@ test("scanPlugin reports the instruction file on any repo (spec-managed vs hand-
   cleanupTmpDir(none);
 });
 
+test("scanPlugin flags a never-available agent tool, suppresses unrecognized plugin tools", () => {
+  const dir = makeTmpDir("scan-toolcontract");
+  // A real-world shape (wshobson agent-teams): a never-available tool (Agent)
+  // mixed with plugin-provided tools (TeamCreate, TaskGet) vigiles can't know.
+  write(
+    dir,
+    "agents/lead.md",
+    "---\nname: lead\ntools: Read, Bash, Agent, TeamCreate, TaskGet\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "lead");
+  assert.equal(agent?.toolIssues.length, 1, "only the never-available tool");
+  assert.equal(agent?.toolIssues[0].kind, "never-available");
+  assert.equal(agent?.toolIssues[0].tool, "Agent");
+  // the report leads with the ✗ + the actionable message
+  assert.match(
+    formatScanReport(scanPlugin(dir)),
+    /never available to a subagent/,
+  );
+});
+
+test("scanPlugin flags a typo'd agent tool with a did-you-mean", () => {
+  const dir = makeTmpDir("scan-tooltypo");
+  write(dir, "agents/t.md", "---\nname: t\ntools: Read, Edt\n---\nbody\n");
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "t");
+  assert.equal(agent?.toolIssues.length, 1);
+  assert.match(agent?.toolIssues[0].message ?? "", /Did you mean "Edit"\?/);
+});
+
+test("scanPlugin: an inline ARRAY tools form parses (no [Read / Bash] artifacts)", () => {
+  const dir = makeTmpDir("scan-toolarray");
+  write(
+    dir,
+    "agents/a.md",
+    '---\nname: a\ntools: [Read, "Bash", Edit]\n---\nbody\n',
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "a");
+  assert.deepEqual(agent?.tools, ["Read", "Bash", "Edit"]);
+  assert.deepEqual(agent?.toolIssues, []);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
