@@ -6,19 +6,21 @@ precision), the assembled agent does the task without the dangerous thing. The
 [README](../README.md) has the 30-second pitch; this is the full guide. For the
 linting layer, see [Verifying your instruction files](verifying-instruction-files.md).
 
-> **Try it now — paste this into Claude Code, in any repo:**
->
-> > Install vigiles and use its **`test-harness`** skill to write and run a
-> > harness test for this project. If I didn't say what to test, pick something
-> > real from my hooks / skills / settings yourself, choose the cheapest tier
-> > that fits, write the test, and run it.
->
-> The `test-harness` skill ships in the vigiles plugin. It installs vigiles,
-> scans your harness for a real hook or skill to pin down, picks the right tier
-> (unit / deterministic / eval), writes the test, and runs it — defaulting to the
-> cheapest meaningful test when you don't name one. Prefer the CLI?
-> `npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
-> model) discover and run `*.harness.mjs` / `*.eval.mjs`.
+**Try it now — paste this into Claude Code, in any repo:**
+
+```text
+Install vigiles and use its test-harness skill to write and run a harness test
+for this project. If I didn't say what to test, pick something real from my
+hooks / skills / settings yourself, choose the cheapest tier that fits, write
+the test, and run it.
+```
+
+The `test-harness` skill ships in the vigiles plugin. It installs vigiles,
+scans your harness for a real hook or skill to pin down, picks the right tier
+(unit / deterministic / eval), writes the test, and runs it — defaulting to the
+cheapest meaningful test when you don't name one. Prefer the CLI?
+`npx vigiles test` (deterministic, no API key) and `npx vigiles eval` (real
+model) discover and run `*.harness.mjs` / `*.eval.mjs`.
 
 `Agent = Model + Harness`. Your harness — hooks, settings, skills, the
 instruction file — is code, and code should be tested. vigiles gives the harness
