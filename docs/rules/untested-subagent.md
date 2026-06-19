@@ -1,4 +1,4 @@
-# untested-agent
+# untested-subagent
 
 Flag a **subagent** (`agents/*.md`) that ships without a test or eval. One of the
 per-kind surface-coverage rules alongside [`untested-skill`](untested-skill.md)
@@ -14,7 +14,7 @@ unmeasured surface in the deterministic layer.
 ## Configuration
 
 ```json
-{ "rules": { "untested-agent": "warn" } }
+{ "rules": { "untested-subagent": "warn" } }
 ```
 
 ### Severity

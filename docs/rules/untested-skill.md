@@ -2,7 +2,7 @@
 
 Flag a **skill** (`SKILL.md`) that ships without a test or eval. One of the
 per-kind surface-coverage rules alongside
-[`untested-agent`](untested-agent.md) and [`untested-hook`](untested-hook.md) —
+[`untested-subagent`](untested-subagent.md) and [`untested-hook`](untested-hook.md) —
 together they replace the former umbrella `untested-surface` rule, so each kind
 gets its own severity (a skill's "does it still fire and behave?" is a different
 question from an agent's tool-contract or a hook's block/allow).

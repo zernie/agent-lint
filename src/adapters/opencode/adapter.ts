@@ -29,6 +29,7 @@ export const opencodeAdapter: HarnessAdapter = {
     referenceVerification: true,
     harnessTesting: true,
     shellHooks: false,
+    subagents: true,
   },
   dialect: opencodeDialect,
   layout: opencodeLayout,

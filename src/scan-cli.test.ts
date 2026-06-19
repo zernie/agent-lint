@@ -31,12 +31,13 @@ import { execSync } from "node:child_process";
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
 
-function run(args: string): { stdout: string; exitCode: number } {
+function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
   try {
     const stdout = execSync(`node ${CLI} ${args}`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
+      cwd,
     });
     return { stdout, exitCode: 0 };
   } catch (e: unknown) {
@@ -100,6 +101,31 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
       `---\nname: foo\ndescription: ${desc("foo")}\n---\n# foo\n`,
     );
 
+    // 2b. A Codex repo wired for `lint` — exercises the layout-driven path end to
+    // end: a TOML [hooks] referencing the harness's OWN `${PLUGIN_ROOT}` token (a
+    // MISSING script → hook-script-exists fires), an untested skill, and a
+    // subagent rule that must report n/a (Codex has no subagents).
+    mk("codexlint/AGENTS.md", "# Agent instructions\nUse `npm test`.\n");
+    mk(
+      "codexlint/.codex/config.toml",
+      '[[hooks.PreToolUse]]\ncommand = "${PLUGIN_ROOT}/hooks/missing.sh"\n',
+    );
+    mk(
+      "codexlint/skills/foo/SKILL.md",
+      `---\nname: foo\ndescription: ${desc("foo")}\n---\n# foo\n`,
+    );
+    mk(
+      "codexlint/.vigilesrc.json",
+      JSON.stringify({
+        harness: "codex",
+        rules: {
+          "hook-script-exists": "warn",
+          "untested-skill": "warn",
+          "subagent-tool-contract": "warn",
+        },
+      }),
+    );
+
     // 3. A mixed repo: BOTH CLAUDE.md and AGENTS.md → detection is ambiguous.
     mk("mixed/CLAUDE.md", "# CC\nRun `npm test`.\n");
     mk("mixed/AGENTS.md", "# Codex\nRun `make`.\n");
@@ -146,6 +172,27 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     );
     assert.match(r.stdout, /Skills \(1\)/);
     assert.match(r.stdout, /MCP servers: yes/); // read from the TOML [mcp_servers]
+  });
+
+  it("Codex repo: `lint` runs the layout-driven rules (hook token, untested) and reports subagent n/a", () => {
+    // `lint` operates on cwd, so run it INSIDE the fixture. Proves the
+    // deterministic rules use the resolved Codex adapter (layout + dialect), not a
+    // hard-coded Claude Code default.
+    const r = run("lint", join(root, "codexlint"));
+
+    // hook-script-exists resolved the harness's ${PLUGIN_ROOT} token (loaded from
+    // TOML [hooks]) and flagged the missing script.
+    assert.match(r.stdout, /Hook-script existence check:/);
+    assert.match(r.stdout, /missing\.sh.*missing/);
+
+    // untested-skill found the skill under the layout's skill dir.
+    assert.match(r.stdout, /Untested surfaces:/);
+    assert.match(r.stdout, /foo/);
+
+    // A subagent rule is configured, but Codex has no subagents → n/a, not a
+    // false pass and not a crash.
+    assert.match(r.stdout, /Subagent tool-contract check:/);
+    assert.match(r.stdout, /n\/a — codex has no subagents/);
   });
 
   it("mixed repo: warns it matches both harnesses, and --harness overrides", () => {

@@ -7,7 +7,7 @@
  *
  * ONE pure detector (`one-detector-no-drift`), reused by THREE callers so they
  * can't disagree: `compileAgent` (spec authoring), `scan` (read-only audit of a
- * shipped plugin), and the `agent-tool-contract` lint rule (the severity-gated
+ * shipped plugin), and the `subagent-tool-contract` lint rule (the severity-gated
  * commit gate). The dialect is injected (core ⊄ adapter) — the composition root
  * passes `claudeCodeDialect` / `codexDialect`.
  *

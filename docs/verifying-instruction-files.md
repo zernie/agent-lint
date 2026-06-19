@@ -141,6 +141,103 @@ editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
 language server. Both have `--check` CI freshness modes.
 [How it works →](linter-support.md#generate-types)
 
+## The validation rules — the full matrix
+
+Beyond the references above, `vigiles lint` runs a set of **deterministic
+validation rules** over your instruction files, skills, subagents, and hooks.
+Each has a default severity (`"warn"` / `"error"` / `false`) and is configured in
+`.vigilesrc.json`. Every rule is **deterministic** (no model, no API key) and
+links to its own reference doc.
+
+**Not every rule applies to every harness.** A rule is scoped to the _surface_ it
+checks and runs only where the active harness has that surface — elsewhere
+`vigiles lint` reports it as **n/a** (loud, never a failure). That's what lets one
+config target Claude Code _and_ Codex without duplicating rules per harness:
+universal rules stay bare and run everywhere; surface rules light up only where
+the surface exists.
+
+| Surface (the gate)          | Rules                                                                                      | Applies to                                |
+| --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Instruction file &amp; docs | `require-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                    | all harnesses                             |
+| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
+| MCP                         | `mcp-config`                                                                               | all with MCP                              |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`                                       | Claude Code, Codex                        |
+| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
+
+The per-family tables below give each rule's default severity and what it checks.
+
+### Spec &amp; integrity
+
+| Rule                                                | Default  | What it checks                                                      |
+| --------------------------------------------------- | -------- | ------------------------------------------------------------------- |
+| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md / AGENTS.md has a spec, inline rule, or frontmatter |
+| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                |
+| [`coverage`](rules/coverage.md)                     | `false`  | The spec covers enough of the project surface                       |
+| [`require-skill-spec`](rules/require-skill-spec.md) | `false`  | **Deprecated** — use `untested-skill` instead                       |
+
+### Test coverage
+
+| Rule                                              | Default  | What it checks                                   |
+| ------------------------------------------------- | -------- | ------------------------------------------------ |
+| [`untested-skill`](rules/untested-skill.md)       | `"warn"` | Every skill (`SKILL.md`) ships with a test/eval  |
+| [`untested-subagent`](rules/untested-subagent.md) | `"warn"` | Every subagent (`agents/*.md`) ships a test/eval |
+| [`untested-hook`](rules/untested-hook.md)         | `"warn"` | Every file-backed hook script ships a test/eval  |
+
+### Reference marking
+
+| Rule                                      | Default  | What it checks                                                                                                                    |
+| ----------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`unmarked-refs`](rules/unmarked-refs.md) | `"warn"` | Code-shaped references are marked (verifiable); drives the [refs-hook nudge](#the-marking-nudge--what-happens-on-every-file-save) |
+
+### Subagent contracts
+
+| Rule                                                              | Default  | What it checks                                                                |
+| ----------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
+| [`subagent-tool-contract`](rules/subagent-tool-contract.md)       | `"warn"` | A subagent's `tools:` are real (catalog cross-ref — never-available / typo)   |
+| [`disallowed-tools-contract`](rules/disallowed-tools-contract.md) | `"warn"` | A subagent's `disallowedTools:` are real tools (a typo blocks nothing)        |
+| [`subagent-frontmatter`](rules/subagent-frontmatter.md)           | `"warn"` | Subagent frontmatter valid (`name`+`description`; `model`/`color` not a typo) |
+
+### Hooks &amp; MCP
+
+| Rule                                                            | Default  | What it checks                                                         |
+| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)          |
+| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)    |
+| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)             |
+| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool               |
+
+### Skill triggers
+
+| Rule                                                  | Default  | What it checks                                                     |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)     | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)   |
+| [`description-overlap`](rules/description-overlap.md) | `"warn"` | No two model-invocable skills have near-identical descriptions     |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)     | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn) |
+
+### Docs hygiene
+
+| Rule                                  | Default | What it checks                                                                   |
+| ------------------------------------- | ------- | -------------------------------------------------------------------------------- |
+| [`orphan-docs`](rules/orphan-docs.md) | (on)    | A `docs/` / `research/` doc no other `.md` references (instruction files exempt) |
+
+### Configure
+
+Set severities in `.vigilesrc.json`:
+
+```json
+{
+  "rules": {
+    "require-spec": "error",
+    "integrity": "error",
+    "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
+  }
+}
+```
+
+Disable a rule for one file with `<!-- vigiles-disable require-spec -->` at the
+top of the markdown. `--strict` promotes `require-spec` to `"error"`.
+
 ## The marking nudge — what happens on every file save
 
 Verification only works on references that are _marked_ (`enforce()`, `file()`,

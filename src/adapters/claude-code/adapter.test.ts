@@ -61,6 +61,7 @@ test("conformance ACCEPTS a pillar-1-only adapter (no transport ports)", () => {
       referenceVerification: true,
       harnessTesting: false,
       shellHooks: false,
+      subagents: false,
     },
     dialect: { ...claudeCodeAdapter.dialect, name: "cursor-ish" },
     layout: { ...claudeCodeAdapter.layout, name: "cursor-ish" },
@@ -80,6 +81,7 @@ test("conformance REJECTS a half-wired adapter (claims harnessTesting, no runtim
       referenceVerification: true,
       harnessTesting: true, // claims it…
       shellHooks: false,
+      subagents: true,
     },
     dialect: claudeCodeAdapter.dialect,
     layout: claudeCodeAdapter.layout,

@@ -43,12 +43,6 @@ import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import {
-  verifyToolContract,
-  confidentToolIssues,
-} from "./core/tool-contract.js";
-import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
-import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
-import {
   probePluginTriggers,
   formatBehavioralReport,
   type TriggerPromptSet,
@@ -64,6 +58,7 @@ import {
   adapterForInstructionFile,
 } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
+import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
@@ -1187,6 +1182,20 @@ async function runLint(
 
   const files = findInstructionFiles(restArgs);
 
+  // Resolve the active harness ONCE so the harness-specific checks below run
+  // against the right adapter's dialect (tool/event catalogs) and surfaces —
+  // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
+  // on a harness without subagents (Codex) rather than scanning nothing.
+  const harnessFlag = flags
+    .find((f) => f.startsWith("--harness="))
+    ?.slice("--harness=".length);
+  const lintSelection = resolveHarnessSelection({
+    root: process.cwd(),
+    flag: harnessFlag,
+    configHarness: normalizeHarnessList(config?.harness),
+  });
+  const adapter = lintSelection.adapter;
+
   // 1. Verify hashes and structure
   if (!silent) {
     if (files.length > 0) {
@@ -1257,51 +1266,52 @@ async function runLint(
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
   // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
-  const untested = checkUntestedSurfaces(config, silent);
+  const untested = checkUntestedSurfaces(config, silent, adapter);
 
-  // 7c. Agent tool-contract check — cross-reference each subagent's `tools:` rail
-  // against the harness catalog (the moat). Off by default unless a severity is
-  // configured; warning surfaces a typo/never-available tool, error gates CI.
-  const toolContract = checkAgentToolContracts(config, silent);
+  // 7c. Subagent tool-contract check — cross-reference each subagent's `tools:`
+  // rail against the harness catalog (the moat). n/a on a harness with no
+  // subagents. Off by default unless a severity is configured; warning surfaces
+  // a typo/never-available tool, error gates CI.
+  const toolContract = checkSubagentToolContracts(config, silent, adapter);
 
   // 7d. Hook-event check — a hook registered under an event the harness doesn't
   // define never fires. High-precision (close typos only). Off unless configured.
-  const hookEvents = checkHookEvents(config, silent);
+  const hookEvents = checkHookEvents(config, silent, adapter);
 
-  // 7e. Frontmatter-schema check — a skill/agent missing required frontmatter
-  // (name; agents also description) won't load/register. High-confidence.
-  const frontmatter = checkFrontmatterSchema(config, silent);
+  // 7e. Subagent-frontmatter check — a subagent missing required frontmatter
+  // (name + description) won't register. n/a on a harness with no subagents.
+  const frontmatter = checkFrontmatterSchema(config, silent, adapter);
 
   // 7f. MCP-config check — a declared MCP server with no command/url can't start.
-  const mcpConfig = checkMcpConfig(config, silent);
+  const mcpConfig = checkMcpConfig(config, silent, adapter);
 
   // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
   // reliable trigger surface). Best-practice nudge; skills load without it.
-  const skillFm = checkSkillFrontmatter(config, silent);
+  const skillFm = checkSkillFrontmatter(config, silent, adapter);
 
   // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
   // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
-  const mcpToolResolves = checkMcpToolResolves(config, silent);
+  const mcpToolResolves = checkMcpToolResolves(config, silent, adapter);
 
   // 7i. Hook-script existence — a hook command referencing a missing script file
   // never runs (matches Anthropic's own `claude plugin validate`).
-  const hookScripts = checkHookScriptExists(config, silent);
+  const hookScripts = checkHookScriptExists(config, silent, adapter);
 
   // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
-  // (the deny-side mirror of agent-tool-contract; close-typo only).
-  const disallowedTools = checkDisallowedTools(config, silent);
+  // (the deny-side mirror of subagent-tool-contract; close-typo only).
+  const disallowedTools = checkDisallowedTools(config, silent, adapter);
 
   // 7k. Description-overlap — two model-invocable skills with near-identical
   // descriptions collide in the selector (deterministic NCD precision proxy).
-  const descriptionOverlap = checkDescriptionOverlap(config, silent);
+  const descriptionOverlap = checkDescriptionOverlap(config, silent, adapter);
 
   // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
   // stricter than some loaders, so verify before enforcing).
-  const frontmatterValid = checkFrontmatterValid(config, silent);
+  const frontmatterValid = checkFrontmatterValid(config, silent, adapter);
 
   // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
   // targets an undeclared server (the moat applied to the hook surface).
-  const mcpHookTargets = checkMcpHookTargets(config, silent);
+  const mcpHookTargets = checkMcpHookTargets(config, silent, adapter);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
@@ -2513,7 +2523,7 @@ function checkIntegrityForFiles(
 }
 
 /**
- * Apply the per-kind `untested-skill` / `untested-agent` / `untested-hook` rules:
+ * Apply the per-kind `untested-skill` / `untested-subagent` / `untested-hook` rules:
  * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
  * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
  * "warn" prints but never fails CI; "error" fails (exit 2). Returns the raw
@@ -2522,10 +2532,11 @@ function checkIntegrityForFiles(
 function checkUntestedSurfaces(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { untested: number; errors: number } {
   const rules = config?.rules;
   const skillSev = ruleSeverity(rules?.["untested-skill"]);
-  const agentSev = ruleSeverity(rules?.["untested-agent"]);
+  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
   const hookSev = ruleSeverity(rules?.["untested-hook"]);
   if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
   const sevFor = (kind: SurfaceKind): RuleSeverity =>
@@ -2535,11 +2546,12 @@ function checkUntestedSurfaces(
   // whichever of the three rules carries them.
   const opts: TestCoverageConfig = {
     ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-agent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
     ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
   };
   const report = findUntestedSurfaces({
     basePath: process.cwd(),
+    layout: adapter.layout,
     skills: skillSev !== false,
     agents: agentSev !== false,
     hooks: hookSev !== false,
@@ -2568,50 +2580,78 @@ function checkUntestedSurfaces(
 }
 
 /**
- * Apply the `agent-tool-contract` rule: cross-reference every subagent's `tools:`
+ * A surface-scoped rule (subagent / shell-hook) is configured, but the active
+ * harness doesn't have that surface. Report it as **n/a** — loud, not silent (the
+ * no-silent-skips ethos): the rule isn't failing and isn't passing, it simply
+ * doesn't apply to this harness. Never counts toward issues/errors.
+ */
+function reportNotApplicable(
+  check: string,
+  surface: string,
+  adapter: HarnessAdapter,
+  silent: boolean,
+): void {
+  if (silent) return;
+  console.log(`\n${check}:\n`);
+  console.log(`  – n/a — ${adapter.name} has no ${surface}`);
+}
+
+/**
+ * Apply the `subagent-tool-contract` rule: cross-reference every subagent's `tools:`
  * rail against the harness tool catalog (the moat — "valid is not true"). Flags
  * only the HIGH-CONFIDENCE issues (a never-available tool, or a close typo) via
  * the shared `confidentToolIssues` detector — the same code `scan` and
  * `compileAgent` use (one-detector-no-drift), so a bare unrecognized tool
  * (plugin/MCP-provided) is never a false alarm. Warning by default; set
- * `agent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
+ * `subagent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
  */
-function checkAgentToolContracts(
+function checkSubagentToolContracts(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
-  const sev = ruleSeverity(config?.rules?.["agent-tool-contract"]);
+  const sev = ruleSeverity(config?.rules?.["subagent-tool-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
-  const files = globSync(["agents/*.md", ".claude/agents/*.md"], {
-    cwd: process.cwd(),
-    ignore: ["**/*.spec.ts"],
-  });
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "Subagent tool-contract check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
+  // Reuse the loader's already-resolved, layout+dialect-driven agents (the same
+  // `scan` detector — one-detector-no-drift) instead of re-globbing a hard-coded
+  // `agents/` path, so a harness with a different subagent dir Just Works.
+  let agents: readonly {
+    path: string;
+    toolIssues: readonly { message: string }[];
+  }[];
+  try {
+    agents = scanPlugin(process.cwd(), adapter.layout, adapter.dialect).agents;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
   let issues = 0;
   let printedHeader = false;
-  for (const rel of files.sort()) {
-    let md: string;
-    try {
-      md = readFileSync(resolve(process.cwd(), rel), "utf-8");
-    } catch {
-      continue;
-    }
-    const tools = parseAgentTools(md);
-    if (tools === null) continue; // no contract → inherits all (a different rule)
-    const found = confidentToolIssues(
-      verifyToolContract(tools, claudeCodeDialect),
-    );
-    if (found.length === 0) continue;
-    issues += found.length;
+  for (const agent of agents) {
+    if (agent.toolIssues.length === 0) continue;
+    issues += agent.toolIssues.length;
     if (!silent) {
       if (!printedHeader) {
-        console.log("\nAgent tool-contract check:\n");
+        console.log("\nSubagent tool-contract check:\n");
         printedHeader = true;
       }
-      for (const issue of found) {
+      for (const issue of agent.toolIssues) {
         console.log(
-          `  ${sev === "error" ? "✗" : "⚠"} ${rel}: ${issue.message}`,
+          `  ${sev === "error" ? "✗" : "⚠"} ${agent.path}: ${issue.message}`,
         );
-        ghAnnotate(sev === "error" ? "error" : "warning", issue.message, rel);
+        ghAnnotate(
+          sev === "error" ? "error" : "warning",
+          issue.message,
+          agent.path,
+        );
       }
     }
   }
@@ -2627,12 +2667,21 @@ function checkAgentToolContracts(
 function checkHookEvents(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-events"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable("Hook-event check", "shell hooks", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).hookEventIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hookEventIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2647,7 +2696,7 @@ function checkHookEvents(
 }
 
 /**
- * Apply the `agent-frontmatter` rule. Two kinds of agent-frontmatter defect, one
+ * Apply the `subagent-frontmatter` rule. Two kinds of subagent-frontmatter defect, one
  * rule: (1) a subagent MISSING a required field (`name`/`description`) — it won't
  * register; (2) a subagent with an INVALID `model:`/`color:` value (a close typo
  * of a real one) — it silently falls back / is ignored. Reuses `scanPlugin`'s
@@ -2656,12 +2705,22 @@ function checkHookEvents(
 function checkFrontmatterSchema(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
-  const sev = ruleSeverity(config?.rules?.["agent-frontmatter"]);
+  const sev = ruleSeverity(config?.rules?.["subagent-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "Subagent-frontmatter check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string; path: string }[];
   try {
-    const r = scanPlugin(process.cwd());
+    const r = scanPlugin(process.cwd(), adapter.layout, adapter.dialect);
     found = [...r.frontmatterIssues, ...r.frontmatterValueIssues];
   } catch {
     return { issues: 0, errors: 0 };
@@ -2691,12 +2750,17 @@ function checkFrontmatterSchema(
 function checkSkillFrontmatter(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).skillMetaIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).skillMetaIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2722,12 +2786,17 @@ function checkSkillFrontmatter(
 function checkMcpConfig(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-config"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).mcpIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).mcpIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2751,12 +2820,21 @@ function checkMcpConfig(
 function checkDisallowedTools(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["disallowed-tools-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable("Disallowed-tools check", "subagents", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
   let found: { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).agents.flatMap((a) =>
       a.disallowedToolIssues.map((i) => ({ message: i.message, path: a.path })),
     );
   } catch {
@@ -2789,12 +2867,17 @@ function checkDisallowedTools(
 function checkFrontmatterValid(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["frontmatter-valid"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).malformedFrontmatter;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).malformedFrontmatter;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2822,12 +2905,17 @@ function checkFrontmatterValid(
 function checkDescriptionOverlap(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["description-overlap"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).descriptionOverlaps;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).descriptionOverlaps;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2851,12 +2939,26 @@ function checkDescriptionOverlap(
 function checkMcpHookTargets(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-hook-target-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable(
+      "MCP hook-target check",
+      "shell hooks",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).mcpHookIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).mcpHookIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2881,14 +2983,26 @@ function checkMcpHookTargets(
 function checkHookScriptExists(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-script-exists"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable(
+      "Hook-script existence check",
+      "shell hooks",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let missing: { script: string }[];
   try {
-    missing = scanPlugin(process.cwd()).hooks.filter(
-      (h) => h.status === "missing",
-    );
+    missing = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hooks.filter((h) => h.status === "missing");
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2916,12 +3030,26 @@ function checkHookScriptExists(
 function checkMcpToolResolves(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-tool-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "MCP tool-resolution check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).agents.flatMap((a) =>
       a.mcpToolIssues.map((i) => ({ message: i.message, path: a.path })),
     );
   } catch {

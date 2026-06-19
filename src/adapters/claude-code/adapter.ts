@@ -23,6 +23,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
     referenceVerification: true,
     harnessTesting: true,
     shellHooks: true,
+    subagents: true,
   },
   dialect: claudeCodeDialect,
   layout: claudeCodeLayout,

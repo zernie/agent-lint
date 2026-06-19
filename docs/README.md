@@ -26,11 +26,12 @@ New here? Start with the [README](../README.md).
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
-- **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-agent`](rules/untested-agent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
+- **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-subagent`](rules/untested-subagent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
 
 ## Test your harness (layer 2)
 
-- [`harness-testing.md`](harness-testing.md) — the harness-agnostic core: the four layers (verify-refs / hook-unit / deterministic / eval), the `Trace` model, runner-agnostic usage (node:test / vitest / jest), the CLI fallback, per-level CI.
+- [`harness-testing.md`](harness-testing.md) — the task-first how-to guide: pick what you want to test (hook / wiring / skill firing / behaviour) and the tier that answers it, with a copy-paste first test, CI, and the coverage table.
+  - [`testing-api.md`](testing-api.md) — the full API reference: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance), plus imports & harness selection.
   - [`harness-testing-claude-code.md`](harness-testing-claude-code.md) — Claude Code specifics: the oh-my-claudecode walkthrough, `${CLAUDE_PLUGIN_ROOT}` / `pluginDir` / the `Skill` tool, `scriptModel`, the bubblewrap sandbox.
   - [`harness-testing-codex.md`](harness-testing-codex.md) — Codex specifics: `runHarnessTest({ adapter: codexAdapter })` against real `codex exec`, the OpenAI Responses mock, what maps and what doesn't.
 - [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
