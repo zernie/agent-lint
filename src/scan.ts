@@ -70,8 +70,22 @@ export interface ScanHook {
   readonly status: HookStatus;
 }
 
+/**
+ * The repo's top-level instruction file (`CLAUDE.md` / `AGENTS.md`), if present.
+ * Every cc/codex repo has one even when it ships no plugin surface, so `scan`
+ * reports it — otherwise a plain instruction-only repo looks empty. `hasSpec` is
+ * the deterministic fact that a `<file>.spec.ts` sits beside it (spec-managed vs
+ * hand-written); it is informational, NOT the `require-spec` gate (that's lint).
+ */
+export interface ScanInstructions {
+  readonly file: string;
+  readonly hasSpec: boolean;
+}
+
 export interface ScanReport {
   readonly dir: string;
+  /** The detected instruction file (CLAUDE.md/AGENTS.md), or null if none. */
+  readonly instructions: ScanInstructions | null;
   readonly skills: readonly ScanSkill[];
   readonly agents: readonly ScanAgent[];
   readonly hooks: readonly ScanHook[];
@@ -292,8 +306,18 @@ export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
   const lay = layout ?? claudeCodeLayout;
   const loaded = loadPlugin(dir, lay);
   const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
+  const instructions: ScanInstructions | null =
+    loaded.files[lay.instructionFile] !== undefined
+      ? {
+          file: lay.instructionFile,
+          hasSpec: existsSync(
+            join(resolve(dir), `${lay.instructionFile}.spec.ts`),
+          ),
+        }
+      : null;
   return {
     dir,
+    instructions,
     skills: scanSkills(loaded.files),
     agents: scanAgents(loaded.files),
     hooks,
@@ -363,6 +387,13 @@ function skillLine(s: ScanSkill): string {
 /** Format a scan report as human-readable text. */
 export function formatScanReport(r: ScanReport): string {
   const out: string[] = [`Scan: ${r.dir}`, ""];
+
+  if (r.instructions) {
+    const tag = r.instructions.hasSpec
+      ? "spec-managed"
+      : "hand-written, no spec";
+    out.push(`Instructions: ${r.instructions.file} (${tag})`, "");
+  }
 
   out.push(...section("Skills", r.skills.map(skillLine)));
 

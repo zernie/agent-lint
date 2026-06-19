@@ -15,6 +15,7 @@ import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 function report(over: Partial<ScanReport> = {}): ScanReport {
   return {
     dir: "x",
+    instructions: null,
     skills: [],
     agents: [],
     hooks: [],

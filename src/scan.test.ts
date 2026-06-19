@@ -171,6 +171,40 @@ test("scanPlugin flags a non-Latin description as a cross-language trigger risk"
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reports the instruction file on any repo (spec-managed vs hand-written)", () => {
+  // A plain cc repo: just a CLAUDE.md, no plugin surface — scan must still
+  // surface the instruction file, not look empty.
+  const bare = makeTmpDir("scan-instr-bare");
+  write(bare, "CLAUDE.md", "# Project\nRun the build.\n");
+  const r1 = scanPlugin(bare);
+  assert.deepEqual(r1.instructions, { file: "CLAUDE.md", hasSpec: false });
+  assert.match(
+    formatScanReport(r1),
+    /Instructions: CLAUDE\.md \(hand-written, no spec\)/,
+  );
+  cleanupTmpDir(bare);
+
+  // A spec-managed instruction file (a sibling CLAUDE.md.spec.ts).
+  const managed = makeTmpDir("scan-instr-managed");
+  write(managed, "CLAUDE.md", "# Project\n");
+  write(managed, "CLAUDE.md.spec.ts", "export default {};\n");
+  const r2 = scanPlugin(managed);
+  assert.deepEqual(r2.instructions, { file: "CLAUDE.md", hasSpec: true });
+  assert.match(
+    formatScanReport(r2),
+    /Instructions: CLAUDE\.md \(spec-managed\)/,
+  );
+  cleanupTmpDir(managed);
+
+  // No instruction file → null, no Instructions line.
+  const none = makeTmpDir("scan-instr-none");
+  write(none, "skills/foo/SKILL.md", "---\nname: foo\ndescription: foo\n---\n");
+  const r3 = scanPlugin(none);
+  assert.equal(r3.instructions, null);
+  assert.doesNotMatch(formatScanReport(r3), /Instructions:/);
+  cleanupTmpDir(none);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
