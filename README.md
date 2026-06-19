@@ -94,6 +94,12 @@ File paths, scripts, and code symbols — plus linter rules across **7 catalogs*
 step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade) when you want
 it. **[Full guide →](docs/verifying-instruction-files.md)**
 
+**Same cross-reference, any plugin.** `npx vigiles scan` checks a plugin's
+_contracts_ — every subagent tool, `mcp__server__tool`, `mcp_tool` hook, hook
+event, and script path actually **exists and resolves**, not just parses (valid
+YAML ≠ a tool that's real). A **superset of Anthropic's `claude plugin validate`**,
+no key. **[Audit any plugin →](docs/cli.md#scan-dir)**
+
 ## ② Test — does your harness do its job?
 
 A hook can be wired wrong. A skill's description can fail to trigger — or hijack
@@ -131,7 +137,8 @@ That's why you can eval your harness on every change, not just once.
 
 ## More
 
-- **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `lint` rules.
+- **[Plugin health leaderboard →](docs/cli.md#scan-dir)** — point `scan` at a marketplace (e.g. `wshobson/agents`) and it ranks every plugin by structural health (0–100, A–F), worst issues first — still **no key**. Add `--trigger` for the model-gated column: do the skills actually fire?
+- **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the `lint` rules.
 - **[Skills →](docs/skills.md)** — consumer skills installed as a Claude Code plugin: `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles` (or let `vigiles init` do it). The model-invocable ones (`test-harness`, `strengthen`, `edit-spec`) fire on their own — ask _"test my skills"_, _"strengthen my rules"_, or _"add a rule to CLAUDE.md"_ and the agent reaches for them; `migrate-to-spec` and `linter-docs` are user-invoked.
 - **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
 - Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).

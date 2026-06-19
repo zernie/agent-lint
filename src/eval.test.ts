@@ -29,6 +29,7 @@ import {
   runPool,
   isRateLimited,
   measureTriggerRateWith,
+  measureTriggerRate,
   formatTriggerRateReport,
   measureWith,
   measureArmsWith,
@@ -53,9 +54,12 @@ import {
   resolveSpawnEnv,
   EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
+  type ParsedModelRun,
+  type ModelOutputParser,
 } from "./eval.js";
 import {
   usedTool,
+  skillResolved,
   outputContains,
   assertTriggerRate,
 } from "./harness-assert.js";
@@ -266,6 +270,237 @@ test("measureTriggerRateWith aggregates per-prompt and overall trigger rate", as
   assert.equal(ignore?.fired, 0);
   assert.equal(ignore?.rate, 0);
   assert.ok(formatTriggerRateReport(report).includes("trigger-rate: 67%"));
+});
+
+test("measureTriggerRateWith accepts a custom ModelOutputParser (non-Claude trace)", async () => {
+  // Prove the trace-parser seam: a runner emitting a NON-Claude format + a custom
+  // parser that understands it → firing is detected without any Claude stream-json.
+  // This is the seam a Codex `codex exec --json` parser plugs into.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    // a deliberately un-Claude-like line protocol
+    Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("fire") ? "CALLED:Skill:demo:test\n" : "NOOP\n",
+    });
+  const codexLikeParser = (out: {
+    code: number;
+    stdout: string;
+  }): ParsedModelRun => {
+    const calls = [...out.stdout.matchAll(/^CALLED:Skill:(\S+)$/gm)].map(
+      (m) => ({
+        name: "Skill",
+        input: { skill: m[1] },
+        resultText: "",
+        isError: false,
+      }),
+    );
+    return {
+      turns: calls.length,
+      output: out.stdout,
+      toolCalls: calls,
+      hooks: [],
+      subagents: [],
+      usage: {
+        costUsd: 0,
+        durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+      },
+    };
+  };
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["fire one", "ignore this", "fire two"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => skillResolved(t, "demo:test"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+    codexLikeParser,
+  );
+  assert.ok(Math.abs(report.rate - 2 / 3) < 1e-9); // 2 of 3 fired, via the custom parser
+});
+
+test("measureTriggerRateWith excludes errored/rate-limited runs (not misses)", async () => {
+  // A "boom" prompt errors; runError flags it. It must be dropped from n, not
+  // scored as a recall-0 miss — the Codex usage-limit class of bug.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("boom") ? "RUN_ERROR" : "FIRED",
+    });
+  const parse: ModelOutputParser = (out) => ({
+    turns: 1,
+    output: out.stdout,
+    toolCalls: out.stdout.includes("FIRED")
+      ? [{ name: "Skill", input: {}, resultText: "", isError: false }]
+      : [],
+    hooks: [],
+    subagents: [],
+    usage: {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  });
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["fire a", "boom b", "fire c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => t.toolCalls.some((c) => c.name === "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+    parse,
+    (out) => (out.stdout.includes("RUN_ERROR") ? "errored" : null),
+  );
+  assert.equal(report.n, 2); // boom excluded
+  assert.equal(report.errored, 1); // and surfaced
+  assert.equal(report.rate, 1); // the 2 valid runs both fired
+});
+
+test("measureTriggerRate dispatches a custom { evalDriver } (the codex seam)", async () => {
+  // The public entry must route runner+parse+runError from the driver.
+  const report = await measureTriggerRate(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["x one", "x two", "x three"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => t.toolCalls.some((c) => c.name === "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    {
+      evalDriver: {
+        runner: () => Promise.resolve({ code: 0, stdout: "OK" }),
+        parse: (out) => ({
+          turns: 1,
+          output: out.stdout,
+          toolCalls: [
+            { name: "Skill", input: {}, resultText: "", isError: false },
+          ],
+          hooks: [],
+          subagents: [],
+          usage: {
+            costUsd: 0,
+            durationMs: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+          },
+        }),
+      },
+    },
+  );
+  assert.equal(report.rate, 1); // the injected driver drove every run
+  assert.equal(report.n, 3);
+});
+
+test("measureTriggerRateWith seeds `fixture` files into each run's cwd", async () => {
+  const skillStream =
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "t1", name: "Skill", input: {} }],
+      },
+    }) +
+    "\n" +
+    JSON.stringify({ type: "result", num_turns: 1 });
+  const plain = JSON.stringify({ type: "result", num_turns: 1 });
+  // The skill "fires" iff the fixture file is on disk in the run cwd — proving
+  // the context was seeded BEFORE the agent ran.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: existsSync(join(a.cwd, "package.json")) ? skillStream : plain,
+    });
+
+  const withFixture = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => usedTool(t, "Skill"),
+      trials: 1,
+      spacingSec: 0,
+      fixture: { "package.json": "{}", "src/index.js": "x" },
+    },
+    runner,
+  );
+  assert.equal(withFixture.rate, 1); // fixture present → every run fires
+
+  const without = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => usedTool(t, "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  assert.equal(without.rate, 0); // empty cwd → never fires
+});
+
+test("measureTriggerRateWith runs the grid in parallel when concurrency > 1", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const runner = async (): Promise<{ code: number; stdout: string }> => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((r) => setTimeout(r, 5));
+    active--;
+    return {
+      code: 0,
+      stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+    };
+  };
+
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["a", "b", "c", "d"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: () => false,
+      trials: 2,
+      spacingSec: 0,
+      concurrency: 4,
+    },
+    runner,
+  );
+
+  assert.equal(report.n, 8); // 4 prompts × 2 trials all executed
+  assert.deepEqual(
+    report.perPrompt.map((p) => p.prompt),
+    ["a", "b", "c", "d"], // aggregation preserves input order despite parallelism
+  );
+  assert.ok(
+    maxActive > 1,
+    `expected parallel runs, max concurrent was ${maxActive}`,
+  );
 });
 
 test("promptDistance (NCD) is 0 for identical, larger for different, normalized", () => {

@@ -122,6 +122,95 @@ export interface RulesConfig {
    * block the edit, false → off.
    */
   "unmarked-refs"?: RuleSeverity;
+  /**
+   * Cross-reference each subagent's `tools:` rail against the harness tool
+   * catalog — flag a never-available tool or a close typo (the moat). Only
+   * high-confidence issues are reported (a bare unrecognized tool is likely
+   * plugin/MCP-provided, never flagged). Off unless set; "warn" surfaces,
+   * "error" gates CI. Same detector as `scan` + `compileAgent`.
+   */
+  "agent-tool-contract"?: RuleSeverity;
+  /**
+   * Flag a hook registered under an event name the harness doesn't define (a
+   * typo → the hook never fires). High-precision: close typos only, never a
+   * framework/custom event. Default "warn"; "error" gates CI. Same detector as
+   * `scan`.
+   */
+  "hook-events"?: RuleSeverity;
+  /**
+   * Flag a skill/agent missing a required frontmatter field — a skill needs
+   * `name` (to load), an agent needs `name` + `description`. A broken surface
+   * that won't register. Default "warn"; "error" gates CI. Same detector as `scan`.
+   */
+  "agent-frontmatter"?: RuleSeverity;
+  /**
+   * Flag a declared MCP server that can't start — neither a `command` (stdio)
+   * nor a `url` (http/sse). Default "warn"; "error" gates CI. Same detector as
+   * `scan`. (JSON `.mcp.json`/manifest `mcpServers`; Codex TOML not yet parsed.)
+   */
+  "mcp-config"?: RuleSeverity;
+  /**
+   * RECOMMEND (not require) that a SKILL.md declares an explicit `name` +
+   * `description` rather than relying on the dir-name / first-paragraph
+   * fallbacks — a more reliable trigger surface. The skill still loads without
+   * them, so this is a best-practice nudge: default "warn"; set "error" to
+   * enforce on your own skills. Same detector as `scan` (skillMetaIssues).
+   */
+  "skill-frontmatter"?: RuleSeverity;
+  /**
+   * Cross-reference an `mcp__server__tool` in a subagent's contract against the
+   * plugin's declared `mcpServers` — flag a server the plugin doesn't declare
+   * (the MCP half of the tool moat; `agent-tool-contract` checks the built-in
+   * half). High-precision: only flags when the plugin SHIPS a declared set,
+   * allowlists harness built-ins (`ide`), and skips the plugin-namespaced
+   * `mcp__plugin_…` form. Default "warn"; "error" gates CI. Same detector as
+   * `scan` (mcpToolIssues).
+   */
+  "mcp-tool-resolves"?: RuleSeverity;
+  /**
+   * Flag a hook command that references a script file which doesn't exist on
+   * disk (with `${CLAUDE_PLUGIN_ROOT}` resolved) — the hook silently never runs.
+   * FP-safe: skips unresolved `$VAR` paths, existence-guarded one-liners, and
+   * inline commands. Matches Anthropic's own `claude plugin validate`. Default
+   * "warn"; "error" gates CI. Same detector as `scan` (hooks status "missing").
+   */
+  "hook-script-exists"?: RuleSeverity;
+  /**
+   * Cross-reference a subagent's `disallowedTools:` block-list against the
+   * catalog — the deny-side mirror of `agent-tool-contract`. A close typo there
+   * blocks NOTHING (you meant to deny `Bash`, wrote `Bsh`), leaving the tool
+   * available. High-precision: close-typo only (a never-available tool is
+   * harmless to list, a bare unknown is likely a plugin tool). Default "warn";
+   * "error" gates CI. Same detector as `scan` (disallowedToolIssues).
+   */
+  "disallowed-tools-contract"?: RuleSeverity;
+  /**
+   * Flag two model-invocable skills whose descriptions are near-identical — the
+   * selector can't tell them apart, so the wrong one fires (a precision
+   * collision). A DETERMINISTIC NCD proxy for a `--trigger`-class behavioral bug;
+   * calibrated FP-safe (only basically-identical text, below the sweep's
+   * most-similar distinct pair). Default "warn"; "error" gates CI. Same detector
+   * as `scan` (descriptionOverlaps).
+   */
+  "description-overlap"?: RuleSeverity;
+  /**
+   * Flag a skill/agent whose `---` frontmatter block EXISTS but isn't valid YAML
+   * — fields may not parse as intended. CAVEAT: a real YAML parser (js-yaml) is
+   * stricter than some loaders, so a one-line `description:` containing a `: `
+   * colon or an `<example>` block is flagged even though it may still load.
+   * Hence default "warn" (a nudge), not "error" — verify before enforcing. Same
+   * detector as `scan` (malformedFrontmatter).
+   */
+  "frontmatter-valid"?: RuleSeverity;
+  /**
+   * Flag a `type: "mcp_tool"` hook action that's incomplete (missing `server` /
+   * `tool`) or targets a server the plugin doesn't declare in `mcpServers` — the
+   * hook silently never dispatches. High-precision: the undeclared-server half is
+   * gated on the plugin shipping a declared set and allowlists built-ins (`ide`),
+   * mirroring `mcp-tool-resolves`. Default "warn"; "error" gates CI. Same detector
+   * as `scan` (mcpHookIssues).
+   */
+  "mcp-hook-target-resolves"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

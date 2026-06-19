@@ -431,6 +431,17 @@ describe("loadConfig", () => {
       "untested-agent": "warn",
       "untested-hook": "warn",
       "unmarked-refs": "warn",
+      "agent-tool-contract": "warn",
+      "hook-events": "warn",
+      "agent-frontmatter": "warn",
+      "mcp-config": "warn",
+      "skill-frontmatter": "warn",
+      "mcp-tool-resolves": "warn",
+      "hook-script-exists": "warn",
+      "disallowed-tools-contract": "warn",
+      "description-overlap": "warn",
+      "frontmatter-valid": "warn",
+      "mcp-hook-target-resolves": "warn",
     });
   });
 
