@@ -439,6 +439,7 @@ describe("loadConfig", () => {
       "mcp-tool-resolves": "warn",
       "hook-script-exists": "warn",
       "disallowed-tools-contract": "warn",
+      "description-overlap": "warn",
     });
   });
 

@@ -419,6 +419,7 @@ want compile-on-edit.
 | [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)                 | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) MCP server             |
 | [`hook-script-exists`](rules/hook-script-exists.md)               | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)           |
 | [`skill-frontmatter`](rules/skill-frontmatter.md)                 | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)               |
+| [`description-overlap`](rules/description-overlap.md)             | `"warn"` | No two model-invocable skills have near-identical descriptions (selector collision)    |
 
 Configure in `.vigilesrc.json`:
 

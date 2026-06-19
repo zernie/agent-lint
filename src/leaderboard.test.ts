@@ -28,6 +28,7 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     frontmatterValueIssues: [],
     skillMetaIssues: [],
     mcpIssues: [],
+    descriptionOverlaps: [],
     warnings: [],
     untested: 0,
     ...over,
