@@ -18,6 +18,7 @@ layer-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter
 - [A worked deterministic example](#a-worked-deterministic-example)
 - [The OpenAI Responses mock (`startCodexMock`)](#the-openai-responses-mock-startcodexmock)
 - [What maps, and what doesn't](#what-maps-and-what-doesnt)
+- [Authenticating Codex (for the eval tier)](#authenticating-codex-for-the-eval-tier)
 - [See also](#see-also)
 
 ## Select Codex by the `{ adapter }` option
@@ -158,6 +159,44 @@ See the spike + env-validation checklist in
 [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
 (2026-06-18 update). (Matches the [`docs/harnesses.md`](harnesses.md) matrix
 footnote ² — still don't gate on it.)
+
+## Authenticating Codex (for the eval tier)
+
+The **deterministic** tier (`runHarnessTest`) is **keyless** — it points `codex
+exec` at the in-process Responses mock, so it needs no login. Only the **eval**
+tier (real model) needs Codex auth. Three ways, in order of fit:
+
+1. **Device-code flow — best for a headless / remote / sandbox env** (no browser
+   on the box, no `localhost` callback to forward):
+
+   ```bash
+   codex login --device-auth
+   ```
+
+   It prints a URL (`https://auth.openai.com/codex/device`) and a one-time code.
+   Open the URL on **any** device, enter the code, and the CLI — which is polling
+   — completes the login; the token is written to `~/.codex` on the box running
+   the command. This is the flow to use when an agent/CI sets Codex up for you.
+   Verify with `codex login status`.
+
+2. **Browser flow — local dev only:** plain `codex login` opens a browser and
+   redirects to `http://localhost:1455`. Fine on your laptop; it does **not** work
+   in a remote sandbox (the callback hits the sandbox's loopback, not yours) —
+   use `--device-auth` there.
+
+3. **API key (no browser):** pipe a key in —
+
+   ```bash
+   printenv OPENAI_API_KEY | codex login --with-api-key
+   ```
+
+   Use this when you have a key and want a non-interactive setup, or when the
+   ChatGPT plan on the account doesn't include Codex.
+
+The eval tier also needs **network egress** to the Codex/OpenAI backend (the
+deterministic tier doesn't — it only talks to the in-process mock). Install the
+CLI with `npm i -g @openai/codex` (pin the version — the `codex exec --json`
+event schema can shift between releases; validated against `codex-cli` 0.141.0).
 
 ## See also
 
