@@ -61,5 +61,5 @@ file start (after an optional BOM / a leading vigiles integrity comment) — a
 
 ## See also
 
-- [agent-frontmatter](agent-frontmatter.md) — required fields + valid `model`/`color`
+- [subagent-frontmatter](subagent-frontmatter.md) — required fields + valid `model`/`color`
   (a _parsed_ frontmatter that's missing/typo'd a field, vs this rule's _unparseable_ block).

@@ -149,6 +149,23 @@ Each has a default severity (`"warn"` / `"error"` / `false`) and is configured i
 `.vigilesrc.json`. Every rule is **deterministic** (no model, no API key) and
 links to its own reference doc.
 
+**Not every rule applies to every harness.** A rule is scoped to the _surface_ it
+checks and runs only where the active harness has that surface — elsewhere
+`vigiles lint` reports it as **n/a** (loud, never a failure). That's what lets one
+config target Claude Code _and_ Codex without duplicating rules per harness:
+universal rules stay bare and run everywhere; surface rules light up only where
+the surface exists.
+
+| Surface (the gate)          | Rules                                                                                      | Applies to                                |
+| --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Instruction file &amp; docs | `require-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                    | all harnesses                             |
+| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
+| MCP                         | `mcp-config`                                                                               | all with MCP                              |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`                                       | Claude Code, Codex                        |
+| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
+
+The per-family tables below give each rule's default severity and what it checks.
+
 ### Spec &amp; integrity
 
 | Rule                                                | Default  | What it checks                                                      |
@@ -160,11 +177,11 @@ links to its own reference doc.
 
 ### Test coverage
 
-| Rule                                        | Default  | What it checks                                   |
-| ------------------------------------------- | -------- | ------------------------------------------------ |
-| [`untested-skill`](rules/untested-skill.md) | `"warn"` | Every skill (`SKILL.md`) ships with a test/eval  |
-| [`untested-agent`](rules/untested-agent.md) | `"warn"` | Every subagent (`agents/*.md`) ships a test/eval |
-| [`untested-hook`](rules/untested-hook.md)   | `"warn"` | Every file-backed hook script ships a test/eval  |
+| Rule                                              | Default  | What it checks                                   |
+| ------------------------------------------------- | -------- | ------------------------------------------------ |
+| [`untested-skill`](rules/untested-skill.md)       | `"warn"` | Every skill (`SKILL.md`) ships with a test/eval  |
+| [`untested-subagent`](rules/untested-subagent.md) | `"warn"` | Every subagent (`agents/*.md`) ships a test/eval |
+| [`untested-hook`](rules/untested-hook.md)         | `"warn"` | Every file-backed hook script ships a test/eval  |
 
 ### Reference marking
 
@@ -176,9 +193,9 @@ links to its own reference doc.
 
 | Rule                                                              | Default  | What it checks                                                                |
 | ----------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
-| [`agent-tool-contract`](rules/agent-tool-contract.md)             | `"warn"` | A subagent's `tools:` are real (catalog cross-ref — never-available / typo)   |
+| [`subagent-tool-contract`](rules/subagent-tool-contract.md)       | `"warn"` | A subagent's `tools:` are real (catalog cross-ref — never-available / typo)   |
 | [`disallowed-tools-contract`](rules/disallowed-tools-contract.md) | `"warn"` | A subagent's `disallowedTools:` are real tools (a typo blocks nothing)        |
-| [`agent-frontmatter`](rules/agent-frontmatter.md)                 | `"warn"` | Subagent frontmatter valid (`name`+`description`; `model`/`color` not a typo) |
+| [`subagent-frontmatter`](rules/subagent-frontmatter.md)           | `"warn"` | Subagent frontmatter valid (`name`+`description`; `model`/`color` not a typo) |
 
 ### Hooks &amp; MCP
 

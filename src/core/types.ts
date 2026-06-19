@@ -84,7 +84,7 @@ export interface OrphansConfig {
 
 /**
  * Shared options for the per-kind untested-* rules (`untested-skill` /
- * `untested-agent` / `untested-hook`). Which kinds are scanned is controlled by
+ * `untested-subagent` / `untested-hook`). Which kinds are scanned is controlled by
  * each rule's severity (set a rule to `false` to skip that kind), so only the
  * test-discovery knobs live here.
  */
@@ -111,7 +111,7 @@ export interface RulesConfig {
   /** Flag a skill (SKILL.md) that ships with no test or eval. Default: "warn". */
   "untested-skill"?: RuleWithOptions<TestCoverageConfig>;
   /** Flag a subagent (agents/*.md) that ships with no test or eval. Default: "warn". */
-  "untested-agent"?: RuleWithOptions<TestCoverageConfig>;
+  "untested-subagent"?: RuleWithOptions<TestCoverageConfig>;
   /** Flag a hook script that ships with no test or eval. Default: "warn". */
   "untested-hook"?: RuleWithOptions<TestCoverageConfig>;
   /**
@@ -129,7 +129,7 @@ export interface RulesConfig {
    * plugin/MCP-provided, never flagged). Off unless set; "warn" surfaces,
    * "error" gates CI. Same detector as `scan` + `compileAgent`.
    */
-  "agent-tool-contract"?: RuleSeverity;
+  "subagent-tool-contract"?: RuleSeverity;
   /**
    * Flag a hook registered under an event name the harness doesn't define (a
    * typo → the hook never fires). High-precision: close typos only, never a
@@ -142,7 +142,7 @@ export interface RulesConfig {
    * `name` (to load), an agent needs `name` + `description`. A broken surface
    * that won't register. Default "warn"; "error" gates CI. Same detector as `scan`.
    */
-  "agent-frontmatter"?: RuleSeverity;
+  "subagent-frontmatter"?: RuleSeverity;
   /**
    * Flag a declared MCP server that can't start — neither a `command` (stdio)
    * nor a `url` (http/sse). Default "warn"; "error" gates CI. Same detector as
@@ -160,7 +160,7 @@ export interface RulesConfig {
   /**
    * Cross-reference an `mcp__server__tool` in a subagent's contract against the
    * plugin's declared `mcpServers` — flag a server the plugin doesn't declare
-   * (the MCP half of the tool moat; `agent-tool-contract` checks the built-in
+   * (the MCP half of the tool moat; `subagent-tool-contract` checks the built-in
    * half). High-precision: only flags when the plugin SHIPS a declared set,
    * allowlists harness built-ins (`ide`), and skips the plugin-namespaced
    * `mcp__plugin_…` form. Default "warn"; "error" gates CI. Same detector as
@@ -177,7 +177,7 @@ export interface RulesConfig {
   "hook-script-exists"?: RuleSeverity;
   /**
    * Cross-reference a subagent's `disallowedTools:` block-list against the
-   * catalog — the deny-side mirror of `agent-tool-contract`. A close typo there
+   * catalog — the deny-side mirror of `subagent-tool-contract`. A close typo there
    * blocks NOTHING (you meant to deny `Bash`, wrote `Bsh`), leaving the tool
    * available. High-precision: close-typo only (a never-available tool is
    * harmless to list, a bare unknown is likely a plugin tool). Default "warn";

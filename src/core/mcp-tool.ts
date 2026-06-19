@@ -4,7 +4,7 @@
  * names a server `linear`; if the plugin declares its own MCP servers (a
  * `.mcp.json` / manifest `mcpServers` block) and `linear` isn't among them, the
  * tool can't resolve — a dead contract entry. This completes the tool moat:
- * `agent-tool-contract` (tool-contract.ts) verifies BUILT-IN tools but passes
+ * `subagent-tool-contract` (tool-contract.ts) verifies BUILT-IN tools but passes
  * ANY `mcp__*` token unchecked; this verifies the MCP half.
  *
  * Calibrated HIGH-PRECISION — three guards, each learned from a real plugin in

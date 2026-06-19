@@ -1,4 +1,4 @@
-# agent-tool-contract
+# subagent-tool-contract
 
 Cross-reference every **subagent's `tools:` rail** (`agents/*.md`) against the
 harness tool catalog — the "valid is not true" moat applied to a tool contract.
@@ -31,7 +31,7 @@ suffix (`Bash(git:*)`) are parsed/normalized before checking.
 ## Configuration
 
 ```json
-{ "rules": { "agent-tool-contract": "warn" } }
+{ "rules": { "subagent-tool-contract": "warn" } }
 ```
 
 ### Severity

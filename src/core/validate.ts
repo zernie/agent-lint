@@ -75,15 +75,15 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   coverage: false,
   // Per-kind surface-coverage: a skill/agent/hook must ship with a test or eval.
   "untested-skill": "warn",
-  "untested-agent": "warn",
+  "untested-subagent": "warn",
   "untested-hook": "warn",
   "unmarked-refs": "warn",
   // High-precision (never-available + close typos only), so on by default at warn.
-  "agent-tool-contract": "warn",
+  "subagent-tool-contract": "warn",
   // High-precision (close typos only), on by default at warn.
   "hook-events": "warn",
   // Missing required frontmatter (name/description) — on by default at warn.
-  "agent-frontmatter": "warn",
+  "subagent-frontmatter": "warn",
   // A declared MCP server with no command/url can't start — on by default at warn.
   "mcp-config": "warn",
   // Best-practice nudge (skills load without frontmatter) — warn, not error.
@@ -92,7 +92,7 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "mcp-tool-resolves": "warn",
   // A hook script referenced but missing never runs — on by default at warn.
   "hook-script-exists": "warn",
-  // High-precision (close-typo only) deny-list mirror of agent-tool-contract.
+  // High-precision (close-typo only) deny-list mirror of subagent-tool-contract.
   "disallowed-tools-contract": "warn",
   // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
   "description-overlap": "warn",

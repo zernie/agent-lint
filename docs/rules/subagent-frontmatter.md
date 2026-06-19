@@ -1,4 +1,4 @@
-# agent-frontmatter
+# subagent-frontmatter
 
 Flag a **subagent** (`agents/*.md`) missing a required frontmatter field. Per the
 [subagent docs](https://code.claude.com/docs/en/sub-agents), a subagent
@@ -18,7 +18,7 @@ _good_ trigger surface is a behavioral question — measure it with
 
 ## What it flags
 
-Two kinds of agent-frontmatter defect, one rule:
+Two kinds of subagent-frontmatter defect, one rule:
 
 | Kind             | Surface       | Example failure                                                 |
 | ---------------- | ------------- | --------------------------------------------------------------- |
@@ -40,7 +40,7 @@ frontmatter at all** — they never register. See
 ## Configuration
 
 ```json
-{ "rules": { "agent-frontmatter": "warn" } }
+{ "rules": { "subagent-frontmatter": "warn" } }
 ```
 
 ### Severity

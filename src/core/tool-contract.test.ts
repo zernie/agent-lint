@@ -1,6 +1,6 @@
 /**
  * Tool-contract detector test suite (vitest) — the shared cross-referencing moat
- * reused by compileAgent / scan / the agent-tool-contract lint rule. Asserts the
+ * reused by compileAgent / scan / the subagent-tool-contract lint rule. Asserts the
  * verdict AND the high-precision calibration that keeps it from crying wolf when
  * auditing third-party plugins (the TaskCreate/TaskGet lesson).
  */

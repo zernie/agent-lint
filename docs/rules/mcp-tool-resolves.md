@@ -6,7 +6,7 @@ the plugin's **declared MCP servers**. If the plugin declares its own servers
 among them, the tool can't resolve — a dead contract entry.
 
 This is the **MCP half of the tool moat**:
-[`agent-tool-contract`](agent-tool-contract.md) verifies a subagent's _built-in_
+[`subagent-tool-contract`](subagent-tool-contract.md) verifies a subagent's _built-in_
 tools but passes any `mcp__*` token through unchecked; this rule verifies the MCP
 half. Same detector `vigiles scan` uses (`verifyMcpToolServers` in
 `src/core/mcp-tool.ts`) — one detector, two callers.
@@ -64,7 +64,7 @@ Subagent contracts (`agents/*.md` `tools:`). Reads declared servers from
 is the common case).
 
 A skill's `allowed-tools` is a different namespace and is deliberately not
-checked here, mirroring `agent-tool-contract`.
+checked here, mirroring `subagent-tool-contract`.
 
 ## Why
 
@@ -76,5 +76,5 @@ surface.
 
 ## See also
 
-- [agent-tool-contract](agent-tool-contract.md) — the built-in half of the moat.
+- [subagent-tool-contract](subagent-tool-contract.md) — the built-in half of the moat.
 - [mcp-config](mcp-config.md) — a declared MCP server that can't _start_.
