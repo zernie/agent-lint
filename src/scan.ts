@@ -34,6 +34,10 @@ import {
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
 import { editDistance } from "./core/linters.js";
+import {
+  findDescriptionOverlaps,
+  type DescriptionOverlap,
+} from "./core/description-overlap.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
 import {
   parseAgentTools,
@@ -152,6 +156,8 @@ export interface ScanReport {
   readonly skillMetaIssues: readonly FrontmatterIssue[];
   /** Declared MCP servers that can't start (no command/url). */
   readonly mcpIssues: readonly McpIssue[];
+  /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
+  readonly descriptionOverlaps: readonly DescriptionOverlap[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -335,6 +341,28 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Near-duplicate description pairs among the MODEL-INVOCABLE skills — the ones
+ * that actually compete for auto-selection (a user-invoked skill is picked by
+ * explicit command, so it can't collide). Uses the same effective-description
+ * logic as `scanSkills` (frontmatter `description` ← first body paragraph), then
+ * the NCD precision-proxy. See description-overlap.ts.
+ */
+function descriptionOverlapsFor(
+  files: Record<string, string>,
+): DescriptionOverlap[] {
+  const surfaces: { name: string; description: string }[] = [];
+  for (const [path, md] of Object.entries(files)) {
+    if (!isSkill(path)) continue;
+    if (/^\s*disable-model-invocation:\s*true\s*$/m.test(md)) continue;
+    const fm = frontmatter(md);
+    const description = fm.description ?? firstBodyParagraph(md);
+    if (!description || description.length < 20) continue;
+    surfaces.push({ name: fm.name ?? skillName(path), description });
+  }
+  return findDescriptionOverlaps(surfaces);
 }
 
 function scanAgents(
@@ -663,6 +691,7 @@ export function scanPlugin(
     frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files),
     skillMetaIssues: skillMetaIssuesFor(loaded.files),
     mcpIssues: verifyMcpServers(mcpServers),
+    descriptionOverlaps: descriptionOverlapsFor(loaded.files),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -855,6 +884,13 @@ export function formatScanReport(r: ScanReport): string {
     ...section(
       "MCP config",
       r.mcpIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Description overlap (precision risk)",
+      r.descriptionOverlaps.map((o) => `  ⚠ ${o.message}`),
     ),
   );
 

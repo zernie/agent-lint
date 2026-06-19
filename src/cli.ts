@@ -770,6 +770,8 @@ interface LintReport {
   hookScriptErrors: number;
   disallowedToolIssues: number;
   disallowedToolErrors: number;
+  descriptionOverlapIssues: number;
+  descriptionOverlapErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -871,6 +873,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.mcpToolErrors > 0 ||
     report.hookScriptErrors > 0 ||
     report.disallowedToolErrors > 0 ||
+    report.descriptionOverlapErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1282,6 +1285,10 @@ async function runLint(
   // (the deny-side mirror of agent-tool-contract; close-typo only).
   const disallowedTools = checkDisallowedTools(config, silent);
 
+  // 7k. Description-overlap — two model-invocable skills with near-identical
+  // descriptions collide in the selector (deterministic NCD precision proxy).
+  const descriptionOverlap = checkDescriptionOverlap(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1348,6 +1355,8 @@ async function runLint(
     hookScriptErrors: hookScripts.errors,
     disallowedToolIssues: disallowedTools.issues,
     disallowedToolErrors: disallowedTools.errors,
+    descriptionOverlapIssues: descriptionOverlap.issues,
+    descriptionOverlapErrors: descriptionOverlap.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2746,6 +2755,35 @@ function checkDisallowedTools(
         issue.message,
         issue.path,
       );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `description-overlap` rule: two model-invocable skills with
+ * near-identical descriptions collide in the selector — the wrong one fires. A
+ * deterministic NCD proxy for a `--trigger`-class precision bug. Reuses
+ * `scanPlugin`'s `descriptionOverlaps` (calibrated FP-safe: only basically
+ * identical text). Warning by default; "error" gates CI.
+ */
+function checkDescriptionOverlap(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["description-overlap"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).descriptionOverlaps;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nDescription-overlap check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

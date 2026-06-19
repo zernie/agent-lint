@@ -467,6 +467,36 @@ test("scanPlugin does NOT flag mcp tools when the plugin declares no servers", (
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags near-duplicate model-invocable skill descriptions, skips user-invoked", () => {
+  const dir = makeTmpDir("scan-overlap");
+  const dup =
+    "Use this skill to review code for security issues and suggest concrete fixes before merging the change";
+  write(
+    dir,
+    "skills/a/SKILL.md",
+    `---\nname: a\ndescription: ${dup}\n---\n# a\n`,
+  );
+  write(
+    dir,
+    "skills/b/SKILL.md",
+    `---\nname: b\ndescription: ${dup}\n---\n# b\n`,
+  );
+  // A user-invoked near-dup must NOT collide (picked by explicit command).
+  write(
+    dir,
+    "skills/c/SKILL.md",
+    `---\nname: c\ndescription: ${dup}\ndisable-model-invocation: true\n---\n# c\n`,
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.descriptionOverlaps.length, 1);
+  assert.deepEqual(
+    [r.descriptionOverlaps[0].a, r.descriptionOverlaps[0].b].sort(),
+    ["a", "b"],
+  );
+  assert.match(formatScanReport(r), /near-identical/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin flags an agent model/color typo, not a valid value or full model id", () => {
   const dir = makeTmpDir("scan-modelcolor");
   write(

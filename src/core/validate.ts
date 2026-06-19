@@ -94,6 +94,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "hook-script-exists": "warn",
   // High-precision (close-typo only) deny-list mirror of agent-tool-contract.
   "disallowed-tools-contract": "warn",
+  // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
+  "description-overlap": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

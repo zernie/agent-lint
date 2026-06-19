@@ -184,6 +184,15 @@ export interface RulesConfig {
    * "error" gates CI. Same detector as `scan` (disallowedToolIssues).
    */
   "disallowed-tools-contract"?: RuleSeverity;
+  /**
+   * Flag two model-invocable skills whose descriptions are near-identical — the
+   * selector can't tell them apart, so the wrong one fires (a precision
+   * collision). A DETERMINISTIC NCD proxy for a `--trigger`-class behavioral bug;
+   * calibrated FP-safe (only basically-identical text, below the sweep's
+   * most-similar distinct pair). Default "warn"; "error" gates CI. Same detector
+   * as `scan` (descriptionOverlaps).
+   */
+  "description-overlap"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------
