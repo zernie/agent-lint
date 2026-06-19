@@ -129,8 +129,34 @@ risks the trigger column would quantify:
   phrases, and postmortem ships a negative cue ("Не использовать для обычных
   session debriefs") — explicit recall + precision steering.
 
-Behavioral probe not yet run (it needs language-matched prompt sets — and the
-English-vs-Russian recall gap is itself worth measuring). Offered as next.
+### Finding 3a — haretrail behavioral probe (native Codex): cross-language risk REFUTED
+
+Run **natively on real `codex exec`** (the first native-Codex eval — see
+`research/codex-prototype-findings.md`), via
+`codexEvalRunner` → `parseCodexEvalRun` → `codexSkillFired`, with haretrail's
+skills installed (bodies stubbed to bound cost, Russian descriptions kept). Three
+skills × **Russian vs English** prompts × 3 each:
+
+| skill    | RU recall | EN recall |
+| -------- | --------- | --------- |
+| research | 3/3       | **3/3**   |
+| summary  | 3/3       | **3/3**   |
+| debrief  | 3/3       | **2/3**   |
+
+**The cross-language trigger risk does NOT materialize.** The Russian-described
+skills fire reliably on **English** prompts — the model handles the
+RU-description / EN-prompt case fine. So the deterministic flag ("non-Latin
+description → cross-language risk") was a correct RISK flag, and the model-gated
+measurement CLEARS it for these skills. The discipline worked exactly as designed:
+scan flags the risk deterministically, the eval confirms or refutes. **Do not
+recommend "switch to English" — the data says it's unnecessary here.** (The single
+`debrief/en` miss also confirms `codexSkillFired` is discriminating, not a blanket
+true: it only fires when that skill's `SKILL.md` is actually read.)
+
+What this leaves as haretrail's real (minor) issues: the cosmetic `{data-repo}`
+placeholder, the untested surfaces, and an UNMEASURED precision/overlap question
+(debrief vs lessons vs postmortem; task vs research) — recall is healthy, precision
+across the overlapping cluster wasn't probed here.
 
 ## Not run here — observed egress
 
