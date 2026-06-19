@@ -143,6 +143,12 @@ export interface RulesConfig {
    * that won't register. Default "warn"; "error" gates CI. Same detector as `scan`.
    */
   "frontmatter-schema"?: RuleSeverity;
+  /**
+   * Flag a declared MCP server that can't start — neither a `command` (stdio)
+   * nor a `url` (http/sse). Default "warn"; "error" gates CI. Same detector as
+   * `scan`. (JSON `.mcp.json`/manifest `mcpServers`; Codex TOML not yet parsed.)
+   */
+  "mcp-config"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

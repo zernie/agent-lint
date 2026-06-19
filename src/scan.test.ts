@@ -391,6 +391,26 @@ test("scanPlugin flags missing required frontmatter (skill name, agent name+desc
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags an MCP server that can't start (no command/url)", () => {
+  const dir = makeTmpDir("scan-mcp");
+  write(
+    dir,
+    ".mcp.json",
+    JSON.stringify({
+      mcpServers: {
+        ok: { command: "node", args: ["s.js"] },
+        remote: { url: "https://x/sse" },
+        broken: { args: ["x"] }, // neither command nor url
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.mcpIssues.length, 1);
+  assert.equal(r.mcpIssues[0].server, "broken");
+  assert.match(formatScanReport(r), /MCP config/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);

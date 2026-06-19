@@ -414,6 +414,7 @@ want compile-on-edit.
 | [`agent-tool-contract`](rules/agent-tool-contract.md) | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)            |
 | [`hook-events`](rules/hook-events.md)                 | `"warn"` | Hooks register under a real event name (a typo never fires)                        |
 | [`frontmatter-schema`](rules/frontmatter-schema.md)   | `"warn"` | Skills/agents have required frontmatter (skill `name`; agent `name`+`description`) |
+| [`mcp-config`](rules/mcp-config.md)                   | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                         |
 
 Configure in `.vigilesrc.json`:
 
