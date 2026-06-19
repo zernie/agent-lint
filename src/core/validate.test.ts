@@ -437,6 +437,7 @@ describe("loadConfig", () => {
       "mcp-config": "warn",
       "skill-frontmatter": "warn",
       "mcp-tool-resolves": "warn",
+      "hook-script-exists": "warn",
     });
   });
 

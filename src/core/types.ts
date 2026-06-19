@@ -167,6 +167,14 @@ export interface RulesConfig {
    * `scan` (mcpToolIssues).
    */
   "mcp-tool-resolves"?: RuleSeverity;
+  /**
+   * Flag a hook command that references a script file which doesn't exist on
+   * disk (with `${CLAUDE_PLUGIN_ROOT}` resolved) — the hook silently never runs.
+   * FP-safe: skips unresolved `$VAR` paths, existence-guarded one-liners, and
+   * inline commands. Matches Anthropic's own `claude plugin validate`. Default
+   * "warn"; "error" gates CI. Same detector as `scan` (hooks status "missing").
+   */
+  "hook-script-exists"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

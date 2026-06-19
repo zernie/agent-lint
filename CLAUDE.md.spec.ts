@@ -231,6 +231,8 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Rule doc: mcp-config — flag a declared MCP server that can't start (no command/url); FP-safe unambiguous check; reads .mcp.json + manifest mcpServers (Codex TOML not yet parsed); default warn; same detector as scan",
     "docs/rules/mcp-tool-resolves.md":
       "Rule doc: mcp-tool-resolves — the MCP half of the tool moat: flag a subagent's mcp__server__tool whose server isn't in the plugin's declared mcpServers. High-precision (gate on a declared set, allowlist built-ins like `ide`, skip the plugin-namespaced form); default warn; same detector as scan (mcpToolIssues). Sibling of agent-tool-contract (built-in half) + mcp-config (server can start)",
+    "docs/rules/hook-script-exists.md":
+      "Rule doc: hook-script-exists — flag a hook command referencing a script file missing on disk (silently never runs); matches Anthropic's own `claude plugin validate`, making vigiles a superset on the hook surface. FP-safe (skips unresolved $VARs, existence-guarded one-liners, inline commands); default warn; same detector as scan (hooks status 'missing'). Distinct from untested-hook (script exists but unverified)",
     "docs/rules/skill-frontmatter.md":
       "Rule doc: skill-frontmatter — RECOMMEND (not require) explicit skill name+description for a reliable trigger surface; skills load without it (dir/first-paragraph fallback) so it's a best-practice nudge (default warn, set error to enforce your own), distinct from agent-frontmatter (subagent requirement); same detector as scan (skillMetaIssues)",
     "src/core/doc-refs.ts":

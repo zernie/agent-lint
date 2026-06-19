@@ -416,6 +416,7 @@ want compile-on-edit.
 | [`agent-frontmatter`](rules/agent-frontmatter.md)     | `"warn"` | Subagents have required frontmatter (`name`+`description`; skills need none)    |
 | [`mcp-config`](rules/mcp-config.md)                   | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                      |
 | [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)     | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) MCP server      |
+| [`hook-script-exists`](rules/hook-script-exists.md)   | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)    |
 | [`skill-frontmatter`](rules/skill-frontmatter.md)     | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)        |
 
 Configure in `.vigilesrc.json`:
