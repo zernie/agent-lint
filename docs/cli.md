@@ -184,6 +184,59 @@ surfaced per-skill (`unmeasured`), never crashing the scan. See
 for what it catches. (The remaining behavioural columns — observed egress,
 safety — build on the same footing.)
 
+## Lint vs scan — gate vs report
+
+`lint` and `scan` look like they overlap, but they're **different verbs with
+different contracts** — the classic gate-vs-report split (think `eslint .` /
+`tsc --noEmit` vs `npm audit` / `terraform plan`):
+
+- **`lint` is the gate.** It runs on **your** repo with **your** config, verifies
+  references (file paths, scripts, and linter rules across **7 catalogs** — does
+  the rule exist _and_ is it enabled?), checks integrity/hash, coverage
+  thresholds, orphan docs, duplicate rules — and exits with **config-driven
+  severities → stable CI codes (0/1/2)**. It blocks bad commits.
+- **`scan` is the report.** Zero config, **read-only**, harness-aware, works on
+  **any** plugin (including third-party ones with no spec). It inventories the
+  structure, ranks a whole marketplace (leaderboard), and — with `--trigger` —
+  adds the model-gated behavioural column.
+
+They deliberately **share one implementation** of the few deterministic
+structural detectors they have in common (untested-surface, dangling-ref,
+description-script), per the `one-detector-no-drift` rule, so the two surfaces can
+never disagree. The asymmetry everywhere else is intentional: some checks need
+inputs only the gate has (your catalogs, your compiled output), and the paid
+`--trigger` column must **never** become a `lint` rule (lint stays free +
+deterministic + every-commit).
+
+**What each does:**
+
+| Check                                                       |  `lint`  |  `scan`   | `scan --trigger` |
+| ----------------------------------------------------------- | :------: | :-------: | :--------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |        –         |
+| Marked file/script ref verification                         |    ✓     |     –     |        –         |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |        –         |
+| Untested surface                                            |  ✓ gate  |  ✓ count  |        –         |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |        –         |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |        –         |
+| Leaderboard (rank a marketplace)                            |    –     |     ✓     |        –         |
+| Trigger recall/precision (does a skill fire?)               |    –     |     –     |        ✓         |
+| Config severities + CI exit codes                           |    ✓     | read-only |    read-only     |
+| **Cost tier**                                               | free/det | free/det  |  **paid/model**  |
+
+**Where each runs:**
+
+| Target             |        `lint`        |        `scan`         |  `scan --trigger`   |
+| ------------------ | :------------------: | :-------------------: | :-----------------: |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)¹ |   n/a (no skills)   |
+| Claude Code plugin |          ✓           |           ✓           |          ✓          |
+| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
+| Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
+
+¹ On a plain repo `scan` reports the detected instruction file (`CLAUDE.md` /
+`AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
+_verification_ of that file is `lint`'s job (and needs marks — inline,
+frontmatter, or a spec; plain prose isn't auto-parsed).
+
 ## GitHub Action
 
 The Action is a **composite action over the published `npx vigiles` CLI** — it
