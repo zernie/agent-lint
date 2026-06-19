@@ -766,6 +766,8 @@ interface LintReport {
   skillFrontmatterErrors: number;
   mcpToolIssues: number;
   mcpToolErrors: number;
+  hookScriptIssues: number;
+  hookScriptErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -865,6 +867,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.mcpConfigErrors > 0 ||
     report.skillFrontmatterErrors > 0 ||
     report.mcpToolErrors > 0 ||
+    report.hookScriptErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1268,6 +1271,10 @@ async function runLint(
   // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
   const mcpToolResolves = checkMcpToolResolves(config, silent);
 
+  // 7i. Hook-script existence — a hook command referencing a missing script file
+  // never runs (matches Anthropic's own `claude plugin validate`).
+  const hookScripts = checkHookScriptExists(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1330,6 +1337,8 @@ async function runLint(
     skillFrontmatterErrors: skillFm.errors,
     mcpToolIssues: mcpToolResolves.issues,
     mcpToolErrors: mcpToolResolves.errors,
+    hookScriptIssues: hookScripts.issues,
+    hookScriptErrors: hookScripts.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2692,6 +2701,42 @@ function checkMcpConfig(
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `hook-script-exists` rule: a hook command references a script file
+ * that doesn't exist on disk (with `${CLAUDE_PLUGIN_ROOT}` resolved) → the hook
+ * silently never runs. Reuses `scanPlugin`'s `hooks` (status "missing"); the
+ * shared resolver already excludes the FP-prone cases (unresolved vars,
+ * existence-guarded one-liners, inline commands). Matches Anthropic's own
+ * `claude plugin validate`. Warning by default; "error" gates CI.
+ */
+function checkHookScriptExists(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-script-exists"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let missing: { script: string }[];
+  try {
+    missing = scanPlugin(process.cwd()).hooks.filter(
+      (h) => h.status === "missing",
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (missing.length > 0 && !silent) {
+    console.log("\nHook-script existence check:\n");
+    for (const h of missing) {
+      const msg = `hook script "${h.script}" is referenced but missing — the hook never runs.`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg);
+    }
+  }
+  return {
+    issues: missing.length,
+    errors: sev === "error" ? missing.length : 0,
+  };
 }
 
 /**

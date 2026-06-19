@@ -90,6 +90,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "skill-frontmatter": "warn",
   // High-precision (gated on a declared MCP set; built-ins allowlisted) — warn.
   "mcp-tool-resolves": "warn",
+  // A hook script referenced but missing never runs — on by default at warn.
+  "hook-script-exists": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {
