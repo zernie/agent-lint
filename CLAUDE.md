@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:1ac399235f19824d compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:65791fd1b2ade4ae compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -381,6 +381,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Doc Per Rule
 
 **Guidance only** — Every validation rule in .vigilesrc.json must have a corresponding doc in docs/rules/<rule-name>.md. The doc covers configuration, severity levels, options, what the rule checks, and why. README links to each rule doc from the rules table.
+
+### Rules Docs In Sync
+
+**Guidance only** — The set of validation rules is a SINGLE SOURCE OF TRUTH that the docs must track, never drift from: the `RulesConfig` keys in `src/core/types.ts` (plus any built-in `vigiles/*` rule like `orphan-docs`) ARE the rule set, and the central rules table in `docs/cli.md` (the `## Validation rules` section) must list EVERY one — each with its default severity and a one-line `what it checks`, linking its `docs/rules/<name>.md`. So adding, removing, or renaming a rule is not done until the SAME change updates three places together: the `RulesConfig` type, the `docs/cli.md` table row, and the `docs/rules/<name>.md` doc (the doc-per-rule requirement) — no rule ships absent from the table, and no table row points at a rule that no longer exists. The README does NOT re-list the rules (readme-brevity); it links to the `docs/cli.md` table as the one canonical list, so the table is the place that must stay complete. When you touch the rule set, re-derive the table from the `RulesConfig` keys to catch a missed row. Complements doc-per-rule (which governs the per-rule doc) — this governs the COMPLETENESS of the one shared list.
 
 ### Readme Brevity
 
