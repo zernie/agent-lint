@@ -66,6 +66,26 @@ const DEFAULT_IGNORE = [
  */
 const DISABLE_RE = /<!--\s*vigiles-disable\s+orphan-docs\s*-->/;
 
+/**
+ * Files the HARNESS loads directly — an instruction file (`CLAUDE.md` /
+ * `AGENTS.md`), a skill (`SKILL.md`), a subagent (`agents/*.md`), or a slash
+ * command (`commands/*.md`) — are load-bearing by their NAME/LOCATION, not
+ * because another `.md` links to them. They are categorically NOT docs, so they
+ * are never orphans, even if a project broadens `orphans.include` to scan the
+ * whole repo. (They are still scanned as REFERENCERS, so a real doc that only
+ * a CLAUDE.md links to is still credited — this exemption only removes them from
+ * the orphan-CANDIDATE set.)
+ */
+function isHarnessLoadedFile(path: string): boolean {
+  const norm = normalizePath(path);
+  const base = norm.slice(norm.lastIndexOf("/") + 1);
+  if (base === "CLAUDE.md" || base === "AGENTS.md" || base === "SKILL.md") {
+    return true;
+  }
+  // Subagent / slash-command surfaces the harness enumerates by directory.
+  return /(^|\/)(agents|commands)\//.test(norm);
+}
+
 // Match markdown links ](path.md) or ](path.md#anchor)
 const LINK_RE = /\]\(([^)\s]+\.md)(?:#[^)]*)?\)/g;
 
@@ -94,6 +114,7 @@ function collectDocs(
   const docs = new Set<string>();
   for (const pattern of include) {
     for (const p of globSync(pattern, { cwd: basePath, ignore: [...ignore] })) {
+      if (isHarnessLoadedFile(p)) continue; // instruction files are never orphans
       if (isOrphanExempt(resolve(basePath, p))) continue;
       docs.add(normalizePath(p));
     }

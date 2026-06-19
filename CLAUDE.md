@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:65791fd1b2ade4ae compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:54a88cd80ba10d66 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -384,7 +384,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 
 ### Rules Docs In Sync
 
-**Guidance only** — The set of validation rules is a SINGLE SOURCE OF TRUTH that the docs must track, never drift from: the `RulesConfig` keys in `src/core/types.ts` (plus any built-in `vigiles/*` rule like `orphan-docs`) ARE the rule set, and the central rules table in `docs/cli.md` (the `## Validation rules` section) must list EVERY one — each with its default severity and a one-line `what it checks`, linking its `docs/rules/<name>.md`. So adding, removing, or renaming a rule is not done until the SAME change updates three places together: the `RulesConfig` type, the `docs/cli.md` table row, and the `docs/rules/<name>.md` doc (the doc-per-rule requirement) — no rule ships absent from the table, and no table row points at a rule that no longer exists. The README does NOT re-list the rules (readme-brevity); it links to the `docs/cli.md` table as the one canonical list, so the table is the place that must stay complete. When you touch the rule set, re-derive the table from the `RulesConfig` keys to catch a missed row. Complements doc-per-rule (which governs the per-rule doc) — this governs the COMPLETENESS of the one shared list.
+**Guidance only** — The set of validation rules is a SINGLE SOURCE OF TRUTH that the docs must track, never drift from: the `RulesConfig` keys in `src/core/types.ts` (plus any built-in `vigiles/*` rule like `orphan-docs`) ARE the rule set, and the canonical rules matrix in `docs/verifying-instruction-files.md` (the `## The validation rules` section — it lives in the LINTING GUIDE, where a reader looking for the rules expects it, NOT buried in the CLI reference) must list EVERY one — each with its default severity and a one-line `what it checks`, linking its `docs/rules/<name>.md`. The matrix is grouped by family (spec & integrity, test coverage, reference marking, subagent contracts, hooks & MCP, skill triggers, docs hygiene). So adding, removing, or renaming a rule is not done until the SAME change updates three places together: the `RulesConfig` type, the matrix row in `docs/verifying-instruction-files.md`, and the `docs/rules/<name>.md` doc (the doc-per-rule requirement) — no rule ships absent from the matrix, and no row points at a rule that no longer exists. `docs/cli.md` and the README do NOT re-list the rules (readme-brevity); they LINK to the one matrix in the linting guide, so that matrix is the place that must stay complete. When you touch the rule set, re-derive the matrix from the `RulesConfig` keys to catch a missed row. Complements doc-per-rule (which governs the per-rule doc) — this governs the COMPLETENESS of the one shared list and WHERE it lives.
 
 ### Readme Brevity
 

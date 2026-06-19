@@ -32,6 +32,46 @@ describe("findOrphanDocs()", () => {
     }
   });
 
+  it("never flags harness-loaded instruction files, even when scanned", () => {
+    const dir = makeTmpDir("orphans-instruction");
+    try {
+      mkdirSync(join(dir, "skills/greet"), { recursive: true });
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      mkdirSync(join(dir, "commands"), { recursive: true });
+      // Harness-loaded surfaces — load-bearing by name/location, never orphans.
+      writeFileSync(join(dir, "CLAUDE.md"), "# instructions");
+      writeFileSync(join(dir, "AGENTS.md"), "# instructions");
+      writeFileSync(join(dir, "skills/greet/SKILL.md"), "# greet");
+      writeFileSync(join(dir, "agents/reviewer.md"), "# reviewer");
+      writeFileSync(join(dir, "commands/ship.md"), "# ship");
+      // A genuine orphan doc to prove the scan still works under a broad include.
+      writeFileSync(join(dir, "rot.md"), "# nobody links me");
+
+      // Broaden include to the whole repo — instruction files must stay exempt.
+      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      assert.deepEqual([...report.orphans], ["rot.md"]);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
+  it("still credits a doc that only a CLAUDE.md references", () => {
+    const dir = makeTmpDir("orphans-cref");
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(join(dir, "docs/guide.md"), "# guide");
+      // The exemption removes CLAUDE.md from the CANDIDATE set but it still
+      // counts as a REFERENCER, so docs/guide.md is not an orphan.
+      writeFileSync(join(dir, "CLAUDE.md"), "See [guide](docs/guide.md).");
+
+      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      assert.deepEqual([...report.orphans], []);
+      assert.deepEqual([...report.referencedDocs], ["docs/guide.md"]);
+    } finally {
+      cleanupTmpDir(dir);
+    }
+  });
+
   it("recognizes backtick path references", () => {
     const dir = makeTmpDir("orphans-tick");
     try {
