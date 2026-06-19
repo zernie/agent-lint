@@ -85,11 +85,12 @@ adapters that hang or no-op. Each adapter therefore declares an
 **requires a transport port only for the capability the adapter claims** — so a
 reference-only harness is a first-class adapter, not a broken one.
 
-| Capability                                  | Descriptor flag                         | Needs ports             | What it unlocks                                         |
-| ------------------------------------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------- |
-| **Lint** (layer 1) — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `lint` — verify refs, tools, paths |
-| **Test** (layer 2) — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model) |
-| **Shell-hook tier**                         | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)      |
+| Capability                                  | Descriptor flag                         | Needs ports             | What it unlocks                                                          |
+| ------------------------------------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------ |
+| **Lint** (layer 1) — reference verification | `referenceVerification` (always `true`) | `dialect`, `layout`     | `compile` / `scan` / `lint` — verify refs, tools, paths                  |
+| **Test** (layer 2) — harness testing        | `harnessTesting`                        | `runtime` + `modelMock` | `runHarnessTest` / `runEval` (spawn binary, mock model)                  |
+| **Shell-hook tier**                         | `shellHooks`                            | `hookProtocol`          | the `runHook` unit tier (hooks as shell processes)                       |
+| **Subagents**                               | `subagents`                             | —                       | the subagent lint rules (`subagent-tool-contract`, …); n/a where `false` |
 
 Where the harnesses land (✅ shipped · 🧪 internal prototype · ⛔ **blocked**, with why):
 

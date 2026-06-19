@@ -132,6 +132,7 @@ interface AdapterCapabilities {
   readonly referenceVerification: true; // layer 1 — always
   readonly harnessTesting: boolean; // layer 2 — needs runtime + modelMock
   readonly shellHooks: boolean; // shell-process hooks — needs hookProtocol
+  readonly subagents: boolean; // has subagents — gates the subagent lint rules
 }
 
 interface HarnessAdapter {
