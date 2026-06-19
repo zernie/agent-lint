@@ -63,6 +63,9 @@ const layout: PluginLayout = {
   settingsFormat: "json", // or "toml" (e.g. Codex's config.toml [hooks])
   instructionFile: "AGENTS.md",
   surfaceDirs: ["skills", "agents"],
+  skillDir: "skills", // <dir>/<name>/SKILL.md
+  agentDir: "agents", // subagent dir; "" if the harness has no subagents
+  commandDir: "commands", // <dir>/<name>.md
   materializeRoot: ".myagent",
   pluginRootToken: "${MY_PLUGIN_ROOT}",
   mcpConfigFile: ".mcp.json",

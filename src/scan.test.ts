@@ -18,6 +18,8 @@ import {
   unexpectedScript,
 } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);
@@ -90,6 +92,38 @@ function fixture(): string {
   );
   return dir;
 }
+
+test("subagent classification is layout-driven (ready for new harnesses)", () => {
+  // A harness whose subagents live somewhere other than `agents/` — e.g.
+  // OpenCode's `.opencode/agent`. Here: a flat `subagents/` dir, declared via
+  // the layout. The classifier must find it there AND a default Claude Code scan
+  // (agentDir "agents") must NOT — proving the dir is read from the layout, not
+  // hard-coded.
+  const dir = makeTmpDir("scan-layout-agentdir");
+  write(
+    dir,
+    "subagents/reviewer.md",
+    "---\nname: reviewer\ndescription: Reviews code for issues carefully\ntools: Reat\n---\nReview.\n",
+  );
+
+  const customLayout = {
+    ...claudeCodeLayout,
+    agentDir: "subagents",
+    surfaceDirs: ["subagents"],
+    materializeRoot: "",
+  };
+  const r = scanPlugin(dir, customLayout, claudeCodeDialect);
+  const reviewer = r.agents.find((a) => a.name === "reviewer");
+  assert.ok(reviewer, "subagent under the layout's agentDir is classified");
+  assert.ok(
+    reviewer.toolIssues.length > 0,
+    "the typo'd tool (Reat→Read) is flagged via the same detector",
+  );
+
+  // Default Claude Code layout (agentDir "agents") must not classify it.
+  assert.equal(scanPlugin(dir).agents.length, 0);
+  cleanupTmpDir(dir);
+});
 
 test("scanPlugin reports skills with description + user-invoked flags", () => {
   const dir = fixture();

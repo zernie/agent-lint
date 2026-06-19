@@ -199,16 +199,42 @@ function frontmatter(md: string): {
   };
 }
 
-// Anchor each surface on a real path boundary (start-of-path or a `/`), so a
-// directory whose NAME merely ends in the keyword isn't misclassified — e.g.
-// the skill `skills/dispatching-parallel-agents/SKILL.md` must NOT register as
-// an agent named "SKILL" (the `-agents/` substring), which real plugins like
-// obra/superpowers ship. See scan.test.ts for the regression cases.
-const isSkill = (f: string): boolean =>
-  /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(f);
-const isAgent = (f: string): boolean =>
-  /(?:^|\/)agents\/[^/]+\.md$/.test(f) && !f.endsWith(".spec.ts");
-const isCommand = (f: string): boolean => /(?:^|\/)commands\/.+\.md$/.test(f);
+/**
+ * Per-kind surface classifiers, built from the harness `PluginLayout`'s
+ * `skillDir`/`agentDir`/`commandDir` — so adding a harness whose subagents live
+ * somewhere other than `agents/` (OpenCode's `.opencode/agent`) needs no change
+ * here. Each anchors on a real path boundary (start-of-path or a `/`), so a
+ * directory whose NAME merely ends in the keyword isn't misclassified — e.g. the
+ * skill `skills/dispatching-parallel-agents/SKILL.md` must NOT register as an
+ * agent named "SKILL" (the `-agents/` substring), which real plugins like
+ * obra/superpowers ship. See scan.test.ts for the regression cases.
+ */
+export interface SurfaceClassifier {
+  isSkill(f: string): boolean;
+  isAgent(f: string): boolean;
+  isCommand(f: string): boolean;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function makeClassifier(layout: PluginLayout): SurfaceClassifier {
+  // An empty dir means "this harness has no such surface" → never matches.
+  const at = (dir: string): string | null =>
+    dir ? `(?:^|/)${escapeRe(dir)}/` : null;
+  const skill = at(layout.skillDir);
+  const agent = at(layout.agentDir);
+  const command = at(layout.commandDir);
+  const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
+  const agentRe = agent ? new RegExp(`${agent}[^/]+\\.md$`) : null;
+  const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
+  return {
+    isSkill: (f) => skillRe?.test(f) ?? false,
+    isAgent: (f) => (agentRe?.test(f) ?? false) && !f.endsWith(".spec.ts"),
+    isCommand: (f) => commandRe?.test(f) ?? false,
+  };
+}
 
 function skillName(path: string): string {
   return (
@@ -294,10 +320,13 @@ function firstBodyParagraph(md: string): string | undefined {
   return para.join(" ").trim() || undefined;
 }
 
-function scanSkills(files: Record<string, string>): ScanSkill[] {
+function scanSkills(
+  files: Record<string, string>,
+  cls: SurfaceClassifier,
+): ScanSkill[] {
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isSkill(path)) continue;
+    if (!cls.isSkill(path)) continue;
     const fm = frontmatter(md);
     // A skill's trigger surface is its frontmatter `description` OR — when that's
     // absent — Claude Code's fallback to the first body paragraph. Only when
@@ -324,10 +353,11 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
  */
 function descriptionOverlapsFor(
   files: Record<string, string>,
+  cls: SurfaceClassifier,
 ): DescriptionOverlap[] {
   const surfaces: { name: string; description: string }[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isSkill(path)) continue;
+    if (!cls.isSkill(path)) continue;
     if (/^\s*disable-model-invocation:\s*true\s*$/m.test(md)) continue;
     const fm = frontmatter(md);
     const description = fm.description ?? firstBodyParagraph(md);
@@ -341,10 +371,11 @@ function scanAgents(
   files: Record<string, string>,
   dialect: HarnessDialect,
   declaredServers: readonly string[],
+  cls: SurfaceClassifier,
 ): ScanAgent[] {
   const out: ScanAgent[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isAgent(path)) continue;
+    if (!cls.isAgent(path)) continue;
     const tools = parseAgentTools(md);
     out.push({
       name: basename(path, ".md"),
@@ -453,10 +484,11 @@ function scanHooks(
  */
 function frontmatterIssuesFor(
   files: Record<string, string>,
+  cls: SurfaceClassifier,
 ): FrontmatterIssue[] {
   const out: FrontmatterIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isAgent(path)) continue; // skills require no frontmatter (dir/body fallbacks)
+    if (!cls.isAgent(path)) continue; // skills require no frontmatter (dir/body fallbacks)
     const fm = frontmatter(md);
     const missing: ("name" | "description")[] = [];
     if (!fm.name) missing.push("name");
@@ -519,10 +551,11 @@ function closeCandidate(
  */
 function frontmatterValueIssuesFor(
   files: Record<string, string>,
+  cls: SurfaceClassifier,
 ): FrontmatterValueIssue[] {
   const out: FrontmatterValueIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isAgent(path)) continue;
+    if (!cls.isAgent(path)) continue;
     const fm = frontmatter(md);
     // A model id with a digit/hyphen is an explicit form, not an alias typo.
     if (fm.model && !/[0-9-]/.test(fm.model)) {
@@ -564,10 +597,11 @@ function frontmatterValueIssuesFor(
  */
 function malformedFrontmatterFor(
   files: Record<string, string>,
+  cls: SurfaceClassifier,
 ): FrontmatterParseIssue[] {
   const out: FrontmatterParseIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isSkill(path) && !isAgent(path)) continue;
+    if (!cls.isSkill(path) && !cls.isAgent(path)) continue;
     if (!readFrontmatter(md).malformed) continue;
     out.push({
       path,
@@ -586,10 +620,13 @@ function malformedFrontmatterFor(
  * missing either; surfaced as a soft note in scan (NOT a structural defect, NOT
  * scored) and gated by the `skill-frontmatter` lint rule (warn by default).
  */
-function skillMetaIssuesFor(files: Record<string, string>): FrontmatterIssue[] {
+function skillMetaIssuesFor(
+  files: Record<string, string>,
+  cls: SurfaceClassifier,
+): FrontmatterIssue[] {
   const out: FrontmatterIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    if (!isSkill(path)) continue;
+    if (!cls.isSkill(path)) continue;
     const fm = frontmatter(md);
     const missing: ("name" | "description")[] = [];
     if (!fm.name) missing.push("name");
@@ -643,6 +680,7 @@ export function scanPlugin(
   dialect: HarnessDialect = claudeCodeDialect,
 ): ScanReport {
   const lay = layout ?? claudeCodeLayout;
+  const cls = makeClassifier(lay);
   const loaded = loadPlugin(dir, lay);
   const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
   // Hook-event keys are a CLOSED platform set — an unrecognized one is a dead
@@ -675,25 +713,25 @@ export function scanPlugin(
   return {
     dir,
     instructions,
-    skills: scanSkills(loaded.files),
-    agents: scanAgents(loaded.files, dialect, declaredServers),
+    skills: scanSkills(loaded.files, cls),
+    agents: scanAgents(loaded.files, dialect, declaredServers, cls),
     hooks,
     inlineHooks: inline,
-    commands: Object.keys(loaded.files).filter(isCommand).length,
+    commands: Object.keys(loaded.files).filter(cls.isCommand).length,
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
-    frontmatterIssues: frontmatterIssuesFor(loaded.files),
-    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files),
-    skillMetaIssues: skillMetaIssuesFor(loaded.files),
+    frontmatterIssues: frontmatterIssuesFor(loaded.files, cls),
+    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files, cls),
+    skillMetaIssues: skillMetaIssuesFor(loaded.files, cls),
     mcpIssues: verifyMcpServers(mcpServers),
     mcpHookIssues: verifyMcpHookTargets(
       loaded.settings.hooks,
       declaredServers,
       dialect,
     ),
-    descriptionOverlaps: descriptionOverlapsFor(loaded.files),
-    malformedFrontmatter: malformedFrontmatterFor(loaded.files),
+    descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
