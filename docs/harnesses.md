@@ -122,15 +122,11 @@ seam, with Claude Code as the default and its behaviour byte-identical. A gated
 `harness-test.test.ts` runs the real-codex turn (request shape + SSE captured from
 live traffic, not guessed). Lint is format-correct per ¹. `runEval` /
 trigger-rate for Codex is **in progress** (not usable through the public API yet):
-the eval tier's trace parsing is an injectable `ModelOutputParser`, and the Codex
-`codex exec --json` runner + parser + skill-firing predicate
-(`codexEvalRunner` / `parseCodexEvalRun` / `codexSkillFired`) are **built and
-live-validated against the real binary** (schema confirmed: a thread/item JSONL
-stream; Codex has no discrete skill event, so firing is detected by the model
-reading `skills/<name>/SKILL.md`). What remains is wiring `{ adapter }` dispatch
-into `measureTriggerRate` / `runEval`. **Pin codex 0.139.0** (0.141.0 regressed the
-keyless mock). See the spike + 2026-06-19 live-capture findings in
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md).
+the Codex eval parser/runner/firing-predicate are built and validated against the
+real binary; what remains is wiring `{ adapter }` dispatch into
+`measureTriggerRate` / `runEval`. See
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
+for the confirmed schema + findings.
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't
