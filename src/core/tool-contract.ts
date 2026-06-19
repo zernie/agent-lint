@@ -84,7 +84,7 @@ export function verifyToolContract(
   const issues: ToolIssue[] = [];
   for (const raw of tools) {
     const tool = raw.split("(")[0].trim(); // strip a Tool(restriction) suffix
-    if (tool === "") continue;
+    if (tool === "" || tool === "*") continue; // "" / "*" = wildcard, inherits all
     if (never.has(tool)) {
       issues.push({
         tool,
