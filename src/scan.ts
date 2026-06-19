@@ -100,6 +100,12 @@ export interface FrontmatterIssue {
   readonly message: string;
 }
 
+/** A skill/agent whose `---` block exists but isn't valid YAML (may not parse as intended). */
+export interface FrontmatterParseIssue {
+  readonly path: string;
+  readonly message: string;
+}
+
 /** An agent frontmatter field whose VALUE is invalid (a typo of a real model/color). */
 export interface FrontmatterValueIssue {
   readonly path: string;
@@ -159,6 +165,8 @@ export interface ScanReport {
   readonly mcpIssues: readonly McpIssue[];
   /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
   readonly descriptionOverlaps: readonly DescriptionOverlap[];
+  /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
+  readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -543,6 +551,30 @@ function frontmatterValueIssuesFor(
 }
 
 /**
+ * Frontmatter that EXISTS but isn't valid YAML — the `frontmatter-valid` signal.
+ * Reported for skills + agents via the shared reader's `malformed` flag. Honest
+ * caveat (see docs/rules/frontmatter-valid.md): js-yaml is stricter than some
+ * loaders, so a one-line `description:` containing a `: ` colon or an `<example>`
+ * block is flagged even though it may still load — which is why scan surfaces it
+ * as an informational note (NOT a structural defect) and the lint rule is a
+ * warn, not an error. The file's other fields are still salvaged.
+ */
+function malformedFrontmatterFor(
+  files: Record<string, string>,
+): FrontmatterParseIssue[] {
+  const out: FrontmatterParseIssue[] = [];
+  for (const [path, md] of Object.entries(files)) {
+    if (!isSkill(path) && !isAgent(path)) continue;
+    if (!readFrontmatter(md).malformed) continue;
+    out.push({
+      path,
+      message: `${path}: frontmatter is not valid YAML — fields may not parse as intended (a colon, quote, or bracket likely needs escaping/quoting).`,
+    });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
  * Skill-metadata RECOMMENDATION (not a correctness check): a `SKILL.md` loads
  * fine without frontmatter (`name` ← dir, `description` ← first body paragraph),
  * but relying on those fallbacks is fragile — the dir name may be unclear and the
@@ -653,6 +685,7 @@ export function scanPlugin(
     skillMetaIssues: skillMetaIssuesFor(loaded.files),
     mcpIssues: verifyMcpServers(mcpServers),
     descriptionOverlaps: descriptionOverlapsFor(loaded.files),
+    malformedFrontmatter: malformedFrontmatterFor(loaded.files),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -894,6 +927,17 @@ export function formatScanReport(r: ScanReport): string {
   if (r.skillMetaIssues.length > 0) {
     out.push(
       `ℹ ${String(r.skillMetaIssues.length)} skill(s) lack an explicit frontmatter name/description (recommended for a reliable trigger surface) — they still load via fallback`,
+      "",
+    );
+  }
+
+  // Malformed-YAML frontmatter is INFORMATIONAL, not a structural defect: js-yaml
+  // is stricter than some loaders (a colon/quote/<example> in a one-line
+  // description trips it though the file may still load), and the other fields are
+  // salvaged. Surfaced as a note; the frontmatter-valid lint rule warns on it.
+  if (r.malformedFrontmatter.length > 0) {
+    out.push(
+      `ℹ ${String(r.malformedFrontmatter.length)} file(s) have frontmatter that isn't valid YAML — fields may not parse as intended (verify before enforcing \`frontmatter-valid\`)`,
       "",
     );
   }

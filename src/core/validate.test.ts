@@ -440,6 +440,7 @@ describe("loadConfig", () => {
       "hook-script-exists": "warn",
       "disallowed-tools-contract": "warn",
       "description-overlap": "warn",
+      "frontmatter-valid": "warn",
     });
   });
 

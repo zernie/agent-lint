@@ -420,6 +420,7 @@ want compile-on-edit.
 | [`hook-script-exists`](rules/hook-script-exists.md)               | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)           |
 | [`skill-frontmatter`](rules/skill-frontmatter.md)                 | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)               |
 | [`description-overlap`](rules/description-overlap.md)             | `"warn"` | No two model-invocable skills have near-identical descriptions (selector collision)    |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)                 | `"warn"` | A skill/agent `---` block is valid YAML (warn — js-yaml is stricter than some loaders) |
 
 Configure in `.vigilesrc.json`:
 
