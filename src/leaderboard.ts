@@ -67,6 +67,7 @@ export function scoreReport(r: ScanReport): {
   );
   const deadHookEvents = r.hookEventIssues.length;
   const badFrontmatter = r.frontmatterIssues.length;
+  const badFrontmatterValues = r.frontmatterValueIssues.length;
   const badMcp = r.mcpIssues.length;
 
   const deductions: { n: number; weight: number; label: string }[] = [
@@ -114,6 +115,11 @@ export function scoreReport(r: ScanReport): {
       n: badFrontmatter,
       weight: W_NO_DESCRIPTION,
       label: "surface(s) missing required frontmatter (name/description)",
+    },
+    {
+      n: badFrontmatterValues,
+      weight: W_NO_CONTRACT,
+      label: "agent(s) with an invalid model/color (typo → silent fallback)",
     },
     {
       n: badMcp,

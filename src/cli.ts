@@ -2620,10 +2620,11 @@ function checkHookEvents(
 }
 
 /**
- * Apply the `agent-frontmatter` rule: a skill/agent missing a required
- * frontmatter field (a skill needs `name`; an agent needs `name` + `description`)
- * is a structurally broken surface — it won't load/register. Reuses `scanPlugin`'s
- * `frontmatterIssues`. Warning by default; "error" gates CI.
+ * Apply the `agent-frontmatter` rule. Two kinds of agent-frontmatter defect, one
+ * rule: (1) a subagent MISSING a required field (`name`/`description`) — it won't
+ * register; (2) a subagent with an INVALID `model:`/`color:` value (a close typo
+ * of a real one) — it silently falls back / is ignored. Reuses `scanPlugin`'s
+ * `frontmatterIssues` + `frontmatterValueIssues`. Warning by default; "error" gates CI.
  */
 function checkFrontmatterSchema(
   config: VigilesConfig | undefined,
@@ -2633,7 +2634,8 @@ function checkFrontmatterSchema(
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).frontmatterIssues;
+    const r = scanPlugin(process.cwd());
+    found = [...r.frontmatterIssues, ...r.frontmatterValueIssues];
   } catch {
     return { issues: 0, errors: 0 };
   }
