@@ -31,6 +31,15 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **More deterministic lint rules — the next moat surfaces (P1).** This session
+  shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
+  agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
+  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`,
+  `duplicate-names`, the novel `description-overlap` (NCD precision proxy),
+  `frontmatter-valid`, `hook-matcher` — is in
+  [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
+  "valid is not true" cross-reference on a new surface, high-precision by design.
+
 - **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
   Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
   refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
