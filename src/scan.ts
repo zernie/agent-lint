@@ -127,6 +127,8 @@ export interface ScanReport {
   readonly hookEventIssues: readonly HookEventIssue[];
   /** Skills/agents missing a required frontmatter field (name; agents also description). */
   readonly frontmatterIssues: readonly FrontmatterIssue[];
+  /** Skills lacking an EXPLICIT name/description — a best-practice recommendation, not a defect. */
+  readonly skillMetaIssues: readonly FrontmatterIssue[];
   /** Declared MCP servers that can't start (no command/url). */
   readonly mcpIssues: readonly McpIssue[];
   readonly warnings: readonly string[];
@@ -407,6 +409,34 @@ function frontmatterIssuesFor(
 }
 
 /**
+ * Skill-metadata RECOMMENDATION (not a correctness check): a `SKILL.md` loads
+ * fine without frontmatter (`name` ← dir, `description` ← first body paragraph),
+ * but relying on those fallbacks is fragile — the dir name may be unclear and the
+ * first paragraph is often a heading or boilerplate, making a weak trigger
+ * surface. Best practice is an EXPLICIT `name` + `description`. Flags skills
+ * missing either; surfaced as a soft note in scan (NOT a structural defect, NOT
+ * scored) and gated by the `skill-frontmatter` lint rule (warn by default).
+ */
+function skillMetaIssuesFor(files: Record<string, string>): FrontmatterIssue[] {
+  const out: FrontmatterIssue[] = [];
+  for (const [path, md] of Object.entries(files)) {
+    if (!isSkill(path)) continue;
+    const fm = frontmatter(md);
+    const missing: ("name" | "description")[] = [];
+    if (!fm.name) missing.push("name");
+    if (!fm.description) missing.push("description");
+    if (missing.length === 0) continue;
+    out.push({
+      path,
+      kind: "skill",
+      missing,
+      message: `skill ${path} has no explicit frontmatter ${missing.join(" / ")} — recommended for a reliable trigger surface (it still loads via the dir-name / first-paragraph fallback).`,
+    });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
  * Collect declared MCP servers from the JSON sources (`.mcp.json` + the plugin
  * manifest's `mcpServers`) and validate each can start. Codex's TOML
  * `[mcp_servers]` isn't parsed here (a documented gap); the JSON CC shape is the
@@ -479,6 +509,7 @@ export function scanPlugin(
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
     frontmatterIssues: frontmatterIssuesFor(loaded.files),
+    skillMetaIssues: skillMetaIssuesFor(loaded.files),
     mcpIssues: mcpIssuesFor(resolve(dir), lay),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
@@ -692,6 +723,15 @@ export function formatScanReport(r: ScanReport): string {
   if (mismatched.length > 0) {
     out.push(
       `⚠ ${String(mismatched.length)} skill(s) have descriptions in an unexpected script (cross-language trigger risk) — measure with \`scan --trigger\``,
+      "",
+    );
+  }
+
+  // Skill-metadata is a RECOMMENDATION, not a structural defect (the skill loads
+  // via fallbacks) — reported as a soft note, never counted in the verdict.
+  if (r.skillMetaIssues.length > 0) {
+    out.push(
+      `ℹ ${String(r.skillMetaIssues.length)} skill(s) lack an explicit frontmatter name/description (recommended for a reliable trigger surface) — they still load via fallback`,
       "",
     );
   }

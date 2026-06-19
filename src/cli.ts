@@ -762,6 +762,8 @@ interface LintReport {
   frontmatterSchemaErrors: number;
   mcpConfigIssues: number;
   mcpConfigErrors: number;
+  skillFrontmatterIssues: number;
+  skillFrontmatterErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -859,6 +861,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.hookEventErrors > 0 ||
     report.frontmatterSchemaErrors > 0 ||
     report.mcpConfigErrors > 0 ||
+    report.skillFrontmatterErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1254,6 +1257,10 @@ async function runLint(
   // 7f. MCP-config check — a declared MCP server with no command/url can't start.
   const mcpConfig = checkMcpConfig(config, silent);
 
+  // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
+  // reliable trigger surface). Best-practice nudge; skills load without it.
+  const skillFm = checkSkillFrontmatter(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1312,6 +1319,8 @@ async function runLint(
     frontmatterSchemaErrors: frontmatter.errors,
     mcpConfigIssues: mcpConfig.issues,
     mcpConfigErrors: mcpConfig.errors,
+    skillFrontmatterIssues: skillFm.issues,
+    skillFrontmatterErrors: skillFm.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2603,6 +2612,40 @@ function checkFrontmatterSchema(
   }
   if (found.length > 0 && !silent) {
     console.log("\nFrontmatter-schema check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `skill-frontmatter` rule: RECOMMEND (not require) that a SKILL.md
+ * declares an explicit `name` + `description` rather than relying on the
+ * dir-name / first-paragraph fallbacks — a more reliable trigger surface. The
+ * skill still LOADS without them, so this is a best-practice nudge: warn by
+ * default; set "error" to enforce it on your own skills. Reuses `scanPlugin`'s
+ * `skillMetaIssues`.
+ */
+function checkSkillFrontmatter(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["skill-frontmatter"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).skillMetaIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSkill-frontmatter check:\n");
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(

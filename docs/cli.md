@@ -415,6 +415,7 @@ want compile-on-edit.
 | [`hook-events`](rules/hook-events.md)                 | `"warn"` | Hooks register under a real event name (a typo never fires)                     |
 | [`frontmatter-schema`](rules/frontmatter-schema.md)   | `"warn"` | Subagents have required frontmatter (`name`+`description`; skills need none)    |
 | [`mcp-config`](rules/mcp-config.md)                   | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                      |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)     | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)        |
 
 Configure in `.vigilesrc.json`:
 
