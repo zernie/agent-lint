@@ -84,6 +84,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "hook-events": "warn",
   // Missing required frontmatter (name/description) — on by default at warn.
   "frontmatter-schema": "warn",
+  // A declared MCP server with no command/url can't start — on by default at warn.
+  "mcp-config": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

@@ -434,6 +434,7 @@ describe("loadConfig", () => {
       "agent-tool-contract": "warn",
       "hook-events": "warn",
       "frontmatter-schema": "warn",
+      "mcp-config": "warn",
     });
   });
 

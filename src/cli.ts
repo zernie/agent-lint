@@ -760,6 +760,8 @@ interface LintReport {
   hookEventErrors: number;
   frontmatterSchemaIssues: number;
   frontmatterSchemaErrors: number;
+  mcpConfigIssues: number;
+  mcpConfigErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -856,6 +858,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.toolContractErrors > 0 ||
     report.hookEventErrors > 0 ||
     report.frontmatterSchemaErrors > 0 ||
+    report.mcpConfigErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1248,6 +1251,9 @@ async function runLint(
   // (name; agents also description) won't load/register. High-confidence.
   const frontmatter = checkFrontmatterSchema(config, silent);
 
+  // 7f. MCP-config check — a declared MCP server with no command/url can't start.
+  const mcpConfig = checkMcpConfig(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1304,6 +1310,8 @@ async function runLint(
     hookEventErrors: hookEvents.errors,
     frontmatterSchemaIssues: frontmatter.issues,
     frontmatterSchemaErrors: frontmatter.errors,
+    mcpConfigIssues: mcpConfig.issues,
+    mcpConfigErrors: mcpConfig.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2602,6 +2610,33 @@ function checkFrontmatterSchema(
         issue.message,
         issue.path,
       );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `mcp-config` rule: a declared MCP server with neither a `command`
+ * (stdio) nor a `url` (http/sse) can't start. Reuses `scanPlugin`'s `mcpIssues`.
+ * Warning by default; "error" gates CI.
+ */
+function checkMcpConfig(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-config"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).mcpIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP-config check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

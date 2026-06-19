@@ -62,6 +62,7 @@ export function scoreReport(r: ScanReport): {
   const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
   const deadHookEvents = r.hookEventIssues.length;
   const badFrontmatter = r.frontmatterIssues.length;
+  const badMcp = r.mcpIssues.length;
 
   const deductions: { n: number; weight: number; label: string }[] = [
     {
@@ -98,6 +99,11 @@ export function scoreReport(r: ScanReport): {
       n: badFrontmatter,
       weight: W_NO_DESCRIPTION,
       label: "surface(s) missing required frontmatter (name/description)",
+    },
+    {
+      n: badMcp,
+      weight: W_DANGLING_REF,
+      label: "MCP server(s) that can't start (no command/url)",
     },
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
   ];

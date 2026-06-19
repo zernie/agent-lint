@@ -31,6 +31,7 @@ import {
   confidentHookEventIssues,
   type HookEventIssue,
 } from "./core/hook-events.js";
+import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
@@ -126,6 +127,8 @@ export interface ScanReport {
   readonly hookEventIssues: readonly HookEventIssue[];
   /** Skills/agents missing a required frontmatter field (name; agents also description). */
   readonly frontmatterIssues: readonly FrontmatterIssue[];
+  /** Declared MCP servers that can't start (no command/url). */
+  readonly mcpIssues: readonly McpIssue[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -405,6 +408,33 @@ function frontmatterIssuesFor(
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * Collect declared MCP servers from the JSON sources (`.mcp.json` + the plugin
+ * manifest's `mcpServers`) and validate each can start. Codex's TOML
+ * `[mcp_servers]` isn't parsed here (a documented gap); the JSON CC shape is the
+ * common case. Merged so a server defined in both is checked once.
+ */
+function mcpIssuesFor(root: string, layout: PluginLayout): McpIssue[] {
+  const servers: Record<string, unknown> = {};
+  const collect = (file: string): void => {
+    const p = join(root, file);
+    if (!existsSync(p)) return;
+    try {
+      const parsed = JSON.parse(readFileSync(p, "utf-8")) as {
+        mcpServers?: unknown;
+      };
+      if (parsed.mcpServers !== null && typeof parsed.mcpServers === "object") {
+        Object.assign(servers, parsed.mcpServers);
+      }
+    } catch {
+      /* malformed JSON is the loader's concern, not this check's */
+    }
+  };
+  collect(".mcp.json");
+  collect(layout.manifestPath);
+  return verifyMcpServers(servers);
+}
+
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -451,6 +481,7 @@ export function scanPlugin(
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
     frontmatterIssues: frontmatterIssuesFor(loaded.files),
+    mcpIssues: mcpIssuesFor(resolve(dir), lay),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -634,6 +665,13 @@ export function formatScanReport(r: ScanReport): string {
     ),
   );
 
+  out.push(
+    ...section(
+      "MCP config",
+      r.mcpIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
   const facts: string[] = [];
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
@@ -666,7 +704,8 @@ export function formatScanReport(r: ScanReport): string {
     r.agents.reduce((n, a) => n + a.toolIssues.length, 0) +
     r.danglingRefs.length +
     r.hookEventIssues.length +
-    r.frontmatterIssues.length;
+    r.frontmatterIssues.length +
+    r.mcpIssues.length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"
