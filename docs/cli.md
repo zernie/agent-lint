@@ -399,31 +399,14 @@ want compile-on-edit.
 
 ## Validation rules
 
-`vigiles lint` validates instruction files; the refs-hook nudges marking on edit:
+`vigiles lint` runs a set of deterministic validation rules over your instruction
+files, skills, subagents, and hooks (configured in `.vigilesrc.json`). The full
+matrix — every rule, its default severity, what it checks, and a link to its
+reference doc — lives with the linting guide:
 
-| Rule                                                              | Default  | What it checks                                                                         |
-| ----------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)                           | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter           |
-| [`require-skill-spec`](rules/require-skill-spec.md)               | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead             |
-| [`integrity`](rules/integrity.md)                                 | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                                   |
-| [`coverage`](rules/coverage.md)                                   | `false`  | Spec covers enough of the project surface                                              |
-| [`untested-skill`](rules/untested-skill.md)                       | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                                     |
-| [`untested-agent`](rules/untested-agent.md)                       | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                               |
-| [`untested-hook`](rules/untested-hook.md)                         | `"warn"` | Every file-backed hook script ships with a test or eval                                |
-| [`unmarked-refs`](rules/unmarked-refs.md)                         | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge        |
-| [`agent-tool-contract`](rules/agent-tool-contract.md)             | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)                |
-| [`disallowed-tools-contract`](rules/disallowed-tools-contract.md) | `"warn"` | Subagent `disallowedTools:` are real tools (a typo blocks nothing)                     |
-| [`hook-events`](rules/hook-events.md)                             | `"warn"` | Hooks register under a real event name (a typo never fires)                            |
-| [`agent-frontmatter`](rules/agent-frontmatter.md)                 | `"warn"` | Subagent frontmatter valid (required `name`+`description`; `model`/`color` not a typo) |
-| [`mcp-config`](rules/mcp-config.md)                               | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                             |
-| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)                 | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) MCP server             |
-| [`hook-script-exists`](rules/hook-script-exists.md)               | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)           |
-| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md)   | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool (else it never dispatches)    |
-| [`skill-frontmatter`](rules/skill-frontmatter.md)                 | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)               |
-| [`description-overlap`](rules/description-overlap.md)             | `"warn"` | No two model-invocable skills have near-identical descriptions (selector collision)    |
-| [`frontmatter-valid`](rules/frontmatter-valid.md)                 | `"warn"` | A skill/agent `---` block is valid YAML (warn — js-yaml is stricter than some loaders) |
+**[→ The validation rules, the full matrix](verifying-instruction-files.md#the-validation-rules--the-full-matrix)**
 
-Configure in `.vigilesrc.json`:
+Quick severity config:
 
 ```json
 {
