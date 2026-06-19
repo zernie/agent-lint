@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:5998bd5fbe092f70 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c7ad0e5b12f142af compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -360,6 +360,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Docs Quality
 
 **Guidance only** — The docs/ reference docs are the HOW the README defers to — they are NOT held to README brevity (depth is their job; a long reference doc is correct, a wall of undifferentiated prose is not). Hold each to a DOC-appropriate polish bar instead: (1) open with a one-line "what this doc is" + an UP-LINK to the README in the same breath ("the README has the pitch; this is the full guide") so a reader who landed deep can climb back to the sell; (2) be SCANNABLE — descriptive section headings, a Contents list once a doc runs long, tables and runnable code blocks over prose walls, bold lead-ins; (3) CROSS-LINK siblings (the lint guide and the testing guide point at each other; every doc ends in a "See also") and link DOWN to the deeper doc rather than inlining its detail; (4) stay CONSISTENT with the README and with each other — terminology, claims, and framing must track the front door, never contradict it (the lint/test naming, the promptfoo cost contrast, the deterministic-vs-real-model split), and a doc the README promises must actually deliver that depth (no thin stubs, no stale/renamed commands or dead example paths). The README sells; the docs prove and instruct — both are first-class, neither is a dumping ground.
+
+### Public Vs Internal Docs
+
+**Guidance only** — Match the detail to the AUDIENCE — don't overload public readers. INTERNAL docs (`research/*.md`, `CLAUDE.md`) hold the full record: confirmed wire schemas, parsing mechanics (dedup rules, field maps), version regressions, spike narratives, env-validation checklists, the why-behind-the-why. PUBLIC docs (`docs/*.md`, `README.md`) state only what a USER needs to ACT — the status, the one or two genuinely useful insights, and how to use the feature — then LINK to the internal doc for the rest ('the confirmed schema + full findings are in research/X.md'). Do NOT paste a JSONL/event schema, an internal dedup/parse detail, a dependency's internal version quirk, or a spike story into a user-facing guide unless a user genuinely needs it to USE the feature. The test: would a user reading this to ACCOMPLISH a task be helped by this line, or just made to scroll? When in doubt, put it in `research/` and link. (Complements doc-per-rule + docs-quality + readme-brevity: those govern polish and where rule docs live; this governs which TIER a given fact belongs in.)
 
 ### Ts Essentials
 
