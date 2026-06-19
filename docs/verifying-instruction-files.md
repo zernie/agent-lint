@@ -141,6 +141,32 @@ editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
 language server. Both have `--check` CI freshness modes.
 [How it works →](linter-support.md#generate-types)
 
+## What `vigiles lint` checks — the rule set
+
+Beyond the references above, `lint` runs a set of **deterministic validation
+rules** over your instruction files, skills, subagents, and hooks. Each has a
+default severity (`warn` / `error` / off) and is configured in `.vigilesrc.json`.
+They group into a few families:
+
+- **Spec & integrity** — `require-spec`, `integrity`, `coverage`: a CLAUDE.md /
+  AGENTS.md is spec-backed and its compiled output wasn't hand-edited.
+- **Test coverage** — `untested-skill`, `untested-agent`, `untested-hook`: every
+  skill, subagent, and hook ships with a test or eval.
+- **Reference marking** — `unmarked-refs`: code-shaped references are expressed as
+  verifiable marks (drives the [marking nudge](#the-marking-nudge--what-happens-on-every-file-save)).
+- **Subagent contracts** — `agent-tool-contract`, `disallowed-tools-contract`,
+  `agent-frontmatter`: a subagent's `tools:` / `disallowedTools:` are real tools
+  and its frontmatter registers.
+- **Hooks & MCP** — `hook-events`, `hook-script-exists`, `mcp-config`,
+  `mcp-tool-resolves`, `mcp-hook-target-resolves`: a hook fires under a real event,
+  its script exists, and every MCP server/tool it names resolves.
+- **Skill triggers** — `skill-frontmatter`, `description-overlap`,
+  `frontmatter-valid`: a skill has a reliable, non-colliding trigger surface.
+
+**[Full rule list, defaults & config →](cli.md#validation-rules)** — the complete
+table, with each rule's default severity, what it checks, and a link to its
+per-rule doc. Each row links to a [`docs/rules/<name>.md`](rules/) reference.
+
 ## The marking nudge — what happens on every file save
 
 Verification only works on references that are _marked_ (`enforce()`, `file()`,
