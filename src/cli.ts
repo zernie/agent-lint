@@ -758,6 +758,8 @@ interface LintReport {
   toolContractErrors: number;
   hookEventIssues: number;
   hookEventErrors: number;
+  frontmatterSchemaIssues: number;
+  frontmatterSchemaErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -853,6 +855,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.untestedErrors > 0 ||
     report.toolContractErrors > 0 ||
     report.hookEventErrors > 0 ||
+    report.frontmatterSchemaErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1241,6 +1244,10 @@ async function runLint(
   // define never fires. High-precision (close typos only). Off unless configured.
   const hookEvents = checkHookEvents(config, silent);
 
+  // 7e. Frontmatter-schema check — a skill/agent missing required frontmatter
+  // (name; agents also description) won't load/register. High-confidence.
+  const frontmatter = checkFrontmatterSchema(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1295,6 +1302,8 @@ async function runLint(
     toolContractErrors: toolContract.errors,
     hookEventIssues: hookEvents.issues,
     hookEventErrors: hookEvents.errors,
+    frontmatterSchemaIssues: frontmatter.issues,
+    frontmatterSchemaErrors: frontmatter.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2561,6 +2570,38 @@ function checkHookEvents(
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `frontmatter-schema` rule: a skill/agent missing a required
+ * frontmatter field (a skill needs `name`; an agent needs `name` + `description`)
+ * is a structurally broken surface — it won't load/register. Reuses `scanPlugin`'s
+ * `frontmatterIssues`. Warning by default; "error" gates CI.
+ */
+function checkFrontmatterSchema(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["frontmatter-schema"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).frontmatterIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nFrontmatter-schema check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

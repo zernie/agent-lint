@@ -137,6 +137,12 @@ export interface RulesConfig {
    * `scan`.
    */
   "hook-events"?: RuleSeverity;
+  /**
+   * Flag a skill/agent missing a required frontmatter field — a skill needs
+   * `name` (to load), an agent needs `name` + `description`. A broken surface
+   * that won't register. Default "warn"; "error" gates CI. Same detector as `scan`.
+   */
+  "frontmatter-schema"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

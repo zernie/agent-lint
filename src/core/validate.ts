@@ -82,6 +82,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "agent-tool-contract": "warn",
   // High-precision (close typos only), on by default at warn.
   "hook-events": "warn",
+  // Missing required frontmatter (name/description) — on by default at warn.
+  "frontmatter-schema": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

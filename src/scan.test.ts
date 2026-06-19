@@ -353,6 +353,44 @@ test("scanPlugin does NOT flag a hooks ARRAY (non-CC custom format)", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags missing required frontmatter (skill name, agent name+description)", () => {
+  const dir = makeTmpDir("scan-fm");
+  // ananddtyagi shape: a skill with no frontmatter, and a subagent that's pure prose.
+  write(
+    dir,
+    "skills/noname/SKILL.md",
+    "# Crisis Advisor\n\nprose, no frontmatter\n",
+  );
+  write(
+    dir,
+    "agents/proseonly.md",
+    "You are an expert. No frontmatter here.\n",
+  );
+  // a skill with description but no name (han shape) → missing name only
+  write(
+    dir,
+    "skills/desc-only/SKILL.md",
+    "---\ndescription: A skill with a description but no name field at all here\n---\n# x\n",
+  );
+  const r = scanPlugin(dir);
+  const descOnly = r.frontmatterIssues.find((i) =>
+    i.path.includes("desc-only"),
+  );
+  assert.deepEqual(descOnly?.missing, ["name"], "skill with desc but no name");
+  assert.ok(
+    r.frontmatterIssues.some(
+      (i) =>
+        i.path.includes("proseonly") &&
+        i.kind === "agent" &&
+        i.missing.includes("name") &&
+        i.missing.includes("description"),
+    ),
+    "a prose-only agent is missing both",
+  );
+  assert.match(formatScanReport(r), /Frontmatter/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
