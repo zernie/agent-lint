@@ -8,7 +8,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { parseCodexEvalRun, codexSkillFired } from "./eval.js";
+import { parseCodexEvalRun, codexSkillFired, codexRunError } from "./eval.js";
 
 // Real plain turn.
 const PLAIN = [
@@ -67,6 +67,24 @@ test("codexSkillFired detects a skill via its SKILL.md read", () => {
   // and on a turn with no skill read:
   assert.equal(
     codexSkillFired(parseCodexEvalRun({ stdout: PLAIN }), "x"),
+    false,
+  );
+});
+
+test("codexRunError detects a rate-limit / errored turn (not a clean miss)", () => {
+  // Real usage-limit capture — must be distinguished from "skill didn't fire".
+  const RATE_LIMITED = [
+    `{"type":"thread.started","thread_id":"x"}`,
+    `{"type":"turn.started"}`,
+    `{"type":"error","message":"You've hit your usage limit. … try again at 8:37 AM."}`,
+    `{"type":"turn.failed","error":{"message":"You've hit your usage limit."}}`,
+  ].join("\n");
+  assert.match(codexRunError({ stdout: RATE_LIMITED }) ?? "", /usage limit/);
+  // a clean turn has no error
+  assert.equal(codexRunError({ stdout: PLAIN }), null);
+  // and the errored turn must NOT look like a fired skill
+  assert.equal(
+    codexSkillFired(parseCodexEvalRun({ stdout: RATE_LIMITED }), "x"),
     false,
   );
 });

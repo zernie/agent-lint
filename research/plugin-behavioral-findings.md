@@ -158,6 +158,23 @@ placeholder, the untested surfaces, and an UNMEASURED precision/overlap question
 (debrief vs lessons vs postmortem; task vs research) — recall is healthy, precision
 across the overlapping cluster wasn't probed here.
 
+### Finding 3b — precision probe BLOCKED by a usage limit, which caught a tooling bug
+
+Attempted the precision/collision probe (does a `debrief` prompt wrongly fire
+`lessons`/`postmortem`, etc.) and got **all-miss** — which turned out to be a Codex
+**usage limit** ("You've hit your usage limit… try again at 8:37 AM"), not real
+misses. So the precision question is still **unmeasured** (retry after the quota
+resets).
+
+The dogfood win: this exposed a real robustness bug — `parseCodexEvalRun` left an
+errored/rate-limited turn as an empty trace, so `codexSkillFired` read it as a
+clean recall-0 **miss**. A rate-limit silently corrupting trigger-rate as false
+negatives is exactly the kind of bug that invalidates a whole run. **Fixed:**
+`codexRunError(out)` detects the `error` / `turn.failed` event (incl. usage
+limits); an errored turn must be skipped/retried, never scored as a miss (the
+Codex analog of the Claude path's `isRateLimited` backoff). Increment 3's dispatch
+must consult it so a quota hit doesn't tank a Codex eval.
+
 ## Not run here — observed egress
 
 The other behavioral column, observed-egress (`src/egress.ts` / `src/sandbox.ts`),

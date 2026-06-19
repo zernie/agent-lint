@@ -36,6 +36,8 @@ interface CodexEvent {
   readonly type?: string;
   readonly item?: Record<string, unknown>;
   readonly usage?: Record<string, unknown>;
+  readonly message?: string;
+  readonly error?: { message?: string };
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -120,6 +122,23 @@ export function parseCodexEvalRun(out: { stdout: string }): ParsedModelRun {
     subagents: [],
     usage,
   };
+}
+
+/**
+ * The error message if the run errored or was rate-limited (an `error` /
+ * `turn.failed` event), else null. CRITICAL for the eval tier: an errored turn
+ * must NOT be scored as a clean "skill didn't fire" miss — dogfooding hit a Codex
+ * usage limit ("You've hit your usage limit…") whose `error` event left an empty
+ * trace that `codexSkillFired` read as recall 0. A caller should skip/retry an
+ * errored run, not count it. (The Claude path has `isRateLimited` + backoff; this
+ * is the Codex equivalent detector.)
+ */
+export function codexRunError(out: { stdout: string }): string | null {
+  for (const e of parseLines(out.stdout)) {
+    if (e.type === "error") return str(e.message) || "codex error";
+    if (e.type === "turn.failed") return str(e.error?.message) || "turn failed";
+  }
+  return null;
 }
 
 /**
