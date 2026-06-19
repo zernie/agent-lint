@@ -1719,7 +1719,34 @@ export interface TriggerRateReport {
    * description). A non-zero count is the whole-harness measurement.
    */
   readonly competitors: number;
+  /**
+   * Runs EXCLUDED because the turn errored / was rate-limited (detected by the
+   * driver's `runError`), present only when > 0. These are NOT counted in `n` or
+   * as misses — so `rate` reflects only valid runs. A large `errored` relative to
+   * `n` means the measurement is thin (e.g. a Codex usage limit was hit); re-run.
+   */
+  readonly errored?: number;
 }
+
+/**
+ * An eval-tier transport: how to RUN a real harness turn and PARSE its output.
+ * The default is Claude Code (`claudeEvalDriver`); a second harness supplies its
+ * own (e.g. `codexEvalDriver` from `vigiles/codex`) and passes it as
+ * `measureTriggerRate(spec, { evalDriver })` — the eval-tier analog of
+ * `runHarnessTest`'s `{ adapter }`. `runError` lets the loop drop an
+ * errored/rate-limited turn instead of scoring it as a miss.
+ */
+export interface EvalDriver {
+  readonly runner: AgentRunner;
+  readonly parse: ModelOutputParser;
+  readonly runError?: (out: RunOut) => string | null;
+}
+
+/** The default (Claude Code) eval driver: real `claude` + stream-json parsing. */
+export const claudeEvalDriver: EvalDriver = {
+  runner: spawnAgent,
+  parse: parseClaudeRun,
+};
 
 /**
  * Package loose `<skillsDir>/<name>/SKILL.md` skills into a throwaway plugin dir
@@ -2086,6 +2113,8 @@ interface TriggerRunConfig {
   readonly concurrency: number;
   /** How to parse the runner's stdout into a trace (default Claude stream-json). */
   readonly parse: ModelOutputParser;
+  /** Detect an errored/rate-limited turn (excluded from the rate, not a miss). */
+  readonly runError?: (out: RunOut) => string | null;
 }
 
 /** Run one prompt set × trials through `runner`, aggregating fired counts. */
@@ -2094,7 +2123,7 @@ async function runTriggerTrial(
   prompt: string,
   cfg: TriggerRunConfig,
   runner: AgentRunner,
-): Promise<number> {
+): Promise<{ fired: number; errored: boolean }> {
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
   try {
     if (cfg.fixture) writeFiles(cwd, cfg.fixture);
@@ -2107,18 +2136,33 @@ async function runTriggerTrial(
       pluginDir: cfg.pluginDir,
       timeoutMs: cfg.timeoutMs,
     });
-    return cfg.fired(makeContext(cwd, out, cfg.parse)) ? 1 : 0;
+    // An errored/rate-limited turn is NOT a "skill didn't fire" miss — it's
+    // excluded from the rate, so e.g. a Codex usage limit can't read as recall 0.
+    if (cfg.runError?.(out)) return { fired: 0, errored: true };
+    return {
+      fired: cfg.fired(makeContext(cwd, out, cfg.parse)) ? 1 : 0,
+      errored: false,
+    };
   } finally {
     rmSync(cwd, { recursive: true, force: true });
     await sleep(cfg.spacing);
   }
 }
 
+/** A count for reporting: the number if positive, else undefined (omit zero). */
+const positiveOrUndefined = (n: number): number | undefined =>
+  n > 0 ? n : undefined;
+
 async function runTriggerSet(
   prompts: readonly string[],
   cfg: TriggerRunConfig,
   runner: AgentRunner,
-): Promise<{ perPrompt: PromptTriggerStat[]; fired: number; n: number }> {
+): Promise<{
+  perPrompt: PromptTriggerStat[];
+  fired: number;
+  n: number;
+  errored: number;
+}> {
   // Flatten prompts × trials into one work list so concurrency spans both.
   const jobs = prompts.flatMap((prompt, promptIndex) =>
     Array.from({ length: cfg.trials }, () => ({ prompt, promptIndex })),
@@ -2126,11 +2170,16 @@ async function runTriggerSet(
   const outcomes = await runPool(jobs, cfg.concurrency, (job) =>
     runTriggerTrial(job.prompt, cfg, runner),
   );
-  // Re-aggregate per prompt, preserving the input order.
+  // Re-aggregate per prompt, preserving input order; errored runs don't count.
   const firedBy = new Array<number>(prompts.length).fill(0);
   const trialsBy = new Array<number>(prompts.length).fill(0);
+  let errored = 0;
   jobs.forEach((job, i) => {
-    firedBy[job.promptIndex] += outcomes[i];
+    if (outcomes[i].errored) {
+      errored += 1;
+      return;
+    }
+    firedBy[job.promptIndex] += outcomes[i].fired;
     trialsBy[job.promptIndex] += 1;
   });
   const perPrompt: PromptTriggerStat[] = prompts.map((prompt, i) => ({
@@ -2143,6 +2192,7 @@ async function runTriggerSet(
     perPrompt,
     fired: firedBy.reduce((a, b) => a + b, 0),
     n: trialsBy.reduce((a, b) => a + b, 0),
+    errored,
   };
 }
 
@@ -2154,13 +2204,8 @@ async function runTriggerSet(
  * injectable `runner` so the loop is unit-testable without a model;
  * `measureTriggerRate` is this with the real agent runner.
  */
-export async function measureTriggerRateWith(
-  spec: TriggerRateSpec,
-  runner: AgentRunner,
-  parse: ModelOutputParser = parseClaudeRun,
-): Promise<TriggerRateReport> {
-  // Deterministic gate FIRST — reject a too-small / near-duplicate prompt set
-  // before spending a token (and before packaging a skillsDir).
+/** Diversity pre-flight: reject a too-small / near-duplicate prompt set (both sides). */
+function assertTriggerDiversity(spec: TriggerRateSpec): void {
   const diversity = {
     minPrompts: spec.minPrompts,
     minDistance: spec.minDistance,
@@ -2172,6 +2217,16 @@ export async function measureTriggerRateWith(
       label: "irrelevantPrompts",
     });
   }
+}
+
+export async function measureTriggerRateWith(
+  spec: TriggerRateSpec,
+  runner: AgentRunner,
+  parse: ModelOutputParser = parseClaudeRun,
+  runError?: (out: RunOut) => string | null,
+): Promise<TriggerRateReport> {
+  // Deterministic gate FIRST — before spending a token (or packaging a skillsDir).
+  assertTriggerDiversity(spec);
 
   // Model floor (default Sonnet): trigger-rate under-measures selection on a
   // weaker model, so FAIL before spending a token rather than report a
@@ -2201,6 +2256,7 @@ export async function measureTriggerRateWith(
     fixture: spec.fixture,
     concurrency: Math.max(1, spec.concurrency ?? 1),
     parse,
+    runError,
   };
 
   try {
@@ -2210,6 +2266,7 @@ export async function measureTriggerRateWith(
       n: relevant.n,
       perPrompt: relevant.perPrompt,
       competitors,
+      errored: positiveOrUndefined(relevant.errored),
     };
     if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
@@ -2221,6 +2278,7 @@ export async function measureTriggerRateWith(
     const fires = relevant.fired + irrelevant.fired;
     return {
       ...base,
+      errored: positiveOrUndefined(relevant.errored + irrelevant.errored),
       falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
       precision: fires > 0 ? relevant.fired / fires : undefined,
       perIrrelevant: irrelevant.perPrompt,
@@ -2233,13 +2291,18 @@ export async function measureTriggerRateWith(
 
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureTriggerRateWith */
 /**
- * Measure a skill/behaviour's real trigger rate across prompts × trials against
- * the real `claude` CLI. Requires `claude` + model auth.
+ * Measure a skill/behaviour's real trigger rate across prompts × trials. Defaults
+ * to the real `claude` CLI (`claudeEvalDriver`); pass `{ evalDriver }` to drive a
+ * second harness — e.g. `measureTriggerRate(spec, { evalDriver: codexEvalDriver })`
+ * from `vigiles/codex` (the eval-tier analog of `runHarnessTest`'s `{ adapter }`).
+ * Requires that harness's binary + auth.
  */
 export async function measureTriggerRate(
   spec: TriggerRateSpec,
+  opts: { evalDriver?: EvalDriver } = {},
 ): Promise<TriggerRateReport> {
-  return measureTriggerRateWith(spec, spawnAgent);
+  const d = opts.evalDriver ?? claudeEvalDriver;
+  return measureTriggerRateWith(spec, d.runner, d.parse, d.runError);
 }
 /* v8 ignore stop */
 

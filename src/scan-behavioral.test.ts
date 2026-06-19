@@ -14,8 +14,10 @@ import {
   probePluginTriggersWith,
   formatBehavioralReport,
   type BehavioralReport,
+  type HarnessProbe,
 } from "./scan-behavioral.js";
-import type { AgentRunArgs } from "./eval.js";
+import { parseClaudeRun, type AgentRunArgs } from "./eval.js";
+import { skillResolved } from "./harness-assert.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
 function write(dir: string, rel: string, content: string): void {
@@ -75,6 +77,14 @@ const fakeRunner = (
   return Promise.resolve({ code: 0, stdout });
 };
 
+// A Claude-shaped probe wrapping the fake runner (no real binary).
+const fakeProbe: HarnessProbe = {
+  evalDriver: { runner: fakeRunner, parse: parseClaudeRun },
+  firedFor: (name) => (t) => skillResolved(t, `myplugin:${name}`),
+  stub: false,
+  available: () => true,
+};
+
 test("probePluginTriggersWith probes only model-invocable described skills", async () => {
   const dir = plugin();
   const report = await probePluginTriggersWith(
@@ -85,7 +95,7 @@ test("probePluginTriggersWith probes only model-invocable described skills", asy
         irrelevant: ["calm alpha", "calm beta"],
       },
     },
-    fakeRunner,
+    fakeProbe,
     { minPrompts: 1, minDistance: 0 },
   );
 
@@ -110,7 +120,7 @@ test("probePluginTriggersWith reports a thin prompt set per-skill, not a crash",
   const report = await probePluginTriggersWith(
     dir,
     { foo: { prompts: ["fire once"] } },
-    fakeRunner,
+    fakeProbe,
   );
   const foo = report.results.find((r) => r.skill === "foo");
   assert.equal(foo?.measured, false);

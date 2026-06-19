@@ -18,13 +18,18 @@ import { join } from "node:path";
 
 import { scanPlugin } from "./scan.js";
 import {
-  measureTriggerRateWith,
-  spawnAgent,
+  measureTriggerRate,
+  claudeEvalDriver,
   type TriggerRateReport,
-  type AgentRunner,
+  type EvalDriver,
 } from "./eval.js";
 import { skillResolved } from "./harness-assert.js";
-import { claudeAvailable } from "./harness-test.js";
+import { claudeAvailable, type Trace } from "./harness-test.js";
+import { codexEvalDriver, codexSkillFired } from "./adapters/codex/eval.js";
+import { codexDriver } from "./adapters/codex/driver.js";
+
+/** Which harness drives the behavioral column (default Claude Code). */
+export type ProbeHarness = "claude-code" | "codex";
 
 /** Author-supplied prompt sets for one skill (bare skill name → these). */
 export interface SkillPrompts {
@@ -57,6 +62,42 @@ export interface ProbeOptions {
   readonly model?: string;
   readonly minPrompts?: number;
   readonly minDistance?: number;
+  /** Which harness to drive (default `"claude-code"`). */
+  readonly harness?: ProbeHarness;
+}
+
+/**
+ * Per-harness probe wiring: the eval driver (runner+parse), how to build the
+ * `fired` predicate for a skill, whether to stub bodies, and an availability
+ * gate. Claude detects firing via the `Skill` tool_use (namespaced by the
+ * plugin name); Codex has no skill event, so firing is the SKILL.md read
+ * (`codexSkillFired`, bare name) — see `research/codex-prototype-findings.md`.
+ */
+export interface HarnessProbe {
+  readonly evalDriver: EvalDriver;
+  readonly firedFor: (name: string) => (t: Trace) => boolean;
+  readonly stub: boolean;
+  readonly available: () => boolean;
+}
+
+function buildProbe(dir: string, harness: ProbeHarness): HarnessProbe {
+  if (harness === "codex") {
+    return {
+      evalDriver: codexEvalDriver,
+      firedFor: (name) => (t) => codexSkillFired(t, name),
+      // Codex stubbing of a non-Claude plugin isn't validated; install the real
+      // skills (firing is the SKILL.md read, detected regardless of body).
+      stub: false,
+      available: () => codexDriver.available(),
+    };
+  }
+  const ns = pluginName(dir);
+  return {
+    evalDriver: claudeEvalDriver,
+    firedFor: (name) => (t) => skillResolved(t, ns ? `${ns}:${name}` : name),
+    stub: true,
+    available: claudeAvailable,
+  };
 }
 
 /** Plugin name from `.claude-plugin/plugin.json` (the skill id's namespace). */
@@ -75,32 +116,30 @@ function pluginName(dir: string): string | null {
 /** Shared per-run inputs, so `probeSkill` stays a small (ctx, name, prompts) call. */
 interface ProbeCtx {
   readonly dir: string;
-  readonly ns: string | null;
   readonly opts: ProbeOptions;
-  readonly runner: AgentRunner;
+  readonly probe: HarnessProbe;
 }
 
-/** Probe one skill (runner injected) → its trigger result, never throwing. */
+/** Probe one skill via the harness probe's eval driver → result, never throwing. */
 async function probeSkill(
   ctx: ProbeCtx,
   name: string,
   ps: SkillPrompts,
 ): Promise<SkillTriggerResult> {
-  const skillId = ctx.ns ? `${ctx.ns}:${name}` : name;
   try {
-    const r: TriggerRateReport = await measureTriggerRateWith(
+    const r: TriggerRateReport = await measureTriggerRate(
       {
         pluginDir: ctx.dir,
-        stubSkillBodies: true,
+        stubSkillBodies: ctx.probe.stub,
         prompts: ps.prompts,
         irrelevantPrompts: ps.irrelevant,
         minPrompts: ctx.opts.minPrompts,
         minDistance: ctx.opts.minDistance,
         model: ctx.opts.model,
         concurrency: ctx.opts.concurrency,
-        fired: (t) => skillResolved(t, skillId),
+        fired: ctx.probe.firedFor(name),
       },
-      ctx.runner,
+      { evalDriver: ctx.probe.evalDriver },
     );
     return {
       skill: name,
@@ -125,10 +164,10 @@ async function probeSkill(
 export async function probePluginTriggersWith(
   dir: string,
   promptSet: TriggerPromptSet,
-  runner: AgentRunner,
+  probe: HarnessProbe,
   opts: ProbeOptions = {},
 ): Promise<BehavioralReport> {
-  const ctx: ProbeCtx = { dir, ns: pluginName(dir), opts, runner };
+  const ctx: ProbeCtx = { dir, opts, probe };
   // Only model-invocable, describable skills can auto-trigger; user-invoked and
   // description-less ones can't, so they're not behavioral candidates.
   const candidates = scanPlugin(dir).skills.filter(
@@ -150,14 +189,19 @@ export async function probePluginTriggersWith(
   return { available: true, results };
 }
 
-/** Probe a plugin's skills against the real `claude` CLI (needs auth). */
+/**
+ * Probe a plugin's skills against the real harness (default Claude Code; Codex via
+ * `opts.harness`). Needs that harness's binary + auth; degrades to
+ * `available: false` otherwise.
+ */
 export async function probePluginTriggers(
   dir: string,
   promptSet: TriggerPromptSet,
   opts: ProbeOptions = {},
 ): Promise<BehavioralReport> {
-  if (!claudeAvailable()) return { available: false, results: [] };
-  return probePluginTriggersWith(dir, promptSet, spawnAgent, opts);
+  const probe = buildProbe(dir, opts.harness ?? "claude-code");
+  if (!probe.available()) return { available: false, results: [] };
+  return probePluginTriggersWith(dir, promptSet, probe, opts);
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
@@ -165,7 +209,7 @@ const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
 /** Format the behavioral column as a scan-report section. */
 export function formatBehavioralReport(b: BehavioralReport): string {
   if (!b.available) {
-    return "Behavioral (trigger-rate): unavailable — needs the `claude` CLI + model auth";
+    return "Behavioral (trigger-rate): unavailable — needs the harness CLI + model auth";
   }
   if (b.results.length === 0) {
     return "Behavioral (trigger-rate): no model-invocable skills to probe";

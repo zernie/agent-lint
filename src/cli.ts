@@ -46,6 +46,7 @@ import {
   probePluginTriggers,
   formatBehavioralReport,
   type TriggerPromptSet,
+  type ProbeHarness,
 } from "./scan-behavioral.js";
 import {
   detectAdapterResult,
@@ -2573,6 +2574,7 @@ async function handleScanTrigger(
   root: string,
   args: string[],
   json: boolean,
+  harness: ProbeHarness,
 ): Promise<void> {
   const promptsPath = flagValue(args, "--prompts");
   if (!promptsPath) {
@@ -2600,6 +2602,7 @@ async function handleScanTrigger(
     concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
     minPrompts: minPromptsRaw ? Number(minPromptsRaw) : undefined,
     model: flagValue(args, "--model"),
+    harness,
   });
   console.log(
     json
@@ -3302,7 +3305,11 @@ async function main(): Promise<void> {
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );
-        if (wantTrigger) await handleScanTrigger(root, args, json);
+        if (wantTrigger) {
+          const harness: ProbeHarness =
+            adapter.name === "codex" ? "codex" : "claude-code";
+          await handleScanTrigger(root, args, json, harness);
+        }
       }
       break;
     }

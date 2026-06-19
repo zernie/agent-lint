@@ -27,8 +27,21 @@
  */
 
 import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
-import type { ParsedModelRun } from "../../eval.js";
+import type {
+  ParsedModelRun,
+  AgentRunArgs,
+  RunOut,
+  EvalDriver,
+} from "../../eval.js";
 import type { ToolCall } from "../../core/harness-driver.js";
 
 /** A line of `codex exec --json` output. */
@@ -147,12 +160,66 @@ export function codexRunError(out: { stdout: string }): string | null {
  * reads its `…/<name>/SKILL.md` via a `command_execution`. Best-effort (a cached
  * skill might not be re-read); for the trigger-rate `fired` predicate over Codex.
  */
-export function codexSkillFired(run: ParsedModelRun, name: string): boolean {
+export function codexSkillFired(
+  run: { toolCalls: readonly ToolCall[] },
+  name: string,
+): boolean {
   const needle = `${name}/SKILL.md`;
   return run.toolCalls.some((c) => str(c.name).includes(needle));
 }
 
+/**
+ * Materialize a (Claude-shaped) plugin dir's skills into `<cwd>/.codex/skills/` —
+ * where Codex actually discovers them (validated live: codex reads
+ * `<cwd>/.codex/skills/<name>/SKILL.md`). This is the Codex analog of Claude's
+ * `--plugin-dir`: `measureTriggerRate` hands the runner a `pluginDir` (the
+ * stubbed/packaged skills), and the Codex runner installs them here before the
+ * turn. Pure fs — unit-testable without a binary.
+ */
+export function installCodexSkills(pluginDir: string, cwd: string): number {
+  const skillsRoot = join(pluginDir, "skills");
+  if (!existsSync(skillsRoot)) return 0;
+  let n = 0;
+  for (const name of readdirSync(skillsRoot)) {
+    const src = join(skillsRoot, name, "SKILL.md");
+    if (!existsSync(src)) continue;
+    const dest = join(cwd, ".codex", "skills", name, "SKILL.md");
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, readFileSync(src, "utf-8"));
+    n += 1;
+  }
+  return n;
+}
+
 /* v8 ignore start -- real codex subprocess; validated against the binary, not the unit gate */
+/**
+ * The Codex eval-tier `AgentRunner`: install the run's skills into `.codex/skills`
+ * (Codex's discovery path, vs Claude's `--plugin-dir`), then drive a real
+ * `codex exec --json` turn. The seam `measureTriggerRate(spec, { evalDriver:
+ * codexEvalDriver })` dispatches through.
+ */
+export function codexEvalAgentRunner(args: AgentRunArgs): Promise<RunOut> {
+  if (args.pluginDir) installCodexSkills(args.pluginDir, args.cwd);
+  return Promise.resolve(
+    codexEvalRunner({
+      task: args.task,
+      cwd: args.cwd,
+      timeoutMs: args.timeoutMs,
+    }),
+  );
+}
+
+/**
+ * The Codex eval driver — pass to `measureTriggerRate(spec, { evalDriver:
+ * codexEvalDriver })` to run a trigger-rate eval natively on `codex exec`. Pair
+ * the spec's `fired` with `codexSkillFired` (Codex has no Skill-tool event).
+ */
+export const codexEvalDriver: EvalDriver = {
+  runner: codexEvalAgentRunner,
+  parse: parseCodexEvalRun,
+  runError: codexRunError,
+};
+
 /**
  * Spawn real `codex exec --json` for the eval tier (real model, the user's codex
  * auth — NOT the mock). CONFIRMED flags (codex 0.139.0): `--json` for the event

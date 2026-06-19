@@ -183,15 +183,27 @@ empty / `output = trimmed stdout` on anything unrecognised — each extractor
 isolated so finishing against captured JSONL is a field-name edit, not a rewrite.
 `codexEvalRunner` spawns `codex exec --json` (v8-ignored; flags + skill-install
 wiring are best-guess pending the binary). Unit-tested over synthetic fixtures for
-both shapes (`src/adapters/codex/eval.test.ts`). Deliberately NOT wired into the
-public dispatch yet (increment 3) so an unvalidated parser can't silently report
-recall 0 under the public API.
+both shapes (`src/adapters/codex/eval.test.ts`). Now finalized + wired (see the 2026-06-19
+update + increment 3 below).
 
-### Increment 3 — needs env
+### Increment 3 — BUILT (env-independent), pending live end-to-end validation
 
-**`{ adapter }` dispatch** on `measureTriggerRate`/`runEval` (mirrors
-`runHarnessTest`), selecting `{ runner, parse }` per adapter — wired only after the
-schema (and the skill-selection question) is confirmed against the binary.
+**`{ evalDriver }` dispatch** on `measureTriggerRate` (the trigger-rate seam
+`scan --trigger` rides), mirroring `runHarnessTest`'s `{ adapter }`. An
+`EvalDriver = { runner, parse, runError? }` bundles a harness's
+`AgentRunner` + `ModelOutputParser` + an optional errored-run detector;
+`claudeEvalDriver` (default) and `codexEvalDriver` (`codexEvalAgentRunner` +
+`parseCodexEvalRun` + `codexRunError`) are the two impls. `measureTriggerRate(spec,
+{ evalDriver })` selects one; a trial whose `runError` fires is EXCLUDED from the
+denominator (an errored/rate-limited turn isn't a clean miss) and counted as
+`errored` in the report. `src/scan-behavioral.ts` carries a `HarnessProbe`
+(`buildProbe(dir, harness)`) that picks the driver + the per-harness "fired"
+predicate (`skillResolved` for Claude with stubbed bodies, `codexSkillFired` for
+Codex), so `scan --trigger --harness=codex` routes through the Codex driver. Wired
+
+- fake-tested (`src/eval.test.ts`, `src/scan-behavioral.test.ts` drive the dispatch
+  with an injected fake driver, no binary); the one remaining step is a live
+  end-to-end run (the haretrail EN-vs-RU eval natively), gated on Codex quota.
 
 ## UPDATE (2026-06-19): live capture — schema CONFIRMED, skill question ANSWERED
 
@@ -217,10 +229,10 @@ captured real `codex exec --json` turns. Findings:
 - Spawn gotcha: stdin must be `/dev/null` (`stdio:["ignore",…]`) — codex otherwise
   blocks on "Reading additional input from stdin…".
 
-Remaining: **increment 3** — wire `{ adapter }` dispatch into
-`measureTriggerRate`/`runEval` (runner = `codexEvalRunner`, parse =
-`parseCodexEvalRun`, fired = `codexSkillFired`) and run the haretrail EN-vs-RU
-eval natively. Needs network egress to the model backend on each run.
+Increment 3 (the `{ evalDriver }` dispatch) is now BUILT + fake-tested (see
+above). Remaining is purely a LIVE validation: run the haretrail EN-vs-RU eval
+natively via `scan --trigger --harness=codex` once the Codex quota resets. Needs
+network egress to the model backend on each run.
 
 ### Env-validation checklist
 
@@ -239,6 +251,9 @@ eval natively. Needs network egress to the model backend on each run.
       (the SKILL.md read), best-effort, pair with a judged check.
 - [x] Finish `parseCodexEvalRun` against the real schema; replace the synthetic
       fixtures with captured ones.
-- [ ] Wire `codexAdapter` → `{ runner, parse }` and validate end-to-end against a
-      real Codex skill pack (re-run the haretrail EN-vs-RU cross-language eval
-      NATIVELY instead of via the Claude wrapper).
+- [x] Wire `codexEvalDriver` → `measureTriggerRate({ evalDriver })` +
+      `scan --trigger --harness=codex` (the `HarnessProbe` dispatch); fake-tested
+      end-to-end with an injected driver (no binary).
+- [ ] LIVE end-to-end validation: re-run the haretrail EN-vs-RU cross-language
+      eval NATIVELY via `scan --trigger --harness=codex` (gated on Codex quota
+      reset) instead of via the Claude wrapper.
