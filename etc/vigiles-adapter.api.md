@@ -9,6 +9,7 @@ export interface AdapterCapabilities {
     readonly harnessTesting: boolean;
     readonly referenceVerification: true;
     readonly shellHooks: boolean;
+    readonly subagents: boolean;
 }
 
 // @public
@@ -114,6 +115,8 @@ export interface ModelMock {
 
 // @public
 export interface PluginLayout {
+    readonly agentDir: string;
+    readonly commandDir: string;
     readonly hooksConventionPath: string;
     readonly instructionFile: string;
     readonly intraRefDirs: readonly string[];
@@ -125,6 +128,7 @@ export interface PluginLayout {
     readonly pluginRootToken: string;
     readonly settingsFormat: "json" | "toml";
     readonly settingsPath: string;
+    readonly skillDir: string;
     readonly surfaceDirs: readonly string[];
 }
 
