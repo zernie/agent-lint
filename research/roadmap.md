@@ -40,6 +40,18 @@
   [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
   "valid is not true" cross-reference on a new surface, high-precision by design.
 
+- **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook (P1).** The lint
+  consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
+  findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
+  minimal-token messages the agent applies directly, and (b) **lint-as-a-PostToolUse-hook**
+  that gates the moment the agent writes a bad reference — extend the existing refs-hook
+  from symbol marks to the whole cross-reference family (tool-contract, mcp-tool,
+  hook-events). Corollary: **FP-calibration becomes a SAFETY property, not just UX** — a
+  human ignores a noisy finding, but an agent _obediently "fixes" every one_, so a false
+  positive makes it edit correct content. The "don't cry wolf" discipline is load-bearing
+  once the consumer is a model. See [instruction-file-linter-landscape](instruction-file-linter-landscape.md)
+  (the moat in an agent-authored world). · **P1**
+
 - **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
   Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
   refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
