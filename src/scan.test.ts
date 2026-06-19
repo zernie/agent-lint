@@ -433,6 +433,40 @@ test("scanPlugin flags an MCP server that can't start (no command/url)", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags an mcp__server__tool whose server the plugin doesn't declare", () => {
+  const dir = makeTmpDir("scan-mcptool");
+  write(
+    dir,
+    ".mcp.json",
+    JSON.stringify({ mcpServers: { github: { command: "gh-mcp" } } }),
+  );
+  write(
+    dir,
+    "agents/a.md",
+    "---\nname: a\ntools: Read, mcp__github__search, mcp__linear__create, mcp__ide__getDiagnostics\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((x) => x.name === "a");
+  // github = declared (ok), ide = built-in (allowlisted), linear = undeclared (flagged)
+  assert.equal(agent?.mcpToolIssues.length, 1);
+  assert.equal(agent?.mcpToolIssues[0].server, "linear");
+  assert.match(formatScanReport(scanPlugin(dir)), /can't resolve/);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin does NOT flag mcp tools when the plugin declares no servers", () => {
+  // The high-precision gate: with no .mcp.json, the agent reaches global/project
+  // servers (the ananddtyagi mcp__ide__* shape) — flagging would cry wolf.
+  const dir = makeTmpDir("scan-mcptool-nogate");
+  write(
+    dir,
+    "agents/a.md",
+    "---\nname: a\ntools: Task, mcp__ide__getDiagnostics, mcp__anything__x\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((x) => x.name === "a");
+  assert.deepEqual(agent?.mcpToolIssues, []);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);

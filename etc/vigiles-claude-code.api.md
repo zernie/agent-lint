@@ -42,6 +42,7 @@ export interface HarnessDialect {
     readonly builtinAgentTools: readonly string[];
     readonly hookEvents: readonly string[];
     readonly instructionTargets: readonly string[];
+    readonly knownMcpServers?: readonly string[];
     readonly mcpToolPattern: RegExp;
     readonly name: string;
     readonly neverAvailableTools: readonly string[];

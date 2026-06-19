@@ -42,6 +42,11 @@ export const claudeCodeDialect: HarnessDialect = {
     "WaitForMcpServers",
   ],
   mcpToolPattern: /^mcp__[a-z0-9_-]+__[a-z0-9_-]+$/i,
+  // Claude Code's own built-in MCP server: the IDE integration provides
+  // `mcp__ide__getDiagnostics` / `mcp__ide__executeCode` at runtime without any
+  // plugin declaring it, so a contract that lists those must NOT be flagged as
+  // referencing an undeclared server (the mcp-tool-resolves allowlist).
+  knownMcpServers: ["ide"],
   // The real Claude Code hook events. (Was wrong: PreSession/PostSession don't
   // exist; SessionStart/SessionEnd/Stop/SubagentStop/UserPromptSubmit/PreCompact
   // were missing — verified against the events real plugins register.)

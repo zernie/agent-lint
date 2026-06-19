@@ -157,6 +157,16 @@ export interface RulesConfig {
    * enforce on your own skills. Same detector as `scan` (skillMetaIssues).
    */
   "skill-frontmatter"?: RuleSeverity;
+  /**
+   * Cross-reference an `mcp__server__tool` in a subagent's contract against the
+   * plugin's declared `mcpServers` — flag a server the plugin doesn't declare
+   * (the MCP half of the tool moat; `agent-tool-contract` checks the built-in
+   * half). High-precision: only flags when the plugin SHIPS a declared set,
+   * allowlists harness built-ins (`ide`), and skips the plugin-namespaced
+   * `mcp__plugin_…` form. Default "warn"; "error" gates CI. Same detector as
+   * `scan` (mcpToolIssues).
+   */
+  "mcp-tool-resolves"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

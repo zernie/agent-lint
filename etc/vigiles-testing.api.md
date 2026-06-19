@@ -302,6 +302,9 @@ export interface CheckResult {
 }
 
 // @public
+export const claudeEvalDriver: EvalDriver;
+
+// @public
 export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
 
 // @public
@@ -389,6 +392,16 @@ export interface EvalArm {
 
 // @public
 export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResult[];
+
+// @public
+export interface EvalDriver {
+    // (undocumented)
+    readonly parse: ModelOutputParser;
+    // (undocumented)
+    readonly runError?: (out: RunOut) => string | null;
+    // (undocumented)
+    readonly runner: AgentRunner;
+}
 
 // @public (undocumented)
 export interface EvalReport {
@@ -659,10 +672,12 @@ export interface MeasureSpec {
 }
 
 // @public
-export function measureTriggerRate(spec: TriggerRateSpec): Promise<TriggerRateReport>;
+export function measureTriggerRate(spec: TriggerRateSpec, opts?: {
+    evalDriver?: EvalDriver;
+}): Promise<TriggerRateReport>;
 
-// @public
-export function measureTriggerRateWith(spec: TriggerRateSpec, runner: AgentRunner): Promise<TriggerRateReport>;
+// @public (undocumented)
+export function measureTriggerRateWith(spec: TriggerRateSpec, runner: AgentRunner, parse?: ModelOutputParser, runError?: (out: RunOut) => string | null): Promise<TriggerRateReport>;
 
 // @public
 export function measureWith(spec: MeasureSpec, runner: AgentRunner): Promise<CheckReport>;
@@ -690,6 +705,9 @@ export interface MetricStat {
     readonly se: number;
     readonly std: number;
 }
+
+// @public (undocumented)
+export type ModelOutputParser = (out: RunOut) => ParsedModelRun;
 
 // @public
 export interface ModelRequest {
@@ -743,6 +761,25 @@ export function packageSkillsDir(skillsDir: string, opts?: {
 
 // @public
 export function parseBaselineFile(json: string): BaselineFile;
+
+// @public
+export function parseClaudeRun(out: RunOut): ParsedModelRun;
+
+// @public
+export interface ParsedModelRun {
+    // (undocumented)
+    readonly hooks: ReturnType<typeof parseHooks>;
+    // (undocumented)
+    readonly output: string;
+    // (undocumented)
+    readonly subagents: ReturnType<typeof parseSubagents>;
+    // (undocumented)
+    readonly toolCalls: ReturnType<typeof parseToolCalls>;
+    // (undocumented)
+    readonly turns: number;
+    // (undocumented)
+    readonly usage: EvalUsage;
+}
 
 // @public
 export function parseHookOutput(stdout: string): HookOutput | null;
@@ -909,6 +946,9 @@ export function skillResolved(trace: Trace, skill: string): boolean;
 export function skip(reason?: string): never;
 
 // @public
+export function spawnAgent(a: AgentRunArgs): Promise<RunOut>;
+
+// @public
 export function specTrusted(spec: {
     plugin?: string;
     pluginDir?: string;
@@ -984,6 +1024,7 @@ export interface Trace {
 // @public (undocumented)
 export interface TriggerRateReport {
     readonly competitors: number;
+    readonly errored?: number;
     readonly falsePositiveRate?: number;
     readonly n: number;
     readonly perIrrelevant?: readonly PromptTriggerStat[];
@@ -996,7 +1037,9 @@ export interface TriggerRateReport {
 // @public
 export interface TriggerRateSpec {
     readonly allowedTools?: readonly string[];
+    readonly concurrency?: number;
     readonly fired: (trace: Trace) => boolean;
+    readonly fixture?: Record<string, string>;
     readonly installSet?: readonly string[];
     readonly irrelevantPrompts?: readonly string[];
     readonly minDistance?: number;
