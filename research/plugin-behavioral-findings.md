@@ -190,6 +190,33 @@ non-errored trials to get actual numbers — a quota wall, not a code gap. The
 eval-ready cluster prompt set is saved at
 `research/fixtures/haretrail-cluster.json` for the retry.
 
+## Probe queue — superpowers recall re-run on the shipped `--trigger` path (2026-06-19)
+
+> Session state (durable, in case of context compaction). This session shipped
+> the full deterministic cross-referencing **moat** as 4 lint rules + scan checks,
+> each one shared detector reused by scan + lint (+ compileAgent for tools), all
+> calibrated high-precision against the 444-plugin sweep:
+> `agent-tool-contract` (#1), `hook-events` (#2), `frontmatter-schema` (#3,
+> subagents-only — skills need no frontmatter, empirically confirmed),
+> `mcp-config` (#4). Plus scanner FP-hardening (curated-marketplace, han dedup,
+> quoted-desc, relative/guarded hooks, project-rooted refs, `tools:*` wildcard).
+> The one real external bug: **ananddtyagi/cc-marketplace ships ~9 prose-only
+> subagents that never register** — empirically verified by driving the real
+> `claude` CLI (`research/plugin-structural-findings.md`).
+>
+> NEXT (this section): a recall probe to confirm the BEHAVIORAL "structurally
+> green but silent" finding on the SHIPPED `vigiles scan --trigger` path.
+
+- **Target:** `obra/superpowers` (full clone), 14 skills, model-invocable.
+- **Skills probed** (prompt set saved at
+  `research/fixtures/superpowers-trigger-probe.json`, 10 prompts each):
+  - `systematic-debugging` — hypothesis: UNDER-fires (prior ad-hoc probe ~10%).
+  - `brainstorming` — hypothesis: under-fires (~20–30%).
+  - `test-driven-development` — control, should fire ~100%.
+- **Method:** `vigiles scan <superpowers> --trigger --prompts=…` (recall only;
+  stubbed bodies; on the Claude subscription, `$0` metered).
+- **Results:** _(filled in below after the run)_
+
 ## Not run here — observed egress
 
 The other behavioral column, observed-egress (`src/egress.ts` / `src/sandbox.ts`),
