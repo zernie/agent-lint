@@ -433,6 +433,7 @@ describe("loadConfig", () => {
       "unmarked-refs": "warn",
       "agent-tool-contract": "warn",
       "hook-events": "warn",
+      "frontmatter-schema": "warn",
     });
   });
 

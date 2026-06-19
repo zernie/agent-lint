@@ -401,18 +401,19 @@ want compile-on-edit.
 
 `vigiles lint` validates instruction files; the refs-hook nudges marking on edit:
 
-| Rule                                                  | Default  | What it checks                                                                  |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)               | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
-| [`require-skill-spec`](rules/require-skill-spec.md)   | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead      |
-| [`integrity`](rules/integrity.md)                     | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
-| [`coverage`](rules/coverage.md)                       | `false`  | Spec covers enough of the project surface                                       |
-| [`untested-skill`](rules/untested-skill.md)           | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                              |
-| [`untested-agent`](rules/untested-agent.md)           | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                        |
-| [`untested-hook`](rules/untested-hook.md)             | `"warn"` | Every file-backed hook script ships with a test or eval                         |
-| [`unmarked-refs`](rules/unmarked-refs.md)             | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
-| [`agent-tool-contract`](rules/agent-tool-contract.md) | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)         |
-| [`hook-events`](rules/hook-events.md)                 | `"warn"` | Hooks register under a real event name (a typo never fires)                     |
+| Rule                                                  | Default  | What it checks                                                                     |
+| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- |
+| [`require-spec`](rules/require-spec.md)               | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter       |
+| [`require-skill-spec`](rules/require-skill-spec.md)   | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead         |
+| [`integrity`](rules/integrity.md)                     | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                               |
+| [`coverage`](rules/coverage.md)                       | `false`  | Spec covers enough of the project surface                                          |
+| [`untested-skill`](rules/untested-skill.md)           | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                                 |
+| [`untested-agent`](rules/untested-agent.md)           | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                           |
+| [`untested-hook`](rules/untested-hook.md)             | `"warn"` | Every file-backed hook script ships with a test or eval                            |
+| [`unmarked-refs`](rules/unmarked-refs.md)             | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge    |
+| [`agent-tool-contract`](rules/agent-tool-contract.md) | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)            |
+| [`hook-events`](rules/hook-events.md)                 | `"warn"` | Hooks register under a real event name (a typo never fires)                        |
+| [`frontmatter-schema`](rules/frontmatter-schema.md)   | `"warn"` | Skills/agents have required frontmatter (skill `name`; agent `name`+`description`) |
 
 Configure in `.vigilesrc.json`:
 

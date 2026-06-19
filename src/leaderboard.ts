@@ -61,6 +61,7 @@ export function scoreReport(r: ScanReport): {
   const noContract = r.agents.filter((a) => a.tools === null).length;
   const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
   const deadHookEvents = r.hookEventIssues.length;
+  const badFrontmatter = r.frontmatterIssues.length;
 
   const deductions: { n: number; weight: number; label: string }[] = [
     {
@@ -92,6 +93,11 @@ export function scoreReport(r: ScanReport): {
       n: noContract,
       weight: W_NO_CONTRACT,
       label: "agent(s) inherit all tools (no contract)",
+    },
+    {
+      n: badFrontmatter,
+      weight: W_NO_DESCRIPTION,
+      label: "surface(s) missing required frontmatter (name/description)",
     },
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
   ];

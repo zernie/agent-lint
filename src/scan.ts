@@ -76,6 +76,14 @@ export interface ScanAgent {
   readonly toolIssues: readonly ToolIssue[];
 }
 
+/** A skill/agent whose frontmatter is missing a required field (name / description). */
+export interface FrontmatterIssue {
+  readonly path: string;
+  readonly kind: "skill" | "agent";
+  readonly missing: readonly ("name" | "description")[];
+  readonly message: string;
+}
+
 /** ok = file present; missing = referenced but absent; unresolved = path still has an unexpanded var, can't check. */
 export type HookStatus = "ok" | "missing" | "unresolved";
 
@@ -116,6 +124,8 @@ export interface ScanReport {
   readonly danglingRefs: readonly string[];
   /** Hooks registered under an event name the harness doesn't define (typo / dead). */
   readonly hookEventIssues: readonly HookEventIssue[];
+  /** Skills/agents missing a required frontmatter field (name; agents also description). */
+  readonly frontmatterIssues: readonly FrontmatterIssue[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -363,6 +373,38 @@ function scanHooks(
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Frontmatter-schema check: a SKILL.md needs a `name` to load (Claude Code keys
+ * a skill on its frontmatter name, not the dir); a subagent needs `name` +
+ * `description`. A missing required field is a structurally broken surface. Skill
+ * `description` is handled on the skill line (a trigger property), so it's not
+ * repeated here. High-confidence, low-volume in practice (the ananddtyagi
+ * no-frontmatter skills + a handful of name-less ones across 886 swept skills).
+ */
+function frontmatterIssuesFor(
+  files: Record<string, string>,
+): FrontmatterIssue[] {
+  const out: FrontmatterIssue[] = [];
+  for (const [path, md] of Object.entries(files)) {
+    const isSkillFile = isSkill(path);
+    const isAgentFile = isAgent(path);
+    if (!isSkillFile && !isAgentFile) continue;
+    const fm = frontmatter(md);
+    const missing: ("name" | "description")[] = [];
+    if (!fm.name) missing.push("name");
+    if (isAgentFile && !fm.description) missing.push("description");
+    if (missing.length === 0) continue;
+    const kind = isSkillFile ? "skill" : "agent";
+    out.push({
+      path,
+      kind,
+      missing,
+      message: `${kind} ${path} is missing required frontmatter: ${missing.join(", ")} — it won't load/register.`,
+    });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -408,6 +450,7 @@ export function scanPlugin(
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
+    frontmatterIssues: frontmatterIssuesFor(loaded.files),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -584,6 +627,13 @@ export function formatScanReport(r: ScanReport): string {
     ),
   );
 
+  out.push(
+    ...section(
+      "Frontmatter",
+      r.frontmatterIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
   const facts: string[] = [];
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
@@ -615,7 +665,8 @@ export function formatScanReport(r: ScanReport): string {
     r.skills.filter((s) => !s.hasDescription).length +
     r.agents.reduce((n, a) => n + a.toolIssues.length, 0) +
     r.danglingRefs.length +
-    r.hookEventIssues.length;
+    r.hookEventIssues.length +
+    r.frontmatterIssues.length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"
