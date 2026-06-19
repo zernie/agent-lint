@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:d284a50b63631983 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:4be494458bda9a6b compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -413,6 +413,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Dual Language Tests
 
 **Guidance only** — Harness/eval test SCRIPTS must run whether authored in JavaScript (`.mjs` / `.cjs` / `.js`) or TypeScript (`.ts` / `.mts` / `.cts`) — neither language is second-class. `vigiles test` / `vigiles eval` discover both (the `*.harness.*` / `*.eval.*` glob in `src/adapters/claude-code/run-scripts.ts`) and run a TypeScript script through `tsx` when installed, else Node's native type stripping (Node >= 22.6), failing with an actionable message when neither is available. The typed `vigiles/testing` API and the zero-setup CLI scripts are two on-ramps to the same tiers. vigiles's OWN unit test suite, by contrast, is uniformly TypeScript (every `src/**/*.test.ts`, run by vitest), so the project dogfoods the typed path; the `.mjs` files under `examples/harness/` stay JavaScript on purpose as the copy-paste CLI-fallback demos (see `docs/testing-matrix.md`).
+
+### Analogical Transfer
+
+**Guidance only** — The way to find a non-obvious MOAT in the (young, ad-hoc) agent-harness space is ANALOGICAL TRANSFER: take a mature CS principle and map it onto the harness — even when it looks crazy at first, because the looks-crazy transfers are exactly where the edge is (the whole competitor field is structural linters; nobody is thinking this way). The organizing thesis they roll up into: MINIMIZE THE HARNESS STATE-SPACE / make invalid states UNREACHABLE — via four instruments (construct=spec/types so invalid states can't be expressed; verify=lint so they're detected+rejected; gate=hooks so they can't be entered in-loop; test=evals so the remaining valid space is proven). The agent-world adaptation: when the author is a model, 'make invalid states UNREPRESENTABLE' (type-system, edit-time, human audience) becomes 'make invalid states UNREACHABLE IN THE LOOP' (gating hook, loop-time, format-agnostic) — which is why the moat is the HARNESS, not the authoring format. FILTER every transfer by don't-cry-wolf: keep only ones that yield a DETERMINISTIC, high-signal check or gate that shrinks the state space; if it needs a model or emits a fuzzy score, it's a cute analogy, not a moat. Worked examples (object-capabilities + taint → the lethal-trifecta forbidden-state check; effect systems → declared-vs-observed effects; totality → every hook decides every event; MDL → derivable-content-is-redundant) and the ranked bets live in `research/harness-state-space.md`.
 
 ### No Orphan Docs
 
