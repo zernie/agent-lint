@@ -467,6 +467,28 @@ test("scanPlugin does NOT flag mcp tools when the plugin declares no servers", (
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags an agent model/color typo, not a valid value or full model id", () => {
+  const dir = makeTmpDir("scan-modelcolor");
+  write(
+    dir,
+    "agents/typo.md",
+    "---\nname: t\ndescription: d\nmodel: sonet\ncolor: yelow\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/ok.md",
+    "---\nname: o\ndescription: d\nmodel: claude-sonnet-4-5\ncolor: cyan\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  const fields = r.frontmatterValueIssues.map(
+    (i) => `${i.field}:${i.suggestion}`,
+  );
+  // typo.md: sonet→sonnet, yelow→yellow. ok.md: full id (skipped) + valid color.
+  assert.deepEqual(fields.sort(), ["color:yellow", "model:sonnet"]);
+  assert.match(formatScanReport(r), /silently falls back/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin flags a disallowedTools typo (blocks nothing), not a valid/unknown entry", () => {
   const dir = makeTmpDir("scan-disallowed");
   write(

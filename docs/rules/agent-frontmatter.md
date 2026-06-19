@@ -18,9 +18,19 @@ _good_ trigger surface is a behavioral question — measure it with
 
 ## What it flags
 
-| Surface       | Required              | Example failure                               |
-| ------------- | --------------------- | --------------------------------------------- |
-| `agents/*.md` | `name`, `description` | a subagent that's pure prose (no `---` block) |
+Two kinds of agent-frontmatter defect, one rule:
+
+| Kind             | Surface       | Example failure                                                 |
+| ---------------- | ------------- | --------------------------------------------------------------- |
+| Missing required | `agents/*.md` | a subagent that's pure prose (no `---` block) → won't register  |
+| Invalid value    | `agents/*.md` | `model: sonet` / `color: yelow` → silently falls back / ignored |
+
+The **invalid-value** half cross-references the `model:` against the alias set
+(`inherit`/`sonnet`/`opus`/`haiku`) and `color:` against the color enum, flagging
+only a **close typo** (≤2 edits) — a full/dated model id (`claude-sonnet-4-5`) is
+an explicit form and left alone, and an unrecognized far-off value is suppressed
+(high-precision, no cry-wolf). This matches Anthropic's own `claude plugin
+validate` + cclint.
 
 This is the rule that catches the real bug the plugin sweep found: a marketplace
 shipping subagents (`changelog-generator`, `content-creator`, …) with **no

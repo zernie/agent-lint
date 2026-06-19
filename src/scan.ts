@@ -33,6 +33,7 @@ import {
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
+import { editDistance } from "./core/linters.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
 import {
   parseAgentTools,
@@ -94,6 +95,15 @@ export interface FrontmatterIssue {
   readonly message: string;
 }
 
+/** An agent frontmatter field whose VALUE is invalid (a typo of a real model/color). */
+export interface FrontmatterValueIssue {
+  readonly path: string;
+  readonly field: "model" | "color";
+  readonly value: string;
+  readonly suggestion: string;
+  readonly message: string;
+}
+
 /** ok = file present; missing = referenced but absent; unresolved = path still has an unexpanded var, can't check. */
 export type HookStatus = "ok" | "missing" | "unresolved";
 
@@ -136,6 +146,8 @@ export interface ScanReport {
   readonly hookEventIssues: readonly HookEventIssue[];
   /** Skills/agents missing a required frontmatter field (name; agents also description). */
   readonly frontmatterIssues: readonly FrontmatterIssue[];
+  /** Agent frontmatter fields with an invalid value (a typo of a real model/color). */
+  readonly frontmatterValueIssues: readonly FrontmatterValueIssue[];
   /** Skills lacking an EXPLICIT name/description — a best-practice recommendation, not a defect. */
   readonly skillMetaIssues: readonly FrontmatterIssue[];
   /** Declared MCP servers that can't start (no command/url). */
@@ -193,12 +205,19 @@ function readField(block: string, key: string): string | undefined {
   );
 }
 
-function frontmatter(md: string): { name?: string; description?: string } {
+function frontmatter(md: string): {
+  name?: string;
+  description?: string;
+  model?: string;
+  color?: string;
+} {
   const m = /(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/.exec(md);
   if (!m) return {};
   return {
     name: readField(m[1], "name"),
     description: readField(m[1], "description"),
+    model: readField(m[1], "model"),
+    color: readField(m[1], "color"),
   };
 }
 
@@ -453,6 +472,87 @@ function frontmatterIssuesFor(
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+// The canonical subagent `model:` aliases and `color:` enum (Claude Code). The
+// model check skips a full/dated id (`claude-sonnet-4-5`) — that's a valid
+// explicit form, not a typo — so only an alias misspelling is caught.
+const MODEL_ALIASES = ["inherit", "sonnet", "opus", "haiku"];
+const AGENT_COLORS = [
+  "red",
+  "blue",
+  "green",
+  "yellow",
+  "purple",
+  "orange",
+  "pink",
+  "cyan",
+];
+
+/**
+ * Closest candidate by edit distance, ONLY when it's a high-confidence typo: the
+ * value isn't already a candidate, and the nearest is within 2 edits. Returns
+ * null otherwise — a far-off value is more likely an unknown-we-don't-know than a
+ * typo (the high-precision discipline), so it's suppressed, not flagged.
+ */
+function closeCandidate(
+  value: string,
+  candidates: readonly string[],
+): string | null {
+  const v = value.toLowerCase();
+  if (candidates.includes(v)) return null;
+  let best: string | null = null;
+  let bestDistance = Infinity;
+  for (const c of candidates) {
+    const dist = editDistance(v, c);
+    if (dist < bestDistance) {
+      bestDistance = dist;
+      best = c;
+    }
+  }
+  return bestDistance > 0 && bestDistance <= 2 ? best : null;
+}
+
+/**
+ * Agent frontmatter VALUE validity — a `model:` or `color:` that's a close typo
+ * of a real one. A bad `model:` silently falls back; a bad `color:` is ignored.
+ * High-precision (close-typo only); a full/dated model id is left alone. Folded
+ * into the `agent-frontmatter` rule. Agents only (skills have no model/color).
+ */
+function frontmatterValueIssuesFor(
+  files: Record<string, string>,
+): FrontmatterValueIssue[] {
+  const out: FrontmatterValueIssue[] = [];
+  for (const [path, md] of Object.entries(files)) {
+    if (!isAgent(path)) continue;
+    const fm = frontmatter(md);
+    // A model id with a digit/hyphen is an explicit form, not an alias typo.
+    if (fm.model && !/[0-9-]/.test(fm.model)) {
+      const near = closeCandidate(fm.model, MODEL_ALIASES);
+      if (near) {
+        out.push({
+          path,
+          field: "model",
+          value: fm.model,
+          suggestion: near,
+          message: `agent ${path} has model "${fm.model}", not a known alias — it silently falls back. Did you mean "${near}"?`,
+        });
+      }
+    }
+    if (fm.color) {
+      const near = closeCandidate(fm.color, AGENT_COLORS);
+      if (near) {
+        out.push({
+          path,
+          field: "color",
+          value: fm.color,
+          suggestion: near,
+          message: `agent ${path} has color "${fm.color}", not a valid color — it's ignored. Did you mean "${near}"?`,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 /**
  * Skill-metadata RECOMMENDATION (not a correctness check): a `SKILL.md` loads
  * fine without frontmatter (`name` ← dir, `description` ← first body paragraph),
@@ -560,6 +660,7 @@ export function scanPlugin(
     danglingRefs: danglingRefs(resolve(dir), lay),
     hookEventIssues,
     frontmatterIssues: frontmatterIssuesFor(loaded.files),
+    frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files),
     skillMetaIssues: skillMetaIssuesFor(loaded.files),
     mcpIssues: verifyMcpServers(mcpServers),
     warnings: loaded.warnings,
@@ -744,10 +845,10 @@ export function formatScanReport(r: ScanReport): string {
   );
 
   out.push(
-    ...section(
-      "Frontmatter",
-      r.frontmatterIssues.map((i) => `  ✗ ${i.message}`),
-    ),
+    ...section("Frontmatter", [
+      ...r.frontmatterIssues.map((i) => `  ✗ ${i.message}`),
+      ...r.frontmatterValueIssues.map((i) => `  ✗ ${i.message}`),
+    ]),
   );
 
   out.push(
@@ -806,6 +907,7 @@ export function formatScanReport(r: ScanReport): string {
     r.danglingRefs.length +
     r.hookEventIssues.length +
     r.frontmatterIssues.length +
+    r.frontmatterValueIssues.length +
     r.mcpIssues.length;
   out.push(
     broken === 0
