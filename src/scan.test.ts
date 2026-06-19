@@ -467,6 +467,23 @@ test("scanPlugin does NOT flag mcp tools when the plugin declares no servers", (
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags a disallowedTools typo (blocks nothing), not a valid/unknown entry", () => {
+  const dir = makeTmpDir("scan-disallowed");
+  write(
+    dir,
+    "agents/a.md",
+    "---\nname: a\ntools: Read\ndisallowedTools: Bsh, Bash, Agent, mcp__x__y\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((x) => x.name === "a");
+  // Bsh = typo of Bash (flagged); Bash = legitimately blocked; Agent =
+  // never-available (harmless to block); mcp__x__y = a real plugin tool to block.
+  assert.equal(agent?.disallowedToolIssues.length, 1);
+  assert.equal(agent?.disallowedToolIssues[0].tool, "Bsh");
+  assert.match(agent?.disallowedToolIssues[0].message ?? "", /blocks nothing/);
+  assert.match(formatScanReport(scanPlugin(dir)), /Did you mean "Bash"\?/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);

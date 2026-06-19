@@ -82,6 +82,7 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
             tools: null,
             toolIssues: [],
             mcpToolIssues: [],
+            disallowedToolIssues: [],
           },
         ],
       }),
