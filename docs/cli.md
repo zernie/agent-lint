@@ -412,6 +412,7 @@ want compile-on-edit.
 | [`untested-hook`](rules/untested-hook.md)             | `"warn"` | Every file-backed hook script ships with a test or eval                         |
 | [`unmarked-refs`](rules/unmarked-refs.md)             | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
 | [`agent-tool-contract`](rules/agent-tool-contract.md) | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)         |
+| [`hook-events`](rules/hook-events.md)                 | `"warn"` | Hooks register under a real event name (a typo never fires)                     |
 
 Configure in `.vigilesrc.json`:
 

@@ -756,6 +756,8 @@ interface LintReport {
   untestedErrors: number;
   toolContractIssues: number;
   toolContractErrors: number;
+  hookEventIssues: number;
+  hookEventErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -850,6 +852,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.coverageErrors > 0 ||
     report.untestedErrors > 0 ||
     report.toolContractErrors > 0 ||
+    report.hookEventErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1234,6 +1237,10 @@ async function runLint(
   // configured; warning surfaces a typo/never-available tool, error gates CI.
   const toolContract = checkAgentToolContracts(config, silent);
 
+  // 7d. Hook-event check — a hook registered under an event the harness doesn't
+  // define never fires. High-precision (close typos only). Off unless configured.
+  const hookEvents = checkHookEvents(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1286,6 +1293,8 @@ async function runLint(
     untestedErrors: untested.errors,
     toolContractIssues: toolContract.issues,
     toolContractErrors: toolContract.errors,
+    hookEventIssues: hookEvents.issues,
+    hookEventErrors: hookEvents.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2527,6 +2536,34 @@ function checkAgentToolContracts(
     }
   }
   return { issues, errors: sev === "error" ? issues : 0 };
+}
+
+/**
+ * Apply the `hook-events` rule: flag a hook registered under an event name the
+ * harness doesn't define (a typo → the hook never fires). Reuses `scanPlugin`'s
+ * `hookEventIssues` (the shared detector, high-precision: close typos only, never
+ * a framework/custom event). Warning by default; "error" gates CI.
+ */
+function checkHookEvents(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-events"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).hookEventIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nHook-event check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
 }
 
 /**

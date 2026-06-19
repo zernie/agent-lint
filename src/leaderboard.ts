@@ -60,12 +60,18 @@ export function scoreReport(r: ScanReport): {
   const noDesc = r.skills.filter((s) => !s.hasDescription).length;
   const noContract = r.agents.filter((a) => a.tools === null).length;
   const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
+  const deadHookEvents = r.hookEventIssues.length;
 
   const deductions: { n: number; weight: number; label: string }[] = [
     {
       n: missingHooks,
       weight: W_MISSING_HOOK,
       label: "hook script(s) MISSING",
+    },
+    {
+      n: deadHookEvents,
+      weight: W_MISSING_HOOK,
+      label: "hook(s) on an unknown event (never fire)",
     },
     {
       n: noDesc,

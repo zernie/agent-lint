@@ -130,6 +130,13 @@ export interface RulesConfig {
    * "error" gates CI. Same detector as `scan` + `compileAgent`.
    */
   "agent-tool-contract"?: RuleSeverity;
+  /**
+   * Flag a hook registered under an event name the harness doesn't define (a
+   * typo → the hook never fires). High-precision: close typos only, never a
+   * framework/custom event. Default "warn"; "error" gates CI. Same detector as
+   * `scan`.
+   */
+  "hook-events"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

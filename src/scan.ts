@@ -26,6 +26,11 @@ import {
   confidentToolIssues,
   type ToolIssue,
 } from "./core/tool-contract.js";
+import {
+  verifyHookEvents,
+  confidentHookEventIssues,
+  type HookEventIssue,
+} from "./core/hook-events.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
@@ -109,6 +114,8 @@ export interface ScanReport {
    * and the leaderboard can count it.
    */
   readonly danglingRefs: readonly string[];
+  /** Hooks registered under an event name the harness doesn't define (typo / dead). */
+  readonly hookEventIssues: readonly HookEventIssue[];
   readonly warnings: readonly string[];
   readonly untested: number;
 }
@@ -365,6 +372,22 @@ export function scanPlugin(
   const lay = layout ?? claudeCodeLayout;
   const loaded = loadPlugin(dir, lay);
   const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
+  // Hook-event keys are a CLOSED platform set — an unrecognized one is a dead
+  // registration (the hook never fires), so flag every unknown (not just typos).
+  // ONLY for the canonical object-keyed-by-event shape: a plugin shipping a
+  // hooks ARRAY uses a non-CC/custom format whose events live INSIDE each entry
+  // (e.g. ananddtyagi/sugar's `[{event:"tool-use",…}]`) — Object.keys would read
+  // array INDICES, a false positive. We don't interpret a format we don't own.
+  const hooksObj = loaded.settings.hooks;
+  const eventNames =
+    hooksObj !== null &&
+    typeof hooksObj === "object" &&
+    !Array.isArray(hooksObj)
+      ? Object.keys(hooksObj as Record<string, unknown>)
+      : [];
+  const hookEventIssues = confidentHookEventIssues(
+    verifyHookEvents(eventNames, dialect),
+  );
   const instructions: ScanInstructions | null =
     loaded.files[lay.instructionFile] !== undefined
       ? {
@@ -384,6 +407,7 @@ export function scanPlugin(
     commands: Object.keys(loaded.files).filter(isCommand).length,
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(resolve(dir), lay),
+    hookEventIssues,
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -553,6 +577,13 @@ export function formatScanReport(r: ScanReport): string {
     ),
   );
 
+  out.push(
+    ...section(
+      "Hook events",
+      r.hookEventIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
   const facts: string[] = [];
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
@@ -583,7 +614,8 @@ export function formatScanReport(r: ScanReport): string {
     r.hooks.filter((h) => h.status === "missing").length +
     r.skills.filter((s) => !s.hasDescription).length +
     r.agents.reduce((n, a) => n + a.toolIssues.length, 0) +
-    r.danglingRefs.length;
+    r.danglingRefs.length +
+    r.hookEventIssues.length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"

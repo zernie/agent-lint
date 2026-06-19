@@ -23,6 +23,7 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     commands: 0,
     mcp: false,
     danglingRefs: [],
+    hookEventIssues: [],
     warnings: [],
     untested: 0,
     ...over,
