@@ -59,6 +59,10 @@ test("a Tool(restriction) suffix is stripped to its base tool", () => {
   assert.deepEqual(verifyToolContract(["Bash(git status:*)"], d), []);
 });
 
+test('a "*" wildcard (all tools) is not flagged', () => {
+  assert.deepEqual(verifyToolContract(["*"], d), []);
+});
+
 test("closestTool only suggests within edit distance 2", () => {
   assert.equal(closestTool("Edt", d), "Edit"); // distance 1
   assert.equal(closestTool("TaskGet", d), null); // distance 3 → no guess
