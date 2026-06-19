@@ -131,6 +131,7 @@ That's why you can eval your harness on every change, not just once.
 
 ## More
 
+- **[Audit any plugin →](docs/cli.md#scan-dir)** — `npx vigiles scan <repo>` reports what a plugin ships and what's structurally broken (dead refs, no-description skills, broken hook paths) with **no key**; point it at a marketplace (e.g. `wshobson/agents`) and it ranks every plugin by health (0–100, A–F). Add `--trigger` for the model-gated column: do the skills actually fire?
 - **[CLI & GitHub Action →](docs/cli.md)** — every command, the Action (inputs / output / versioning), the Claude Code plugin, and the five `lint` rules.
 - **[Skills →](docs/skills.md)** — consumer skills installed as a Claude Code plugin: `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles` (or let `vigiles init` do it). The model-invocable ones (`test-harness`, `strengthen`, `edit-spec`) fire on their own — ask _"test my skills"_, _"strengthen my rules"_, or _"add a rule to CLAUDE.md"_ and the agent reaches for them; `migrate-to-spec` and `linter-docs` are user-invoked.
 - **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).

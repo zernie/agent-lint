@@ -134,7 +134,9 @@ no usable description −10 (can't trigger), a broken intra-plugin reference −
 (partial-vendor / dead path), an agent with no `tools:` contract −5 (inherits
 everything), an untested surface −3. Scoring deliberately ignores the loader's
 free-text warnings (they include doc-mention false positives), so the ranking
-stays defensible.
+stays defensible. A **command-only** plugin (`commands/*.md`, no skills/agents/hooks)
+or an **MCP-only** plugin (`.mcp.json`) is a real, valid surface and scores on its
+own health — only a directory with _no_ surface at all scores 0.
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
 harness-aware supply-chain audit (see `research/divergent-bets.md`,
@@ -149,7 +151,9 @@ single plugin, it measures how reliably the description actually **FIRES**
 `measureTriggerRate` — the bug a green structural scan can't see (a skill with a
 fine description that never triggers). It needs the `claude` CLI + model auth, and
 **degrades honestly** ("unavailable") when they're absent rather than faking a
-pass.
+pass. `--harness=codex` routes the probe through the native Codex driver instead
+(a trigger surfaces as the model reading the skill's `SKILL.md`, since Codex has no
+Skill-tool event) — see [`docs/harness-testing-codex.md`](harness-testing-codex.md).
 
 Prompts are **author-supplied** (not model-generated — a path in prose is
 undecidable): a JSON map of skill name → `{ prompts, irrelevant }`.
