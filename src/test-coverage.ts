@@ -25,6 +25,25 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { globSync } from "glob";
+import type { PluginLayout } from "./core/layout.js";
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+
+/**
+ * The two on-disk locations a surface dir can occupy: the plugin-root form
+ * (`skills/…`) and the materialized form (`.claude/skills/…`) — derived from the
+ * layout so a non-Claude-Code harness (its own `materializeRoot` / surface dir)
+ * is discovered without hard-coding `.claude`. An empty `dir` (a harness lacking
+ * the surface, e.g. Codex subagents) yields no globs.
+ */
+function surfaceGlobs(
+  dir: string,
+  leaf: string,
+  materializeRoot: string,
+): string[] {
+  if (!dir) return [];
+  const matForm = materializeRoot ? `${materializeRoot}/${dir}` : dir;
+  return [...new Set([`${dir}/${leaf}`, `${matForm}/${leaf}`])];
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +85,12 @@ export interface TestCoverageOptions {
   readonly testGlobs?: readonly string[];
   /** Extra ignore globs (added to node_modules/dist/.git/.vigiles). */
   readonly exclude?: readonly string[];
+  /**
+   * Harness layout — where skills/agents live, the plugin-root token, the
+   * manifest/settings paths. Defaults to Claude Code; a non-CC adapter passes its
+   * own so the surface globs and hook-token expansion aren't hard-coded.
+   */
+  readonly layout?: PluginLayout;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,12 +127,16 @@ function read(path: string): string {
   }
 }
 
-function discoverSkills(basePath: string, ignore: string[]): Surface[] {
+function discoverSkills(
+  basePath: string,
+  ignore: string[],
+  layout: PluginLayout,
+): Surface[] {
   const out: Surface[] = [];
-  const found = globSync(["skills/*/SKILL.md", ".claude/skills/*/SKILL.md"], {
-    cwd: basePath,
-    ignore,
-  });
+  const found = globSync(
+    surfaceGlobs(layout.skillDir, "*/SKILL.md", layout.materializeRoot),
+    { cwd: basePath, ignore },
+  );
   for (const path of found.sort()) {
     const name = basename(dirname(path));
     const content = read(join(basePath, path));
@@ -115,19 +144,23 @@ function discoverSkills(basePath: string, ignore: string[]): Surface[] {
       kind: "skill",
       path,
       name,
-      tokens: [`skills/${name}`, `:${name}`],
+      tokens: [`${layout.skillDir}/${name}`, `:${name}`],
       ignored: content.includes(IGNORE_MARKER),
     });
   }
   return out;
 }
 
-function discoverAgents(basePath: string, ignore: string[]): Surface[] {
+function discoverAgents(
+  basePath: string,
+  ignore: string[],
+  layout: PluginLayout,
+): Surface[] {
   const out: Surface[] = [];
-  const found = globSync(["agents/*.md", ".claude/agents/*.md"], {
-    cwd: basePath,
-    ignore,
-  });
+  const found = globSync(
+    surfaceGlobs(layout.agentDir, "*.md", layout.materializeRoot),
+    { cwd: basePath, ignore },
+  );
   for (const path of found.sort()) {
     if (path.endsWith(".spec.ts")) continue;
     const content = read(join(basePath, path));
@@ -145,7 +178,11 @@ function discoverAgents(basePath: string, ignore: string[]): Surface[] {
 }
 
 /** Hook-script paths referenced from a manifest's `hooks` block (file hooks only). */
-function hookScripts(basePath: string, manifest: string): string[] {
+function hookScripts(
+  basePath: string,
+  manifest: string,
+  pluginRootToken: string,
+): string[] {
   if (!existsSync(join(basePath, manifest))) return [];
   let hooks: unknown;
   try {
@@ -156,25 +193,32 @@ function hookScripts(basePath: string, manifest: string): string[] {
   }
   if (hooks === undefined) return [];
   const text = JSON.stringify(hooks);
+  // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT" — strip the harness's
+  // own token (both forms) so the path is checkable relative to the plugin root.
+  const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
   const scripts = new Set<string>();
   for (const m of text.matchAll(SCRIPT_RE)) {
     const rel = m[0]
-      .replace("${CLAUDE_PLUGIN_ROOT}/", "")
-      .replace(/^\$\{CLAUDE_PLUGIN_ROOT\}/, "")
+      .replaceAll(pluginRootToken, "")
+      .replaceAll(unbraced, "")
+      .replace(/^\/+/, "")
       .replace(/^\.\//, "");
     if (existsSync(join(basePath, rel))) scripts.add(rel);
   }
   return [...scripts];
 }
 
-function discoverHooks(basePath: string): Surface[] {
+function discoverHooks(basePath: string, layout: PluginLayout): Surface[] {
   const scripts = new Set<string>();
-  for (const m of [
-    ".claude-plugin/plugin.json",
-    ".claude/settings.json",
-    ".claude/settings.local.json",
-  ]) {
-    for (const s of hookScripts(basePath, m)) scripts.add(s);
+  // The harness's manifest + settings (and a `.local` settings sibling, a CC
+  // convention that's harmless to probe elsewhere).
+  const localSettings = layout.settingsPath.replace(/(\.[^./]+)$/, ".local$1");
+  const manifests = [
+    ...new Set([layout.manifestPath, layout.settingsPath, localSettings]),
+  ];
+  for (const m of manifests) {
+    for (const s of hookScripts(basePath, m, layout.pluginRootToken))
+      scripts.add(s);
   }
   return [...scripts].sort().map((path) => ({
     kind: "hook" as const,
@@ -241,15 +285,17 @@ export function findUntestedSurfaces(
   options: TestCoverageOptions = {},
 ): UntestedReport {
   const basePath = options.basePath ?? process.cwd();
+  const layout = options.layout ?? claudeCodeLayout;
   const ignore = [...DEFAULT_IGNORE, ...(options.exclude ?? [])];
   const globs = options.testGlobs ?? DEFAULT_TEST_GLOBS;
 
   const surfaces: Surface[] = [];
   if (options.skills !== false)
-    surfaces.push(...discoverSkills(basePath, ignore));
+    surfaces.push(...discoverSkills(basePath, ignore, layout));
   if (options.agents !== false)
-    surfaces.push(...discoverAgents(basePath, ignore));
-  if (options.hooks !== false) surfaces.push(...discoverHooks(basePath));
+    surfaces.push(...discoverAgents(basePath, ignore, layout));
+  if (options.hooks !== false)
+    surfaces.push(...discoverHooks(basePath, layout));
 
   // Every skill/agent/hook is held to the requirement — only an explicit
   // `vigiles:ignore-test` marker exempts a surface (a visible, deliberate skip).

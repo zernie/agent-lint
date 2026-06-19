@@ -1266,7 +1266,7 @@ async function runLint(
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
   // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
-  const untested = checkUntestedSurfaces(config, silent);
+  const untested = checkUntestedSurfaces(config, silent, adapter);
 
   // 7c. Subagent tool-contract check — cross-reference each subagent's `tools:`
   // rail against the harness catalog (the moat). n/a on a harness with no
@@ -2532,6 +2532,7 @@ function checkIntegrityForFiles(
 function checkUntestedSurfaces(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { untested: number; errors: number } {
   const rules = config?.rules;
   const skillSev = ruleSeverity(rules?.["untested-skill"]);
@@ -2550,6 +2551,7 @@ function checkUntestedSurfaces(
   };
   const report = findUntestedSurfaces({
     basePath: process.cwd(),
+    layout: adapter.layout,
     skills: skillSev !== false,
     agents: agentSev !== false,
     hooks: hookSev !== false,
