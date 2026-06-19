@@ -144,6 +144,8 @@ catches a `--trigger`-class problem with **no model**.
 
 ## See also
 
+- [handoff-pr40](handoff-pr40.md) — the resume-here state for the branch this
+  backlog is being worked on (what shipped, disciplines, ranked next steps).
 - [plugin-structural-findings](plugin-structural-findings.md) — the sweep these
   are grounded in (+ the FP lessons that mandate high-precision calibration).
 - [roadmap](roadmap.md) — where these slot into Now/Next (pillar 1).
