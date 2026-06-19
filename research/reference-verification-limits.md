@@ -103,6 +103,19 @@ Existing tools split by **artifact**, and only one group is even about ours:
   verifies a bare prose backtick, or "is `eslint/no-console` enabled," for an
   instruction file. → **Own** — the unfilled niche and the moat.
 
+> **Update (2026-06-19): the niche filled, but unevenly.** A whole category of
+> dedicated instruction-file linters appeared in 2025–2026 (agnix, AgentLint,
+> claudelint, cclint×2, ctxlint, agents-lint, AgentEval, …). The cheap half of
+> Group C is now **commoditized** — file-path and npm-script existence ship in
+> agents-lint/ctxlint/agnix, so vigiles's `file()`/`cmd()` are at parity, not
+> ahead. What stayed **uncontested** is the harder half: catalog _resolution_
+> (vs the competitors' hardcoded tool/event sets and prose heuristics), the
+> harness-surface cross-references (subagent tool contracts, MCP tool→server,
+> hook-event typos), and FP-calibration against real plugins. The linter-rule
+> catalog check specifically is real but **narrow/low-incidence** and should not
+> lead the moat story. Full landscape + the honest moat assessment:
+> `instruction-file-linter-landscape.md`.
+
 ## The floor
 
 **Omission is irreducible.** No tool forces you to document something — "you
@@ -119,3 +132,4 @@ gap is the whole undecidable judgment.
 - `research/symbol-verification.md` — the shipped `vigiles:symbol` design.
 - `research/harness-testing.md` — testing the harness (the no-undecidability-ceiling pillar).
 - `research/skill-authoring-pains.md` — the drift pain this addresses.
+- `research/instruction-file-linter-landscape.md` — the 2026 competitor wave (agnix, AgentLint, cclint, …) and where the moat actually holds.
