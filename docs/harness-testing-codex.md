@@ -133,32 +133,56 @@ vigiles's `agent()` builder doesn't map onto it, so it isn't compiled to Codex
 (`agent-runtime`, the railway result contract) is Claude Code only. See
 [`docs/harnesses.md`](harnesses.md) footnote ¹.
 
-**Tool-call / hook stream parsing is minimal.** The Codex driver parses the final
-assistant text into `output`; `toolCalls` and `hooks` are left empty (the codex
-JSONL schema isn't parsed for the output check). A test that needs to assert on
-tool sequences or hook firing uses Claude Code today.
+**Two stdout formats — note which tier reads which.** The deterministic driver
+(`parseCodexRun`) reads `codex exec`'s plain text into `output` and leaves
+`toolCalls`/`hooks` empty (enough for the mock-turn output check). The **eval**
+tier reads `codex exec --json` and DOES parse tool calls — see the confirmed
+schema next.
 
-**`runEval` / trigger-rate for Codex is in progress** — not yet usable
-end-to-end, so use Claude Code for evals today. What's done: the eval tier's
-trace parsing is now an injectable `ModelOutputParser` (default
-`parseClaudeRun`), so a Codex parser can plug in without touching the Claude path.
-What's left, gated on validating against the live `codex` binary:
+### The `codex exec --json` schema (confirmed against codex-cli 0.139.0)
 
-1. a `codex exec --json` `AgentRunner` + a `parseCodexEvalRun` over Codex's CLI
-   JSONL (today `parseCodexRun` returns `toolCalls: []` by design, so the eval
-   tier can't yet detect a Codex tool/skill call);
-2. `{ adapter }` dispatch on `measureTriggerRate` / `runEval` (mirrors
-   `runHarnessTest`);
-3. **the open question only the binary can answer:** Claude trigger-rate keys on
-   an explicit `Skill` tool_use — Codex skills are progressive-disclosure
-   `SKILL.md` instructions, and whether a skill activation surfaces as a discrete
-   `codex exec --json` event is unconfirmed. If it doesn't, the Codex "fired"
-   predicate becomes a behavioral/judged check rather than a trace predicate.
+Captured from real turns. It's a JSONL **thread/item** event stream:
 
-See the spike + env-validation checklist in
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
-(2026-06-18 update). (Matches the [`docs/harnesses.md`](harnesses.md) matrix
-footnote ² — still don't gate on it.)
+```jsonc
+{"type":"thread.started","thread_id":"…"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution",…}}   // mid-flight
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'echo hi'","aggregated_output":"hi\n","exit_code":0}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"…"}}
+{"type":"turn.completed","usage":{"input_tokens":…,"cached_input_tokens":…,"output_tokens":…}}
+```
+
+`parseCodexEvalRun` (in `vigiles/codex`) maps it to the common `Trace`: assistant
+text = `item.completed`/`agent_message`→`text`; a tool call =
+`item.type:"command_execution"`→`command` (with `aggregated_output`/`exit_code`);
+usage rides `turn.completed`. It counts `item.completed` only — an `item.started`
+repeats the same `id` mid-flight. (Spawn gotcha: stdin must be `/dev/null` or codex
+blocks on "Reading additional input from stdin…".)
+
+### Codex has no "skill selected" event — detect the SKILL.md read
+
+The decisive finding: **Codex's CLI has no Skill-tool concept**, so there is no
+discrete skill-activation event like Claude's `Skill` tool_use. When a skill
+triggers, the model **reads the skill's `SKILL.md` via a `command_execution`**
+(`sed/cat … skills/<name>/SKILL.md`) and usually says so in an `agent_message`. So
+the Codex "fired" predicate is **`codexSkillFired(run, name)`** — it looks for that
+SKILL.md read. Best-effort by nature (a cached skill might not be re-read), so pair
+it with a behavioral/judged check when you need certainty. This was validated live:
+a marker skill triggered and `codexSkillFired` detected it end-to-end.
+
+**`runEval` / trigger-rate for Codex — status.** The parser + runner
+(`parseCodexEvalRun` / `codexEvalRunner` / `codexSkillFired`) are **built and
+live-validated**; what remains is increment 3 — wiring `{ adapter }` dispatch into
+`measureTriggerRate` / `runEval` (runner = `codexEvalRunner`, parse =
+`parseCodexEvalRun`, fired = `codexSkillFired`) so the public API drives a Codex
+eval directly. Until that lands, use Claude Code for evals, or call the codex
+functions directly. **Pin codex 0.139.0** — 0.141.0 has a model-metadata
+regression that breaks the keyless mock recipe. Auth + network egress are required
+for real eval turns (see the auth section above).
+
+See [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
+(2026-06-19 live-capture update) for the full findings. (Matches the
+[`docs/harnesses.md`](harnesses.md) matrix footnote ².)
 
 ## Authenticating Codex (for the eval tier)
 

@@ -1,81 +1,80 @@
 /**
- * Codex eval-parser test suite. SYNTHETIC fixtures — there's no `codex` binary in
- * the build env, so these encode the two PLAUSIBLE `codex exec --json` schemas the
- * tolerant parser targets (the older `{msg:{type,…}}` event stream and the newer
- * `{type:"item.*", item:{…}}` thread/item stream). When the live binary lands,
- * replace these with CAPTURED JSONL and adjust field names if needed (the parser
- * is structured so that's a small edit). Proves: tolerance across both shapes,
- * graceful degradation on junk, and the Claude-shaped output contract.
+ * Codex eval-parser test suite. Fixtures are REAL `codex exec --json` output
+ * captured from codex-cli 0.139.0 (ChatGPT auth) — a plain turn, a tool-calling
+ * turn, and a skill-activating turn. They ground the parser in the confirmed
+ * thread/item schema (assistant = item.completed/agent_message/text; tool =
+ * command_execution/command; usage on turn.completed; item.started deduped).
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { parseCodexEvalRun } from "./eval.js";
+import { parseCodexEvalRun, codexSkillFired } from "./eval.js";
 
-// Older event-stream shape: { msg: { type, … } } per line.
-const EVENT_STREAM = [
-  JSON.stringify({ msg: { type: "task_started" } }),
-  JSON.stringify({
-    msg: { type: "exec_command_begin", command: "grep -r foo" },
-  }),
-  JSON.stringify({
-    msg: { type: "agent_message", message: "Here is the answer." },
-  }),
-  JSON.stringify({
-    msg: { type: "token_count", input_tokens: 1200, output_tokens: 80 },
-  }),
+// Real plain turn.
+const PLAIN = [
+  `{"type":"thread.started","thread_id":"019ede3d-5bcd-7731-80c2-3678a1b86f24"}`,
+  `{"type":"turn.started"}`,
+  `{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"HELLO_CODEX"}}`,
+  `{"type":"turn.completed","usage":{"input_tokens":11625,"cached_input_tokens":4992,"output_tokens":8,"reasoning_output_tokens":0}}`,
 ].join("\n");
 
-// Newer thread/item shape: { type: "item.*", item: { … } } per line.
-const THREAD_ITEM = [
-  JSON.stringify({ type: "turn.started" }),
-  JSON.stringify({
-    type: "item.completed",
-    item: { item_type: "command_execution", command: "ls -la" },
-  }),
-  JSON.stringify({
-    type: "item.completed",
-    item: { item_type: "assistant_message", text: "Done." },
-  }),
-  JSON.stringify({
-    type: "turn.completed",
-    usage: { input_tokens: 50, output_tokens: 10 },
-  }),
+// Real tool-calling turn (note item.started + item.completed for the same id).
+const TOOL = [
+  `{"type":"thread.started","thread_id":"019ede3d-cd48-7bc3-ae50-1b670a261d2b"}`,
+  `{"type":"turn.started"}`,
+  `{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'echo VIGILES_TOOL_TEST'","aggregated_output":"","exit_code":null,"status":"in_progress"}}`,
+  `{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'echo VIGILES_TOOL_TEST'","aggregated_output":"VIGILES_TOOL_TEST\\n","exit_code":0,"status":"completed"}}`,
+  `{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"It printed VIGILES_TOOL_TEST"}}`,
+  `{"type":"turn.completed","usage":{"input_tokens":23349,"cached_input_tokens":16128,"output_tokens":54,"reasoning_output_tokens":0}}`,
 ].join("\n");
 
-test("parseCodexEvalRun reads the older event-stream shape", () => {
-  const r = parseCodexEvalRun({ stdout: EVENT_STREAM });
-  assert.equal(r.output, "Here is the answer.");
-  assert.equal(r.turns, 1);
-  assert.equal(r.toolCalls.length, 1);
-  assert.equal(r.toolCalls[0].name, "grep -r foo");
-  assert.equal(r.usage.inputTokens, 1200);
-  assert.equal(r.usage.outputTokens, 80);
-});
+// Real skill-activating turn — the model READS the SKILL.md via a command_execution.
+const SKILL = [
+  `{"type":"thread.started","thread_id":"019ede3e-b5e3-7090-abb8-5a34ad2eeef2"}`,
+  `{"type":"turn.started"}`,
+  `{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’m using the vigiles-marker skill because you invoked its trigger word."}}`,
+  `{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc \\"sed -n '1,220p' /tmp/cxreal/.codex/skills/vigiles-marker/SKILL.md\\"","status":"in_progress"}}`,
+  `{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc \\"sed -n '1,220p' /tmp/cxreal/.codex/skills/vigiles-marker/SKILL.md\\"","aggregated_output":"---\\nname: vigiles-marker\\n---\\n","exit_code":0,"status":"completed"}}`,
+  `{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"SKILL_FIRED_XYZZY"}}`,
+  `{"type":"turn.completed","usage":{"input_tokens":23704,"cached_input_tokens":16640,"output_tokens":110,"reasoning_output_tokens":0}}`,
+].join("\n");
 
-test("parseCodexEvalRun reads the newer thread/item shape", () => {
-  const r = parseCodexEvalRun({ stdout: THREAD_ITEM });
-  assert.equal(r.output, "Done.");
+test("parseCodexEvalRun reads a plain turn (agent_message + usage)", () => {
+  const r = parseCodexEvalRun({ stdout: PLAIN });
+  assert.equal(r.output, "HELLO_CODEX");
   assert.equal(r.turns, 1);
-  assert.equal(r.toolCalls.length, 1);
-  assert.equal(r.toolCalls[0].name, "ls -la");
-  assert.equal(r.usage.inputTokens, 50);
-});
-
-test("parseCodexEvalRun tolerates junk + falls back to trimmed stdout", () => {
-  // Non-JSON lines and a malformed object are skipped; with no recognised
-  // assistant-text event, output falls back to the trimmed raw stdout.
-  const r = parseCodexEvalRun({
-    stdout: "not json\n{ broken \nplain text reply  \n",
-  });
-  assert.equal(r.output, "not json\n{ broken \nplain text reply");
-  assert.equal(r.turns, 0);
   assert.deepEqual(r.toolCalls, []);
+  assert.equal(r.usage.inputTokens, 11625);
+  assert.equal(r.usage.outputTokens, 8);
+  assert.equal(r.usage.cacheReadTokens, 4992); // cached_input_tokens
 });
 
-test("parseCodexEvalRun returns the Claude-shaped ParsedModelRun contract", () => {
-  const r = parseCodexEvalRun({ stdout: "" });
-  // shape slots straight into the ModelOutputParser seam
+test("parseCodexEvalRun reads a tool turn, deduping item.started/completed", () => {
+  const r = parseCodexEvalRun({ stdout: TOOL });
+  // exactly ONE command_execution (item.started for the same id is not counted)
+  assert.equal(r.toolCalls.length, 1);
+  assert.equal(r.toolCalls[0].name, "/bin/bash -lc 'echo VIGILES_TOOL_TEST'");
+  assert.equal(r.toolCalls[0].resultText, "VIGILES_TOOL_TEST\n");
+  assert.equal(r.toolCalls[0].isError, false);
+  assert.equal(r.output, "It printed VIGILES_TOOL_TEST");
+});
+
+test("codexSkillFired detects a skill via its SKILL.md read", () => {
+  const r = parseCodexEvalRun({ stdout: SKILL });
+  // the trigger surfaced as the model reading vigiles-marker/SKILL.md
+  assert.equal(codexSkillFired(r, "vigiles-marker"), true);
+  assert.equal(codexSkillFired(r, "some-other-skill"), false);
+  // and on a turn with no skill read:
+  assert.equal(
+    codexSkillFired(parseCodexEvalRun({ stdout: PLAIN }), "x"),
+    false,
+  );
+});
+
+test("parseCodexEvalRun is tolerant + returns the Claude-shaped contract", () => {
+  const r = parseCodexEvalRun({ stdout: "not json\n{ broken \nplain reply  " });
+  assert.equal(r.output, "not json\n{ broken \nplain reply"); // fallback to trimmed stdout
+  assert.equal(r.turns, 0);
   assert.deepEqual(Object.keys(r).sort(), [
     "hooks",
     "output",
@@ -84,6 +83,4 @@ test("parseCodexEvalRun returns the Claude-shaped ParsedModelRun contract", () =
     "turns",
     "usage",
   ]);
-  assert.deepEqual(r.hooks, []);
-  assert.deepEqual(r.subagents, []);
 });

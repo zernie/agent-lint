@@ -1,27 +1,29 @@
 /**
- * Codex EVAL-tier transport — increment 2 of native Codex eval (the runner +
- * trace parser that `measureTriggerRate`/`runEval` will dispatch to via the
- * `ModelOutputParser` seam landed in increment 1).
+ * Codex EVAL-tier transport — the runner + trace parser that
+ * `measureTriggerRate`/`runEval` dispatch to via the `ModelOutputParser` seam.
  *
- * ⚠️ STATUS: SCAFFOLD pending live-binary validation. There is no `codex` binary
- * in the build env, so the exact `codex exec --json` line schema is UNVERIFIED.
- * `parseCodexEvalRun` is therefore deliberately TOLERANT and multi-shape: it
- * probes the two plausible Codex JSONL event models (the older `{msg:{type,…}}`
- * event stream and the newer `{type:"item.*", item:{…}}` thread/item stream) and
- * degrades to empty fields on anything it doesn't recognise, rather than
- * crashing. Each extractor is small and isolated so finishing it against captured
- * JSONL is a field-name edit, not a rewrite. See the env-validation checklist in
- * research/codex-prototype-findings.md (2026-06-18 update).
+ * SCHEMA: CONFIRMED against real `codex exec --json` (codex-cli 0.139.0, ChatGPT
+ * auth). The stream is the thread/item model:
  *
- * NOT yet wired into the public `measureTriggerRate({ adapter })` dispatch — that
- * is increment 3, deliberately gated until the schema is confirmed, so an
- * unvalidated parser can't silently report recall 0 under the public API.
+ *   {"type":"thread.started","thread_id":"…"}
+ *   {"type":"turn.started"}
+ *   {"type":"item.started","item":{"id":"item_0","type":"command_execution",…}}   // mid-flight
+ *   {"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"…","aggregated_output":"…","exit_code":0}}
+ *   {"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"…"}}
+ *   {"type":"turn.completed","usage":{"input_tokens":…,"cached_input_tokens":…,"output_tokens":…}}
  *
- * The deepest open question (only the binary can answer): a Claude skill
- * activation is an explicit `Skill` tool_use; a Codex skill is a
- * progressive-disclosure `SKILL.md` instruction, so it may NOT surface as a
- * discrete event at all. If it doesn't, `toolCalls` will not carry a "Skill"
- * entry and the Codex "fired" predicate must become a behavioral/judged check.
+ * So: assistant text = `item.completed` with `item.type:"agent_message"` →
+ * `item.text`; a tool call = `item.type:"command_execution"` → `item.command`;
+ * usage rides `turn.completed`. We count `item.completed` ONLY (an `item.started`
+ * carries the same `id` mid-flight — counting both double-counts).
+ *
+ * THE SKILL FINDING: Codex has NO discrete "skill selected" event (its CLI has no
+ * Skill-tool concept). When a skill triggers, the model READS the skill's
+ * `SKILL.md` via a `command_execution` (`sed/cat … skills/<name>/SKILL.md`) and
+ * usually says so in an `agent_message`. So "did skill X fire" on Codex is not a
+ * clean trace event like Claude's `Skill` tool_use — it's detected by the
+ * SKILL.md read (`codexSkillFired`). Best-effort by nature (a cached skill might
+ * not be re-read); pair with a behavioral/judged check for certainty.
  */
 
 import { spawnSync } from "node:child_process";
@@ -29,10 +31,9 @@ import { spawnSync } from "node:child_process";
 import type { ParsedModelRun } from "../../eval.js";
 import type { ToolCall } from "../../core/harness-driver.js";
 
-/** A single line of `codex exec --json` output, shape-agnostic. */
+/** A line of `codex exec --json` output. */
 interface CodexEvent {
   readonly type?: string;
-  readonly msg?: Record<string, unknown>;
   readonly item?: Record<string, unknown>;
   readonly usage?: Record<string, unknown>;
 }
@@ -55,112 +56,92 @@ function parseLines(stdout: string): CodexEvent[] {
   return out;
 }
 
-// --- shape probes (ASSUMED — verify each against captured `codex exec --json`) ---
-
-/** Assistant text from either event model. */
-function assistantText(e: CodexEvent): string {
-  // older: { msg: { type: "agent_message", message: "…" } }
-  if (str(e.msg?.type) === "agent_message") return str(e.msg?.message);
-  // newer: { type: "item.completed", item: { item_type|type: "assistant_message", text } }
-  const itype = str(e.item?.item_type) || str(e.item?.type);
-  if (
-    e.type?.startsWith("item.") &&
-    /assistant|agent_message|message/.test(itype)
-  ) {
-    return str(e.item?.text);
-  }
-  return "";
+/** Is this completed item a tool/command call (vs an agent_message / error)? */
+function isToolItem(itemType: string): boolean {
+  return (
+    itemType === "command_execution" || /function_call|tool/.test(itemType)
+  );
 }
 
-/** Build a ToolCall from an event's payload object. */
-function buildCall(
-  src: Record<string, unknown> | undefined,
-  fallbackName: string,
-): ToolCall {
+function buildCall(item: Record<string, unknown>, itemType: string): ToolCall {
   return {
-    name: str(src?.name) || str(src?.command) || fallbackName,
-    input: src ?? {},
-    resultText: "",
-    isError: false,
+    // command_execution → the shell command; function-style → its name.
+    name: str(item.command) || str(item.name) || itemType,
+    input: item,
+    resultText: str(item.aggregated_output),
+    isError: num(item.exit_code) !== 0 && item.exit_code != null,
   };
 }
 
-/** A tool/command/function call from either event model, or null. */
-function toolCall(e: CodexEvent): ToolCall | null {
-  // older: { msg: { type: "exec_command_begin"|"function_call", command|name, … } }
-  const mtype = str(e.msg?.type);
-  if (/exec_command|function_call|tool/.test(mtype))
-    return buildCall(e.msg, mtype);
-  // newer: { type: "item.*", item: { item_type|type: "command_execution"|"function_call", … } }
-  const itype = str(e.item?.item_type) || str(e.item?.type);
-  if (e.type?.startsWith("item.") && /command|function_call|tool/.test(itype)) {
-    return buildCall(e.item, itype);
-  }
-  return null;
-}
-
-/** Token usage from a `token_count` event or an inline `usage` block. */
-function usageFromEvent(
-  e: CodexEvent,
-): { input: number; output: number } | null {
-  const u = str(e.msg?.type) === "token_count" ? e.msg : e.usage;
-  if (!u) return null;
+/** Map a `turn.completed` usage block to the common EvalUsage. */
+function usageFrom(u: Record<string, unknown>): ParsedModelRun["usage"] {
   return {
-    input: num(u.input_tokens) || num(u.prompt_tokens),
-    output: num(u.output_tokens) || num(u.completion_tokens),
+    costUsd: 0, // codex on the ChatGPT sub reports no per-run USD
+    durationMs: 0,
+    inputTokens: num(u.input_tokens),
+    outputTokens: num(u.output_tokens),
+    cacheCreationTokens: 0,
+    cacheReadTokens: num(u.cached_input_tokens),
   };
 }
 
-/**
- * Parse `codex exec --json` stdout into the common trace fields. Tolerant by
- * design (see file header). Returns Claude-shaped `ParsedModelRun` so it slots
- * into the `ModelOutputParser` seam unchanged.
- */
+const ZERO_USAGE: ParsedModelRun["usage"] = {
+  costUsd: 0,
+  durationMs: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheCreationTokens: 0,
+  cacheReadTokens: 0,
+};
+
+/** Parse `codex exec --json` stdout into the common trace fields (confirmed schema). */
 export function parseCodexEvalRun(out: { stdout: string }): ParsedModelRun {
-  const events = parseLines(out.stdout);
   const texts: string[] = [];
   const toolCalls: ToolCall[] = [];
-  let inputTokens = 0;
-  let outputTokens = 0;
-  for (const e of events) {
-    const t = assistantText(e);
-    if (t) texts.push(t);
-    const call = toolCall(e);
-    if (call) toolCalls.push(call);
-    const u = usageFromEvent(e);
-    if (u) {
-      inputTokens += u.input;
-      outputTokens += u.output;
+  let usage = ZERO_USAGE;
+  for (const e of parseLines(out.stdout)) {
+    if (e.type === "turn.completed" && e.usage) usage = usageFrom(e.usage);
+    // Count COMPLETED items only — item.started carries the same id mid-flight.
+    if (e.type !== "item.completed" || !e.item) continue;
+    const itemType = str(e.item.type);
+    if (itemType === "agent_message") {
+      const t = str(e.item.text);
+      if (t) texts.push(t);
+    } else if (isToolItem(itemType)) {
+      toolCalls.push(buildCall(e.item, itemType));
     }
   }
   return {
-    // Fallback to the trimmed stdout (what parseCodexRun does) when no assistant
-    // text event was recognised — keeps the output non-empty pre-validation.
+    // Fallback to trimmed stdout if no agent_message was seen (keeps output non-empty).
     output: texts.join("\n") || out.stdout.trim(),
     turns: texts.length,
     toolCalls,
     hooks: [],
     subagents: [],
-    usage: {
-      costUsd: 0, // codex exec is keyless/sub; no per-run USD reported
-      durationMs: 0,
-      inputTokens,
-      outputTokens,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-    },
+    usage,
   };
+}
+
+/**
+ * Did Codex activate skill `name` on this run? Detected by the SKILL.md read —
+ * Codex has no discrete skill-selection event, so when a skill triggers the model
+ * reads its `…/<name>/SKILL.md` via a `command_execution`. Best-effort (a cached
+ * skill might not be re-read); for the trigger-rate `fired` predicate over Codex.
+ */
+export function codexSkillFired(run: ParsedModelRun, name: string): boolean {
+  const needle = `${name}/SKILL.md`;
+  return run.toolCalls.some((c) => str(c.name).includes(needle));
 }
 
 /* v8 ignore start -- real codex subprocess; validated against the binary, not the unit gate */
 /**
  * Spawn real `codex exec --json` for the eval tier (real model, the user's codex
- * auth — NOT the mock). Returns the raw stdout for `parseCodexEvalRun`. Flags are
- * a best guess pending validation: `--json` for the event stream,
- * `--skip-git-repo-check` for a bare temp cwd, `--ignore-user-config` to keep the
- * host config out. The prompt is the trailing positional. Plugin/skill install
- * wiring (where Codex discovers the skills under test) is TODO — confirm with the
- * binary how `codex exec` is pointed at a skill set.
+ * auth — NOT the mock). CONFIRMED flags (codex 0.139.0): `--json` for the event
+ * stream, `--skip-git-repo-check` for a bare cwd, the approvals/sandbox bypass so
+ * the turn runs unattended, `-C <cwd>` for the working dir, prompt as the trailing
+ * positional, and stdin = /dev/null (`stdio: ["ignore",…]`) — codex otherwise
+ * blocks on "Reading additional input from stdin…". Needs ChatGPT/API auth +
+ * network egress to the model backend.
  */
 export function codexEvalRunner(args: {
   task: string;
@@ -173,13 +154,16 @@ export function codexEvalRunner(args: {
       "exec",
       "--json",
       "--skip-git-repo-check",
-      "--ignore-user-config",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "-C",
+      args.cwd,
       args.task,
     ],
     {
       cwd: args.cwd,
       encoding: "utf-8",
       timeout: args.timeoutMs,
+      stdio: ["ignore", "pipe", "pipe"],
       maxBuffer: 64 * 1024 * 1024,
     },
   );
