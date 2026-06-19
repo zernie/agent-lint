@@ -24,6 +24,7 @@ import type { HarnessDialect } from "./core/dialect.js";
 import {
   verifyToolContract,
   confidentToolIssues,
+  disallowedToolIssues,
   type ToolIssue,
 } from "./core/tool-contract.js";
 import {
@@ -33,7 +34,10 @@ import {
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
-import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
+import {
+  parseAgentTools,
+  parseAgentToolList,
+} from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +82,8 @@ export interface ScanAgent {
   readonly toolIssues: readonly ToolIssue[];
   /** MCP tool entries naming a server the plugin doesn't declare (can't resolve). */
   readonly mcpToolIssues: readonly McpToolIssue[];
+  /** `disallowedTools:` block-list entries that are typos of a real tool (block nothing). */
+  readonly disallowedToolIssues: readonly ToolIssue[];
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -338,6 +344,12 @@ function scanAgents(
       mcpToolIssues: tools
         ? verifyMcpToolServers(tools, declaredServers, dialect)
         : [],
+      // The block-list mirror: a `disallowedTools:` entry that's a typo of a real
+      // tool blocks nothing (close-typo only — high-precision). See tool-contract.ts.
+      disallowedToolIssues: disallowedToolIssues(
+        parseAgentToolList(md, "disallowedTools") ?? [],
+        dialect,
+      ),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -667,13 +679,18 @@ function agentLines(a: ScanAgent): string[] {
     a.tools === null
       ? "tools: (inherits all — no contract)"
       : `tools: ${a.tools.join(", ") || "(none)"}`;
-  const broken = a.toolIssues.length + a.mcpToolIssues.length;
+  const broken =
+    a.toolIssues.length +
+    a.mcpToolIssues.length +
+    a.disallowedToolIssues.length;
   let mark = "✓";
   if (broken > 0) mark = "✗";
   else if (a.tools === null) mark = "⚠";
   const lines = [`  ${mark} ${a.name} — ${tools}`];
   for (const issue of a.toolIssues) lines.push(`      ✗ ${issue.message}`);
   for (const issue of a.mcpToolIssues) lines.push(`      ✗ ${issue.message}`);
+  for (const issue of a.disallowedToolIssues)
+    lines.push(`      ✗ ${issue.message}`);
   return lines;
 }
 
@@ -779,7 +796,11 @@ export function formatScanReport(r: ScanReport): string {
     r.hooks.filter((h) => h.status === "missing").length +
     r.skills.filter((s) => !s.hasDescription).length +
     r.agents.reduce(
-      (n, a) => n + a.toolIssues.length + a.mcpToolIssues.length,
+      (n, a) =>
+        n +
+        a.toolIssues.length +
+        a.mcpToolIssues.length +
+        a.disallowedToolIssues.length,
       0,
     ) +
     r.danglingRefs.length +

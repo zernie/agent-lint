@@ -768,6 +768,8 @@ interface LintReport {
   mcpToolErrors: number;
   hookScriptIssues: number;
   hookScriptErrors: number;
+  disallowedToolIssues: number;
+  disallowedToolErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -868,6 +870,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.skillFrontmatterErrors > 0 ||
     report.mcpToolErrors > 0 ||
     report.hookScriptErrors > 0 ||
+    report.disallowedToolErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1275,6 +1278,10 @@ async function runLint(
   // never runs (matches Anthropic's own `claude plugin validate`).
   const hookScripts = checkHookScriptExists(config, silent);
 
+  // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
+  // (the deny-side mirror of agent-tool-contract; close-typo only).
+  const disallowedTools = checkDisallowedTools(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1339,6 +1346,8 @@ async function runLint(
     mcpToolErrors: mcpToolResolves.errors,
     hookScriptIssues: hookScripts.issues,
     hookScriptErrors: hookScripts.errors,
+    disallowedToolIssues: disallowedTools.issues,
+    disallowedToolErrors: disallowedTools.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2698,6 +2707,43 @@ function checkMcpConfig(
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `disallowed-tools-contract` rule: a subagent's `disallowedTools:`
+ * block-list entry that's a close typo of a real tool blocks NOTHING — the tool
+ * it was meant to deny stays available, silently. Reuses `scanPlugin`'s per-agent
+ * `disallowedToolIssues` (close-typo only — high-precision). Warning by default;
+ * "error" gates CI.
+ */
+function checkDisallowedTools(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["disallowed-tools-contract"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+      a.disallowedToolIssues.map((i) => ({ message: i.message, path: a.path })),
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nDisallowed-tools check:\n");
+    for (const issue of found) {
+      console.log(
+        `  ${sev === "error" ? "✗" : "⚠"} ${issue.path}: ${issue.message}`,
+      );
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

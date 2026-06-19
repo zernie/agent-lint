@@ -11,8 +11,23 @@ import {
   verifyToolContract,
   confidentToolIssues,
   closestTool,
+  disallowedToolIssues,
 } from "./tool-contract.js";
 import { claudeCodeDialect as d } from "../adapters/claude-code/dialect.js";
+
+test("disallowedToolIssues flags ONLY a close typo of a real tool (block-list)", () => {
+  // Bsh → typo of Bash (flagged); Bash → legitimately blocked (ok); Agent →
+  // never-available, harmless to list (ok); mcp__x__y → a plugin tool to block
+  // (ok); Zzzzzz → bare unknown, likely a plugin tool, not a typo (suppressed).
+  const issues = disallowedToolIssues(
+    ["Bsh", "Bash", "Agent", "mcp__x__y", "Zzzzzz"],
+    d,
+  );
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].tool, "Bsh");
+  assert.equal(issues[0].suggestion, "Bash");
+  assert.match(issues[0].message, /blocks nothing/);
+});
 
 test("a clean contract (built-ins + MCP) has no issues", () => {
   const issues = verifyToolContract(

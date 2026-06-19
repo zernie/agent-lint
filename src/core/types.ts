@@ -175,6 +175,15 @@ export interface RulesConfig {
    * "warn"; "error" gates CI. Same detector as `scan` (hooks status "missing").
    */
   "hook-script-exists"?: RuleSeverity;
+  /**
+   * Cross-reference a subagent's `disallowedTools:` block-list against the
+   * catalog — the deny-side mirror of `agent-tool-contract`. A close typo there
+   * blocks NOTHING (you meant to deny `Bash`, wrote `Bsh`), leaving the tool
+   * available. High-precision: close-typo only (a never-available tool is
+   * harmless to list, a bare unknown is likely a plugin tool). Default "warn";
+   * "error" gates CI. Same detector as `scan` (disallowedToolIssues).
+   */
+  "disallowed-tools-contract"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

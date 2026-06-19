@@ -71,6 +71,41 @@ export function confidentToolIssues(issues: readonly ToolIssue[]): ToolIssue[] {
 }
 
 /**
+ * Verify a subagent's `disallowedTools:` BLOCK-list — the mirror of the allow
+ * contract. A typo here is dangerous: you meant to block `Bash` but wrote `Bsh`,
+ * so nothing is blocked and the dangerous tool stays available, silently. Returns
+ * one {@link ToolIssue} per entry that's a CLOSE TYPO of a real built-in (the
+ * high-confidence signal). Deliberately NOT flagged: a real built-in (it IS being
+ * blocked — correct), a never-available tool (harmless to block), an MCP tool (a
+ * legitimate plugin tool to block), or a bare unknown with no near match (likely
+ * a plugin/MCP tool, not a typo — the cry-wolf trap). The block-list inverts the
+ * allow check: never-available is fine to list, a typo is the actual defect.
+ */
+export function disallowedToolIssues(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): ToolIssue[] {
+  const never = new Set(dialect.neverAvailableTools);
+  const issues: ToolIssue[] = [];
+  for (const raw of tools) {
+    const tool = raw.split("(")[0].trim();
+    if (tool === "" || tool === "*") continue;
+    if (dialect.builtinAgentTools.includes(tool)) continue; // legitimately blocked
+    if (never.has(tool)) continue; // harmless to list (already unavailable)
+    if (dialect.mcpToolPattern.test(tool)) continue; // a real plugin/MCP tool to block
+    const near = closestTool(tool, dialect);
+    if (near === null) continue; // bare unknown → likely a plugin tool, not a typo
+    issues.push({
+      tool,
+      kind: "unknown",
+      suggestion: near,
+      message: `disallowedTools entry "${tool}" matches no real tool — it blocks nothing. Did you mean "${near}"?`,
+    });
+  }
+  return issues;
+}
+
+/**
  * Verify a subagent's `tools:` contract against the dialect catalog. Returns one
  * {@link ToolIssue} per offending entry (empty when every tool is a real built-in
  * or a well-formed MCP tool). A `Tool(restriction)` suffix (e.g. `Bash(git:*)`)

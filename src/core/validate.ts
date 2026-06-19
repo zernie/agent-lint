@@ -92,6 +92,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "mcp-tool-resolves": "warn",
   // A hook script referenced but missing never runs — on by default at warn.
   "hook-script-exists": "warn",
+  // High-precision (close-typo only) deny-list mirror of agent-tool-contract.
+  "disallowed-tools-contract": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

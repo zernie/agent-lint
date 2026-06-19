@@ -64,14 +64,26 @@ function extractFrontmatter(markdown: string): string | null {
  * an empty list (`tools:` with nothing after it) means "no tools allowed".
  */
 export function parseAgentTools(markdown: string): string[] | null {
+  return parseAgentToolList(markdown, "tools");
+}
+
+/**
+ * Parse a comma/array tool list under an arbitrary frontmatter `key` (e.g.
+ * `tools:` or `disallowedTools:`). Returns the parsed tool names, or `null` when
+ * the key is absent. Handles the inline ARRAY form (`key: [Read, "Bash"]`) as
+ * well as the bare comma list — strip surrounding brackets, then per-token quotes.
+ * Without this a contract reads `[Read` / `Bash]`, which both breaks the
+ * PreToolUse rail and trips the tool-contract checks. Shared by the rail
+ * (`tools:`) and the `disallowed-tools-contract` scan/lint (`disallowedTools:`).
+ */
+export function parseAgentToolList(
+  markdown: string,
+  key: string,
+): string[] | null {
   const fm = extractFrontmatter(markdown);
   if (fm === null) return null;
-  const match = /^tools:[ \t]*(.*)$/m.exec(fm);
+  const match = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(fm);
   if (!match) return null;
-  // Handle the inline ARRAY form too (`tools: [Read, Bash]` / `["Read","Bash"]`),
-  // not just the bare comma list — strip surrounding brackets, then per-token
-  // quotes. Without this a contract reads `[Read` / `Bash]`, which both breaks the
-  // PreToolUse rail (it would block `Read`) and trips the tool-contract check.
   return match[1]
     .replace(/^\[|\]$/g, "")
     .split(",")

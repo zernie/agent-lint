@@ -438,6 +438,7 @@ describe("loadConfig", () => {
       "skill-frontmatter": "warn",
       "mcp-tool-resolves": "warn",
       "hook-script-exists": "warn",
+      "disallowed-tools-contract": "warn",
     });
   });
 

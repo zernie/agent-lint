@@ -25,16 +25,16 @@ MCP stdio/http config. Those are now PARITY, not moat.
 
 Legend: ✓same · ~ partial/schema-only · ✗ absent.
 
-| vigiles rule                              | agnix          | claudelint / cclint | `claude plugin validate` (**official**) | eval tools (promptfoo/DeepEval/Inspect) | MCP / security scanners |
-| ----------------------------------------- | -------------- | ------------------- | --------------------------------------- | --------------------------------------- | ----------------------- |
-| `agent-tool-contract` (tool in catalog)   | ~ (CC-SK-008)  | ~ known-tools       | ✗ (only checks it's an array)           | ✗                                       | ✗                       |
-| `hook-events` (event name real)           | ✓ (CC-HK-001)  | ✓                   | ✓                                       | ✗                                       | ✗                       |
-| `agent-frontmatter` (name/desc)           | ✓              | ✓ (+color, +model)  | ✓ (+color, +model)                      | ✗                                       | ✗                       |
-| `skill-frontmatter` (recommend)           | ~              | ✓                   | ~                                       | ✗                                       | ✗                       |
+| vigiles rule                              | agnix          | claudelint / cclint | `claude plugin validate` (**official**) | eval tools (promptfoo/DeepEval/Inspect) | MCP / security scanners  |
+| ----------------------------------------- | -------------- | ------------------- | --------------------------------------- | --------------------------------------- | ------------------------ |
+| `agent-tool-contract` (tool in catalog)   | ~ (CC-SK-008)  | ~ known-tools       | ✗ (only checks it's an array)           | ✗                                       | ✗                        |
+| `hook-events` (event name real)           | ✓ (CC-HK-001)  | ✓                   | ✓                                       | ✗                                       | ✗                        |
+| `agent-frontmatter` (name/desc)           | ✓              | ✓ (+color, +model)  | ✓ (+color, +model)                      | ✗                                       | ✗                        |
+| `skill-frontmatter` (recommend)           | ~              | ✓                   | ~                                       | ✗                                       | ✗                        |
 | `mcp-config` (server can start)           | ~ (MCP-024)    | ~                   | **✓** (stdio/http)                      | ✗                                       | ~ (rug-pull fingerprint) |
-| `mcp-tool-resolves` (server declared)     | ✗ (field only) | ✗                   | ✗                                       | ✗                                       | ✗                       |
-| `enforce()` linter-rule cross-ref (7 cat) | ✗              | ✗                   | ✗                                       | ✗                                       | ✗                       |
-| harness **testing** (runHook/eval)        | ✗              | ✗                   | ✗                                       | ✓ (their core)                          | ✗                       |
+| `mcp-tool-resolves` (server declared)     | ✗ (field only) | ✗                   | ✗                                       | ✗                                       | ✗                        |
+| `enforce()` linter-rule cross-ref (7 cat) | ✗              | ✗                   | ✗                                       | ✗                                       | ✗                        |
+| harness **testing** (runHook/eval)        | ✗              | ✗                   | ✗                                       | ✓ (their core)                          | ✗                        |
 
 Categories that are **orthogonal** (positioning boundaries, not competitors):
 
