@@ -1,4 +1,4 @@
-# frontmatter-schema
+# agent-frontmatter
 
 Flag a **subagent** (`agents/*.md`) missing a required frontmatter field. Per the
 [subagent docs](https://code.claude.com/docs/en/sub-agents), a subagent
@@ -30,7 +30,7 @@ frontmatter at all** — they never register. See
 ## Configuration
 
 ```json
-{ "rules": { "frontmatter-schema": "warn" } }
+{ "rules": { "agent-frontmatter": "warn" } }
 ```
 
 ### Severity

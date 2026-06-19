@@ -83,7 +83,7 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   // High-precision (close typos only), on by default at warn.
   "hook-events": "warn",
   // Missing required frontmatter (name/description) — on by default at warn.
-  "frontmatter-schema": "warn",
+  "agent-frontmatter": "warn",
   // A declared MCP server with no command/url can't start — on by default at warn.
   "mcp-config": "warn",
   // Best-practice nudge (skills load without frontmatter) — warn, not error.

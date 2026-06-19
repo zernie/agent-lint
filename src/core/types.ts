@@ -142,7 +142,7 @@ export interface RulesConfig {
    * `name` (to load), an agent needs `name` + `description`. A broken surface
    * that won't register. Default "warn"; "error" gates CI. Same detector as `scan`.
    */
-  "frontmatter-schema"?: RuleSeverity;
+  "agent-frontmatter"?: RuleSeverity;
   /**
    * Flag a declared MCP server that can't start — neither a `command` (stdio)
    * nor a `url` (http/sse). Default "warn"; "error" gates CI. Same detector as
