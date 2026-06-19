@@ -17,6 +17,7 @@ import {
   suggestedTestPath,
 } from "./test-coverage.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
+import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
 
 function write(dir: string, rel: string, content: string): void {
   const abs = join(dir, rel);
@@ -27,6 +28,54 @@ function write(dir: string, rel: string, content: string): void {
 function skill(name: string, extra = ""): string {
   return `---\nname: ${name}\ndescription: A skill that does ${name} things for tests\n${extra}---\n\n# ${name}\n`;
 }
+
+test("surface discovery + hook-token are layout-driven (non-CC harness)", () => {
+  // A harness with its OWN surface dirs and plugin-root token — proves the
+  // de-CC-ing: skills/agents are found at the layout's dirs and a hook script is
+  // resolved through the layout's token, NOT hard-coded `skills/`/`agents/`/
+  // `${CLAUDE_PLUGIN_ROOT}`. (Regression guard for the scan.ts/test-coverage.ts
+  // hard-codings.)
+  const dir = makeTmpDir("tc-layout");
+  write(dir, "mysurf/skill/foo/SKILL.md", skill("foo"));
+  write(dir, "mysurf/agent/bar.md", skill("bar"));
+  write(dir, "hooks/present.sh", "#!/bin/sh\n");
+  write(
+    dir,
+    "my-manifest.json",
+    JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          { hooks: [{ command: "$MY_PLUGIN_ROOT/hooks/present.sh" }] },
+        ],
+      },
+    }),
+  );
+
+  const layout = {
+    ...claudeCodeLayout,
+    skillDir: "mysurf/skill",
+    agentDir: "mysurf/agent",
+    commandDir: "mysurf/command",
+    materializeRoot: "",
+    manifestPath: "my-manifest.json",
+    pluginRootToken: "${MY_PLUGIN_ROOT}",
+  };
+
+  const r = findUntestedSurfaces({ basePath: dir, layout });
+  const byKind = (k: string) =>
+    r.untested.filter((s) => s.kind === k).map((s) => s.name);
+  assert.deepEqual(byKind("skill"), ["foo"], "skill found at layout.skillDir");
+  assert.deepEqual(byKind("agent"), ["bar"], "agent found at layout.agentDir");
+  assert.deepEqual(
+    byKind("hook"),
+    ["present"],
+    "hook resolved via layout.pluginRootToken (unbraced $MY_PLUGIN_ROOT)",
+  );
+
+  // The default Claude Code layout sees none of it (different dirs/token).
+  assert.equal(findUntestedSurfaces({ basePath: dir }).total, 0);
+  cleanupTmpDir(dir);
+});
 
 test("skill is covered by a colocated eval", () => {
   const dir = makeTmpDir("tc-coloc");
