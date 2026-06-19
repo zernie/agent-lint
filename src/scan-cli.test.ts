@@ -167,6 +167,29 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     assert.match(r.stdout, /beta/);
   });
 
+  it("curated marketplace (all external members): reports honestly, not 'empty'", () => {
+    // obra/superpowers-marketplace, anthropics/claude-plugins-community shape —
+    // every member is an external git/url plugin, nothing on disk.
+    mk(
+      "curated/.claude-plugin/marketplace.json",
+      JSON.stringify({
+        name: "curated",
+        plugins: [
+          { name: "p1", source: { source: "url", url: "https://x/1.git" } },
+          { name: "p2", source: { source: "url", url: "https://x/2.git" } },
+        ],
+      }),
+    );
+    const r = run(`scan ${join(root, "curated")}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(
+      r.stdout,
+      /Marketplace "curated": 2 plugin\(s\), all external/,
+    );
+    assert.doesNotMatch(r.stdout, /no structural issues found/);
+    assert.doesNotMatch(r.stdout, /nothing was loaded/);
+  });
+
   it("--json emits a parseable report with the instruction file", () => {
     const r = run(`scan ${join(root, "codex")} --json`);
     assert.equal(r.exitCode, 0);
