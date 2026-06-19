@@ -353,30 +353,27 @@ test("scanPlugin does NOT flag a hooks ARRAY (non-CC custom format)", () => {
   cleanupTmpDir(dir);
 });
 
-test("scanPlugin flags missing required frontmatter (skill name, agent name+description)", () => {
+test("frontmatter-schema flags a prose-only AGENT, but NOT a frontmatter-less skill", () => {
   const dir = makeTmpDir("scan-fm");
-  // ananddtyagi shape: a skill with no frontmatter, and a subagent that's pure prose.
+  // A skill with NO frontmatter still loads in CC (name←dir, description←first
+  // body paragraph), so it must NOT be flagged — that was a false positive.
   write(
     dir,
     "skills/noname/SKILL.md",
     "# Crisis Advisor\n\nprose, no frontmatter\n",
   );
+  // A subagent REQUIRES name+description (no fallback) → a prose-only one won't
+  // register. This is the real bug class.
   write(
     dir,
     "agents/proseonly.md",
     "You are an expert. No frontmatter here.\n",
   );
-  // a skill with description but no name (han shape) → missing name only
-  write(
-    dir,
-    "skills/desc-only/SKILL.md",
-    "---\ndescription: A skill with a description but no name field at all here\n---\n# x\n",
-  );
   const r = scanPlugin(dir);
-  const descOnly = r.frontmatterIssues.find((i) =>
-    i.path.includes("desc-only"),
+  assert.ok(
+    !r.frontmatterIssues.some((i) => i.path.includes("noname")),
+    "a frontmatter-less skill is NOT flagged (dir/body fallbacks)",
   );
-  assert.deepEqual(descOnly?.missing, ["name"], "skill with desc but no name");
   assert.ok(
     r.frontmatterIssues.some(
       (i) =>
@@ -385,7 +382,7 @@ test("scanPlugin flags missing required frontmatter (skill name, agent name+desc
         i.missing.includes("name") &&
         i.missing.includes("description"),
     ),
-    "a prose-only agent is missing both",
+    "a prose-only agent is missing both required fields",
   );
   assert.match(formatScanReport(r), /Frontmatter/);
   cleanupTmpDir(dir);
