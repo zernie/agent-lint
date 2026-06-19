@@ -193,19 +193,51 @@ recall 0 under the public API.
 `runHarnessTest`), selecting `{ runner, parse }` per adapter — wired only after the
 schema (and the skill-selection question) is confirmed against the binary.
 
-### Env-validation checklist (when the `codex` binary lands)
+## UPDATE (2026-06-19): live capture — schema CONFIRMED, skill question ANSWERED
 
-- [x] Install + auth: `npm i -g @openai/codex` (validated 0.141.0); auth in a
+Authed real codex (ChatGPT device-auth, **codex-cli 0.139.0** — `0.141.0` has a
+model-metadata regression that breaks the keyless mock recipe, so pin 0.139) and
+captured real `codex exec --json` turns. Findings:
+
+- **Schema confirmed (thread/item):** assistant = `item.completed` with
+  `item.type:"agent_message"` → `item.text`; tool = `item.type:"command_execution"`
+  → `item.command` (+ `aggregated_output`, `exit_code`); usage rides
+  `turn.completed` (`input_tokens` / `output_tokens` / `cached_input_tokens`). An
+  `item.started` repeats the same `id` mid-flight, so count `item.completed` ONLY.
+- **The gating unknown is ANSWERED — no discrete skill event.** Codex's CLI has no
+  Skill-tool concept; when a skill triggers, the model **reads the skill's
+  `SKILL.md` via a `command_execution`** (`sed/cat … skills/<name>/SKILL.md`) and
+  usually says so in an `agent_message`. So the Codex "fired" predicate is the
+  SKILL.md read (`codexSkillFired`), not a trace event — best-effort, pair with a
+  judged check for certainty.
+- **Increment 2 finalized + live-validated:** `parseCodexEvalRun` rewritten to the
+  confirmed schema, fixtures replaced with REAL captures, `codexSkillFired` added;
+  the shipped `codexEvalRunner → parseCodexEvalRun → codexSkillFired` chain was run
+  end-to-end against the live binary (a marker skill fired and was detected).
+- Spawn gotcha: stdin must be `/dev/null` (`stdio:["ignore",…]`) — codex otherwise
+  blocks on "Reading additional input from stdin…".
+
+Remaining: **increment 3** — wire `{ adapter }` dispatch into
+`measureTriggerRate`/`runEval` (runner = `codexEvalRunner`, parse =
+`parseCodexEvalRun`, fired = `codexSkillFired`) and run the haretrail EN-vs-RU
+eval natively. Needs network egress to the model backend on each run.
+
+### Env-validation checklist
+
+- [x] Install + auth: `npm i -g @openai/codex` (pin **0.139.0**; 0.141 regressed);
+      auth in a
       remote/headless box via `codex login --device-auth` (URL + one-time code, no
       `localhost` callback — the only flow that works in a sandbox), or
       `printenv OPENAI_API_KEY | codex login --with-api-key`. Deterministic tier is
       keyless; only the eval tier needs this + network egress. See the auth section
       in `docs/harness-testing-codex.md`.
-- [ ] Capture `codex exec --json` JSONL for (a) a plain text turn, (b) a
+- [x] Capture `codex exec --json` JSONL for (a) a plain text turn, (b) a
       tool-calling turn, (c) a skill-activating turn → confirm the line schema.
-- [ ] Answer the gating unknown: is a skill activation a discrete event? If yes,
-      its shape; if no, redefine the Codex "fired" predicate as behavioral/judged.
-- [ ] Finish `parseCodexEvalRun` against the real schema; replace the synthetic
+- [x] Answer the gating unknown — ANSWERED: a skill activation is NOT a discrete
+      event; it's the model reading `skills/<name>/SKILL.md` via a
+      `command_execution`, so the Codex "fired" predicate is `codexSkillFired`
+      (the SKILL.md read), best-effort, pair with a judged check.
+- [x] Finish `parseCodexEvalRun` against the real schema; replace the synthetic
       fixtures with captured ones.
 - [ ] Wire `codexAdapter` → `{ runner, parse }` and validate end-to-end against a
       real Codex skill pack (re-run the haretrail EN-vs-RU cross-language eval
