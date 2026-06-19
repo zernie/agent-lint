@@ -782,9 +782,17 @@ export function expandMarketplace(
   return mp ? [...mp.onDisk] : null;
 }
 
-function section(title: string, lines: readonly string[]): string[] {
+// `count` defaults to the number of lines, but a section whose entries span
+// multiple lines (Agents: a header + indented issue lines; Hooks: file hooks +
+// an inline-summary line) passes the real entity count so the header isn't
+// inflated by sub-lines.
+function section(
+  title: string,
+  lines: readonly string[],
+  count: number = lines.length,
+): string[] {
   if (lines.length === 0) return [];
-  return [`${title} (${String(lines.length)}):`, ...lines, ""];
+  return [`${title} (${String(count)}):`, ...lines, ""];
 }
 
 /** One skill's report line: ✓/⚠ + name + notes (no-trigger, user-invoked, language risk). */
@@ -837,7 +845,7 @@ export function formatScanReport(r: ScanReport): string {
 
   out.push(...section("Skills", r.skills.map(skillLine)));
 
-  out.push(...section("Agents", r.agents.flatMap(agentLines)));
+  out.push(...section("Agents", r.agents.flatMap(agentLines), r.agents.length));
 
   const hookMark: Record<HookStatus, string> = {
     ok: "✓",
@@ -857,7 +865,9 @@ export function formatScanReport(r: ScanReport): string {
       `  · ${String(r.inlineHooks)} inline hook(s) (no script file)`,
     );
   }
-  out.push(...section("Hooks", hookLines));
+  out.push(
+    ...section("Hooks", hookLines, r.hooks.length + r.inlineHooks),
+  );
 
   out.push(
     ...section(
