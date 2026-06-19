@@ -44,6 +44,70 @@ All are deterministic at the core (a few add optional LLM scoring). The category
 active, and growing — `agnix` alone ships an LSP, four IDE integrations, and weekly
 releases.
 
+## Capability matrix (capability × tool)
+
+Legend: ✓ full · ~ shallow/partial (e.g. a hardcoded list, presence-only) · ✗ none.
+Columns: **vig**=vigiles, **agnx**=agnix, **AgL**=AgentLint, **cll**=claudelint,
+**ccl**=cclint, **ctx**=ctxlint/agents-lint, **AgE**=AgentEval, **rev**=CodeRabbit/Greptile.
+
+| Capability                                          | vig | agnx | AgL | cll | ccl | ctx | AgE | rev |
+| --------------------------------------------------- | --- | ---- | --- | --- | --- | --- | --- | --- |
+| Structure / frontmatter schema                      | ✓   | ✓    | ✓   | ✓   | ✓   | ✓   | ✓   | ✗   |
+| Secrets / security scan                             | ~   | ✓    | ✓   | ✓   | ~   | ✓   | ~   | ✓   |
+| Prose quality (vague language)                      | ✗   | ✓    | ✓   | ~   | ✓   | ✓   | ✓   | ✗   |
+| File-path exists                                    | ✓   | ✓    | ✓   | ~   | ~   | ✓   | ✓   | ✗   |
+| npm-script exists (package.json)                    | ✓   | ✗    | ~   | ✗   | ✗   | ✓   | ✗   | ✗   |
+| **Linter-rule catalog (exists + enabled, 7 APIs)**  | ✓   | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | ✗   |
+| **Subagent tool-contract (catalog + did-you-mean)** | ✓   | ✗    | ✗   | ✗   | ~   | ✗   | ✗   | ✗   |
+| **MCP tool → declared-server resolution**           | ✓   | ✗    | ✗   | ~   | ✗   | ✗   | ✗   | ✗   |
+| **Hook-event typo (catalog, framework-aware)**      | ✓   | ✗    | ~   | ~   | ~   | ✗   | ✗   | ✗   |
+| **Cross-lang symbol refs / description-overlap**    | ✓   | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | ✗   |
+| **FP-calibration vs real plugins**                  | ✓   | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | ✗   |
+| Auto-fix                                            | ~   | ✓    | ✓   | ✓   | ✓   | ✓   | ✗   | ✓   |
+| LSP / IDE integration                               | ✗   | ✓    | ✗   | ✗   | ~   | ✗   | ✗   | ~   |
+| Templates / scaffolding                             | ✓   | ✗    | ~   | ~   | ✗   | ~   | ✗   | ✗   |
+| **Cross-harness DEPTH** (compile + test + x-ref)    | ✓   | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | ✗   |
+| Cross-harness BREADTH (formats covered)             | ~   | ✓    | ✓   | ✗   | ✗   | ✓   | ✓   | ~   |
+| Ease of adoption (agent-run init, md on-ramps)      | ✓   | ~    | ~   | ~   | ~   | ~   | ~   | ✓   |
+| **Harness TESTING (hooks fire / skill trigger)**    | ✓   | ✗    | ✗   | ✗   | ✗   | ✗   | ~   | ✗   |
+
+The bold rows are where vigiles is alone or near-alone. Note the two cross-harness rows are
+different bets: **agnix wins breadth** (11 formats, structural rules per format); **vigiles
+wins depth** (the only tool that compiles, tests, AND cross-references per harness via
+adapters — but on 2 harnesses today). Don't claim breadth; claim depth.
+
+## Do their rules make sense, or is most of it noise?
+
+Rule **count is a vanity metric**. The axis that matters is **signal per rule**: does a
+rule catch a _silent failure_ (something that breaks the agent and nothing tells you), or
+is it a style/opinion nitpick? The field skews hard to the second, because style rules are
+cheap to write by the hundred.
+
+- **High-signal (catches a silent failure):** hook script missing, hook-event typo (the
+  hook never fires), circular `@import` (infinite loop), MCP server can't start, a
+  never-available/typo'd tool silently dropped, a rule named but not enabled. The
+  "valid is not true" class — the bug doesn't surface until the agent quietly does the
+  wrong thing.
+- **Noise / vanity:** kebab-case naming, file-size/line caps, "vague language" / "generic
+  instruction" detection (agnix flags `Be helpful and accurate` as a finding),
+  emphasis-density, token-budget heuristics, and 0–100 "quality scores" across subjective
+  dimensions (AgentLint's findability/clarity, AgentLinter's 8 weighted dims). Opinionated,
+  fuzzy, and the first thing a team mutes.
+
+Per tool: **agnix's 425** and **claudelint's 114** have a real high-signal _core_ (circular
+import, hook-script existence, MCP transport) that **overlaps vigiles**, wrapped in a long
+structural/style tail padding the count across 11 harnesses. **AgentLint / AgentLinter** are
+the most noise-heavy — their product _is_ the subjective 0–100 score. **cclint**'s
+`karpathy` rules are explicitly opinion. None of the noisy tail catches a silent failure; it
+catches taste.
+
+So a big rule count signals **breadth of opinion, not depth of verification**. vigiles's
+posture is the inverse — **a small set of rules each tied to a silent-failure class,
+FP-calibrated against real plugins so it doesn't cry wolf** (the vendored-plugin FP-guard +
+true-positive tests). That is itself an _adoption_ argument: a noisy linter gets disabled
+within a week; a high-signal one that only speaks when something is actually broken stays
+wired into CI. **Fewer-but-true beats 425-but-mostly-taste.**
+
 ## Commoditized vs. still-uncontested
 
 Three buckets, and only the third is a durable edge:
@@ -122,16 +186,49 @@ not a nicety** — vigiles's markdown-mode reference extraction should walk a Co
 - **AgentEval** — closest to the layer-2 eval frame (measures behavioural impact of an
   instruction-file change); early (≈67 commits) but the one to watch on the testing axis.
 
-## Recommendation
+## Strategy: beat, subsume, delegate — and the one wedge
 
-1. **Don't lead positioning on the rule-catalog check.** Lead on FP-calibrated,
-   multi-surface cross-referencing (harness tool/MCP/hook resolution against live
-   catalogs) + the harness-testing layer.
-2. **AST-ify markdown-mode extraction** — competitive parity with agnix, not polish.
-3. **Templates are an authoring feature, not a moat** — ship them for spec ergonomics;
-   don't pitch them as the differentiator.
-4. **Own the "harness engineering" category** vigiles sits in (Faros / Atlan / the
-   Linux-Foundation AAIF coined it) — aware that AgentLint already uses the phrase.
+You don't out-rule agnix (425 structural rules, an LSP, 4 IDEs) and you shouldn't try.
+Split the field three ways.
+
+**BEAT** (widen and lead — structurally ahead, not cheaply copyable):
+
+- The **cross-referencing engine** — catalog resolution + harness surfaces + FP-calibration
+  (the bold matrix rows). Fewer-but-true, each rule a silent-failure class.
+- **Harness testing** (layer 2) — uncontested, no ceiling. The apex.
+- **Cross-harness DEPTH** — the only tool that compiles + tests + cross-references per
+  harness via adapters. Lead on depth, never breadth.
+- **Ease of adoption** — agent-run `init` (non-interactive, the agent installs it), the
+  markdown ladder (inline → frontmatter → spec), install-as-the-agent flow. A high-signal
+  linter that an agent wires up unattended is a different product from a 425-rule CLI a
+  human has to configure and then mute.
+
+**SUBSUME** (reach parity cheaply so nobody needs a second tool): the table-stakes
+structural / secrets / path / script checks — fold the **high-signal subset** into
+`scan`/`lint` so "I'll also run agnix" loses its reason. Do **not** chase 425 rules or the
+noisy tail; absorb the silent-failure catchers (circular import, hook-script-exists, MCP
+startability — much already shipped) and skip the taste-scoring.
+
+**DELEGATE / don't fight:**
+
+- **LSP / IDE polish** — agnix is far ahead; a thin LSP is a maybe-later, not the moat.
+- **Sync / distribution** — Ruler / rulesync; compose, don't absorb (existing stance).
+- **AI code review** — CodeRabbit / Greptile; a different product (they _use_ the file,
+  don't validate it).
+- **Deep security scanning** — SkillSpector / Semgrep; delegate.
+
+**The one wedge — and it is NOT templating.** Templating is a feature, not an identity:
+spec-tier, off the market's preferred surface, and already half-shipped by claudelint/cclint.
+The sharpest single wedge is: **"test your harness, don't just lint it" — cross-harness, and
+easy enough that the agent installs it.** Lint the references for free (the high-signal
+floor); then test that the hooks fire and the skills trigger, on your Claude subscription.
+Everyone else lints a markdown file; only vigiles tests the assembled machine, across
+harnesses, with an adoption path an agent runs unattended. **Make the linting the free
+funnel; make the testing the identity.**
+
+Supporting moves: AST-ify markdown extraction (parity with agnix, not polish); own the
+"harness engineering" category (Faros / Atlan / Linux-Foundation AAIF coined it — aware
+AgentLint already uses the phrase); keep the rule set small, true, and FP-calibrated.
 
 ## See also
 
