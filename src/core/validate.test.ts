@@ -433,7 +433,7 @@ describe("loadConfig", () => {
       "unmarked-refs": "warn",
       "agent-tool-contract": "warn",
       "hook-events": "warn",
-      "frontmatter-schema": "warn",
+      "agent-frontmatter": "warn",
       "mcp-config": "warn",
       "skill-frontmatter": "warn",
     });

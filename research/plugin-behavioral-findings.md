@@ -196,7 +196,7 @@ eval-ready cluster prompt set is saved at
 > the full deterministic cross-referencing **moat** as 4 lint rules + scan checks,
 > each one shared detector reused by scan + lint (+ compileAgent for tools), all
 > calibrated high-precision against the 444-plugin sweep:
-> `agent-tool-contract` (#1), `hook-events` (#2), `frontmatter-schema` (#3,
+> `agent-tool-contract` (#1), `hook-events` (#2), `agent-frontmatter` (#3,
 > subagents-only — skills need no frontmatter, empirically confirmed),
 > `mcp-config` (#4). Plus scanner FP-hardening (curated-marketplace, han dedup,
 > quoted-desc, relative/guarded hooks, project-rooted refs, `tools:*` wildcard).

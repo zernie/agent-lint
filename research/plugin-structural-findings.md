@@ -51,7 +51,7 @@ matters).
 > worst its fallback description is a weak trigger surface — a behavioral concern,
 > not a structural one). The real, verified bug is the **subagents**: `name` +
 > `description` ARE required for a subagent, with no fallback, so a prose-only
-> agent file never registers. The `frontmatter-schema` rule was corrected to
+> agent file never registers. The `agent-frontmatter` rule was corrected to
 > check agents only.
 
 > ✅ **Empirically confirmed (2026-06-19, claude 2.1.183), not just doc-inferred.**

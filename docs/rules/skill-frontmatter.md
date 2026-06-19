@@ -10,7 +10,7 @@ boilerplate, making a weak, accidental trigger surface. An explicit
 `name` + `description` is the reliable, intentional choice.
 
 This is a **best-practice nudge, not a correctness check** — distinct from
-[`frontmatter-schema`](frontmatter-schema.md), which flags _subagents_ that
+[`agent-frontmatter`](agent-frontmatter.md), which flags _subagents_ that
 genuinely won't register without required frontmatter. Same detector `scan` uses
 (`skillMetaIssues`); reported as a soft `ℹ` note in `scan` (never counted as a
 structural defect or scored on the leaderboard).
@@ -53,5 +53,5 @@ write a real one in the first place.
 
 ## See also
 
-- [`frontmatter-schema`](frontmatter-schema.md) — the subagent **requirement**
+- [`agent-frontmatter`](agent-frontmatter.md) — the subagent **requirement**
   (won't register), vs this skill **recommendation** (still loads).
