@@ -26,7 +26,8 @@ import type {
   RailwayStep,
 } from "./spec.js";
 
-import { checkLinterRule, extractLinterName, editDistance } from "./linters.js";
+import { checkLinterRule, extractLinterName } from "./linters.js";
+import { verifyToolContract } from "./tool-contract.js";
 import type { LinterCheckResult } from "./linters.js";
 import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
 
@@ -867,45 +868,17 @@ export function compileSkill(
 // an agent()'s tool contract (its built-in catalog) — only the OUTPUT renderer
 // is CC-only here. See research/codex-prototype-findings.md (gaps).
 
-/** Closest known tool by edit distance (≤ 3), for a "did you mean" hint. */
-function closestTool(tool: string, dialect: HarnessDialect): string | null {
-  let best: string | null = null;
-  let bestDistance = Infinity;
-  for (const known of dialect.builtinAgentTools) {
-    const d = editDistance(tool.toLowerCase(), known.toLowerCase());
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = known;
-    }
-  }
-  return bestDistance <= 3 ? best : null;
-}
-
-/** Verify a subagent's allowed-tools contract — the rails are real tools. */
+/** Verify a subagent's allowed-tools contract — the rails are real tools. The
+ * detection lives in the shared `verifyToolContract` detector (one-detector-no-
+ * drift: compile + scan + the agent-tool-contract lint rule call the same code). */
 function validateAgentTools(
   tools: readonly string[],
   dialect: HarnessDialect,
 ): CompileError[] {
-  const never = new Set(dialect.neverAvailableTools);
-  const errors: CompileError[] = [];
-  for (const tool of tools) {
-    if (never.has(tool)) {
-      errors.push({
-        type: "unknown-tool",
-        message: `Tool "${tool}" is never available to a subagent — remove it from the tools list.`,
-      });
-      continue;
-    }
-    if (dialect.builtinAgentTools.includes(tool)) continue;
-    if (dialect.mcpToolPattern.test(tool)) continue;
-    const near = closestTool(tool, dialect);
-    const hint = near ? ` Did you mean "${near}"?` : "";
-    errors.push({
-      type: "unknown-tool",
-      message: `Unknown tool "${tool}" in agent tools — use a built-in tool (${dialect.builtinAgentTools.join(", ")}) or an MCP tool (mcp__server__tool).${hint}`,
-    });
-  }
-  return errors;
+  return verifyToolContract(tools, dialect).map((issue) => ({
+    type: "unknown-tool",
+    message: issue.message,
+  }));
 }
 
 /** Build the subagent YAML frontmatter (name / description / model / tools). */

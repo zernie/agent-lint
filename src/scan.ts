@@ -17,8 +17,15 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import { danglingRefs } from "./plugin-loader.js";
 import type { PluginLayout } from "./core/layout.js";
+import type { HarnessDialect } from "./core/dialect.js";
+import {
+  verifyToolContract,
+  confidentToolIssues,
+  type ToolIssue,
+} from "./core/tool-contract.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
@@ -60,6 +67,8 @@ export interface ScanAgent {
   readonly path: string;
   /** Declared tool contract, or null when the agent ships no `tools:` (inherits all). */
   readonly tools: readonly string[] | null;
+  /** Contract entries that don't resolve to a real built-in / MCP tool (typo, never-available). */
+  readonly toolIssues: readonly ToolIssue[];
 }
 
 /** ok = file present; missing = referenced but absent; unresolved = path still has an unexpanded var, can't check. */
@@ -255,11 +264,26 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function scanAgents(files: Record<string, string>): ScanAgent[] {
+function scanAgents(
+  files: Record<string, string>,
+  dialect: HarnessDialect,
+): ScanAgent[] {
   const out: ScanAgent[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!isAgent(path)) continue;
-    out.push({ name: basename(path, ".md"), path, tools: parseAgentTools(md) });
+    const tools = parseAgentTools(md);
+    out.push({
+      name: basename(path, ".md"),
+      path,
+      tools,
+      // Cross-reference the declared rail against the dialect catalog — the moat.
+      // Auditing third-party plugins → only the HIGH-CONFIDENCE issues (never-
+      // available + close typos); a bare unrecognized tool is likely plugin/MCP-
+      // provided, not a defect (the TaskCreate/TaskGet lesson). See tool-contract.ts.
+      toolIssues: tools
+        ? confidentToolIssues(verifyToolContract(tools, dialect))
+        : [],
+    });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -333,7 +357,11 @@ function scanHooks(
 // ---------------------------------------------------------------------------
 
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
-export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
+export function scanPlugin(
+  dir: string,
+  layout?: PluginLayout,
+  dialect: HarnessDialect = claudeCodeDialect,
+): ScanReport {
   const lay = layout ?? claudeCodeLayout;
   const loaded = loadPlugin(dir, lay);
   const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
@@ -350,7 +378,7 @@ export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
     dir,
     instructions,
     skills: scanSkills(loaded.files),
-    agents: scanAgents(loaded.files),
+    agents: scanAgents(loaded.files, dialect),
     hooks,
     inlineHooks: inline,
     commands: Object.keys(loaded.files).filter(isCommand).length,
@@ -483,12 +511,17 @@ export function formatScanReport(r: ScanReport): string {
   out.push(
     ...section(
       "Agents",
-      r.agents.map((a) => {
+      r.agents.flatMap((a) => {
         const tools =
           a.tools === null
             ? "tools: (inherits all — no contract)"
             : `tools: ${a.tools.join(", ") || "(none)"}`;
-        return `  ${a.tools === null ? "⚠" : "✓"} ${a.name} — ${tools}`;
+        const mark =
+          a.toolIssues.length > 0 ? "✗" : a.tools === null ? "⚠" : "✓";
+        const lines = [`  ${mark} ${a.name} — ${tools}`];
+        for (const issue of a.toolIssues)
+          lines.push(`      ✗ ${issue.message}`);
+        return lines;
       }),
     ),
   );
@@ -549,6 +582,7 @@ export function formatScanReport(r: ScanReport): string {
   const broken =
     r.hooks.filter((h) => h.status === "missing").length +
     r.skills.filter((s) => !s.hasDescription).length +
+    r.agents.reduce((n, a) => n + a.toolIssues.length, 0) +
     r.danglingRefs.length;
   out.push(
     broken === 0

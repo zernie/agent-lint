@@ -43,6 +43,12 @@ import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import {
+  verifyToolContract,
+  confidentToolIssues,
+} from "./core/tool-contract.js";
+import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import {
   probePluginTriggers,
   formatBehavioralReport,
   type TriggerPromptSet,
@@ -748,6 +754,8 @@ interface LintReport {
   orphanCount: number;
   untestedSurfaces: number;
   untestedErrors: number;
+  toolContractIssues: number;
+  toolContractErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -841,6 +849,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.integrityErrors > 0 ||
     report.coverageErrors > 0 ||
     report.untestedErrors > 0 ||
+    report.toolContractErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1220,6 +1229,11 @@ async function runLint(
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   const untested = checkUntestedSurfaces(config, silent);
 
+  // 7c. Agent tool-contract check — cross-reference each subagent's `tools:` rail
+  // against the harness catalog (the moat). Off by default unless a severity is
+  // configured; warning surfaces a typo/never-available tool, error gates CI.
+  const toolContract = checkAgentToolContracts(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1270,6 +1284,8 @@ async function runLint(
     orphanCount: orphanReport.orphans.length,
     untestedSurfaces: untested.untested,
     untestedErrors: untested.errors,
+    toolContractIssues: toolContract.issues,
+    toolContractErrors: toolContract.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2463,6 +2479,57 @@ function checkUntestedSurfaces(
 }
 
 /**
+ * Apply the `agent-tool-contract` rule: cross-reference every subagent's `tools:`
+ * rail against the harness tool catalog (the moat — "valid is not true"). Flags
+ * only the HIGH-CONFIDENCE issues (a never-available tool, or a close typo) via
+ * the shared `confidentToolIssues` detector — the same code `scan` and
+ * `compileAgent` use (one-detector-no-drift), so a bare unrecognized tool
+ * (plugin/MCP-provided) is never a false alarm. Warning by default; set
+ * `agent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
+ */
+function checkAgentToolContracts(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["agent-tool-contract"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  const files = globSync(["agents/*.md", ".claude/agents/*.md"], {
+    cwd: process.cwd(),
+    ignore: ["**/*.spec.ts"],
+  });
+  let issues = 0;
+  let printedHeader = false;
+  for (const rel of files.sort()) {
+    let md: string;
+    try {
+      md = readFileSync(resolve(process.cwd(), rel), "utf-8");
+    } catch {
+      continue;
+    }
+    const tools = parseAgentTools(md);
+    if (tools === null) continue; // no contract → inherits all (a different rule)
+    const found = confidentToolIssues(
+      verifyToolContract(tools, claudeCodeDialect),
+    );
+    if (found.length === 0) continue;
+    issues += found.length;
+    if (!silent) {
+      if (!printedHeader) {
+        console.log("\nAgent tool-contract check:\n");
+        printedHeader = true;
+      }
+      for (const issue of found) {
+        console.log(
+          `  ${sev === "error" ? "✗" : "⚠"} ${rel}: ${issue.message}`,
+        );
+        ghAnnotate(sev === "error" ? "error" : "warning", issue.message, rel);
+      }
+    }
+  }
+  return { issues, errors: sev === "error" ? issues : 0 };
+}
+
+/**
  * Apply the configured coverage thresholds. Returns the number of failing
  * thresholds (so the lint can fail CI when severity is "error").
  *
@@ -3308,7 +3375,7 @@ async function main(): Promise<void> {
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
           : det.adapter;
-        const report = scanPlugin(targets[0], adapter.layout);
+        const report = scanPlugin(targets[0], adapter.layout, adapter.dialect);
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
           if (!harnessFlag && det.ambiguousWith.length > 0) {

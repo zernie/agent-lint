@@ -59,6 +59,7 @@ export function scoreReport(r: ScanReport): {
   const missingHooks = r.hooks.filter((h) => h.status === "missing").length;
   const noDesc = r.skills.filter((s) => !s.hasDescription).length;
   const noContract = r.agents.filter((a) => a.tools === null).length;
+  const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
 
   const deductions: { n: number; weight: number; label: string }[] = [
     {
@@ -75,6 +76,11 @@ export function scoreReport(r: ScanReport): {
       n: r.danglingRefs.length,
       weight: W_DANGLING_REF,
       label: "broken intra-plugin reference(s)",
+    },
+    {
+      n: deadTools,
+      weight: W_DANGLING_REF,
+      label: "agent tool(s) that don't exist (typo / never-available)",
     },
     {
       n: noContract,
