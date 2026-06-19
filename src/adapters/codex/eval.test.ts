@@ -7,8 +7,24 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { parseCodexEvalRun, codexSkillFired, codexRunError } from "./eval.js";
+import {
+  parseCodexEvalRun,
+  codexSkillFired,
+  codexRunError,
+  installCodexSkills,
+  codexEvalDriver,
+} from "./eval.js";
 
 // Real plain turn.
 const PLAIN = [
@@ -87,6 +103,42 @@ test("codexRunError detects a rate-limit / errored turn (not a clean miss)", () 
     codexSkillFired(parseCodexEvalRun({ stdout: RATE_LIMITED }), "x"),
     false,
   );
+});
+
+test("installCodexSkills materializes a plugin's skills into <cwd>/.codex/skills", () => {
+  // The Codex analog of --plugin-dir: measureTriggerRate hands the runner a
+  // (Claude-shaped) pluginDir; the codex runner installs its skills where codex
+  // discovers them (validated live: <cwd>/.codex/skills/<name>/SKILL.md).
+  const root = mkdtempSync(join(tmpdir(), "codex-install-"));
+  try {
+    const pluginDir = join(root, "plugin");
+    for (const name of ["alpha", "beta"]) {
+      mkdirSync(join(pluginDir, "skills", name), { recursive: true });
+      writeFileSync(
+        join(pluginDir, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\n---\nbody`,
+      );
+    }
+    const cwd = join(root, "run");
+    mkdirSync(cwd, { recursive: true });
+    const n = installCodexSkills(pluginDir, cwd);
+    assert.equal(n, 2);
+    assert.ok(existsSync(join(cwd, ".codex", "skills", "alpha", "SKILL.md")));
+    assert.match(
+      readFileSync(join(cwd, ".codex", "skills", "beta", "SKILL.md"), "utf-8"),
+      /name: beta/,
+    );
+    // no skills dir → 0, no throw
+    assert.equal(installCodexSkills(join(root, "nope"), cwd), 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("codexEvalDriver wires the codex parser + rate-limit detector", () => {
+  assert.equal(codexEvalDriver.parse, parseCodexEvalRun);
+  assert.equal(codexEvalDriver.runError, codexRunError);
+  assert.equal(typeof codexEvalDriver.runner, "function");
 });
 
 test("parseCodexEvalRun is tolerant + returns the Claude-shaped contract", () => {

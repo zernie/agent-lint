@@ -29,6 +29,7 @@ import {
   runPool,
   isRateLimited,
   measureTriggerRateWith,
+  measureTriggerRate,
   formatTriggerRateReport,
   measureWith,
   measureArmsWith,
@@ -54,6 +55,7 @@ import {
   EPHEMERAL_HOME_KEEP,
   type AgentRunArgs,
   type ParsedModelRun,
+  type ModelOutputParser,
 } from "./eval.js";
 import {
   usedTool,
@@ -323,6 +325,91 @@ test("measureTriggerRateWith accepts a custom ModelOutputParser (non-Claude trac
     codexLikeParser,
   );
   assert.ok(Math.abs(report.rate - 2 / 3) < 1e-9); // 2 of 3 fired, via the custom parser
+});
+
+test("measureTriggerRateWith excludes errored/rate-limited runs (not misses)", async () => {
+  // A "boom" prompt errors; runError flags it. It must be dropped from n, not
+  // scored as a recall-0 miss — the Codex usage-limit class of bug.
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({
+      code: 0,
+      stdout: a.task.includes("boom") ? "RUN_ERROR" : "FIRED",
+    });
+  const parse: ModelOutputParser = (out) => ({
+    turns: 1,
+    output: out.stdout,
+    toolCalls: out.stdout.includes("FIRED")
+      ? [{ name: "Skill", input: {}, resultText: "", isError: false }]
+      : [],
+    hooks: [],
+    subagents: [],
+    usage: {
+      costUsd: 0,
+      durationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    },
+  });
+  const report = await measureTriggerRateWith(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["fire a", "boom b", "fire c"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => t.toolCalls.some((c) => c.name === "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    runner,
+    parse,
+    (out) => (out.stdout.includes("RUN_ERROR") ? "errored" : null),
+  );
+  assert.equal(report.n, 2); // boom excluded
+  assert.equal(report.errored, 1); // and surfaced
+  assert.equal(report.rate, 1); // the 2 valid runs both fired
+});
+
+test("measureTriggerRate dispatches a custom { evalDriver } (the codex seam)", async () => {
+  // The public entry must route runner+parse+runError from the driver.
+  const report = await measureTriggerRate(
+    {
+      pluginDir: "/p",
+      stubSkillBodies: false,
+      prompts: ["x one", "x two", "x three"],
+      minPrompts: 1,
+      minDistance: 0,
+      fired: (t) => t.toolCalls.some((c) => c.name === "Skill"),
+      trials: 1,
+      spacingSec: 0,
+    },
+    {
+      evalDriver: {
+        runner: () => Promise.resolve({ code: 0, stdout: "OK" }),
+        parse: (out) => ({
+          turns: 1,
+          output: out.stdout,
+          toolCalls: [
+            { name: "Skill", input: {}, resultText: "", isError: false },
+          ],
+          hooks: [],
+          subagents: [],
+          usage: {
+            costUsd: 0,
+            durationMs: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+          },
+        }),
+      },
+    },
+  );
+  assert.equal(report.rate, 1); // the injected driver drove every run
+  assert.equal(report.n, 3);
 });
 
 test("measureTriggerRateWith seeds `fixture` files into each run's cwd", async () => {
