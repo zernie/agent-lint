@@ -215,7 +215,29 @@ eval-ready cluster prompt set is saved at
   - `test-driven-development` — control, should fire ~100%.
 - **Method:** `vigiles scan <superpowers> --trigger --prompts=…` (recall only;
   stubbed bodies; on the Claude subscription, `$0` metered).
-- **Results:** _(filled in below after the run)_
+- **Results (2026-06-19, claude 2.1.183, recall over 10 prompts each):**
+
+  | Skill                     | Recall |                            |
+  | ------------------------- | ------ | -------------------------- |
+  | `test-driven-development` | 100%   | ✓ control — fires reliably |
+  | `brainstorming`           | 50%    | ⚠                          |
+  | `systematic-debugging`    | 10%    | ⚠                          |
+
+  **The control firing 100% validates the measurement** (the harness + selector
+  work); against that baseline, `systematic-debugging` at **10%** is a real
+  "structurally green but silent" bug — its description ("Use when encountering
+  any bug, test failure, or unexpected behavior, before attempting fixes") is
+  textbook, yet on 9/10 natural bug-report prompts the model just starts debugging
+  inline instead of selecting the skill. `brainstorming` at 50% sits in the prior
+  noise band (earlier ad-hoc probes read 10–30% at n=10).
+
+  **Reconfirms the pattern** (Finding 2) on the SHIPPED `scan --trigger` path:
+  skills keyed off an explicit METHOD the user names ("test-first", "TDD") fire
+  reliably; skills keyed off a SITUATION the user merely describes ("there's a
+  bug") under-fire, because the natural phrasing doesn't cue skill selection. The
+  deterministic scan rates all three a green `✓`; only the behavioral column sees
+  the 10% vs 100% gap. Caveat: n=10/1-trial — the rank-ordering and the 10%-vs-100%
+  gap are the signal, not the second digit.
 
 ## Not run here — observed egress
 
