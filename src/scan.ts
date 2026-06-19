@@ -377,32 +377,30 @@ function scanHooks(
 // ---------------------------------------------------------------------------
 
 /**
- * Frontmatter-schema check: a SKILL.md needs a `name` to load (Claude Code keys
- * a skill on its frontmatter name, not the dir); a subagent needs `name` +
- * `description`. A missing required field is a structurally broken surface. Skill
- * `description` is handled on the skill line (a trigger property), so it's not
- * repeated here. High-confidence, low-volume in practice (the ananddtyagi
- * no-frontmatter skills + a handful of name-less ones across 886 swept skills).
+ * Frontmatter-schema check — **subagents only**. Per the Claude Code docs, a
+ * subagent (`agents/*.md`) REQUIRES `name` + `description` (no fallback) or it
+ * won't register. A SKILL.md requires NOTHING: `name` falls back to the directory
+ * name and `description` to the first body paragraph, so a frontmatter-less skill
+ * still loads — flagging it would be a false positive (skill description QUALITY
+ * is a separate, behavioral concern). See https://code.claude.com/docs/en/skills
+ * and …/sub-agents.
  */
 function frontmatterIssuesFor(
   files: Record<string, string>,
 ): FrontmatterIssue[] {
   const out: FrontmatterIssue[] = [];
   for (const [path, md] of Object.entries(files)) {
-    const isSkillFile = isSkill(path);
-    const isAgentFile = isAgent(path);
-    if (!isSkillFile && !isAgentFile) continue;
+    if (!isAgent(path)) continue; // skills require no frontmatter (dir/body fallbacks)
     const fm = frontmatter(md);
     const missing: ("name" | "description")[] = [];
     if (!fm.name) missing.push("name");
-    if (isAgentFile && !fm.description) missing.push("description");
+    if (!fm.description) missing.push("description");
     if (missing.length === 0) continue;
-    const kind = isSkillFile ? "skill" : "agent";
     out.push({
       path,
-      kind,
+      kind: "agent",
       missing,
-      message: `${kind} ${path} is missing required frontmatter: ${missing.join(", ")} — it won't load/register.`,
+      message: `agent ${path} is missing required frontmatter: ${missing.join(", ")} — it won't register.`,
     });
   }
   return out.sort((a, b) => a.path.localeCompare(b.path));

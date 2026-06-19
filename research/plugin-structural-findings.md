@@ -39,13 +39,24 @@ Real, reproducible defects found in third-party plugins. Verified by hand agains
 the actual files (not just a scanner verdict — see the FP table below for why that
 matters).
 
-| Plugin                                                               | Bug                                                                                                                                                                          | Impact                                                                                                                    | Status                                           |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **ananddtyagi/cc-marketplace** → `plugins/claude-dev-infrastructure` | Skills `crisis-debugging-advisor` and `meta-skill-router` ship with **no YAML frontmatter at all** (the file opens with `# Title`, no `---` block → no `name`/`description`) | Claude Code selects skills on the frontmatter `description`; with none, these two skills can **never be model-triggered** | **Found 2026-06-19. Not yet reported upstream.** |
+| Plugin                         | Bug                                                                                                                                                                   | Impact                                                                                                    | Status                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **ananddtyagi/cc-marketplace** | ~9 **subagents** (`changelog-generator`, `content-creator`, `growth-hacker`, `instagram-curator`, …) ship as **pure prose with no YAML frontmatter** (no `---` block) | A subagent REQUIRES `name` + `description` (no fallback) → these **never register / can't be dispatched** | **Found 2026-06-19. Not yet reported upstream.** |
+
+> ⚠️ **Correction (2026-06-19).** An earlier version of this row claimed the
+> SKILLS `crisis-debugging-advisor` / `meta-skill-router` "never fire" because
+> they lack frontmatter. **That was wrong** — verified against the Claude Code
+> docs: a SKILL.md needs NO frontmatter (`name` ← directory name, `description` ←
+> first body paragraph), so a frontmatter-less skill still loads and can fire (at
+> worst its fallback description is a weak trigger surface — a behavioral concern,
+> not a structural one). The real, verified bug is the **subagents**: `name` +
+> `description` ARE required for a subagent, with no fallback, so a prose-only
+> agent file never registers. The `frontmatter-schema` rule was corrected to
+> check agents only.
 
 > Disclosure etiquette: report as a friendly issue/PR with the fix (add a
-> `name` + `description` frontmatter block), link the `vigiles scan` output. Keep
-> it constructive — the goal is a working plugin, not a gotcha.
+> `name` + `description` frontmatter block to each agent), link the `vigiles
+scan` output. Keep it constructive — the goal is a working plugin, not a gotcha.
 
 ## Scanner false positives — found by the sweep, fixed
 

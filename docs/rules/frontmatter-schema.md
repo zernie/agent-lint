@@ -1,27 +1,31 @@
 # frontmatter-schema
 
-Flag a **skill** or **subagent** missing a required frontmatter field. A
-`SKILL.md` needs a `name` (Claude Code keys a skill on its frontmatter name — no
-name, no load); a subagent (`agents/*.md`) needs `name` **and** `description`. A
-missing field is a structurally broken surface: the skill never loads, the agent
-never registers. Same detector `vigiles scan` uses (`frontmatterIssues`); one
-detector, two callers, no drift.
+Flag a **subagent** (`agents/*.md`) missing a required frontmatter field. Per the
+[subagent docs](https://code.claude.com/docs/en/sub-agents), a subagent
+**requires** both `name` and `description` (no fallback) — without them Claude
+Code won't register it, so the agent is silently undispatchable. Same detector
+`vigiles scan` uses (`frontmatterIssues`); one detector, two callers.
+
+## Skills are deliberately NOT checked
+
+A `SKILL.md` requires **no** frontmatter: per the
+[skills docs](https://code.claude.com/docs/en/skills) every field is optional —
+`name` falls back to the **directory name** and `description` to the **first
+paragraph of the body**. So a frontmatter-less skill still loads and can fire;
+flagging it would be a false positive. (Whether its fallback description is a
+_good_ trigger surface is a behavioral question — measure it with
+`scan --trigger`, don't assert it structurally.)
 
 ## What it flags
 
-| Surface             | Required              | Example failure                                              |
-| ------------------- | --------------------- | ------------------------------------------------------------ |
-| `skills/*/SKILL.md` | `name`                | a file with no `---` block, or `description:` but no `name:` |
-| `agents/*.md`       | `name`, `description` | a subagent that's pure prose (no frontmatter)                |
-
-A skill's **description** is reported separately (on the skill line — it's a
-trigger property, scored by the leaderboard), so this rule covers the skill
-`name` and the agent's full `name`+`description`.
+| Surface       | Required              | Example failure                               |
+| ------------- | --------------------- | --------------------------------------------- |
+| `agents/*.md` | `name`, `description` | a subagent that's pure prose (no `---` block) |
 
 This is the rule that catches the real bug the plugin sweep found: a marketplace
-shipping skills (`crisis-debugging-advisor`, `meta-skill-router`) and subagents
-(`changelog-generator`, …) with **no frontmatter at all** — they silently never
-work. See `research/plugin-structural-findings.md`.
+shipping subagents (`changelog-generator`, `content-creator`, …) with **no
+frontmatter at all** — they never register. See
+`research/plugin-structural-findings.md`.
 
 ## Configuration
 
@@ -39,11 +43,10 @@ work. See `research/plugin-structural-findings.md`.
 
 ## Scope
 
-`skills/*/SKILL.md` + `.claude/skills/*/SKILL.md`, and `agents/*.md` +
-`.claude/agents/*.md`. Deterministic, model-free.
+`agents/*.md` + `.claude/agents/*.md`. Deterministic, model-free.
 
 ## Why
 
-The cheapest, highest-confidence bug a harness can ship: a surface that can't
-load because its frontmatter is incomplete. No model needed to know a skill
-without a `name` will never register.
+A subagent without its required frontmatter is the cheapest, highest-confidence
+bug a harness can ship: it silently never registers, so the capability the author
+intended simply isn't there. No model needed to know it won't load.
