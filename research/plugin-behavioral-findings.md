@@ -324,6 +324,9 @@ skillResolved(t, "superpowers:brainstorming")`); the canonical shape is
 
 ## See also
 
+- [plugin-structural-findings](plugin-structural-findings.md) — the deterministic
+  half (structural sweep of real marketplaces): the public disclosures list + the
+  scanner false positives the sweep found and fixed.
 - [distribution-strategy](distribution-strategy.md) — E1: run scan on popular
   repos and publish findings; this is the behavioral half.
 - [divergent-bets](divergent-bets.md) — #9 plugin/skill leaderboard; the
