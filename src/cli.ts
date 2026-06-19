@@ -47,7 +47,6 @@ import {
   confidentToolIssues,
 } from "./core/tool-contract.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
-import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -64,6 +63,7 @@ import {
   adapterForInstructionFile,
 } from "./adapter-registry.js";
 import type { HarnessDialect } from "./core/dialect.js";
+import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
 
@@ -1187,6 +1187,20 @@ async function runLint(
 
   const files = findInstructionFiles(restArgs);
 
+  // Resolve the active harness ONCE so the harness-specific checks below run
+  // against the right adapter's dialect (tool/event catalogs) and surfaces —
+  // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
+  // on a harness without subagents (Codex) rather than scanning nothing.
+  const harnessFlag = flags
+    .find((f) => f.startsWith("--harness="))
+    ?.slice("--harness=".length);
+  const lintSelection = resolveHarnessSelection({
+    root: process.cwd(),
+    flag: harnessFlag,
+    configHarness: normalizeHarnessList(config?.harness),
+  });
+  const adapter = lintSelection.adapter;
+
   // 1. Verify hashes and structure
   if (!silent) {
     if (files.length > 0) {
@@ -1259,18 +1273,19 @@ async function runLint(
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   const untested = checkUntestedSurfaces(config, silent);
 
-  // 7c. Agent tool-contract check — cross-reference each subagent's `tools:` rail
-  // against the harness catalog (the moat). Off by default unless a severity is
-  // configured; warning surfaces a typo/never-available tool, error gates CI.
-  const toolContract = checkAgentToolContracts(config, silent);
+  // 7c. Subagent tool-contract check — cross-reference each subagent's `tools:`
+  // rail against the harness catalog (the moat). n/a on a harness with no
+  // subagents. Off by default unless a severity is configured; warning surfaces
+  // a typo/never-available tool, error gates CI.
+  const toolContract = checkSubagentToolContracts(config, silent, adapter);
 
   // 7d. Hook-event check — a hook registered under an event the harness doesn't
   // define never fires. High-precision (close typos only). Off unless configured.
-  const hookEvents = checkHookEvents(config, silent);
+  const hookEvents = checkHookEvents(config, silent, adapter);
 
-  // 7e. Frontmatter-schema check — a skill/agent missing required frontmatter
-  // (name; agents also description) won't load/register. High-confidence.
-  const frontmatter = checkFrontmatterSchema(config, silent);
+  // 7e. Subagent-frontmatter check — a subagent missing required frontmatter
+  // (name + description) won't register. n/a on a harness with no subagents.
+  const frontmatter = checkFrontmatterSchema(config, silent, adapter);
 
   // 7f. MCP-config check — a declared MCP server with no command/url can't start.
   const mcpConfig = checkMcpConfig(config, silent);
@@ -1288,7 +1303,7 @@ async function runLint(
   const hookScripts = checkHookScriptExists(config, silent);
 
   // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
-  // (the deny-side mirror of agent-tool-contract; close-typo only).
+  // (the deny-side mirror of subagent-tool-contract; close-typo only).
   const disallowedTools = checkDisallowedTools(config, silent);
 
   // 7k. Description-overlap — two model-invocable skills with near-identical
@@ -2513,7 +2528,7 @@ function checkIntegrityForFiles(
 }
 
 /**
- * Apply the per-kind `untested-skill` / `untested-agent` / `untested-hook` rules:
+ * Apply the per-kind `untested-skill` / `untested-subagent` / `untested-hook` rules:
  * find skills/agents/hooks with no test or eval (see src/test-coverage.ts). Each
  * kind is gated by its OWN rule severity — a kind set to `false` is not scanned;
  * "warn" prints but never fails CI; "error" fails (exit 2). Returns the raw
@@ -2525,7 +2540,7 @@ function checkUntestedSurfaces(
 ): { untested: number; errors: number } {
   const rules = config?.rules;
   const skillSev = ruleSeverity(rules?.["untested-skill"]);
-  const agentSev = ruleSeverity(rules?.["untested-agent"]);
+  const agentSev = ruleSeverity(rules?.["untested-subagent"]);
   const hookSev = ruleSeverity(rules?.["untested-hook"]);
   if (!skillSev && !agentSev && !hookSev) return { untested: 0, errors: 0 };
   const sevFor = (kind: SurfaceKind): RuleSeverity =>
@@ -2535,7 +2550,7 @@ function checkUntestedSurfaces(
   // whichever of the three rules carries them.
   const opts: TestCoverageConfig = {
     ...ruleOptions<TestCoverageConfig>(rules?.["untested-skill"]),
-    ...ruleOptions<TestCoverageConfig>(rules?.["untested-agent"]),
+    ...ruleOptions<TestCoverageConfig>(rules?.["untested-subagent"]),
     ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
   };
   const report = findUntestedSurfaces({
@@ -2568,20 +2583,47 @@ function checkUntestedSurfaces(
 }
 
 /**
- * Apply the `agent-tool-contract` rule: cross-reference every subagent's `tools:`
+ * A surface-scoped rule (subagent / shell-hook) is configured, but the active
+ * harness doesn't have that surface. Report it as **n/a** — loud, not silent (the
+ * no-silent-skips ethos): the rule isn't failing and isn't passing, it simply
+ * doesn't apply to this harness. Never counts toward issues/errors.
+ */
+function reportNotApplicable(
+  check: string,
+  surface: string,
+  adapter: HarnessAdapter,
+  silent: boolean,
+): void {
+  if (silent) return;
+  console.log(`\n${check}:\n`);
+  console.log(`  – n/a — ${adapter.name} has no ${surface}`);
+}
+
+/**
+ * Apply the `subagent-tool-contract` rule: cross-reference every subagent's `tools:`
  * rail against the harness tool catalog (the moat — "valid is not true"). Flags
  * only the HIGH-CONFIDENCE issues (a never-available tool, or a close typo) via
  * the shared `confidentToolIssues` detector — the same code `scan` and
  * `compileAgent` use (one-detector-no-drift), so a bare unrecognized tool
  * (plugin/MCP-provided) is never a false alarm. Warning by default; set
- * `agent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
+ * `subagent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
  */
-function checkAgentToolContracts(
+function checkSubagentToolContracts(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
-  const sev = ruleSeverity(config?.rules?.["agent-tool-contract"]);
+  const sev = ruleSeverity(config?.rules?.["subagent-tool-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "Subagent tool-contract check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   const files = globSync(["agents/*.md", ".claude/agents/*.md"], {
     cwd: process.cwd(),
     ignore: ["**/*.spec.ts"],
@@ -2598,13 +2640,13 @@ function checkAgentToolContracts(
     const tools = parseAgentTools(md);
     if (tools === null) continue; // no contract → inherits all (a different rule)
     const found = confidentToolIssues(
-      verifyToolContract(tools, claudeCodeDialect),
+      verifyToolContract(tools, adapter.dialect),
     );
     if (found.length === 0) continue;
     issues += found.length;
     if (!silent) {
       if (!printedHeader) {
-        console.log("\nAgent tool-contract check:\n");
+        console.log("\nSubagent tool-contract check:\n");
         printedHeader = true;
       }
       for (const issue of found) {
@@ -2627,12 +2669,21 @@ function checkAgentToolContracts(
 function checkHookEvents(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-events"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable("Hook-event check", "shell hooks", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).hookEventIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hookEventIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2647,7 +2698,7 @@ function checkHookEvents(
 }
 
 /**
- * Apply the `agent-frontmatter` rule. Two kinds of agent-frontmatter defect, one
+ * Apply the `subagent-frontmatter` rule. Two kinds of subagent-frontmatter defect, one
  * rule: (1) a subagent MISSING a required field (`name`/`description`) — it won't
  * register; (2) a subagent with an INVALID `model:`/`color:` value (a close typo
  * of a real one) — it silently falls back / is ignored. Reuses `scanPlugin`'s
@@ -2656,12 +2707,22 @@ function checkHookEvents(
 function checkFrontmatterSchema(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
-  const sev = ruleSeverity(config?.rules?.["agent-frontmatter"]);
+  const sev = ruleSeverity(config?.rules?.["subagent-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "Subagent-frontmatter check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string; path: string }[];
   try {
-    const r = scanPlugin(process.cwd());
+    const r = scanPlugin(process.cwd(), adapter.layout, adapter.dialect);
     found = [...r.frontmatterIssues, ...r.frontmatterValueIssues];
   } catch {
     return { issues: 0, errors: 0 };

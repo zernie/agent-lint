@@ -2,7 +2,7 @@
 
 Flag a **hook script** that ships without a test or eval. One of the per-kind
 surface-coverage rules alongside [`untested-skill`](untested-skill.md) and
-[`untested-agent`](untested-agent.md).
+[`untested-subagent`](untested-subagent.md).
 
 A hook is the most deterministic surface: it's a shell/script process that makes a
 block/allow decision. Its natural test is a `runHook` unit test (pipe a synthesized

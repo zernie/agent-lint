@@ -515,7 +515,7 @@ function closeCandidate(
  * Agent frontmatter VALUE validity — a `model:` or `color:` that's a close typo
  * of a real one. A bad `model:` silently falls back; a bad `color:` is ignored.
  * High-precision (close-typo only); a full/dated model id is left alone. Folded
- * into the `agent-frontmatter` rule. Agents only (skills have no model/color).
+ * into the `subagent-frontmatter` rule. Agents only (skills have no model/color).
  */
 function frontmatterValueIssuesFor(
   files: Record<string, string>,

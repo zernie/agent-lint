@@ -353,7 +353,7 @@ test("scanPlugin does NOT flag a hooks ARRAY (non-CC custom format)", () => {
   cleanupTmpDir(dir);
 });
 
-test("agent-frontmatter flags a prose-only AGENT, but NOT a frontmatter-less skill", () => {
+test("subagent-frontmatter flags a prose-only AGENT, but NOT a frontmatter-less skill", () => {
   const dir = makeTmpDir("scan-fm");
   // A skill with NO frontmatter still loads in CC (name←dir, description←first
   // body paragraph), so it must NOT be flagged — that was a false positive.

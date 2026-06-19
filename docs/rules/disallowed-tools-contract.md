@@ -1,7 +1,7 @@
 # disallowed-tools-contract
 
 Cross-reference a subagent's **`disallowedTools:` block-list** against the harness
-tool catalog — the deny-side mirror of [`agent-tool-contract`](agent-tool-contract.md).
+tool catalog — the deny-side mirror of [`subagent-tool-contract`](subagent-tool-contract.md).
 A typo here is dangerous: you meant to block `Bash` but wrote `Bsh`, so **nothing
 is blocked** and the tool you intended to deny stays available, silently. Same
 detector `vigiles scan` uses (`disallowedToolIssues` in `src/core/tool-contract.ts`).
@@ -22,7 +22,7 @@ disallowedTools: Bsh, Bash, Agent, mcp__github__search
 ## High-precision calibration
 
 The block-list **inverts** the allow check, so the FP-safe set is different from
-`agent-tool-contract`:
+`subagent-tool-contract`:
 
 - A **real built-in** in the list is correct (it's being blocked) — not flagged.
 - A **never-available** tool (`Agent`, `AskUserQuestion`) is harmless to list — not
@@ -60,5 +60,5 @@ half of the tool moat, and it's a check no other validator does.
 
 ## See also
 
-- [agent-tool-contract](agent-tool-contract.md) — the allow-list half (the same
+- [subagent-tool-contract](subagent-tool-contract.md) — the allow-list half (the same
   catalog cross-reference, applied to `tools:`).

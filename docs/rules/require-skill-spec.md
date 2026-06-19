@@ -4,7 +4,7 @@
 > Level-0/1 on-ramp), so requiring a `.spec.ts` per `SKILL.md` was the wrong
 > constraint — it nagged about hand-authored, vendored, fixture, and bench skills
 > alike. Use [`untested-skill`](untested-skill.md) instead (with its siblings
-> [`untested-agent`](untested-agent.md) / [`untested-hook`](untested-hook.md)):
+> [`untested-subagent`](untested-subagent.md) / [`untested-hook`](untested-hook.md)):
 > _"every skill / agent / hook ships with a test or eval"_ is the coverage that
 > matters, with an explicit `vigiles:ignore-test` opt-out. This rule's
 > implementation is **kept** — set `require-skill-spec` explicitly if you still
