@@ -33,6 +33,29 @@ const OPENCODE_HARNESS = "src/adapters/opencode/**/*.ts";
 // adapter. Otherwise "agnostic" is a name only. See research/adapter-api-design.md.
 const AGNOSTIC_SURFACE = "src/{testing,unit,integration,e2e}.ts";
 
+// The harness-agnostic DOMAIN + the reference-verification DETECTORS — these take
+// a PluginLayout / HarnessDialect by injection, so they must NOT hard-code a
+// Claude Code literal (the bug class fixed in scan.ts/test-coverage.ts: a
+// `${CLAUDE_PLUGIN_ROOT}` token or a `.claude/` surface path baked in instead of
+// read from the layout). The CC adapter, the CC eval transport (src/eval.ts), and
+// the CC plugin onboarding (init in src/cli.ts) legitimately reference CC, so they
+// are NOT in this set. Complements the import-graph boundary with a string-literal
+// boundary. See research/code-adapter-architecture.md.
+const HARNESS_AGNOSTIC_DETECTORS = [
+  "src/core/**/*.ts",
+  "src/scan.ts",
+  "src/test-coverage.ts",
+  "src/plugin-loader.ts",
+];
+const CC_LITERAL_RE = "CLAUDE_PLUGIN_ROOT|\\.claude|ANTHROPIC_";
+const CC_LITERAL_MSG =
+  "Harness-agnostic code must not hard-code a Claude Code literal " +
+  "(${CLAUDE_PLUGIN_ROOT}, .claude/, ANTHROPIC_*). Read it from the injected " +
+  "PluginLayout / HarnessDialect instead — e.g. layout.pluginRootToken, " +
+  "layout.skillDir / agentDir / commandDir, layout.materializeRoot, " +
+  "layout.manifestPath. CC literals belong only in src/adapters/claude-code/ " +
+  "(or the CC-specific eval transport). See research/code-adapter-architecture.md.";
+
 export default [
   {
     ignores: ["dist/", "node_modules/", "examples/harness/vendor/"],
@@ -136,6 +159,27 @@ export default [
                 "Agnostic surface: the harness-agnostic public entry (${file.type}) must not import a specific harness adapter (${dependency.type}) — this includes src/mock-model.ts (the Claude-Code mock). Re-export ONLY the agnostic names from the composition-root runner modules (src/{harness-test,run-hook,eval}.ts); import harness-specific transport (scriptModel, claudeCodeDriver, loadPlugin) from vigiles/claude-code. See research/adapter-api-design.md.",
             },
           ],
+        },
+      ],
+    },
+  },
+  // String-literal boundary: no hard-coded Claude Code literals in the
+  // harness-agnostic domain/detectors. Catches the scan.ts/test-coverage.ts bug
+  // class at lint time so a new harness's surfaces/token are never silently
+  // ignored. Both forms — a plain string literal and a template-string quasi.
+  {
+    files: HARNESS_AGNOSTIC_DETECTORS,
+    ignores: ["src/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: `Literal[value=/${CC_LITERAL_RE}/]`,
+          message: CC_LITERAL_MSG,
+        },
+        {
+          selector: `TemplateElement[value.raw=/${CC_LITERAL_RE}/]`,
+          message: CC_LITERAL_MSG,
         },
       ],
     },

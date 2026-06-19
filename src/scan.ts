@@ -210,9 +210,9 @@ function frontmatter(md: string): {
  * obra/superpowers ship. See scan.test.ts for the regression cases.
  */
 export interface SurfaceClassifier {
-  isSkill(f: string): boolean;
-  isAgent(f: string): boolean;
-  isCommand(f: string): boolean;
+  readonly isSkill: (f: string) => boolean;
+  readonly isAgent: (f: string) => boolean;
+  readonly isCommand: (f: string) => boolean;
 }
 
 function escapeRe(s: string): string {
@@ -407,15 +407,23 @@ function scanAgents(
 
 /**
  * Resolve a hook script token to a checkable path. `loadPlugin` expands the
- * braced `${CLAUDE_PLUGIN_ROOT}`; the unbraced shell form `$CLAUDE_PLUGIN_ROOT`
- * survives, so resolve it against the plugin root here and strip shell quotes.
- * A token that still carries any `$VAR` after that is genuinely uncheckable.
+ * braced plugin-root token (`${CLAUDE_PLUGIN_ROOT}`, Codex `${PLUGIN_ROOT}`, …);
+ * the unbraced shell form survives, so resolve BOTH forms of the HARNESS's token
+ * (from the layout, not hard-coded) against the plugin root and strip shell
+ * quotes. A token that still carries any `$VAR` after that is genuinely
+ * uncheckable.
  */
-function resolveScript(token: string, root: string): ScanHook {
+function resolveScript(
+  token: string,
+  root: string,
+  pluginRootToken: string,
+): ScanHook {
+  // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT".
+  const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
   const cleaned = token
     .replace(/["']/g, "")
-    .replaceAll("${CLAUDE_PLUGIN_ROOT}", root)
-    .replaceAll("$CLAUDE_PLUGIN_ROOT", root);
+    .replaceAll(pluginRootToken, root)
+    .replaceAll(unbraced, root);
   if (cleaned.includes("$")) return { script: token, status: "unresolved" };
   // A relative hook path (`./hooks/x.sh`, `scripts/x.py`) is the plugin's own —
   // resolve it against the PLUGIN ROOT, not the scanner's cwd. Without this, a
@@ -438,6 +446,7 @@ const EXISTENCE_GUARD =
 function scanHooks(
   settings: { hooks?: unknown },
   root: string,
+  pluginRootToken: string,
 ): { hooks: ScanHook[]; inline: number } {
   const text = JSON.stringify(settings.hooks ?? {});
   const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
@@ -459,7 +468,7 @@ function scanHooks(
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root);
+      const hook = resolveScript(tok, root, pluginRootToken);
       byScript.set(hook.script, hook);
     }
   }
@@ -682,7 +691,11 @@ export function scanPlugin(
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
   const loaded = loadPlugin(dir, lay);
-  const { hooks, inline } = scanHooks(loaded.settings, resolve(dir));
+  const { hooks, inline } = scanHooks(
+    loaded.settings,
+    resolve(dir),
+    lay.pluginRootToken,
+  );
   // Hook-event keys are a CLOSED platform set — an unrecognized one is a dead
   // registration (the hook never fires), so flag every unknown (not just typos).
   // ONLY for the canonical object-keyed-by-event shape: a plugin shipping a
@@ -733,7 +746,8 @@ export function scanPlugin(
     descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
     malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
     warnings: loaded.warnings,
-    untested: findUntestedSurfaces({ basePath: dir }).untested.length,
+    untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
+      .length,
   };
 }
 
