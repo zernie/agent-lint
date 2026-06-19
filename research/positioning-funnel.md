@@ -83,10 +83,14 @@ as move #1:
 
 Recommendation: **lead leaderboard-authority, hold with the test framework, deliver via the
 mother-harness/agent-install flow.** Worth writing both as competing one-pagers before
-committing, because it's the real strategic fork.
+committing, because it's the real strategic fork. (Update: `zero-config-mother-harness.md`
+largely collapses this fork — the mother harness is the _delivery vehicle_ for the verify+test
+moat, not a curation identity.)
 
 ## See also
 
+- `zero-config-mother-harness.md` — the "create-agentic-app" research: be a persistent verifier
+  (not a create-react-app scaffolder), compose the bundle (don't out-curate superpowers).
 - `harness-state-space.md` — the thesis + the ranked bets (the ammunition these axes deploy).
 - `instruction-file-linter-landscape.md` — the competitor map (why the cross-ref engine +
   testing, not rule count, is the moat) + the named threats (agnix/Codacy/AgentLint/AgentEval).
