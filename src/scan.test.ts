@@ -124,6 +124,77 @@ test("scanPlugin reads a YAML block-scalar description (not just `>`)", () => {
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reads a multi-line QUOTED description (value on the next line)", () => {
+  // trailofbits/react-pdf shape: `description:` then an indented quoted scalar.
+  // Was mislabeled "no description" (can't trigger) — a false positive.
+  const dir = makeTmpDir("scan-quoted-desc");
+  write(
+    dir,
+    "skills/q/SKILL.md",
+    '---\nname: q\ndescription:\n  "Generates PDF documents using React-PDF with TypeScript.\n  Use when creating reports, invoices, or resumes."\nallowed-tools: Read\n---\n# q\n',
+  );
+  const q = scanPlugin(dir).skills.find((s) => s.name === "q");
+  assert.equal(q?.hasDescription, true);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin resolves a relative hook path against the plugin root, not cwd", () => {
+  // ananddtyagi/cc-marketplace shape: `./hooks/x.sh` (the file IS present).
+  // existsSync was cwd-relative → reported MISSING (false positive).
+  const dir = makeTmpDir("scan-relhook");
+  write(dir, "hooks/present.sh", "#!/usr/bin/env bash\n");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [{ type: "command", command: "bash ./hooks/present.sh" }],
+          },
+        ],
+      },
+    }),
+  );
+  const h = scanPlugin(dir).hooks.find((x) => x.script.includes("present.sh"));
+  assert.equal(h?.status, "ok");
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin treats an existence-guarded hook command as optional, not missing", () => {
+  // gmickel/flow-next shape: `[ ! -f x ] || x` — runs x only if present.
+  const dir = makeTmpDir("scan-guardhook");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [
+              {
+                type: "command",
+                command: "[ ! -f scripts/gen.py ] || scripts/gen.py",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.ok(
+    !r.hooks.some((h) => h.status === "missing"),
+    "a guarded optional hook must not be flagged missing",
+  );
+  assert.equal(r.inlineHooks, 1, "counted as a conditional one-liner");
+  cleanupTmpDir(dir);
+});
+
 test("unexpectedScript: expected is a configurable default (Latin), not hardcoded", () => {
   const ru = "Создавать и обновлять task-folders в репозитории";
   const en = "Create and update task folders in the repo";

@@ -13,7 +13,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -114,12 +114,13 @@ const SCRIPT_RE = /\S+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
 const BLOCK_SCALAR_RE = /^[|>][+-]?\d*$/;
 
 /**
- * Read a top-level frontmatter field, handling YAML block scalars. A naive
- * `description:\s*(.+)` captures only the `>` / `>-` indicator when a skill
- * writes its description as a folded block — real plugins (wshobson/agents)
- * commonly do, and the regex parser then mislabels a richly-described skill as
- * "no description". When the inline value is a block indicator, gather the
- * following more-indented lines.
+ * Read a top-level frontmatter field, handling multi-line YAML values. A naive
+ * `description:\s*(.+)` mislabels a richly-described skill as "no description"
+ * in two real-world cases: a block scalar (`description: >` / `>-`, common in
+ * wshobson/agents) AND a quoted scalar whose value starts on the NEXT indented
+ * line (`description:\n  "Generates PDF…"`, as trailofbits/react-pdf writes it).
+ * In both, the inline value is empty or just an indicator, so gather the
+ * following more-indented lines and strip any surrounding quotes from the join.
  */
 function readField(block: string, key: string): string | undefined {
   const lines = block.split(/\r?\n/);
@@ -129,9 +130,11 @@ function readField(block: string, key: string): string | undefined {
   const inline = (
     new RegExp(`^${key}:[ \\t]*(.*)$`).exec(lines[idx])?.[1] ?? ""
   ).trim();
-  if (!BLOCK_SCALAR_RE.test(inline)) {
+  // A non-empty inline value that isn't a block-scalar indicator is the value.
+  if (inline && !BLOCK_SCALAR_RE.test(inline)) {
     return inline.replace(/^["']|["']$/g, "").trim() || undefined;
   }
+  // Empty inline OR a block indicator → the value continues on indented lines.
   const collected: string[] = [];
   for (let i = idx + 1; i < lines.length; i++) {
     if (lines[i].trim() === "") continue;
@@ -139,7 +142,15 @@ function readField(block: string, key: string): string | undefined {
     if (indent <= keyIndent) break;
     collected.push(lines[i].trim());
   }
-  return collected.join(" ").trim() || undefined;
+  // Strip surrounding quotes that wrap the whole multi-line quoted scalar.
+  return (
+    collected
+      .join(" ")
+      .trim()
+      .replace(/^["']/, "")
+      .replace(/["']$/, "")
+      .trim() || undefined
+  );
 }
 
 function frontmatter(md: string): { name?: string; description?: string } {
@@ -260,13 +271,27 @@ function scanAgents(files: Record<string, string>): ScanAgent[] {
  * A token that still carries any `$VAR` after that is genuinely uncheckable.
  */
 function resolveScript(token: string, root: string): ScanHook {
-  const path = token
+  const cleaned = token
     .replace(/["']/g, "")
     .replaceAll("${CLAUDE_PLUGIN_ROOT}", root)
     .replaceAll("$CLAUDE_PLUGIN_ROOT", root);
-  if (path.includes("$")) return { script: token, status: "unresolved" };
-  return { script: path, status: existsSync(path) ? "ok" : "missing" };
+  if (cleaned.includes("$")) return { script: token, status: "unresolved" };
+  // A relative hook path (`./hooks/x.sh`, `scripts/x.py`) is the plugin's own —
+  // resolve it against the PLUGIN ROOT, not the scanner's cwd. Without this, a
+  // plugin that references `./hooks/x.sh` (the file IS present) was reported
+  // MISSING because existsSync() checked cwd-relative (a false positive caught on
+  // ananddtyagi/cc-marketplace). The displayed `script` stays as the author wrote it.
+  const abs = isAbsolute(cleaned) ? cleaned : resolve(root, cleaned);
+  return { script: cleaned, status: existsSync(abs) ? "ok" : "missing" };
 }
+
+// A shell existence guard around a command — `[ ! -f x ] || x`, `[ -f x ] && x`,
+// `test -f x && …`. Authors use it to make a hook OPTIONAL (run the script only
+// if present; a no-op otherwise — e.g. a runtime-generated guard), so a missing
+// target is INTENTIONAL, not a broken reference. Don't flag scripts in such a
+// command as MISSING (a false positive caught on gmickel/flow-next's ralph-guard).
+const EXISTENCE_GUARD =
+  /(?:\[\[?\s*!?\s*-[efsx]\s)|(?:\btest\s+!?\s*-[efsx]\s)/;
 
 /** Pull script-file hook commands out of the resolved settings; count inline ones. */
 function scanHooks(
@@ -283,6 +308,12 @@ function scanHooks(
     const unescaped = cmd.replace(/\\(.)/g, "$1");
     const found = unescaped.match(SCRIPT_RE);
     if (!found || found.length === 0) {
+      inline++;
+      continue;
+    }
+    // A guarded command runs its script only if it exists — an optional hook, not
+    // a broken one. Treat it as a conditional one-liner (inline), don't path-check.
+    if (EXISTENCE_GUARD.test(unescaped)) {
       inline++;
       continue;
     }

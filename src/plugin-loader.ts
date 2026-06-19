@@ -256,6 +256,34 @@ function intraRefRe(layout: PluginLayout): RegExp {
   );
 }
 
+// Shell vars that root a path OUTSIDE the plugin (the user's project / home), so
+// a `surface/…` after one is NOT a plugin-root ref. Anything else ($ROOT,
+// $PLUGIN_ROOT, ${CLAUDE_PLUGIN_ROOT}, …) is taken as the plugin root.
+const NON_PLUGIN_VARS = new Set([
+  "CLAUDE_PROJECT_DIR",
+  "CLAUDE_PROJECT",
+  "HOME",
+  "PWD",
+  "OLDPWD",
+]);
+
+/**
+ * Is a surface-dir match at `idx` actually rooted at the PLUGIN (so checkable
+ * under `root`), vs nested under a literal dir or a project/home var? A match
+ * preceded by a literal segment (`.claude/hooks/…` — a PROJECT path, the
+ * gmickel/flow-next false positive) or a project var (`$CLAUDE_PROJECT_DIR/…`)
+ * is NOT a plugin ref. A bare ref (`cat skills/…`) or one after a plugin-root
+ * var (`${PLUGIN_ROOT}/skills/…`, obra/superpowers) IS.
+ */
+function isPluginRooted(content: string, idx: number): boolean {
+  if (idx === 0 || content[idx - 1] !== "/") return true; // bare / after quote-space
+  // The path component immediately before the separating slash.
+  const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
+  const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
+  if (varName !== undefined) return !NON_PLUGIN_VARS.has(varName); // a var root
+  return false; // a literal dir segment → nested, not a plugin-root ref
+}
+
 // Documentation files (skill bodies, command docs, reference notes) are PROSE —
 // a `skills/foo/SKILL.md` path inside them is almost always an example, a
 // template placeholder (`wc -w skills/path/SKILL.md`), or a "❌ Bad" sample, not
@@ -281,6 +309,7 @@ const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
 function missingRefsIn(content: string, re: RegExp, root: string): string[] {
   const out: string[] = [];
   for (const m of content.matchAll(re)) {
+    if (m.index !== undefined && !isPluginRooted(content, m.index)) continue;
     if (!existsSync(join(root, m[0]))) out.push(m[0]);
   }
   return out;
