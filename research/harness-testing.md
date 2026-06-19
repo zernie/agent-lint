@@ -157,6 +157,46 @@ and the agents/commands surfaces.
 - **Eval** (`runEval`) = "does my hook / CLAUDE.md / skill / subagent _change what
   the agent does_?" — behaviour, statistical, real cost.
 
+## Why the import path IS the capability contract
+
+A test's level is legible three ways at once — its **import path**, its **file
+suffix**, and its **CI job** — so you can't accidentally hide a network e2e test
+inside the unit gate. The import path is load-bearing: `vigiles/unit` exposes
+nothing that needs a model, bubblewrap, or the network; higher tiers re-export the
+lower ones (dependencies point downward only), so an e2e test reuses unit
+predicates but a unit test _physically can't_ reach egress.
+
+This is enforced, not just named. The runners live at the **composition root**
+(`src/`), and the agnostic surface never imports an adapter — an
+`eslint-plugin-boundaries` rule forbids an agnostic barrel from importing
+`src/adapters/*`. The five tiers map to imports:
+
+| Level       | Import                | File                    | Runner               | Needs                          |
+| ----------- | --------------------- | ----------------------- | -------------------- | ------------------------------ |
+| refs        | —                     | `CLAUDE.md` / specs     | `vigiles lint`       | nothing                        |
+| unit        | `vigiles/unit`        | `*.test.ts`             | vitest `unit`        | nothing                        |
+| integration | `vigiles/integration` | `*.integration.test.ts` | vitest `integration` | harness binary + bwrap, no key |
+| e2e         | `vigiles/e2e`         | `*.e2e.test.ts`         | vitest `e2e`         | routable sandbox + network     |
+| eval        | `vigiles/testing`     | `*.eval.mjs`            | `vigiles eval`       | a real model (keyed)           |
+
+## Two layers or three? (where eval sits)
+
+vigiles has **two layers** — (1) verify the references, (2) test the harness — and
+**eval stays inside layer 2**, as its non-deterministic top axis. A _layer_ is a
+distinct concern: "the references are real" vs "the harness behaves." Eval isn't a
+third concern — it's the deepest way of answering the **same** layer-2 question
+("does the harness behave?"), just with different epistemics: it **measures**
+(mean ± se, significance, pass^k) where unit/integration/e2e **assert** (pass/fail).
+So it's drawn as a distinct _axis_ (non-deterministic, keyed, read-don't-gate) —
+but not a separate layer, because splitting it would imply eval delivers a
+different value than "test the harness," which it doesn't.
+
+The one future where eval graduates to a third layer: if vigiles builds the
+**self-improving harness** (auto-tune skills/hooks by measured evolution — see
+`research/divergent-bets.md` #7), eval stops being "a way to test" and becomes "a
+way to _optimize_" — a genuinely distinct concern worth its own layer. Until then:
+two layers, four levels (refs · unit · integration · e2e) + the eval axis.
+
 ## See also
 
 - `research/harness-testing-coverage-matrix.md` — the whole potential testing
