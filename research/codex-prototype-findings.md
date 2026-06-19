@@ -254,6 +254,12 @@ network egress to the model backend on each run.
 - [x] Wire `codexEvalDriver` → `measureTriggerRate({ evalDriver })` +
       `scan --trigger --harness=codex` (the `HarnessProbe` dispatch); fake-tested
       end-to-end with an injected driver (no binary).
-- [ ] LIVE end-to-end validation: re-run the haretrail EN-vs-RU cross-language
-      eval NATIVELY via `scan --trigger --harness=codex` (gated on Codex quota
-      reset) instead of via the Claude wrapper.
+- [x] LIVE dispatch validation: `scan --trigger --harness=codex` was run NATIVELY
+      against the real binary (2026-06-19) — the CLI dispatched through the Codex
+      `EvalDriver`, spawned real `codex exec --json`, and `codexRunError` correctly
+      EXCLUDED the errored trials (report showed `recall 0% (0 runs)` = `n=0`, not
+      scored as misses). The plumbing + error-exclusion are proven against reality.
+- [ ] LIVE numbers: the recall/precision MEASUREMENT is still gated on the Codex
+      usage limit (every trial errored "try again at 8:37 AM"). Retry the cluster
+      probe (`research/fixtures/haretrail-cluster.json`) once quota resets to get
+      actual debrief/lessons/postmortem precision numbers.

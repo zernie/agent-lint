@@ -173,7 +173,22 @@ negatives is exactly the kind of bug that invalidates a whole run. **Fixed:**
 `codexRunError(out)` detects the `error` / `turn.failed` event (incl. usage
 limits); an errored turn must be skipped/retried, never scored as a miss (the
 Codex analog of the Claude path's `isRateLimited` backoff). Increment 3's dispatch
-must consult it so a quota hit doesn't tank a Codex eval.
+consults it so a quota hit doesn't tank a Codex eval.
+
+**Update (2026-06-19, increment 3 live re-attempt).** Re-ran the same cluster probe
+through the SHIPPED public path — `vigiles scan --trigger --harness=codex
+--prompts=…` — now that the `{ evalDriver }` dispatch is wired. The quota is still
+capped (same "try again at 8:37 AM"), so the recall/precision **numbers** remain
+unmeasured. But the run **live-validated increment 3's plumbing against the real
+binary**: the CLI dispatched through the Codex `EvalDriver`, spawned real
+`codex exec --json`, and `codexRunError` correctly EXCLUDED every errored trial —
+the report shows `debrief — recall 0% (0 runs)` and `postmortem — recall 0% (0
+runs)` (`n=0`, i.e. excluded, NOT scored as misses), exactly the behaviour 3b's fix
+specifies. The diversity gate also fired live (it rejected a too-similar
+`irrelevant` pair for `lessons`). So the only thing still gated on quota is
+non-errored trials to get actual numbers — a quota wall, not a code gap. The
+eval-ready cluster prompt set is saved at
+`research/fixtures/haretrail-cluster.json` for the retry.
 
 ## Not run here — observed egress
 
