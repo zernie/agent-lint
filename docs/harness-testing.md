@@ -91,15 +91,17 @@ There is **one canonical entry point per layer** — import from these:
 | ② Test your harness      | `vigiles/testing` | every tier + check + assertion: `runHook` / `runHarnessTest` / `runEval` / `measure`, the `check` vocabulary, the `assert*` helpers, tool stubs |
 | ① Lint instruction files | `vigiles/linting` | the spec builders + the compiler                                                                                                                |
 
-`vigiles/testing` is the **superset** — reach for it first. Two other groups are
-deliberate surfaces, not aliases: the **capability-scoped tier barrels**
-`vigiles/unit` / `vigiles/integration` / `vigiles/e2e` (the Levels table above —
-the import path _is_ the capability contract, so `vigiles/unit` physically can't
-reach a model or the network), and `vigiles/spec` (the authoring surface — spec
-builders for `.spec.ts` files). CC-specific transport — `scriptModel`, `loadPlugin`,
-`resolveHarness`, and the type `LoadedPlugin` — lives in `vigiles/claude-code`, not
-`vigiles/testing`. Runner integration is `vigiles/vitest` / `vigiles/jest`; harness
-selection is `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
+`vigiles/testing` is the **superset** — reach for it first. The other entry points
+are deliberate surfaces, not aliases:
+
+- **Capability-scoped tier barrels** — `vigiles/unit` / `vigiles/integration` /
+  `vigiles/e2e` (the Levels table above): the import path _is_ the capability
+  contract, so `vigiles/unit` physically can't reach a model or the network.
+- **Authoring** — `vigiles/spec`: the spec builders for `.spec.ts` files.
+- **CC-specific transport** — `scriptModel`, `loadPlugin`, `resolveHarness`, and
+  the `LoadedPlugin` type live in `vigiles/claude-code`, not `vigiles/testing`.
+- **Runner integration** — `vigiles/vitest` / `vigiles/jest`.
+- **Harness selection** — `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
 
 The **harness-specific** pieces — the mock wire format, the plugin layout, the
 sandbox — live in the per-harness guides:
@@ -219,13 +221,16 @@ assertHookFired(r, "UserPromptSubmit"); // it actually fired
 assertOutputContains(r, /on it/); // …and the run completed
 ```
 
-The scripted `model` turns and the mock that serves them are harness-specific:
-Claude Code's `scriptModel` renders the Anthropic Messages SSE; Codex drives real
-`codex exec` against the OpenAI Responses mock. The plugin layout the loader reads
-(`.claude-plugin/plugin.json`, `${CLAUDE_PLUGIN_ROOT}`, `pluginDir` native install
-for the `Skill` tool — vs. Codex's `AGENTS.md` + TOML config) is likewise
-per-harness. The rich worked examples — loading a real plugin, native skill
-install, the safe-by-default sandbox — live in the per-harness guides:
+The scripted `model` turns, the mock that serves them, and the plugin layout the
+loader reads are all **harness-specific**:
+
+- **Mock wire format** — Claude Code's `scriptModel` renders the Anthropic
+  Messages SSE; Codex drives real `codex exec` against the OpenAI Responses mock.
+- **Plugin layout** — `.claude-plugin/plugin.json`, `${CLAUDE_PLUGIN_ROOT}`,
+  `pluginDir` native install for the `Skill` tool — vs. Codex's `AGENTS.md` + TOML config.
+
+The rich worked examples — loading a real plugin, native skill install, the
+safe-by-default sandbox — live in the per-harness guides:
 **[Claude Code](harness-testing-claude-code.md)** ·
 **[Codex](harness-testing-codex.md)**.
 
@@ -744,14 +749,15 @@ model / API key) — run it on a keyed job with `npm run test:eval`, not on ever
 
 vigiles has **two layers** — (1) verify the references, (2) test the harness —
 and **eval stays inside layer 2**, as its non-deterministic top axis. A _layer_
-is a distinct concern: "the references are real" vs "the harness behaves." Eval
-isn't a third concern — it's the deepest way of answering the **same** layer-2
-question ("does the harness behave?"), just with different epistemics: it
+is a distinct concern: "the references are real" vs "the harness behaves."
+
+Eval isn't a third concern — it's the deepest way of answering the **same**
+layer-2 question ("does the harness behave?"), just with different epistemics: it
 **measures** (mean ± se, significance, pass^k) where unit/integration/e2e
-**assert** (pass/fail). So in the docs it's drawn as a clearly distinct _axis_
-(non-deterministic, keyed, read-don't-gate) — but not a separate layer, because
-splitting it would imply eval delivers a different value than "test the harness,"
-which it doesn't.
+**assert** (pass/fail). So it's drawn as a clearly distinct _axis_
+(non-deterministic, keyed, read-don't-gate) — but not a separate layer: splitting
+it would imply eval delivers a different value than "test the harness," which it
+doesn't.
 
 The one future where eval graduates to a third layer: if vigiles builds the
 **self-improving harness** (auto-tune skills/hooks by measured evolution — see
@@ -847,12 +853,13 @@ The eval ecosystem — [promptfoo](https://github.com/promptfoo/promptfoo),
 [Inspect](https://inspect.aisi.org.uk/) — is excellent at what it does, and
 vigiles is **not** a competing eval framework. They evaluate a **model/agent on a
 dataset**; vigiles tests **the harness** (your hooks / settings / instruction file
-/ skills, loaded exactly as they ship) and is built to be **deterministic and
-cheap** where those tools are real-model-only. The core difference is cost by
-construction: every one of their runs is a real model call by design, while vigiles
-answers most harness questions — does this hook block? is it wired in? does the
-skill resolve? — with **no model and no API key at all**, paying for a real model
-only at the eval tier, only when the question needs one.
+/ skills, loaded exactly as they ship), built to be **deterministic and cheap**
+where those tools are real-model-only.
+
+The core difference is **cost by construction**. Every one of their runs is a real
+model call by design. vigiles answers most harness questions — does this hook
+block? is it wired in? does the skill resolve? — with **no model and no API key at
+all**, paying for a real model only at the eval tier, only when the question needs one.
 
 | Capability                                                    | vigiles                         | promptfoo         | DeepEval | Braintrust | Inspect          |
 | ------------------------------------------------------------- | ------------------------------- | ----------------- | -------- | ---------- | ---------------- |
