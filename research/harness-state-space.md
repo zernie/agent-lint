@@ -41,6 +41,36 @@ If it needs a model or only emits a fuzzy 0–100 score, it's a cute analogy, no
 
 ### Moat bets (mostly transfers → deterministic check classes)
 
+**Foundational — the two FP principles applied to the USER's instruction files** (vigiles's
+own `ts-essentials` rule uses both internally; the move is to point them at the object
+domain — the user's CLAUDE.md/SKILL.md — not just vigiles's code). Everything below is a
+query _over_ these:
+
+- **0a. Make illegal states unrepresentable → schema-as-sum-types.** Design the
+  SKILL.md/agent/hook schema — the typed-spec builders AND the `generate-schema` JSON Schema
+  — as precise discriminated unions so illegal _combinations_ can't be authored; where
+  markdown can't forbid authoring, the JSON Schema (`oneOf`/`required`/`not`/`enum`) rejects
+  them at edit time and lint hard-errors them. Each illegal state is a real silent-failure
+  bug: model-invocable skill with no description/trigger (never fires) →
+  `{invocable:"model", description, trigger}` XOR `{invocable:"user", command}`; a
+  never-available/typo'd tool (silently dropped) → `tools: ClaudeTool[]` over a closed
+  catalog; an incomplete `mcp_tool` hook (never runs) → `{event} & McpToolAction{server,tool}`;
+  mutually-exclusive fields (`disable-model-invocation` ∧ trigger examples) forbidden by the
+  union; ephemeral state (`Current Task`/version/date) → **no such slot exists**, so it has
+  nowhere to go. Enforce structure by CONSTRUCTION (spec) + SCHEMA (markdown), not
+  after-the-fact prose checks.
+- **0b. Parse, don't validate → parse-the-harness-once.** Read the whole harness
+  (CLAUDE.md + SKILL.mds + agents + hooks + plugin.json/MCP) ONCE at the boundary into a
+  typed `Harness` model whose types have already eliminated the illegal states; lint, scan,
+  hooks, and tests all consume THAT, never re-parsing raw markdown. So: "fails to parse into
+  the typed model" IS the error (a SKILL.md that can't yield a valid `Skill` is rejected at
+  the boundary, not re-checked at five call sites); no detector drift (one parse = one source
+  of truth — `one-detector-no-drift` is a corollary); normalize once (`string|string[]`
+  tools, braced/unbraced plugin-root). The lenient `frontmatter-read` + `loadPlugin` are the
+  seed; the discipline is "no consumer touches raw md again," and the parse emits the
+  diagnostics (lint findings) AND the typed value (what hooks/tests run on) — **parsing IS
+  the verification.** The trifecta check (#1) is just a query over this parsed capability set.
+
 1. **Capability-graph + lethal-trifecta forbidden-state check.** Object-capability +
    taint analysis. The dangerous _state_ is the co-occurrence of {private-data access} ∧
    {untrusted-content intake} ∧ {exfiltration channel} in one agent's capability set —
@@ -155,6 +185,15 @@ _before the agent runs_, statically, at commit time, for free** — every other 
 `agent-supply-chain-security.md` for the prior stance this sharpens.
 
 ## Ranked (ordered) — criteria: moat defensibility × adoption pull × low effort × timeliness × fits-the-engine
+
+**Tier 0 — the foundation under everything (build/solidify first):**
+
+- **Schema-as-sum-types (0a)** + **parse-the-harness-once (0b).** Not flashy, but every
+  Tier-1 check is a _query over the parsed, sum-typed harness model_ — the trifecta query is
+  cheap only because the harness was parsed once into a typed capability set, and structural
+  enforcement is "illegal states won't construct/validate." Partly built (`frontmatter-read`,
+  `loadPlugin`); the work is making it THE discipline + the public `generate-schema`
+  constraints.
 
 **Tier 1 — do now (highest combined ROI):**
 
