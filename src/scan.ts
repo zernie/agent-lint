@@ -268,19 +268,42 @@ export function unexpectedScript(
   return dominant.count / total >= 0.2 ? dominant.label : null;
 }
 
+/**
+ * The first prose paragraph of a SKILL.md body (after the frontmatter and any
+ * leading `#` headings) — Claude Code's FALLBACK skill description when the
+ * frontmatter omits `description`. Used so the trigger-surface check doesn't
+ * overclaim "can't trigger" for a skill that has a usable body paragraph.
+ */
+function firstBodyParagraph(md: string): string | undefined {
+  const body = md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+  const para: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t === "" || t.startsWith("#")) {
+      if (para.length > 0) break; // end of the first paragraph
+      continue; // skip leading blanks / headings
+    }
+    para.push(t);
+  }
+  return para.join(" ").trim() || undefined;
+}
+
 function scanSkills(files: Record<string, string>): ScanSkill[] {
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!isSkill(path)) continue;
     const fm = frontmatter(md);
+    // A skill's trigger surface is its frontmatter `description` OR — when that's
+    // absent — Claude Code's fallback to the first body paragraph. Only when
+    // NEITHER exists is the skill genuinely undescribed (can't be selected). The
+    // explicit-frontmatter best-practice is the separate `skill-frontmatter` rule.
+    const effectiveDesc = fm.description ?? firstBodyParagraph(md);
     out.push({
       name: fm.name ?? skillName(path),
       path,
-      hasDescription: Boolean(fm.description && fm.description.length >= 20),
+      hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
       userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
-      descriptionScript: fm.description
-        ? unexpectedScript(fm.description)
-        : null,
+      descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -609,7 +632,7 @@ function section(title: string, lines: readonly string[]): string[] {
 /** One skill's report line: ✓/⚠ + name + notes (no-trigger, user-invoked, language risk). */
 function skillLine(s: ScanSkill): string {
   if (!s.hasDescription) {
-    return `  ⚠ ${s.name} (missing/short description — can't trigger)`;
+    return `  ⚠ ${s.name} (no usable description — no frontmatter description and no body text — can't trigger)`;
   }
   const notes: string[] = [];
   if (s.userInvoked) notes.push("user-invoked");
