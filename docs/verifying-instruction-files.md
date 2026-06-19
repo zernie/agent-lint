@@ -36,19 +36,25 @@ Zero install commitment, zero new files.
 
 ### Typed spec — compiler-grade guarantees
 
-Markdown mode verifies the rules you declare when you run `lint`. A typed spec
-goes further in three ways markdown can't:
+Markdown mode already squiggles typos at edit time (the YAML schema `init`
+generates), so edit-time feedback is _not_ what a spec buys you. A typed spec is
+better in ways markdown structurally can't reach:
 
-- **References are types.** Every linter rule, file path, npm script, and code
-  symbol is checked by `tsc` itself — continuously, as you type, not only when
-  lint runs. A stale reference is a red squiggle _and_ a compile error.
-- **The output can't drift.** `compile` stamps the CLAUDE.md it emits with an
-  integrity hash, making it a build artifact: a hand-edit or silent drift is
-  caught, and the spec stays the single source of truth the agent edits.
+- **More gets verified.** Markdown frontmatter only checks `enforce` rule _names_
+  against the catalog — its schema is an enum of rule names, nothing more. The
+  spec also verifies file paths, npm scripts, and code symbols, so a missing path
+  or renamed symbol is a hard error, not silent prose.
 - **References live in the prose.** `file()`, `cmd()`, `symbol()`, and `ref()`
-  bind verified references inside the instruction text itself — not just
-  standalone enforce rules — so a renamed file mentioned in a sentence still
-  fails the build.
+  bind verified references _inside the instruction text itself_ — not just
+  standalone enforce declarations — so a renamed file mentioned mid-sentence fails
+  the build. Markdown's body is unchecked free text.
+- **The output can't drift.** `compile` stamps the emitted CLAUDE.md with an
+  integrity hash, making it a build artifact: a hand-edit or silent drift is
+  caught, and the spec stays the single source of truth. In markdown mode the file
+  _is_ the source — there's nothing to detect drift against.
+- **It's code.** Compose and share rules across specs, fan one source out to a
+  byte-identical CLAUDE.md and AGENTS.md, and get the monotonicity proof system
+  below (a rule can be strengthened but never silently weakened).
 
 ```typescript
 // CLAUDE.md.spec.ts
