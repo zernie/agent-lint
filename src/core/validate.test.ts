@@ -435,6 +435,7 @@ describe("loadConfig", () => {
       "hook-events": "warn",
       "frontmatter-schema": "warn",
       "mcp-config": "warn",
+      "skill-frontmatter": "warn",
     });
   });
 

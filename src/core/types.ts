@@ -149,6 +149,14 @@ export interface RulesConfig {
    * `scan`. (JSON `.mcp.json`/manifest `mcpServers`; Codex TOML not yet parsed.)
    */
   "mcp-config"?: RuleSeverity;
+  /**
+   * RECOMMEND (not require) that a SKILL.md declares an explicit `name` +
+   * `description` rather than relying on the dir-name / first-paragraph
+   * fallbacks — a more reliable trigger surface. The skill still loads without
+   * them, so this is a best-practice nudge: default "warn"; set "error" to
+   * enforce on your own skills. Same detector as `scan` (skillMetaIssues).
+   */
+  "skill-frontmatter"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

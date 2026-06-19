@@ -388,6 +388,31 @@ test("frontmatter-schema flags a prose-only AGENT, but NOT a frontmatter-less sk
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin recommends explicit skill frontmatter (skillMetaIssues), but it's not a structural defect", () => {
+  const dir = makeTmpDir("scan-skillmeta");
+  // Has a description (so it loads + has a trigger surface) but NO explicit name
+  // → recommendation only, NOT a structural defect.
+  write(
+    dir,
+    "skills/foo/SKILL.md",
+    "---\ndescription: A foo skill with a real explicit description for testing here\n---\n# Foo\n",
+  );
+  // Explicit name+description → no recommendation.
+  write(
+    dir,
+    "skills/bar/SKILL.md",
+    "---\nname: bar\ndescription: A bar skill with a proper explicit description here\n---\n# bar\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.skillMetaIssues.length, 1);
+  assert.ok(r.skillMetaIssues[0].path.includes("foo"));
+  assert.deepEqual(r.skillMetaIssues[0].missing, ["name"]);
+  // It's a recommendation, NOT a structural issue — must not flip the verdict.
+  assert.match(formatScanReport(r), /no structural issues found/);
+  assert.match(formatScanReport(r), /lack an explicit frontmatter/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin flags an MCP server that can't start (no command/url)", () => {
   const dir = makeTmpDir("scan-mcp");
   write(
