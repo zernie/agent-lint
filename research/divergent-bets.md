@@ -39,6 +39,11 @@
 - **Smallest first step.** Pick 20 popular marketplace skills, run trigger-rate +
   load-conformance + `recordEgress`, publish a single scored table as a blog post.
   Reuses `measureTriggerRate`, `loadPlugin`, the sandbox — no new mechanism.
+- **Started.** The structural column is shipped (`scan`/`leaderboard`, now with
+  marketplace traversal — wshobson/agents ranks 80+ plugins from one root); the
+  behavioral column has its first real finding in
+  [plugin-behavioral-findings](plugin-behavioral-findings.md) (superpowers'
+  `brainstorming` recall ≈20–30% despite a structurally-clean description).
 - **Risk.** Ranking others publicly invites disputes; trigger-rate is model- and
   prompt-dependent (must publish methodology + confidence). Cost of scanning at
   scale (mitigate: sample, cache).

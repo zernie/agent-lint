@@ -18,6 +18,7 @@ layer-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter
 - [A worked deterministic example](#a-worked-deterministic-example)
 - [The OpenAI Responses mock (`startCodexMock`)](#the-openai-responses-mock-startcodexmock)
 - [What maps, and what doesn't](#what-maps-and-what-doesnt)
+- [Authenticating Codex (for the eval tier)](#authenticating-codex-for-the-eval-tier)
 - [See also](#see-also)
 
 ## Select Codex by the `{ adapter }` option
@@ -115,15 +116,15 @@ for how the recipe was proven.
 
 ## What maps, and what doesn't
 
-| Surface               | Codex                                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Instructions          | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical      |
-| Skills                | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                 |
-| Deterministic harness | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)        |
-| Hook veto             | ✅ same wire level as CC — block via exit 2                                               |
-| Plugin/MCP manifest   | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                   |
-| Subagents             | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract |
-| `runEval`             | documented follow-on (same driver seam), not yet shipped — don't gate on it               |
+| Surface                  | Codex                                                                                                                                                                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instructions             | `AGENTS.md` (plain markdown) — Lint compiles + verifies it; CC output byte-identical                                                                                                                                                                                   |
+| Skills                   | minimal `SKILL.md` (`name`/`description`, via `dialect.skillFrontmatter`)                                                                                                                                                                                              |
+| Deterministic harness    | ✅ `runHarnessTest({ adapter: codexAdapter })` against real `codex exec` (keyless)                                                                                                                                                                                     |
+| Hook veto                | ✅ same wire level as CC — block via exit 2                                                                                                                                                                                                                            |
+| Plugin/MCP manifest      | TOML (`config.toml` + `[mcp_servers]`), read format-aware by the loader                                                                                                                                                                                                |
+| Subagents                | ⛔ **deliberate non-goal** — a Codex subagent is a TOML concurrency table, not a contract                                                                                                                                                                              |
+| `runEval` / trigger-rate | 🚧 **built, live-validation pending** — runner + JSONL parser + skill-firing predicate confirmed against the binary, and `{ evalDriver }` dispatch (`scan --trigger --harness=codex`) is wired + fake-tested; a live native eval run is the one remaining step (below) |
 
 **Subagents are a boundary, not a gap.** A Codex subagent is an `[agents.<name>]`
 TOML concurrency table (`max_threads` / `max_depth`), not a tool-contract file —
@@ -132,16 +133,63 @@ vigiles's `agent()` builder doesn't map onto it, so it isn't compiled to Codex
 (`agent-runtime`, the railway result contract) is Claude Code only. See
 [`docs/harnesses.md`](harnesses.md) footnote ¹.
 
-**Tool-call / hook stream parsing is minimal.** The Codex driver parses the final
-assistant text into `output`; `toolCalls` and `hooks` are left empty (the codex
-JSONL schema isn't parsed for the output check). A test that needs to assert on
-tool sequences or hook firing uses Claude Code today.
+**Tool-call parsing differs by tier.** The deterministic driver (`parseCodexRun`)
+reads `codex exec`'s plain text into `output` only. The **eval** tier reads
+`codex exec --json` and parses tool calls + usage via `parseCodexEvalRun`.
 
-**`runEval` for Codex is a documented follow-on**, not shipped — it rides the same
-`HarnessTestDriver` seam as `runHarnessTest`, but the path isn't wired or proven
-yet. Use Claude Code for evals; use Codex for the deterministic
-`runHarnessTest` tier. (This matches the [`docs/harnesses.md`](harnesses.md)
-matrix footnote ² — don't over-promise it.)
+**`runEval` / trigger-rate for Codex is built; one live run remains.** The parser,
+runner, and skill-firing predicate (`parseCodexEvalRun` / `codexEvalAgentRunner` /
+`codexSkillFired`) are validated against the real binary, and the public dispatch
+is wired: `measureTriggerRate(spec, { evalDriver: codexEvalDriver })` and, through
+the CLI, `vigiles scan --trigger --harness=codex`. It's fake-tested end-to-end
+(an injected driver, no binary); the one remaining step is a live native eval run,
+gated on Codex quota. One thing worth knowing as a user: **Codex has no "skill
+selected" event** the way Claude does, so a skill trigger is detected by the model
+reading the skill's `SKILL.md` (`codexSkillFired`) — best-effort, so pair it with
+a judged check. **Pin codex 0.139.0** (0.141 regressed the keyless mock), and real
+eval turns need auth + network egress.
+
+The confirmed `codex exec --json` schema and the full findings are in
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md).
+(Matches the [`docs/harnesses.md`](harnesses.md) matrix footnote ².)
+
+## Authenticating Codex (for the eval tier)
+
+The **deterministic** tier (`runHarnessTest`) is **keyless** — it points `codex
+exec` at the in-process Responses mock, so it needs no login. Only the **eval**
+tier (real model) needs Codex auth. Three ways, in order of fit:
+
+1. **Device-code flow — best for a headless / remote / sandbox env** (no browser
+   on the box, no `localhost` callback to forward):
+
+   ```bash
+   codex login --device-auth
+   ```
+
+   It prints a URL (`https://auth.openai.com/codex/device`) and a one-time code.
+   Open the URL on **any** device, enter the code, and the CLI — which is polling
+   — completes the login; the token is written to `~/.codex` on the box running
+   the command. This is the flow to use when an agent/CI sets Codex up for you.
+   Verify with `codex login status`.
+
+2. **Browser flow — local dev only:** plain `codex login` opens a browser and
+   redirects to `http://localhost:1455`. Fine on your laptop; it does **not** work
+   in a remote sandbox (the callback hits the sandbox's loopback, not yours) —
+   use `--device-auth` there.
+
+3. **API key (no browser):** pipe a key in —
+
+   ```bash
+   printenv OPENAI_API_KEY | codex login --with-api-key
+   ```
+
+   Use this when you have a key and want a non-interactive setup, or when the
+   ChatGPT plan on the account doesn't include Codex.
+
+The eval tier also needs **network egress** to the Codex/OpenAI backend (the
+deterministic tier doesn't — it only talks to the in-process mock). Install the
+CLI with `npm i -g @openai/codex` (pin the version — the `codex exec --json`
+event schema can shift between releases; validated against `codex-cli` 0.141.0).
 
 ## See also
 

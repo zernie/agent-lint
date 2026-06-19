@@ -101,8 +101,12 @@ one dialect) and `scan` (reports harness-specific structure). See
 Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
 of what it ships and what's structurally broken — **no model, no API key**. It
 re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
-`findUntestedSurfaces`): per-skill description presence + user-invoked flag,
-per-agent tool contract (and the "no `tools:` line → inherits every tool"
+`findUntestedSurfaces`): per-skill description presence + user-invoked flag +
+**description-script** detection (a description whose dominant script differs from
+the expected one — **default Latin, configurable** — carries a cross-language
+trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
+under-fire on English prompts; a RISK flag, not a defect — measure it with
+`--trigger`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
 forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
 counts, and the loader's dangling-ref / surface warnings. `--json` for CI.
@@ -117,21 +121,121 @@ harness-agnostic.)
 npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
 npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles scan ./marketplace-repo     # a marketplace.json root → ranks every member
 npx vigiles scan ./repo --harness=codex # override harness detection
 ```
 
-Pass **more than one directory** and `scan` switches to a **ranked health
-leaderboard** — a deterministic structural-health score (0–100 + A–F) per
-plugin, worst issues first. Weights: a missing hook script −15 (won't run), a
-skill with no usable description −10 (can't trigger), an agent with no `tools:`
-contract −5 (inherits everything), an untested surface −3. Scoring deliberately
-ignores the loader's free-text warnings (they include doc-mention false
-positives), so the ranking stays defensible.
+Pass **more than one directory** — or a single **marketplace** root (a
+`.claude-plugin/marketplace.json`, e.g. `wshobson/agents`' 80+ plugins, which
+`scan` expands into its members) — and `scan` switches to a **ranked health
+leaderboard**: a deterministic structural-health score (0–100 + A–F) per plugin,
+worst issues first. Weights: a missing hook script −15 (won't run), a skill with
+no usable description −10 (can't trigger), a broken intra-plugin reference −8
+(partial-vendor / dead path), an agent with no `tools:` contract −5 (inherits
+everything), an untested surface −3. Scoring deliberately ignores the loader's
+free-text warnings (they include doc-mention false positives), so the ranking
+stays defensible. A **command-only** plugin (`commands/*.md`, no skills/agents/hooks)
+or an **MCP-only** plugin (`.mcp.json`) is a real, valid surface and scores on its
+own health — only a directory with _no_ surface at all scores 0.
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
 harness-aware supply-chain audit (see `research/divergent-bets.md`,
-`research/agent-supply-chain-security.md`); behavioural columns that need to
-_run_ the plugin (observed egress, real trigger-rate, safety) build on top.
+`research/agent-supply-chain-security.md`).
+
+#### Behavioral column — `scan --trigger`
+
+The structural scan above is the free, no-model column. **`--trigger`** opts into
+the model-gated column that stacks on top: for each model-invocable skill in a
+single plugin, it measures how reliably the description actually **FIRES**
+(recall, plus precision when irrelevant prompts are given) via
+`measureTriggerRate` — the bug a green structural scan can't see (a skill with a
+fine description that never triggers). It needs the `claude` CLI + model auth, and
+**degrades honestly** ("unavailable") when they're absent rather than faking a
+pass. `--harness=codex` routes the probe through the native Codex driver instead
+(a trigger surfaces as the model reading the skill's `SKILL.md`, since Codex has no
+Skill-tool event) — see [`docs/harness-testing-codex.md`](harness-testing-codex.md).
+
+Prompts are **author-supplied** (not model-generated — a path in prose is
+undecidable): a JSON map of skill name → `{ prompts, irrelevant }`.
+
+```bash
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
+```
+
+```jsonc
+// probes.json — keyed by bare skill name
+{
+  "brainstorming": {
+    "prompts": ["…≥10 prompts it SHOULD fire on…"],
+    "irrelevant": ["…prompts it should stay quiet on (→ precision)…"],
+  },
+}
+```
+
+Flags use the `--flag=value` form (`--prompts=`, `--concurrency=`, `--model=`,
+`--min-prompts=`). A diversity gate requires **≥10 prompts per set** (and per
+`irrelevant` set) before spending a token; lower it with `--min-prompts=` for a
+genuinely narrow skill. Skills with no prompts are reported `unmeasured`;
+user-invoked skills aren't probed (they can't auto-trigger); a thin prompt set is
+surfaced per-skill (`unmeasured`), never crashing the scan. See
+[`docs/harness-testing.md`](harness-testing.md) for the underlying
+`measureTriggerRate` and [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md)
+for what it catches. (The remaining behavioural columns — observed egress,
+safety — build on the same footing.)
+
+## Lint vs scan — gate vs report
+
+`lint` and `scan` look like they overlap, but they're **different verbs with
+different contracts** — the classic gate-vs-report split (think `eslint .` /
+`tsc --noEmit` vs `npm audit` / `terraform plan`):
+
+- **`lint` is the gate.** It runs on **your** repo with **your** config, verifies
+  references (file paths, scripts, and linter rules across **7 catalogs** — does
+  the rule exist _and_ is it enabled?), checks integrity/hash, coverage
+  thresholds, orphan docs, duplicate rules — and exits with **config-driven
+  severities → stable CI codes (0/1/2)**. It blocks bad commits.
+- **`scan` is the report.** Zero config, **read-only**, harness-aware, works on
+  **any** plugin (including third-party ones with no spec). It inventories the
+  structure, ranks a whole marketplace (leaderboard), and — with `--trigger` —
+  adds the model-gated behavioural column.
+
+They deliberately **share one implementation** of the few deterministic
+structural detectors they have in common (untested-surface, dangling-ref,
+description-script), per the `one-detector-no-drift` rule, so the two surfaces can
+never disagree. The asymmetry everywhere else is intentional: some checks need
+inputs only the gate has (your catalogs, your compiled output), and the paid
+`--trigger` column must **never** become a `lint` rule (lint stays free +
+deterministic + every-commit).
+
+**What each does:**
+
+| Check                                                       |  `lint`  |  `scan`   | `scan --trigger` |
+| ----------------------------------------------------------- | :------: | :-------: | :--------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |        –         |
+| Marked file/script ref verification                         |    ✓     |     –     |        –         |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |        –         |
+| Untested surface                                            |  ✓ gate  |  ✓ count  |        –         |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |        –         |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |        –         |
+| Leaderboard (rank a marketplace)                            |    –     |     ✓     |        –         |
+| Trigger recall/precision (does a skill fire?)               |    –     |     –     |        ✓         |
+| Config severities + CI exit codes                           |    ✓     | read-only |    read-only     |
+| **Cost tier**                                               | free/det | free/det  |  **paid/model**  |
+
+**Where each runs:**
+
+| Target             |        `lint`        |        `scan`         |  `scan --trigger`   |
+| ------------------ | :------------------: | :-------------------: | :-----------------: |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)¹ |   n/a (no skills)   |
+| Claude Code plugin |          ✓           |           ✓           |          ✓          |
+| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
+| Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
+
+¹ On a plain repo `scan` reports the detected instruction file (`CLAUDE.md` /
+`AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
+_verification_ of that file is `lint`'s job (and needs marks — inline,
+frontmatter, or a spec; plain prose isn't auto-parsed).
 
 ## GitHub Action
 
@@ -297,16 +401,27 @@ want compile-on-edit.
 
 `vigiles lint` validates instruction files; the refs-hook nudges marking on edit:
 
-| Rule                                                | Default  | What it checks                                                                  |
-| --------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter    |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead      |
-| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                            |
-| [`coverage`](rules/coverage.md)                     | `false`  | Spec covers enough of the project surface                                       |
-| [`untested-skill`](rules/untested-skill.md)         | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                              |
-| [`untested-agent`](rules/untested-agent.md)         | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                        |
-| [`untested-hook`](rules/untested-hook.md)           | `"warn"` | Every file-backed hook script ships with a test or eval                         |
-| [`unmarked-refs`](rules/unmarked-refs.md)           | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge |
+| Rule                                                              | Default  | What it checks                                                                         |
+| ----------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------- |
+| [`require-spec`](rules/require-spec.md)                           | `"warn"` | Every CLAUDE.md/AGENTS.md has a spec, inline rule, or `vigiles:` frontmatter           |
+| [`require-skill-spec`](rules/require-skill-spec.md)               | `false`  | **Deprecated** (skills can be hand-written) — use `untested-skill` instead             |
+| [`integrity`](rules/integrity.md)                                 | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                                   |
+| [`coverage`](rules/coverage.md)                                   | `false`  | Spec covers enough of the project surface                                              |
+| [`untested-skill`](rules/untested-skill.md)                       | `"warn"` | Every skill (`SKILL.md`) ships with a test or eval                                     |
+| [`untested-agent`](rules/untested-agent.md)                       | `"warn"` | Every subagent (`agents/*.md`) ships with a test or eval                               |
+| [`untested-hook`](rules/untested-hook.md)                         | `"warn"` | Every file-backed hook script ships with a test or eval                                |
+| [`unmarked-refs`](rules/unmarked-refs.md)                         | `"warn"` | Instruction-file references are marked (verifiable); drives the refs-hook nudge        |
+| [`agent-tool-contract`](rules/agent-tool-contract.md)             | `"warn"` | Subagent `tools:` are real (catalog cross-ref — never-available / typo)                |
+| [`disallowed-tools-contract`](rules/disallowed-tools-contract.md) | `"warn"` | Subagent `disallowedTools:` are real tools (a typo blocks nothing)                     |
+| [`hook-events`](rules/hook-events.md)                             | `"warn"` | Hooks register under a real event name (a typo never fires)                            |
+| [`agent-frontmatter`](rules/agent-frontmatter.md)                 | `"warn"` | Subagent frontmatter valid (required `name`+`description`; `model`/`color` not a typo) |
+| [`mcp-config`](rules/mcp-config.md)                               | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                             |
+| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)                 | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) MCP server             |
+| [`hook-script-exists`](rules/hook-script-exists.md)               | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)           |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md)   | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool (else it never dispatches)    |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)                 | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)               |
+| [`description-overlap`](rules/description-overlap.md)             | `"warn"` | No two model-invocable skills have near-identical descriptions (selector collision)    |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)                 | `"warn"` | A skill/agent `---` block is valid YAML (warn — js-yaml is stricter than some loaders) |
 
 Configure in `.vigilesrc.json`:
 

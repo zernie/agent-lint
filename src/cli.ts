@@ -41,7 +41,19 @@ import type {
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
-import { scanPlugin, formatScanReport } from "./scan.js";
+import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
+import {
+  verifyToolContract,
+  confidentToolIssues,
+} from "./core/tool-contract.js";
+import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
+import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
+import {
+  probePluginTriggers,
+  formatBehavioralReport,
+  type TriggerPromptSet,
+  type ProbeHarness,
+} from "./scan-behavioral.js";
 import {
   detectAdapterResult,
   resolveAdapter,
@@ -742,6 +754,28 @@ interface LintReport {
   orphanCount: number;
   untestedSurfaces: number;
   untestedErrors: number;
+  toolContractIssues: number;
+  toolContractErrors: number;
+  hookEventIssues: number;
+  hookEventErrors: number;
+  frontmatterSchemaIssues: number;
+  frontmatterSchemaErrors: number;
+  mcpConfigIssues: number;
+  mcpConfigErrors: number;
+  skillFrontmatterIssues: number;
+  skillFrontmatterErrors: number;
+  mcpToolIssues: number;
+  mcpToolErrors: number;
+  hookScriptIssues: number;
+  hookScriptErrors: number;
+  disallowedToolIssues: number;
+  disallowedToolErrors: number;
+  descriptionOverlapIssues: number;
+  descriptionOverlapErrors: number;
+  frontmatterValidIssues: number;
+  frontmatterValidErrors: number;
+  mcpHookIssues: number;
+  mcpHookErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -835,6 +869,17 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.integrityErrors > 0 ||
     report.coverageErrors > 0 ||
     report.untestedErrors > 0 ||
+    report.toolContractErrors > 0 ||
+    report.hookEventErrors > 0 ||
+    report.frontmatterSchemaErrors > 0 ||
+    report.mcpConfigErrors > 0 ||
+    report.skillFrontmatterErrors > 0 ||
+    report.mcpToolErrors > 0 ||
+    report.hookScriptErrors > 0 ||
+    report.disallowedToolErrors > 0 ||
+    report.descriptionOverlapErrors > 0 ||
+    report.frontmatterValidErrors > 0 ||
+    report.mcpHookErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1214,6 +1259,50 @@ async function runLint(
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
   const untested = checkUntestedSurfaces(config, silent);
 
+  // 7c. Agent tool-contract check — cross-reference each subagent's `tools:` rail
+  // against the harness catalog (the moat). Off by default unless a severity is
+  // configured; warning surfaces a typo/never-available tool, error gates CI.
+  const toolContract = checkAgentToolContracts(config, silent);
+
+  // 7d. Hook-event check — a hook registered under an event the harness doesn't
+  // define never fires. High-precision (close typos only). Off unless configured.
+  const hookEvents = checkHookEvents(config, silent);
+
+  // 7e. Frontmatter-schema check — a skill/agent missing required frontmatter
+  // (name; agents also description) won't load/register. High-confidence.
+  const frontmatter = checkFrontmatterSchema(config, silent);
+
+  // 7f. MCP-config check — a declared MCP server with no command/url can't start.
+  const mcpConfig = checkMcpConfig(config, silent);
+
+  // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
+  // reliable trigger surface). Best-practice nudge; skills load without it.
+  const skillFm = checkSkillFrontmatter(config, silent);
+
+  // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
+  // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
+  const mcpToolResolves = checkMcpToolResolves(config, silent);
+
+  // 7i. Hook-script existence — a hook command referencing a missing script file
+  // never runs (matches Anthropic's own `claude plugin validate`).
+  const hookScripts = checkHookScriptExists(config, silent);
+
+  // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
+  // (the deny-side mirror of agent-tool-contract; close-typo only).
+  const disallowedTools = checkDisallowedTools(config, silent);
+
+  // 7k. Description-overlap — two model-invocable skills with near-identical
+  // descriptions collide in the selector (deterministic NCD precision proxy).
+  const descriptionOverlap = checkDescriptionOverlap(config, silent);
+
+  // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
+  // stricter than some loaders, so verify before enforcing).
+  const frontmatterValid = checkFrontmatterValid(config, silent);
+
+  // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
+  // targets an undeclared server (the moat applied to the hook surface).
+  const mcpHookTargets = checkMcpHookTargets(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1264,6 +1353,28 @@ async function runLint(
     orphanCount: orphanReport.orphans.length,
     untestedSurfaces: untested.untested,
     untestedErrors: untested.errors,
+    toolContractIssues: toolContract.issues,
+    toolContractErrors: toolContract.errors,
+    hookEventIssues: hookEvents.issues,
+    hookEventErrors: hookEvents.errors,
+    frontmatterSchemaIssues: frontmatter.issues,
+    frontmatterSchemaErrors: frontmatter.errors,
+    mcpConfigIssues: mcpConfig.issues,
+    mcpConfigErrors: mcpConfig.errors,
+    skillFrontmatterIssues: skillFm.issues,
+    skillFrontmatterErrors: skillFm.errors,
+    mcpToolIssues: mcpToolResolves.issues,
+    mcpToolErrors: mcpToolResolves.errors,
+    hookScriptIssues: hookScripts.issues,
+    hookScriptErrors: hookScripts.errors,
+    disallowedToolIssues: disallowedTools.issues,
+    disallowedToolErrors: disallowedTools.errors,
+    descriptionOverlapIssues: descriptionOverlap.issues,
+    descriptionOverlapErrors: descriptionOverlap.errors,
+    frontmatterValidIssues: frontmatterValid.issues,
+    frontmatterValidErrors: frontmatterValid.errors,
+    mcpHookIssues: mcpHookTargets.issues,
+    mcpHookErrors: mcpHookTargets.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2457,6 +2568,382 @@ function checkUntestedSurfaces(
 }
 
 /**
+ * Apply the `agent-tool-contract` rule: cross-reference every subagent's `tools:`
+ * rail against the harness tool catalog (the moat — "valid is not true"). Flags
+ * only the HIGH-CONFIDENCE issues (a never-available tool, or a close typo) via
+ * the shared `confidentToolIssues` detector — the same code `scan` and
+ * `compileAgent` use (one-detector-no-drift), so a bare unrecognized tool
+ * (plugin/MCP-provided) is never a false alarm. Warning by default; set
+ * `agent-tool-contract: "error"` to gate CI. Returns the issue + error counts.
+ */
+function checkAgentToolContracts(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["agent-tool-contract"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  const files = globSync(["agents/*.md", ".claude/agents/*.md"], {
+    cwd: process.cwd(),
+    ignore: ["**/*.spec.ts"],
+  });
+  let issues = 0;
+  let printedHeader = false;
+  for (const rel of files.sort()) {
+    let md: string;
+    try {
+      md = readFileSync(resolve(process.cwd(), rel), "utf-8");
+    } catch {
+      continue;
+    }
+    const tools = parseAgentTools(md);
+    if (tools === null) continue; // no contract → inherits all (a different rule)
+    const found = confidentToolIssues(
+      verifyToolContract(tools, claudeCodeDialect),
+    );
+    if (found.length === 0) continue;
+    issues += found.length;
+    if (!silent) {
+      if (!printedHeader) {
+        console.log("\nAgent tool-contract check:\n");
+        printedHeader = true;
+      }
+      for (const issue of found) {
+        console.log(
+          `  ${sev === "error" ? "✗" : "⚠"} ${rel}: ${issue.message}`,
+        );
+        ghAnnotate(sev === "error" ? "error" : "warning", issue.message, rel);
+      }
+    }
+  }
+  return { issues, errors: sev === "error" ? issues : 0 };
+}
+
+/**
+ * Apply the `hook-events` rule: flag a hook registered under an event name the
+ * harness doesn't define (a typo → the hook never fires). Reuses `scanPlugin`'s
+ * `hookEventIssues` (the shared detector, high-precision: close typos only, never
+ * a framework/custom event). Warning by default; "error" gates CI.
+ */
+function checkHookEvents(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-events"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).hookEventIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nHook-event check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `agent-frontmatter` rule. Two kinds of agent-frontmatter defect, one
+ * rule: (1) a subagent MISSING a required field (`name`/`description`) — it won't
+ * register; (2) a subagent with an INVALID `model:`/`color:` value (a close typo
+ * of a real one) — it silently falls back / is ignored. Reuses `scanPlugin`'s
+ * `frontmatterIssues` + `frontmatterValueIssues`. Warning by default; "error" gates CI.
+ */
+function checkFrontmatterSchema(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["agent-frontmatter"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    const r = scanPlugin(process.cwd());
+    found = [...r.frontmatterIssues, ...r.frontmatterValueIssues];
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nFrontmatter-schema check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `skill-frontmatter` rule: RECOMMEND (not require) that a SKILL.md
+ * declares an explicit `name` + `description` rather than relying on the
+ * dir-name / first-paragraph fallbacks — a more reliable trigger surface. The
+ * skill still LOADS without them, so this is a best-practice nudge: warn by
+ * default; set "error" to enforce it on your own skills. Reuses `scanPlugin`'s
+ * `skillMetaIssues`.
+ */
+function checkSkillFrontmatter(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["skill-frontmatter"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).skillMetaIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSkill-frontmatter check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `mcp-config` rule: a declared MCP server with neither a `command`
+ * (stdio) nor a `url` (http/sse) can't start. Reuses `scanPlugin`'s `mcpIssues`.
+ * Warning by default; "error" gates CI.
+ */
+function checkMcpConfig(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-config"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).mcpIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP-config check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `disallowed-tools-contract` rule: a subagent's `disallowedTools:`
+ * block-list entry that's a close typo of a real tool blocks NOTHING — the tool
+ * it was meant to deny stays available, silently. Reuses `scanPlugin`'s per-agent
+ * `disallowedToolIssues` (close-typo only — high-precision). Warning by default;
+ * "error" gates CI.
+ */
+function checkDisallowedTools(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["disallowed-tools-contract"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+      a.disallowedToolIssues.map((i) => ({ message: i.message, path: a.path })),
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nDisallowed-tools check:\n");
+    for (const issue of found) {
+      console.log(
+        `  ${sev === "error" ? "✗" : "⚠"} ${issue.path}: ${issue.message}`,
+      );
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `frontmatter-valid` rule: a skill/agent `---` block that EXISTS but
+ * isn't valid YAML — fields may not parse as intended. Reuses `scanPlugin`'s
+ * `malformedFrontmatter`. HONEST caveat (see docs/rules/frontmatter-valid.md):
+ * js-yaml is stricter than some loaders, so a one-line `description:` with a
+ * colon / `<example>` is flagged though it may still load — hence WARN by default
+ * (verify before setting "error").
+ */
+function checkFrontmatterValid(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["frontmatter-valid"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).malformedFrontmatter;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nFrontmatter-validity check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `description-overlap` rule: two model-invocable skills with
+ * near-identical descriptions collide in the selector — the wrong one fires. A
+ * deterministic NCD proxy for a `--trigger`-class precision bug. Reuses
+ * `scanPlugin`'s `descriptionOverlaps` (calibrated FP-safe: only basically
+ * identical text). Warning by default; "error" gates CI.
+ */
+function checkDescriptionOverlap(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["description-overlap"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).descriptionOverlaps;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nDescription-overlap check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `mcp-hook-target-resolves` rule: a `type: "mcp_tool"` hook action
+ * that's incomplete (no `server`/`tool`) or targets a server the plugin doesn't
+ * declare — the hook silently never dispatches. Reuses `scanPlugin`'s
+ * `mcpHookIssues` (high-precision: declared-set gated, built-ins allowlisted).
+ * Warning by default; "error" gates CI.
+ */
+function checkMcpHookTargets(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-hook-target-resolves"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).mcpHookIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP hook-target check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `hook-script-exists` rule: a hook command references a script file
+ * that doesn't exist on disk (with `${CLAUDE_PLUGIN_ROOT}` resolved) → the hook
+ * silently never runs. Reuses `scanPlugin`'s `hooks` (status "missing"); the
+ * shared resolver already excludes the FP-prone cases (unresolved vars,
+ * existence-guarded one-liners, inline commands). Matches Anthropic's own
+ * `claude plugin validate`. Warning by default; "error" gates CI.
+ */
+function checkHookScriptExists(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-script-exists"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let missing: { script: string }[];
+  try {
+    missing = scanPlugin(process.cwd()).hooks.filter(
+      (h) => h.status === "missing",
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (missing.length > 0 && !silent) {
+    console.log("\nHook-script existence check:\n");
+    for (const h of missing) {
+      const msg = `hook script "${h.script}" is referenced but missing — the hook never runs.`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg);
+    }
+  }
+  return {
+    issues: missing.length,
+    errors: sev === "error" ? missing.length : 0,
+  };
+}
+
+/**
+ * Apply the `mcp-tool-resolves` rule: an `mcp__server__tool` in a subagent's
+ * contract whose server isn't in the plugin's declared `mcpServers` can't resolve
+ * (the MCP half of the tool moat). Reuses `scanPlugin`'s per-agent `mcpToolIssues`
+ * — high-precision (gated on a declared set, built-ins allowlisted, the
+ * plugin-namespaced form skipped). Warning by default; "error" gates CI.
+ */
+function checkMcpToolResolves(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-tool-resolves"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+      a.mcpToolIssues.map((i) => ({ message: i.message, path: a.path })),
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP tool-resolution check:\n");
+    for (const issue of found) {
+      console.log(
+        `  ${sev === "error" ? "✗" : "⚠"} ${issue.path}: ${issue.message}`,
+      );
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
  * Apply the configured coverage thresholds. Returns the number of failing
  * thresholds (so the lint can fail CI when severity is "error").
  *
@@ -2552,6 +3039,57 @@ function findInstructionFiles(restArgs: string[]): string[] {
     );
   }
   return files;
+}
+
+/** Value of a `--flag=value` arg (the `=` form, so it never collides with a positional). */
+function flagValue(args: string[], name: string): string | undefined {
+  return args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+/**
+ * The `scan --trigger` behavioral column: load the author-supplied per-skill
+ * prompt sets, probe the plugin's model-invocable skills, print the column.
+ * Model-gated and opt-in — the structural scan above stays deterministic.
+ */
+async function handleScanTrigger(
+  root: string,
+  args: string[],
+  json: boolean,
+  harness: ProbeHarness,
+): Promise<void> {
+  const promptsPath = flagValue(args, "--prompts");
+  if (!promptsPath) {
+    console.error(
+      "scan --trigger needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  let promptSet: TriggerPromptSet;
+  try {
+    promptSet = JSON.parse(
+      readFileSync(resolve(promptsPath), "utf-8"),
+    ) as TriggerPromptSet;
+  } catch (e) {
+    console.error(
+      `scan --trigger: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const concurrencyRaw = flagValue(args, "--concurrency");
+  const minPromptsRaw = flagValue(args, "--min-prompts");
+  const report = await probePluginTriggers(root, promptSet, {
+    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
+    minPrompts: minPromptsRaw ? Number(minPromptsRaw) : undefined,
+    model: flagValue(args, "--model"),
+    harness,
+  });
+  console.log(
+    json
+      ? JSON.stringify(report, null, 2)
+      : `\n${formatBehavioralReport(report)}`,
+  );
 }
 
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
@@ -3209,14 +3747,41 @@ async function main(): Promise<void> {
     case "scan": {
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
-      if (dirs.length > 1) {
+      // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
+      // under one marketplace.json) expands into its members and ranks them.
+      const market =
+        dirs.length === 1 ? inspectMarketplace(resolve(dirs[0])) : null;
+      const targets =
+        market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
+      const wantTrigger = args.includes("--trigger");
+      if (market && market.onDisk.length === 0 && market.total > 0) {
+        // A CURATED marketplace — every member is an external git/url plugin, so
+        // there's nothing on disk to scan. Say so honestly instead of falling
+        // through to a misleading "empty machine / no structural issues" report
+        // (obra/superpowers-marketplace, anthropics/claude-plugins-community).
+        if (json) {
+          console.log(JSON.stringify(market, null, 2));
+        } else {
+          console.log(
+            `Marketplace "${market.name}": ${String(market.total)} plugin(s), all external ` +
+              `(url/git sources, not on disk).\n` +
+              `Nothing to scan here — clone a member plugin and scan that, or scan a ` +
+              `marketplace that vendors its plugins in-tree.`,
+          );
+        }
+      } else if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine).
-        const scores = rankPlugins(dirs);
+        const scores = rankPlugins(targets);
         console.log(
           json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
         );
+        if (wantTrigger) {
+          console.log(
+            "\n⚠ --trigger (behavioral column) runs per single plugin; not yet wired into the leaderboard. Scan one plugin dir to probe it.",
+          );
+        }
       } else {
-        const root = resolve(dirs[0]);
+        const root = resolve(targets[0]);
         const harnessFlag = args
           .find((a) => a.startsWith("--harness="))
           ?.slice("--harness=".length);
@@ -3224,7 +3789,7 @@ async function main(): Promise<void> {
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
           : det.adapter;
-        const report = scanPlugin(dirs[0], adapter.layout);
+        const report = scanPlugin(targets[0], adapter.layout, adapter.dialect);
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
           if (!harnessFlag && det.ambiguousWith.length > 0) {
@@ -3237,6 +3802,11 @@ async function main(): Promise<void> {
         console.log(
           json ? JSON.stringify(report, null, 2) : formatScanReport(report),
         );
+        if (wantTrigger) {
+          const harness: ProbeHarness =
+            adapter.name === "codex" ? "codex" : "claude-code";
+          await handleScanTrigger(root, args, json, harness);
+        }
       }
       break;
     }

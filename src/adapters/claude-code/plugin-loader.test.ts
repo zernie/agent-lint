@@ -83,6 +83,36 @@ test("loadPlugin warns on dangling intra-plugin file references", () => {
   }
 });
 
+test("loadPlugin does NOT flag a project-rooted ref as dangling (only plugin-rooted)", () => {
+  const root = makeTmpDir("plugin-projref");
+  try {
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    // A smoke-test script (gmickel/flow-next shape) referencing the PROJECT's
+    // .claude/hooks and $CLAUDE_PROJECT_DIR — runtime paths, NOT plugin files —
+    // plus a genuine plugin-rooted missing ref that MUST still be caught.
+    writeFileSync(
+      join(root, "hooks", "setup"),
+      [
+        'cat "$CLAUDE_PROJECT_DIR/.claude/hooks/ralph-guard.py"', // project var → skip
+        "run .claude/hooks/other.py", // literal nested dir → skip
+        'cat "$ROOT/skills/real-missing/SKILL.md"', // plugin-rooted → flag
+      ].join("\n"),
+    );
+    const { warnings } = loadPlugin(root);
+    const dangling = warnings.find((w) => w.includes("intra-plugin")) ?? "";
+    assert.ok(
+      !dangling.includes("ralph-guard.py") && !dangling.includes("other.py"),
+      "project-rooted / literal-nested refs are not plugin files",
+    );
+    assert.ok(
+      dangling.includes("skills/real-missing/SKILL.md"),
+      "a genuine plugin-rooted missing ref is still flagged",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin: a complete plugin has no dangling-ref warning", () => {
   const root = makePlugin(); // skills/foo/SKILL.md exists, no broken refs
   try {

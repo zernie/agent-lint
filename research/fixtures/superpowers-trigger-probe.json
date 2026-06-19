@@ -1,0 +1,44 @@
+{
+  "systematic-debugging": {
+    "prompts": [
+      "The app crashes intermittently when I click save — can you track down why?",
+      "My test test_login started failing after my last change. Figure out what broke.",
+      "Users report the dashboard sometimes shows stale data. Investigate the root cause.",
+      "There's a memory leak somewhere in the worker process. Find it.",
+      "The API returns 500 on certain inputs but I can't tell which. Diagnose it.",
+      "Something's off — the totals don't add up in the report. Why?",
+      "My function returns undefined sometimes and I don't know why. Debug it.",
+      "The build passes locally but fails in CI with a cryptic error. Get to the bottom of it.",
+      "After upgrading the library, the parser throws on valid input. What's going on?",
+      "Intermittent flaky test — passes 9 out of 10 runs. Track down the cause."
+    ]
+  },
+  "brainstorming": {
+    "prompts": [
+      "I want to add some kind of notification feature but I'm not sure what it should do.",
+      "Let's figure out what a good onboarding flow for new users could look like.",
+      "I need to build a dashboard but I haven't decided what goes on it. Let's explore.",
+      "Thinking about adding collaboration to the app — what are the options?",
+      "What could a smart-search feature for our docs even include? Let's brainstorm.",
+      "I want to make the settings page better but I'm not sure how. Ideas?",
+      "We need some kind of reporting capability — help me think through what.",
+      "Considering adding gamification. Not sure what form it should take. Let's explore.",
+      "Help me come up with approaches for a plugin system for our tool.",
+      "I'd like to add an export feature — let's design what formats and options make sense."
+    ]
+  },
+  "test-driven-development": {
+    "prompts": [
+      "Implement a function that validates email addresses, test-first.",
+      "Add a feature to parse ISO dates. Write the tests before the code.",
+      "Build a rate limiter. Use TDD.",
+      "I need a function to merge two sorted arrays — do it test-driven.",
+      "Implement password strength checking, starting with the tests.",
+      "Write a CSV parser using test-driven development.",
+      "Add a discount calculation feature, tests first.",
+      "Implement an LRU cache test-first.",
+      "Build a function to slugify titles — TDD please.",
+      "Create a retry-with-backoff helper, writing tests before implementation."
+    ]
+  }
+}

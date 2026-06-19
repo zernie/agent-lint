@@ -31,6 +31,15 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **More deterministic lint rules — the next moat surfaces (P1).** This session
+  shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
+  agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
+  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`,
+  `duplicate-names`, the novel `description-overlap` (NCD precision proxy),
+  `frontmatter-valid`, `hook-matcher` — is in
+  [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
+  "valid is not true" cross-reference on a new surface, high-precision by design.
+
 - **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
   Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
   refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
@@ -128,6 +137,30 @@
   `findSimilarRules`) so a large roster gets faithful precision at a fraction of
   the cost. Decided + grounded; deliberately deferred (the two existing tiers
   cover the common cases). [isolated-vs-whole-harness](isolated-vs-whole-harness-eval.md) · **P3 (MED–LOW)**
+- **Auto-applied known context for trigger-rate** — empty-context activation
+  measurement is faithful for opening-move skills but biased-low for
+  state-dependent ones (fires only mid-session — "about to claim done", "review
+  arrived", "dirty git tree"), a blind spot the whole query-based field (AWS
+  skill-eval included) shares. Two steps: (1) **DONE** — `TriggerRateSpec` gained
+  `fixture` (seed repo state) + `concurrency` (parallelize the grid), reaching
+  parity with the user-injected-context tools (prior-turn/history still open);
+  (2) the differentiator, still open — auto-select a **curated preset context**
+  from the skill's declared trigger phrases so it's measured in the state it
+  claims to fire on. Preset SELECTION on explicit cues, not prose synthesis (stays
+  out of the undecidable-prose trap). [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
+- **Per-model trigger-rate + context-rot curve** — two parts. (a) Report
+  trigger-rate **per model** wherever we report it — already a capability
+  (`EvalArm.model` makes a model comparison a harness A/B; Sonnet default +
+  `minModel` floor), so this is "make it a standard column", near-free. (b) The
+  study: measure how recall **rots as the skill roster grows** (5 → 20 → 80
+  skills) and whether a stronger model rots slower — the concrete form of
+  `divergent-bets` #11 (measure model × harness) and the buyer question "how many
+  skills can I install before they stop firing, on model X?". A roster × model ×
+  prompt matrix, so opt-in study, not a default gate; rides the existing isolated
+  → near-neighbor → whole-harness (`installSet`) tiers crossed with model arms.
+  Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
+  (~20 stubbed runs) to confirm the curve is real + model-dependent before any
+  matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.

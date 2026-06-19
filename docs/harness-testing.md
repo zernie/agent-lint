@@ -489,6 +489,17 @@ Three things make this cheap and honest, all on by choice:
   `"sonnet"`) **fails** the run before spending a token if you point it below —
   lower it deliberately for a cheap, pessimistic check. The model lives in the
   spec, not an env override.
+- **Context — `fixture`.** Each run defaults to an **empty cwd**, which is
+  faithful for opening-move skills ("describe a feature", "debug this") but
+  under-measures skills whose trigger is a repo **state** ("in a git repo",
+  "dirty tree"). Pass **`fixture: { "path": "contents" }`** to seed that state so
+  recall reflects the condition the skill claims to fire on, not a cold start
+  (mirrors `MeasureSpec.fixture`). See
+  [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md).
+- **Throughput — `concurrency`.** The prompts × trials grid runs serially by
+  default (politest to rate limits); set **`concurrency: N`** to run N in parallel
+  and cut wall-clock on a large prompt set or roster sweep (the `spacingSec` pause
+  still applies per run).
 - **Isolated vs whole-harness.** By default the skill competes against the
   **other skills in the plugin you point at** (honest — selection is competitive).
   Pass **`installSet: [otherPluginsOrSkillDirs]`** to co-install the rest of the
@@ -499,6 +510,13 @@ Three things make this cheap and honest, all on by choice:
   cheaper tier / after a model upgrade?", set a per-arm `model` in `measureArms` /
   `runEval` (`arms: { sonnet: { model: … }, opus: { model: … } }`) — no separate
   multi-model matrix runner.
+
+> **Probing a whole plugin at once:** `vigiles scan <plugin> --trigger
+--prompts=<file.json>` is the batch front-end to `measureTriggerRate` — it
+> measures recall/precision for every model-invocable skill in a plugin and prints
+> it as the behavioral column of the scan report. See
+> [`docs/cli.md`](cli.md#behavioral-column--scan---trigger). Per-skill API control
+> (this section) vs whole-plugin one-shot (scan) — same engine.
 
 ### LLM-as-judge for subjective outcomes
 

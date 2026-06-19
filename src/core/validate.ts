@@ -78,6 +78,28 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "untested-agent": "warn",
   "untested-hook": "warn",
   "unmarked-refs": "warn",
+  // High-precision (never-available + close typos only), so on by default at warn.
+  "agent-tool-contract": "warn",
+  // High-precision (close typos only), on by default at warn.
+  "hook-events": "warn",
+  // Missing required frontmatter (name/description) — on by default at warn.
+  "agent-frontmatter": "warn",
+  // A declared MCP server with no command/url can't start — on by default at warn.
+  "mcp-config": "warn",
+  // Best-practice nudge (skills load without frontmatter) — warn, not error.
+  "skill-frontmatter": "warn",
+  // High-precision (gated on a declared MCP set; built-ins allowlisted) — warn.
+  "mcp-tool-resolves": "warn",
+  // A hook script referenced but missing never runs — on by default at warn.
+  "hook-script-exists": "warn",
+  // High-precision (close-typo only) deny-list mirror of agent-tool-contract.
+  "disallowed-tools-contract": "warn",
+  // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
+  "description-overlap": "warn",
+  // Malformed-YAML frontmatter — WARN only (js-yaml is stricter than some loaders).
+  "frontmatter-valid": "warn",
+  // A mcp_tool hook incomplete / targeting an undeclared server — on by default at warn.
+  "mcp-hook-target-resolves": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

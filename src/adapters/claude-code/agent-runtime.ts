@@ -32,28 +32,14 @@ import {
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 
+import {
+  readFrontmatter,
+  frontmatterList,
+} from "../../core/frontmatter-read.js";
+
 // ---------------------------------------------------------------------------
 // Parse the tool contract from a compiled agent .md
 // ---------------------------------------------------------------------------
-
-/** Extract the YAML frontmatter block (between the first pair of `---` fences). */
-function extractFrontmatter(markdown: string): string | null {
-  const lines = markdown.split("\n");
-  let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === "---") {
-      start = i;
-      break;
-    }
-  }
-  if (start === -1) return null;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") {
-      return lines.slice(start + 1, i).join("\n");
-    }
-  }
-  return null;
-}
 
 /**
  * Parse an agent's allowed-tools contract from its compiled markdown.
@@ -64,14 +50,23 @@ function extractFrontmatter(markdown: string): string | null {
  * an empty list (`tools:` with nothing after it) means "no tools allowed".
  */
 export function parseAgentTools(markdown: string): string[] | null {
-  const fm = extractFrontmatter(markdown);
-  if (fm === null) return null;
-  const match = /^tools:[ \t]*(.*)$/m.exec(fm);
-  if (!match) return null;
-  return match[1]
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
+  return parseAgentToolList(markdown, "tools");
+}
+
+/**
+ * Parse a comma/array tool list under an arbitrary frontmatter `key` (e.g.
+ * `tools:` or `disallowedTools:`) via the shared lenient reader
+ * (core/frontmatter-read.ts): a real YAML parse (so `key: [Read, "Bash"]` is a
+ * native array and `key: Read, Bash` a comma scalar) with a regex salvage when
+ * the block is malformed — the rail still reads the contract. `null` when the key
+ * is absent (inherits all), `[]` when present-but-empty (no tools). Shared by the
+ * rail (`tools:`) and the `disallowed-tools-contract` scan/lint.
+ */
+export function parseAgentToolList(
+  markdown: string,
+  key: string,
+): string[] | null {
+  return frontmatterList(readFrontmatter(markdown), key);
 }
 
 // ---------------------------------------------------------------------------

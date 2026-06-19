@@ -1,0 +1,47 @@
+{
+  "debrief": {
+    "prompts": [
+      "debrief this session",
+      "debrief all",
+      "write a session debrief for what we just did",
+      "summarize what happened in this working session as a debrief",
+      "create a debrief entry for today's work"
+    ],
+    "irrelevant": [
+      "add a lesson to LESSONS.md",
+      "show me the lessons learned so far",
+      "write a full incident postmortem with timeline and impact",
+      "draft a root-cause postmortem for last night's outage"
+    ]
+  },
+  "lessons": {
+    "prompts": [
+      "add a lesson learned",
+      "show me the lessons",
+      "record this as a lesson in LESSONS.md",
+      "update the lessons file with what we learned",
+      "log a new lesson from this mistake"
+    ],
+    "irrelevant": [
+      "debrief this whole working session for me",
+      "produce a session debrief of today's pairing",
+      "create a heavy incident-grade postmortem with timeline and impact",
+      "investigate the production outage and write the postmortem"
+    ]
+  },
+  "postmortem": {
+    "prompts": [
+      "write an incident postmortem",
+      "create a postmortem with timeline, impact, and root cause",
+      "do a heavy incident-grade postmortem for the outage",
+      "draft a postmortem for the production incident",
+      "write up the incident analysis as a postmortem"
+    ],
+    "irrelevant": [
+      "debrief this working session for me",
+      "give me a quick session debrief of today",
+      "add a lesson learned to LESSONS.md",
+      "show me the lessons we recorded so far"
+    ]
+  }
+}

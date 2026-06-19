@@ -46,8 +46,6 @@ import {
   claude,
   enforce,
   guidance,
-  check,
-  every,
   file,
   cmd,
   ref,

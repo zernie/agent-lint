@@ -15,12 +15,22 @@ import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 function report(over: Partial<ScanReport> = {}): ScanReport {
   return {
     dir: "x",
+    instructions: null,
     skills: [],
     agents: [],
     hooks: [],
     inlineHooks: 0,
     commands: 0,
     mcp: false,
+    danglingRefs: [],
+    hookEventIssues: [],
+    frontmatterIssues: [],
+    frontmatterValueIssues: [],
+    skillMetaIssues: [],
+    mcpIssues: [],
+    mcpHookIssues: [],
+    descriptionOverlaps: [],
+    malformedFrontmatter: [],
     warnings: [],
     untested: 0,
     ...over,
@@ -30,7 +40,13 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
 test("a structurally clean plugin scores 100", () => {
   const r = report({
     skills: [
-      { name: "s", path: "p", hasDescription: true, userInvoked: false },
+      {
+        name: "s",
+        path: "p",
+        hasDescription: true,
+        userInvoked: false,
+        descriptionScript: null,
+      },
     ],
     hooks: [{ script: "h.sh", status: "ok" }],
   });
@@ -48,28 +64,63 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
     scoreReport(
       report({
         skills: [
-          { name: "s", path: "p", hasDescription: false, userInvoked: false },
+          {
+            name: "s",
+            path: "p",
+            hasDescription: false,
+            userInvoked: false,
+            descriptionScript: null,
+          },
         ],
       }),
     ).score,
     90,
   );
   assert.equal(
-    scoreReport(report({ agents: [{ name: "a", path: "p", tools: null }] }))
-      .score,
+    scoreReport(
+      report({
+        agents: [
+          {
+            name: "a",
+            path: "p",
+            tools: null,
+            toolIssues: [],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+          },
+        ],
+      }),
+    ).score,
     95,
   );
   assert.equal(
     scoreReport(
       report({
         skills: [
-          { name: "s", path: "p", hasDescription: true, userInvoked: false },
+          {
+            name: "s",
+            path: "p",
+            hasDescription: true,
+            userInvoked: false,
+            descriptionScript: null,
+          },
         ],
         untested: 4,
       }),
     ).score,
     88,
   );
+});
+
+test("penalty: broken intra-plugin reference -8 each", () => {
+  const { score, issues } = scoreReport(
+    report({
+      hooks: [{ script: "h.sh", status: "ok" }],
+      danglingRefs: ["skills/using-x/SKILL.md", "agents/missing.md"],
+    }),
+  );
+  assert.equal(score, 84); // 100 - 2*8
+  assert.ok(issues.some((i) => i.includes("broken intra-plugin reference")));
 });
 
 test("score clamps at 0 and an empty machine is not healthy", () => {
@@ -85,6 +136,21 @@ test("score clamps at 0 and an empty machine is not healthy", () => {
     })),
   });
   assert.equal(scoreReport(r).score, 0);
+});
+
+test("a command-only or MCP-only plugin is a real surface, not score 0", () => {
+  // commands/*.md with no skills/agents/hooks — Anthropic ships these.
+  const cmdOnly = scoreReport(report({ commands: 3 }));
+  assert.equal(cmdOnly.score, 100);
+  assert.deepEqual(cmdOnly.issues, []);
+
+  // an MCP-only plugin (.mcp.json, no other surface) is loadable too.
+  const mcpOnly = scoreReport(report({ mcp: true }));
+  assert.equal(mcpOnly.score, 100);
+  assert.deepEqual(mcpOnly.issues, []);
+
+  // truly empty (no surface at all) is still 0.
+  assert.equal(scoreReport(report()).score, 0);
 });
 
 test("rankPlugins orders healthy above broken, with grades", () => {

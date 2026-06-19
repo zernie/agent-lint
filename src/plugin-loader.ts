@@ -256,30 +256,86 @@ function intraRefRe(layout: PluginLayout): RegExp {
   );
 }
 
+// Shell vars that root a path OUTSIDE the plugin (the user's project / home), so
+// a `surface/…` after one is NOT a plugin-root ref. Anything else ($ROOT,
+// $PLUGIN_ROOT, ${CLAUDE_PLUGIN_ROOT}, …) is taken as the plugin root.
+const NON_PLUGIN_VARS = new Set([
+  "CLAUDE_PROJECT_DIR",
+  "CLAUDE_PROJECT",
+  "HOME",
+  "PWD",
+  "OLDPWD",
+]);
+
+/**
+ * Is a surface-dir match at `idx` actually rooted at the PLUGIN (so checkable
+ * under `root`), vs nested under a literal dir or a project/home var? A match
+ * preceded by a literal segment (`.claude/hooks/…` — a PROJECT path, the
+ * gmickel/flow-next false positive) or a project var (`$CLAUDE_PROJECT_DIR/…`)
+ * is NOT a plugin ref. A bare ref (`cat skills/…`) or one after a plugin-root
+ * var (`${PLUGIN_ROOT}/skills/…`, obra/superpowers) IS.
+ */
+function isPluginRooted(content: string, idx: number): boolean {
+  if (idx === 0 || content[idx - 1] !== "/") return true; // bare / after quote-space
+  // The path component immediately before the separating slash.
+  const seg = /([^\s"'`(=:/]*)$/.exec(content.slice(0, idx - 1))?.[1] ?? "";
+  const varName = /^\$\{?(\w+)\}?$/.exec(seg)?.[1];
+  if (varName !== undefined) return !NON_PLUGIN_VARS.has(varName); // a var root
+  return false; // a literal dir segment → nested, not a plugin-root ref
+}
+
+// Documentation files (skill bodies, command docs, reference notes) are PROSE —
+// a `skills/foo/SKILL.md` path inside them is almost always an example, a
+// template placeholder (`wc -w skills/path/SKILL.md`), or a "❌ Bad" sample, not
+// a real file operation. Scanning them produced near-100% false positives across
+// real plugins (wshobson/agents, obra/superpowers), so we skip them as SOURCES.
+// A path in an executable hook/helper script (incl. extensionless ones like
+// obra/superpowers' `hooks/session-start`) IS a real file op — those we scan.
+const DOC_SOURCE_RE = /\.(?:md|markdown|mdx|txt|rst)$/i;
+
 /**
  * Intra-plugin file references that don't resolve — the partial-vendor / broken-
- * path class (e.g. obra/superpowers' `SessionStart` reads
+ * path class (e.g. obra/superpowers' `hooks/session-start` reads
  * `skills/using-superpowers/SKILL.md`, which a sliced vendor snapshot omits). We
- * scan the plugin's own text files under the surface dirs (hooks scripts
- * included — those aren't materialized into `files`) for root-relative path refs
- * and report the ones missing on disk. A static check that would have caught a
- * bug the dogfood hit twice. Best-effort: a warning, not an error.
+ * scan the plugin's own EXECUTABLE files under the surface dirs (hook/helper
+ * scripts — those aren't materialized into `files`) for root-relative path refs
+ * and report the ones missing on disk. Documentation sources are deliberately
+ * excluded (see `DOC_SOURCE_RE`) — a path in prose is undecidably ref-or-example,
+ * the same heuristic-scanning anti-pattern reference verification rejects. A
+ * static check that would have caught a bug the dogfood hit twice. Best-effort:
+ * a warning, not an error.
  */
-function danglingRefs(root: string, layout: PluginLayout): string[] {
-  const missing = new Set<string>();
-  const seen = new Set<string>();
-  const re = intraRefRe(layout);
+/** Path refs in `content` (matched by `re`) that don't resolve under `root`. */
+function missingRefsIn(content: string, re: RegExp, root: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(re)) {
+    if (m.index !== undefined && !isPluginRooted(content, m.index)) continue;
+    if (!existsSync(join(root, m[0]))) out.push(m[0]);
+  }
+  return out;
+}
+
+/** The plugin's executable (non-prose) source files under the surface dirs. */
+function executableSources(
+  root: string,
+  layout: PluginLayout,
+): Record<string, string> {
+  const sources: Record<string, string> = {};
   for (const surface of layout.intraRefDirs) {
     const dir = join(root, surface);
     if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
-    for (const content of Object.values(readTree(dir, root))) {
-      for (const m of content.matchAll(re)) {
-        const ref = m[0];
-        if (seen.has(ref)) continue;
-        seen.add(ref);
-        if (!existsSync(join(root, ref))) missing.add(ref);
-      }
+    for (const [path, content] of Object.entries(readTree(dir, root))) {
+      if (!DOC_SOURCE_RE.test(path)) sources[path] = content; // skip prose
     }
+  }
+  return sources;
+}
+
+export function danglingRefs(root: string, layout: PluginLayout): string[] {
+  const re = intraRefRe(layout);
+  const missing = new Set<string>();
+  for (const content of Object.values(executableSources(root, layout))) {
+    for (const ref of missingRefsIn(content, re, root)) missing.add(ref);
   }
   return [...missing];
 }
