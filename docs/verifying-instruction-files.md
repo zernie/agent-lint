@@ -29,18 +29,26 @@ Each rule is checked against your real linter config — typos get closest-match
 suggestions, disabled rules are flagged. `vigiles lint` enforces them in CI.
 Zero install commitment, zero new files.
 
-> **Want editor autocomplete?** Promote the rules into a `vigiles:` YAML
-> frontmatter block and run `npx vigiles generate-schema` — your editor's YAML
-> language server then autocompletes rule names and red-squiggles typos at edit
-> time, still with no TypeScript. Same enforcement, nicer authoring.
-> [Markdown mode →](markdown-mode.md)
+> **Want editor autocomplete?** Move the rules into a `vigiles:` YAML
+> frontmatter block — `init` already generated the schema, so your editor's YAML
+> language server autocompletes rule names and squiggles typos at edit time, no
+> TypeScript required. [Markdown mode →](markdown-mode.md)
 
 ### Typed spec — compiler-grade guarantees
 
-When you want the strongest guarantees, compile a typed spec. Every linter rule
-reference is verified against your real config, every file path against the
-filesystem, every npm script against package.json. Stale references become
-compile errors — caught at edit time, not when the agent silently ignores you.
+Markdown mode verifies the rules you declare when you run `lint`. A typed spec
+goes further in three ways markdown can't:
+
+- **References are types.** Every linter rule, file path, npm script, and code
+  symbol is checked by `tsc` itself — continuously, as you type, not only when
+  lint runs. A stale reference is a red squiggle _and_ a compile error.
+- **The output can't drift.** `compile` stamps the CLAUDE.md it emits with an
+  integrity hash, making it a build artifact: a hand-edit or silent drift is
+  caught, and the spec stays the single source of truth the agent edits.
+- **References live in the prose.** `file()`, `cmd()`, `symbol()`, and `ref()`
+  bind verified references inside the instruction text itself — not just
+  standalone enforce rules — so a renamed file mentioned in a sentence still
+  fails the build.
 
 ```typescript
 // CLAUDE.md.spec.ts
@@ -70,9 +78,9 @@ export default claude({
 });
 ```
 
-`npx vigiles compile` turns that into CLAUDE.md (with an integrity hash). The spec
-is the source of truth and CLAUDE.md is a build artifact: the agent edits the spec
-— hooks auto-compile, types catch typos in the editor, CI catches drift.
+`npx vigiles compile` turns that into CLAUDE.md. From there the loop runs itself:
+the agent edits the spec, hooks auto-compile, types catch typos in the editor, and
+CI catches drift.
 
 ## Three rule types
 
