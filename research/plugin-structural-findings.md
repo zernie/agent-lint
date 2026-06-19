@@ -41,7 +41,8 @@ matters).
 
 | Plugin                         | Bug                                                                                                                                                                   | Impact                                                                                                    | Status                                           |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **ananddtyagi/cc-marketplace** | ~9 **subagents** (`changelog-generator`, `content-creator`, `growth-hacker`, `instagram-curator`, …) ship as **pure prose with no YAML frontmatter** (no `---` block) | A subagent REQUIRES `name` + `description` (no fallback) → these **never register / can't be dispatched** | **Found 2026-06-19. Not yet reported upstream.** |
+| **ananddtyagi/cc-marketplace** | ~9 **subagents** (`changelog-generator`, `content-creator`, `growth-hacker`, `instagram-curator`, …) ship as **pure prose with no YAML frontmatter** (no `---` block); `accessibility-expert` has a **blank `description:`** | A subagent REQUIRES `name` + `description` (no fallback) → these **never register / can't be dispatched** | **Found 2026-06-19. Not yet reported upstream.** |
+| **MadAppGang/claude-code**, **giuseppe-trisciuoglio/developer-kit**, **ananddtyagi/cc-marketplace** | Subagents list **`AskUserQuestion`** (and ananddtyagi's `codebase-documenter` lists **`ExitPlanMode`**) in their `tools:` contract. Affected: MadAppGang `frontend` (api-analyst, tester), `instantly` (×3), `nanobanana` (style-manager); giuseppe `developer-kit-core`, `developer-kit-typescript` | These tools are **never available to a subagent** — Claude Code **silently drops** them (confirmed by Anthropic [#12890](https://github.com/anthropics/claude-code/issues/12890) + [#18721](https://github.com/anthropics/claude-code/issues/18721)), so the author's intended capability is missing with no warning | **Found 2026-06-19. Verified via Anthropic issues. PR text drafted (see [oss-pr-drafts](oss-pr-drafts.md)).** |
 
 > ⚠️ **Correction (2026-06-19).** An earlier version of this row claimed the
 > SKILLS `crisis-debugging-advisor` / `meta-skill-router` "never fire" because
@@ -123,6 +124,11 @@ lands a regression test in `src/scan.test.ts` /
 
 ## See also
 
+- [oss-pr-drafts](oss-pr-drafts.md) — ready-to-file PR/issue text for the
+  verified bugs above (the adoption play).
+- [competitor-rule-matrix](competitor-rule-matrix.md) — how vigiles's rules
+  compare to agnix / claudelint / cclint / Anthropic's `claude plugin validate`,
+  plus the poach backlog the sweep + landscape surfaced.
 - [plugin-behavioral-findings](plugin-behavioral-findings.md) — the model-gated
   half (trigger-rate recall/precision on real plugins).
 - [distribution-strategy](distribution-strategy.md) — E1: scan popular repos and
