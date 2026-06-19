@@ -133,56 +133,24 @@ vigiles's `agent()` builder doesn't map onto it, so it isn't compiled to Codex
 (`agent-runtime`, the railway result contract) is Claude Code only. See
 [`docs/harnesses.md`](harnesses.md) footnote ¹.
 
-**Two stdout formats — note which tier reads which.** The deterministic driver
-(`parseCodexRun`) reads `codex exec`'s plain text into `output` and leaves
-`toolCalls`/`hooks` empty (enough for the mock-turn output check). The **eval**
-tier reads `codex exec --json` and DOES parse tool calls — see the confirmed
-schema next.
+**Tool-call parsing differs by tier.** The deterministic driver (`parseCodexRun`)
+reads `codex exec`'s plain text into `output` only. The **eval** tier reads
+`codex exec --json` and parses tool calls + usage via `parseCodexEvalRun`.
 
-### The `codex exec --json` schema (confirmed against codex-cli 0.139.0)
+**`runEval` / trigger-rate for Codex is in progress** — not yet usable through the
+public API, so use Claude Code for evals today (or call the `vigiles/codex`
+functions directly). The parser, runner, and skill-firing predicate
+(`parseCodexEvalRun` / `codexEvalRunner` / `codexSkillFired`) are built and
+validated against the real binary; what remains is wiring `{ adapter }` dispatch
+into `measureTriggerRate` / `runEval`. One thing worth knowing as a user: **Codex
+has no "skill selected" event** the way Claude does, so a skill trigger is detected
+by the model reading the skill's `SKILL.md` (`codexSkillFired`) — best-effort, so
+pair it with a judged check. **Pin codex 0.139.0** (0.141 regressed the keyless
+mock), and real eval turns need auth + network egress.
 
-Captured from real turns. It's a JSONL **thread/item** event stream:
-
-```jsonc
-{"type":"thread.started","thread_id":"…"}
-{"type":"turn.started"}
-{"type":"item.started","item":{"id":"item_0","type":"command_execution",…}}   // mid-flight
-{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'echo hi'","aggregated_output":"hi\n","exit_code":0}}
-{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"…"}}
-{"type":"turn.completed","usage":{"input_tokens":…,"cached_input_tokens":…,"output_tokens":…}}
-```
-
-`parseCodexEvalRun` (in `vigiles/codex`) maps it to the common `Trace`: assistant
-text = `item.completed`/`agent_message`→`text`; a tool call =
-`item.type:"command_execution"`→`command` (with `aggregated_output`/`exit_code`);
-usage rides `turn.completed`. It counts `item.completed` only — an `item.started`
-repeats the same `id` mid-flight. (Spawn gotcha: stdin must be `/dev/null` or codex
-blocks on "Reading additional input from stdin…".)
-
-### Codex has no "skill selected" event — detect the SKILL.md read
-
-The decisive finding: **Codex's CLI has no Skill-tool concept**, so there is no
-discrete skill-activation event like Claude's `Skill` tool_use. When a skill
-triggers, the model **reads the skill's `SKILL.md` via a `command_execution`**
-(`sed/cat … skills/<name>/SKILL.md`) and usually says so in an `agent_message`. So
-the Codex "fired" predicate is **`codexSkillFired(run, name)`** — it looks for that
-SKILL.md read. Best-effort by nature (a cached skill might not be re-read), so pair
-it with a behavioral/judged check when you need certainty. This was validated live:
-a marker skill triggered and `codexSkillFired` detected it end-to-end.
-
-**`runEval` / trigger-rate for Codex — status.** The parser + runner
-(`parseCodexEvalRun` / `codexEvalRunner` / `codexSkillFired`) are **built and
-live-validated**; what remains is increment 3 — wiring `{ adapter }` dispatch into
-`measureTriggerRate` / `runEval` (runner = `codexEvalRunner`, parse =
-`parseCodexEvalRun`, fired = `codexSkillFired`) so the public API drives a Codex
-eval directly. Until that lands, use Claude Code for evals, or call the codex
-functions directly. **Pin codex 0.139.0** — 0.141.0 has a model-metadata
-regression that breaks the keyless mock recipe. Auth + network egress are required
-for real eval turns (see the auth section above).
-
-See [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
-(2026-06-19 live-capture update) for the full findings. (Matches the
-[`docs/harnesses.md`](harnesses.md) matrix footnote ².)
+The confirmed `codex exec --json` schema and the full findings are in
+[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md).
+(Matches the [`docs/harnesses.md`](harnesses.md) matrix footnote ².)
 
 ## Authenticating Codex (for the eval tier)
 
