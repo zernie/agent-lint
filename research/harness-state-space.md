@@ -263,8 +263,40 @@ the bot be _invited_ and welcome rather than blocked. Sources: [curl ends bug bo
 [Renovate noise-reduction](https://docs.renovatebot.com/noise-reduction/),
 [Hacktoberfest 2020 → opt-in](https://dev.to/devteam/an-update-on-hacktoberfest-37a).
 
+## Refinements / decisions (this session)
+
+- **0a vs 0b — which principle does what.** "Make illegal states unrepresentable" (0a) is
+  the **product** principle — it generates user-facing checks (model-invocable-needs-trigger,
+  tools-absent-vs-empty footgun, allowed∩disallowed contradiction, guidance-needs-a-`why`,
+  ephemeral-state-has-no-slot). "Parse, don't validate" (0b) is the **substrate** — how
+  vigiles is built (one parse → typed model **+** a rich `Diagnostic[]` carrying span +
+  did-you-mean; the invalid branch is an explicit `unresolved` variant, never dropped). Plain
+  TS discriminated unions + a runtime diagnostics stream; the only type-state flourish is the
+  existing phantom pipeline (`RawSpec → … → ReadyToEmit`). Don't sell 0b as a moat — it's good
+  engineering, not a new check.
+- **Trifecta severity = `warn` + explicit sign-off.** Not a block (a deploy/CI subagent
+  legitimately holds all three legs; blocking makes an agent strip a needed tool — FP-as-
+  safety). Fire only when all three legs are unambiguously in the _declared_ set; suppress via
+  a `vigiles:allow-trifecta "<reason>"` marker that records the reason. The forbidden state is
+  **unacknowledged** trifecta, not trifecta. Escalate to `error` in CI; surface in a `scan`
+  security column + the disclosure finding.
+- **Totality → matcher-coverage (demote the pure version).** Full totality of an arbitrary
+  hook script is undecidable. The shippable deterministic slice is **matcher-coverage**: a CC
+  hook's `matcher` too-narrow/typo'd so it silently never fires on cases it should gate (the
+  `hook-matcher` rule). Pure totality is a test-tier idea (`propertyHook` fuzz). It's the
+  softest bet — lead with matcher-coverage, keep totality Tier-3.
+- **Derivability = exact-structural-subset, not semantic.** To stay deterministic + FP-safe,
+  do NOT detect "semantically redundant prose" (a model job — the fuzzy ctxlint version).
+  Flag only an **exact reconstructable subset of a structured source**: a Commands section
+  whose bullets ⊆ `package.json` scripts; a Structure listing whose paths ⊆ the real dir tree;
+  a rule list ⊆ the enabled lint rules. Yields a true `% derivable` number per file (the
+  leaderboard column), and "compute it with `fromScripts()`/`fromGlob()`" is the fix.
+
 ## See also
 
+- `positioning-funnel.md` — the cross-axis moat analysis (mother-harness / test-framework /
+  leaderboard / …) and the viral→moat→delivery funnel these bets serve.
+- `shareable-presets.md` — the preset API design (the typed-preset bet #9 expanded).
 - `instruction-file-linter-landscape.md` — the competitor map; why the cross-ref engine +
   testing (not rule count) is the moat.
 - `lightweight-spec-authoring.md` — the spec/templates design; where "TS to the fullest"
