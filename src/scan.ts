@@ -40,6 +40,7 @@ import {
   type DescriptionOverlap,
 } from "./core/description-overlap.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
+import { verifyMcpHookTargets, type McpHookIssue } from "./core/mcp-hook.js";
 import {
   parseAgentTools,
   parseAgentToolList,
@@ -163,6 +164,8 @@ export interface ScanReport {
   readonly skillMetaIssues: readonly FrontmatterIssue[];
   /** Declared MCP servers that can't start (no command/url). */
   readonly mcpIssues: readonly McpIssue[];
+  /** `type: mcp_tool` hook actions that are incomplete or target an undeclared server. */
+  readonly mcpHookIssues: readonly McpHookIssue[];
   /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
   readonly descriptionOverlaps: readonly DescriptionOverlap[];
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
@@ -684,6 +687,11 @@ export function scanPlugin(
     frontmatterValueIssues: frontmatterValueIssuesFor(loaded.files),
     skillMetaIssues: skillMetaIssuesFor(loaded.files),
     mcpIssues: verifyMcpServers(mcpServers),
+    mcpHookIssues: verifyMcpHookTargets(
+      loaded.settings.hooks,
+      declaredServers,
+      dialect,
+    ),
     descriptionOverlaps: descriptionOverlapsFor(loaded.files),
     malformedFrontmatter: malformedFrontmatterFor(loaded.files),
     warnings: loaded.warnings,
@@ -891,6 +899,13 @@ export function formatScanReport(r: ScanReport): string {
 
   out.push(
     ...section(
+      "MCP hook targets",
+      r.mcpHookIssues.map((i) => `  ✗ ${i.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
       "Description overlap (precision risk)",
       r.descriptionOverlaps.map((o) => `  ⚠ ${o.message}`),
     ),
@@ -957,7 +972,8 @@ export function formatScanReport(r: ScanReport): string {
     r.hookEventIssues.length +
     r.frontmatterIssues.length +
     r.frontmatterValueIssues.length +
-    r.mcpIssues.length;
+    r.mcpIssues.length +
+    r.mcpHookIssues.length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"

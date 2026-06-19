@@ -774,6 +774,8 @@ interface LintReport {
   descriptionOverlapErrors: number;
   frontmatterValidIssues: number;
   frontmatterValidErrors: number;
+  mcpHookIssues: number;
+  mcpHookErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -877,6 +879,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.disallowedToolErrors > 0 ||
     report.descriptionOverlapErrors > 0 ||
     report.frontmatterValidErrors > 0 ||
+    report.mcpHookErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1296,6 +1299,10 @@ async function runLint(
   // stricter than some loaders, so verify before enforcing).
   const frontmatterValid = checkFrontmatterValid(config, silent);
 
+  // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
+  // targets an undeclared server (the moat applied to the hook surface).
+  const mcpHookTargets = checkMcpHookTargets(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1366,6 +1373,8 @@ async function runLint(
     descriptionOverlapErrors: descriptionOverlap.errors,
     frontmatterValidIssues: frontmatterValid.issues,
     frontmatterValidErrors: frontmatterValid.errors,
+    mcpHookIssues: mcpHookTargets.issues,
+    mcpHookErrors: mcpHookTargets.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2824,6 +2833,35 @@ function checkDescriptionOverlap(
   }
   if (found.length > 0 && !silent) {
     console.log("\nDescription-overlap check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `mcp-hook-target-resolves` rule: a `type: "mcp_tool"` hook action
+ * that's incomplete (no `server`/`tool`) or targets a server the plugin doesn't
+ * declare — the hook silently never dispatches. Reuses `scanPlugin`'s
+ * `mcpHookIssues` (high-precision: declared-set gated, built-ins allowlisted).
+ * Warning by default; "error" gates CI.
+ */
+function checkMcpHookTargets(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-hook-target-resolves"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(process.cwd()).mcpHookIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP hook-target check:\n");
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);

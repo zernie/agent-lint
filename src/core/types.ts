@@ -202,6 +202,15 @@ export interface RulesConfig {
    * detector as `scan` (malformedFrontmatter).
    */
   "frontmatter-valid"?: RuleSeverity;
+  /**
+   * Flag a `type: "mcp_tool"` hook action that's incomplete (missing `server` /
+   * `tool`) or targets a server the plugin doesn't declare in `mcpServers` — the
+   * hook silently never dispatches. High-precision: the undeclared-server half is
+   * gated on the plugin shipping a declared set and allowlists built-ins (`ide`),
+   * mirroring `mcp-tool-resolves`. Default "warn"; "error" gates CI. Same detector
+   * as `scan` (mcpHookIssues).
+   */
+  "mcp-hook-target-resolves"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

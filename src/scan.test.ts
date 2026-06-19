@@ -560,6 +560,45 @@ test("scanPlugin flags a disallowedTools typo (blocks nothing), not a valid/unkn
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin flags a mcp_tool hook targeting an undeclared server + an incomplete one", () => {
+  const dir = makeTmpDir("scan-mcphook");
+  write(
+    dir,
+    ".mcp.json",
+    JSON.stringify({ mcpServers: { github: { command: "gh-mcp" } } }),
+  );
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              { type: "mcp_tool", server: "github", tool: "search" }, // ok
+              { type: "mcp_tool", server: "linear", tool: "create" }, // undeclared
+              { type: "mcp_tool", server: "github" }, // incomplete (no tool)
+              { type: "command", command: "echo hi" }, // ignored
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.mcpHookIssues.length, 2);
+  assert.ok(
+    r.mcpHookIssues.some(
+      (i) => i.kind === "undeclared-server" && i.server === "linear",
+    ),
+  );
+  assert.ok(r.mcpHookIssues.some((i) => i.kind === "incomplete"));
+  assert.match(formatScanReport(r), /MCP hook targets/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);

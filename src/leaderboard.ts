@@ -69,6 +69,7 @@ export function scoreReport(r: ScanReport): {
   const badFrontmatter = r.frontmatterIssues.length;
   const badFrontmatterValues = r.frontmatterValueIssues.length;
   const badMcp = r.mcpIssues.length;
+  const badMcpHooks = r.mcpHookIssues.length;
 
   const deductions: { n: number; weight: number; label: string }[] = [
     {
@@ -125,6 +126,11 @@ export function scoreReport(r: ScanReport): {
       n: badMcp,
       weight: W_DANGLING_REF,
       label: "MCP server(s) that can't start (no command/url)",
+    },
+    {
+      n: badMcpHooks,
+      weight: W_DANGLING_REF,
+      label: "mcp_tool hook(s) incomplete / targeting an undeclared server",
     },
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
   ];
