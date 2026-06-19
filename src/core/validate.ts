@@ -80,6 +80,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "unmarked-refs": "warn",
   // High-precision (never-available + close typos only), so on by default at warn.
   "agent-tool-contract": "warn",
+  // High-precision (close typos only), on by default at warn.
+  "hook-events": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

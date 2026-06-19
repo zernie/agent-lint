@@ -317,6 +317,42 @@ test("scanPlugin: an inline ARRAY tools form parses (no [Read / Bash] artifacts)
   assert.deepEqual(agent?.toolIssues, []);
 });
 
+test("scanPlugin flags a typo'd hook event, suppresses a framework/custom event", () => {
+  const dir = makeTmpDir("scan-hookevent");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({
+      name: "x",
+      hooks: {
+        // a typo of PreToolUse → flagged; a han-style custom event → suppressed
+        PreToolUSe: [
+          { matcher: "Edit", hooks: [{ type: "command", command: "echo a" }] },
+        ],
+        TeammateIdle: [{ hooks: [{ type: "command", command: "echo b" }] }],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.hookEventIssues.length, 1);
+  assert.equal(r.hookEventIssues[0].event, "PreToolUSe");
+  assert.match(formatScanReport(r), /Hook events/);
+  assert.match(formatScanReport(r), /Did you mean "PreToolUse"\?/);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin does NOT flag a hooks ARRAY (non-CC custom format)", () => {
+  // ananddtyagi/sugar shape: hooks is a list of {event:"tool-use",…} objects.
+  const dir = makeTmpDir("scan-hookarray");
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify([{ name: "h", event: "tool-use", action: {} }]),
+  );
+  assert.deepEqual(scanPlugin(dir).hookEventIssues, []);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin reports agent tool contracts incl. inherits-all", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
