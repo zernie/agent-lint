@@ -98,6 +98,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "description-overlap": "warn",
   // Malformed-YAML frontmatter — WARN only (js-yaml is stricter than some loaders).
   "frontmatter-valid": "warn",
+  // A mcp_tool hook incomplete / targeting an undeclared server — on by default at warn.
+  "mcp-hook-target-resolves": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

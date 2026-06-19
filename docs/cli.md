@@ -418,6 +418,7 @@ want compile-on-edit.
 | [`mcp-config`](rules/mcp-config.md)                               | `"warn"` | Declared MCP servers can start (have a `command` or `url`)                             |
 | [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)                 | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) MCP server             |
 | [`hook-script-exists`](rules/hook-script-exists.md)               | `"warn"` | A hook's referenced script file exists on disk (else it silently never runs)           |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md)   | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool (else it never dispatches)    |
 | [`skill-frontmatter`](rules/skill-frontmatter.md)                 | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger surface)               |
 | [`description-overlap`](rules/description-overlap.md)             | `"warn"` | No two model-invocable skills have near-identical descriptions (selector collision)    |
 | [`frontmatter-valid`](rules/frontmatter-valid.md)                 | `"warn"` | A skill/agent `---` block is valid YAML (warn — js-yaml is stricter than some loaders) |

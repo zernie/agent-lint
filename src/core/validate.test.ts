@@ -441,6 +441,7 @@ describe("loadConfig", () => {
       "disallowed-tools-contract": "warn",
       "description-overlap": "warn",
       "frontmatter-valid": "warn",
+      "mcp-hook-target-resolves": "warn",
     });
   });
 
