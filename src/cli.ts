@@ -772,6 +772,8 @@ interface LintReport {
   disallowedToolErrors: number;
   descriptionOverlapIssues: number;
   descriptionOverlapErrors: number;
+  frontmatterValidIssues: number;
+  frontmatterValidErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -874,6 +876,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.hookScriptErrors > 0 ||
     report.disallowedToolErrors > 0 ||
     report.descriptionOverlapErrors > 0 ||
+    report.frontmatterValidErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1289,6 +1292,10 @@ async function runLint(
   // descriptions collide in the selector (deterministic NCD precision proxy).
   const descriptionOverlap = checkDescriptionOverlap(config, silent);
 
+  // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
+  // stricter than some loaders, so verify before enforcing).
+  const frontmatterValid = checkFrontmatterValid(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1357,6 +1364,8 @@ async function runLint(
     disallowedToolErrors: disallowedTools.errors,
     descriptionOverlapIssues: descriptionOverlap.issues,
     descriptionOverlapErrors: descriptionOverlap.errors,
+    frontmatterValidIssues: frontmatterValid.issues,
+    frontmatterValidErrors: frontmatterValid.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2750,6 +2759,40 @@ function checkDisallowedTools(
       console.log(
         `  ${sev === "error" ? "✗" : "⚠"} ${issue.path}: ${issue.message}`,
       );
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `frontmatter-valid` rule: a skill/agent `---` block that EXISTS but
+ * isn't valid YAML — fields may not parse as intended. Reuses `scanPlugin`'s
+ * `malformedFrontmatter`. HONEST caveat (see docs/rules/frontmatter-valid.md):
+ * js-yaml is stricter than some loaders, so a one-line `description:` with a
+ * colon / `<example>` is flagged though it may still load — hence WARN by default
+ * (verify before setting "error").
+ */
+function checkFrontmatterValid(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["frontmatter-valid"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).malformedFrontmatter;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nFrontmatter-validity check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(
         sev === "error" ? "error" : "warning",
         issue.message,

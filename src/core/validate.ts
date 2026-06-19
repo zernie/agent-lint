@@ -96,6 +96,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "disallowed-tools-contract": "warn",
   // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
   "description-overlap": "warn",
+  // Malformed-YAML frontmatter — WARN only (js-yaml is stricter than some loaders).
+  "frontmatter-valid": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

@@ -467,6 +467,30 @@ test("scanPlugin does NOT flag mcp tools when the plugin declares no servers", (
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin reports malformed-YAML frontmatter as an informational note, not a defect", () => {
+  const dir = makeTmpDir("scan-malformed");
+  // Unclosed flow array → invalid YAML; salvage still recovers a long description
+  // (so the ONLY finding is the malformed note, not a no-description defect).
+  write(
+    dir,
+    "skills/bad/SKILL.md",
+    "---\nname: bad\ndescription: a perfectly long salvageable description here\nallowed-tools: [a, b, c\n---\n# bad\n",
+  );
+  // Valid frontmatter → not flagged.
+  write(
+    dir,
+    "skills/good/SKILL.md",
+    "---\nname: good\ndescription: a perfectly valid description here\n---\n# good\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.malformedFrontmatter.length, 1);
+  assert.match(r.malformedFrontmatter[0].path, /bad\/SKILL\.md$/);
+  // It's a soft note, NOT counted in the structural verdict.
+  assert.match(formatScanReport(r), /isn't valid YAML/);
+  assert.doesNotMatch(formatScanReport(r), /1 structural issue/);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin flags near-duplicate model-invocable skill descriptions, skips user-invoked", () => {
   const dir = makeTmpDir("scan-overlap");
   const dup =

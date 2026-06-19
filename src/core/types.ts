@@ -193,6 +193,15 @@ export interface RulesConfig {
    * as `scan` (descriptionOverlaps).
    */
   "description-overlap"?: RuleSeverity;
+  /**
+   * Flag a skill/agent whose `---` frontmatter block EXISTS but isn't valid YAML
+   * — fields may not parse as intended. CAVEAT: a real YAML parser (js-yaml) is
+   * stricter than some loaders, so a one-line `description:` containing a `: `
+   * colon or an `<example>` block is flagged even though it may still load.
+   * Hence default "warn" (a nudge), not "error" — verify before enforcing. Same
+   * detector as `scan` (malformedFrontmatter).
+   */
+  "frontmatter-valid"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------
