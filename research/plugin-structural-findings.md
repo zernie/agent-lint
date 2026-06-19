@@ -54,6 +54,16 @@ matters).
 > agent file never registers. The `frontmatter-schema` rule was corrected to
 > check agents only.
 
+> ✅ **Empirically confirmed (2026-06-19, claude 2.1.183), not just doc-inferred.**
+> Cloned the repo, dropped a real prose-only agent (`changelog-generator.md`)
+> beside a control agent (proper frontmatter) in `.claude/agents/`, and drove the
+> real `claude` CLI: (1) listing available subagents shows the control but NOT the
+> prose-only one; (2) dispatching the prose-only one via the Task tool returns
+> `NO_SUCH_AGENT`; (3) the control dispatches and runs. The mirror test confirms
+> the skill side too — a frontmatter-less SKILL.md DOES load (listed via its
+> directory name). So: prose-only agents are genuinely inert; prose-only skills
+> are fine.
+
 > Disclosure etiquette: report as a friendly issue/PR with the fix (add a
 > `name` + `description` frontmatter block to each agent), link the `vigiles
 scan` output. Keep it constructive — the goal is a working plugin, not a gotcha.
