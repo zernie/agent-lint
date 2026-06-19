@@ -1283,35 +1283,35 @@ async function runLint(
   const frontmatter = checkFrontmatterSchema(config, silent, adapter);
 
   // 7f. MCP-config check — a declared MCP server with no command/url can't start.
-  const mcpConfig = checkMcpConfig(config, silent);
+  const mcpConfig = checkMcpConfig(config, silent, adapter);
 
   // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
   // reliable trigger surface). Best-practice nudge; skills load without it.
-  const skillFm = checkSkillFrontmatter(config, silent);
+  const skillFm = checkSkillFrontmatter(config, silent, adapter);
 
   // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
   // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
-  const mcpToolResolves = checkMcpToolResolves(config, silent);
+  const mcpToolResolves = checkMcpToolResolves(config, silent, adapter);
 
   // 7i. Hook-script existence — a hook command referencing a missing script file
   // never runs (matches Anthropic's own `claude plugin validate`).
-  const hookScripts = checkHookScriptExists(config, silent);
+  const hookScripts = checkHookScriptExists(config, silent, adapter);
 
   // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
   // (the deny-side mirror of subagent-tool-contract; close-typo only).
-  const disallowedTools = checkDisallowedTools(config, silent);
+  const disallowedTools = checkDisallowedTools(config, silent, adapter);
 
   // 7k. Description-overlap — two model-invocable skills with near-identical
   // descriptions collide in the selector (deterministic NCD precision proxy).
-  const descriptionOverlap = checkDescriptionOverlap(config, silent);
+  const descriptionOverlap = checkDescriptionOverlap(config, silent, adapter);
 
   // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
   // stricter than some loaders, so verify before enforcing).
-  const frontmatterValid = checkFrontmatterValid(config, silent);
+  const frontmatterValid = checkFrontmatterValid(config, silent, adapter);
 
   // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
   // targets an undeclared server (the moat applied to the hook surface).
-  const mcpHookTargets = checkMcpHookTargets(config, silent);
+  const mcpHookTargets = checkMcpHookTargets(config, silent, adapter);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
@@ -2750,12 +2750,17 @@ function checkFrontmatterSchema(
 function checkSkillFrontmatter(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).skillMetaIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).skillMetaIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2781,12 +2786,17 @@ function checkSkillFrontmatter(
 function checkMcpConfig(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-config"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).mcpIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).mcpIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2810,12 +2820,21 @@ function checkMcpConfig(
 function checkDisallowedTools(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["disallowed-tools-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable("Disallowed-tools check", "subagents", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
   let found: { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).agents.flatMap((a) =>
       a.disallowedToolIssues.map((i) => ({ message: i.message, path: a.path })),
     );
   } catch {
@@ -2848,12 +2867,17 @@ function checkDisallowedTools(
 function checkFrontmatterValid(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["frontmatter-valid"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).malformedFrontmatter;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).malformedFrontmatter;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2881,12 +2905,17 @@ function checkFrontmatterValid(
 function checkDescriptionOverlap(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["description-overlap"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).descriptionOverlaps;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).descriptionOverlaps;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2910,12 +2939,26 @@ function checkDescriptionOverlap(
 function checkMcpHookTargets(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-hook-target-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable(
+      "MCP hook-target check",
+      "shell hooks",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(process.cwd()).mcpHookIssues;
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).mcpHookIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2940,14 +2983,26 @@ function checkMcpHookTargets(
 function checkHookScriptExists(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-script-exists"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable(
+      "Hook-script existence check",
+      "shell hooks",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let missing: { script: string }[];
   try {
-    missing = scanPlugin(process.cwd()).hooks.filter(
-      (h) => h.status === "missing",
-    );
+    missing = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hooks.filter((h) => h.status === "missing");
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -2975,12 +3030,26 @@ function checkHookScriptExists(
 function checkMcpToolResolves(
   config: VigilesConfig | undefined,
   silent: boolean,
+  adapter: HarnessAdapter,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-tool-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.subagents) {
+    reportNotApplicable(
+      "MCP tool-resolution check",
+      "subagents",
+      adapter,
+      silent,
+    );
+    return { issues: 0, errors: 0 };
+  }
   let found: { message: string; path: string }[];
   try {
-    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).agents.flatMap((a) =>
       a.mcpToolIssues.map((i) => ({ message: i.message, path: a.path })),
     );
   } catch {
