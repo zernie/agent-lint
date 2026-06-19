@@ -96,6 +96,15 @@ const modelMock: ModelMock = {
 
 export const myHarnessAdapter: HarnessAdapter = {
   name: "my-harness",
+  // What this harness can drive — gates which transport ports are required, and
+  // which surface lint rules apply. `subagents:false` makes the subagent rules
+  // (subagent-tool-contract, …) report n/a instead of running.
+  capabilities: {
+    referenceVerification: true, // always
+    harnessTesting: true, // needs runtime + modelMock
+    shellHooks: true, // needs hookProtocol
+    subagents: true, // has a subagent surface (layout.agentDir)
+  },
   dialect,
   layout,
   runtime,
