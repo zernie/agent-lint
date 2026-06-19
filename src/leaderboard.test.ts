@@ -117,6 +117,21 @@ test("score clamps at 0 and an empty machine is not healthy", () => {
   assert.equal(scoreReport(r).score, 0);
 });
 
+test("a command-only or MCP-only plugin is a real surface, not score 0", () => {
+  // commands/*.md with no skills/agents/hooks — Anthropic ships these.
+  const cmdOnly = scoreReport(report({ commands: 3 }));
+  assert.equal(cmdOnly.score, 100);
+  assert.deepEqual(cmdOnly.issues, []);
+
+  // an MCP-only plugin (.mcp.json, no other surface) is loadable too.
+  const mcpOnly = scoreReport(report({ mcp: true }));
+  assert.equal(mcpOnly.score, 100);
+  assert.deepEqual(mcpOnly.issues, []);
+
+  // truly empty (no surface at all) is still 0.
+  assert.equal(scoreReport(report()).score, 0);
+});
+
 test("rankPlugins orders healthy above broken, with grades", () => {
   const dir = makeTmpDir("lb");
   const mk = (sub: string, files: Record<string, string>) => {

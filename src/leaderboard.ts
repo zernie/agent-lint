@@ -46,8 +46,13 @@ export function scoreReport(r: ScanReport): {
   score: number;
   issues: string[];
 } {
-  // An empty/unloadable machine isn't healthy — it's a non-plugin or a broken load.
-  if (r.skills.length + r.agents.length + r.hooks.length === 0) {
+  // An empty/unloadable machine isn't healthy — it's a non-plugin or a broken
+  // load. A command-only or MCP-only plugin (commands/*.md or .mcp.json with no
+  // skills/agents/hooks) IS a legitimate plugin, though — Anthropic ships
+  // command-only plugins in its own marketplace — so it must NOT score 0.
+  const surfaces =
+    r.skills.length + r.agents.length + r.hooks.length + r.commands;
+  if (surfaces === 0 && !r.mcp) {
     return { score: 0, issues: ["no loadable plugin surface"] };
   }
 
