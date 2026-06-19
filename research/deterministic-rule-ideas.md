@@ -10,11 +10,27 @@
 > forced precision fixes). Free, no-model, every-commit. The model-gated column
 > (`--trigger`) is the deliberate exception and stays out of `lint`.
 
-## Shipped this session (the baseline these build on)
+## Shipped (the baseline these build on)
 
-`agent-tool-contract` · `hook-events` · `agent-frontmatter` · `skill-frontmatter`
-· `mcp-config` — each one detector reused by `scan` + `lint` (+ `compileAgent`
-for tools). Plus FP-hardening of the existing structural checks.
+First wave: `agent-tool-contract` · `hook-events` · `agent-frontmatter` ·
+`skill-frontmatter` · `mcp-config` — each one detector reused by `scan` + `lint`
+(+ `compileAgent` for tools). Plus FP-hardening of the existing structural checks.
+
+Second wave (2026-06-19, this + the competitor-poach round —
+[competitor-rule-matrix](competitor-rule-matrix.md)):
+
+- ✅ **`mcp-tool-resolves`** (#1 below) — the MCP half of the tool moat.
+- ✅ **`hook-script-exists`** — promoted scan's missing-hook status to a lint
+  rule (poach: matches Anthropic's `claude plugin validate`).
+- ✅ **`disallowed-tools-contract`** — deny-side mirror of agent-tool-contract
+  (poach from SkillCheck; a check no one else has).
+- ✅ **`description-overlap`** (#6 below) — the NCD precision proxy showpiece.
+- ✅ **agent `model:`/`color:` validity** — folded into `agent-frontmatter`
+  (poach: matches the official validator + cclint).
+
+Still open below: `hook-matcher` (#2), `frontmatter-valid` (#3),
+`duplicate-names` (#4), `hook-shape` (#5), plus `mcp-hook-target-resolves` and
+duplicate/reserved MCP server names (from the competitor matrix).
 
 ## Tier 1 — ship next (high yield, FP-safe, grounded, moat-aligned)
 
