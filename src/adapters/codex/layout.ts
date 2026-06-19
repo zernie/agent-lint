@@ -21,6 +21,9 @@ export const codexLayout: PluginLayout = {
   settingsFormat: "toml",
   instructionFile: "AGENTS.md",
   surfaceDirs: ["skills", "prompts"],
+  skillDir: "skills",
+  agentDir: "", // Codex `[agents]` is a TOML concurrency table, not a subagent dir
+  commandDir: "prompts",
   materializeRoot: ".codex",
   pluginRootToken: "${PLUGIN_ROOT}",
   mcpConfigFile: ".mcp.json",

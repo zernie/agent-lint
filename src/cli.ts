@@ -43,11 +43,6 @@ import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import {
-  verifyToolContract,
-  confidentToolIssues,
-} from "./core/tool-contract.js";
-import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
-import {
   probePluginTriggers,
   formatBehavioralReport,
   type TriggerPromptSet,
@@ -2624,36 +2619,37 @@ function checkSubagentToolContracts(
     );
     return { issues: 0, errors: 0 };
   }
-  const files = globSync(["agents/*.md", ".claude/agents/*.md"], {
-    cwd: process.cwd(),
-    ignore: ["**/*.spec.ts"],
-  });
+  // Reuse the loader's already-resolved, layout+dialect-driven agents (the same
+  // `scan` detector — one-detector-no-drift) instead of re-globbing a hard-coded
+  // `agents/` path, so a harness with a different subagent dir Just Works.
+  let agents: readonly {
+    path: string;
+    toolIssues: readonly { message: string }[];
+  }[];
+  try {
+    agents = scanPlugin(process.cwd(), adapter.layout, adapter.dialect).agents;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
   let issues = 0;
   let printedHeader = false;
-  for (const rel of files.sort()) {
-    let md: string;
-    try {
-      md = readFileSync(resolve(process.cwd(), rel), "utf-8");
-    } catch {
-      continue;
-    }
-    const tools = parseAgentTools(md);
-    if (tools === null) continue; // no contract → inherits all (a different rule)
-    const found = confidentToolIssues(
-      verifyToolContract(tools, adapter.dialect),
-    );
-    if (found.length === 0) continue;
-    issues += found.length;
+  for (const agent of agents) {
+    if (agent.toolIssues.length === 0) continue;
+    issues += agent.toolIssues.length;
     if (!silent) {
       if (!printedHeader) {
         console.log("\nSubagent tool-contract check:\n");
         printedHeader = true;
       }
-      for (const issue of found) {
+      for (const issue of agent.toolIssues) {
         console.log(
-          `  ${sev === "error" ? "✗" : "⚠"} ${rel}: ${issue.message}`,
+          `  ${sev === "error" ? "✗" : "⚠"} ${agent.path}: ${issue.message}`,
         );
-        ghAnnotate(sev === "error" ? "error" : "warning", issue.message, rel);
+        ghAnnotate(
+          sev === "error" ? "error" : "warning",
+          issue.message,
+          agent.path,
+        );
       }
     }
   }

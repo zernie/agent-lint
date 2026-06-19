@@ -21,6 +21,9 @@ export const opencodeLayout: PluginLayout = {
   // `.opencode/` segment. (Contrast Claude Code: root-level `skills/` surfaces
   // relocated under `.claude`.)
   surfaceDirs: [".opencode/agent", ".opencode/command"],
+  skillDir: ".opencode/skill",
+  agentDir: ".opencode/agent",
+  commandDir: ".opencode/command",
   materializeRoot: "",
   pluginRootToken: "${OPENCODE_PLUGIN_ROOT}",
   mcpConfigFile: "opencode.json",
