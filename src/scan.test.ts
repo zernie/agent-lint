@@ -14,6 +14,7 @@ import {
   scanPlugin,
   formatScanReport,
   expandMarketplace,
+  inspectMarketplace,
   unexpectedScript,
 } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
@@ -323,5 +324,59 @@ test("expandMarketplace expands a marketplace root into member plugin dirs", () 
   );
   // a non-marketplace dir returns null
   assert.equal(expandMarketplace(join(dir, "plugins/a")), null);
+  cleanupTmpDir(dir);
+});
+
+test("inspectMarketplace classifies on-disk vs external + dedupes aliased dirs", () => {
+  const dir = makeTmpDir("scan-mp-inspect");
+  write(
+    dir,
+    ".claude-plugin/marketplace.json",
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "a", source: "./plugins/a" },
+        // two more NAMES aliasing the same dir — must count once (the han shape)
+        { name: "a-alias", source: "./plugins/a" },
+        { name: "a-again", source: "./plugins/a" },
+        { name: "ext1", source: { source: "url", url: "https://x/y.git" } },
+        { name: "ext2", source: { source: "github", repo: "p/q" } },
+        { name: "gone", source: "./plugins/gone" }, // string path, absent → external
+      ],
+    }),
+  );
+  write(dir, "plugins/a/skills/sa/SKILL.md", "---\nname: sa\n---\n# sa\n");
+  const mp = inspectMarketplace(dir);
+  assert.ok(mp);
+  assert.equal(mp.name, "mp");
+  assert.equal(mp.total, 6);
+  assert.equal(mp.onDisk.length, 1, "three aliases of plugins/a dedupe to one");
+  assert.equal(mp.external, 3, "two url/github + one missing string path");
+  // expandMarketplace delegates → also deduped
+  assert.deepEqual(expandMarketplace(dir), [...mp.onDisk]);
+  assert.equal(inspectMarketplace(join(dir, "plugins/a")), null); // not a marketplace
+  cleanupTmpDir(dir);
+});
+
+test("inspectMarketplace reports a CURATED marketplace (all external, none on disk)", () => {
+  // obra/superpowers-marketplace, anthropics/claude-plugins-community shape.
+  const dir = makeTmpDir("scan-mp-curated");
+  write(
+    dir,
+    ".claude-plugin/marketplace.json",
+    JSON.stringify({
+      name: "curated",
+      plugins: [
+        { name: "p1", source: { source: "url", url: "https://x/1.git" } },
+        { name: "p2", source: { source: "url", url: "https://x/2.git" } },
+      ],
+    }),
+  );
+  const mp = inspectMarketplace(dir);
+  assert.ok(mp);
+  assert.equal(mp.onDisk.length, 0);
+  assert.equal(mp.external, 2);
+  assert.equal(mp.total, 2);
+  assert.deepEqual(expandMarketplace(dir), []); // marketplace, but nothing on disk
   cleanupTmpDir(dir);
 });

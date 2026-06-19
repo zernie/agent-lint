@@ -41,7 +41,7 @@ import type {
 import { ruleSeverity, ruleOptions } from "./core/types.js";
 import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
-import { scanPlugin, formatScanReport, expandMarketplace } from "./scan.js";
+import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -3268,11 +3268,27 @@ async function main(): Promise<void> {
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
       // under one marketplace.json) expands into its members and ranks them.
-      const members =
-        dirs.length === 1 ? expandMarketplace(resolve(dirs[0])) : null;
-      const targets = members && members.length > 0 ? members : dirs;
+      const market =
+        dirs.length === 1 ? inspectMarketplace(resolve(dirs[0])) : null;
+      const targets =
+        market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
       const wantTrigger = args.includes("--trigger");
-      if (targets.length > 1) {
+      if (market && market.onDisk.length === 0 && market.total > 0) {
+        // A CURATED marketplace — every member is an external git/url plugin, so
+        // there's nothing on disk to scan. Say so honestly instead of falling
+        // through to a misleading "empty machine / no structural issues" report
+        // (obra/superpowers-marketplace, anthropics/claude-plugins-community).
+        if (json) {
+          console.log(JSON.stringify(market, null, 2));
+        } else {
+          console.log(
+            `Marketplace "${market.name}": ${String(market.total)} plugin(s), all external ` +
+              `(url/git sources, not on disk).\n` +
+              `Nothing to scan here — clone a member plugin and scan that, or scan a ` +
+              `marketplace that vendors its plugins in-tree.`,
+          );
+        }
+      } else if (targets.length > 1) {
         // Multiple targets → rank them (the leaderboard engine).
         const scores = rankPlugins(targets);
         console.log(

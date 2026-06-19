@@ -331,18 +331,33 @@ export function scanPlugin(dir: string, layout?: PluginLayout): ScanReport {
 }
 
 /**
- * If `dir` is a plugin MARKETPLACE (a `marketplace.json` beside the layout's
- * plugin manifest, e.g. `.claude-plugin/marketplace.json`), expand it into the
- * absolute dirs of its member plugins, resolving each entry's relative `source`.
- * Returns `null` when there's no marketplace. Entries with a non-string source
- * (external git/github plugins, which aren't on disk) are skipped, as are member
- * dirs that don't exist. Used by `vigiles scan` to rank a whole marketplace —
- * wshobson/agents alone ships 80+ plugins under one `marketplace.json`.
+ * A plugin MARKETPLACE (`.claude-plugin/marketplace.json`) decomposed into its
+ * members. A marketplace either VENDORS its plugins in-tree (string `source`
+ * paths, e.g. wshobson/agents — `onDisk` populated) or CURATES external ones
+ * (object `source` with a git/url, e.g. obra/superpowers-marketplace,
+ * anthropics/claude-plugins-community — `external` populated, nothing on disk).
+ * Distinguishing the two lets `scan` report a curated marketplace honestly
+ * instead of mistaking it for an empty repo.
  */
-export function expandMarketplace(
+export interface MarketplaceInfo {
+  readonly name: string;
+  /** Member plugin dirs that exist on disk (string `source` paths). */
+  readonly onDisk: readonly string[];
+  /** Members referencing an off-disk source (url/git/github) — can't be scanned here. */
+  readonly external: number;
+  readonly total: number;
+}
+
+/**
+ * Read a `marketplace.json` beside the layout's plugin manifest and classify its
+ * members into on-disk vs external. Returns `null` when `dir` is not a
+ * marketplace. The source of truth behind {@link expandMarketplace} and the
+ * curated-marketplace report in `vigiles scan`.
+ */
+export function inspectMarketplace(
   dir: string,
   layout: PluginLayout = claudeCodeLayout,
-): string[] | null {
+): MarketplaceInfo | null {
   const mpPath = join(dir, dirname(layout.manifestPath), "marketplace.json");
   if (!existsSync(mpPath)) return null;
   let parsed: unknown;
@@ -353,14 +368,51 @@ export function expandMarketplace(
   }
   const plugins = (parsed as { plugins?: unknown }).plugins;
   if (!Array.isArray(plugins)) return null;
-  const dirs: string[] = [];
+  const name = (parsed as { name?: unknown }).name;
+  // Dedupe by resolved path: a marketplace may map several named entries to the
+  // SAME plugin dir (TheBushidoCollective/han aliases 338 names onto 159 dirs).
+  // Scanning a dir twice is pure noise, so each on-disk member counts once.
+  const onDisk: string[] = [];
+  const seen = new Set<string>();
+  let external = 0;
   for (const entry of plugins) {
     const source = (entry as { source?: unknown }).source;
-    if (typeof source !== "string") continue; // external plugin, not on disk
+    if (typeof source !== "string") {
+      external++; // external plugin (url/git/github object), not on disk
+      continue;
+    }
     const abs = resolve(dir, source);
-    if (existsSync(abs) && statSync(abs).isDirectory()) dirs.push(abs);
+    if (existsSync(abs) && statSync(abs).isDirectory()) {
+      if (!seen.has(abs)) {
+        seen.add(abs);
+        onDisk.push(abs);
+      }
+    } else {
+      external++; // a string source that doesn't resolve on disk
+    }
   }
-  return dirs;
+  return {
+    name: typeof name === "string" ? name : basename(dir),
+    onDisk,
+    external,
+    total: plugins.length,
+  };
+}
+
+/**
+ * If `dir` is a plugin MARKETPLACE (a `marketplace.json` beside the layout's
+ * plugin manifest, e.g. `.claude-plugin/marketplace.json`), expand it into the
+ * absolute dirs of its member plugins. Returns `null` when there's no
+ * marketplace, `[]` when it's a marketplace whose members are all external (not
+ * on disk). Used by `vigiles scan` to rank a whole marketplace — wshobson/agents
+ * alone ships 80+ plugins under one `marketplace.json`. See {@link inspectMarketplace}.
+ */
+export function expandMarketplace(
+  dir: string,
+  layout: PluginLayout = claudeCodeLayout,
+): string[] | null {
+  const mp = inspectMarketplace(dir, layout);
+  return mp ? [...mp.onDisk] : null;
 }
 
 function section(title: string, lines: readonly string[]): string[] {
