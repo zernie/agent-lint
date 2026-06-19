@@ -34,6 +34,7 @@ import {
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
 import { editDistance } from "./core/linters.js";
+import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
   findDescriptionOverlaps,
   type DescriptionOverlap,
@@ -168,62 +169,22 @@ export interface ScanReport {
 
 const SCRIPT_RE = /\S+\.(?:sh|mjs|cjs|js|ts|py|rb)\b/g;
 
-/** A YAML block-scalar indicator: `>`/`|` with optional chomp (`+`/`-`) + indent digit. */
-const BLOCK_SCALAR_RE = /^[|>][+-]?\d*$/;
-
-/**
- * Read a top-level frontmatter field, handling multi-line YAML values. A naive
- * `description:\s*(.+)` mislabels a richly-described skill as "no description"
- * in two real-world cases: a block scalar (`description: >` / `>-`, common in
- * wshobson/agents) AND a quoted scalar whose value starts on the NEXT indented
- * line (`description:\n  "Generates PDF…"`, as trailofbits/react-pdf writes it).
- * In both, the inline value is empty or just an indicator, so gather the
- * following more-indented lines and strip any surrounding quotes from the join.
- */
-function readField(block: string, key: string): string | undefined {
-  const lines = block.split(/\r?\n/);
-  const idx = lines.findIndex((l) => new RegExp(`^${key}:`).test(l));
-  if (idx === -1) return undefined;
-  const keyIndent = /^(\s*)/.exec(lines[idx])?.[1].length ?? 0;
-  const inline = (
-    new RegExp(`^${key}:[ \\t]*(.*)$`).exec(lines[idx])?.[1] ?? ""
-  ).trim();
-  // A non-empty inline value that isn't a block-scalar indicator is the value.
-  if (inline && !BLOCK_SCALAR_RE.test(inline)) {
-    return inline.replace(/^["']|["']$/g, "").trim() || undefined;
-  }
-  // Empty inline OR a block indicator → the value continues on indented lines.
-  const collected: string[] = [];
-  for (let i = idx + 1; i < lines.length; i++) {
-    if (lines[i].trim() === "") continue;
-    const indent = /^(\s*)/.exec(lines[i])?.[1].length ?? 0;
-    if (indent <= keyIndent) break;
-    collected.push(lines[i].trim());
-  }
-  // Strip surrounding quotes that wrap the whole multi-line quoted scalar.
-  return (
-    collected
-      .join(" ")
-      .trim()
-      .replace(/^["']/, "")
-      .replace(/["']$/, "")
-      .trim() || undefined
-  );
-}
-
+// The scalar fields scan reads from a skill/agent `---` block, via the shared
+// lenient reader (core/frontmatter-read.ts) — a real YAML parse with a regex
+// salvage on malformed input, so block scalars / multi-line quoted values parse
+// for free and a bad block still yields what it can. One reader, no drift.
 function frontmatter(md: string): {
   name?: string;
   description?: string;
   model?: string;
   color?: string;
 } {
-  const m = /(?:^|\n)---\r?\n([\s\S]*?)\r?\n---/.exec(md);
-  if (!m) return {};
+  const fm = readFrontmatter(md);
   return {
-    name: readField(m[1], "name"),
-    description: readField(m[1], "description"),
-    model: readField(m[1], "model"),
-    color: readField(m[1], "color"),
+    name: frontmatterScalar(fm, "name"),
+    description: frontmatterScalar(fm, "description"),
+    model: frontmatterScalar(fm, "model"),
+    color: frontmatterScalar(fm, "color"),
   };
 }
 
@@ -865,9 +826,7 @@ export function formatScanReport(r: ScanReport): string {
       `  · ${String(r.inlineHooks)} inline hook(s) (no script file)`,
     );
   }
-  out.push(
-    ...section("Hooks", hookLines, r.hooks.length + r.inlineHooks),
-  );
+  out.push(...section("Hooks", hookLines, r.hooks.length + r.inlineHooks));
 
   out.push(
     ...section(
