@@ -98,6 +98,51 @@ first prose line) to each agent; fill `accessibility-expert`'s blank description
 
 ---
 
+## Filing recipe (ready-to-apply)
+
+> Status: these target external repos, so they CANNOT be filed from a vigiles dev
+> session (GitHub scope = `zernie/vigiles`). File from a session/checkout scoped
+> to each repo, or by hand. Each fix below is mechanical and one commit.
+
+Per repo:
+
+```bash
+git clone https://github.com/<owner>/<repo> && cd <repo>
+git checkout -b fix/subagent-tool-contract
+# apply the edit(s) below
+git commit -am "fix: remove AskUserQuestion from subagent tools (Claude silently drops it)"
+gh pr create --title "fix: remove AskUserQuestion from subagent tools" --body-file - <<'BODY'
+<the issue body from Bug 1 above>
+BODY
+```
+
+### Worked diff — Bug 1, comma form (MadAppGang `tester.md`)
+
+```diff
+-tools: Bash, Glob, Grep, …, KillShell, AskUserQuestion, Skill, SlashCommand, mcp__chrome-devtools__click, …
++tools: Bash, Glob, Grep, …, KillShell, Skill, SlashCommand, mcp__chrome-devtools__click, …
+```
+
+Just delete the `AskUserQuestion,` token (and `ExitPlanMode,` for ananddtyagi's
+`codebase-documenter`). Same for the **array form** (giuseppe
+`developer-kit-core/agents/*.md` — `tools: [Read, …, AskUserQuestion]` → drop the
+trailing `, AskUserQuestion`).
+
+### Worked diff — Bug 2, missing frontmatter (ananddtyagi `changelog-generator.md`)
+
+```diff
++---
++name: changelog-generator
++description: Analyze git history and conversation context to produce a clear, organized changelog over a given time range.
++---
++
+ You are an expert technical documentation specialist with deep expertise in …
+```
+
+`name` ← the directory name; `description` ← a one-line summary of the first prose
+paragraph. For `accessibility-expert`, fill the existing blank `description:`
+instead of prepending a block.
+
 ## Not filed (verified NON-bugs / noise)
 
 These the scanner flagged but hand-verification showed they are **not**
