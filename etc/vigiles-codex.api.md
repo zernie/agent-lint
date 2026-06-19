@@ -16,6 +16,22 @@ export const codexDialect: HarnessDialect;
 // @public (undocumented)
 export const codexDriver: HarnessTestDriver;
 
+// @public
+export function codexEvalAgentRunner(args: AgentRunArgs): Promise<RunOut>;
+
+// @public
+export const codexEvalDriver: EvalDriver;
+
+// @public
+export function codexEvalRunner(args: {
+    task: string;
+    cwd: string;
+    timeoutMs: number;
+}): {
+    code: number;
+    stdout: string;
+};
+
 // @public (undocumented)
 export const codexHookProtocol: HookProtocol;
 
@@ -52,13 +68,31 @@ export interface CodexRequest {
     readonly toolNames: readonly string[];
 }
 
+// @public
+export function codexRunError(out: {
+    stdout: string;
+}): string | null;
+
 // @public (undocumented)
 export const codexRuntime: HarnessRuntime;
+
+// @public
+export function codexSkillFired(run: {
+    toolCalls: readonly ToolCall[];
+}, name: string): boolean;
 
 // @public
 export interface CodexTurn {
     readonly text: string;
 }
+
+// @public
+export function installCodexSkills(pluginDir: string, cwd: string): number;
+
+// @public
+export function parseCodexEvalRun(out: {
+    stdout: string;
+}): ParsedModelRun;
 
 // @public
 export function parseCodexRun(stdout: string): ParsedRun;

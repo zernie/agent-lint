@@ -33,6 +33,14 @@ export interface HarnessDialect {
   readonly neverAvailableTools: readonly string[];
   /** Matches an MCP tool reference, e.g. `mcp__server__tool`. */
   readonly mcpToolPattern: RegExp;
+  /**
+   * MCP servers the harness provides itself, available to a contract WITHOUT the
+   * plugin declaring them — e.g. Claude Code's built-in `ide` integration
+   * (`mcp__ide__getDiagnostics`). The `mcp-tool-resolves` check allowlists these
+   * so a reference to a built-in server is never flagged as an undeclared one.
+   * Optional (additive, non-breaking for existing adapters) — defaults to none.
+   */
+  readonly knownMcpServers?: readonly string[];
   /** Hook event names the harness fires. */
   readonly hookEvents: readonly string[];
   /** Instruction-file targets the harness reads (also the h1 heading). */

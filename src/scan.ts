@@ -32,6 +32,7 @@ import {
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
+import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
 import { parseAgentTools } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
 
@@ -75,6 +76,8 @@ export interface ScanAgent {
   readonly tools: readonly string[] | null;
   /** Contract entries that don't resolve to a real built-in / MCP tool (typo, never-available). */
   readonly toolIssues: readonly ToolIssue[];
+  /** MCP tool entries naming a server the plugin doesn't declare (can't resolve). */
+  readonly mcpToolIssues: readonly McpToolIssue[];
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -312,6 +315,7 @@ function scanSkills(files: Record<string, string>): ScanSkill[] {
 function scanAgents(
   files: Record<string, string>,
   dialect: HarnessDialect,
+  declaredServers: readonly string[],
 ): ScanAgent[] {
   const out: ScanAgent[] = [];
   for (const [path, md] of Object.entries(files)) {
@@ -327,6 +331,12 @@ function scanAgents(
       // provided, not a defect (the TaskCreate/TaskGet lesson). See tool-contract.ts.
       toolIssues: tools
         ? confidentToolIssues(verifyToolContract(tools, dialect))
+        : [],
+      // The MCP half of the moat: an `mcp__server__tool` whose server isn't in the
+      // plugin's declared set can't resolve. High-precision (gated on a declared
+      // set, built-ins allowlisted, plugin-namespaced form skipped). See mcp-tool.ts.
+      mcpToolIssues: tools
+        ? verifyMcpToolServers(tools, declaredServers, dialect)
         : [],
     });
   }
@@ -461,11 +471,15 @@ function skillMetaIssuesFor(files: Record<string, string>): FrontmatterIssue[] {
 
 /**
  * Collect declared MCP servers from the JSON sources (`.mcp.json` + the plugin
- * manifest's `mcpServers`) and validate each can start. Codex's TOML
- * `[mcp_servers]` isn't parsed here (a documented gap); the JSON CC shape is the
- * common case. Merged so a server defined in both is checked once.
+ * manifest's `mcpServers`). Codex's TOML `[mcp_servers]` isn't parsed here (a
+ * documented gap); the JSON CC shape is the common case. Merged so a server
+ * defined in both sources appears once. Shared by the `mcp-config` check (does
+ * each server start?) and `mcp-tool-resolves` (is each referenced server here?).
  */
-function mcpIssuesFor(root: string, layout: PluginLayout): McpIssue[] {
+function collectMcpServers(
+  root: string,
+  layout: PluginLayout,
+): Record<string, unknown> {
   const servers: Record<string, unknown> = {};
   const collect = (file: string): void => {
     const p = join(root, file);
@@ -483,7 +497,7 @@ function mcpIssuesFor(root: string, layout: PluginLayout): McpIssue[] {
   };
   collect(".mcp.json");
   collect(layout.manifestPath);
-  return verifyMcpServers(servers);
+  return servers;
 }
 
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
@@ -520,11 +534,13 @@ export function scanPlugin(
           ),
         }
       : null;
+  const mcpServers = collectMcpServers(resolve(dir), lay);
+  const declaredServers = Object.keys(mcpServers);
   return {
     dir,
     instructions,
     skills: scanSkills(loaded.files),
-    agents: scanAgents(loaded.files, dialect),
+    agents: scanAgents(loaded.files, dialect, declaredServers),
     hooks,
     inlineHooks: inline,
     commands: Object.keys(loaded.files).filter(isCommand).length,
@@ -533,7 +549,7 @@ export function scanPlugin(
     hookEventIssues,
     frontmatterIssues: frontmatterIssuesFor(loaded.files),
     skillMetaIssues: skillMetaIssuesFor(loaded.files),
-    mcpIssues: mcpIssuesFor(resolve(dir), lay),
+    mcpIssues: verifyMcpServers(mcpServers),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir }).untested.length,
   };
@@ -645,6 +661,22 @@ function skillLine(s: ScanSkill): string {
   return `  ${mark} ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
 }
 
+/** One agent's report block: ✗ (broken contract) / ⚠ (inherits all) / ✓ + issues. */
+function agentLines(a: ScanAgent): string[] {
+  const tools =
+    a.tools === null
+      ? "tools: (inherits all — no contract)"
+      : `tools: ${a.tools.join(", ") || "(none)"}`;
+  const broken = a.toolIssues.length + a.mcpToolIssues.length;
+  let mark = "✓";
+  if (broken > 0) mark = "✗";
+  else if (a.tools === null) mark = "⚠";
+  const lines = [`  ${mark} ${a.name} — ${tools}`];
+  for (const issue of a.toolIssues) lines.push(`      ✗ ${issue.message}`);
+  for (const issue of a.mcpToolIssues) lines.push(`      ✗ ${issue.message}`);
+  return lines;
+}
+
 /** Format a scan report as human-readable text. */
 export function formatScanReport(r: ScanReport): string {
   const out: string[] = [`Scan: ${r.dir}`, ""];
@@ -658,23 +690,7 @@ export function formatScanReport(r: ScanReport): string {
 
   out.push(...section("Skills", r.skills.map(skillLine)));
 
-  out.push(
-    ...section(
-      "Agents",
-      r.agents.flatMap((a) => {
-        const tools =
-          a.tools === null
-            ? "tools: (inherits all — no contract)"
-            : `tools: ${a.tools.join(", ") || "(none)"}`;
-        const mark =
-          a.toolIssues.length > 0 ? "✗" : a.tools === null ? "⚠" : "✓";
-        const lines = [`  ${mark} ${a.name} — ${tools}`];
-        for (const issue of a.toolIssues)
-          lines.push(`      ✗ ${issue.message}`);
-        return lines;
-      }),
-    ),
-  );
+  out.push(...section("Agents", r.agents.flatMap(agentLines)));
 
   const hookMark: Record<HookStatus, string> = {
     ok: "✓",
@@ -762,7 +778,10 @@ export function formatScanReport(r: ScanReport): string {
   const broken =
     r.hooks.filter((h) => h.status === "missing").length +
     r.skills.filter((s) => !s.hasDescription).length +
-    r.agents.reduce((n, a) => n + a.toolIssues.length, 0) +
+    r.agents.reduce(
+      (n, a) => n + a.toolIssues.length + a.mcpToolIssues.length,
+      0,
+    ) +
     r.danglingRefs.length +
     r.hookEventIssues.length +
     r.frontmatterIssues.length +

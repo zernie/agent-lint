@@ -436,6 +436,7 @@ describe("loadConfig", () => {
       "agent-frontmatter": "warn",
       "mcp-config": "warn",
       "skill-frontmatter": "warn",
+      "mcp-tool-resolves": "warn",
     });
   });
 

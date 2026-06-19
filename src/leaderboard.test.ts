@@ -75,7 +75,15 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
   assert.equal(
     scoreReport(
       report({
-        agents: [{ name: "a", path: "p", tools: null, toolIssues: [] }],
+        agents: [
+          {
+            name: "a",
+            path: "p",
+            tools: null,
+            toolIssues: [],
+            mcpToolIssues: [],
+          },
+        ],
       }),
     ).score,
     95,

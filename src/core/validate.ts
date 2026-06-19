@@ -88,6 +88,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "mcp-config": "warn",
   // Best-practice nudge (skills load without frontmatter) — warn, not error.
   "skill-frontmatter": "warn",
+  // High-precision (gated on a declared MCP set; built-ins allowlisted) — warn.
+  "mcp-tool-resolves": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

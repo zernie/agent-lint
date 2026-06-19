@@ -764,6 +764,8 @@ interface LintReport {
   mcpConfigErrors: number;
   skillFrontmatterIssues: number;
   skillFrontmatterErrors: number;
+  mcpToolIssues: number;
+  mcpToolErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -862,6 +864,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.frontmatterSchemaErrors > 0 ||
     report.mcpConfigErrors > 0 ||
     report.skillFrontmatterErrors > 0 ||
+    report.mcpToolErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1261,6 +1264,10 @@ async function runLint(
   // reliable trigger surface). Best-practice nudge; skills load without it.
   const skillFm = checkSkillFrontmatter(config, silent);
 
+  // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
+  // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
+  const mcpToolResolves = checkMcpToolResolves(config, silent);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1321,6 +1328,8 @@ async function runLint(
     mcpConfigErrors: mcpConfig.errors,
     skillFrontmatterIssues: skillFm.issues,
     skillFrontmatterErrors: skillFm.errors,
+    mcpToolIssues: mcpToolResolves.issues,
+    mcpToolErrors: mcpToolResolves.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2680,6 +2689,43 @@ function checkMcpConfig(
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `mcp-tool-resolves` rule: an `mcp__server__tool` in a subagent's
+ * contract whose server isn't in the plugin's declared `mcpServers` can't resolve
+ * (the MCP half of the tool moat). Reuses `scanPlugin`'s per-agent `mcpToolIssues`
+ * — high-precision (gated on a declared set, built-ins allowlisted, the
+ * plugin-namespaced form skipped). Warning by default; "error" gates CI.
+ */
+function checkMcpToolResolves(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["mcp-tool-resolves"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: { message: string; path: string }[];
+  try {
+    found = scanPlugin(process.cwd()).agents.flatMap((a) =>
+      a.mcpToolIssues.map((i) => ({ message: i.message, path: a.path })),
+    );
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nMCP tool-resolution check:\n");
+    for (const issue of found) {
+      console.log(
+        `  ${sev === "error" ? "✗" : "⚠"} ${issue.path}: ${issue.message}`,
+      );
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        issue.message,
+        issue.path,
+      );
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

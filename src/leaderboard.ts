@@ -60,6 +60,7 @@ export function scoreReport(r: ScanReport): {
   const noDesc = r.skills.filter((s) => !s.hasDescription).length;
   const noContract = r.agents.filter((a) => a.tools === null).length;
   const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
+  const deadMcpTools = r.agents.reduce((n, a) => n + a.mcpToolIssues.length, 0);
   const deadHookEvents = r.hookEventIssues.length;
   const badFrontmatter = r.frontmatterIssues.length;
   const badMcp = r.mcpIssues.length;
@@ -89,6 +90,11 @@ export function scoreReport(r: ScanReport): {
       n: deadTools,
       weight: W_DANGLING_REF,
       label: "agent tool(s) that don't exist (typo / never-available)",
+    },
+    {
+      n: deadMcpTools,
+      weight: W_DANGLING_REF,
+      label: "agent MCP tool(s) whose server isn't declared (can't resolve)",
     },
     {
       n: noContract,
