@@ -13,6 +13,7 @@ import {
   tool,
   toolWith,
   notTool,
+  didNotWrite,
   skill,
   output,
   hookFired,
@@ -268,6 +269,24 @@ test("wrote(): checks the work-dir file presence", () => {
   const miss = wrote("NOPE").eval(t);
   assert.equal(miss.pass, false);
   assert.match(miss.message, /expected the agent to create "NOPE"/);
+});
+
+test("didNotWrite(): the side-effect-boundary negative over the work dir", () => {
+  const t = makeTrace({ file: (p) => (p === "out.txt" ? "x" : null) });
+  // absent file → ok (stayed inside the declared write surface)
+  assert.equal(didNotWrite("secrets.env").eval(t).pass, true);
+  assert.match(
+    didNotWrite("secrets.env").eval(t).message,
+    /"secrets.env" was not created/,
+  );
+  // present file → fail (escaped the boundary)
+  const escaped = didNotWrite("out.txt").eval(t);
+  assert.equal(escaped.pass, false);
+  assert.match(escaped.message, /expected the agent NOT to create "out.txt"/);
+  assert.deepEqual(didNotWrite("x").toJSON(), {
+    kind: "didNotWrite",
+    path: "x",
+  });
 });
 
 test("blocked()/allowed(): hook-decision checks over HookRunResult", () => {
