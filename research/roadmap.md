@@ -40,11 +40,16 @@
 - [ ] **`vigiles optimize` (per-repo) v0** — measure the user's skills/model/rules on their
       tasks; recommend add/drop/swap with a measured delta. Builds on harness-ROI-optimizer +
       CI-for-model-upgrades. → `divergent-bets.md`
-- [ ] **Benchmark methodology + task corpus** — define "real task," the success metric, per-repo
-      variance; publish the method (the contestable part). **v0 doc shipped:**
-      [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
-      bill/target/blast-radius — grounded in the P0 caveman measurement); the
-      reusable task-corpus module is the remaining piece. → `measurement-authority.md`
+- [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
+      doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
+      bill/target/blast-radius — grounded in the P0 caveman measurement). The
+      **reusable task-corpus module shipped:** [`bench/corpus/coding-tasks.mjs`](../bench/corpus/coding-tasks.mjs)
+      (5 neutral real coding tasks, each self-contained + checkable + agentic) +
+      [`verify.mjs`](../bench/corpus/verify.mjs) (a no-model self-check that every
+      correctness oracle discriminates good/bad). The P0 eval now consumes it, and
+      the ecosystem benchmark (A1) + `vigiles optimize` (A2) A/B over the SAME corpus.
+      Remaining: per-repo-variance handling (report the distribution across tasks,
+      not one mean). → `measurement-authority.md`
 
 **P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
 
@@ -68,8 +73,14 @@
 - [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
       column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
 - [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
-- [ ] **Score-explainer pairing** — when the benchmark flags a low score, surface the
-      deterministic cause (overlap / never-available tool / typo'd hook) + the fix. →
+- [x] **Score-explainer pairing — core DONE (2026-06-20).** [`src/score-explainer.ts`](../src/score-explainer.ts)
+      (`explainScore` / `explainSurface` / `formatExplanations`, 12 vitest cases):
+      pure over the `ScanReport` the linter already computes (one-detector-no-drift),
+      it maps each cross-ref finding to the behavioral SYMPTOM a benchmark observes
+      (wrong-skill-fires / skill-never-fires / agent-underperforms / hook-never-runs /
+      subagent-never-dispatches) + a one-line fix — so the optimizer says "underperforms
+      BECAUSE its description overlaps X — differentiate them", not just "drop it".
+      Remaining: wire it into `vigiles optimize` (A2) / a `vigiles explain` CLI. →
       `measurement-authority.md`
 
 **Distribution:**
