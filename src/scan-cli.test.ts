@@ -253,3 +253,68 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     assert.equal(report.mcp, true);
   });
 });
+
+// --- `vigiles explain` — the deterministic WHY (C4) over the real CLI ----------
+
+describe("explain e2e — deterministic cause + fix", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "explain-e2e-"));
+    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, "demo", ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(root, "demo", "agents"), { recursive: true });
+    // A subagent whose `tools:` names "Reed" — a close typo of the real "Read",
+    // so it's silently dropped: the subagent-tool-contract cause of an
+    // agent-underperforms symptom, with a did-you-mean fix.
+    writeFileSync(
+      join(root, "demo", "agents", "rev.md"),
+      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("names the deterministic cause, the symptom, and the one-line fix", () => {
+    const r = run(`explain ${join(root, "demo")}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /the subagent loses a declared tool/);
+    assert.match(r.stdout, /\[subagent-tool-contract\]/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
+  });
+
+  it("a surface name filters to that one underperformer", () => {
+    const r = run(`explain ${join(root, "demo")} rev`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Explaining "rev":/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
+  });
+
+  it("--json emits the structured explanation array", () => {
+    const r = run(`explain ${join(root, "demo")} --json`);
+    assert.equal(r.exitCode, 0);
+    const exps = JSON.parse(r.stdout) as {
+      surface: string;
+      symptom: string;
+      detector: string;
+      fix: string;
+      confidence: string;
+    }[];
+    assert.equal(exps.length, 1);
+    assert.equal(exps[0].symptom, "agent-underperforms");
+    assert.equal(exps[0].detector, "subagent-tool-contract");
+    assert.equal(exps[0].confidence, "likely");
+    assert.match(exps[0].fix, /Read/);
+  });
+
+  it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
+    const r = run(`explain ${join(root, "demo")} absent`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /No deterministic cause found/);
+  });
+});
