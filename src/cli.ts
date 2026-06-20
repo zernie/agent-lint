@@ -39,9 +39,20 @@ import type {
   RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
-import type { SurfaceKind } from "./test-coverage.js";
+import type { SurfaceKind, Surface } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import {
+  scaffoldTest,
+  formatScaffolds,
+  type ScaffoldInput,
+} from "./scaffold-test.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
+import type { ScanReport } from "./scan.js";
+import {
+  explainScore,
+  explainSurface,
+  formatExplanations,
+} from "./score-explainer.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -61,6 +72,7 @@ import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
 import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
+import { optimize, formatOptimize } from "./optimize.js";
 
 import {
   compileClaude,
@@ -92,6 +104,10 @@ import {
   clearActiveAgent,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
+  setEffectActive,
+  clearEffectActive,
+} from "./adapters/claude-code/effect-region.js";
+import {
   interceptHookDecision,
   parseIntercepts,
   INTERCEPT_TOOLS_ENV,
@@ -108,6 +124,7 @@ import {
   setActiveSkill,
   clearActiveSkill,
   evaluateStopHook,
+  evaluateSkillPreToolUse,
   gateLabel,
 } from "./adapters/claude-code/skill-runtime.js";
 import { checkLinterRule } from "./core/linters.js";
@@ -1186,9 +1203,7 @@ async function runLint(
   // against the right adapter's dialect (tool/event catalogs) and surfaces —
   // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
   // on a harness without subagents (Codex) rather than scanning nothing.
-  const harnessFlag = flags
-    .find((f) => f.startsWith("--harness="))
-    ?.slice("--harness=".length);
+  const harnessFlag = harnessFlagFrom(flags);
   const lintSelection = resolveHarnessSelection({
     root: process.cwd(),
     flag: harnessFlag,
@@ -1983,7 +1998,7 @@ interface Pillar1Result {
   specTargets: string[];
   /** Files actually written (for the commit hint). */
   written: string[];
-  /** Existing hand-written targets that still need migrate-to-spec. */
+  /** Existing hand-written targets that still need adopt-spec. */
   needsMigration: string[];
 }
 
@@ -2069,7 +2084,7 @@ function redirectSyncToolTargets(cwd: string, targets: string[]): string[] {
 
 /** Pillar 1 — specs + types + schema + compile. Scaffolds a spec for every
  * instruction file (so `--lint` always delivers a spec), but never compiles
- * OVER a hand-written file — that is left to the migrate-to-spec skill. */
+ * OVER a hand-written file — that is left to the adopt-spec skill. */
 async function setupPillar1(
   detected: DetectedProject,
   targetValue: string | undefined,
@@ -2105,7 +2120,7 @@ async function setupPillar1(
     if (targetExists && !targetHasHash(resolve(cwd, target))) {
       needsMigration.push(target);
       console.log(
-        `  ${target} already has content — port it into the spec with the migrate-to-spec skill, then \`vigiles compile\`.`,
+        `  ${target} already has content — adopt it into a spec with the adopt-spec skill, then \`vigiles compile\`.`,
       );
     }
   }
@@ -2332,7 +2347,7 @@ function printSetupSummary(opts: {
   const nextSteps: string[] = [];
   if (needsMigration.length > 0) {
     nextSteps.push(
-      `Port ${needsMigration.join(", ")} into its spec with the migrate-to-spec skill, then \`npx vigiles compile\``,
+      `Adopt ${needsMigration.join(", ")} into a spec with the adopt-spec skill, then \`npx vigiles compile\``,
     );
   } else if (specPathsList.length > 0) {
     nextSteps.push(
@@ -3406,6 +3421,140 @@ function handleRunScripts(
   }
 }
 
+/** Parse the `--harness=<name>` override out of an argv list (the one definition). */
+function harnessFlagFrom(argv: string[]): string | undefined {
+  return argv
+    .find((a) => a.startsWith("--harness="))
+    ?.slice("--harness=".length);
+}
+
+/**
+ * `vigiles explain <dir> [name]` — the deterministic WHY behind a low score (C4):
+ * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
+ * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
+ * optional surface name narrows to one underperforming skill/agent (the
+ * optimizer's call). `--json` for the agent-consumable shape, `--harness=` to
+ * override detection.
+ */
+function handleExplain(restArgs: string[], args: string[]): void {
+  const dir = resolve(restArgs[0] ?? ".");
+  const surface = restArgs[1];
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
+  const exps = surface ? explainSurface(report, surface) : explainScore(report);
+  if (json) {
+    console.log(JSON.stringify(exps, null, 2));
+    return;
+  }
+  if (surface) console.log(`Explaining "${surface}":\n`);
+  console.log(formatExplanations(exps));
+}
+
+/**
+ * The plugin's declared name for the namespaced skill id, read from the layout's
+ * manifest (adapter-aware path, not a hardcoded `.claude-plugin/`), falling back to
+ * the dir basename. JSON manifests only for now (a TOML/Codex manifest → basename).
+ */
+function pluginNameFor(dir: string, manifestPath: string): string {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(resolve(dir, manifestPath), "utf-8"),
+    ) as { name?: unknown };
+    if (typeof manifest.name === "string" && manifest.name)
+      return manifest.name;
+  } catch {
+    /* missing / non-JSON manifest → fall back */
+  }
+  return basename(dir);
+}
+
+/** Enrich an untested Surface with the metadata the right template needs. */
+function scaffoldInputFor(
+  s: Surface,
+  report: ScanReport,
+  pluginName: string,
+): ScaffoldInput {
+  const base = { kind: s.kind, name: s.name, path: s.path };
+  switch (s.kind) {
+    case "skill": {
+      const sk = report.skills.find((x) => x.name === s.name);
+      return { ...base, pluginName, userInvoked: sk?.userInvoked };
+    }
+    case "agent": {
+      const ag = report.agents.find((x) => x.name === s.name);
+      return { ...base, tools: ag?.tools ?? null };
+    }
+    case "hook":
+      return { ...base, hookCommand: `bash ${s.path}` };
+  }
+}
+
+/**
+ * `vigiles scaffold-test [dir]` — generate a runnable STARTER test for each
+ * untested skill/agent/hook (B1, test-gen from free-form). Reuses the
+ * untested-surface detector for the list + `scan` for the metadata, then emits the
+ * cheapest meaningful tier per kind (hook → `runHook`, skill → `measureTriggerRate`,
+ * subagent → `runHarnessTest`) at the surface's suggested test path. Dry-run by
+ * default (prints the scaffolds); `--write` creates the files (never clobbering an
+ * existing one); `--json` for the agent-consumable `{ path, content }[]`.
+ */
+function handleScaffoldTest(restArgs: string[], args: string[]): void {
+  const dir = resolve(restArgs[0] ?? ".");
+  const write = args.includes("--write");
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+
+  const { untested } = findUntestedSurfaces({
+    basePath: dir,
+    layout: adapter.layout,
+  });
+  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
+  const pluginName = pluginNameFor(dir, adapter.layout.manifestPath);
+  const scaffolds = untested.map((s) =>
+    scaffoldTest(scaffoldInputFor(s, report, pluginName)),
+  );
+
+  if (json) {
+    console.log(JSON.stringify(scaffolds, null, 2));
+    return;
+  }
+  if (!write) {
+    console.log(formatScaffolds(scaffolds));
+    for (const s of scaffolds) {
+      console.log(`\n# ${s.path}\n`);
+      console.log(s.content);
+    }
+    if (scaffolds.length > 0) {
+      console.log("Re-run with --write to create these files.");
+    }
+    return;
+  }
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const s of scaffolds) {
+    const target = resolve(dir, s.path);
+    if (existsSync(target)) {
+      skipped.push(s.path);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, s.content);
+    written.push(s.path);
+  }
+  for (const p of written) console.log(`✓ wrote ${p}`);
+  for (const p of skipped) console.log(`⊘ skipped ${p} (already exists)`);
+  if (written.length === 0 && skipped.length === 0) {
+    console.log("Nothing to scaffold — every surface already has a test.");
+  }
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -3422,6 +3571,12 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+  );
+  console.log(
+    "  vigiles explain <dir> [name]   Deterministic WHY a skill/agent underperforms + the fix (--json, --harness=)",
+  );
+  console.log(
+    "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",
   );
   console.log("");
   console.log("Examples:");
@@ -3557,6 +3712,43 @@ function skillStartCommand(target: string | undefined): void {
 }
 
 /**
+ * PreToolUse-hook entrypoint: enforce the active skill's declared purity floor.
+ * Reads the tool event on stdin, parses the `vigiles:purity:` marker from the
+ * active skill's compiled SKILL.md, and blocks (exit 2 + reason on stderr) any
+ * tool call that violates the declared floor — refining `Bash` by the live
+ * command via `isReadOnlyBash`. Skills have no tools-allowlist rail; this gate
+ * is purity-only. Mirrors `agentHookCommand` for skills.
+ */
+function skillToolHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let tool = "";
+  let command: string | undefined;
+  try {
+    const parsed = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: { command?: unknown };
+    };
+    tool = parsed.tool_name ?? "";
+    if (typeof parsed.tool_input?.command === "string") {
+      command = parsed.tool_input.command;
+    }
+  } catch {
+    /* malformed input → no tool, allow */
+  }
+  if (!tool) return;
+  const decision = evaluateSkillPreToolUse(process.cwd(), tool, command);
+  if (!decision.allow) {
+    console.error(decision.message);
+    process.exit(2);
+  }
+}
+
+/**
  * PreToolUse-hook entrypoint: enforce the active subagent's allowed-tools
  * contract. Reads the tool event on stdin, parses the active agent's compiled
  * `.md` tool rail, and blocks (exit 2 + reason on stderr) any tool outside it —
@@ -3570,13 +3762,21 @@ function agentHookCommand(): void {
     /* no stdin */
   }
   let tool = "";
+  let command: string | undefined;
   try {
-    tool = (JSON.parse(raw) as { tool_name?: string }).tool_name ?? "";
+    const parsed = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: { command?: unknown };
+    };
+    tool = parsed.tool_name ?? "";
+    if (typeof parsed.tool_input?.command === "string") {
+      command = parsed.tool_input.command;
+    }
   } catch {
     /* malformed input → no tool, allow */
   }
   if (!tool) return;
-  const decision = evaluatePreToolUse(process.cwd(), tool);
+  const decision = evaluatePreToolUse(process.cwd(), tool, command);
   if (!decision.allow) {
     console.error(decision.message);
     process.exit(2);
@@ -3632,6 +3832,9 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
     case "skill-hook":
       skillHookCommand();
       return true;
+    case "skill-tool-hook":
+      skillToolHookCommand();
+      return true;
     case "agent-start":
       agentStartCommand(restArgs[0]);
       return true;
@@ -3652,6 +3855,13 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "refs-hook":
       refsHookCommand();
+      return true;
+    case "effect-enter":
+      setEffectActive(process.cwd());
+      console.log("Effect boundary entered.");
+      return true;
+    case "effect-exit":
+      clearEffectActive(process.cwd());
       return true;
     default:
       return false;
@@ -3838,9 +4048,7 @@ async function main(): Promise<void> {
         console.log("Run `vigiles init` to create one.");
         process.exit(0);
       }
-      const harnessFlag = args
-        .find((a) => a.startsWith("--harness="))
-        ?.slice("--harness=".length);
+      const harnessFlag = harnessFlagFrom(args);
       const valid = await compile(specs, config, { harnessFlag });
       console.log("");
       if (valid) {
@@ -3910,9 +4118,7 @@ async function main(): Promise<void> {
         }
       } else {
         const root = resolve(targets[0]);
-        const harnessFlag = args
-          .find((a) => a.startsWith("--harness="))
-          ?.slice("--harness=".length);
+        const harnessFlag = harnessFlagFrom(args);
         const det = detectAdapterResult(root);
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
@@ -3927,9 +4133,18 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        console.log(
-          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
-        );
+        if (args.includes("--fix-plan")) {
+          // The deterministic optimization lens on the SAME report: health score
+          // + the ranked free fixes to clear before measuring (the A2 spine).
+          const plan = optimize(report);
+          console.log(
+            json ? JSON.stringify(plan, null, 2) : formatOptimize(plan),
+          );
+        } else {
+          console.log(
+            json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+          );
+        }
         if (wantTrigger) {
           const harness: ProbeHarness =
             adapter.name === "codex" ? "codex" : "claude-code";
@@ -3938,6 +4153,13 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "explain":
+      handleExplain(restArgs, args);
+      break;
+    case "scaffold-test":
+      handleScaffoldTest(restArgs, args);
+      break;
 
     // --- Plumbing ---
 

@@ -14,6 +14,9 @@ npx vigiles refs <file.md>          # Check the symbol references in an instruct
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
+npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
+npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
+npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -184,6 +187,94 @@ surfaced per-skill (`unmeasured`), never crashing the scan. See
 for what it catches. (The remaining behavioural columns — observed egress,
 safety — build on the same footing.)
 
+### `explain [dir] [name]`
+
+The deterministic **WHY** behind a low score. A measurement (a trigger-rate
+eval, a benchmark) tells you a skill _underperforms_ — `explain` tells you the
+structural **cause** and the one-line **fix**, reading the same `ScanReport`
+`scan` computes (no model, free, every commit). It maps each cross-reference
+finding to the behavioural symptom it accounts for:
+
+| Symptom                            | Deterministic cause it surfaces                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| the selector fires the wrong skill | two skills with near-identical descriptions (`description-overlap`)                                       |
+| the skill never fires              | a skill with no usable description (`skill-frontmatter`)                                                  |
+| the subagent loses a tool          | a never-available / typo'd tool or undeclared MCP server (`subagent-tool-contract` / `mcp-tool-resolves`) |
+| the hook never runs                | a typo'd event or a missing script (`hook-events` / `hook-script-exists`)                                 |
+| the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
+
+```bash
+npx vigiles explain ./some-plugin          # every cause found, likely-first
+npx vigiles explain ./some-plugin caveman  # narrow to one underperformer
+npx vigiles explain ./some-plugin --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
+npx vigiles explain ./repo --harness=codex # override harness detection
+```
+
+`confidence` is `likely` (a hard dead-end — a missing script can't run) or
+`possible` (a high-precision proxy — an overlap _may_ collide; confirm with
+`scan --trigger`). With no deterministic cause, it says so and points you at the
+behavioural tier (the cause is likely in the prose, measured by an eval). It's
+the diagnostic the per-repo optimizer prints beside each drop/swap
+recommendation — _"underperforms **because** its description overlaps X"_, not
+just _"drop it"_. The pairing is the strategy in
+[`research/measurement-authority.md`](../research/measurement-authority.md)
+(measurement = the _what_; linting = the deterministic _why_).
+
+### `scaffold-test [dir]`
+
+**Free-form in, a runnable starter test out.** For every **untested** skill /
+subagent / hook in a plugin (the surfaces `vigiles lint` flags via
+`untested-skill` / `untested-subagent` / `untested-hook`), generate a scaffolded
+test at its suggested path — the deterministic counterpart to the `test-harness`
+skill (which picks the tier with a model). Each scaffold wires the real public
+API + the surface's own metadata and leaves TODOs only where judgement is needed:
+
+| Surface      | Tier      | Generated                                                   |
+| ------------ | --------- | ----------------------------------------------------------- |
+| **hook**     | `runHook` | a unit test asserting the block/allow decision (free)       |
+| **skill**    | eval      | a `measureTriggerRate` recall + precision eval (real model) |
+| **subagent** | harness   | a `runHarnessTest` scaffold (points at the `result()` path) |
+
+```bash
+npx vigiles scaffold-test ./my-plugin          # dry-run: print the scaffolds
+npx vigiles scaffold-test ./my-plugin --write   # write each to its suggested path (never clobbers)
+npx vigiles scaffold-test ./my-plugin --json    # the agent-consumable { path, content, kind, tier }[]
+npx vigiles scaffold-test ./repo --harness=codex
+```
+
+`--write` skips any path that already exists, and the generated file lands where
+the untested-surface detector looks for it — so the surface stops being reported
+untested. Fill in the TODOs (prompts / event input / assertions), then run with
+`vigiles test` or `vigiles eval`.
+
+### `scan --fix-plan [dir]`
+
+The **fix-plan lens** on a scan — the per-repo harness optimizer's free,
+deterministic half. Where `explain` diagnoses _one_ surface a measurement
+flagged, `scan --fix-plan` is the whole-repo adoption view: a
+structural-**health score** (the same `scoreReport` the leaderboard uses) plus
+the **ranked free fixes** to apply _before_ you spend a token measuring. It
+reuses `explain`'s findings (one detector, no drift), so each recommendation
+carries the cause, the one-line fix, and an action verb — `FIX` (a structural
+dead-end) or `DIFFERENTIATE` (a description-overlap pair).
+
+```bash
+npx vigiles scan ./my-plugin --fix-plan          # health score + ranked free fixes, likely-first
+npx vigiles scan ./my-plugin --fix-plan --json   # the agent-consumable plan {score, grade, empty, recommendations}
+npx vigiles scan ./repo --fix-plan --harness=codex
+```
+
+This is the **"linting as a free pre-filter to measurement"** thesis: clear the
+structural problems a model can't help with first (free, certain), _then_
+measure whether the structurally-clean skills earn their keep with
+`scan --trigger` (real-model, on your subscription). That **measured behavioural
+delta** — does dropping/swapping a skill actually move success or cost? — is the
+next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
+flag rather than its own `optimize` verb until that measured half lands (an
+optimizer that only re-prints scan's findings hasn't earned a separate command).
+See [`research/measurement-authority.md`](../research/measurement-authority.md)
+(A2) and the [roadmap](../research/roadmap.md).
+
 ## Lint vs scan — gate vs report
 
 `lint` and `scan` look like they overlap, but they're **different verbs with
@@ -351,7 +442,7 @@ To verify generated types are fresh in CI:
 
 Without the plugin, you're responsible for manually running `compile` and
 `generate-types`. With it, the agent works with fresh instruction files
-automatically, and the consumer skills (`strengthen`, `migrate-to-spec`,
+automatically, and the consumer skills (`strengthen`, `adopt-spec`,
 `test-harness`, `edit-spec`) are available (edit-spec now covers adding a rule).
 
 The plugin installs through the **Claude Code plugin marketplace** — globally

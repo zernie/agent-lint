@@ -8,17 +8,19 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { agent } from "../../core/spec.js";
+import { agent, instructions, effect, file } from "../../core/spec.js";
 import { compileAgent } from "../../core/compile.js";
 import { claudeCodeDialect } from "./dialect.js";
 import {
   parseAgentTools,
+  parseAgentPurity,
   decidePreToolUse,
   setActiveAgent,
   readActiveAgent,
   clearActiveAgent,
   evaluatePreToolUse,
 } from "./agent-runtime.js";
+import { setEffectActive, clearEffectActive } from "./effect-region.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 import { runHook } from "../../run-hook.js";
 import { writeFileSync, readFileSync } from "node:fs";
@@ -236,6 +238,95 @@ test("evaluatePreToolUse allows everything for an inherit-all agent", () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseAgentPurity + the runtime purity gate (command-refined Bash)
+// ---------------------------------------------------------------------------
+
+test("parseAgentPurity reads the vigiles:purity marker compile emits", () => {
+  const { markdown } = compileAgent(
+    agent({
+      name: "editor",
+      description: "Edits within a boundary.",
+      purity: "bounded",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/editor.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.equal(parseAgentPurity(markdown), "bounded");
+});
+
+test("parseAgentPurity returns null when no marker is present", () => {
+  const { markdown } = compileAgent(
+    agent({ name: "a", description: "d", tools: ["Read"], body: "b" }),
+    { specFile: "a.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.equal(parseAgentPurity(markdown), null);
+});
+
+test("evaluatePreToolUse applies the purity gate: a bounded agent's Bash is command-refined", () => {
+  const dir = makeTmpDir("agent-purity");
+  try {
+    const { markdown } = compileAgent(
+      agent({
+        name: "editor",
+        description: "Edits + observes via Bash.",
+        purity: "bounded",
+        tools: ["Read", "Write", "Bash"],
+        body: "b",
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/editor.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "editor.md"), markdown);
+    setActiveAgent(dir, "editor.md");
+
+    // read-only Bash is an observation → allowed even outside any boundary.
+    assert.equal(evaluatePreToolUse(dir, "Bash", "git status").allow, true);
+    // mutating Bash → denied by the purity gate (the rail alone would allow it).
+    const blocked = evaluatePreToolUse(dir, "Bash", "git push origin main");
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /read-only/);
+    // Write is a decidable effect → allowed at the bounded floor.
+    assert.equal(evaluatePreToolUse(dir, "Write").allow, true);
+    assert.equal(evaluatePreToolUse(dir, "Read").allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluatePreToolUse: the tool-contract rail still fires before the purity gate", () => {
+  const dir = makeTmpDir("agent-purity-rail");
+  try {
+    // A pure agent: Read/Grep only. Write is out of contract → the RAIL denies
+    // it (the purity gate never needs to), proving the two layers compose.
+    const { markdown } = compileAgent(
+      agent({
+        name: "reviewer",
+        description: "Reviews.",
+        purity: "pure",
+        tools: ["Read", "Grep"],
+        body: "b",
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/reviewer.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "reviewer.md"), markdown);
+    setActiveAgent(dir, "reviewer.md");
+    const blocked = evaluatePreToolUse(dir, "Write");
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /allowed-tools contract/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // The differentiator's invariant: hook ⇄ allowlist agree
 // ---------------------------------------------------------------------------
 
@@ -342,6 +433,54 @@ test("agent-hook CLI allows (exit 0) an in-contract tool", () => {
   }
 });
 
+test("agent-hook CLI command-gates Bash for a bounded agent (read-only allowed, mutating blocked)", () => {
+  const dir = makeTmpDir("agent-hook-purity");
+  const { markdown } = compileAgent(
+    agent({
+      name: "editor",
+      description: "Edits + observes.",
+      purity: "bounded",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    {
+      basePath: dir,
+      specFile: "agents/editor.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
+  );
+  writeFileSync(join(dir, "editor.md"), markdown);
+  setActiveAgent(dir, "editor.md");
+  try {
+    const ok = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git status" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(ok.blocked, false);
+    assert.equal(ok.exitCode, 0);
+
+    const blocked = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push origin main" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.exitCode, 2);
+    assert.match(blocked.stderr, /read-only/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("agent-hook CLI allows when no agent is active", () => {
   const dir = makeTmpDir("agent-hook-none");
   try {
@@ -431,4 +570,149 @@ test("the spec form ADDS the rail the real subagent omits, and it parses + enfor
   // the tools the wild original inherited but a visual validator must not hold:
   assert.equal(decidePreToolUse(enforced, "Write").allow, false);
   assert.equal(decidePreToolUse(enforced, "Edit").allow, false);
+});
+
+// ---------------------------------------------------------------------------
+// Effect boundary gate — evaluatePreToolUse + runHook
+// ---------------------------------------------------------------------------
+
+test("evaluatePreToolUse: effect boundary outside blocks side-effecting tools", () => {
+  const dir = makeTmpDir("agent-effect-boundary");
+  try {
+    const { markdown } = compileAgent(
+      agent({
+        name: "release",
+        description: "Cut a release.",
+        tools: ["Read", "Write", "Bash"],
+        body: instructions`
+          ## Prepare
+          Read ${file("package.json")}.
+
+          ## Apply
+          ${effect`
+            Side effects allowed ONLY here.
+          `}
+        `,
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/release.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "release.md"), markdown);
+    setActiveAgent(dir, "release.md");
+    // ensure no effect-active marker → outside the boundary
+
+    // Write is side-effecting → denied when outside the effect boundary
+    const blocked = evaluatePreToolUse(dir, "Write");
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /pure unit may only observe/);
+
+    // Read is always read-only → allowed even outside the boundary
+    const allowed = evaluatePreToolUse(dir, "Read");
+    assert.equal(allowed.allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluatePreToolUse: effect boundary inside allows side-effecting tools", () => {
+  const dir = makeTmpDir("agent-effect-inside");
+  try {
+    const { markdown } = compileAgent(
+      agent({
+        name: "release",
+        description: "Cut a release.",
+        tools: ["Read", "Write"],
+        body: instructions`
+          ## Apply
+          ${effect`Write ${file("package.json")}.`}
+        `,
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/release.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "release.md"), markdown);
+    setActiveAgent(dir, "release.md");
+    setEffectActive(dir); // enter the boundary
+
+    // Write is now inside the boundary → allowed
+    const allowed = evaluatePreToolUse(dir, "Write");
+    assert.equal(allowed.allow, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
+});
+
+test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again", () => {
+  const dir = makeTmpDir("agent-hook-effect");
+  const { markdown } = compileAgent(
+    agent({
+      name: "release",
+      description: "Cut a release.",
+      tools: ["Read", "Write"],
+      body: instructions`
+        ## Apply
+        ${effect`Write the changelog.`}
+      `,
+    }),
+    {
+      basePath: dir,
+      specFile: "agents/release.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
+  );
+  writeFileSync(join(dir, "release.md"), markdown);
+  setActiveAgent(dir, "release.md");
+  try {
+    // Outside the boundary → Write blocked
+    const outsideBlocked = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(outsideBlocked.blocked, true);
+
+    // Enter the boundary
+    setEffectActive(dir);
+
+    // Inside the boundary → Write allowed
+    const insideAllowed = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(insideAllowed.blocked, false);
+
+    // Exit the boundary
+    clearEffectActive(dir);
+
+    // Outside again → Write blocked
+    const afterExit = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(afterExit.blocked, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
 });

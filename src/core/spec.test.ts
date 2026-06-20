@@ -4,11 +4,15 @@ import assert from "node:assert/strict";
 import {
   enforce,
   guidance,
+  result,
   file,
   cmd,
   ref,
   symbol,
+  dir,
+  glob,
   instructions,
+  effect,
   claude,
   skill,
 } from "./spec.js";
@@ -106,6 +110,18 @@ describe("reference helpers", () => {
     assert.equal(r._ref, "skill");
     assert.equal(r.path, "skills/other/SKILL.md");
   });
+
+  it("dir() creates a dir ref", () => {
+    const r = dir("src/core");
+    assert.equal(r._ref, "dir");
+    assert.equal(r.path, "src/core");
+  });
+
+  it("glob() creates a glob ref", () => {
+    const r = glob("src/**/*.test.ts");
+    assert.equal(r._ref, "glob");
+    assert.equal(r.pattern, "src/**/*.test.ts");
+  });
 });
 
 describe("instructions tagged template", () => {
@@ -117,6 +133,35 @@ describe("instructions tagged template", () => {
     assert.equal(typeof result[2], "string");
     assert.equal((result[3] as { _ref: string })._ref, "cmd");
     assert.equal(typeof result[4], "string");
+  });
+});
+
+describe("effect() tagged template", () => {
+  it("produces an EffectRegion with correct _ref", () => {
+    const region = effect`Side effects allowed here.`;
+    assert.equal(region._ref, "effect");
+    assert.equal(region.body.length, 1);
+    assert.equal(typeof region.body[0], "string");
+  });
+
+  it("interleaves strings and InstructionFragment refs", () => {
+    const region = effect`Write ${file("package.json")} and run ${cmd("npm publish")}.`;
+    assert.equal(region._ref, "effect");
+    assert.equal(region.body.length, 5);
+    assert.equal(typeof region.body[0], "string");
+    assert.equal((region.body[1] as { _ref: string })._ref, "file");
+    assert.equal(typeof region.body[2], "string");
+    assert.equal((region.body[3] as { _ref: string })._ref, "cmd");
+    assert.equal(typeof region.body[4], "string");
+  });
+
+  it("can be nested inside instructions", () => {
+    const frags = instructions`Before. ${effect`Inside ${file("package.json")}.`} After.`;
+    // [string, EffectRegion, string]
+    assert.equal(frags.length, 3);
+    const region = frags[1] as { _ref: string; body: unknown[] };
+    assert.equal(region._ref, "effect");
+    assert.ok(region.body.length > 0);
   });
 });
 
@@ -286,6 +331,33 @@ describe("compileSkill()", () => {
     assert.equal(errors.length, 0);
   });
 
+  it("renders context: fork and a forked skill's typed output contract", () => {
+    const spec = skill({
+      name: "review",
+      description: "Review a file.",
+      context: "fork", // runs as a subagent → has a return boundary
+      output: result({ defects: "string[]" }, { reason: "string" }),
+      body: "Review the file.",
+    });
+    const { markdown, errors } = compileSkill(spec);
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("context: fork"));
+    assert.ok(markdown.includes("## Output contract"));
+    assert.ok(markdown.includes("```vigiles:ok"));
+    assert.ok(markdown.includes('"defects": string[]'));
+  });
+
+  it("errors when output is set WITHOUT context: fork (inline = no return)", () => {
+    const spec = skill({
+      name: "review",
+      description: "Review a file.",
+      output: result({ ok: "boolean" }, { reason: "string" }),
+      body: "Review the file.",
+    });
+    const { errors } = compileSkill(spec);
+    assert.ok(errors.some((e) => e.type === "output-without-fork"));
+  });
+
   it("compiles a skill with tagged template body", () => {
     const spec = skill({
       name: "test-skill",
@@ -306,6 +378,67 @@ describe("compileSkill()", () => {
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
     assert.equal(errors[0].type, "stale-file");
+  });
+
+  it("verifies a dir() ref against a real directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`The engine lives in ${dir("src/core")}.`,
+    });
+    const { markdown, errors } = compileSkill(spec, {
+      basePath: process.cwd(),
+    });
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("`src/core`"));
+  });
+
+  it("flags a dir() ref to a missing directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`See ${dir("src/nonexistent-dir-xyz")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-file");
+  });
+
+  it("flags a dir() ref that points at a FILE, not a directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`See ${dir("package.json")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-ref");
+    assert.match(errors[0].message, /Not a directory/);
+  });
+
+  it("verifies a glob() ref that matches at least one file", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`Specs: ${glob("src/core/*.test.ts")}.`,
+    });
+    const { markdown, errors } = compileSkill(spec, {
+      basePath: process.cwd(),
+    });
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("`src/core/*.test.ts`"));
+  });
+
+  it("flags a glob() ref that matches nothing", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`Specs: ${glob("src/**/*.nonexistent-ext")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-ref");
+    assert.match(errors[0].message, /matched no files/);
   });
 
   it("includes frontmatter fields", () => {
@@ -549,17 +682,30 @@ describe("section guardrails", () => {
     assert.ok(!errors.some((e) => e.type === "section-too-long"));
   });
 
-  it("skips maxSectionLines check when not configured", () => {
-    const longContent = Array.from(
+  it("allows a normal section under the generous default (no maxSectionLines)", () => {
+    // 100 lines is well under the 200-line default — real prose sections are short.
+    const content = Array.from(
       { length: 100 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
-      sections: { wall: longContent },
-      rules: {},
-    });
+    const spec = claude({ sections: { ok: content }, rules: {} });
     const { errors } = compileClaude(spec);
     assert.ok(!errors.some((e) => e.type === "section-too-long"));
+  });
+
+  it("applies a generous DEFAULT cap (200 lines) with no maxSectionLines set", () => {
+    // An egregious dump trips the default guard even when the author set no cap —
+    // TS types can't bound string length, so this is the compile-time backstop.
+    const dump = Array.from(
+      { length: 250 },
+      (_, i) => `Line ${String(i + 1)}`,
+    ).join("\n");
+    const spec = claude({ sections: { wall: dump }, rules: {} });
+    const { errors } = compileClaude(spec);
+    const tooLong = errors.find((e) => e.type === "section-too-long");
+    assert.ok(tooLong, "the default cap should fire on a 250-line section");
+    assert.ok(tooLong.message.includes("max 200"));
+    assert.ok(tooLong.message.includes("maxSectionLines")); // points at the override
   });
 });
 

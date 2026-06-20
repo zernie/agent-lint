@@ -197,6 +197,9 @@ export function decideSandbox(opts: {
     available: boolean;
 }): SandboxDecision;
 
+// @public
+export function didNotWrite(path: string): Check<Trace>;
+
 // @public (undocumented)
 export interface DiffOptions {
     readonly alpha?: number;
@@ -518,6 +521,7 @@ export function subagent(name: string, checks: readonly Check<Trace>[]): Check<T
 // @public
 export interface SubagentTrace {
     readonly name: string;
+    readonly output: string;
     readonly toolCalls: readonly ToolCall[];
 }
 

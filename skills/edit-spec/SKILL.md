@@ -27,7 +27,7 @@ Look for spec files in the repo root:
 - Any `*.spec.ts` matching instruction files
 
 If no spec exists: if there's a hand-written `CLAUDE.md`, suggest the
-`migrate-to-spec` skill; otherwise suggest `npx vigiles init` to scaffold one.
+`adopt-spec` skill; otherwise suggest `npx vigiles init` to scaffold one.
 
 ### Step 2: Read and Understand the Spec
 

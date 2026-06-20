@@ -20,6 +20,15 @@
             "command": "npm install && npm run build && pip install ruff pylint && gem install rubocop 2>/dev/null; true"
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-handoff.sh\""
+          }
+        ]
       }
     ],
     "PostToolUse": [

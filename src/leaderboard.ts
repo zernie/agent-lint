@@ -33,7 +33,8 @@ const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → b
 const W_NO_CONTRACT = 5; // an agent with no `tools:` line → inherits everything
 const W_UNTESTED = 3; // a surface with no test/eval → warning-tier
 
-function gradeFor(score: number): PluginScore["grade"] {
+/** Map a 0–100 structural-health score to its letter grade (A ≥90 … F <60). */
+export function gradeFor(score: number): PluginScore["grade"] {
   if (score >= 90) return "A";
   if (score >= 80) return "B";
   if (score >= 70) return "C";

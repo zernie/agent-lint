@@ -86,8 +86,42 @@ assertCreated(r, "DONE"); // a file was created
 `withHarness(spec, fn)` wraps a deterministic run with try/finally cleanup so a
 test doesn't leak temp dirs.
 
+### Assert a subagent's typed outcome
+
 For the railway/result subagent contract, `assertAgentOk` / `assertAgentErr` /
-`assertAgentResult` test a subagent's outcome via `parseAgentResult`.
+`assertAgentResult` test a subagent's outcome via `parseAgentResult` — a
+**deterministic assert that replaces an LLM judge**. A subagent with a `result()`
+contract ends its turn with a `vigiles:ok` / `vigiles:err` block; these helpers
+parse it and validate it against the declared shape:
+
+```ts
+import { result } from "vigiles";
+import {
+  assertAgentOk,
+  assertAgentErr,
+  assertAgentResult,
+} from "vigiles/testing";
+
+const contract = result(
+  { files: "string[]", summary: "string" }, // the ok track
+  { reason: "string", step: "string" }, // the err track
+);
+
+const value = assertAgentOk(r.output, contract); // returns the validated `value`
+const error = assertAgentErr(r.output, contract); // returns the validated `error`
+
+// The general predicate form, for rich detail:
+assertAgentResult(
+  r.output,
+  (res) => res.kind === "ok" && res.value.files.length > 0,
+  contract,
+);
+```
+
+Pass the `contract` and a wrong/missing field fails the assertion; omit it and any
+well-formed JSON block is accepted. Output that isn't a valid block is `malformed`
+(throws) — never a silent pass. Worked example:
+[`railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs).
 
 ## The `check` vocabulary
 

@@ -33,6 +33,7 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     malformedFrontmatter: [],
     warnings: [],
     untested: 0,
+    puritySummary: { pure: 0, bounded: 0, unrestricted: 0 },
     ...over,
   };
 }
@@ -87,6 +88,8 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
             toolIssues: [],
             mcpToolIssues: [],
             disallowedToolIssues: [],
+            purity: "unrestricted" as const,
+            effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
           },
         ],
       }),

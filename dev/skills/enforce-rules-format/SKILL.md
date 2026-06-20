@@ -54,7 +54,7 @@ For each issue found:
 
 If the project uses v1 format, suggest migrating to v2 specs for type safety:
 
-> Your rules could benefit from type-safe specs. Run the `migrate-to-spec` skill to convert your CLAUDE.md to a typed .spec.ts file.
+> Your rules could benefit from type-safe specs. Run the `adopt-spec` skill to convert your CLAUDE.md to a typed .spec.ts file.
 
 ### Step 5: Verify
 

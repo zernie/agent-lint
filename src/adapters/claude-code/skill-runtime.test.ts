@@ -1,12 +1,14 @@
 /**
  * Tests for the skill runtime: parsing vigiles:gate / vigiles:result markers
  * out of a compiled SKILL.md and executing the gate ladder with short-circuit.
+ * Also covers the skill purity gate (parseSkillPurity / evaluateSkillPreToolUse
+ * / skill-tool-hook CLI) — mirrors the purity section of agent-runtime.test.ts.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   parseSkillGates,
@@ -17,7 +19,15 @@ import {
   clearActiveSkill,
   readActiveSkill,
   evaluateStopHook,
+  parseSkillPurity,
+  evaluateSkillPreToolUse,
 } from "./skill-runtime.js";
+import { skill, instructions, effect } from "../../core/spec.js";
+import { compileSkill } from "../../core/compile.js";
+import { claudeCodeDialect } from "./dialect.js";
+import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
+import { runHook } from "../../run-hook.js";
+import { setEffectActive, clearEffectActive } from "./effect-region.js";
 
 const SAMPLE = `# skill
 
@@ -194,4 +204,334 @@ test("evaluateStopHook blocks when the result gate fails", () => {
   assert.equal(d.allow, false);
   assert.match(d.message, /is not done: result gate `false` failed/);
   rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// parseSkillPurity + evaluateSkillPreToolUse — the skill purity gate
+// ---------------------------------------------------------------------------
+
+test("parseSkillPurity reads the vigiles:purity marker compileSkill emits", () => {
+  const { markdown } = compileSkill(
+    skill({
+      name: "editor",
+      description: "Edits within a boundary.",
+      purity: "bounded",
+      tools: ["Read", "Bash"],
+      body: "b",
+    }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.equal(parseSkillPurity(markdown), "bounded");
+});
+
+test("parseSkillPurity returns null when no marker is present", () => {
+  const { markdown } = compileSkill(
+    skill({ name: "reader", description: "Reads files.", body: "b" }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.equal(parseSkillPurity(markdown), null);
+});
+
+test("evaluateSkillPreToolUse: bounded skill — Bash command-refined, Write allowed, Read allowed", () => {
+  const dir = makeTmpDir("skill-purity");
+  try {
+    const { markdown } = compileSkill(
+      skill({
+        name: "editor",
+        description: "Edits + observes via Bash.",
+        purity: "bounded",
+        tools: ["Read", "Write", "Bash"],
+        body: "b",
+      }),
+      {
+        basePath: dir,
+        specFile: "SKILL.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "SKILL.md"), markdown);
+    setActiveSkill(dir, "SKILL.md");
+
+    // read-only Bash → allowed (observation, not a side effect)
+    assert.equal(
+      evaluateSkillPreToolUse(dir, "Bash", "git status").allow,
+      true,
+    );
+    // mutating Bash → denied by the purity gate
+    const blocked = evaluateSkillPreToolUse(
+      dir,
+      "Bash",
+      "git push origin main",
+    );
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /read-only/);
+    // Write is a decidable boundary effect → allowed at the bounded floor
+    assert.equal(evaluateSkillPreToolUse(dir, "Write").allow, true);
+    // Read is always allowed
+    assert.equal(evaluateSkillPreToolUse(dir, "Read").allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluateSkillPreToolUse allows anything when no skill is active", () => {
+  const dir = makeTmpDir("skill-purity-none");
+  try {
+    assert.equal(evaluateSkillPreToolUse(dir, "Bash").allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluateSkillPreToolUse allows when the active skill's .md is missing", () => {
+  const dir = makeTmpDir("skill-purity-missing");
+  try {
+    setActiveSkill(dir, "SKILL.md");
+    assert.equal(evaluateSkillPreToolUse(dir, "Write").allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluateSkillPreToolUse allows everything when skill declares no purity marker", () => {
+  const dir = makeTmpDir("skill-purity-none-marker");
+  try {
+    const { markdown } = compileSkill(
+      skill({ name: "reader", description: "Reads files.", body: "b" }),
+      {
+        basePath: dir,
+        specFile: "SKILL.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "SKILL.md"), markdown);
+    setActiveSkill(dir, "SKILL.md");
+    assert.equal(evaluateSkillPreToolUse(dir, "Bash").allow, true);
+    assert.equal(evaluateSkillPreToolUse(dir, "Write").allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// skill-tool-hook (CLI): the real PreToolUse purity gate process
+// ---------------------------------------------------------------------------
+
+const CLI = resolve(__dirname, "..", "..", "..", "dist", "cli.js");
+
+/** Set up a temp project with a compiled bounded skill and mark it active. */
+function projectWithBoundedSkill(): string {
+  const dir = makeTmpDir("skill-hook-cli");
+  const { markdown } = compileSkill(
+    skill({
+      name: "editor",
+      description: "Edits + observes.",
+      purity: "bounded",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    {
+      basePath: dir,
+      specFile: "SKILL.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
+  );
+  writeFileSync(join(dir, "SKILL.md"), markdown);
+  setActiveSkill(dir, "SKILL.md");
+  return dir;
+}
+
+test("skill-tool-hook CLI allows (exit 0) a read-only Bash command for a bounded skill", () => {
+  const dir = projectWithBoundedSkill();
+  try {
+    const r = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git status" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(r.blocked, false);
+    assert.equal(r.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("skill-tool-hook CLI blocks (exit 2) a mutating Bash command for a bounded skill", () => {
+  const dir = projectWithBoundedSkill();
+  try {
+    const r = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push origin main" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(r.blocked, true);
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr, /read-only/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("skill-tool-hook CLI allows when no skill is active", () => {
+  const dir = makeTmpDir("skill-hook-none");
+  try {
+    const r = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "rm -rf /" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(r.blocked, false);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("skill-tool-hook CLI allows on a malformed/empty event (no tool name)", () => {
+  const dir = projectWithBoundedSkill();
+  try {
+    const r = runHook(`node ${CLI} skill-tool-hook`, {}, { cwd: dir });
+    assert.equal(r.blocked, false);
+    assert.equal(r.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Effect boundary gate — evaluateSkillPreToolUse + skill-tool-hook CLI
+// ---------------------------------------------------------------------------
+
+test("evaluateSkillPreToolUse: effect boundary outside blocks side-effecting tools", () => {
+  const dir = makeTmpDir("skill-effect-outside");
+  try {
+    const { markdown } = compileSkill(
+      skill({
+        name: "release",
+        description: "Cut a release.",
+        body: instructions`
+          ## Apply
+          ${effect`
+            Side effects allowed ONLY here.
+          `}
+        `,
+      }),
+      { basePath: dir },
+    );
+    writeFileSync(join(dir, "SKILL.md"), markdown);
+    setActiveSkill(dir, "SKILL.md");
+    // no effect-active file → outside the boundary
+
+    // Write is side-effecting → denied outside the effect boundary
+    const blocked = evaluateSkillPreToolUse(dir, "Write");
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /pure unit may only observe/);
+
+    // Read is always read-only → allowed
+    const allowed = evaluateSkillPreToolUse(dir, "Read");
+    assert.equal(allowed.allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluateSkillPreToolUse: effect boundary inside allows side-effecting tools", () => {
+  const dir = makeTmpDir("skill-effect-inside");
+  try {
+    const { markdown } = compileSkill(
+      skill({
+        name: "release",
+        description: "Cut a release.",
+        body: instructions`
+          ## Apply
+          ${effect`Write the changelog.`}
+        `,
+      }),
+      { basePath: dir },
+    );
+    writeFileSync(join(dir, "SKILL.md"), markdown);
+    setActiveSkill(dir, "SKILL.md");
+    setEffectActive(dir); // enter the boundary
+
+    // Write is inside the boundary → allowed
+    const allowed = evaluateSkillPreToolUse(dir, "Write");
+    assert.equal(allowed.allow, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
+});
+
+test("skill-tool-hook CLI: effect-enter allows Write; effect-exit blocks Write again", () => {
+  const dir = makeTmpDir("skill-hook-effect");
+  const { markdown } = compileSkill(
+    skill({
+      name: "release",
+      description: "Cut a release.",
+      body: instructions`
+        ## Apply
+        ${effect`Write the changelog.`}
+      `,
+    }),
+    { basePath: dir },
+  );
+  writeFileSync(join(dir, "SKILL.md"), markdown);
+  setActiveSkill(dir, "SKILL.md");
+  try {
+    // Outside the boundary → Write blocked
+    const outsideBlocked = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(outsideBlocked.blocked, true);
+
+    // Enter the boundary
+    setEffectActive(dir);
+
+    // Inside the boundary → Write allowed
+    const insideAllowed = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(insideAllowed.blocked, false);
+
+    // Exit the boundary
+    clearEffectActive(dir);
+
+    // Outside again → Write blocked
+    const afterExit = runHook(
+      `node ${CLI} skill-tool-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(afterExit.blocked, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
 });

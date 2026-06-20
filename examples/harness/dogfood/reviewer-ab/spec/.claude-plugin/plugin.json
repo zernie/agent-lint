@@ -1,0 +1,5 @@
+{
+  "name": "reviewer-spec",
+  "version": "0.0.0",
+  "description": "A/B arm: a code-reviewer subagent WITH a vigiles spec (typed result() outcome + purity)."
+}

@@ -31,6 +31,11 @@ import {
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 
+import { decidePurityGate } from "../../core/effects.js";
+import type { PurityLevel } from "../../core/effects.js";
+import { claudeCodeDialect } from "./dialect.js";
+import { hasEffectBoundary, readEffectActive } from "./effect-region.js";
+
 export type RuntimeGate =
   | { readonly kind: "cmd"; readonly command: string; readonly retry: number }
   | { readonly kind: "file"; readonly path: string; readonly retry: number }
@@ -305,6 +310,65 @@ export function readActiveSkill(cwd: string): string | null {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skill purity gate (mirrors agent-runtime.ts parseAgentPurity / evaluatePreToolUse)
+// ---------------------------------------------------------------------------
+
+const PURITY_RE = /<!--\s*vigiles:purity:(pure|bounded|unrestricted)\s*-->/;
+
+/**
+ * Parse the declared purity floor from a compiled SKILL.md — the
+ * `<!-- vigiles:purity:LEVEL -->` marker `compileSkill` emits (see
+ * `purityMarker` in compile.ts). Returns null when no marker is present (the
+ * skill declared no floor, so the purity gate imposes no constraint). Mirrors
+ * `parseAgentPurity` in agent-runtime.ts.
+ */
+export function parseSkillPurity(markdown: string): PurityLevel | null {
+  const m = PURITY_RE.exec(markdown);
+  return m ? (m[1] as PurityLevel) : null;
+}
+
+/** A runtime allow/deny decision (mirrors PreToolDecision in agent-runtime.ts). */
+export interface SkillPreToolDecision {
+  /** Whether the tool call is allowed (true) or blocked (false). */
+  readonly allow: boolean;
+  /** Message fed back to the model on a block; empty on allow. */
+  readonly message: string;
+}
+
+/**
+ * PreToolUse purity gate for skills. Mirrors `evaluatePreToolUse` in
+ * agent-runtime.ts, but enforces ONLY the purity floor — skills have no
+ * tools-allowlist rail (that's a separate, future concern). If a skill is
+ * active and declares a `vigiles:purity:` marker, `decidePurityGate` checks
+ * the live call (refining `Bash` by the concrete command via `isReadOnlyBash`).
+ * With no active skill, a missing `.md`, or no purity marker, always allows.
+ */
+export function evaluateSkillPreToolUse(
+  cwd: string,
+  tool: string,
+  command?: string,
+): SkillPreToolDecision {
+  const skillPath = readActiveSkill(cwd);
+  if (!skillPath) return { allow: true, message: "" };
+
+  const full = resolve(cwd, skillPath);
+  if (!existsSync(full)) return { allow: true, message: "" };
+
+  const md = readFileSync(full, "utf-8");
+  const purity = parseSkillPurity(md);
+  const boundary = hasEffectBoundary(md);
+  if (boundary) {
+    const effective: PurityLevel = readEffectActive(cwd)
+      ? (purity ?? "unrestricted")
+      : "pure";
+    return decidePurityGate(effective, tool, command, claudeCodeDialect);
+  }
+  if (!purity) return { allow: true, message: "" };
+
+  return decidePurityGate(purity, tool, command, claudeCodeDialect);
 }
 
 export interface StopDecision {

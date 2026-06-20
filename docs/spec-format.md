@@ -31,6 +31,8 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 `Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `instructions` with embedded `file()`, `cmd()`, and `ref()` references.
 
+Each section (and each subagent section) is length-guarded at compile time: a single section over a **generous 200-line default** is rejected as a likely content dump (TypeScript types can't bound a string's length, so the cap lives in the compiler — the ESLint `max-len` precedent). Override per spec with `maxSectionLines` (tighter to enforce your own limit, larger for an intentionally long section); `maxTokens` caps the whole compiled file.
+
 <!-- vigiles:ignore -->
 
 ```ts
@@ -88,13 +90,87 @@ export default skill({
 });
 ```
 
-| Field                    | Type                              | Required | Description                                         |
-| ------------------------ | --------------------------------- | -------- | --------------------------------------------------- |
-| `name`                   | `string`                          | yes      | Skill name (used in YAML frontmatter)               |
-| `description`            | `string`                          | yes      | Short description (frontmatter)                     |
-| `argumentHint`           | `string`                          | no       | Hint for the argument (frontmatter)                 |
-| `disableModelInvocation` | `boolean`                         | no       | Disable model invocation flag (frontmatter)         |
-| `body`                   | `string \| InstructionFragment[]` | yes      | Instruction body -- plain string or tagged template |
+| Field                    | Type                                                | Required | Description                                                                                                        |
+| ------------------------ | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `name`                   | `string`                                            | yes      | Skill name (used in YAML frontmatter)                                                                              |
+| `description`            | `string`                                            | yes      | Short description (frontmatter) -- the trigger surface, keep it short                                              |
+| `argumentHint`           | `string`                                            | no       | Hint for the argument (frontmatter)                                                                                |
+| `inputs`                 | `SkillInput[]`                                      | no       | Typed inputs via `input(name, hint)` -- compile to argument-hint + an `## Arguments` section                       |
+| `disableModelInvocation` | `boolean`                                           | no       | Disable model invocation flag (frontmatter)                                                                        |
+| `tools`                  | `string[]`                                          | no       | Allowed-tools contract (built-in or `mcp__server__tool`); omit = inherit all                                       |
+| `purity`                 | `"pure" \| "bounded" \| "dangerously-unrestricted"` | no       | Side-effect floor (see [Purity & effects](#purity--effects))                                                       |
+| `steps`                  | `SkillStep[]`                                       | no       | Gated pipeline via `step(do, { gate, retry })` -- compiles to `## Steps`. Use this OR `body`                       |
+| `result`                 | `Gate`                                              | no       | Terminal postcondition gate (`cmd()`/`file()`/`project()`); compiles to `## Result`                                |
+| `context`                | `"fork"`                                            | no       | Run as a forked subagent -- the prerequisite for `output`                                                          |
+| `output`                 | `OutputContract`                                    | no       | A `result(okShape, errShape)` typed outcome -- **requires `context:"fork"`** (see [Railway](railway-subagents.md)) |
+| `body`                   | `string \| InstructionFragment[]`                   | yes\*    | Instruction body -- plain string or tagged template (\*or use `steps`)                                             |
+| `maxInlineCodeLines`     | `number`                                            | no       | Cap an inline fenced code block before it must move to a `file()` (default 20)                                     |
+
+## Subagent (agent) Specs
+
+Use `agent()` to define a subagent (`agents/<name>.md`) — a delegated worker with a
+verified **tool contract** and, optionally, a typed **railway outcome**. The full
+guide (typed outcomes, composing flat workers with `railway()`/`delegate()`,
+asserting deterministically) is **[railway-subagents.md](railway-subagents.md)**;
+this is the field reference.
+
+<!-- vigiles:ignore -->
+
+```ts
+import { agent, result } from "vigiles";
+
+export default agent({
+  name: "code-reviewer",
+  description: "Review a diff for correctness defects.",
+  model: "opus",
+  color: "pink",
+  tools: ["Read", "Grep"], // allowlist — already excludes Write/Edit
+  purity: "pure", // read-only floor (compile + runtime gate)
+  output: result(
+    { defects: "string[]", summary: "string" },
+    { reason: "string" },
+  ),
+  body: "You are a careful code reviewer…",
+});
+```
+
+> **`tools` vs `disallowedTools` — use ONE.** `tools` is an _allowlist_ (only these);
+> `disallowedTools` is a _denylist_. Under a `tools` allowlist a tool not listed is
+> already unavailable, so `disallowedTools` would be **redundant**. Reach for
+> `disallowedTools` only when there's **no** allowlist (the agent inherits all tools)
+> and you want to subtract a few — e.g. `agent({ name, description, disallowedTools: ["Bash"] })`.
+
+| Field             | Type                                                | Required | Description                                                                                    |
+| ----------------- | --------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `name`            | `string`                                            | yes      | Subagent name (frontmatter; the dispatch handle)                                               |
+| `description`     | `string`                                            | yes      | What it does — read by the orchestrator to decide when to delegate                             |
+| `model`           | `string`                                            | no       | Model alias (`"sonnet"`/`"opus"`/`"haiku"`/`"inherit"`)                                        |
+| `color`           | `string`                                            | no       | Subagent UI colour (frontmatter)                                                               |
+| `tools`           | `string[]`                                          | no       | Allowed-tools contract — **verified** (typo/never-available flagged). Omit = inherit all       |
+| `disallowedTools` | `string[]`                                          | no       | Deny-side contract — verified close-typo (a typo'd entry blocks nothing)                       |
+| `purity`          | `"pure" \| "bounded" \| "dangerously-unrestricted"` | no       | Side-effect floor (see [Purity & effects](#purity--effects))                                   |
+| `output`          | `OutputContract`                                    | no       | `result(okShape, errShape)` typed outcome → `## Output contract`; testable via `assertAgentOk` |
+| `sections`        | `Record<string, string \| InstructionFragment[]>`   | no       | Named `##` system-prompt sections (same verified-ref rules as a CLAUDE.md)                     |
+| `rules`           | `Record<string, Rule>`                              | no       | Rules the worker must follow → `## Rules`                                                      |
+| `body`            | `string \| InstructionFragment[]`                   | no       | The lead "You are…" prose before any sections                                                  |
+
+## Purity & effects
+
+`purity` declares a unit's **side-effect floor**, enforced at compile (the tool
+contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
+
+| Level                        | Allows                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `"pure"`                     | read-only tools only (no Write/Edit/Bash side effects)                                                      |
+| `"bounded"`                  | + Write/Edit and command-gated Bash (read-only Bash allowed, mutating denied); bars MCP/unknown/inherit-all |
+| `"dangerously-unrestricted"` | no enforcement (the loud-at-the-declaration escape hatch)                                                   |
+
+`"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
+tools and is a violation.
+
+`effect\`…\``marks a **side-effect boundary** inside a body (a tagged template
+usable as an interpolated fragment). It compiles to`<!-- vigiles:effect -->`…`<!-- /vigiles:effect -->` markers that tighten the runtime gate to read-only
+_outside_ the region and the declared floor _inside_ it.
 
 ## Reference Helpers
 
@@ -112,9 +188,24 @@ Returns a `CmdRef` containing a `VerifiedCmd`. For npm commands, the script is v
 
 Returns a `SkillRef` containing a `VerifiedRef`. The path is verified to exist at compile time. Compiles to a markdown link: `[dirname](path)`.
 
+### `dir(path)`
+
+Returns a `DirRef` containing a `VerifiedDir`. The path is verified at compile time to exist **and be a directory** (a `dir()` pointing at a file is an error). Compiles to a backtick path: `` `src/core` ``. Use it so a spec that names a directory proves it's really there — the "architecture floats free" fix, where a plain string in prose rots silently.
+
+### `glob(pattern)`
+
+Returns a `GlobRef` containing a `VerifiedGlob`. The pattern is verified at compile time to match **at least one path** (`*` / `**` syntax, dotfiles included). Compiles to a backtick pattern: `` `src/**/*.test.ts` ``. Use it to prove a class of files exists where the instructions claim (e.g. tests, configs).
+
 ### `instructions`
 
-Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`.
+Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`. A single prose section over a generous default (200 lines) is rejected as a likely dump — override with `maxSectionLines`, or split / move detail into a `file()`.
+
+### Outcome & pipeline builders
+
+- `result(okShape, errShape)` — a subagent's (or forked skill's) typed `Result<ok, err>` outcome. Field types: `"string" | "number" | "boolean" | "string[]"`. Full guide: **[railway-subagents.md](railway-subagents.md)**.
+- `railway({ name, steps, recover, onError })` + `delegate(agent, task?)` — compose flat subagents into a success track with bounded recovery. See [railway-subagents.md](railway-subagents.md).
+- `input(name, hint)` / `step(do, { gate, retry })` / `project(role)` — a skill's typed inputs, gated pipeline steps, and portable command gates.
+- `effect\`…\`` — a side-effect boundary inside a body (see [Purity & effects](#purity--effects)).
 
 ```ts
 instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
@@ -192,6 +283,8 @@ rules: {
 - `file()` produces `FileRef` containing `VerifiedPath`
 - `cmd()` produces `CmdRef` containing `VerifiedCmd`
 - `ref()` produces `SkillRef` containing `VerifiedRef`
+- `dir()` produces `DirRef` containing `VerifiedDir`
+- `glob()` produces `GlobRef` containing `VerifiedGlob`
 
 The compiler only accepts these branded types in path-sensitive positions. This prevents passing unverified strings where a verified reference is expected -- the TypeScript compiler catches the error at authoring time.
 

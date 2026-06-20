@@ -226,6 +226,8 @@ declare const __brand: unique symbol;
 export type VerifiedPath = string & { readonly [__brand]: "VerifiedPath" };
 export type VerifiedCmd = string & { readonly [__brand]: "VerifiedCmd" };
 export type VerifiedRef = string & { readonly [__brand]: "VerifiedRef" };
+export type VerifiedDir = string & { readonly [__brand]: "VerifiedDir" };
+export type VerifiedGlob = string & { readonly [__brand]: "VerifiedGlob" };
 
 /** A typed file reference — verified at compile time. */
 export interface FileRef {
@@ -252,7 +254,19 @@ export interface SymbolRef {
   readonly symbol: string;
 }
 
-export type Ref = FileRef | CmdRef | SkillRef | SymbolRef;
+/** A typed directory reference — verified to exist AND be a directory. */
+export interface DirRef {
+  readonly _ref: "dir";
+  readonly path: VerifiedDir;
+}
+
+/** A typed glob reference — verified to match at least one path. */
+export interface GlobRef {
+  readonly _ref: "glob";
+  readonly pattern: VerifiedGlob;
+}
+
+export type Ref = FileRef | CmdRef | SkillRef | SymbolRef | DirRef | GlobRef;
 
 /**
  * Reference a file path — verified to exist at compile time.
@@ -288,11 +302,44 @@ export function ref(path: string): SkillRef {
   return { _ref: "skill", path: path as VerifiedRef };
 }
 
+/**
+ * Reference a directory — verified at compile time to exist AND be a directory
+ * (not a file). The "architecture floats free" fix: a spec that names `src/core/`
+ * proves the directory is really there, where a plain string in prose rots
+ * silently. Compiles to the inline form `` `path` ``.
+ */
+export function dir(path: string): DirRef {
+  return { _ref: "dir", path: path as VerifiedDir };
+}
+
+/**
+ * Reference a glob pattern — verified at compile time to match at least one path,
+ * so `glob("src/*.test.ts")` proves tests actually exist where the instructions
+ * claim (the pattern supports the usual `*` / `**` syntax). Compiles to the
+ * inline form `` `pattern` ``.
+ */
+export function glob(pattern: string): GlobRef {
+  return { _ref: "glob", pattern: pattern as VerifiedGlob };
+}
+
 // ---------------------------------------------------------------------------
 // Instruction template — process refs inside skill instructions
 // ---------------------------------------------------------------------------
 
-export type InstructionFragment = string | Ref;
+/**
+ * A marked side-effect BOUNDARY inside a skill/agent body — "side effects are
+ * allowed ONLY inside this block." Compiles to `<!-- vigiles:effect -->` …
+ * `<!-- /vigiles:effect -->` markers the runtime PreToolUse gate keys on: outside
+ * the region the unit is treated as read-only (the `"pure"` effective floor),
+ * inside it the declared purity floor applies. The position-aware companion to
+ * the per-call `purity` floor. See `research/effect-boundary-design.md`.
+ */
+export interface EffectRegion {
+  readonly _ref: "effect";
+  readonly body: InstructionFragment[];
+}
+
+export type InstructionFragment = string | Ref | EffectRegion;
 
 /**
  * Tagged template literal for skill instructions with typed references.
@@ -315,9 +362,54 @@ export function instructions(
   return result;
 }
 
+/**
+ * Tagged template literal marking a side-effect boundary — usable as an
+ * interpolated fragment inside a body / `instructions\`\``:
+ *
+ *   instructions`
+ *     ## Apply
+ *     ${effect`
+ *       Side effects are allowed ONLY here:
+ *       - write ${file("CHANGELOG.md")}
+ *       - ${cmd("npm publish")}
+ *     `}
+ *   `
+ *
+ * Returns an `EffectRegion` fragment; `compile` wraps its rendered body in
+ * `<!-- vigiles:effect -->` markers. Independent of the `doc()` authoring
+ * surface — it does not block on it.
+ */
+export function effect(
+  strings: TemplateStringsArray,
+  ...values: InstructionFragment[]
+): EffectRegion {
+  const body: InstructionFragment[] = [];
+  for (let i = 0; i < strings.length; i++) {
+    if (strings[i]) body.push(strings[i]);
+    if (i < values.length) body.push(values[i]);
+  }
+  return { _ref: "effect", body };
+}
+
 // ---------------------------------------------------------------------------
 // CLAUDE.md spec (#5 — conditional maxSectionLines)
 // ---------------------------------------------------------------------------
+
+/**
+ * The purity an author DECLARES for a skill/agent — the floor `compile`
+ * enforces against the tool contract (see `purityViolations` in
+ * `core/effects.ts`). Mirrors the analysis `PurityLevel` for the two meaningful
+ * rungs, so what you DECLARE and what `scan` REPORTS share one vocabulary:
+ * - `"pure"`:    only read-only tools — no side effects at all.
+ * - `"bounded"`: decidable side-effecting tools (Write, Edit, …) are allowed,
+ *   but not `Bash` / unknown-effect / inherits-all (the unbounded cells).
+ * - `"dangerously-unrestricted"`: the explicit escape hatch — no enforcement.
+ *   Deliberately loud (cf. React's `dangerouslySetInnerHTML`) so opting OUT of
+ *   the guardrail stands out in review. Omitting `purity` is the same
+ *   (unenforced) default WITHOUT typing the loud word — you write it only when
+ *   you mean to override a stricter level.
+ */
+export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
 
 /** Known markdown instruction file targets. */
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {}); // escape hatch for custom targets
@@ -335,7 +427,12 @@ export interface ClaudeSpec {
   readonly keyFiles?: Record<string, string>;
   /** Named prose sections — plain strings or tagged templates with file()/cmd()/ref(). */
   readonly sections?: Record<string, string | InstructionFragment[]>;
-  /** Maximum lines per prose section (per-spec override). */
+  /**
+   * Maximum lines for a single named prose section. Overrides the generous
+   * compile-time default (200 lines) that guards every section + agent section
+   * against an egregious content dump — set a tighter number to enforce your own
+   * house limit, or a larger one for an intentionally long section.
+   */
   readonly maxSectionLines?: number;
   /**
    * Maximum estimated tokens for the compiled output (~4 chars per token).
@@ -465,6 +562,31 @@ export interface SkillSpec {
   /** Whether to disable model invocation (frontmatter flag). */
   readonly disableModelInvocation?: boolean;
   /**
+   * Execution context. `"fork"` runs the skill's body as the task inside a
+   * forked SUBAGENT (its own context window) instead of inline in the main
+   * conversation (Anthropic's `context: fork` frontmatter). This is the ONLY
+   * setting under which a skill gains a real call→return boundary — so it's the
+   * prerequisite for declaring an `output` Result contract (see `output`). Omit
+   * for the default inline execution.
+   */
+  readonly context?: "fork";
+  /**
+   * The allowed-tools contract for this skill. Each entry must be a known
+   * built-in tool or an MCP tool (`mcp__server__tool`). Omit to inherit all
+   * tools. When `purity` is `"pure"`/`"bounded"`, the declared tools are checked
+   * against that floor — compile rejects a tool looser than the declared level.
+   */
+  readonly tools?: readonly string[];
+  /**
+   * Declare this skill's purity floor — compile rejects a tool contract looser
+   * than it. `"pure"` allows only read-only tools; `"bounded"` also allows
+   * decidable side-effecting tools (Write, Edit, …) but bars `Bash` /
+   * unknown-effect / inherits-all; `"dangerously-unrestricted"` (or omitting it)
+   * enforces nothing. NOTE: `"pure"`/`"bounded"` require an explicit read-only
+   * `tools` list — an absent list inherits ALL tools and is a violation.
+   */
+  readonly purity?: AuthoredPurity;
+  /**
    * Gated pipeline steps. When set, the skill compiles to a `## Steps`
    * checklist with a deterministic gate per step. Use this OR `body`.
    */
@@ -474,6 +596,18 @@ export interface SkillSpec {
    * Compiles to a `## Result` section + a `vigiles:result` marker.
    */
   readonly result?: Gate;
+  /**
+   * The skill's typed railway outcome — the SAME `Result<ok, err>` contract a
+   * subagent declares with `result(okShape, errShape)`. Valid ONLY with
+   * `context: "fork"`: a forked skill runs as a subagent, so it has the
+   * call→return boundary a typed outcome needs (compile errors if `output` is set
+   * without `context: "fork"`). When valid, compiles to a `## Output contract`
+   * with a `vigiles:ok` / `vigiles:err` block — parseable (`parseAgentResult`) and
+   * testable (`assertAgentOk`) via the existing subagent rail. An INLINE skill has
+   * no return, so a typed outcome there is a category error — hence the gate. See
+   * `research/spec-syntax-and-railway-scope.md`.
+   */
+  readonly output?: OutputContract;
   /** Freeform instruction body (linear/unstructured skills). Use this OR `steps`. */
   readonly body?: string | InstructionFragment[];
   /**
@@ -517,6 +651,8 @@ export interface AgentSpec {
   readonly description: string;
   /** Model alias (e.g. "sonnet", "opus", "haiku", "inherit"). Optional. */
   readonly model?: string;
+  /** Subagent UI colour (Claude Code frontmatter, e.g. "pink", "blue"). Optional. */
+  readonly color?: string;
   /**
    * The allowed-tools contract — the rails the worker runs on. Each entry must be
    * a known built-in tool (Read/Write/Edit/Bash/Grep/Glob/WebSearch/WebFetch/
@@ -524,6 +660,17 @@ export interface AgentSpec {
    * Omit to inherit all tools. Verified at compile time.
    */
   readonly tools?: readonly string[];
+  /**
+   * The DENY-side contract — tools the worker may NOT use. Use this INSTEAD OF
+   * `tools`, not with it: `tools` is an allowlist (only these), so a tool not
+   * listed is already unavailable and a `disallowedTools` entry would be
+   * redundant. `disallowedTools` earns its place only when there's NO allowlist
+   * (the agent inherits ALL tools) and you want to subtract a few — e.g.
+   * `disallowedTools: ["Bash"]` on an otherwise-unrestricted worker. Rendered to
+   * the `disallowedTools:` frontmatter; close-typos are flagged (a typo'd entry
+   * blocks nothing). For a read-only floor prefer a tight `tools` list + `purity`.
+   */
+  readonly disallowedTools?: readonly string[];
   /**
    * The lead/intro prose of the system prompt (the "You are…" opener), before any
    * sections. Carries verified `file()`/`cmd()`/`symbol()`/`ref()` marks. No
@@ -546,6 +693,15 @@ export interface AgentSpec {
    * and testable (see `result()`, `parseAgentResult`, `assertAgentOk`).
    */
   readonly output?: OutputContract;
+  /**
+   * Declare this agent's purity floor — compile rejects a tool contract looser
+   * than it. `"pure"` allows only read-only tools; `"bounded"` also allows
+   * decidable side-effecting tools (Write, Edit, …) but bars `Bash` /
+   * unknown-effect / inherits-all; `"dangerously-unrestricted"` (or omitting it)
+   * enforces nothing. `"pure"`/`"bounded"` require an explicit `tools` list — a
+   * wildcard or absent-tools (inherits-all) is always a violation.
+   */
+  readonly purity?: AuthoredPurity;
 }
 
 /**

@@ -1221,10 +1221,10 @@ describe("CLI: vigiles init auto-detection", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should detect existing CLAUDE.md and suggest migration", () => {
+  it("should detect existing CLAUDE.md and suggest adoption", () => {
     writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
     const { stdout } = run("init --no-plugin", tmpDir);
-    assert.ok(stdout.includes("without a spec") || stdout.includes("migrate"));
+    assert.ok(stdout.includes("without a spec") || stdout.includes("adopt"));
   });
 
   it("should detect .cursorrules and suggest sync tool", () => {
@@ -1905,9 +1905,9 @@ describe("E2E: fixture project adoption", () => {
 
   it("setup detects existing hand-written CLAUDE.md", () => {
     const { stdout } = run("init --no-plugin", workDir);
-    // Should detect CLAUDE.md without spec and suggest migration
+    // Should detect CLAUDE.md without spec and suggest adoption
     assert.ok(
-      stdout.includes("without a spec") || stdout.includes("migrate"),
+      stdout.includes("without a spec") || stdout.includes("adopt"),
       "Should detect hand-written CLAUDE.md",
     );
   });
