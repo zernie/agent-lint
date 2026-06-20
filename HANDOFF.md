@@ -33,28 +33,31 @@ distribution D1–D3. The full ordered map + per-item status is in `research/roa
 ## In flight
 
 Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`.
+**Awaiting direction** — the typed-contracts layer's useful half is done (B1/B2/B3);
+B4 + the lethal-trifecta check were both DEFERRED by the user (see below). Don't pick
+the next feature unilaterally; ask.
 
 ## Decisions / shipped this session
 
-- **B1 — test-gen from free-form (`vigiles scaffold-test`).** Free-form in, a RUNNABLE
-  starter test out. `src/scaffold-test.ts` (pure `scaffoldTest`/`formatScaffolds`, 15
-  vitest incl. a `node --check` validity gate on every template) + the CLI handler
-  (reuses `findUntestedSurfaces` + `scanPlugin` + manifest name; dry-run / `--write`
-  never-clobber / `--json`; 4 e2e in `scan-cli.test.ts`). Per kind: hook→runHook (unit),
-  skill→measureTriggerRate (eval), subagent→runHarnessTest (points at the B2 result()
-  path). Emits at the untested-detector's `suggestedTestPath` so the file stops the
-  surface being reported untested. Docs in `docs/cli.md`. Remaining typed-contracts: B3
-  side-effect boundaries, B4 shareable templates. (Future: single-surface-path targeting +
-  TOML-manifest name for Codex — today falls back to dir basename.)
-- **B2 — elevate railway/Result contracts for testability (docs + worked example).**
-  The `assertAgentOk/Err/Result` helpers existed + were unit-tested but had NO worked
-  example and near-zero doc coverage (the "deterministic assert replaces an LLM judge"
-  payoff was invisible). Added `examples/harness/railway-result.harness.mjs` (Part A pure
-  text→Result, always runs; Part B the same assert over a real mock-driven `runHarness`
-  turn — needs the claude BINARY but NO key, so it RUNS here + in CI) + a new section in
-  `docs/harness-testing.md` + expanded the `docs/testing-api.md` stub. Validated: example
-  passes via `vigiles test`. Remaining typed-contracts siblings: B1 test-gen, B3 side-effect
-  boundaries, B4 shareable templates.
+- **B3 — side-effect boundary as a deterministic test (SHIPPED, `b7a121d`).** Rung 2 of
+  the typed-contracts ladder. Added `didNotWrite(path)` — the symmetric no-write sibling of
+  `wrote()` — to the check vocabulary (auto-public on `vigiles/testing`+`unit`, +1
+  `check.test.ts` case) + `examples/harness/effect-boundary.harness.mjs` (Part A asserts the
+  boundary over a constructed Trace incl. catching an escape; Part B the same
+  `wrote`/`didNotWrite`/`notTool` checks over a real scripted-mock `runHarness` turn — claude
+  BINARY, NO key). Validated: passes via `vigiles test`. Docs: a sibling section in
+  `docs/harness-testing.md`. The authoring half (`effect()`, `purity:` floor) already shipped.
+- **B4 — shareable typed presets: DEFERRED (user call).** `preset()`/`extend()` only pay off
+  at SCALE (org/monorepo consuming a published preset) and vigiles has ~no consumers yet —
+  network-effect-before-the-network. The `off()` primitive was also mis-framed (it reads as
+  "disable an eslint rule," but vigiles never touches eslint config — `enforce()` only
+  documents+verifies a rule is already enabled; `off()` could at most DROP an inherited rule
+  from the compiled instruction file). Roadmap P1 updated to `[ ] DEFERRED`.
+- **Lethal-trifecta / capability check: DEFERRED (user call).** Was the proposed nearer-term
+  P2 pick (deterministic, no-auth, the Analogical-Transfer forbidden-state moat example).
+  User said defer before any code was written — nothing built, stays `[ ]` in roadmap P2.
+- **(prev session) B1 + B2 shipped** — `vigiles scaffold-test` (`0fb7f2c`) + railway/Result
+  docs+example (`9c3e69f`); roadmap P1 now marks both `[x]`.
 - **`dir()` + `glob()` spec builders** (`42f0b5e`) — lightweight authoring helpers (research's
   #1 gap). `src/core/spec.ts` builders + compile verification (`validateDirRef` = exists AND
   is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases, docs in `docs/spec-format.md`.
