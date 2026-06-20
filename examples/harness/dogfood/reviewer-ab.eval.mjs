@@ -33,18 +33,17 @@
  *
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
  *
- * FINDING (2026-06-20, sonnet, real runs n=1,2): this eval surfaced a MEASUREMENT-
- * TOOLING gap, not a verdict on the contract. With `allowedTools:["Task"]` the lead
- * has no Read, yet `foundBug`=100% — so the code-reviewer subagent DID dispatch and
- * review. But `subagent(code-reviewer)`=0% and `output(/vigiles:ok/)`=0%, because:
- *   (a) the `subagent()` nested-trace check false-negatives on a `--plugin-dir`
- *       subagent (it doesn't recover the sub-trace), and
- *   (b) `output()` reads the LEAD's final text, but the typed vigiles:ok/err block
- *       lives in the SUBAGENT's output — so it can't be seen from the lead.
- * To actually measure the payoff this needs `subagent("code-reviewer", [output(
- * /vigiles:ok/)])` (assert on the SUB's trace) — which is blocked on fixing the
- * subagent nested-trace recovery under `--plugin-dir` (parseSubagents). Logged as a
- * measurement-tooling follow-up; the eval + arms are correct and re-run once it's fixed.
+ * CC DISCOVERIES this eval forced (now fixed in parseSubagents, see src/harness-test.ts):
+ *   - a `--plugin-dir` agent's `subagent_type` is NAMESPACED `plugin:agent` (captured
+ *     "reviewer-spec:code-reviewer"), so a bare-name `subagent("code-reviewer")` check
+ *     must match the last `:`-segment;
+ *   - the sub's `result()` vigiles:ok/err block lands in its RETURN — the dispatch's
+ *     top-level tool_result — NOT in the lead's text and NOT in the sub's own assistant
+ *     messages. So all three checks read the SUB's trace via `subagent(name,[…])`;
+ *   - sonnet won't DELEGATE on a soft task (it reviews inline), so `allowedTools:["Task"]`
+ *     forces it (the lead has no Read; the sub keeps its own).
+ * With those fixed the A/B is measurable: expect (1)+(2) ~equal across arms and (3)
+ * ≫ on `spec` (only the contract arm returns a parseable block). Re-run for the numbers.
  */
 import {
   measureArms,
@@ -77,13 +76,18 @@ const report = await measureArms({
     prose: { pluginDir: dir("./reviewer-ab/prose") },
     spec: { pluginDir: dir("./reviewer-ab/spec") },
   },
+  // All three read the SUBAGENT's trace/return (the contract lives in the SUB,
+  // not the lead) — possible since the subagent nested-trace fix (namespaced
+  // subagent_type + the sub's returned text are now recovered under --plugin-dir).
   checks: [
-    // (1) the subagent actually ran + read the file — fair-A/B guard.
+    // (1) the subagent ran + read the file — fair-A/B guard (both arms).
     subagent("code-reviewer", [tool("Read")]),
-    // (2) QUALITY — it caught the subtract-instead-of-add bug. Must stay ~equal.
-    output(/subtract|a - b|minus|should add|wrong operator/i),
-    // (3) PAYOFF — a parseable typed outcome. Only the `spec` arm can pass.
-    output(/```vigiles:(ok|err)/),
+    // (2) QUALITY — the sub caught the subtract-instead-of-add bug. Stays ~equal.
+    subagent("code-reviewer", [
+      output(/subtract|a - b|minus|should add|wrong operator/i),
+    ]),
+    // (3) PAYOFF — the sub RETURNED a parseable typed block. Only `spec` can pass.
+    subagent("code-reviewer", [output(/```vigiles:(ok|err)/)]),
   ],
 });
 

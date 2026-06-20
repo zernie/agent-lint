@@ -198,6 +198,13 @@ export interface SubagentTrace {
   readonly name: string;
   /** The tools the subagent invoked (events tagged with the Task's id). */
   readonly toolCalls: readonly ToolCall[];
+  /**
+   * The subagent's RETURNED text — the dispatch tool_result the orchestrator
+   * receives back. This is where a `result()` contract's `vigiles:ok`/`vigiles:err`
+   * block lands, so `subagent(name, [output(/vigiles:ok/)])` can assert the typed
+   * outcome. "" if not captured.
+   */
+  readonly output: string;
 }
 
 export interface HarnessTestResult extends Trace {
@@ -279,6 +286,7 @@ export function parseToolCalls(streamJson: string): ToolCall[] {
  */
 export function parseSubagents(streamJson: string): SubagentTrace[] {
   const tasks = new Map<string, string>(); // dispatch id → subagent name
+  const dispatchOutput = new Map<string, string>(); // dispatch id → returned text
   const byParent = new Map<
     string,
     {
@@ -321,18 +329,28 @@ export function parseSubagents(streamJson: string): SubagentTrace[] {
           // A subagent dispatch is any top-level tool_use whose input carries a
           // `subagent_type` — the dispatch tool is named "Agent" on the live CLI
           // (older docs say "Task"), so match the input field, NOT the tool name,
-          // to survive the rename. Confirmed against real claude output.
+          // to survive the rename. Confirmed against real claude output. CC NOTE:
+          // under `--plugin-dir` the value is NAMESPACED `plugin:agent` (captured
+          // "reviewer-spec:code-reviewer"); the bare agent name is matched in the
+          // `subagent()` check (src/check.ts), so the full id is preserved here.
           const sub = (b.input as { subagent_type?: string })?.subagent_type;
           if (typeof sub === "string") tasks.set(id, sub);
         }
         if (parent)
           groupFor(parent).uses.push({ id, name: b.name, input: b.input });
-      } else if (b.type === "tool_result" && parent) {
+      } else if (b.type === "tool_result") {
         const id = typeof b.tool_use_id === "string" ? b.tool_use_id : "";
-        groupFor(parent).results.set(id, {
-          text: contentText(b.content),
-          isError: b.is_error === true,
-        });
+        if (parent) {
+          groupFor(parent).results.set(id, {
+            text: contentText(b.content),
+            isError: b.is_error === true,
+          });
+        } else if (id) {
+          // A top-level tool_result whose id is a subagent dispatch is the SUB's
+          // RETURN to the orchestrator (where a result() vigiles:ok/err block
+          // lands). Record it; matched to its dispatch by id below.
+          dispatchOutput.set(id, contentText(b.content));
+        }
       }
     }
   }
@@ -346,7 +364,7 @@ export function parseSubagents(streamJson: string): SubagentTrace[] {
       resultText: g?.results.get(u.id)?.text ?? "",
       isError: g?.results.get(u.id)?.isError ?? false,
     }));
-    out.push({ name, toolCalls });
+    out.push({ name, toolCalls, output: dispatchOutput.get(taskId) ?? "" });
   }
   return out;
 }

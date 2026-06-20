@@ -341,12 +341,14 @@ export function didNotWrite(path: string): Check<Trace> {
 // did, not just that `Task` fired. Composes the whole vocabulary recursively.
 // ---------------------------------------------------------------------------
 
-/** Wrap a subagent's tool calls as a minimal `Trace` so checks run over it. */
+/** Wrap a subagent's tool calls + returned text as a minimal `Trace` so checks
+ * (incl. `output()` over the sub's RETURN — where a result() vigiles:ok/err block
+ * lands) run over it. */
 function subTrace(sub: SubagentTrace): Trace {
   return {
     toolCalls: sub.toolCalls,
     hooks: [],
-    output: "",
+    output: sub.output,
     modelRequests: [],
     turns: 0,
     subagents: [],
@@ -363,7 +365,13 @@ export function subagent(
     kind: "subagent",
     eval: (t) => {
       const subs = t.subagents ?? [];
-      const sub = subs.find((s) => s.name === name);
+      // A `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent`
+      // (e.g. "reviewer-spec:code-reviewer"), but callers pass the bare agent name
+      // — so match the full id OR its last `:`-segment. Non-namespaced (harness
+      // mock) names match exactly as before.
+      const bare = (n: string) =>
+        n.includes(":") ? n.slice(n.lastIndexOf(":") + 1) : n;
+      const sub = subs.find((s) => s.name === name || bare(s.name) === name);
       if (!sub) {
         return no(
           `expected subagent "${name}" to run; subagents that ran: ${subs.length > 0 ? `[${subs.map((s) => s.name).join(", ")}]` : "none"}`,
