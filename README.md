@@ -26,10 +26,10 @@ is the deterministic layer for it — and the only one that can **A/B-test what
 actually moves the needle on your Claude subscription**, not metered API. Three
 things, adopt any:
 
-|                |                                                                                                                                                                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **🔎 Lint**    | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)**                      |
-| **🧪 Test**    | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
+|                |                                                                                                                                                                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **🔎 Lint**    | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)**                           |
+| **🧪 Test**    | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)**      |
 | **📊 Measure** | Does that skill or plugin actually help — or just add cost? **A/B it on real tasks** and read the bill + correctness, not the vendor's headline. The same engine ranks the hyped ecosystem: **what works vs hype**. **[→](docs/measuring-skills.md)** |
 
 Pick the one that hurts today. **Works with Claude Code and Codex**

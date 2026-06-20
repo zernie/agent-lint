@@ -9,8 +9,8 @@ provenance record. The manifest is `bench/ecosystem/skills.mjs`.
 
 ## Compression skills (injected as `SKILL.md`, vendored here)
 
-| Skill (`id`) | Upstream (license)                | Sourced                                                                                                                 | Published claim                                             |
-| ------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Skill (`id`) | Upstream (license)                                           | Sourced                                                                                                                 | Published claim                                             |
+| ------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `caveman`    | `JuliusBrussee/caveman` (75,119★, MIT © 2026 Julius Brussee) | `skills/caveman/SKILL.md` — the **real** SKILL.md, fetched 2026-06-20, pinned at `@f06348c` (`skills/caveman/SKILL.md`) | description: "~75%"; repo README: "65%" — OUTPUT prose only |
 
 > The compression CLUSTER's other members — RTK, Claw Compactor, Context Mode,
