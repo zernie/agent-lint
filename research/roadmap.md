@@ -12,6 +12,66 @@
 > [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) and
 > [`divergent-bets.md`](divergent-bets.md).
 
+## Strategic direction (2026-06-19): measurement authority
+
+> The pivot (`measurement-authority.md`): vigiles is the **empirical authority on what makes
+> agentic coding actually work** — benchmark the ecosystem (viral) + auto-optimize your harness
+> (adoption), powered by the only real-model A/B eval stack cheap enough to run it (the sub).
+> Three layers, one machine, each makes the next affordable: **measurement (offense) → typed
+> contracts (cheap-to-test substrate + the spec's new purpose) → linting (free pre-filter)**.
+> Specs are reframed as the progressive, zero-friction on-ramp to testability
+> (`typed-contracts-for-agents.md`).
+
+**P0 — validate the thesis before building (cheapest, do first):**
+
+- [ ] **Measure one hyped skill vs its claim.** Run the existing eval engine on **caveman** over
+      ~10 real tasks; report measured whole-session token savings vs the "90%" claim + any
+      task-success delta. "Measured ≪ claimed" (stark) validates the identity; else rethink. ~1
+      day, no new infra. → `measurement-authority.md`
+
+**P1 — measurement (the identity):**
+
+- [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
+      corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
+      `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
+- [ ] **`vigiles optimize` (per-repo) v0** — measure the user's skills/model/rules on their
+      tasks; recommend add/drop/swap with a measured delta. Builds on harness-ROI-optimizer +
+      CI-for-model-upgrades. → `divergent-bets.md`
+- [ ] **Benchmark methodology + task corpus** — define "real task," the success metric, per-repo
+      variance; publish the method (the contestable part). → `measurement-authority.md`
+
+**P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
+
+- [ ] **Test-gen from free-form** — `vigiles` writes a starter test/eval for an existing
+      `.md` skill/agent (the on-ramp; the `test-harness` skill is the seed). Free-form in, a
+      runnable eval out. → `typed-contracts-for-agents.md`
+- [ ] **Elevate railway/Result contracts** — make `result()` / `railway()` /
+      `assertAgentOk/Err` first-class for testability (docs + examples); each typed outcome
+      replaces an LLM-judge with a deterministic assert (primitives shipped, underweighted). →
+      `typed-contracts-for-agents.md`, `railway-subagents.md`
+- [ ] **Side-effect boundaries for skills** — declare where a skill writes/calls;
+      interception-based deterministic test (`tool-intercept` exists). → `typed-contracts-for-agents.md`
+- [ ] **Shareable typed templates (skills/agents)** — generalize presets beyond CLAUDE.md;
+      bundle evals so a template carries its proof; ship 2–3 first-party seeds. → `shareable-presets.md`
+- [ ] **`doc()` + `dir()` lightweight authoring** — the free-form→structured ramp (prose +
+      inline helpers, add contracts gradually). → `lightweight-spec-authoring.md`
+
+**P2 — linting, repositioned (free pre-filter + diagnostic):**
+
+- [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
+- [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
+      column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
+- [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
+- [ ] **Score-explainer pairing** — when the benchmark flags a low score, surface the
+      deterministic cause (overlap / never-available tool / typo'd hook) + the fix. →
+      `measurement-authority.md`
+
+**Distribution:**
+
+- [ ] **The "what actually works" benchmark report** = the viral artifact (follows P0/P1).
+- [ ] **Zero-config installer reframed** — "apply the empirically-best setup"; resident not
+      scaffolder; compose not curate. → `zero-config-mother-harness.md`
+
 ## Shipped recently (don't rebuild)
 
 - **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin

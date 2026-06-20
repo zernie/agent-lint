@@ -72,6 +72,12 @@ becomes "apply the empirically-best setup," not "a bundle we curated." Testing-t
 how the optimizer's recommendations are proven. Same machinery, reframed under "make it
 better," not "check it's not broken."
 
+The **spec** is reframed too: not a CLAUDE.md authoring format (markdown wins) but the
+**zero-friction, progressive on-ramp to testability** — start free-form (vigiles writes the
+eval; at first model-judged), then add typed contracts rung by rung, each one converting an
+expensive model-judge into a cheap deterministic assert. The spec is how you _onboard_ into the
+measurement identity. See `typed-contracts-for-agents.md`.
+
 ## Honest risks
 
 - **Benchmark methodology is hard and contestable** — what's a representative task, what counts

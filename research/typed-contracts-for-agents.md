@@ -84,6 +84,33 @@ prose-vibes units — you need typed outputs to assert. And there is a real auth
 expensive LLM-judge."** That is the skill-testing market (skill-creator / cc-plugin-eval),
 done **deterministically and cheaply** — the same defense→offense move, applied to authoring.
 
+## Progressive adoption: the spec as the zero-friction on-ramp to testability
+
+The spec isn't a format you adopt up front — it's a **ramp you climb incrementally, and every
+rung makes your tests cheaper.** This is the level ladder pointed at _testability_ instead of
+authoring:
+
+1. **Free-form (rung 0).** Keep your existing `.md` skill/agent untouched. vigiles writes a
+   starter eval for it — at first the test can only **model-judge** the prose output (works,
+   but fuzzy + costs tokens). Zero friction; you adopt nothing.
+2. **Add a Result contract (rung 1).** Declare the skill/agent's typed `ok/err` outcome. Now
+   the test **asserts** the outcome deterministically — an expensive model-judge becomes a free
+   deterministic check.
+3. **Declare side-effect boundaries (rung 2).** Mark where it writes/calls. Now the test
+   **intercepts and asserts** the effect (did it push? did it write the file?) without a model.
+4. **Adopt/raise a template (rung 3).** Swap in a better structure or a stricter check set as
+   the unit matures; `extends` a shared template that carries its own evals.
+
+The through-line: **each rung converts more of the test from "model judges the vibe" to "code
+asserts the contract"** — cheaper, faster, deterministic. So adoption is _gradual quality_,
+not a cliff: you get value at rung 0 (a test exists), and you climb only as far as the unit
+deserves. That's the standardrb/TypeScript "any → typed" migration, applied to making
+agent units testable.
+
+This is the spec's true product role: **the zero-friction on-ramp into the measurement
+identity.** You don't sell "rewrite your CLAUDE.md as a typed spec"; you sell "we'll test your
+skill — and the more structure you let us add, the cheaper and sharper the test gets."
+
 ## See also
 
 - `measurement-authority.md` — the identity these contracts make affordable.
