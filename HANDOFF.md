@@ -16,12 +16,14 @@ Don't tunnel on the benchmark; the full scope is all three + distribution.
 
 Per `research/roadmap.md` §"P1 — measurement", in order:
 
-1. **A1 — ecosystem benchmark v0** (the viral artifact). Loop A/B over 10–20 hyped
+1. **A2 — the MEASURED half of `vigiles optimize`.** The deterministic spine SHIPPED
+   this session (`src/optimize.ts` + the `vigiles optimize <dir>` CLI — health score +
+   ranked free fixes, reusing `explainScore`). What's left: wire the real-model A/B so each
+   add/drop/swap carries a MEASURED delta (`runEval` over `bench/corpus`). ⚠ Needs sub auth.
+2. **A1 — ecosystem benchmark v0** (the viral artifact). Loop A/B over 10–20 hyped
    skills on `bench/corpus/coding-tasks.mjs`; table of bill/target/correctness; lead
    with the debunks. ⚠ Costly real-model run — needs the Pro/Max **subscription auth**;
    pilot tiny (`VIGILES_TASKS=2 VIGILES_TRIALS=2`) first. Reuses `runEval`.
-2. **A2 — `vigiles optimize` v0** — measure the user's own skills/model/rules, recommend
-   add/drop/swap with a measured delta. Calls `explainScore` (already shipped) for the WHY.
 3. **A4 (cheap, do anytime)** — `VIGILES_MODEL=sonnet node bench/evals/caveman-claim.eval.mjs`
    to harden P0 on caveman's target model. Also needs sub auth.
 
@@ -34,12 +36,14 @@ Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01c
 
 ## Decisions / shipped this session
 
-- **A1 foundation** — `bench/corpus/coding-tasks.mjs` (reusable real-task corpus) +
-  `verify.mjs` (no-model self-check that each oracle discriminates good/bad).
-- **C4 score-explainer** — `src/score-explainer.ts` (+12 tests) AND the
-  **`vigiles explain <dir> [name]`** CLI (deterministic WHY a skill/agent
-  underperforms, with the fix; `--json`). Docs in `docs/cli.md`. The pairing A2 builds on.
-- **This handoff system** — `HANDOFF.md` + the SessionStart hook + `src/session-handoff.test.ts`.
+- **A2 deterministic spine** — `src/optimize.ts` (`optimize`/`formatOptimize`, 6 vitest +
+  2 e2e in `scan-cli.test.ts`) + the **`vigiles optimize <dir>`** CLI (`--json`,
+  `--harness=`). Health score (reuses `scoreReport`/`gradeFor`) + ranked free fixes
+  (reuses `explainScore`, no drift), then hand off to the measured layer. Docs in
+  `docs/cli.md`. An EMPTY machine is reported empty, never 'clean'.
+- **(prev) A1 foundation** — `bench/corpus/coding-tasks.mjs` + `verify.mjs`.
+- **(prev) C4 score-explainer** — `src/score-explainer.ts` + **`vigiles explain`** CLI.
+- **(prev) handoff system** — `HANDOFF.md` + the SessionStart hook + its test.
 
 ## Gotchas (carry forward)
 
