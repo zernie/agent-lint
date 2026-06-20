@@ -319,11 +319,11 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 });
 
-describe("optimize e2e — health score + ranked free fixes (A2)", () => {
+describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => {
   let root: string;
 
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "optimize-e2e-"));
+    root = mkdtempSync(join(tmpdir(), "fix-plan-e2e-"));
     mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
     writeFileSync(
       join(root, "demo", ".claude-plugin", "plugin.json"),
@@ -342,7 +342,7 @@ describe("optimize e2e — health score + ranked free fixes (A2)", () => {
   });
 
   it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
-    const r = run(`optimize ${join(root, "demo")}`);
+    const r = run(`scan ${join(root, "demo")} --fix-plan`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Harness health: \d+\/100/);
     assert.match(r.stdout, /\[FIX\] rev/);
@@ -351,8 +351,8 @@ describe("optimize e2e — health score + ranked free fixes (A2)", () => {
     assert.match(r.stdout, /--trigger/);
   });
 
-  it("--json emits the structured plan (score, grade, recommendations)", () => {
-    const r = run(`optimize ${join(root, "demo")} --json`);
+  it("--fix-plan --json emits the structured plan (score, grade, recommendations)", () => {
+    const r = run(`scan ${join(root, "demo")} --fix-plan --json`);
     assert.equal(r.exitCode, 0);
     const plan = JSON.parse(r.stdout) as {
       score: number;

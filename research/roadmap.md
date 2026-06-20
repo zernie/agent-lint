@@ -37,16 +37,19 @@
 - [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
       corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
       `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
-- [x] **`vigiles optimize` (per-repo) v0 — DETERMINISTIC SPINE DONE (2026-06-20).**
-      [`src/optimize.ts`](../src/optimize.ts) (`optimize` / `formatOptimize`, 6 vitest +
-      2 e2e cases) + the **`vigiles optimize <dir>`** CLI (`--json`, `--harness=`,
-      documented in `docs/cli.md`). The free half: a structural-health score (reuses
-      `scoreReport`/`gradeFor`) + a typed, ranked `Recommendation[]` reusing `explainScore`
-      (one-detector-no-drift) — `FIX` / `DIFFERENTIATE`, likely dead-ends first — that you
-      clear BEFORE spending a token, then it hands off to the measured layer. **Remaining
-      (the measured half):** wire the real-model A/B so each add/drop/swap carries a
-      measured delta (`runEval` over `bench/corpus`, gated on the subscription). →
-      `measurement-authority.md`, `divergent-bets.md`
+- [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), shipped as
+      `scan --fix-plan`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
+      `formatOptimize`, 6 vitest + 2 e2e cases) surfaced as the **`vigiles scan <dir>
+--fix-plan`** lens (`--json`, `--harness=`, documented in `docs/cli.md`). The free
+      half: a structural-health score (reuses `scoreReport`/`gradeFor`) + a typed, ranked
+      `Recommendation[]` reusing `explainScore` (one-detector-no-drift) — `FIX` /
+      `DIFFERENTIATE`, likely dead-ends first — that you clear BEFORE spending a token,
+      then it hands off to the measured layer. **Folded into `scan` (NOT a standalone
+      `optimize` verb)** because, until the measured half lands, an optimizer that only
+      re-prints scan's findings is a third command on one report — see P2 below.
+      **Remaining (the measured half):** wire the real-model A/B so each add/drop/swap
+      carries a measured delta (`runEval` over `bench/corpus`, gated on the subscription).
+      → `measurement-authority.md`, `divergent-bets.md`
 - [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
       doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
       bill/target/blast-radius — grounded in the P0 caveman measurement). The
@@ -81,6 +84,16 @@
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
 
+- [ ] **Reconsider a standalone `optimize` verb — only once the MEASURED half exists.**
+      The deterministic spine ships as `scan --fix-plan` (above), deliberately NOT its own
+      command: today an "optimizer" that just re-prints scan's structural findings is a
+      third verb over one `ScanReport` (`scan` reports / `explain` diagnoses one surface /
+      fix-plan ranks the repo) — confusing, no new capability. Revisit promoting it back to
+      `vigiles optimize` WHEN it genuinely optimizes: when each add/drop/swap recommendation
+      carries a real-model before/after delta (the A2 measured half over `bench/corpus`).
+      At that point "optimize" means something `scan` can't, and the verb is earned. The
+      pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
+      `measurement-authority.md` (A2)
 - [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
 - [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
       column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
@@ -94,7 +107,7 @@
       BECAUSE its description overlaps X — differentiate them", not just "drop it".
       Shipped as **`vigiles explain <dir> [name]`** (deterministic, `--json` for the
       agent-consumable array; 4 e2e cases in `scan-cli.test.ts`, documented in
-      `docs/cli.md`). Now also consumed by **`vigiles optimize`** (A2) — each
+      `docs/cli.md`). Now also consumed by **`scan --fix-plan`** (A2) — each
       recommendation IS an explanation reshaped with an action verb. →
       `measurement-authority.md`
 
