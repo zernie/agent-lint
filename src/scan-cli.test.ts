@@ -318,3 +318,52 @@ describe("explain e2e — deterministic cause + fix", () => {
     assert.match(r.stdout, /No deterministic cause found/);
   });
 });
+
+describe("optimize e2e — health score + ranked free fixes (A2)", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "optimize-e2e-"));
+    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, "demo", ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(root, "demo", "agents"), { recursive: true });
+    // Same typo'd-tool subagent as the explain fixture: a deterministic FIX.
+    writeFileSync(
+      join(root, "demo", "agents", "rev.md"),
+      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
+    const r = run(`optimize ${join(root, "demo")}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Harness health: \d+\/100/);
+    assert.match(r.stdout, /\[FIX\] rev/);
+    assert.match(r.stdout, /\[subagent-tool-contract\]/);
+    // The whole point: hand off the behavioral question to the measured layer.
+    assert.match(r.stdout, /--trigger/);
+  });
+
+  it("--json emits the structured plan (score, grade, recommendations)", () => {
+    const r = run(`optimize ${join(root, "demo")} --json`);
+    assert.equal(r.exitCode, 0);
+    const plan = JSON.parse(r.stdout) as {
+      score: number;
+      grade: string;
+      empty: boolean;
+      recommendations: { surface: string; action: string; detector: string }[];
+    };
+    assert.equal(plan.empty, false);
+    assert.equal(plan.recommendations.length, 1);
+    assert.equal(plan.recommendations[0].action, "fix");
+    assert.equal(plan.recommendations[0].surface, "rev");
+    assert.equal(plan.recommendations[0].detector, "subagent-tool-contract");
+  });
+});

@@ -37,9 +37,16 @@
 - [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
       corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
       `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
-- [ ] **`vigiles optimize` (per-repo) v0** — measure the user's skills/model/rules on their
-      tasks; recommend add/drop/swap with a measured delta. Builds on harness-ROI-optimizer +
-      CI-for-model-upgrades. → `divergent-bets.md`
+- [x] **`vigiles optimize` (per-repo) v0 — DETERMINISTIC SPINE DONE (2026-06-20).**
+      [`src/optimize.ts`](../src/optimize.ts) (`optimize` / `formatOptimize`, 6 vitest +
+      2 e2e cases) + the **`vigiles optimize <dir>`** CLI (`--json`, `--harness=`,
+      documented in `docs/cli.md`). The free half: a structural-health score (reuses
+      `scoreReport`/`gradeFor`) + a typed, ranked `Recommendation[]` reusing `explainScore`
+      (one-detector-no-drift) — `FIX` / `DIFFERENTIATE`, likely dead-ends first — that you
+      clear BEFORE spending a token, then it hands off to the measured layer. **Remaining
+      (the measured half):** wire the real-model A/B so each add/drop/swap carries a
+      measured delta (`runEval` over `bench/corpus`, gated on the subscription). →
+      `measurement-authority.md`, `divergent-bets.md`
 - [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
       doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
       bill/target/blast-radius — grounded in the P0 caveman measurement). The
@@ -82,8 +89,9 @@
       BECAUSE its description overlaps X — differentiate them", not just "drop it".
       Shipped as **`vigiles explain <dir> [name]`** (deterministic, `--json` for the
       agent-consumable array; 4 e2e cases in `scan-cli.test.ts`, documented in
-      `docs/cli.md`). Remaining: have `vigiles optimize` (A2) call it beside each
-      drop/swap recommendation. → `measurement-authority.md`
+      `docs/cli.md`). Now also consumed by **`vigiles optimize`** (A2) — each
+      recommendation IS an explanation reshaped with an action verb. →
+      `measurement-authority.md`
 
 **Distribution:**
 
