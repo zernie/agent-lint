@@ -1,5 +1,9 @@
 /**
- * `vigiles optimize` (A2 v0) — the per-repo harness optimizer's DETERMINISTIC spine.
+ * The per-repo harness optimizer's DETERMINISTIC spine — shipped as the
+ * `vigiles scan --fix-plan` lens (NOT its own `optimize` verb: until the measured
+ * A/B half lands, an "optimizer" that only re-prints scan's findings doesn't earn
+ * a separate command, so it's folded into scan as one more view on the same
+ * report; see research/roadmap.md §P2 "reconsider an `optimize` verb").
  *
  * A2 in the measurement-authority pivot is the ADOPTION product: measure a user's
  * own skills/model/rules on their tasks and recommend add/drop/swap with a MEASURED

@@ -14,8 +14,8 @@ npx vigiles refs <file.md>          # Check the symbol references in an instruct
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
+npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
-npx vigiles optimize <dir>          # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -219,28 +219,31 @@ just _"drop it"_. The pairing is the strategy in
 [`research/measurement-authority.md`](../research/measurement-authority.md)
 (measurement = the _what_; linting = the deterministic _why_).
 
-### `optimize [dir]`
+### `scan --fix-plan [dir]`
 
-The per-repo **harness optimizer** — its free, deterministic half. Where
-`explain` diagnoses _one_ surface a measurement flagged, `optimize` is the
-whole-repo adoption view: a structural-**health score** (the same `scoreReport`
-the leaderboard uses) plus the **ranked free fixes** to apply _before_ you spend
-a token measuring. It reuses `explain`'s findings (one detector, no drift), so
-each recommendation carries the cause, the one-line fix, and an action verb —
-`FIX` (a structural dead-end) or `DIFFERENTIATE` (a description-overlap pair).
+The **fix-plan lens** on a scan — the per-repo harness optimizer's free,
+deterministic half. Where `explain` diagnoses _one_ surface a measurement
+flagged, `scan --fix-plan` is the whole-repo adoption view: a
+structural-**health score** (the same `scoreReport` the leaderboard uses) plus
+the **ranked free fixes** to apply _before_ you spend a token measuring. It
+reuses `explain`'s findings (one detector, no drift), so each recommendation
+carries the cause, the one-line fix, and an action verb — `FIX` (a structural
+dead-end) or `DIFFERENTIATE` (a description-overlap pair).
 
 ```bash
-npx vigiles optimize ./my-plugin          # health score + ranked free fixes, likely-first
-npx vigiles optimize ./my-plugin --json   # the agent-consumable plan {score, grade, empty, recommendations}
-npx vigiles optimize ./repo --harness=codex
+npx vigiles scan ./my-plugin --fix-plan          # health score + ranked free fixes, likely-first
+npx vigiles scan ./my-plugin --fix-plan --json   # the agent-consumable plan {score, grade, empty, recommendations}
+npx vigiles scan ./repo --fix-plan --harness=codex
 ```
 
-This is the **"linting as a free pre-filter to measurement"** thesis as a
-command: clear the structural problems a model can't help with first (free,
-certain), _then_ measure whether the structurally-clean skills earn their keep
-with `scan --trigger` (real-model, on your subscription). That **measured
-behavioural delta** — does dropping/swapping a skill actually move success or
-cost? — is the next layer; this v0 ships the deterministic spine it stacks on.
+This is the **"linting as a free pre-filter to measurement"** thesis: clear the
+structural problems a model can't help with first (free, certain), _then_
+measure whether the structurally-clean skills earn their keep with
+`scan --trigger` (real-model, on your subscription). That **measured behavioural
+delta** — does dropping/swapping a skill actually move success or cost? — is the
+next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
+flag rather than its own `optimize` verb until that measured half lands (an
+optimizer that only re-prints scan's findings hasn't earned a separate command).
 See [`research/measurement-authority.md`](../research/measurement-authority.md)
 (A2) and the [roadmap](../research/roadmap.md).
 

@@ -3448,25 +3448,6 @@ function handleExplain(restArgs: string[], args: string[]): void {
   console.log(formatExplanations(exps));
 }
 
-/**
- * `vigiles optimize <dir>` — the per-repo harness optimizer (A2 v0), deterministic
- * half. Scan a plugin and print its structural-health score + the prioritized,
- * free fixes (with the WHY) before any token is spent — then hand off to the
- * measured behavioral layer (`scan --trigger`). `--json` for the agent-consumable
- * shape, `--harness=` to override detection. The measured delta is the next layer.
- */
-function handleOptimize(restArgs: string[], args: string[]): void {
-  const dir = resolve(restArgs[0] ?? ".");
-  const json = args.includes("--json");
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
-  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
-  const plan = optimize(report);
-  console.log(json ? JSON.stringify(plan, null, 2) : formatOptimize(plan));
-}
-
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -3486,9 +3467,6 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles explain <dir> [name]   Deterministic WHY a skill/agent underperforms + the fix (--json, --harness=)",
-  );
-  console.log(
-    "  vigiles optimize <dir>         Harness health score + ranked free fixes, before measuring (--json, --harness=)",
   );
   console.log("");
   console.log("Examples:");
@@ -4045,9 +4023,18 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        console.log(
-          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
-        );
+        if (args.includes("--fix-plan")) {
+          // The deterministic optimization lens on the SAME report: health score
+          // + the ranked free fixes to clear before measuring (the A2 spine).
+          const plan = optimize(report);
+          console.log(
+            json ? JSON.stringify(plan, null, 2) : formatOptimize(plan),
+          );
+        } else {
+          console.log(
+            json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+          );
+        }
         if (wantTrigger) {
           const harness: ProbeHarness =
             adapter.name === "codex" ? "codex" : "claude-code";
@@ -4059,9 +4046,6 @@ async function main(): Promise<void> {
 
     case "explain":
       handleExplain(restArgs, args);
-      break;
-    case "optimize":
-      handleOptimize(restArgs, args);
       break;
 
     // --- Plumbing ---
