@@ -8,6 +8,8 @@ import {
   cmd,
   ref,
   symbol,
+  dir,
+  glob,
   instructions,
   effect,
   claude,
@@ -106,6 +108,18 @@ describe("reference helpers", () => {
     const r = ref("skills/other/SKILL.md");
     assert.equal(r._ref, "skill");
     assert.equal(r.path, "skills/other/SKILL.md");
+  });
+
+  it("dir() creates a dir ref", () => {
+    const r = dir("src/core");
+    assert.equal(r._ref, "dir");
+    assert.equal(r.path, "src/core");
+  });
+
+  it("glob() creates a glob ref", () => {
+    const r = glob("src/**/*.test.ts");
+    assert.equal(r._ref, "glob");
+    assert.equal(r.pattern, "src/**/*.test.ts");
   });
 });
 
@@ -336,6 +350,67 @@ describe("compileSkill()", () => {
     const { errors } = compileSkill(spec, { basePath: process.cwd() });
     assert.equal(errors.length, 1);
     assert.equal(errors[0].type, "stale-file");
+  });
+
+  it("verifies a dir() ref against a real directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`The engine lives in ${dir("src/core")}.`,
+    });
+    const { markdown, errors } = compileSkill(spec, {
+      basePath: process.cwd(),
+    });
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("`src/core`"));
+  });
+
+  it("flags a dir() ref to a missing directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`See ${dir("src/nonexistent-dir-xyz")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-file");
+  });
+
+  it("flags a dir() ref that points at a FILE, not a directory", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`See ${dir("package.json")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-ref");
+    assert.match(errors[0].message, /Not a directory/);
+  });
+
+  it("verifies a glob() ref that matches at least one file", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`Specs: ${glob("src/core/*.test.ts")}.`,
+    });
+    const { markdown, errors } = compileSkill(spec, {
+      basePath: process.cwd(),
+    });
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("`src/core/*.test.ts`"));
+  });
+
+  it("flags a glob() ref that matches nothing", () => {
+    const spec = skill({
+      name: "test-skill",
+      description: "A test skill",
+      body: instructions`Specs: ${glob("src/**/*.nonexistent-ext")}.`,
+    });
+    const { errors } = compileSkill(spec, { basePath: process.cwd() });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].type, "stale-ref");
+    assert.match(errors[0].message, /matched no files/);
   });
 
   it("includes frontmatter fields", () => {

@@ -71,8 +71,13 @@
       interception-based deterministic test (`tool-intercept` exists). → `typed-contracts-for-agents.md`
 - [ ] **Shareable typed templates (skills/agents)** — generalize presets beyond CLAUDE.md;
       bundle evals so a template carries its proof; ship 2–3 first-party seeds. → `shareable-presets.md`
-- [ ] **`doc()` + `dir()` lightweight authoring** — the free-form→structured ramp (prose +
-      inline helpers, add contracts gradually). → `lightweight-spec-authoring.md`
+- [~] **`doc()` + `dir()` lightweight authoring** — the free-form→structured ramp (prose +
+  inline helpers, add contracts gradually). **`dir()` + `glob()` SHIPPED (2026-06-20):**
+  [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
+  ([`validateDirRef`](../src/core/compile.ts) — exists AND is a directory;
+  `validateGlobRef` — matches ≥1 path), 7 vitest cases, docs in
+  [`docs/spec-format.md`](../docs/spec-format.md). Remaining: the `doc()` tagged
+  template (markdown-structure-preserving authoring). → `lightweight-spec-authoring.md`
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
 
@@ -166,9 +171,9 @@ is where it lands.) See
 [`side-effect-separation.md`](side-effect-separation.md) +
 [`bash-effect-classification.md`](bash-effect-classification.md) +
 [`effect-boundary-design.md`](effect-boundary-design.md). · **P1**
-- **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
-  (mutates the `Ref` union → render + compile verification across every `Ref`
-  switch); lower priority than the runtime gate.
+- **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
+  lightweight verification helpers (the `Ref` union extended → render + compile
+  verification in every switch). Next in this family: the `doc()` tagged template.
   [`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
 
 - **More deterministic lint rules — the next moat surfaces (P1).** This session

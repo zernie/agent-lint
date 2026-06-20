@@ -36,11 +36,16 @@ Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01c
 
 ## Decisions / shipped this session
 
-- **A2 deterministic spine** — `src/optimize.ts` (`optimize`/`formatOptimize`, 6 vitest +
-  2 e2e in `scan-cli.test.ts`) + the **`vigiles optimize <dir>`** CLI (`--json`,
-  `--harness=`). Health score (reuses `scoreReport`/`gradeFor`) + ranked free fixes
-  (reuses `explainScore`, no drift), then hand off to the measured layer. Docs in
-  `docs/cli.md`. An EMPTY machine is reported empty, never 'clean'.
+- **B `dir()` + `glob()` spec builders** — the lightweight authoring helpers (research's
+  #1 gap). `src/core/spec.ts` builders + compile-time verification in `src/core/compile.ts`
+  (`validateDirRef` = exists AND is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases,
+  docs in `docs/spec-format.md`. Auto-public (the `.` export is spec.ts). `doc()` is the
+  remaining sibling. NOTE: `src/core/doc-refs.ts` (markdown code-block validator) does NOT
+  yet recognize `dir(`/`glob(` in ```ts doc blocks — optional follow-up, no regression.
+- **A2 deterministic spine** — `src/optimize.ts` + the **`vigiles optimize <dir>`** CLI
+  (health score + ranked free fixes, reuses `scoreReport`/`explainScore`). ⚠ User reacted
+  "wtf is optimize?" — it overlaps `scan`/`explain`; left as-is but OPEN whether to keep /
+  fold into `scan --fix-plan` / drop (commit `bad145f`). Settle this before building more CLI.
 - **(prev) A1 foundation** — `bench/corpus/coding-tasks.mjs` + `verify.mjs`.
 - **(prev) C4 score-explainer** — `src/score-explainer.ts` + **`vigiles explain`** CLI.
 - **(prev) handoff system** — `HANDOFF.md` + the SessionStart hook + its test.
