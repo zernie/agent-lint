@@ -47,6 +47,7 @@ export interface HarnessDialect {
     readonly name: string;
     readonly neverAvailableTools: readonly string[];
     readonly pluginRootToken: string;
+    readonly sideEffectingTools?: readonly string[];
     readonly skillFrontmatter: SkillFrontmatterProfile;
 }
 
