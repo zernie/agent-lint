@@ -28,6 +28,7 @@ import type {
 
 import { checkLinterRule, extractLinterName } from "./linters.js";
 import { verifyToolContract } from "./tool-contract.js";
+import { purityViolations } from "./effects.js";
 import type { LinterCheckResult } from "./linters.js";
 import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
 
@@ -99,7 +100,8 @@ export interface CompileError {
     | "reserved-section-key"
     | "spec-name-mismatch"
     | "unknown-tool"
-    | "invalid-railway";
+    | "invalid-railway"
+    | "purity-violation";
   message: string;
   path?: string;
 }
@@ -717,8 +719,8 @@ function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
  * Build the SKILL.md YAML frontmatter block under the harness's frontmatter
  * profile. The `"minimal"` profile (Codex/OpenCode) emits ONLY name +
  * description; `"claude-code"` adds the CC-only keys (disable-model-invocation,
- * argument-hint). Default is `"claude-code"` so callers that pass no dialect get
- * byte-identical output to before.
+ * argument-hint, tools). Default is `"claude-code"` so callers that pass no
+ * dialect get byte-identical output to before.
  */
 function renderSkillFrontmatter(
   spec: SkillSpec,
@@ -743,6 +745,9 @@ function renderSkillFrontmatter(
         ? renderArgumentHint(spec.inputs)
         : spec.argumentHint;
     if (argHint) fm.push(`argument-hint: ${argHint}`);
+    if (spec.tools && spec.tools.length > 0) {
+      fm.push(`tools: ${spec.tools.join(", ")}`);
+    }
   }
   fm.push("", "---");
   return fm.join("\n");
@@ -837,6 +842,24 @@ export function compileSkill(
   }
 
   errors.push(...validateRefs(collectSkillRefs(spec), basePath));
+
+  // purity floor check — the dialect is optional (callers that don't pass one
+  // skip the check rather than crash; the CLI always passes it). An absent
+  // tools list inherits ALL tools, so it's checked as the "*" wildcard (a
+  // violation at the pure/bounded floors), never as the empty set.
+  if (
+    spec.purity &&
+    spec.purity !== "dangerously-unrestricted" &&
+    options.dialect
+  ) {
+    for (const v of purityViolations(
+      spec.tools ?? ["*"],
+      options.dialect,
+      spec.purity,
+    )) {
+      errors.push({ type: "purity-violation", message: v.message });
+    }
+  }
 
   const sections = renderSkillSections(spec);
   errors.push(
@@ -1006,6 +1029,18 @@ export function compileAgent(
   }
 
   if (spec.tools) errors.push(...validateAgentTools(spec.tools, dialect));
+  if (spec.purity && spec.purity !== "dangerously-unrestricted") {
+    // Enforce the declared purity floor against the tool contract. An absent
+    // tools list inherits ALL tools, so it's checked as the "*" wildcard (a
+    // violation at the pure/bounded floors), never as the empty set.
+    for (const v of purityViolations(
+      spec.tools ?? ["*"],
+      dialect,
+      spec.purity,
+    )) {
+      errors.push({ type: "purity-violation", message: v.message });
+    }
+  }
   if (Array.isArray(spec.body)) {
     errors.push(...validateRefs(spec.body, basePath));
   }
