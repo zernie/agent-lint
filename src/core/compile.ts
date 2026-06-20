@@ -870,8 +870,13 @@ export function compileSkill(
     ),
   );
 
+  const marker = purityMarker(spec.purity);
   const content =
-    renderSkillFrontmatter(spec, profile) + "\n\n" + sections.trim() + "\n";
+    renderSkillFrontmatter(spec, profile) +
+    "\n\n" +
+    (marker ? marker + "\n\n" : "") +
+    sections.trim() +
+    "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 
