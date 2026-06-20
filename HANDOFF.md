@@ -36,19 +36,25 @@ Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01c
 
 ## Decisions / shipped this session
 
-- **B `dir()` + `glob()` spec builders** — the lightweight authoring helpers (research's
-  #1 gap). `src/core/spec.ts` builders + compile-time verification in `src/core/compile.ts`
-  (`validateDirRef` = exists AND is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases,
-  docs in `docs/spec-format.md`. Auto-public (the `.` export is spec.ts). `doc()` is the
-  remaining sibling. NOTE: `src/core/doc-refs.ts` (markdown code-block validator) does NOT
-  yet recognize `dir(`/`glob(` in ```ts doc blocks — optional follow-up, no regression.
-- **A2 deterministic spine** — `src/optimize.ts` + the **`vigiles optimize <dir>`** CLI
-  (health score + ranked free fixes, reuses `scoreReport`/`explainScore`). ⚠ User reacted
-  "wtf is optimize?" — it overlaps `scan`/`explain`; left as-is but OPEN whether to keep /
-  fold into `scan --fix-plan` / drop (commit `bad145f`). Settle this before building more CLI.
-- **(prev) A1 foundation** — `bench/corpus/coding-tasks.mjs` + `verify.mjs`.
-- **(prev) C4 score-explainer** — `src/score-explainer.ts` + **`vigiles explain`** CLI.
-- **(prev) handoff system** — `HANDOFF.md` + the SessionStart hook + its test.
+- **`dir()` + `glob()` spec builders** (`42f0b5e`) — lightweight authoring helpers (research's
+  #1 gap). `src/core/spec.ts` builders + compile verification (`validateDirRef` = exists AND
+  is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases, docs in `docs/spec-format.md`.
+  Auto-public (the `.` export is spec.ts). `doc()` is the remaining sibling. NOTE:
+  `src/core/doc-refs.ts` does NOT yet recognize `dir(`/`glob(` in ```ts doc blocks — optional.
+- **`optimize` → folded into `scan --fix-plan`** (`24e24ee`, RESOLVED). User pushed on "what's
+  optimize for" — it was a 3rd command on the same `ScanReport` (scan reports / explain
+  diagnoses one / fix-plan ranks), no new capability until the measured half exists. Removed
+  the `optimize` verb; `scan --fix-plan` is the lens; pure `optimize()` kept. **P2 roadmap item
+  added** to reconsider an `optimize` verb once each rec carries a measured before/after delta.
+- **(prev) `dir/glob` predecessor work** — A1 corpus (`bench/corpus/`), C4 explainer
+  (`src/score-explainer.ts` + `vigiles explain`), the handoff system + SessionStart hook.
+
+## Environment note (this session)
+
+`claude` CLI is on PATH but there is **NO auth** (no API key, no creds file) — so the
+real-model measurement tiers (A1/A2-measured/A4/evals) CANNOT run here. Deterministic work
+(typed contracts, lint rules, corpus, docs) needs neither. Run the measurement layer yourself
+on the Pro/Max subscription.
 
 ## Gotchas (carry forward)
 
