@@ -49,23 +49,23 @@ test("compileAgent renders frontmatter (name/description/model/tools) + hash", (
   assert.match(markdown, /You are a careful code reviewer\./);
 });
 
-test("compileAgent renders color + disallowedTools (deny-side contract)", () => {
+test("compileAgent renders color + disallowedTools (deny-side, no allowlist)", () => {
+  // disallowedTools is the inherit-all-minus-a-few form — used INSTEAD of a `tools`
+  // allowlist (with an allowlist it would be redundant), so no `tools` here.
   const { markdown, errors } = compileAgent(
     agent({
-      name: "code-reviewer",
-      description: "Read-only review — no writes.",
+      name: "broad-worker",
+      description: "Does most things but never shells out.",
       model: "opus",
       color: "pink",
-      tools: ["Read", "Grep"],
-      disallowedTools: ["Write", "Edit"], // side-effect separation, deny side
-      purity: "pure",
-      body: "Review only.",
+      disallowedTools: ["Bash"], // subtract from inherit-all
+      body: "Work, but no Bash.",
     }),
-    { specFile: "agents/code-reviewer.md.spec.ts", dialect: claudeCodeDialect },
+    { specFile: "agents/broad-worker.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.deepEqual(errors, []);
   assert.match(markdown, /\ncolor: pink\n/);
-  assert.match(markdown, /\ndisallowedTools: Write, Edit\n/);
+  assert.match(markdown, /\ndisallowedTools: Bash\n/);
 });
 
 test("compileAgent flags a disallowedTools entry that's a close typo (blocks nothing)", () => {

@@ -124,8 +124,7 @@ export default agent({
   description: "Review a diff for correctness defects.",
   model: "opus",
   color: "pink",
-  tools: ["Read", "Grep"],
-  disallowedTools: ["Write", "Edit"], // deny side -- a reviewer never mutates
+  tools: ["Read", "Grep"], // allowlist — already excludes Write/Edit
   purity: "pure", // read-only floor (compile + runtime gate)
   output: result(
     { defects: "string[]", summary: "string" },
@@ -134,6 +133,12 @@ export default agent({
   body: "You are a careful code reviewer…",
 });
 ```
+
+> **`tools` vs `disallowedTools` — use ONE.** `tools` is an _allowlist_ (only these);
+> `disallowedTools` is a _denylist_. Under a `tools` allowlist a tool not listed is
+> already unavailable, so `disallowedTools` would be **redundant**. Reach for
+> `disallowedTools` only when there's **no** allowlist (the agent inherits all tools)
+> and you want to subtract a few — e.g. `agent({ name, description, disallowedTools: ["Bash"] })`.
 
 | Field             | Type                                                | Required | Description                                                                                    |
 | ----------------- | --------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
