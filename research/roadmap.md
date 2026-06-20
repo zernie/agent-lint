@@ -86,13 +86,21 @@
       mis-framed (it reads as "disable an eslint rule," but vigiles never touches eslint config
       — it can only drop an inherited rule from the compiled instruction file). Revisit once
       adoption exists and a real org wants a shared house style. → `shareable-presets.md`
-- [~] **`doc()` + `dir()` lightweight authoring** — the free-form→structured ramp (prose +
-  inline helpers, add contracts gradually). **`dir()` + `glob()` SHIPPED (2026-06-20):**
-  [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
-  ([`validateDirRef`](../src/core/compile.ts) — exists AND is a directory;
-  `validateGlobRef` — matches ≥1 path), 7 vitest cases, docs in
-  [`docs/spec-format.md`](../docs/spec-format.md). Remaining: the `doc()` tagged
-  template (markdown-structure-preserving authoring). → `lightweight-spec-authoring.md`
+- [x] **`dir()` + `glob()` lightweight authoring — SHIPPED (2026-06-20).**
+      [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
+      (`validateDirRef` — exists AND is a directory; `validateGlobRef` — matches ≥1 path),
+      7 vitest cases, docs in [`docs/spec-format.md`](../docs/spec-format.md). →
+      `lightweight-spec-authoring.md`
+- [✗] **`doc()` builder — DROPPED (2026-06-20).** It would duplicate `instructions\`\``(the existing tagged template already does typed prose-with-refs). Research-backed:
+the spec syntax is already the correct hybrid (plain-object backbone + typed-value
+helpers + tagged template for prose-with-refs) — the win is RESTRAINT, not more
+helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and-railway-scope.md`
+- [ ] **Spec authoring polish (research-backed, 2026-06-20)** — a generous-default,
+      uniform compile-time length-guard on prose helpers (TS types can't bound string
+      length; `maxSectionLines` is the mechanism); model `context: fork` on `SkillSpec`
+      (the one real skill gap — routes a forked skill through the subagent contract);
+      agent frontmatter fields (`disallowedTools`/`color`) for clean plugin round-trips;
+      rename "migrate" → "adopt". → `spec-syntax-and-railway-scope.md`
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
 
@@ -198,8 +206,10 @@ is where it lands.) See
 [`effect-boundary-design.md`](effect-boundary-design.md). · **P1**
 - **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
   lightweight verification helpers (the `Ref` union extended → render + compile
-  verification in every switch). Next in this family: the `doc()` tagged template.
-  [`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
+  verification in every switch). `doc()` was the proposed next sibling but is now
+  DROPPED (duplicates `instructions\`\``) — see
+[`spec-syntax-and-railway-scope.md`](spec-syntax-and-railway-scope.md).
+[`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
 
 - **More deterministic lint rules — the next moat surfaces (P1).** This session
   shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
