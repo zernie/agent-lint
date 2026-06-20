@@ -30,17 +30,37 @@ Per `research/roadmap.md` §"P1 — measurement", in order:
 Then the other layers (all `[ ]` in roadmap): typed contracts B1–B4, linting C1–C3,
 distribution D1–D3. The full ordered map + per-item status is in `research/roadmap.md`.
 
+## AUTONOMOUS RUN — forks & decisions (2026-06-20 night, user asleep)
+
+Mandate: "continue spec hardening, evals, rest of pivot autonomously; flag forks
+in handoff." Decisions I made (reverse me if you disagree):
+
+- **FORK — auth IS available here (BIG correction).** Earlier "no auth" was WRONG:
+  the env has an OAuth token FD + `ANTHROPIC_BASE_URL` + proxy; `claude -p --model
+claude-sonnet-4-6`/`claude-haiku-4-5-20251001` run real turns. So I'm RUNNING
+  real-model evals here, mindful of sub cost. (`claude-3-5-haiku-20241022` is RETIRED.)
+- **DECISION — fp lib for railway: NONE.** The railway is compile+parse-time, not a
+  runtime monad — own discriminated `Result` (`parseAgentResult`) stays, zero-dep.
+  If runtime combinators are ever built → neverthrow (NOT Effect/fp-ts). Recorded in
+  `research/spec-syntax-and-railway-scope.md` Decision 3.
+- **SHIPPED — context:fork (`b19febd`)** + agent fields (`95ce25f`) + adopt rename
+  (`6137008`). Spec hardening P1 is DONE.
+- **FORK (open) — the A/B eval's subagent won't reliably DISPATCH.** `reviewer-ab.eval.mjs`
+  measures "does our spec help a subagent" but sonnet reviews INLINE instead of
+  delegating (0% dispatch at n=1,2 even with "DELEGATE, don't review yourself").
+  Mitigation in flight: `allowedTools:["Task"]` to force delegation (lead can't read,
+  must dispatch). If still flaky at n=3, the HONEST finding is "subagent-dispatch in
+  an eval is unreliable" — I'll record it and not rabbit-hole; the contract's payoff
+  (parseable outcome) only shows once dispatch happens. See the eval's FINDING block.
+- **Our own CLAUDE.md/helpers (user Q):** verdict — leave it (keyFiles already carries
+  verified refs; plain-string sections are narrative). Higher-value dogfood = convert
+  our shipped skills to specs with effect()/purity — deferred.
+
 ## In flight
 
-Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`.
-Spec-foundation review DONE + the polish follow-ups SHIPPED: agent frontmatter
-fields `disallowedTools`/`color` (`95ce25f`) and the `migrate`→`adopt-spec` rename
-(`6137008`). ONE research-backed follow-up LEFT (roadmap P1): model `context: fork`
-on `SkillSpec` — the bridge that lets a forked (procedural) skill carry a `result()`
-outcome via the EXISTING subagent rail. OPEN QUESTION the user raised: whether to
-modernize our OWN `CLAUDE.md.spec.ts` (plain-string `sections` → `instructions\`\``
-for verified refs) — verdict below: low-priority (keyFiles already carries the
-verification); optionally upgrade the ref-dense Architecture section only.
+Everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`. A 3-trial
+A/B eval is RUNNING (`/tmp/reviewer-ab-3trial.log`). Next pivot work queued: A4
+(caveman on sonnet — cheap) then A1 (ecosystem benchmark) — both now runnable here.
 
 ## Decisions / shipped this session (spec-foundation review)
 

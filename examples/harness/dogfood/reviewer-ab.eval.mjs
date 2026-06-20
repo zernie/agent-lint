@@ -56,6 +56,10 @@ const report = await measureArms({
     "via the Task tool — do NOT read or review the file yourself. Then report " +
     "exactly what the subagent returned.",
   model: "sonnet",
+  // Force delegation: the LEAD may only spawn a subagent (no Read/Grep of its
+  // own), so it cannot review inline — it MUST dispatch code-reviewer (which has
+  // its own Read). Removes the "lead reviewed it itself" confound the pilot found.
+  allowedTools: ["Task"],
   trials,
   arms: {
     prose: { pluginDir: dir("./reviewer-ab/prose") },
