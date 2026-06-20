@@ -317,7 +317,11 @@ test("subagent(): runs nested checks over a subagent's sub-trace", () => {
   const t = makeTrace({
     toolCalls: [toolCall("Task")],
     subagents: [
-      { name: "reviewer", toolCalls: [toolCall("Read"), toolCall("Bash")] },
+      {
+        name: "reviewer",
+        toolCalls: [toolCall("Read"), toolCall("Bash")],
+        output: "",
+      },
     ],
   });
   // the reviewer subagent used Read + Bash → nested checks pass
@@ -334,6 +338,33 @@ test("subagent(): runs nested checks over a subagent's sub-trace", () => {
   assert.equal(missing.pass, false);
   assert.match(missing.message, /\[reviewer\]/);
   assert.equal(subagent("x", [tool("Read")]).toJSON().kind, "subagent");
+});
+
+test("subagent(): matches a --plugin-dir namespaced subagent_type by bare name", () => {
+  // Real --plugin-dir dispatch records subagent_type as "plugin:agent"; the caller
+  // passes the bare agent name. (Captured: "reviewer-spec:code-reviewer".)
+  const t = makeTrace({
+    subagents: [
+      {
+        name: "reviewer-spec:code-reviewer",
+        toolCalls: [toolCall("Read")],
+        // the sub's RETURN carries its result() block (where vigiles:ok lands)
+        output: "```vigiles:ok\n{ defects: [], summary: 'ok' }\n```",
+      },
+    ],
+  });
+  // bare name matches the namespaced subagent_type, and a nested output() check
+  // reads the sub's RETURN — the payoff a result() contract makes measurable.
+  assert.equal(
+    subagent("code-reviewer", [tool("Read"), output(/vigiles:ok/)]).eval(t)
+      .pass,
+    true,
+  );
+  // the full namespaced name still matches too
+  assert.equal(
+    subagent("reviewer-spec:code-reviewer", [tool("Read")]).eval(t).pass,
+    true,
+  );
 });
 
 test("judged(): model-graded check with an injectable judge (no real model)", () => {
