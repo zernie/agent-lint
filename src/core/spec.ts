@@ -226,6 +226,8 @@ declare const __brand: unique symbol;
 export type VerifiedPath = string & { readonly [__brand]: "VerifiedPath" };
 export type VerifiedCmd = string & { readonly [__brand]: "VerifiedCmd" };
 export type VerifiedRef = string & { readonly [__brand]: "VerifiedRef" };
+export type VerifiedDir = string & { readonly [__brand]: "VerifiedDir" };
+export type VerifiedGlob = string & { readonly [__brand]: "VerifiedGlob" };
 
 /** A typed file reference — verified at compile time. */
 export interface FileRef {
@@ -252,7 +254,19 @@ export interface SymbolRef {
   readonly symbol: string;
 }
 
-export type Ref = FileRef | CmdRef | SkillRef | SymbolRef;
+/** A typed directory reference — verified to exist AND be a directory. */
+export interface DirRef {
+  readonly _ref: "dir";
+  readonly path: VerifiedDir;
+}
+
+/** A typed glob reference — verified to match at least one path. */
+export interface GlobRef {
+  readonly _ref: "glob";
+  readonly pattern: VerifiedGlob;
+}
+
+export type Ref = FileRef | CmdRef | SkillRef | SymbolRef | DirRef | GlobRef;
 
 /**
  * Reference a file path — verified to exist at compile time.
@@ -286,6 +300,26 @@ export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef {
  */
 export function ref(path: string): SkillRef {
   return { _ref: "skill", path: path as VerifiedRef };
+}
+
+/**
+ * Reference a directory — verified at compile time to exist AND be a directory
+ * (not a file). The "architecture floats free" fix: a spec that names `src/core/`
+ * proves the directory is really there, where a plain string in prose rots
+ * silently. Compiles to the inline form `` `path` ``.
+ */
+export function dir(path: string): DirRef {
+  return { _ref: "dir", path: path as VerifiedDir };
+}
+
+/**
+ * Reference a glob pattern — verified at compile time to match at least one path,
+ * so `glob("src/*.test.ts")` proves tests actually exist where the instructions
+ * claim (the pattern supports the usual `*` / `**` syntax). Compiles to the
+ * inline form `` `pattern` ``.
+ */
+export function glob(pattern: string): GlobRef {
+  return { _ref: "glob", pattern: pattern as VerifiedGlob };
 }
 
 // ---------------------------------------------------------------------------

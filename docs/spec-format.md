@@ -112,6 +112,14 @@ Returns a `CmdRef` containing a `VerifiedCmd`. For npm commands, the script is v
 
 Returns a `SkillRef` containing a `VerifiedRef`. The path is verified to exist at compile time. Compiles to a markdown link: `[dirname](path)`.
 
+### `dir(path)`
+
+Returns a `DirRef` containing a `VerifiedDir`. The path is verified at compile time to exist **and be a directory** (a `dir()` pointing at a file is an error). Compiles to a backtick path: `` `src/core` ``. Use it so a spec that names a directory proves it's really there — the "architecture floats free" fix, where a plain string in prose rots silently.
+
+### `glob(pattern)`
+
+Returns a `GlobRef` containing a `VerifiedGlob`. The pattern is verified at compile time to match **at least one path** (`*` / `**` syntax, dotfiles included). Compiles to a backtick pattern: `` `src/**/*.test.ts` ``. Use it to prove a class of files exists where the instructions claim (e.g. tests, configs).
+
 ### `instructions`
 
 Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`.
@@ -192,6 +200,8 @@ rules: {
 - `file()` produces `FileRef` containing `VerifiedPath`
 - `cmd()` produces `CmdRef` containing `VerifiedCmd`
 - `ref()` produces `SkillRef` containing `VerifiedRef`
+- `dir()` produces `DirRef` containing `VerifiedDir`
+- `glob()` produces `GlobRef` containing `VerifiedGlob`
 
 The compiler only accepts these branded types in path-sensitive positions. This prevents passing unverified strings where a verified reference is expected -- the TypeScript compiler catches the error at authoring time.
 

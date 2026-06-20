@@ -5,7 +5,8 @@
  * markdown instruction files with integrity hashes.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { globSync } from "glob";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
@@ -205,48 +206,89 @@ export function validateSymbolRef(
   return null;
 }
 
+export function validateDirRef(
+  dirPath: string,
+  basePath: string,
+): CompileError | null {
+  const resolved = resolve(basePath, dirPath);
+  if (!existsSync(resolved)) {
+    return {
+      type: "stale-file",
+      message: `Directory not found: "${dirPath}"`,
+      path: dirPath,
+    };
+  }
+  if (!statSync(resolved).isDirectory()) {
+    return {
+      type: "stale-ref",
+      message: `Not a directory: "${dirPath}"`,
+      path: dirPath,
+    };
+  }
+  return null;
+}
+
+export function validateGlobRef(
+  pattern: string,
+  basePath: string,
+): CompileError | null {
+  // ≥1 match = the pattern resolves to something real. `dot` so a dotfile path
+  // (e.g. `.claude/**`) isn't silently a no-match.
+  const matches = globSync(pattern, { cwd: basePath, dot: true });
+  if (matches.length === 0) {
+    return {
+      type: "stale-ref",
+      message: `Glob matched no files: "${pattern}"`,
+      path: pattern,
+    };
+  }
+  return null;
+}
+
 function validateRefs(
   fragments: InstructionFragment[],
   basePath: string,
 ): CompileError[] {
   const errors: CompileError[] = [];
   for (const fragment of fragments) {
-    if (typeof fragment === "string") continue;
-    const r = fragment;
-    switch (r._ref) {
-      case "file": {
-        const err = validateFileRef(r.path, basePath);
-        if (err) errors.push(err);
-        break;
-      }
-      case "cmd": {
-        const err = validateCommandRef(r.command, basePath);
-        if (err) errors.push(err);
-        break;
-      }
-      case "skill": {
-        const err = validateFileRef(r.path, basePath);
-        if (err) {
-          errors.push({
-            type: "stale-ref",
-            message: `Skill not found: "${r.path}"`,
-            path: r.path,
-          });
-        }
-        break;
-      }
-      case "symbol": {
-        const err = validateSymbolRef(r.file, r.symbol, basePath);
-        if (err) errors.push(err);
-        break;
-      }
-      case "effect": {
-        errors.push(...validateRefs(r.body, basePath));
-        break;
-      }
+    if (typeof fragment !== "string") {
+      errors.push(...validateOneRef(fragment, basePath));
     }
   }
   return errors;
+}
+
+const wrap = (e: CompileError | null): CompileError[] => (e ? [e] : []);
+
+/** Validate a single non-string fragment (a `Ref` or `EffectRegion`). */
+function validateOneRef(
+  r: Exclude<InstructionFragment, string>,
+  basePath: string,
+): CompileError[] {
+  switch (r._ref) {
+    case "file":
+      return wrap(validateFileRef(r.path, basePath));
+    case "cmd":
+      return wrap(validateCommandRef(r.command, basePath));
+    case "skill":
+      return validateFileRef(r.path, basePath)
+        ? [
+            {
+              type: "stale-ref",
+              message: `Skill not found: "${r.path}"`,
+              path: r.path,
+            },
+          ]
+        : [];
+    case "symbol":
+      return wrap(validateSymbolRef(r.file, r.symbol, basePath));
+    case "dir":
+      return wrap(validateDirRef(r.path, basePath));
+    case "glob":
+      return wrap(validateGlobRef(r.pattern, basePath));
+    case "effect":
+      return validateRefs(r.body, basePath);
+  }
 }
 
 function renderFragment(fragment: InstructionFragment): string {
@@ -260,6 +302,10 @@ function renderFragment(fragment: InstructionFragment): string {
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
     case "symbol":
       return `\`vigiles:symbol ${fragment.file}#${fragment.symbol}\``;
+    case "dir":
+      return `\`${fragment.path}\``;
+    case "glob":
+      return `\`${fragment.pattern}\``;
     case "effect": {
       const inner = fragment.body.map(renderFragment).join("").trim();
       return `\n<!-- vigiles:effect -->\n\n${inner}\n\n<!-- /vigiles:effect -->\n`;
