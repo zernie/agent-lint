@@ -394,7 +394,9 @@ describe("scaffold-test e2e — test-gen for untested surfaces (B1)", () => {
     );
   });
 
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
 
   it("dry-run lists each untested surface with its kind + tier", () => {
     const r = run(`scaffold-test ${plugin}`);
