@@ -78,6 +78,41 @@ record-replay without an explicit boundary hits ~62% fidelity (fragile); the mar
 interception precise. This is the through-line to `typed-contracts-for-agents.md`: **declaring
 "side effects only here" buys both the safety gate AND deterministic testability from one mark.**
 
+## Compile-time purity: the `pure: true` contract + the purity ladder
+
+Can `compile` _statically ensure_ a skill has no side effects? **Yes — but enforce it on the
+declared tool contract + the gate, NOT by analyzing the prose.** Analyzing the body to infer
+tool use is the wonky, non-deterministic trap (the body is model-interpreted; what tools fire is
+a runtime fact). Instead:
+
+```ts
+skill({ name: "review", pure: true, tools: ["Read", "Grep"] }); // ✓ compiles
+skill({ name: "review", pure: true, tools: ["Read", "Write"] }); // ✗ compile error:
+//   "Write is side-effecting; a pure skill cannot declare it"
+```
+
+- **Compile:** `pure: true` fails if the `tools:` contract holds **any** side-effecting tool —
+  deterministic, because the tool list is static frontmatter and the read-only/side-effecting
+  split is the published catalog. It's the existing `verifyToolContract` detector asserting
+  "∅ side-effecting" (one-detector-no-drift).
+- **Runtime:** the compiled skill ships a rail that **denies every side-effecting tool**, so a
+  model that tries one anyway (or a hand-edited `.md`) is still blocked.
+
+So purity is **guaranteed by the gate, not proven from the prose** — `pure:true` makes a pure
+skill _holding_ an effect tool **unrepresentable** (compile) and _doing_ an effect
+**unreachable** (runtime). It is the strict top of a **3-level ladder**, not forced on everyone:
+
+| Level                      | Means                                | For                             |
+| -------------------------- | ------------------------------------ | ------------------------------- |
+| `pure: true`               | no side-effecting tools, period      | analysis / review / planning    |
+| **bounded** (`effect\`\``) | effects only inside the marked block | the default (the `release` ex.) |
+| unrestricted               | anything                             | legacy / escape hatch           |
+
+The honest hole is the same `Bash` one: `pure:true` ⟹ **no `Bash`** (a side-effecting catch-all
+— `Bash(git log)` and `Bash(rm -rf /)` are one tool). A read-via-`Bash` skill is therefore
+`bounded`, not `pure`, unless it swaps to a typed read-only tool or opts into a narrow
+command-pattern allowlist (brittle). The sandbox remains the indirect-effect backstop.
+
 ## Honest limits
 
 - **`Bash` is undecidable at the tool-name level** (`cat` vs `rm -rf` are the same tool). Either
