@@ -522,6 +522,8 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "docs/agent-setup.md":
       "Non-interactive agent setup guide (hooks via settings.json)",
     "docs/spec-format.md": "Spec format reference (target, sections, rules)",
+    "docs/railway-subagents.md":
+      "Public guide to railway-oriented subagents: the typed Result<ok,err> outcome contract (result() on an agent()), what it compiles to (vigiles:ok/err blocks), composing flat workers (railway()/delegate()/recover), and asserting the outcome deterministically (assertAgentOk/Err/Result — no model judge). States the scope decision: railway is a SUBAGENT primitive (context boundary = parse-point), NOT skills; context:fork is the bridge. Links research/railway-subagents.md (design) + research/spec-syntax-and-railway-scope.md (the scope decision)",
     "docs/linter-support.md":
       "Linter support details (7 catalogs + generate-types/generate-schema)",
     "docs/comparison.md":
