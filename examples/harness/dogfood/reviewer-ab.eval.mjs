@@ -32,13 +32,25 @@
  *   VIGILES_TRIALS=5 node examples/harness/dogfood/reviewer-ab.eval.mjs
  *
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
- * FINDING (2026-06-20, sonnet): the hard part is getting the lead agent to actually
- * DELEGATE — with a soft task it reviews inline (0% dispatch) and the A/B can't see
- * the contract. The task now forces delegation. When the subagent DOES run, only the
- * `spec` arm emits a parseable vigiles:ok/err block (the payoff); the planted bug is
- * caught in both (quality holds). Re-run with VIGILES_TRIALS>=3 for the p-values.
+ *
+ * FINDING (2026-06-20, sonnet, real runs n=1,2): this eval surfaced a MEASUREMENT-
+ * TOOLING gap, not a verdict on the contract. With `allowedTools:["Task"]` the lead
+ * has no Read, yet `foundBug`=100% — so the code-reviewer subagent DID dispatch and
+ * review. But `subagent(code-reviewer)`=0% and `output(/vigiles:ok/)`=0%, because:
+ *   (a) the `subagent()` nested-trace check false-negatives on a `--plugin-dir`
+ *       subagent (it doesn't recover the sub-trace), and
+ *   (b) `output()` reads the LEAD's final text, but the typed vigiles:ok/err block
+ *       lives in the SUBAGENT's output — so it can't be seen from the lead.
+ * To actually measure the payoff this needs `subagent("code-reviewer", [output(
+ * /vigiles:ok/)])` (assert on the SUB's trace) — which is blocked on fixing the
+ * subagent nested-trace recovery under `--plugin-dir` (parseSubagents). Logged as a
+ * measurement-tooling follow-up; the eval + arms are correct and re-run once it's fixed.
  */
-import { measureArms, formatCheckReport, compareCheck } from "../../../dist/eval.js";
+import {
+  measureArms,
+  formatCheckReport,
+  compareCheck,
+} from "../../../dist/eval.js";
 import { subagent, tool, output } from "../../../dist/check.js";
 import { fileURLToPath } from "node:url";
 
