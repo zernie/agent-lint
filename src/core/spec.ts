@@ -630,6 +630,8 @@ export interface AgentSpec {
   readonly description: string;
   /** Model alias (e.g. "sonnet", "opus", "haiku", "inherit"). Optional. */
   readonly model?: string;
+  /** Subagent UI colour (Claude Code frontmatter, e.g. "pink", "blue"). Optional. */
+  readonly color?: string;
   /**
    * The allowed-tools contract — the rails the worker runs on. Each entry must be
    * a known built-in tool (Read/Write/Edit/Bash/Grep/Glob/WebSearch/WebFetch/
@@ -637,6 +639,14 @@ export interface AgentSpec {
    * Omit to inherit all tools. Verified at compile time.
    */
   readonly tools?: readonly string[];
+  /**
+   * The DENY-side contract — tools the worker may NOT use, even if `tools` (or
+   * inherit-all) would grant them. The complement of `tools`: a read-only reviewer
+   * declares `disallowedTools: ["Write", "Edit"]` so side effects are excluded.
+   * Rendered to the `disallowedTools:` frontmatter; close-typos are flagged (a
+   * typo'd entry blocks nothing). Pairs with `purity` for side-effect separation.
+   */
+  readonly disallowedTools?: readonly string[];
   /**
    * The lead/intro prose of the system prompt (the "You are…" opener), before any
    * sections. Carries verified `file()`/`cmd()`/`symbol()`/`ref()` marks. No
