@@ -106,7 +106,9 @@ const TASKS = [
       "'ANSWER: '. Stop.",
     check: (ctx) => {
       const ans = /ANSWER:\s*(.+)/i.exec(ctx.file("ans.txt") ?? "")?.[1] ?? "";
-      return /O\(\s*n\s*\^?\s*2\s*\)|O\(\s*n²\s*\)|quadratic/i.test(ans) ? 1 : 0;
+      return /O\(\s*n\s*\^?\s*2\s*\)|O\(\s*n²\s*\)|quadratic/i.test(ans)
+        ? 1
+        : 0;
     },
   },
   {
@@ -117,7 +119,9 @@ const TASKS = [
       "requires a single '@' and a dot in the domain. Then explain the regex in prose. Stop.",
     check: (ctx) => {
       const f = ctx.file("email.js") ?? "";
-      return /isEmail/.test(f) && /@/.test(f) && /test\(|\.match\(|RegExp|\/.*\//.test(f)
+      return /isEmail/.test(f) &&
+        /@/.test(f) &&
+        /test\(|\.match\(|RegExp|\/.*\//.test(f)
         ? 1
         : 0;
     },
@@ -156,7 +160,11 @@ const pct = (from, to) => (from > 0 ? ((from - to) / from) * 100 : 0);
 const whole = (m) => m.inputTokens + m.outputTokens + m.cacheTokens;
 
 console.log(
-  "\n=== caveman vs its claim (model: " + model + ", trials: " + trials + ") ===\n",
+  "\n=== caveman vs its claim (model: " +
+    model +
+    ", trials: " +
+    trials +
+    ") ===\n",
 );
 console.log(
   "task            out_base  out_cav  out_cut%   $_base   $_cav   cost_cut%  out%session  correct(b/c)",
@@ -180,7 +188,9 @@ for (const r of rows) {
       .toFixed(4)
       .padStart(7)} ${r.c.costUsd.toFixed(4).padStart(7)} ${costCut
       .toFixed(0)
-      .padStart(8)}%  ${outShare.toFixed(1).padStart(9)}%   ${r.b.correct.toFixed(
+      .padStart(
+        8,
+      )}%  ${outShare.toFixed(1).padStart(9)}%   ${r.b.correct.toFixed(
       1,
     )}/${r.c.correct.toFixed(1)}`,
   );
