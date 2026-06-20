@@ -1,0 +1,244 @@
+/**
+ * A1 — the ecosystem benchmark v0: A/B every skill in the manifest over the
+ * neutral coding corpus and report the metric triple (bill / target / blast
+ * radius), leading with the debunks (claimed ≫ measured).
+ *
+ * This is the generalized loop the P0 caveman eval proved on ONE skill
+ * (bench/evals/caveman-claim.eval.mjs): same A/B-over-one-real-task unit, same
+ * whole-session token accounting, same deterministic correctness gate — now over
+ * a SET of skills (bench/ecosystem/skills.mjs) on the SAME corpus
+ * (bench/corpus/coding-tasks.mjs), so the rows are directly comparable.
+ *
+ *   PILOT (cheap, do this first — minds the sub bill):
+ *     VIGILES_SKILLS=caveman VIGILES_TASKS=2 VIGILES_TRIALS=2 \
+ *       node bench/ecosystem/benchmark.mjs
+ *
+ *   One quality plugin:
+ *     VIGILES_SKILLS=superpowers VIGILES_TASKS=2 VIGILES_TRIALS=2 \
+ *       node bench/ecosystem/benchmark.mjs
+ *
+ *   Full v0 sweep (every manifest skill, 5 tasks × 3 trials — EXPENSIVE):
+ *     node bench/ecosystem/benchmark.mjs
+ *
+ * Real model → real cost, on the Pro/Max subscription (apiKeySource:"none").
+ * Default model: haiku (cheap v0). VIGILES_MODEL=sonnet for the rigorous pass.
+ *
+ * Output: an incremental per-skill table (so a timeout still yields partial data)
+ * + a final leaderboard + a JSON dump under bench/ecosystem/results/ (the held
+ * data; no report is published from here — the writeup is a separate, gated step).
+ *
+ * See research/benchmark-methodology.md (the method) and
+ * research/measurement-authority.md (why this is the viral artifact).
+ */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { runEval } from "../../dist/eval.js";
+import { CODING_TASKS } from "../corpus/coding-tasks.mjs";
+import { selectSkills } from "./skills.mjs";
+
+const trials = Number(process.env.VIGILES_TRIALS || 3);
+const taskLimit = Number(process.env.VIGILES_TASKS || 5);
+const model = process.env.VIGILES_MODEL || "haiku";
+const concurrency = Number(process.env.VIGILES_CONCURRENCY || 4);
+
+const SKILLS = selectSkills(process.env.VIGILES_SKILLS);
+const TASKS = CODING_TASKS.slice(0, taskLimit);
+
+if (SKILLS.length === 0) {
+  console.error(
+    `No skills matched VIGILES_SKILLS=${process.env.VIGILES_SKILLS}. ` +
+      `Known ids: see bench/ecosystem/skills.mjs.`,
+  );
+  process.exit(1);
+}
+
+// usage fields are optional per harness/model; default missing to 0.
+const u = (ctx, k) => Number(ctx.usage?.[k] ?? 0);
+const pct = (from, to) => (from > 0 ? ((from - to) / from) * 100 : 0);
+const whole = (m) => m.inputTokens + m.outputTokens + m.cacheTokens;
+
+console.log(
+  `\n=== vigiles ecosystem benchmark v0 (model: ${model}, ` +
+    `${SKILLS.length} skill(s) × ${TASKS.length} task(s) × ${trials} trial(s)) ===`,
+);
+console.log(
+  "Metric triple: BILL (cost$) · TARGET (output tokens) · BLAST RADIUS (correctness).\n",
+);
+
+let runningCost = 0;
+const leaderboard = [];
+
+for (const skill of SKILLS) {
+  console.log(
+    `\n### ${skill.title}  [${skill.category}]  — ${skill.source}` +
+      (skill.stars ? `  (${skill.stars.toLocaleString()}★)` : ""),
+  );
+  console.log(`    claim: ${skill.claim.text}`);
+  console.log(
+    "    task            out_base  out_skl  out_cut%   $_base   $_skl  cost_cut%  out%sess  correct(b/s)",
+  );
+
+  let sumOutCut = 0,
+    sumCostCut = 0,
+    sumOutShare = 0,
+    anyRegress = false,
+    taskN = 0;
+  const taskRows = [];
+
+  for (const t of TASKS) {
+    let report;
+    try {
+      report = await runEval({
+        name: `ecosystem: ${skill.id}/${t.name}`,
+        fixture: { ...t.files }, // both arms get the task seed
+        arms: {
+          baseline: {}, // task only
+          skill: skill.arm, // + SKILL.md (files) OR --plugin-dir (pluginDir)
+        },
+        task: t.task,
+        measure: (ctx) => ({
+          inputTokens: u(ctx, "inputTokens"),
+          outputTokens: u(ctx, "outputTokens"),
+          cacheTokens:
+            u(ctx, "cacheReadTokens") + u(ctx, "cacheCreationTokens"),
+          costUsd: u(ctx, "costUsd"), // the honest bill (cache ~0.1×, output 1×)
+          correct: t.check(ctx),
+        }),
+        trials,
+        model,
+        concurrency,
+      });
+    } catch (e) {
+      console.log(`    ${t.name.padEnd(15)} ERROR: ${e.message}`);
+      continue;
+    }
+    runningCost += report.totalCostUsd;
+    const b = report.arms.baseline.metrics;
+    const s = report.arms.skill.metrics;
+
+    const outCut = pct(b.outputTokens, s.outputTokens);
+    const costCut = pct(b.costUsd, s.costUsd);
+    const outShare = whole(b) > 0 ? (b.outputTokens / whole(b)) * 100 : 0;
+    const regress = s.correct < b.correct;
+    sumOutCut += outCut;
+    sumCostCut += costCut;
+    sumOutShare += outShare;
+    if (regress) anyRegress = true;
+    taskN++;
+    taskRows.push({
+      task: t.name,
+      baseline: b,
+      skill: s,
+      outCut,
+      costCut,
+      outShare,
+      regress,
+    });
+
+    console.log(
+      `    ${t.name.padEnd(15)} ${b.outputTokens.toFixed(0).padStart(8)} ` +
+        `${s.outputTokens.toFixed(0).padStart(8)} ${outCut.toFixed(0).padStart(7)}%  ` +
+        `${b.costUsd.toFixed(4).padStart(7)} ${s.costUsd.toFixed(4).padStart(7)} ` +
+        `${costCut.toFixed(0).padStart(8)}%  ${outShare.toFixed(1).padStart(7)}%   ` +
+        `${b.correct.toFixed(1)}/${s.correct.toFixed(1)}`,
+    );
+  }
+
+  const n = taskN || 1;
+  const meanOutCut = sumOutCut / n;
+  const meanCostCut = sumCostCut / n;
+  const meanOutShare = sumOutShare / n;
+  const claimGap =
+    skill.claim.pct != null ? skill.claim.pct - meanOutCut : null;
+
+  leaderboard.push({
+    id: skill.id,
+    title: skill.title,
+    category: skill.category,
+    claim: skill.claim,
+    meanOutCut,
+    meanCostCut,
+    meanOutShare,
+    claimGap,
+    anyRegress,
+    tasks: taskRows,
+  });
+
+  console.log(
+    `    -> mean output cut ${meanOutCut.toFixed(0)}%  ·  ` +
+      `mean cost cut ${meanCostCut.toFixed(0)}%  ·  ` +
+      `output share ${meanOutShare.toFixed(1)}%  ·  ` +
+      `correctness regression: ${anyRegress ? "YES" : "no"}` +
+      (claimGap != null
+        ? `\n    -> CLAIM ${skill.claim.pct}% vs MEASURED ${meanOutCut.toFixed(0)}% on the target ` +
+          `=> overclaim gap ${claimGap.toFixed(0)} points`
+        : ""),
+  );
+  console.log(`    (running bill so far: $${runningCost.toFixed(4)})`);
+}
+
+// ---- Leaderboard: debunks first (largest overclaim gap), then quality by cost ----
+const debunks = leaderboard
+  .filter((r) => r.claimGap != null)
+  .sort((a, b) => b.claimGap - a.claimGap);
+const quality = leaderboard
+  .filter((r) => r.claimGap == null)
+  .sort((a, b) => a.meanCostCut - b.meanCostCut); // most cost ADDED first (most negative cut)
+
+console.log("\n\n========== LEADERBOARD (v0) ==========");
+if (debunks.length) {
+  console.log("\n-- Debunks (a published % claim vs what we measured) --");
+  for (const r of debunks) {
+    const verdict =
+      r.meanOutCut < r.claim.pct * 0.5
+        ? "DEBUNKED"
+        : r.meanOutCut < r.claim.pct
+          ? "overstated"
+          : "held up";
+    console.log(
+      `  ${r.title.padEnd(22)} claim ${String(r.claim.pct + "%").padStart(4)} · ` +
+        `measured ${r.meanOutCut.toFixed(0).padStart(4)}% · ` +
+        `bill ${r.meanCostCut >= 0 ? "-" : "+"}${Math.abs(r.meanCostCut).toFixed(0)}% · ` +
+        `${r.anyRegress ? "BROKE correctness" : "no regression"} · ${verdict}`,
+    );
+  }
+}
+if (quality.length) {
+  console.log(
+    "\n-- Quality plugins (no single % claim — the bill they add on neutral tasks) --",
+  );
+  for (const r of quality) {
+    console.log(
+      `  ${r.title.padEnd(22)} bill ${r.meanCostCut >= 0 ? "-" : "+"}${Math.abs(
+        r.meanCostCut,
+      ).toFixed(0)}% · ` +
+        `output ${r.meanOutCut >= 0 ? "-" : "+"}${Math.abs(r.meanOutCut).toFixed(0)}% · ` +
+        `${r.anyRegress ? "BROKE correctness" : "no regression"}`,
+    );
+  }
+}
+console.log(`\nTotal measured bill: $${runningCost.toFixed(4)}`);
+
+// ---- Hold the data: dump JSON for later analysis / the (gated) writeup ----
+const outDir = fileURLToPath(new URL("./results/", import.meta.url));
+mkdirSync(outDir, { recursive: true });
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const outFile = `${outDir}${stamp}_${model}.json`;
+writeFileSync(
+  outFile,
+  JSON.stringify(
+    {
+      model,
+      trials,
+      tasks: TASKS.map((t) => t.name),
+      runningCost,
+      leaderboard,
+    },
+    null,
+    2,
+  ),
+);
+console.log(`\nData held at: ${outFile.replace(process.cwd() + "/", "")}`);
+console.log(
+  "(v0 engine — no report published from here; the writeup is a separate gated step.)",
+);

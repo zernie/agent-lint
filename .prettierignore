@@ -13,6 +13,11 @@ examples/harness/vendor/
 # API Extractor reports (tool-generated, exact format)
 etc/
 
+# Ecosystem-benchmark run artifacts (machine-written JSON) + vendored upstream
+# SKILL.md snapshots (pinned by SHA, formatted by their upstreams, not us).
+bench/ecosystem/results/
+bench/ecosystem/skills/
+
 # The root CLAUDE.md is a vigiles-COMPILED artifact: `vigiles compile` owns its
 # exact bytes (an integrity hash over the output gates it in CI). Prettier would
 # re-escape markdown (e.g. `skills/*` → `skills/\*`) and desync that hash, so the
