@@ -807,3 +807,152 @@ test("inspectMarketplace reports a CURATED marketplace (all external, none on di
   assert.deepEqual(expandMarketplace(dir), []); // marketplace, but nothing on disk
   cleanupTmpDir(dir);
 });
+
+// ---------------------------------------------------------------------------
+// Effect-surface column tests (deterministic, no model)
+// ---------------------------------------------------------------------------
+
+test("effect surface: agent with only read-only tools is pure", () => {
+  const dir = makeTmpDir("scan-effect-pure");
+  write(
+    dir,
+    "agents/reader.md",
+    "---\nname: reader\ndescription: Reads files\ntools: Read, Grep, Glob\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "reader");
+  assert.ok(agent, "agent found");
+  assert.equal(agent.purity, "pure");
+  assert.deepEqual(agent.effectBuckets.sideEffecting, []);
+  assert.deepEqual(agent.effectBuckets.unknown, []);
+  assert.ok(agent.effectBuckets.readOnly.length > 0, "has read-only tools");
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: agent with side-effecting tools (no Bash) is bounded", () => {
+  const dir = makeTmpDir("scan-effect-bounded");
+  write(
+    dir,
+    "agents/writer.md",
+    "---\nname: writer\ndescription: Writes files\ntools: Read, Write, Edit\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "writer");
+  assert.ok(agent, "agent found");
+  assert.equal(agent.purity, "bounded");
+  assert.ok(
+    agent.effectBuckets.sideEffecting.length > 0,
+    "has side-effecting tools",
+  );
+  assert.deepEqual(agent.effectBuckets.unknown, []);
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: agent with Bash is unrestricted", () => {
+  const dir = makeTmpDir("scan-effect-bash");
+  write(
+    dir,
+    "agents/runner.md",
+    "---\nname: runner\ndescription: Runs commands\ntools: Read, Bash\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "runner");
+  assert.ok(agent, "agent found");
+  assert.equal(agent.purity, "unrestricted");
+  assert.ok(
+    agent.effectBuckets.sideEffecting.includes("Bash"),
+    "Bash in side-effecting bucket",
+  );
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: agent with no tools line (inherits-all) is unrestricted", () => {
+  const dir = makeTmpDir("scan-effect-inheritsall");
+  // An agent with no `tools:` line inherits all tools including side-effecting ones.
+  write(
+    dir,
+    "agents/wildcard.md",
+    "---\nname: wildcard\ndescription: Does anything\n---\nbody\n",
+  );
+  const agent = scanPlugin(dir).agents.find((a) => a.name === "wildcard");
+  assert.ok(agent, "agent found");
+  assert.equal(agent.tools, null, "no tools: line → inherits all");
+  assert.equal(agent.purity, "unrestricted");
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: harness-level puritySummary aggregates correctly", () => {
+  const dir = makeTmpDir("scan-effect-summary");
+  // pure: only read-only tools
+  write(
+    dir,
+    "agents/reader.md",
+    "---\nname: reader\ndescription: Reads\ntools: Read, Grep\n---\nbody\n",
+  );
+  // bounded: side-effecting, no Bash, no unknown
+  write(
+    dir,
+    "agents/writer.md",
+    "---\nname: writer\ndescription: Writes\ntools: Read, Write\n---\nbody\n",
+  );
+  // unrestricted: Bash
+  write(
+    dir,
+    "agents/runner.md",
+    "---\nname: runner\ndescription: Runs\ntools: Bash\n---\nbody\n",
+  );
+  // unrestricted: inherits-all (no tools: line)
+  write(
+    dir,
+    "agents/wild.md",
+    "---\nname: wild\ndescription: Wild\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.puritySummary.pure, 1);
+  assert.equal(r.puritySummary.bounded, 1);
+  assert.equal(r.puritySummary.unrestricted, 2);
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: formatScanReport includes purity tags per agent and the summary line", () => {
+  const dir = makeTmpDir("scan-effect-format");
+  write(
+    dir,
+    "agents/reader.md",
+    "---\nname: reader\ndescription: Reads files for analysis\ntools: Read, Grep\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/writer.md",
+    "---\nname: writer\ndescription: Writes output files here\ntools: Read, Write\n---\nbody\n",
+  );
+  write(
+    dir,
+    "agents/runner.md",
+    "---\nname: runner\ndescription: Runs shell commands here\ntools: Bash\n---\nbody\n",
+  );
+  const text = formatScanReport(scanPlugin(dir));
+  // Each agent line includes the purity tag in brackets.
+  assert.match(text, /reader.*\[pure\]/);
+  assert.match(text, /writer.*\[bounded\]/);
+  assert.match(text, /runner.*\[unrestricted\]/);
+  // Harness-level summary line is present.
+  assert.match(text, /Effect surface: 1 pure · 1 bounded · 1 unrestricted/);
+  cleanupTmpDir(dir);
+});
+
+test("effect surface: puritySummary is in the JSON shape (ScanReport)", () => {
+  const dir = makeTmpDir("scan-effect-json");
+  write(
+    dir,
+    "agents/a.md",
+    "---\nname: a\ndescription: Does stuff\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  // The puritySummary field is present on the report object (JSON shape).
+  assert.ok("puritySummary" in r);
+  assert.equal(typeof r.puritySummary.pure, "number");
+  assert.equal(typeof r.puritySummary.bounded, "number");
+  assert.equal(typeof r.puritySummary.unrestricted, "number");
+  // effectBuckets is on each agent.
+  assert.ok("effectBuckets" in r.agents[0]);
+  assert.ok("purity" in r.agents[0]);
+  cleanupTmpDir(dir);
+});
