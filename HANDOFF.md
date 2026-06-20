@@ -14,17 +14,18 @@ Don't tunnel on the benchmark; the full scope is all three + distribution.
 
 ## Next move
 
-SPEC + DOCS are DONE (this autonomous run — see below). Remaining pivot work, in order
-(real-model evals RUN here — auth is available):
+SPEC + DOCS + TESTING-HARNESS + the core EVALS are DONE (this autonomous run — see
+below). The does-our-spec-help A/B gave its VERDICT: **the spec HELPED** (quality
+identical 100%/100%, parseable-outcome payoff 0%→100% prose→spec — typed-contracts
+thesis validated on our own contract). Remaining pivot work (real-model evals RUN
+here — auth is available):
 
-1. **FIX subagent nested-trace recovery under `--plugin-dir`** (`parseSubagents` in
-   `src/harness-test.ts`) — the unblock for the does-our-spec-help A/B (the subagent
-   dispatches but the `subagent()` check can't see its sub-trace). Needs a live JSONL
-   capture of a `--plugin-dir` dispatch to read the real `subagent_type` value.
-2. **A1 — ecosystem benchmark v0** (the viral artifact): A/B 10–20 hyped skills on
+1. **A1 — ecosystem benchmark v0** (the viral artifact): A/B 10–20 hyped skills on
    `bench/corpus/coding-tasks.mjs`; pilot tiny first; lead with the debunks (caveman
-   is the template — measured ≪ claimed). Reuses `runEval`.
-3. **A2 measured half / distribution** — later. Full map in `research/roadmap.md`.
+   is the template — measured ≪ claimed). Reuses `runEval`. ⚠ LARGE (sourcing skills +
+   real-model cost + a PUBLISH decision = outward-facing, get user sign-off first).
+2. **A2 measured optimize half / distribution / P2 trifecta** — later. Full map in
+   `research/roadmap.md`.
 
 ## AUTONOMOUS RUN — forks & decisions (2026-06-20 night, user asleep)
 
@@ -67,10 +68,14 @@ status in `research/roadmap.md`.
   DEFERRED (all user-confirmed).
 - **Docs:** `docs/spec-format.md` now COMPLETE (subagent section, full skill/agent
   field tables, purity & effects) (`44a8d54`); `docs/railway-subagents.md` (`bae46ad`);
+  `tools` vs `disallowedTools` clarified — use ONE not both (`ad09ed2`, user Q);
   two research decisions recorded in `research/spec-syntax-and-railway-scope.md`.
-- **Measurement (real runs):** caveman debunk HARDENED on sonnet — −23% output /
-  −20% cost, gets stronger (`4783464`); the does-our-spec-help A/B built + run,
-  surfaced the `--plugin-dir` subagent-trace gap (`41747ca`, finding in the eval).
+- **Testing harness:** FIXED subagent nested-trace recovery under `--plugin-dir`
+  (`212869d`) — namespaced `subagent_type` + the sub's RETURN captured as
+  `SubagentTrace.output`; CC discoveries documented inline. Unlocks subagent-contract evals.
+- **Measurement (real runs):** caveman debunk HARDENED on sonnet — −23%/−20%, gets
+  stronger (`4783464`); the does-our-spec-help A/B DONE — **the spec HELPED**
+  (quality 100%/100%, payoff 0%→100%; thesis validated on our own contract) (`b25218e`).
 - **Decisions:** railway = subagents-only; spec syntax already the right hybrid
   (restraint > more helpers); fp-lib = none (neverthrow if ever); see the forks list above.
 
