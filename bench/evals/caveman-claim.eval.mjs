@@ -36,6 +36,17 @@
  * numbers are noisy at 3 trials (slugify flipped -9%→+12% pilot→full). The
  * AGGREGATE direction + the ~1% output-share are robust; the sonnet/opus pass is
  * the rigorous follow-up (the output-share point is model-agnostic regardless).
+ *
+ * FOLLOW-UP (2026-06-20, real SONNET — caveman's TARGET model, 2 tasks × 2 trials):
+ * the debunk gets STRONGER, not weaker. slugify -33% / debounce -13% output, so
+ *   MEAN output cut = -23%  (output went UP — the opposite of the ~65% claim)
+ *   MEAN cost cut   = -20%  (the bill went UP by a fifth)
+ *   output share    = 0.5%  of session tokens · correctness = 0 regressions
+ * The caveat that "haiku may underuse the terse style" is now ruled out: on the
+ * model caveman targets, the telegraphic style still didn't compress an agentic
+ * coding session — it cost MORE. The ~65% headline is a single-shot-Q&A artifact;
+ * on multi-turn coding the output-share (~1%) makes it structurally unable to move
+ * the bill regardless. (Pilot N — widen to 5×3 for tighter CIs; direction is clear.)
  */
 import { runEval } from "../../dist/eval.js";
 import { CODING_TASKS } from "../corpus/coding-tasks.mjs";
