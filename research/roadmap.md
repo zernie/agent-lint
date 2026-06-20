@@ -24,10 +24,13 @@
 
 **P0 — validate the thesis before building (cheapest, do first):**
 
-- [ ] **Measure one hyped skill vs its claim.** Run the existing eval engine on **caveman** over
-      ~10 real tasks; report measured whole-session token savings vs the "90%" claim + any
-      task-success delta. "Measured ≪ claimed" (stark) validates the identity; else rethink. ~1
-      day, no new infra. → `measurement-authority.md`
+- [x] **Measure one hyped skill vs its claim — DONE (2026-06-20), thesis VALIDATED.**
+      caveman over 5 real coding tasks (real haiku, 3 trials, on the subscription,
+      [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs)):
+      claims ~65% output cut, measured **−5% output / −4% cost**, output only
+      **~1.1% of session tokens**, 0 correctness regressions. "Measured ≪ claimed",
+      stark. Rigorous follow-up = sonnet/opus (caveman's target models) + the
+      reusable corpus. → `measurement-authority.md`, `benchmark-methodology.md`
 
 **P1 — measurement (the identity):**
 

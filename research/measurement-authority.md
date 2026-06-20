@@ -6,6 +6,16 @@
 > checker that the harness isn't broken; become the **empirical authority on what makes
 > agentic coding actually work.** Same eval engine, opposite posture — defense → offense.
 
+> **P0 VALIDATED (2026-06-20).** First worked measurement — caveman (54k★, claims
+> ~65% output-token reduction) over 5 real coding tasks, real haiku on the
+> subscription (`bench/evals/caveman-claim.eval.mjs`): measured **−5% output**
+> (it grew; only 1/5 tasks compressed), **−4% cost**, and — the structural kill —
+> output is **~1.1% of session tokens**, so even a true 65% output cut moves the
+> bill ~0.7%. Correctness intact (0/5 regressions). "Measured ≪ claimed", stark —
+> exactly the result the thesis predicted. Caveat: caveman targets Sonnet/Opus
+> (haiku is the cheap v0 pass); the ~1% output-share is model-agnostic. Method:
+> [`benchmark-methodology.md`](benchmark-methodology.md).
+
 ## The critique that forced this
 
 1. **Hygiene doesn't go viral.** Linters/validators/test tools win by becoming necessary
