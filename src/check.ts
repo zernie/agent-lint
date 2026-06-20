@@ -318,6 +318,24 @@ export function wrote(path: string): Check<Trace> {
   };
 }
 
+/**
+ * The agent did NOT leave a file at this path — the **side-effect boundary**
+ * negative: a skill that declares it writes only `out.txt` should leave nothing
+ * at `secrets.env`. The symmetric sibling of `wrote()`; pairs with
+ * `notTool(...)` to assert a unit stayed inside its declared write surface
+ * deterministically (no model judge).
+ */
+export function didNotWrite(path: string): Check<Trace> {
+  return {
+    kind: "didNotWrite",
+    eval: (t) =>
+      t.file(path) === null
+        ? ok(`file "${path}" was not created`)
+        : no(`expected the agent NOT to create "${path}", but it exists`),
+    toJSON: () => ({ kind: "didNotWrite", path }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Subagent — a `Task` run as a nested trace. Run checks over what the SUBAGENT
 // did, not just that `Task` fired. Composes the whole vocabulary recursively.
