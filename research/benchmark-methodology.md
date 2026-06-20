@@ -103,7 +103,7 @@ cheap v0 sweep; sonnet/opus — a skill's target models — for the rigorous pas
   generalized loop (`benchmark.mjs`) over a real, SHA-pinned skill manifest
   (`skills.mjs`, provenance in `SOURCES.md`), reusing this exact method over a SET
   of skills. Pilot: `VIGILES_SKILLS=caveman VIGILES_TASKS=2 VIGILES_TRIALS=2 node
-  bench/ecosystem/benchmark.mjs`.
+bench/ecosystem/benchmark.mjs`.
 - [`eval-api-landscape.md`](eval-api-landscape.md) — the eval infra (cost/cache
   capture, significance, regression gating) this method runs on.
 - [`skill-eval-landscape.md`](skill-eval-landscape.md) — prior-art skill evals
