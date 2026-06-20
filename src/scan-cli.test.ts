@@ -20,7 +20,9 @@ import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
+  readFileSync,
   readdirSync,
+  existsSync,
   rmSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -365,5 +367,91 @@ describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => 
     assert.equal(plan.recommendations[0].action, "fix");
     assert.equal(plan.recommendations[0].surface, "rev");
     assert.equal(plan.recommendations[0].detector, "subagent-tool-contract");
+  });
+});
+
+describe("scaffold-test e2e — test-gen for untested surfaces (B1)", () => {
+  let root: string;
+  let plugin: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "scaffold-cli-"));
+    plugin = join(root, "demo");
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(plugin, ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(plugin, "skills", "greet"), { recursive: true });
+    writeFileSync(
+      join(plugin, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly\n---\nGreet them.\n",
+    );
+    mkdirSync(join(plugin, "agents"), { recursive: true });
+    writeFileSync(
+      join(plugin, "agents", "reviewer.md"),
+      "---\nname: reviewer\ndescription: Reviews a diff\ntools: Read, Grep\n---\nReview.\n",
+    );
+  });
+
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it("dry-run lists each untested surface with its kind + tier", () => {
+    const r = run(`scaffold-test ${plugin}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /skills\/greet\/greet\.eval\.mjs\s+\[skill → eval/);
+    assert.match(
+      r.stdout,
+      /agents\/reviewer\.harness\.mjs\s+\[agent → harness/,
+    );
+    // dry-run prints content, not files: nothing written yet.
+    assert.equal(
+      existsSync(join(plugin, "skills", "greet", "greet.eval.mjs")),
+      false,
+    );
+  });
+
+  it("--write creates the files with the right public imports + namespaced id", () => {
+    const r = run(`scaffold-test ${plugin} --write`);
+    assert.equal(r.exitCode, 0);
+    const evalFile = join(plugin, "skills", "greet", "greet.eval.mjs");
+    assert.ok(existsSync(evalFile));
+    const content = readFileSync(evalFile, "utf-8");
+    assert.match(content, /from "vigiles\/testing"/);
+    assert.match(content, /"demo:greet"/); // the manifest name, not the dir basename
+    assert.match(content, /measureTriggerRate/);
+  });
+
+  it("--write a second time skips the now-covered surfaces (no clobber)", () => {
+    const r = run(`scaffold-test ${plugin} --write`);
+    assert.equal(r.exitCode, 0);
+    // The skill+agent now have colocated tests → no longer untested → nothing to do.
+    assert.match(r.stdout, /Nothing to scaffold|skipped/);
+  });
+
+  it("--json emits the agent-consumable { path, content }[]", () => {
+    const fresh = join(root, "fresh");
+    mkdirSync(join(fresh, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(fresh, ".claude-plugin", "plugin.json"),
+      '{"name":"fresh"}\n',
+    );
+    mkdirSync(join(fresh, "skills", "hi"), { recursive: true });
+    writeFileSync(
+      join(fresh, "skills", "hi", "SKILL.md"),
+      "---\nname: hi\ndescription: Says hi\n---\nHi.\n",
+    );
+    const r = run(`scaffold-test ${fresh} --json`);
+    assert.equal(r.exitCode, 0);
+    const scaffolds = JSON.parse(r.stdout) as {
+      path: string;
+      kind: string;
+      tier: string;
+      content: string;
+    }[];
+    assert.equal(scaffolds.length, 1);
+    assert.equal(scaffolds[0].path, "skills/hi/hi.eval.mjs");
+    assert.equal(scaffolds[0].tier, "eval");
+    assert.match(scaffolds[0].content, /"fresh:hi"/);
   });
 });

@@ -36,6 +36,16 @@ Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01c
 
 ## Decisions / shipped this session
 
+- **B1 — test-gen from free-form (`vigiles scaffold-test`).** Free-form in, a RUNNABLE
+  starter test out. `src/scaffold-test.ts` (pure `scaffoldTest`/`formatScaffolds`, 15
+  vitest incl. a `node --check` validity gate on every template) + the CLI handler
+  (reuses `findUntestedSurfaces` + `scanPlugin` + manifest name; dry-run / `--write`
+  never-clobber / `--json`; 4 e2e in `scan-cli.test.ts`). Per kind: hook→runHook (unit),
+  skill→measureTriggerRate (eval), subagent→runHarnessTest (points at the B2 result()
+  path). Emits at the untested-detector's `suggestedTestPath` so the file stops the
+  surface being reported untested. Docs in `docs/cli.md`. Remaining typed-contracts: B3
+  side-effect boundaries, B4 shareable templates. (Future: single-surface-path targeting +
+  TOML-manifest name for Codex — today falls back to dir basename.)
 - **B2 — elevate railway/Result contracts for testability (docs + worked example).**
   The `assertAgentOk/Err/Result` helpers existed + were unit-tested but had NO worked
   example and near-zero doc coverage (the "deterministic assert replaces an LLM judge"
