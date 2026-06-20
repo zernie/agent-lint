@@ -90,13 +90,82 @@ export default skill({
 });
 ```
 
-| Field                    | Type                              | Required | Description                                         |
-| ------------------------ | --------------------------------- | -------- | --------------------------------------------------- |
-| `name`                   | `string`                          | yes      | Skill name (used in YAML frontmatter)               |
-| `description`            | `string`                          | yes      | Short description (frontmatter)                     |
-| `argumentHint`           | `string`                          | no       | Hint for the argument (frontmatter)                 |
-| `disableModelInvocation` | `boolean`                         | no       | Disable model invocation flag (frontmatter)         |
-| `body`                   | `string \| InstructionFragment[]` | yes      | Instruction body -- plain string or tagged template |
+| Field                    | Type                                                | Required | Description                                                                                                        |
+| ------------------------ | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `name`                   | `string`                                            | yes      | Skill name (used in YAML frontmatter)                                                                              |
+| `description`            | `string`                                            | yes      | Short description (frontmatter) -- the trigger surface, keep it short                                              |
+| `argumentHint`           | `string`                                            | no       | Hint for the argument (frontmatter)                                                                                |
+| `inputs`                 | `SkillInput[]`                                      | no       | Typed inputs via `input(name, hint)` -- compile to argument-hint + an `## Arguments` section                       |
+| `disableModelInvocation` | `boolean`                                           | no       | Disable model invocation flag (frontmatter)                                                                        |
+| `tools`                  | `string[]`                                          | no       | Allowed-tools contract (built-in or `mcp__server__tool`); omit = inherit all                                       |
+| `purity`                 | `"pure" \| "bounded" \| "dangerously-unrestricted"` | no       | Side-effect floor (see [Purity & effects](#purity--effects))                                                       |
+| `steps`                  | `SkillStep[]`                                       | no       | Gated pipeline via `step(do, { gate, retry })` -- compiles to `## Steps`. Use this OR `body`                       |
+| `result`                 | `Gate`                                              | no       | Terminal postcondition gate (`cmd()`/`file()`/`project()`); compiles to `## Result`                                |
+| `context`                | `"fork"`                                            | no       | Run as a forked subagent -- the prerequisite for `output`                                                          |
+| `output`                 | `OutputContract`                                    | no       | A `result(okShape, errShape)` typed outcome -- **requires `context:"fork"`** (see [Railway](railway-subagents.md)) |
+| `body`                   | `string \| InstructionFragment[]`                   | yes\*    | Instruction body -- plain string or tagged template (\*or use `steps`)                                             |
+| `maxInlineCodeLines`     | `number`                                            | no       | Cap an inline fenced code block before it must move to a `file()` (default 20)                                     |
+
+## Subagent (agent) Specs
+
+Use `agent()` to define a subagent (`agents/<name>.md`) — a delegated worker with a
+verified **tool contract** and, optionally, a typed **railway outcome**. The full
+guide (typed outcomes, composing flat workers with `railway()`/`delegate()`,
+asserting deterministically) is **[railway-subagents.md](railway-subagents.md)**;
+this is the field reference.
+
+<!-- vigiles:ignore -->
+
+```ts
+import { agent, result } from "vigiles";
+
+export default agent({
+  name: "code-reviewer",
+  description: "Review a diff for correctness defects.",
+  model: "opus",
+  color: "pink",
+  tools: ["Read", "Grep"],
+  disallowedTools: ["Write", "Edit"], // deny side -- a reviewer never mutates
+  purity: "pure", // read-only floor (compile + runtime gate)
+  output: result(
+    { defects: "string[]", summary: "string" },
+    { reason: "string" },
+  ),
+  body: "You are a careful code reviewer…",
+});
+```
+
+| Field             | Type                                                | Required | Description                                                                                    |
+| ----------------- | --------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `name`            | `string`                                            | yes      | Subagent name (frontmatter; the dispatch handle)                                               |
+| `description`     | `string`                                            | yes      | What it does — read by the orchestrator to decide when to delegate                             |
+| `model`           | `string`                                            | no       | Model alias (`"sonnet"`/`"opus"`/`"haiku"`/`"inherit"`)                                        |
+| `color`           | `string`                                            | no       | Subagent UI colour (frontmatter)                                                               |
+| `tools`           | `string[]`                                          | no       | Allowed-tools contract — **verified** (typo/never-available flagged). Omit = inherit all       |
+| `disallowedTools` | `string[]`                                          | no       | Deny-side contract — verified close-typo (a typo'd entry blocks nothing)                       |
+| `purity`          | `"pure" \| "bounded" \| "dangerously-unrestricted"` | no       | Side-effect floor (see [Purity & effects](#purity--effects))                                   |
+| `output`          | `OutputContract`                                    | no       | `result(okShape, errShape)` typed outcome → `## Output contract`; testable via `assertAgentOk` |
+| `sections`        | `Record<string, string \| InstructionFragment[]>`   | no       | Named `##` system-prompt sections (same verified-ref rules as a CLAUDE.md)                     |
+| `rules`           | `Record<string, Rule>`                              | no       | Rules the worker must follow → `## Rules`                                                      |
+| `body`            | `string \| InstructionFragment[]`                   | no       | The lead "You are…" prose before any sections                                                  |
+
+## Purity & effects
+
+`purity` declares a unit's **side-effect floor**, enforced at compile (the tool
+contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
+
+| Level                        | Allows                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `"pure"`                     | read-only tools only (no Write/Edit/Bash side effects)                                                      |
+| `"bounded"`                  | + Write/Edit and command-gated Bash (read-only Bash allowed, mutating denied); bars MCP/unknown/inherit-all |
+| `"dangerously-unrestricted"` | no enforcement (the loud-at-the-declaration escape hatch)                                                   |
+
+`"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
+tools and is a violation.
+
+`effect\`…\``marks a **side-effect boundary** inside a body (a tagged template
+usable as an interpolated fragment). It compiles to`<!-- vigiles:effect -->`…`<!-- /vigiles:effect -->` markers that tighten the runtime gate to read-only
+_outside_ the region and the declared floor _inside_ it.
 
 ## Reference Helpers
 
@@ -124,7 +193,14 @@ Returns a `GlobRef` containing a `VerifiedGlob`. The pattern is verified at comp
 
 ### `instructions`
 
-Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`.
+Tagged template literal that interleaves strings and refs. Use it for `sections` values in `claude()` or the `body` of `skill()`. A single prose section over a generous default (200 lines) is rejected as a likely dump — override with `maxSectionLines`, or split / move detail into a `file()`.
+
+### Outcome & pipeline builders
+
+- `result(okShape, errShape)` — a subagent's (or forked skill's) typed `Result<ok, err>` outcome. Field types: `"string" | "number" | "boolean" | "string[]"`. Full guide: **[railway-subagents.md](railway-subagents.md)**.
+- `railway({ name, steps, recover, onError })` + `delegate(agent, task?)` — compose flat subagents into a success track with bounded recovery. See [railway-subagents.md](railway-subagents.md).
+- `input(name, hint)` / `step(do, { gate, retry })` / `project(role)` — a skill's typed inputs, gated pipeline steps, and portable command gates.
+- `effect\`…\`` — a side-effect boundary inside a body (see [Purity & effects](#purity--effects)).
 
 ```ts
 instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
