@@ -9,6 +9,10 @@ Most of it runs with **no model and no API key** — milliseconds, on every comm
 Only the real-model tier (evals) needs a model, and it runs on your own `claude`
 CLI, not metered tokens.
 
+> Want to know whether a skill or plugin actually **helps** — does it beat the
+> no-skill baseline, and at what cost? That's the measurement layer on top of these
+> tiers: see [Measuring skills & plugins](measuring-skills.md).
+
 ## Your first test
 
 A hook is just a process: the harness pipes it a JSON event and reads back an exit
