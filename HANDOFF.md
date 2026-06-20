@@ -14,21 +14,17 @@ Don't tunnel on the benchmark; the full scope is all three + distribution.
 
 ## Next move
 
-Per `research/roadmap.md` §"P1 — measurement", in order:
+SPEC + DOCS are DONE (this autonomous run — see below). Remaining pivot work, in order
+(real-model evals RUN here — auth is available):
 
-1. **A2 — the MEASURED half of `vigiles optimize`.** The deterministic spine SHIPPED
-   this session (`src/optimize.ts` + the `vigiles optimize <dir>` CLI — health score +
-   ranked free fixes, reusing `explainScore`). What's left: wire the real-model A/B so each
-   add/drop/swap carries a MEASURED delta (`runEval` over `bench/corpus`). ⚠ Needs sub auth.
-2. **A1 — ecosystem benchmark v0** (the viral artifact). Loop A/B over 10–20 hyped
-   skills on `bench/corpus/coding-tasks.mjs`; table of bill/target/correctness; lead
-   with the debunks. ⚠ Costly real-model run — needs the Pro/Max **subscription auth**;
-   pilot tiny (`VIGILES_TASKS=2 VIGILES_TRIALS=2`) first. Reuses `runEval`.
-3. **A4 (cheap, do anytime)** — `VIGILES_MODEL=sonnet node bench/evals/caveman-claim.eval.mjs`
-   to harden P0 on caveman's target model. Also needs sub auth.
-
-Then the other layers (all `[ ]` in roadmap): typed contracts B1–B4, linting C1–C3,
-distribution D1–D3. The full ordered map + per-item status is in `research/roadmap.md`.
+1. **FIX subagent nested-trace recovery under `--plugin-dir`** (`parseSubagents` in
+   `src/harness-test.ts`) — the unblock for the does-our-spec-help A/B (the subagent
+   dispatches but the `subagent()` check can't see its sub-trace). Needs a live JSONL
+   capture of a `--plugin-dir` dispatch to read the real `subagent_type` value.
+2. **A1 — ecosystem benchmark v0** (the viral artifact): A/B 10–20 hyped skills on
+   `bench/corpus/coding-tasks.mjs`; pilot tiny first; lead with the debunks (caveman
+   is the template — measured ≪ claimed). Reuses `runEval`.
+3. **A2 measured half / distribution** — later. Full map in `research/roadmap.md`.
 
 ## AUTONOMOUS RUN — forks & decisions (2026-06-20 night, user asleep)
 
@@ -58,40 +54,25 @@ claude-sonnet-4-6`/`claude-haiku-4-5-20251001` run real turns. So I'm RUNNING
 
 ## In flight
 
-Everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`. A 3-trial
-A/B eval is RUNNING (`/tmp/reviewer-ab-3trial.log`). Next pivot work queued: A4
-(caveman on sonnet — cheap) then A1 (ecosystem benchmark) — both now runnable here.
+Everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`. Spec +
+docs of the pivot are DONE. Real evals ran (caveman-sonnet, the A/B). Full per-item
+status in `research/roadmap.md`.
 
-## Decisions / shipped this session (spec-foundation review)
+## Shipped (this multi-part session)
 
-- **Two decisions SETTLED with web research + recorded** (`660d12c`,
-  `research/spec-syntax-and-railway-scope.md`): (1) **railway/Result is a SUBAGENT
-  contract, NOT skills** — skills run inline (no return/parse-point), so a typed
-  outcome is a category error; `context: fork` is the bridge. The railway-for-skills
-  edit I'd started was REVERTED. (2) **spec syntax is already the correct hybrid**
-  (plain-object backbone + typed-value helpers like enforce()/file() + tagged
-  template `instructions\`\``for prose-with-refs) — the win is RESTRAINT:`doc()`DROPPED (dups instructions``), NO`section()` helper (keep the object map).
-- **Length-guard SHIPPED (`989791e`)** — `DEFAULT_MAX_SECTION_LINES = 200` in
-  `validateSectionContent`, now on claude AND agent sections (was opt-in,
-  claude-only), overridable via `maxSectionLines`. Generous on purpose
-  (don't-cry-wolf: our dogfood has a 262-line Key Files + 8298-char paragraph).
-  TS types CAN'T bound string length (confirmed: TS #52243); compile-time guard is
-  the mechanism. +2 spec.test.ts cases; docs in spec-format.md.
-- **Railway public docs SHIPPED (`bae46ad`)** — `docs/railway-subagents.md` (the
-  full agent()/result()/railway() guide + assert-not-judge + the subagents-not-skills
-  scope), cross-linked from harness-testing.md, indexed in CLAUDE.md. orphan-docs ✓.
-- **OSS-plugin round-trip finding** — rewrote a real skill (oh-my-claudecode `verify`)
-  as a spec: compiled output = byte-identical body + only the integrity stamp differs.
-  Skills round-trip CLEAN; the real gaps are agent frontmatter fields (disallowedTools/
-  color/level/skills) + no builder for prose command files (both follow-ups).
-
-## Earlier this session
-
-- **B3 — side-effect boundary deterministic test (`b7a121d`)** — `didNotWrite()`
-  check + `examples/harness/effect-boundary.harness.mjs` + docs.
-- **B4 presets + lethal-trifecta check: DEFERRED (user calls).** B4 premature
-  (no consumers); trifecta deferred before any code. Both `[ ]` in roadmap.
-- **(prev) B1/B2 (`0fb7f2c`/`9c3e69f`) + dir()/glob() (`42f0b5e`) shipped.**
+- **Spec hardening (all shipped):** length-guard (`989791e`), agent `color`/
+  `disallowedTools` (`95ce25f`), `migrate`→`adopt-spec` rename (`6137008`),
+  `context:fork` + gated forked-skill `output` (`b19febd`); earlier B1/B2/B3 +
+  dir()/glob(). `doc()` DROPPED, `section()` helper rejected, B4 presets + trifecta
+  DEFERRED (all user-confirmed).
+- **Docs:** `docs/spec-format.md` now COMPLETE (subagent section, full skill/agent
+  field tables, purity & effects) (`44a8d54`); `docs/railway-subagents.md` (`bae46ad`);
+  two research decisions recorded in `research/spec-syntax-and-railway-scope.md`.
+- **Measurement (real runs):** caveman debunk HARDENED on sonnet — −23% output /
+  −20% cost, gets stronger (`4783464`); the does-our-spec-help A/B built + run,
+  surfaced the `--plugin-dir` subagent-trace gap (`41747ca`, finding in the eval).
+- **Decisions:** railway = subagents-only; spec syntax already the right hybrid
+  (restraint > more helpers); fp-lib = none (neverthrow if ever); see the forks list above.
 
 ## Environment note (CORRECTED 2026-06-20)
 
