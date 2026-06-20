@@ -49,6 +49,41 @@ test("compileAgent renders frontmatter (name/description/model/tools) + hash", (
   assert.match(markdown, /You are a careful code reviewer\./);
 });
 
+test("compileAgent renders color + disallowedTools (deny-side contract)", () => {
+  const { markdown, errors } = compileAgent(
+    agent({
+      name: "code-reviewer",
+      description: "Read-only review — no writes.",
+      model: "opus",
+      color: "pink",
+      tools: ["Read", "Grep"],
+      disallowedTools: ["Write", "Edit"], // side-effect separation, deny side
+      purity: "pure",
+      body: "Review only.",
+    }),
+    { specFile: "agents/code-reviewer.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(errors, []);
+  assert.match(markdown, /\ncolor: pink\n/);
+  assert.match(markdown, /\ndisallowedTools: Write, Edit\n/);
+});
+
+test("compileAgent flags a disallowedTools entry that's a close typo (blocks nothing)", () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "x",
+      description: "y",
+      tools: ["Read"],
+      disallowedTools: ["Wrte"], // typo of Write → would block nothing
+      body: "b",
+    }),
+    { specFile: "agents/x.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.ok(
+    errors.some((e) => /Wrte/.test(e.message) && /Write/.test(e.message)),
+  );
+});
+
 test("compileAgent: minimal agent omits model/tools and has no rules section", () => {
   const { markdown, errors } = compileAgent(
     agent({ name: "echo", description: "Echo things.", body: "Just echo." }),

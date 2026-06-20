@@ -29,7 +29,7 @@ import type {
 } from "./spec.js";
 
 import { checkLinterRule, extractLinterName } from "./linters.js";
-import { verifyToolContract } from "./tool-contract.js";
+import { verifyToolContract, disallowedToolIssues } from "./tool-contract.js";
 import { purityViolations } from "./effects.js";
 import type { LinterCheckResult } from "./linters.js";
 import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
@@ -983,8 +983,12 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
     `description: ${spec.description}`,
   ];
   if (spec.model !== undefined) fm.push(`model: ${spec.model}`);
+  if (spec.color !== undefined) fm.push(`color: ${spec.color}`);
   if (spec.tools && spec.tools.length > 0) {
     fm.push(`tools: ${spec.tools.join(", ")}`);
+  }
+  if (spec.disallowedTools && spec.disallowedTools.length > 0) {
+    fm.push(`disallowedTools: ${spec.disallowedTools.join(", ")}`);
   }
   fm.push("", "---");
   return fm.join("\n");
@@ -1112,6 +1116,13 @@ export function compileAgent(
   }
 
   if (spec.tools) errors.push(...validateAgentTools(spec.tools, dialect));
+  if (spec.disallowedTools) {
+    // A disallowedTools entry that's a close typo of a real tool blocks NOTHING —
+    // the same high-precision detector scan + the disallowed-tools-contract rule use.
+    for (const issue of disallowedToolIssues(spec.disallowedTools, dialect)) {
+      errors.push({ type: "unknown-tool", message: issue.message });
+    }
+  }
   if (spec.purity && spec.purity !== "dangerously-unrestricted") {
     // Enforce the declared purity floor against the tool contract. An absent
     // tools list inherits ALL tools, so it's checked as the "*" wildcard (a
