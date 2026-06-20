@@ -79,12 +79,11 @@ What each piece buys you:
 
 ## What `vigiles compile` emits — `SKILL.md` (the build artifact) `[exists + proposed marks]`
 
-```md
-## <!-- vigiles:sha256:9af… compiled from skills/release/SKILL.md.spec.ts -->
-
+```text
+<!-- vigiles:sha256:9af… compiled from skills/release/SKILL.md.spec.ts -->
+---
 name: release
 description: "Cut a release: decide the bump, write the changelog, tag, publish"
-
 ---
 
 ## Decide (pure)
