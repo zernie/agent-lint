@@ -37,6 +37,17 @@
 - [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
       corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
       `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
+- [~] **Does-our-spec-help A/B (2026-06-20)** — first real-model A/B of vigiles's OWN
+  typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
+  (prose vs spec code-reviewer, controlled). Built + RAN (sonnet). **Surfaced a
+  measurement-tooling gap, not a verdict:** the subagent dispatched (foundBug=100%
+  with a Read-less lead) but `subagent()`/`output()` read 0% — the `subagent()`
+  nested-trace check **false-negatives under `--plugin-dir`** and `output()` reads
+  the lead's text not the sub's. BLOCKS the payoff measurement until fixed.
+- [ ] **FIX: subagent nested-trace recovery under `--plugin-dir`** (measurement tooling).
+      `parseSubagents` doesn't recover a `--plugin-dir`-registered subagent's sub-trace,
+      so `subagent("x",[checks])` can't assert on what the SUB did. The unlock for the
+      A/B above (and any subagent-contract eval). → `eval.ts` / the subagent check.
 - [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), shipped as
       `scan --fix-plan`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
       `formatOptimize`, 6 vitest + 2 e2e cases) surfaced as the **`vigiles scan <dir>
@@ -99,6 +110,14 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       agent frontmatter fields `disallowedTools`/`color` for clean round-trips +
       side-effect separation (`95ce25f`), and the `migrate` → `adopt-spec` rename
       (`6137008`). → `spec-syntax-and-railway-scope.md`
+- [x] **Spec REFERENCE docs complete — SHIPPED (2026-06-20, `44a8d54`).**
+      [`docs/spec-format.md`](../docs/spec-format.md) gained the entire subagent
+      surface (`agent()` field table + example), the full skill field table
+      (inputs/tools/purity/steps/result/context/output), a Purity & effects section,
+      and result/railway/delegate/effect pointers. Pairs with the public railway guide
+      [`docs/railway-subagents.md`](../docs/railway-subagents.md). Spec + its docs are
+      now complete; remaining spec gaps are niche (agent `level`/`skills` frontmatter,
+      a prose-command-file builder) — deferred. → `spec-syntax-and-railway-scope.md`
 - [x] **Model `context: fork` on `SkillSpec` — SHIPPED (2026-06-20, `b19febd`).**
       `context?: "fork"` (rendered to frontmatter) + `output?: OutputContract` on a
       skill, gated: `output` without `context:"fork"` is a compile error
