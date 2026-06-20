@@ -163,7 +163,9 @@ wrong shape, or prose instead of a block, is `malformed` (the honest third track
 caught, never a silent pass. Authoring side: declare the contract with `result()`
 on an `agent()`, or orchestrate flat workers with `railway()` / `delegate()`. The
 parse is pure (`text → Result<S, E>`), so most of this path runs with **no model
-and no key** — see the runnable example below.
+and no key** — see the runnable example below. **Full guide:**
+[`railway-subagents.md`](railway-subagents.md) (the `agent()`/`result()`/`railway()`
+contract end to end, and why it's a subagent — not skill — primitive).
 
 ## Assert a side-effect boundary (`wrote` / `didNotWrite` / `notTool`)
 
@@ -363,4 +365,5 @@ sandbox) is per-harness. Pick yours:
 - [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its tier + file.
 - [`research/harness-testing.md`](../research/harness-testing.md) — the design rationale (two-layers model, why deterministic-first).
+- [`railway-subagents.md`](railway-subagents.md) — the railway/Result subagent contract end to end (typed outcome, compose flat workers, assert deterministically).
 - [`research/railway-subagents.md`](../research/railway-subagents.md) — railway-oriented orchestration over flat subagents (the `result()`/`railway()` design).
