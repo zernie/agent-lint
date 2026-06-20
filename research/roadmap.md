@@ -95,12 +95,17 @@
 the spec syntax is already the correct hybrid (plain-object backbone + typed-value
 helpers + tagged template for prose-with-refs) — the win is RESTRAINT, not more
 helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and-railway-scope.md`
-- [ ] **Spec authoring polish (research-backed, 2026-06-20)** — a generous-default,
-      uniform compile-time length-guard on prose helpers (TS types can't bound string
-      length; `maxSectionLines` is the mechanism); model `context: fork` on `SkillSpec`
-      (the one real skill gap — routes a forked skill through the subagent contract);
-      agent frontmatter fields (`disallowedTools`/`color`) for clean plugin round-trips;
-      rename "migrate" → "adopt". → `spec-syntax-and-railway-scope.md`
+- [x] **Spec authoring polish — SHIPPED (2026-06-20).** Length-guard (`989791e`),
+      agent frontmatter fields `disallowedTools`/`color` for clean round-trips +
+      side-effect separation (`95ce25f`), and the `migrate` → `adopt-spec` rename
+      (`6137008`). → `spec-syntax-and-railway-scope.md`
+- [ ] **Model `context: fork` on `SkillSpec` (P1, research-backed).** Anthropic's
+      official skill frontmatter `context: fork` runs a skill as a forked SUBAGENT —
+      the bridge that gives a procedural skill a real boundary. So a forked skill can
+      carry a `result()` outcome contract routed through the EXISTING subagent rail
+      (`parseAgentResult`/`assertAgentOk`), instead of a skill-level Result primitive
+      (which the research rejected). The one genuine skill gap left. →
+      `spec-syntax-and-railway-scope.md`
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
 
