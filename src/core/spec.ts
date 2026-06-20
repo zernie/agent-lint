@@ -292,7 +292,20 @@ export function ref(path: string): SkillRef {
 // Instruction template — process refs inside skill instructions
 // ---------------------------------------------------------------------------
 
-export type InstructionFragment = string | Ref;
+/**
+ * A marked side-effect BOUNDARY inside a skill/agent body — "side effects are
+ * allowed ONLY inside this block." Compiles to `<!-- vigiles:effect -->` …
+ * `<!-- /vigiles:effect -->` markers the runtime PreToolUse gate keys on: outside
+ * the region the unit is treated as read-only (the `"pure"` effective floor),
+ * inside it the declared purity floor applies. The position-aware companion to
+ * the per-call `purity` floor. See `research/effect-boundary-design.md`.
+ */
+export interface EffectRegion {
+  readonly _ref: "effect";
+  readonly body: InstructionFragment[];
+}
+
+export type InstructionFragment = string | Ref | EffectRegion;
 
 /**
  * Tagged template literal for skill instructions with typed references.
@@ -313,6 +326,35 @@ export function instructions(
     if (i < values.length) result.push(values[i]);
   }
   return result;
+}
+
+/**
+ * Tagged template literal marking a side-effect boundary — usable as an
+ * interpolated fragment inside a body / `instructions\`\``:
+ *
+ *   instructions`
+ *     ## Apply
+ *     ${effect`
+ *       Side effects are allowed ONLY here:
+ *       - write ${file("CHANGELOG.md")}
+ *       - ${cmd("npm publish")}
+ *     `}
+ *   `
+ *
+ * Returns an `EffectRegion` fragment; `compile` wraps its rendered body in
+ * `<!-- vigiles:effect -->` markers. Independent of the `doc()` authoring
+ * surface — it does not block on it.
+ */
+export function effect(
+  strings: TemplateStringsArray,
+  ...values: InstructionFragment[]
+): EffectRegion {
+  const body: InstructionFragment[] = [];
+  for (let i = 0; i < strings.length; i++) {
+    if (strings[i]) body.push(strings[i]);
+    if (i < values.length) body.push(values[i]);
+  }
+  return { _ref: "effect", body };
 }
 
 // ---------------------------------------------------------------------------

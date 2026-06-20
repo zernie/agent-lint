@@ -92,6 +92,10 @@ import {
   clearActiveAgent,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
+  setEffectActive,
+  clearEffectActive,
+} from "./adapters/claude-code/effect-region.js";
+import {
   interceptHookDecision,
   parseIntercepts,
   INTERCEPT_TOOLS_ENV,
@@ -3701,6 +3705,13 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "refs-hook":
       refsHookCommand();
+      return true;
+    case "effect-enter":
+      setEffectActive(process.cwd());
+      console.log("Effect boundary entered.");
+      return true;
+    case "effect-exit":
+      clearEffectActive(process.cwd());
       return true;
     default:
       return false;

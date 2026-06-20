@@ -39,6 +39,7 @@ import {
 import { decidePurityGate } from "../../core/effects.js";
 import type { PurityLevel } from "../../core/effects.js";
 import { claudeCodeDialect } from "./dialect.js";
+import { hasEffectBoundary, readEffectActive } from "./effect-region.js";
 
 // ---------------------------------------------------------------------------
 // Parse the tool contract from a compiled agent .md
@@ -186,8 +187,17 @@ export function evaluatePreToolUse(
   if (!rail.allow) return rail;
 
   // 2) Purity gate — the declared effect floor, refined by the live command.
+  //    If an effect boundary is declared, tighten to "pure" outside it and apply
+  //    the declared purity (or "unrestricted") inside.
   const purity = parseAgentPurity(md);
-  if (purity) {
+  const boundary = hasEffectBoundary(md);
+  if (boundary) {
+    const effective: PurityLevel = readEffectActive(cwd)
+      ? (purity ?? "unrestricted")
+      : "pure";
+    const gate = decidePurityGate(effective, tool, command, claudeCodeDialect);
+    if (!gate.allow) return gate;
+  } else if (purity) {
     const gate = decidePurityGate(purity, tool, command, claudeCodeDialect);
     if (!gate.allow) return gate;
   }

@@ -240,6 +240,10 @@ function validateRefs(
         if (err) errors.push(err);
         break;
       }
+      case "effect": {
+        errors.push(...validateRefs(r.body, basePath));
+        break;
+      }
     }
   }
   return errors;
@@ -256,6 +260,10 @@ function renderFragment(fragment: InstructionFragment): string {
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
     case "symbol":
       return `\`vigiles:symbol ${fragment.file}#${fragment.symbol}\``;
+    case "effect": {
+      const inner = fragment.body.map(renderFragment).join("").trim();
+      return `\n<!-- vigiles:effect -->\n\n${inner}\n\n<!-- /vigiles:effect -->\n`;
+    }
     default:
       return assertNever(fragment);
   }

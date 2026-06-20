@@ -34,6 +34,7 @@ import { resolve, dirname } from "node:path";
 import { decidePurityGate } from "../../core/effects.js";
 import type { PurityLevel } from "../../core/effects.js";
 import { claudeCodeDialect } from "./dialect.js";
+import { hasEffectBoundary, readEffectActive } from "./effect-region.js";
 
 export type RuntimeGate =
   | { readonly kind: "cmd"; readonly command: string; readonly retry: number }
@@ -358,6 +359,13 @@ export function evaluateSkillPreToolUse(
 
   const md = readFileSync(full, "utf-8");
   const purity = parseSkillPurity(md);
+  const boundary = hasEffectBoundary(md);
+  if (boundary) {
+    const effective: PurityLevel = readEffectActive(cwd)
+      ? (purity ?? "unrestricted")
+      : "pure";
+    return decidePurityGate(effective, tool, command, claudeCodeDialect);
+  }
   if (!purity) return { allow: true, message: "" };
 
   return decidePurityGate(purity, tool, command, claudeCodeDialect);

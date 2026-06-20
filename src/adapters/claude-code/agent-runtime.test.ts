@@ -8,7 +8,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { agent } from "../../core/spec.js";
+import { agent, instructions, effect, file } from "../../core/spec.js";
 import { compileAgent } from "../../core/compile.js";
 import { claudeCodeDialect } from "./dialect.js";
 import {
@@ -20,6 +20,7 @@ import {
   clearActiveAgent,
   evaluatePreToolUse,
 } from "./agent-runtime.js";
+import { setEffectActive, clearEffectActive } from "./effect-region.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 import { runHook } from "../../run-hook.js";
 import { writeFileSync, readFileSync } from "node:fs";
@@ -569,4 +570,149 @@ test("the spec form ADDS the rail the real subagent omits, and it parses + enfor
   // the tools the wild original inherited but a visual validator must not hold:
   assert.equal(decidePreToolUse(enforced, "Write").allow, false);
   assert.equal(decidePreToolUse(enforced, "Edit").allow, false);
+});
+
+// ---------------------------------------------------------------------------
+// Effect boundary gate — evaluatePreToolUse + runHook
+// ---------------------------------------------------------------------------
+
+test("evaluatePreToolUse: effect boundary outside blocks side-effecting tools", () => {
+  const dir = makeTmpDir("agent-effect-boundary");
+  try {
+    const { markdown } = compileAgent(
+      agent({
+        name: "release",
+        description: "Cut a release.",
+        tools: ["Read", "Write", "Bash"],
+        body: instructions`
+          ## Prepare
+          Read ${file("package.json")}.
+
+          ## Apply
+          ${effect`
+            Side effects allowed ONLY here.
+          `}
+        `,
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/release.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "release.md"), markdown);
+    setActiveAgent(dir, "release.md");
+    // ensure no effect-active marker → outside the boundary
+
+    // Write is side-effecting → denied when outside the effect boundary
+    const blocked = evaluatePreToolUse(dir, "Write");
+    assert.equal(blocked.allow, false);
+    assert.match(blocked.message, /pure unit may only observe/);
+
+    // Read is always read-only → allowed even outside the boundary
+    const allowed = evaluatePreToolUse(dir, "Read");
+    assert.equal(allowed.allow, true);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("evaluatePreToolUse: effect boundary inside allows side-effecting tools", () => {
+  const dir = makeTmpDir("agent-effect-inside");
+  try {
+    const { markdown } = compileAgent(
+      agent({
+        name: "release",
+        description: "Cut a release.",
+        tools: ["Read", "Write"],
+        body: instructions`
+          ## Apply
+          ${effect`Write ${file("package.json")}.`}
+        `,
+      }),
+      {
+        basePath: dir,
+        specFile: "agents/release.md.spec.ts",
+        dialect: claudeCodeDialect,
+      },
+    );
+    writeFileSync(join(dir, "release.md"), markdown);
+    setActiveAgent(dir, "release.md");
+    setEffectActive(dir); // enter the boundary
+
+    // Write is now inside the boundary → allowed
+    const allowed = evaluatePreToolUse(dir, "Write");
+    assert.equal(allowed.allow, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
+});
+
+test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again", () => {
+  const dir = makeTmpDir("agent-hook-effect");
+  const { markdown } = compileAgent(
+    agent({
+      name: "release",
+      description: "Cut a release.",
+      tools: ["Read", "Write"],
+      body: instructions`
+        ## Apply
+        ${effect`Write the changelog.`}
+      `,
+    }),
+    {
+      basePath: dir,
+      specFile: "agents/release.md.spec.ts",
+      dialect: claudeCodeDialect,
+    },
+  );
+  writeFileSync(join(dir, "release.md"), markdown);
+  setActiveAgent(dir, "release.md");
+  try {
+    // Outside the boundary → Write blocked
+    const outsideBlocked = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(outsideBlocked.blocked, true);
+
+    // Enter the boundary
+    setEffectActive(dir);
+
+    // Inside the boundary → Write allowed
+    const insideAllowed = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(insideAllowed.blocked, false);
+
+    // Exit the boundary
+    clearEffectActive(dir);
+
+    // Outside again → Write blocked
+    const afterExit = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "CHANGELOG.md", content: "..." },
+      },
+      { cwd: dir },
+    );
+    assert.equal(afterExit.blocked, true);
+  } finally {
+    clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
 });

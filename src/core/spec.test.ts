@@ -9,6 +9,7 @@ import {
   ref,
   symbol,
   instructions,
+  effect,
   claude,
   skill,
 } from "./spec.js";
@@ -117,6 +118,35 @@ describe("instructions tagged template", () => {
     assert.equal(typeof result[2], "string");
     assert.equal((result[3] as { _ref: string })._ref, "cmd");
     assert.equal(typeof result[4], "string");
+  });
+});
+
+describe("effect() tagged template", () => {
+  it("produces an EffectRegion with correct _ref", () => {
+    const region = effect`Side effects allowed here.`;
+    assert.equal(region._ref, "effect");
+    assert.equal(region.body.length, 1);
+    assert.equal(typeof region.body[0], "string");
+  });
+
+  it("interleaves strings and InstructionFragment refs", () => {
+    const region = effect`Write ${file("package.json")} and run ${cmd("npm publish")}.`;
+    assert.equal(region._ref, "effect");
+    assert.equal(region.body.length, 5);
+    assert.equal(typeof region.body[0], "string");
+    assert.equal((region.body[1] as { _ref: string })._ref, "file");
+    assert.equal(typeof region.body[2], "string");
+    assert.equal((region.body[3] as { _ref: string })._ref, "cmd");
+    assert.equal(typeof region.body[4], "string");
+  });
+
+  it("can be nested inside instructions", () => {
+    const frags = instructions`Before. ${effect`Inside ${file("package.json")}.`} After.`;
+    // [string, EffectRegion, string]
+    assert.equal(frags.length, 3);
+    const region = frags[1] as { _ref: string; body: unknown[] };
+    assert.equal(region._ref, "effect");
+    assert.ok(region.body.length > 0);
   });
 });
 
