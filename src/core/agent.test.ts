@@ -13,6 +13,7 @@ import {
   agent,
   skill,
   instructions,
+  effect,
   file,
   cmd,
   enforce,
@@ -553,4 +554,55 @@ test('purity: "pure" skill with wildcard tools errors', () => {
   const pureErrors = errors.filter((e) => e.type === "purity-violation");
   assert.ok(pureErrors.length > 0);
   assert.match(pureErrors[0].message, /inherits-all/);
+});
+
+test("effect() body compiles to <!-- vigiles:effect --> markers in a skill", () => {
+  const { markdown } = compileSkill(
+    skill({
+      name: "release",
+      description: "Cut a release.",
+      body: instructions`
+        ## Prepare (pure)
+        Read ${file("package.json")} first.
+
+        ## Apply
+        ${effect`
+          Side effects allowed ONLY here:
+          - write the changelog
+          - tag the version
+        `}
+      `,
+    }),
+    { basePath: process.cwd() },
+  );
+  assert.ok(
+    markdown.includes("<!-- vigiles:effect -->"),
+    "should include effect open marker",
+  );
+  assert.ok(
+    markdown.includes("<!-- /vigiles:effect -->"),
+    "should include effect close marker",
+  );
+  assert.ok(
+    markdown.includes("`package.json`"),
+    "should still render outer file ref",
+  );
+});
+
+test("effect() with a bad inner file ref reports stale-file error", () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "release",
+      description: "Cut a release.",
+      body: instructions`
+        ${effect`write ${file("nonexistent-xyz.md")}`}
+      `,
+    }),
+    { basePath: process.cwd() },
+  );
+  const stale = errors.filter((e) => e.type === "stale-file");
+  assert.ok(
+    stale.length > 0,
+    "should report stale-file for bad ref inside effect()",
+  );
 });

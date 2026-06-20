@@ -124,20 +124,21 @@
 
 ## Now — cheap, high-leverage, do next
 
-- **Effect-surface: the runtime half — what REMAINS (the keystone next step).**
-  The per-call FLOOR gate is DONE for BOTH agents and skills (shipped 2026-06-20:
-  `decidePurityGate` wired into the agent + skill `PreToolUse` rails, with
-  `isReadOnlyBash` refining `Bash` by the live command, and the `vigiles:purity:`
-  marker — see Shipped recently). ONE piece remains: the **position-aware
-  effect-BOUNDARY region mark** (`effect\`\``— denying effects OUTSIDE a marked
-region, vs the per-call floor shipped now; reuses`decidePreToolUse` / the
-tool-contract rail + the bubblewrap sandbox for the indirect/`Bash`-subprocess
-hole, and doubles as the `tool-intercept`test seam). (Reminder from this
-session: the classifier does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool _name_ + permission _pattern_ (`Bash(git:\*)`), not a
-command; the runtime gate is where it lands.) See
+- **Effect-surface: the runtime half — DONE (2026-06-20).** Both pieces shipped:
+  the per-call FLOOR gate (`decidePurityGate` wired into the agent + skill
+  `PreToolUse` rails, `isReadOnlyBash` refining `Bash` by the live command, the
+  `vigiles:purity:` marker) AND the **position-aware effect-BOUNDARY** (the
+  `effect\`\`` `EffectRegion`builder →`<!-- vigiles:effect -->`markers; outside
+a region the gate tightens to the`"pure"`floor, inside it the declared floor;
+region tracked by`.vigiles/effect-active.json`via the`effect-enter`/`exit`CLI — fail-closed). The remaining boundary follow-ons are smaller: relaxing the
+inside-region floor so a`bounded`unit may run MUTATING`Bash`inside the mark
+(today even inside, mutating Bash is floor-denied — conservative), and the`tool-intercept` `outsideEffect`test-seam predicate. (Reminder: the classifier
+does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool
+_name_ + permission _pattern_ (`Bash(git:\*)`), not a command; the runtime gate
+is where it lands.) See
 [`side-effect-separation.md`](side-effect-separation.md) +
 [`bash-effect-classification.md`](bash-effect-classification.md) +
-[`effect-boundary-design.md`](effect-boundary-design.md) (design doc for this remaining piece). · **P1**
+[`effect-boundary-design.md`](effect-boundary-design.md). · **P1**
 - **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
   (mutates the `Ref` union → render + compile verification across every `Ref`
   switch); lower priority than the runtime gate.

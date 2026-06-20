@@ -1,12 +1,15 @@
+<!-- vigiles:ignore-file -->
+
 # Effect-boundary design — `effect()` region mark
 
-> Status: design proposal (2026-06-20). The per-call purity FLOOR gate is SHIPPED
-> (`decidePurityGate`, wired into agent + skill `PreToolUse` rails). This doc designs
-> the ONE remaining piece: the **position-aware effect-BOUNDARY region mark** —
-> "side effects allowed ONLY inside this block." The gate already exists; this is
-> about how the hook knows whether the agent is INSIDE the block. See the intro in
-> the README; [`side-effect-separation.md`](side-effect-separation.md) for the full
-> design rationale; [`roadmap.md`](roadmap.md) for priority.
+> Status: SHIPPED (2026-06-20) — this doc designed it and it landed as designed.
+> The `effect\`\`` `EffectRegion`builder +`<!-- vigiles:effect -->`compile
+markers + the`effect-enter`/`effect-exit`state file + the boundary gate in
+both`PreToolUse`rails are all in`main` (mechanism (a) below, fail-closed).
+Retained as the design record. The per-call purity FLOOR gate it builds on is
+likewise shipped (`decidePurityGate`). See
+[`side-effect-separation.md`](side-effect-separation.md) for the full design
+rationale; [`roadmap.md`](roadmap.md) for what remains (smaller follow-ons).
 
 ---
 
