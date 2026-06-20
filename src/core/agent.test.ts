@@ -370,7 +370,7 @@ test('purity: "pure" agent with NO tools list errors (absent = inherits-all)', (
   assert.match(pureErrors[0].message, /inherits-all/);
 });
 
-test('purity: "bounded" allows a decidable side-effecting tool but bars Bash', () => {
+test('purity: "bounded" allows decidable side-effecting tools AND Bash (runtime-gated)', () => {
   // Write/Edit are fine in a bounded unit — effects confined to the boundary.
   const ok = compileAgent(
     agent({
@@ -387,20 +387,71 @@ test('purity: "bounded" allows a decidable side-effecting tool but bars Bash', (
     [],
   );
 
-  // Bash is undecidable/unbounded → barred even at the bounded floor.
-  const bad = compileAgent(
+  // Bash is decidable at the COMMAND level (isReadOnlyBash), so a bounded unit
+  // may declare it — the runtime `decidePurityGate` confines it (read-only Bash
+  // allowed, mutating Bash denied), not compile.
+  const withBash = compileAgent(
     agent({
       name: "editor2",
-      description: "Tries Bash.",
+      description: "Observes via Bash.",
       purity: "bounded",
       tools: ["Read", "Write", "Bash"],
       body: "b",
     }),
     { specFile: "agents/editor2.md.spec.ts", dialect: claudeCodeDialect },
   );
+  assert.deepEqual(
+    withBash.errors.filter((e) => e.type === "purity-violation"),
+    [],
+  );
+
+  // But MCP / unknown-effect tools stay barred at the bounded floor.
+  const bad = compileAgent(
+    agent({
+      name: "editor3",
+      description: "Tries an MCP tool.",
+      purity: "bounded",
+      tools: ["Read", "mcp__srv__tool"],
+      body: "b",
+    }),
+    { specFile: "agents/editor3.md.spec.ts", dialect: claudeCodeDialect },
+  );
   const boundedErrors = bad.errors.filter((e) => e.type === "purity-violation");
   assert.ok(boundedErrors.length > 0);
-  assert.match(boundedErrors[0].message, /"Bash"/);
+});
+
+test("compileAgent emits a vigiles:purity marker the runtime gate reads", () => {
+  const { markdown } = compileAgent(
+    agent({
+      name: "editor",
+      description: "Edits within a boundary.",
+      purity: "bounded",
+      tools: ["Read", "Write"],
+      body: "b",
+    }),
+    { specFile: "agents/editor.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.match(markdown, /<!--\s*vigiles:purity:bounded\s*-->/);
+
+  // dangerously-unrestricted maps to the neutral runtime level `unrestricted`.
+  const loud = compileAgent(
+    agent({
+      name: "writer",
+      description: "Writes.",
+      purity: "dangerously-unrestricted",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/writer.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.match(loud.markdown, /<!--\s*vigiles:purity:unrestricted\s*-->/);
+
+  // no purity declared → no marker.
+  const plain = compileAgent(
+    agent({ name: "plain", description: "No floor.", body: "b" }),
+    { specFile: "agents/plain.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.doesNotMatch(plain.markdown, /vigiles:purity/);
 });
 
 test('purity: "dangerously-unrestricted" / omitted + side-effecting tools compiles (no enforcement)', () => {

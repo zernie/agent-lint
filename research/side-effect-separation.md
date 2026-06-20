@@ -82,6 +82,9 @@ interception precise. This is the through-line to `typed-contracts-for-agents.md
 
 > **Shipped** (`purity: "pure" | "bounded" | "dangerously-unrestricted"` on the skill/agent
 > builder; `purityViolations` in `src/core/effects.ts`; enforced in `compileSkill`/`compileAgent`).
+> The RUNTIME half now ships too: `decidePurityGate` (`src/core/effects.ts`) is the per-call
+> gate, folded into the agent `PreToolUse` rail (`agent-runtime.ts`) — so `purity` is enforced
+> IN THE LOOP, not only at compile.
 
 Can `compile` _statically ensure_ a skill has no side effects? **Yes — but enforce it on the
 declared tool contract + the gate, NOT by analyzing the prose.** Analyzing the body to infer
@@ -107,11 +110,11 @@ skill _holding_ an effect tool **unrepresentable** (compile) and _doing_ an effe
 **unreachable** (runtime). It is the strict top of a **3-rung ladder**, not forced on everyone —
 and the rung you _declare_ uses the same vocabulary `scan` _reports_ (zero drift):
 
-| Rung (`purity:`)             | Means                                             | For                             |
-| ---------------------------- | ------------------------------------------------- | ------------------------------- |
-| `"pure"`                     | no side-effecting tools, period                   | analysis / review / planning    |
-| `"bounded"`                  | decidable effects ok (Write, Edit); no `Bash`/MCP | the default (the `release` ex.) |
-| `"dangerously-unrestricted"` | anything (the loud, in-review escape hatch)       | legacy / opt-out                |
+| Rung (`purity:`)             | Means                                                 | For                             |
+| ---------------------------- | ----------------------------------------------------- | ------------------------------- |
+| `"pure"`                     | no side-effecting tools, period                       | analysis / review / planning    |
+| `"bounded"`                  | Write/Edit + read-only `Bash` (runtime-gated); no MCP | the default (the `release` ex.) |
+| `"dangerously-unrestricted"` | anything (the loud, in-review escape hatch)           | legacy / opt-out                |
 
 The loosest rung is named `dangerously-unrestricted` (cf. React's `dangerouslySetInnerHTML`) so
 opting OUT of the guardrail stands out in review; omitting `purity` is the same unenforced default
@@ -119,18 +122,28 @@ without typing the loud word. NOTE the asymmetry: the **report** (`scan`/`effect
 neutral `unrestricted` — a health report shouldn't scream "dangerous" at every legitimate `Bash`
 user (don't-cry-wolf); the alarm lives only at the **declaration** site.
 
-The honest hole is the same `Bash` one: `purity: "pure"` ⟹ **no `Bash`** (a side-effecting catch-all
-— `Bash(git log)` and `Bash(rm -rf /)` are one tool). A read-via-`Bash` skill is therefore
-`bounded`, not `pure`, unless it swaps to a typed read-only tool or opts into a narrow
-command-pattern allowlist — exactly the deterministic Bash-effect classification worked out in
-`bash-effect-classification.md`. The sandbox remains the indirect-effect backstop.
+The `Bash` split is now sharp at the FLOOR: `purity: "pure"` ⟹ **no `Bash`** (a pure unit may only
+observe; no Bash, fully static — `Bash(git log)` and `Bash(rm -rf /)` are one tool name). But
+`bounded` now **admits `Bash`**, because its effect is decidable at the COMMAND level and the
+runtime gate confines it: `decidePurityGate` (shipped, wired into the agent `PreToolUse` rail) sees
+the live command and calls `isReadOnlyBash` — a read-only `Bash` (`git status`) runs as observation
+inside a `bounded` boundary, a mutating `Bash` (`git push`) is denied. So a read-via-`Bash` skill is
+`bounded` (not `pure`), and the deterministic Bash-effect classification from
+`bash-effect-classification.md` is no longer a future thing but SHIPPED + wired into that gate. The
+sandbox remains the indirect-effect backstop.
 
 ## Static effect-surface analysis (analyze the harness without running it)
 
 The declared capability sets + effect boundaries make a harness **statically analyzable** —
 with one precision: what's static is the **surface** (which capabilities, how many effect
 boundaries, the capability graph), **not the runtime call count** (model/task-dependent). The
-surface is the more useful thing anyway. From it, deterministically and for free:
+surface is the more useful thing anyway. Note the SURFACE-vs-FLOOR distinction: the static
+**surface** (`effectSurface`, used by `scan`) still reports any `Bash` as `unrestricted` — the
+command isn't visible statically — whereas the enforced **floor** (`purityViolations` /
+`decidePurityGate`) is what ADMITS and CONFINES `Bash` under `bounded`, the runtime gate reading the
+live command. So a `bounded` unit with `Bash` reports an `unrestricted` SURFACE yet enforces a
+`bounded` FLOOR; the runtime gate is exactly what closes that gap. From the surface,
+deterministically and for free:
 
 - **Blast-radius / attack-surface map** — aggregate the capability graph (which skills/agents
   can write / network / exec / spawn / hit which MCP). The harness's total side-effect surface →
@@ -157,11 +170,13 @@ spots), not "does N things"; call counts + effect _values_ stay in the eval tier
 - **`Bash` is undecidable at the tool-name level** (`cat` vs `rm -rf` are the same tool). Either
   pattern-match the command (brittle, needs an allowlist per command) or treat _all_ `Bash` as
   side-effecting (conservative — flags `ls` as an "effect," acceptable for forcing separation).
-  The **real** guarantee for `Bash`/subprocess effects is the **sandbox**, not the hook. A
-  deterministic refinement that classifies the _decidable subset_ of `Bash` command strings by
-  effect (AST + command catalog, fail-closed, no LLM — so `Bash(git status)` ≠ `Bash(rm -rf)`)
-  is worked out in `bash-effect-classification.md`; it sharpens this static surface measure but
-  does not replace the sandbox.
+  The **real** guarantee for `Bash`/subprocess effects is the **sandbox**, not the hook. The
+  command-level refinement that classifies the _decidable subset_ of `Bash` command strings by
+  effect (AST + command catalog, fail-closed, no LLM — so `git status` ≠ `rm -rf`) is now
+  **SHIPPED** (`isReadOnlyBash`) and **wired into the runtime gate** (`decidePurityGate`, on the
+  agent `PreToolUse` rail), not just worked out in `bash-effect-classification.md` — so a `bounded`
+  agent's `git status` is allowed and `git push` denied at the live call. It sharpens the gate; the
+  sandbox remains the indirect/subprocess backstop.
 - **MCP tools are unknown-effect by default** (only Codex has a `destructive` annotation) →
   treat unclassified MCP as side-effecting.
 - **Full coverage = capability-gate (tool) + boundary-marks + sandbox (process).** All three
@@ -174,19 +189,23 @@ spots), not "does N things"; call counts + effect _values_ stay in the eval tier
 - `tool-intercept` / `notTool` = the boundary-as-test-seam.
 - `/strengthen` = the natural home for the auto-marker pass.
 
-So the work is mostly **wiring existing pieces** + three additions: (a) effect-classification
-from the tool catalog (read-only vs side-effecting), (b) the effect-boundary mark + the gate
-keyed on it, (c) the Haiku auto-mark pass in `/strengthen`/compile.
+So the work was mostly **wiring existing pieces**. SHIPPED now: (a) effect-classification from the
+tool catalog (read-only vs side-effecting), plus the per-call FLOOR gate for agents —
+`decidePurityGate` folded into the agent `PreToolUse` rail, refining `Bash` by the live command via
+`isReadOnlyBash`. REMAINING: (b) the position-aware effect-BOUNDARY region mark (`effect`` `` —
+denying effects OUTSIDE a marked region, vs the current per-call floor) + skill-parity (skills have
+no `PreToolUse`rail yet), and (c) the Haiku auto-mark pass in`/strengthen`/compile.
 
 ## Recommendation + first step
 
-Ship the **deterministic capability gate + the effect-boundary mark first** (no model, robust,
-reuses the rail + sandbox), default-deny side-effecting tools outside a marked boundary. Add the
-**Haiku auto-marker as a pure convenience** in `/strengthen` — clearly a suggester, its output
-confirmed at compile. Never let the model be the gate. First experiment: take one real
-side-effecting skill, mark its boundary, and show (a) the gate blocks an effect outside it and
-(b) the same boundary lets `tool-intercept` test it deterministically — the two payoffs from one
-mark.
+The **deterministic capability gate at the per-call FLOOR level now SHIPS for agents** (no model,
+robust, reuses the rail + sandbox + `isReadOnlyBash`) — `decidePurityGate` denies a side-effecting
+tool that violates the declared `purity` floor on every call. The remaining work is the
+**position-aware effect-BOUNDARY region mark** (`effect`` `` — denying effects OUTSIDE a marked
+region, vs the per-call floor shipped now) + **skill-parity** (skills have no `PreToolUse`rail
+yet), then the **Haiku auto-marker as a pure convenience** in`/strengthen`— clearly a suggester,
+its output confirmed at compile. Never let the model be the gate. The boundary's double payoff
+stands: the same mark that gates an effect lets`tool-intercept` test it deterministically.
 
 ## See also
 

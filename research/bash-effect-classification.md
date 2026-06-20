@@ -259,15 +259,18 @@ restriction strings and the skill's documented commands:
 
 > **Implementation calibration (2026-06-20, after shipping `src/core/bash-effects.ts`).** The
 > STATIC refinement above is real but **modest**, and the classifier's PRIMARY home is the
-> **runtime gate**, not `effectSurface`. Why: `effectSurface` sees a tool _name_ + permission
-> _pattern_ from the declared contract (`Bash(git:*)`), **not an actual command** — and a broad
-> restriction like `Bash(git:*)` still permits `git push`, so it correctly stays _effecting_; only
-> a `Bash(<concrete read-only command>)` (e.g. `Bash(git status:*)`) is statically downgradable,
-> which is the minority of real contracts. The classifier earns its keep at runtime, where a
-> `PreToolUse` hook sees the REAL command string (`git status`) and `isReadOnlyBash` can allow it
-> inside a `pure`/`bounded` boundary while denying `git push`. So: build the runtime
-> `effect\`\``-boundary gate first and feed the classifier there; treat the static-`effectSurface`
-> refinement as a small bonus for concrete-restriction contracts.
+> **runtime gate** — which is now WIRED. `isReadOnlyBash` is reached by `decidePurityGate`
+> (`src/core/effects.ts`), folded into the Claude Code agent `PreToolUse` rail
+> (`src/adapters/claude-code/agent-runtime.ts`): the `PreToolUse` hook sees the REAL command
+> string, so a `bounded` agent's `git status` is **allowed** as observation and `git push` is
+> **denied** at the live call. Why this, and not `effectSurface`: `effectSurface` sees a tool
+> _name_ + permission _pattern_ from the declared contract (`Bash(git:*)`), **not an actual
+> command** — and a broad restriction like `Bash(git:*)` still permits `git push`, so it correctly
+> stays _effecting_; only a `Bash(<concrete read-only command>)` (e.g. `Bash(git status:*)`) is
+> statically downgradable, the minority of real contracts. So the STATIC `effectSurface`/`scan`
+> still treats `Bash` as `unrestricted` (it can't see the command); the runtime gate is where the
+> refinement lands, and the static-`effectSurface` refinement stays a small bonus for
+> concrete-restriction contracts.
 
 ### How it composes with the sandbox
 

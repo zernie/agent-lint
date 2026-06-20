@@ -87,8 +87,23 @@
   (declare/report symmetry), and `dangerously-unrestricted` is loud at the
   _declaration_ site but neutral `unrestricted` in the _report_ (no cry-wolf).
   See [`side-effect-separation.md`](side-effect-separation.md) +
-  [`bash-effect-classification.md`](bash-effect-classification.md). **Next steps
-  are the runtime half — see "Effect-surface: the runtime half" under Now.**
+  [`bash-effect-classification.md`](bash-effect-classification.md).
+- **Runtime purity gate — the per-call FLOOR, wired (2026-06-20)** — `purity` is
+  no longer compile-only. `decidePurityGate` (`src/core/effects.ts`) is the
+  per-call gate, folded into the agent `PreToolUse` rail
+  (`src/adapters/claude-code/agent-runtime.ts` via `parseAgentPurity`); the
+  tool-contract rail fires first, then the purity gate, refining `Bash` by the
+  live command with `isReadOnlyBash`. `compile` emits a
+  `<!-- vigiles:purity:LEVEL -->` marker into a compiled agent's `.md`
+  (`dangerously-unrestricted` → neutral `unrestricted`). KEY ladder change:
+  `bounded` now **admits command-gated `Bash`** (read-only allowed as
+  observation, mutating denied) — `pure` still bars `Bash` entirely; the static
+  `effectSurface`/`scan` still reports any `Bash` as `unrestricted` (can't see
+  the command — the runtime gate is where the refinement lands). Remaining: the
+  position-aware effect-BOUNDARY region mark + skill-parity (see "Effect-surface:
+  the runtime half" under Now). See
+  [`side-effect-separation.md`](side-effect-separation.md) +
+  [`bash-effect-classification.md`](bash-effect-classification.md).
 - **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
 - **`untested-surface` rule** + **skills conformance gate** — third gap detector;
@@ -106,22 +121,20 @@
 
 ## Now — cheap, high-leverage, do next
 
-- **Effect-surface: the runtime half (the keystone next step).** `purity` is
-  COMPILE-only today; the payoff is enforcing it IN THE LOOP. Two pieces, in
-  order: (1) the **`effect\`\``boundary mark + a`PreToolUse` gate** that denies a
-  side-effecting tool outside a marked boundary (runtime `bounded` enforcement,
-  reusing `decidePreToolUse` / the tool-contract rail + the bubblewrap sandbox for
-  the indirect/`Bash`-subprocess hole); (2) **wire `bash-effects.ts` into that
-  gate** — the classifier's REAL home, because the hook sees the ACTUAL command
-  (`git status`), so `isReadOnlyBash` lets a read-only Bash run inside a
-  pure/bounded boundary while denying `git push`. HONEST CORRECTION (this session):
-  the classifier does NOT cleanly refine the STATIC `effectSurface`/`scan` — those
-  see a tool _name_ + permission _pattern_ (`Bash(git:*)`), not a command; the
-  static win is modest (only a `Bash(<concrete command>)` restriction is
-  classifiable, and most real restrictions are broad). So aim the classifier at
-  the runtime gate first. The `effect\`\`` mark also doubles as the test seam
-(`tool-intercept`). See [`side-effect-separation.md`](side-effect-separation.md)
-  - [`bash-effect-classification.md`](bash-effect-classification.md). · **P1**
+- **Effect-surface: the runtime half — what REMAINS (the keystone next step).**
+  The per-call FLOOR gate is DONE (shipped 2026-06-20: `decidePurityGate` wired
+  into the agent `PreToolUse` rail, with `isReadOnlyBash` refining `Bash` by the
+  live command, and the `vigiles:purity:` marker — see Shipped recently). Two
+  pieces remain: (1) the **position-aware effect-BOUNDARY region mark**
+  (`effect\`\``— denying effects OUTSIDE a marked region, vs the per-call floor
+shipped now; reuses`decidePreToolUse` / the tool-contract rail + the bubblewrap
+sandbox for the indirect/`Bash`-subprocess hole, and doubles as the
+`tool-intercept`test seam); (2) **skill-parity** — skills have no`PreToolUse`rail yet, so the gate enforces on agents only. (Reminder from this session: the
+classifier does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see
+a tool _name_ + permission _pattern_ (`Bash(git:\*)`), not a command; the runtime
+gate is where it lands.) See
+[`side-effect-separation.md`](side-effect-separation.md) +
+[`bash-effect-classification.md`](bash-effect-classification.md). · **P1**
 - **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
   (mutates the `Ref` union → render + compile verification across every `Ref`
   switch); lower priority than the runtime gate.

@@ -3570,13 +3570,21 @@ function agentHookCommand(): void {
     /* no stdin */
   }
   let tool = "";
+  let command: string | undefined;
   try {
-    tool = (JSON.parse(raw) as { tool_name?: string }).tool_name ?? "";
+    const parsed = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: { command?: unknown };
+    };
+    tool = parsed.tool_name ?? "";
+    if (typeof parsed.tool_input?.command === "string") {
+      command = parsed.tool_input.command;
+    }
   } catch {
     /* malformed input → no tool, allow */
   }
   if (!tool) return;
-  const decision = evaluatePreToolUse(process.cwd(), tool);
+  const decision = evaluatePreToolUse(process.cwd(), tool, command);
   if (!decision.allow) {
     console.error(decision.message);
     process.exit(2);
