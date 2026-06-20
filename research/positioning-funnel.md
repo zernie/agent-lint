@@ -89,6 +89,8 @@ moat, not a curation identity.)
 
 ## See also
 
+- `strategy-verdict.md` — the capstone: the ranked verdict (the spine + the kills) over this
+  whole exploration.
 - `zero-config-mother-harness.md` — the "create-agentic-app" research: be a persistent verifier
   (not a create-react-app scaffolder), compose the bundle (don't out-curate superpowers).
 - `harness-state-space.md` — the thesis + the ranked bets (the ammunition these axes deploy).
