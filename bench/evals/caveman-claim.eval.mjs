@@ -38,6 +38,7 @@
  * the rigorous follow-up (the output-share point is model-agnostic regardless).
  */
 import { runEval } from "../../dist/eval.js";
+import { CODING_TASKS } from "../corpus/coding-tasks.mjs";
 
 const trials = Number(process.env.VIGILES_TRIALS || 3);
 const taskLimit = Number(process.env.VIGILES_TASKS || 5);
@@ -58,90 +59,12 @@ RULES:
 - Code blocks stay COMPLETE and correct — compress PROSE only, never code or required output.
 `;
 
-/**
- * Each task: read a seed file (→ realistic input/cache), produce a checkable
- * artifact (→ correctness), and explain (→ compressible output). `check` reads
- * the written artifact and returns 1/0 — the fact that must survive compression.
- */
-const TASKS = [
-  {
-    name: "slugify",
-    files: { "in.txt": "Implement a slug helper for blog post titles." },
-    task:
-      "Read in.txt. Write a JS function `slugify(s)` to slug.js that lowercases, " +
-      "trims, replaces runs of non-alphanumerics with a single '-', and strips " +
-      "leading/trailing '-'. Then briefly explain your approach in prose. Stop.",
-    check: (ctx) => {
-      const f = ctx.file("slug.js") ?? "";
-      return /function\s+slugify|slugify\s*=/.test(f) &&
-        /toLowerCase/.test(f) &&
-        /replace/.test(f)
-        ? 1
-        : 0;
-    },
-  },
-  {
-    name: "debounce",
-    files: { "in.txt": "We need a debounce utility for a search box." },
-    task:
-      "Read in.txt. Write a JS `debounce(fn, ms)` to debounce.js that delays " +
-      "calling fn until ms after the last call. Then explain in prose how it works. Stop.",
-    check: (ctx) => {
-      const f = ctx.file("debounce.js") ?? "";
-      return /setTimeout/.test(f) && /clearTimeout/.test(f) ? 1 : 0;
-    },
-  },
-  {
-    name: "bugfix-offbyone",
-    files: {
-      "buggy.js":
-        "function lastN(arr, n) {\n  const out = [];\n  for (let i = arr.length - n - 1; i < arr.length; i++) out.push(arr[i]);\n  return out;\n}\n",
-    },
-    task:
-      "Read buggy.js. lastN should return the LAST n elements but it's off by one " +
-      "(returns n+1). Write the corrected function to fixed.js, then explain the bug " +
-      "in prose. Stop.",
-    check: (ctx) => {
-      const f = ctx.file("fixed.js") ?? "";
-      // correct start index is arr.length - n
-      return /length\s*-\s*n\b/.test(f) && !/length\s*-\s*n\s*-\s*1/.test(f)
-        ? 1
-        : 0;
-    },
-  },
-  {
-    name: "bigO",
-    files: {
-      "loop.js":
-        "for (let i = 0; i < n; i++)\n  for (let j = 0; j < n; j++)\n    if (a[i] === a[j]) count++;\n",
-    },
-    task:
-      "Read loop.js. State its time complexity in Big-O, then explain why in prose. " +
-      "Write the answer to ans.txt with the complexity ALONE on the last line prefixed " +
-      "'ANSWER: '. Stop.",
-    check: (ctx) => {
-      const ans = /ANSWER:\s*(.+)/i.exec(ctx.file("ans.txt") ?? "")?.[1] ?? "";
-      return /O\(\s*n\s*\^?\s*2\s*\)|O\(\s*n²\s*\)|quadratic/i.test(ans)
-        ? 1
-        : 0;
-    },
-  },
-  {
-    name: "regex-email",
-    files: { "in.txt": "Need basic email validation, not RFC-perfect." },
-    task:
-      "Read in.txt. Write a JS function `isEmail(s)` to email.js using a regex that " +
-      "requires a single '@' and a dot in the domain. Then explain the regex in prose. Stop.",
-    check: (ctx) => {
-      const f = ctx.file("email.js") ?? "";
-      return /isEmail/.test(f) &&
-        /@/.test(f) &&
-        /test\(|\.match\(|RegExp|\/.*\//.test(f)
-        ? 1
-        : 0;
-    },
-  },
-].slice(0, taskLimit);
+// The neutral real-task corpus (read a seed → write a checkable artifact →
+// explain; the explanation is the compressible surface, the artifact the fact
+// that must survive). Shared with the ecosystem benchmark (A1) + `vigiles
+// optimize` (A2) so every measurement runs on the SAME tasks. See
+// `bench/corpus/coding-tasks.mjs`.
+const TASKS = CODING_TASKS.slice(0, taskLimit);
 
 // usage fields are optional per harness/model; default missing to 0.
 const u = (ctx, k) => Number(ctx.usage?.[k] ?? 0);
