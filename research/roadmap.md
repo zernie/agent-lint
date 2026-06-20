@@ -41,15 +41,16 @@
       `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
 - [~] **Does-our-spec-help A/B (2026-06-20)** — first real-model A/B of vigiles's OWN
   typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
-  (prose vs spec code-reviewer, controlled). Built + RAN (sonnet). **Surfaced a
-  measurement-tooling gap, not a verdict:** the subagent dispatched (foundBug=100%
-  with a Read-less lead) but `subagent()`/`output()` read 0% — the `subagent()`
-  nested-trace check **false-negatives under `--plugin-dir`** and `output()` reads
-  the lead's text not the sub's. BLOCKS the payoff measurement until fixed.
-- [ ] **FIX: subagent nested-trace recovery under `--plugin-dir`** (measurement tooling).
-      `parseSubagents` doesn't recover a `--plugin-dir`-registered subagent's sub-trace,
-      so `subagent("x",[checks])` can't assert on what the SUB did. The unlock for the
-      A/B above (and any subagent-contract eval). → `eval.ts` / the subagent check.
+  (prose vs spec code-reviewer, controlled). The first run surfaced a tooling gap
+  (now FIXED below); the eval's three checks all read the SUB's trace. Re-running for
+  the verdict (expect quality ~equal across arms, the parseable-outcome payoff ≫ on
+  the spec arm). → `measurement-authority.md`
+- [x] **FIX: subagent nested-trace recovery under `--plugin-dir` — SHIPPED (`212869d`).**
+      Two real CC behaviors fixed + validated against a captured live dispatch: (1) a
+      `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent` → match the bare
+      name; (2) the sub's `result()` block lands in its RETURN (the dispatch's top-level
+      `tool_result`) → captured as `SubagentTrace.output`. Unlocks
+      `subagent(name,[output(/vigiles:ok/)])` — any subagent-contract eval.
 - [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), shipped as
       `scan --fix-plan`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
       `formatOptimize`, 6 vitest + 2 e2e cases) surfaced as the **`vigiles scan <dir>
