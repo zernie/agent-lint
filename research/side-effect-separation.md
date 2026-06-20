@@ -113,6 +113,33 @@ The honest hole is the same `Bash` one: `pure:true` ⟹ **no `Bash`** (a side-ef
 `bounded`, not `pure`, unless it swaps to a typed read-only tool or opts into a narrow
 command-pattern allowlist (brittle). The sandbox remains the indirect-effect backstop.
 
+## Static effect-surface analysis (analyze the harness without running it)
+
+The declared capability sets + effect boundaries make a harness **statically analyzable** —
+with one precision: what's static is the **surface** (which capabilities, how many effect
+boundaries, the capability graph), **not the runtime call count** (model/task-dependent). The
+surface is the more useful thing anyway. From it, deterministically and for free:
+
+- **Blast-radius / attack-surface map** — aggregate the capability graph (which skills/agents
+  can write / network / exec / spawn / hit which MCP). The harness's total side-effect surface →
+  the trifecta + over-grant checks _and_ a risk profile.
+- **Least-privilege / purity audit — a harness-health number.** "9/14 skills pure, 3 bounded, 2
+  unrestricted." Higher pure% = more constrained, safer, more analyzable. Deterministic.
+- **Test-cost prediction (the big one).** A `pure` skill is deterministically testable (assert,
+  no model); a `bounded` skill has _N_ seams to mock; an `unrestricted` skill needs a full
+  model-eval. So the static surface **predicts the harness's test/measurement cost** — "X%
+  deterministically testable, Y% needs the model tier" — making the R1/R2/R3 cost-tier
+  classification (today _surveyed_) **deterministic**, a free `scan`/leaderboard column.
+- **Change-impact diffing** — a PR that adds `Write` to a read-only skill _grows the surface_ →
+  a privilege escalation, flagged statically in the harness diff.
+
+The tie-back: **the effect surface is a static MEASURE of the harness state space** (pure ≈ 0
+degrees of freedom, bounded = small, unrestricted = unbounded). "How constrained is your
+harness" becomes a computable number — `harness-state-space.md`'s reduce-the-state-space
+principle, made measurable for free before anything runs. Caveat: `unrestricted`/`Bash` skills
+are the _unbounded_ cells — the analysis reports "unrestricted" (itself the signal: your blind
+spots), not "does N things"; call counts + effect _values_ stay in the eval tier.
+
 ## Honest limits
 
 - **`Bash` is undecidable at the tool-name level** (`cat` vs `rm -rf` are the same tool). Either
