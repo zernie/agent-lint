@@ -39,12 +39,14 @@
 - [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
       corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
       `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
-- [~] **Does-our-spec-help A/B (2026-06-20)** — first real-model A/B of vigiles's OWN
-  typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
-  (prose vs spec code-reviewer, controlled). The first run surfaced a tooling gap
-  (now FIXED below); the eval's three checks all read the SUB's trace. Re-running for
-  the verdict (expect quality ~equal across arms, the parseable-outcome payoff ≫ on
-  the spec arm). → `measurement-authority.md`
+- [x] **Does-our-spec-help A/B — DONE (2026-06-20), the spec HELPED.** First real-model
+      A/B of vigiles's OWN typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
+      (prose vs spec code-reviewer, controlled, sonnet 2×). **Result: quality identical
+      (bug caught 100% both arms — no regression), payoff a categorical win (parseable
+      `vigiles:ok` outcome 0% prose → 100% spec).** So the typed contract adds
+      deterministic testability (assertAgentOk, no LLM judge) at ZERO quality cost — the
+      "typed contracts make measurement affordable" thesis, validated on our own contract.
+      → `measurement-authority.md`, `typed-contracts-for-agents.md`
 - [x] **FIX: subagent nested-trace recovery under `--plugin-dir` — SHIPPED (`212869d`).**
       Two real CC behaviors fixed + validated against a captured live dispatch: (1) a
       `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent` → match the bare

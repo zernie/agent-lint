@@ -42,8 +42,16 @@
  *     messages. So all three checks read the SUB's trace via `subagent(name,[…])`;
  *   - sonnet won't DELEGATE on a soft task (it reviews inline), so `allowedTools:["Task"]`
  *     forces it (the lead has no Read; the sub keeps its own).
- * With those fixed the A/B is measurable: expect (1)+(2) ~equal across arms and (3)
- * ≫ on `spec` (only the contract arm returns a parseable block). Re-run for the numbers.
+ * VERDICT (2026-06-20, sonnet, 2 trials/arm — the tooling now works):
+ *   check          prose   spec
+ *   (1) sub ran     100%    100%   ← fair A/B (only the contract differs)
+ *   (2) found bug   100%    100%   ← QUALITY: identical, no regression
+ *   (3) typed block   0%    100%   ← PAYOFF: only the contract arm is parseable
+ * So the spec HELPED: it makes the subagent's outcome DETERMINISTICALLY PARSEABLE
+ * (assertAgentOk, no LLM judge) at ZERO quality cost. Categorical (0 vs 100, no
+ * variance → no p-value needed). The "typed contracts make measurement affordable"
+ * thesis, validated on vigiles's OWN contract. (NOTE: all three rows label as
+ * "subagent(code-reviewer)" — they're nested checks; order is (1)/(2)/(3) above.)
  */
 import {
   measureArms,
