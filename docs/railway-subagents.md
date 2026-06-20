@@ -164,7 +164,27 @@ conversation and never "returns" a value, so a typed outcome there is a category
 error (for a knowledge skill) or has no parse-point (for a procedural one). The
 bridge for a procedural skill that genuinely needs a typed outcome is Anthropic's
 `context: fork` — it runs the skill as a forked subagent, at which point the
-**subagent** contract applies. The reasoning and citations:
+**subagent** contract applies. That bridge is modelled: a `skill()` may set
+`context: "fork"` and carry an `output: result(...)`, and the **same** Output
+contract renders. The gate is enforced at compile — an `output` without
+`context: "fork"` is an error, because an inline skill has no return to type:
+
+```ts
+import { skill, result } from "vigiles";
+
+export default skill({
+  name: "review",
+  description: "Review a file and return structured findings.",
+  context: "fork", // runs as a subagent → has a return boundary
+  output: result(
+    { defects: "string[]", summary: "string" },
+    { reason: "string" },
+  ),
+  body: "Review the file under review and report defects.",
+});
+```
+
+The reasoning and citations:
 [`research/spec-syntax-and-railway-scope.md`](../research/spec-syntax-and-railway-scope.md).
 
 ## See also

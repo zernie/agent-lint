@@ -40,9 +40,10 @@ sometimes a verb (procedure), but it is never a _returning_ unit; the subagent i
 - Do NOT add a `Result`/railway `output` contract to `skill()` (a mis-feature —
   was started and reverted 2026-06-20).
 - The free-form `body` / gated `steps` model for skills is correct as-is.
-- One real, small skill gap surfaces: **model `context: fork`** in `SkillSpec`
-  frontmatter, and when set, let the forked skill carry a `result()` contract
-  routed through the subagent rail. (Follow-up, not yet built.)
+- One real, small skill gap surfaced and is now **SHIPPED (2026-06-20, `b19febd`)**:
+  `context: "fork"` on `SkillSpec` + an `output?: OutputContract` that's gated to
+  forked skills (a compile error otherwise — `output-without-fork`), routing the
+  forked skill's `result()` through the existing subagent rail.
 - **Agent railway is the keeper** — it's the architecturally-correct home, and it
   deserves great PUBLIC docs (see `docs/railway-subagents.md`).
 

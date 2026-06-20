@@ -99,12 +99,12 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       agent frontmatter fields `disallowedTools`/`color` for clean round-trips +
       side-effect separation (`95ce25f`), and the `migrate` → `adopt-spec` rename
       (`6137008`). → `spec-syntax-and-railway-scope.md`
-- [ ] **Model `context: fork` on `SkillSpec` (P1, research-backed).** Anthropic's
-      official skill frontmatter `context: fork` runs a skill as a forked SUBAGENT —
-      the bridge that gives a procedural skill a real boundary. So a forked skill can
-      carry a `result()` outcome contract routed through the EXISTING subagent rail
-      (`parseAgentResult`/`assertAgentOk`), instead of a skill-level Result primitive
-      (which the research rejected). The one genuine skill gap left. →
+- [x] **Model `context: fork` on `SkillSpec` — SHIPPED (2026-06-20, `b19febd`).**
+      `context?: "fork"` (rendered to frontmatter) + `output?: OutputContract` on a
+      skill, gated: `output` without `context:"fork"` is a compile error
+      (`output-without-fork`) — enforcing "a typed outcome needs the subagent
+      boundary" from the research. A forked skill's Output contract renders via the
+      SAME `renderOutputContract` the subagent uses (one-renderer-no-drift). →
       `spec-syntax-and-railway-scope.md`
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
