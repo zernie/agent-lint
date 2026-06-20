@@ -131,6 +131,26 @@ const TASKS = [
 // usage fields are optional per harness/model; default missing to 0.
 const u = (ctx, k) => Number(ctx.usage?.[k] ?? 0);
 
+// ---- Report incrementally: print each task's row as it finishes, so a
+// ---- timeout still yields partial data (a 30-run real eval is slow). ----
+const pct = (from, to) => (from > 0 ? ((from - to) / from) * 100 : 0);
+const whole = (m) => m.inputTokens + m.outputTokens + m.cacheTokens;
+
+console.log(
+  "\n=== caveman vs its claim (model: " +
+    model +
+    ", trials: " +
+    trials +
+    ") ===\n",
+);
+console.log(
+  "task            out_base  out_cav  out_cut%   $_base   $_cav   cost_cut%  out%session  correct(b/c)",
+);
+
+let sumOutCut = 0,
+  sumCostCut = 0,
+  sumOutShare = 0,
+  anyRegress = false;
 const rows = [];
 for (const t of TASKS) {
   const report = await runEval({
@@ -149,50 +169,29 @@ for (const t of TASKS) {
     }),
     trials,
     model,
+    concurrency: 4, // parallelize the arms×trials (default is serial → timed out)
   });
   const b = report.arms.baseline.metrics;
   const c = report.arms.caveman.metrics;
   rows.push({ name: t.name, b, c });
-}
 
-// ---- Aggregate + report: the claim vs the whole-session reality ----
-const pct = (from, to) => (from > 0 ? ((from - to) / from) * 100 : 0);
-const whole = (m) => m.inputTokens + m.outputTokens + m.cacheTokens;
-
-console.log(
-  "\n=== caveman vs its claim (model: " +
-    model +
-    ", trials: " +
-    trials +
-    ") ===\n",
-);
-console.log(
-  "task            out_base  out_cav  out_cut%   $_base   $_cav   cost_cut%  out%session  correct(b/c)",
-);
-let sumOutCut = 0,
-  sumCostCut = 0,
-  sumOutShare = 0,
-  anyRegress = false;
-for (const r of rows) {
-  const outCut = pct(r.b.outputTokens, r.c.outputTokens);
-  const costCut = pct(r.b.costUsd, r.c.costUsd);
-  const outShare = whole(r.b) > 0 ? (r.b.outputTokens / whole(r.b)) * 100 : 0;
+  const outCut = pct(b.outputTokens, c.outputTokens);
+  const costCut = pct(b.costUsd, c.costUsd);
+  const outShare = whole(b) > 0 ? (b.outputTokens / whole(b)) * 100 : 0;
   sumOutCut += outCut;
   sumCostCut += costCut;
   sumOutShare += outShare;
-  if (r.c.correct < r.b.correct) anyRegress = true;
+  if (c.correct < b.correct) anyRegress = true;
   console.log(
-    `${r.name.padEnd(15)} ${r.b.outputTokens.toFixed(0).padStart(8)} ${r.c.outputTokens
+    `${t.name.padEnd(15)} ${b.outputTokens.toFixed(0).padStart(8)} ${c.outputTokens
       .toFixed(0)
-      .padStart(8)} ${outCut.toFixed(0).padStart(7)}%  ${r.b.costUsd
+      .padStart(8)} ${outCut.toFixed(0).padStart(7)}%  ${b.costUsd
       .toFixed(4)
-      .padStart(7)} ${r.c.costUsd.toFixed(4).padStart(7)} ${costCut
+      .padStart(7)} ${c.costUsd.toFixed(4).padStart(7)} ${costCut
       .toFixed(0)
-      .padStart(
-        8,
-      )}%  ${outShare.toFixed(1).padStart(9)}%   ${r.b.correct.toFixed(
+      .padStart(8)}%  ${outShare.toFixed(1).padStart(9)}%   ${b.correct.toFixed(
       1,
-    )}/${r.c.correct.toFixed(1)}`,
+    )}/${c.correct.toFixed(1)}`,
   );
 }
 const n = rows.length || 1;
