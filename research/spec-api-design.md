@@ -98,6 +98,8 @@ in `shareable-presets.md`:
 
 ## See also
 
+- `end-to-end-walkthrough.md` — this API shown in action across one skill (free-form → typed
+  contract → gate → test → measure).
 - `lightweight-spec-authoring.md` — the `doc()` primitive + the "spec is too heavy" diagnosis.
 - `shareable-presets.md` — the preset bet (this corrects its merge model to stratified).
 - `typed-contracts-for-agents.md` — the `result()`/railway contract this types properly.
