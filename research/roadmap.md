@@ -63,17 +63,29 @@
 
 **P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
 
-- [ ] **Test-gen from free-form** — `vigiles` writes a starter test/eval for an existing
-      `.md` skill/agent (the on-ramp; the `test-harness` skill is the seed). Free-form in, a
-      runnable eval out. → `typed-contracts-for-agents.md`
-- [ ] **Elevate railway/Result contracts** — make `result()` / `railway()` /
-      `assertAgentOk/Err` first-class for testability (docs + examples); each typed outcome
-      replaces an LLM-judge with a deterministic assert (primitives shipped, underweighted). →
+- [x] **Test-gen from free-form — SHIPPED (2026-06-20)** as `vigiles scaffold-test`
+      ([`src/scaffold-test.ts`](../src/scaffold-test.ts) + CLI). Free-form in, a runnable
+      starter test out, per kind at the untested-detector's suggested path. →
+      `typed-contracts-for-agents.md`
+- [x] **Elevate railway/Result contracts — SHIPPED (2026-06-20)** (docs + worked example).
+      `assertAgentOk/Err/Result` existed but were invisible; added
+      [`examples/harness/railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs)
+      (Part A pure, Part B a real mock turn) + a `docs/harness-testing.md` section. →
       `typed-contracts-for-agents.md`, `railway-subagents.md`
-- [ ] **Side-effect boundaries for skills** — declare where a skill writes/calls;
-      interception-based deterministic test (`tool-intercept` exists). → `typed-contracts-for-agents.md`
-- [ ] **Shareable typed templates (skills/agents)** — generalize presets beyond CLAUDE.md;
-      bundle evals so a template carries its proof; ship 2–3 first-party seeds. → `shareable-presets.md`
+- [x] **Side-effect boundaries for skills — SHIPPED (2026-06-20).** The deterministic
+      side-effect-boundary ASSERTION (rung 2): added `didNotWrite()` (the symmetric no-write
+      sibling of `wrote()`) to the check vocabulary +
+      [`examples/harness/effect-boundary.harness.mjs`](../examples/harness/effect-boundary.harness.mjs)
+      (`wrote`/`didNotWrite`/`notTool` over a constructed Trace AND a real mock turn, no key).
+      The authoring half (`effect()`, the `purity:` floor) already shipped. The eval-tier
+      `tool-intercept` (real-model prevention) stays as is. → `typed-contracts-for-agents.md`
+- [ ] **Shareable typed templates (skills/agents) — DEFERRED (premature).** `preset()` /
+      `extend()` only pay off at SCALE (an org standard or monorepo consuming one published
+      preset), and vigiles has ~no consumers yet (`distribution-strategy.md`) — building the
+      network-effect layer before the network. The `off()` primitive in the sketch is also
+      mis-framed (it reads as "disable an eslint rule," but vigiles never touches eslint config
+      — it can only drop an inherited rule from the compiled instruction file). Revisit once
+      adoption exists and a real org wants a shared house style. → `shareable-presets.md`
 - [~] **`doc()` + `dir()` lightweight authoring** — the free-form→structured ramp (prose +
   inline helpers, add contracts gradually). **`dir()` + `glob()` SHIPPED (2026-06-20):**
   [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
