@@ -46,6 +46,11 @@ import {
   parseAgentToolList,
 } from "./adapters/claude-code/agent-runtime.js";
 import { findUntestedSurfaces } from "./test-coverage.js";
+import {
+  effectSurface,
+  type PurityLevel,
+  type EffectSurface,
+} from "./core/effects.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,6 +96,22 @@ export interface ScanAgent {
   readonly mcpToolIssues: readonly McpToolIssue[];
   /** `disallowedTools:` block-list entries that are typos of a real tool (block nothing). */
   readonly disallowedToolIssues: readonly ToolIssue[];
+  /**
+   * Static effect-surface purity of the agent's declared tool contract.
+   * - `"pure"` — no side-effecting tools (read-only, deterministically testable).
+   * - `"bounded"` — has side-effecting tools (Edit/Write/…) but no Bash or unknown.
+   * - `"unrestricted"` — has Bash, any MCP/unknown tool, or inherits-all (no contract).
+   * Computed by `effectSurface()` from `src/core/effects.ts` — one detector, no drift.
+   */
+  readonly purity: PurityLevel;
+  /**
+   * The three tool buckets from `effectSurface()`: read-only, side-effecting, and
+   * unknown-effect (MCP or unrecognized) tool names in the declared contract.
+   */
+  readonly effectBuckets: Pick<
+    EffectSurface,
+    "readOnly" | "sideEffecting" | "unknown"
+  >;
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -172,6 +193,17 @@ export interface ScanReport {
   readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
   readonly untested: number;
+  /**
+   * Harness-level purity summary: how many scanned agents fall into each purity
+   * rung. A high `pure` count means more of the harness is statically testable
+   * (deterministic, no mocks); `unrestricted` is the blind-spot count.
+   * Computed by `effectSurface()` (one detector, no drift).
+   */
+  readonly puritySummary: {
+    pure: number;
+    bounded: number;
+    unrestricted: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +409,10 @@ function scanAgents(
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isAgent(path)) continue;
     const tools = parseAgentTools(md);
+    // An inherits-all agent (no `tools:` line) grants access to every tool
+    // including every side-effecting one — pass the wildcard sentinel so
+    // effectSurface correctly classifies it as `"unrestricted"`.
+    const surface = effectSurface(tools ?? ["*"], dialect);
     out.push({
       name: basename(path, ".md"),
       path,
@@ -400,6 +436,12 @@ function scanAgents(
         parseAgentToolList(md, "disallowedTools") ?? [],
         dialect,
       ),
+      purity: surface.purity,
+      effectBuckets: {
+        readOnly: surface.readOnly,
+        sideEffecting: surface.sideEffecting,
+        unknown: surface.unknown,
+      },
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -723,11 +765,19 @@ export function scanPlugin(
       : null;
   const mcpServers = collectMcpServers(resolve(dir), lay);
   const declaredServers = Object.keys(mcpServers);
+  const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
+  const puritySummary = agents.reduce(
+    (acc, a) => {
+      acc[a.purity]++;
+      return acc;
+    },
+    { pure: 0, bounded: 0, unrestricted: 0 },
+  );
   return {
     dir,
     instructions,
     skills: scanSkills(loaded.files, cls),
-    agents: scanAgents(loaded.files, dialect, declaredServers, cls),
+    agents,
     hooks,
     inlineHooks: inline,
     commands: Object.keys(loaded.files).filter(cls.isCommand).length,
@@ -748,6 +798,7 @@ export function scanPlugin(
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
       .length,
+    puritySummary,
   };
 }
 
@@ -865,7 +916,7 @@ function skillLine(s: ScanSkill): string {
   return `  ${mark} ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
 }
 
-/** One agent's report block: ✗ (broken contract) / ⚠ (inherits all) / ✓ + issues. */
+/** One agent's report block: ✗ (broken contract) / ⚠ (inherits all) / ✓ + issues + purity. */
 function agentLines(a: ScanAgent): string[] {
   const tools =
     a.tools === null
@@ -878,7 +929,15 @@ function agentLines(a: ScanAgent): string[] {
   let mark = "✓";
   if (broken > 0) mark = "✗";
   else if (a.tools === null) mark = "⚠";
-  const lines = [`  ${mark} ${a.name} — ${tools}`];
+  // Purity is an informational health signal (not a structural defect); mark it
+  // clearly so a reader knows which rung this agent is on.
+  const PURITY_TAGS: Record<string, string> = {
+    pure: "pure",
+    bounded: "bounded",
+    unrestricted: "unrestricted",
+  };
+  const purityTag = PURITY_TAGS[a.purity] ?? "unrestricted";
+  const lines = [`  ${mark} ${a.name} — ${tools} [${purityTag}]`];
   for (const issue of a.toolIssues) lines.push(`      ✗ ${issue.message}`);
   for (const issue of a.mcpToolIssues) lines.push(`      ✗ ${issue.message}`);
   for (const issue of a.disallowedToolIssues)
@@ -967,6 +1026,15 @@ export function formatScanReport(r: ScanReport): string {
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
   facts.push(`Untested surfaces: ${String(r.untested)}`);
+  // Effect surface: harness-level purity summary across all scanned agents.
+  // Informational (higher pure% = more constrained, cheaper to test); shown
+  // only when there are agents to summarize (no agents → no summary line).
+  if (r.agents.length > 0) {
+    const { pure, bounded, unrestricted } = r.puritySummary;
+    facts.push(
+      `Effect surface: ${String(pure)} pure · ${String(bounded)} bounded · ${String(unrestricted)} unrestricted`,
+    );
+  }
   out.push(...facts, "");
 
   // The dangling-ref warning is now shown as a first-class ✗ section above, so
