@@ -108,6 +108,7 @@ import {
   setActiveSkill,
   clearActiveSkill,
   evaluateStopHook,
+  evaluateSkillPreToolUse,
   gateLabel,
 } from "./adapters/claude-code/skill-runtime.js";
 import { checkLinterRule } from "./core/linters.js";
@@ -3557,6 +3558,43 @@ function skillStartCommand(target: string | undefined): void {
 }
 
 /**
+ * PreToolUse-hook entrypoint: enforce the active skill's declared purity floor.
+ * Reads the tool event on stdin, parses the `vigiles:purity:` marker from the
+ * active skill's compiled SKILL.md, and blocks (exit 2 + reason on stderr) any
+ * tool call that violates the declared floor — refining `Bash` by the live
+ * command via `isReadOnlyBash`. Skills have no tools-allowlist rail; this gate
+ * is purity-only. Mirrors `agentHookCommand` for skills.
+ */
+function skillToolHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let tool = "";
+  let command: string | undefined;
+  try {
+    const parsed = JSON.parse(raw) as {
+      tool_name?: string;
+      tool_input?: { command?: unknown };
+    };
+    tool = parsed.tool_name ?? "";
+    if (typeof parsed.tool_input?.command === "string") {
+      command = parsed.tool_input.command;
+    }
+  } catch {
+    /* malformed input → no tool, allow */
+  }
+  if (!tool) return;
+  const decision = evaluateSkillPreToolUse(process.cwd(), tool, command);
+  if (!decision.allow) {
+    console.error(decision.message);
+    process.exit(2);
+  }
+}
+
+/**
  * PreToolUse-hook entrypoint: enforce the active subagent's allowed-tools
  * contract. Reads the tool event on stdin, parses the active agent's compiled
  * `.md` tool rail, and blocks (exit 2 + reason on stderr) any tool outside it —
@@ -3639,6 +3677,9 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "skill-hook":
       skillHookCommand();
+      return true;
+    case "skill-tool-hook":
+      skillToolHookCommand();
       return true;
     case "agent-start":
       agentStartCommand(restArgs[0]);

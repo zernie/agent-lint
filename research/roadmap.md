@@ -99,10 +99,13 @@
   `bounded` now **admits command-gated `Bash`** (read-only allowed as
   observation, mutating denied) — `pure` still bars `Bash` entirely; the static
   `effectSurface`/`scan` still reports any `Bash` as `unrestricted` (can't see
-  the command — the runtime gate is where the refinement lands). Remaining: the
-  position-aware effect-BOUNDARY region mark + skill-parity (see "Effect-surface:
-  the runtime half" under Now). See
-  [`side-effect-separation.md`](side-effect-separation.md) +
+  the command — the runtime gate is where the refinement lands). **Skill-parity
+  shipped same day** — skills now carry the SAME per-call gate
+  (`src/adapters/claude-code/skill-runtime.ts`: `parseSkillPurity` +
+  `evaluateSkillPreToolUse`, the `skill-tool-hook` CLI; the floor only, no
+  tools-allowlist rail for skills yet). Remaining: the position-aware
+  effect-BOUNDARY region mark (see "Effect-surface: the runtime half" under Now).
+  See [`side-effect-separation.md`](side-effect-separation.md) +
   [`bash-effect-classification.md`](bash-effect-classification.md).
 - **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
@@ -122,17 +125,16 @@
 ## Now — cheap, high-leverage, do next
 
 - **Effect-surface: the runtime half — what REMAINS (the keystone next step).**
-  The per-call FLOOR gate is DONE (shipped 2026-06-20: `decidePurityGate` wired
-  into the agent `PreToolUse` rail, with `isReadOnlyBash` refining `Bash` by the
-  live command, and the `vigiles:purity:` marker — see Shipped recently). Two
-  pieces remain: (1) the **position-aware effect-BOUNDARY region mark**
-  (`effect\`\``— denying effects OUTSIDE a marked region, vs the per-call floor
-shipped now; reuses`decidePreToolUse` / the tool-contract rail + the bubblewrap
-sandbox for the indirect/`Bash`-subprocess hole, and doubles as the
-`tool-intercept`test seam); (2) **skill-parity** — skills have no`PreToolUse`rail yet, so the gate enforces on agents only. (Reminder from this session: the
-classifier does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see
-a tool _name_ + permission _pattern_ (`Bash(git:\*)`), not a command; the runtime
-gate is where it lands.) See
+  The per-call FLOOR gate is DONE for BOTH agents and skills (shipped 2026-06-20:
+  `decidePurityGate` wired into the agent + skill `PreToolUse` rails, with
+  `isReadOnlyBash` refining `Bash` by the live command, and the `vigiles:purity:`
+  marker — see Shipped recently). ONE piece remains: the **position-aware
+  effect-BOUNDARY region mark** (`effect\`\``— denying effects OUTSIDE a marked
+region, vs the per-call floor shipped now; reuses`decidePreToolUse` / the
+tool-contract rail + the bubblewrap sandbox for the indirect/`Bash`-subprocess
+hole, and doubles as the `tool-intercept`test seam). (Reminder from this
+session: the classifier does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool _name_ + permission _pattern_ (`Bash(git:\*)`), not a
+command; the runtime gate is where it lands.) See
 [`side-effect-separation.md`](side-effect-separation.md) +
 [`bash-effect-classification.md`](bash-effect-classification.md). · **P1**
 - **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
