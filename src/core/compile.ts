@@ -103,7 +103,8 @@ export interface CompileError {
     | "spec-name-mismatch"
     | "unknown-tool"
     | "invalid-railway"
-    | "purity-violation";
+    | "purity-violation"
+    | "output-without-fork";
   message: string;
   path?: string;
 }
@@ -805,6 +806,7 @@ function renderSkillFrontmatter(
         `disable-model-invocation: ${String(spec.disableModelInvocation)}`,
       );
     }
+    if (spec.context !== undefined) fm.push(`context: ${spec.context}`);
     const argHint =
       spec.inputs && spec.inputs.length > 0
         ? renderArgumentHint(spec.inputs)
@@ -833,6 +835,9 @@ function renderSkillSections(spec: SkillSpec): string {
     sections.push(renderSteps(spec.steps));
   }
   if (spec.result) sections.push(renderResult(spec.result));
+  // A forked skill (context: fork) runs as a subagent, so it may carry the SAME
+  // typed Result outcome — reuse the subagent renderer (one-renderer-no-drift).
+  if (spec.output) sections.push(renderOutputContract(spec.output));
   return sections.join("\n\n");
 }
 
@@ -907,6 +912,19 @@ export function compileSkill(
   }
 
   errors.push(...validateRefs(collectSkillRefs(spec), basePath));
+
+  // A typed `output` Result contract is valid ONLY for a forked skill: an inline
+  // skill has no call→return boundary, so a typed outcome there is a category
+  // error (see research/spec-syntax-and-railway-scope.md). Enforce it at compile.
+  if (spec.output && spec.context !== "fork") {
+    errors.push({
+      type: "output-without-fork",
+      message:
+        'A skill `output` (result() contract) requires `context: "fork"` — an ' +
+        "inline skill has no return value to type. Add context:'fork' to run it " +
+        "as a subagent, or drop `output`.",
+    });
+  }
 
   // purity floor check — the dialect is optional (callers that don't pass one
   // skip the check rather than crash; the CLI always passes it). An absent

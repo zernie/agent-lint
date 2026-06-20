@@ -112,6 +112,28 @@ Sources: [Anthony Fu — Type your Config](https://antfu.me/posts/type-your-conf
 · [TS #52243](https://github.com/microsoft/TypeScript/issues/52243) + [string-length limits](https://blog.beraliv.dev/2021-05-31-string-length-in-typescript)
 · [LLM API hallucination modes](https://arxiv.org/html/2409.20550v1).
 
+## Decision 3 — fp library for railway: NONE (stay dependency-free)
+
+**Use vigiles's own discriminated `Result` union (`parseAgentResult` →
+`{ kind: "ok" | "err" | "malformed" }`), not an fp library.**
+
+Why no lib: the railway is a **compile-time + parse-time** construct, not a runtime
+monad. The compiler emits the orchestrator markdown + the `vigiles:ok/err` wire
+format; the MODEL executes the steps; vigiles **parses** the outcome into a typed
+union and asserts on it. There is nothing to _execute_ in TS that needs
+`.andThen`/`combine`/fibers — so a monad library buys no runtime benefit and adds a
+transitive dependency to every consumer of a deliberately dependency-light library.
+The existing `ParsedAgentResult` already IS the Result type, zero-dep and
+tree-shakeable.
+
+If a runtime combinator layer is ever built (the optional `@vigiles/skill` wrapper
+floated in `fp-for-agent-harness.md` — `retry`/`fallback`/`parallel`/`race`), the
+pick is **neverthrow** (lightweight, tree-shakeable, `Result`-focused). **Effect.ts**
+is rejected for the core (heavy bundle + invasive `Effect<A,E,R>`/fibers/layers,
+overkill for a two-track Result); **fp-ts** is rejected (verbose, in maintenance —
+its author moved to Effect). But that layer is gated on the A/B eval proving the
+existing typed contract helps (measurement-first); until then, **no fp dependency**.
+
 ## Also settled
 
 - **Rename "migrate" → "adopt"** in user-facing framing ("start a spec from your
