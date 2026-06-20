@@ -71,6 +71,25 @@ export const claudeCodeDialect: HarnessDialect = {
   // Claude Code reads the full SKILL.md frontmatter set (description,
   // disable-model-invocation, argument-hint, …).
   skillFrontmatter: "claude-code",
+  // Tools that produce side effects in Claude Code. The complement — the
+  // read-only tools — are: Read, Grep, Glob, LS, ToolSearch (and LSP/Agent
+  // which are not in the subagent catalog). Bash is side-effecting because
+  // `cat` and `rm -rf` are the same tool at the tool-name level — the
+  // sandbox is the only closure for subprocess effects.
+  sideEffectingTools: [
+    "Bash",
+    "BashOutput",
+    "KillBash",
+    "Edit",
+    "MultiEdit",
+    "Write",
+    "NotebookEdit",
+    "WebFetch",
+    "WebSearch",
+    "Skill",
+    "Task",
+    "TodoWrite",
+  ],
 };
 
 export type { HarnessDialect } from "../../core/dialect.js";
