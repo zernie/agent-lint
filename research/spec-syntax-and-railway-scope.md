@@ -97,10 +97,12 @@ Prettier `printWidth` precedent), which vigiles already has as `maxSectionLines`
 
 Design call (don't-cry-wolf): a _hard small_ default would flag legitimate content
 — vigiles's OWN spec has a 262-line Key Files section and an 8298-char Positioning
-paragraph. So the guard is a **generous default** (catches egregious dumps only),
-applied **uniformly** to prose surfaces (claude sections + agent sections + skill
-body — previously claude-sections-only), overridable via `maxSectionLines`, with
-`maxTokens` as the global backstop.
+paragraph. So the guard is a **generous default** (200 lines, catches egregious
+dumps only), applied to **named prose sections** (claude sections + agent sections
+— previously claude-sections-only), overridable via `maxSectionLines`, with
+`maxTokens` as the global backstop. Skill `body` is deliberately left uncapped by
+default (legitimately variable — real SKILL.md bodies run long); it still honours
+`maxSectionLines` if an author opts in.
 
 Sources: [Anthony Fu — Type your Config](https://antfu.me/posts/type-your-config)
 · [Vite config](https://vite.dev/config/) · [ESLint defineConfig](https://eslint.org/blog/2025/03/flat-config-extends-define-config-global-ignores/)

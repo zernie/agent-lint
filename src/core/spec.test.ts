@@ -654,17 +654,30 @@ describe("section guardrails", () => {
     assert.ok(!errors.some((e) => e.type === "section-too-long"));
   });
 
-  it("skips maxSectionLines check when not configured", () => {
-    const longContent = Array.from(
+  it("allows a normal section under the generous default (no maxSectionLines)", () => {
+    // 100 lines is well under the 200-line default — real prose sections are short.
+    const content = Array.from(
       { length: 100 },
       (_, i) => `Line ${String(i + 1)}`,
     ).join("\n");
-    const spec = claude({
-      sections: { wall: longContent },
-      rules: {},
-    });
+    const spec = claude({ sections: { ok: content }, rules: {} });
     const { errors } = compileClaude(spec);
     assert.ok(!errors.some((e) => e.type === "section-too-long"));
+  });
+
+  it("applies a generous DEFAULT cap (200 lines) with no maxSectionLines set", () => {
+    // An egregious dump trips the default guard even when the author set no cap —
+    // TS types can't bound string length, so this is the compile-time backstop.
+    const dump = Array.from(
+      { length: 250 },
+      (_, i) => `Line ${String(i + 1)}`,
+    ).join("\n");
+    const spec = claude({ sections: { wall: dump }, rules: {} });
+    const { errors } = compileClaude(spec);
+    const tooLong = errors.find((e) => e.type === "section-too-long");
+    assert.ok(tooLong, "the default cap should fire on a 250-line section");
+    assert.ok(tooLong.message.includes("max 200"));
+    assert.ok(tooLong.message.includes("maxSectionLines")); // points at the override
   });
 });
 
