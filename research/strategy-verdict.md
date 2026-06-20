@@ -5,6 +5,13 @@
 > `shareable-presets.md`, `instruction-file-linter-landscape.md`, `lightweight-spec-authoring.md`).
 > Not a survey — a ranked verdict, with explicit kills. Opinionated on purpose.
 
+> **Superseded (same day) by `measurement-authority.md`.** A later critique landed: verify/
+> test/security is _hygiene_ (low virality, and it reinvents agnix/superpowers). The spine
+> below flips — the headline becomes **measurement & optimization (offense: "what makes your
+> agent better")**, and verify/test/security demotes to substrate. Read this for the
+> kills/ammunition, which still hold; read `measurement-authority.md` for the current top of
+> funnel.
+
 ## The one-sentence verdict
 
 **Be the verify-and-test layer for agent harnesses: go viral with a public security
