@@ -215,3 +215,6 @@ stands: the same mark that gates an effect lets`tool-intercept` test it determin
   minimization; this is its enforcement design.
 - `docs/safety.md` — the bubblewrap/Seatbelt sandbox that closes the indirect-effect hole.
 - `spec-api-design.md` — how the effect boundary is declared in the typed contract.
+- [`effect-boundary-design.md`](effect-boundary-design.md) — the detailed design for the
+  position-aware region mark: authoring surface, compile emission, region-tracking mechanism
+  assessment, and recommended sequencing.

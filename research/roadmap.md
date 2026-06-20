@@ -136,7 +136,8 @@ hole, and doubles as the `tool-intercept`test seam). (Reminder from this
 session: the classifier does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool _name_ + permission _pattern_ (`Bash(git:\*)`), not a
 command; the runtime gate is where it lands.) See
 [`side-effect-separation.md`](side-effect-separation.md) +
-[`bash-effect-classification.md`](bash-effect-classification.md). · **P1**
+[`bash-effect-classification.md`](bash-effect-classification.md) +
+[`effect-boundary-design.md`](effect-boundary-design.md) (design doc for this remaining piece). · **P1**
 - **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
   (mutates the `Ref` union → render + compile verification across every `Ref`
   switch); lower priority than the runtime gate.
