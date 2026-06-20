@@ -442,7 +442,7 @@ To verify generated types are fresh in CI:
 
 Without the plugin, you're responsible for manually running `compile` and
 `generate-types`. With it, the agent works with fresh instruction files
-automatically, and the consumer skills (`strengthen`, `migrate-to-spec`,
+automatically, and the consumer skills (`strengthen`, `adopt-spec`,
 `test-harness`, `edit-spec`) are available (edit-spec now covers adding a rule).
 
 The plugin installs through the **Claude Code plugin marketplace** — globally

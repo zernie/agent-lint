@@ -1998,7 +1998,7 @@ interface Pillar1Result {
   specTargets: string[];
   /** Files actually written (for the commit hint). */
   written: string[];
-  /** Existing hand-written targets that still need migrate-to-spec. */
+  /** Existing hand-written targets that still need adopt-spec. */
   needsMigration: string[];
 }
 
@@ -2084,7 +2084,7 @@ function redirectSyncToolTargets(cwd: string, targets: string[]): string[] {
 
 /** Pillar 1 — specs + types + schema + compile. Scaffolds a spec for every
  * instruction file (so `--lint` always delivers a spec), but never compiles
- * OVER a hand-written file — that is left to the migrate-to-spec skill. */
+ * OVER a hand-written file — that is left to the adopt-spec skill. */
 async function setupPillar1(
   detected: DetectedProject,
   targetValue: string | undefined,
@@ -2120,7 +2120,7 @@ async function setupPillar1(
     if (targetExists && !targetHasHash(resolve(cwd, target))) {
       needsMigration.push(target);
       console.log(
-        `  ${target} already has content — port it into the spec with the migrate-to-spec skill, then \`vigiles compile\`.`,
+        `  ${target} already has content — adopt it into a spec with the adopt-spec skill, then \`vigiles compile\`.`,
       );
     }
   }
@@ -2347,7 +2347,7 @@ function printSetupSummary(opts: {
   const nextSteps: string[] = [];
   if (needsMigration.length > 0) {
     nextSteps.push(
-      `Port ${needsMigration.join(", ")} into its spec with the migrate-to-spec skill, then \`npx vigiles compile\``,
+      `Adopt ${needsMigration.join(", ")} into a spec with the adopt-spec skill, then \`npx vigiles compile\``,
     );
   } else if (specPathsList.length > 0) {
     nextSteps.push(
