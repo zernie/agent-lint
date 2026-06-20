@@ -43,6 +43,11 @@ import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import {
+  explainScore,
+  explainSurface,
+  formatExplanations,
+} from "./score-explainer.js";
+import {
   probePluginTriggers,
   formatBehavioralReport,
   type TriggerPromptSet,
@@ -1191,9 +1196,7 @@ async function runLint(
   // against the right adapter's dialect (tool/event catalogs) and surfaces —
   // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
   // on a harness without subagents (Codex) rather than scanning nothing.
-  const harnessFlag = flags
-    .find((f) => f.startsWith("--harness="))
-    ?.slice("--harness=".length);
+  const harnessFlag = harnessFlagFrom(flags);
   const lintSelection = resolveHarnessSelection({
     root: process.cwd(),
     flag: harnessFlag,
@@ -3411,6 +3414,39 @@ function handleRunScripts(
   }
 }
 
+/** Parse the `--harness=<name>` override out of an argv list (the one definition). */
+function harnessFlagFrom(argv: string[]): string | undefined {
+  return argv
+    .find((a) => a.startsWith("--harness="))
+    ?.slice("--harness=".length);
+}
+
+/**
+ * `vigiles explain <dir> [name]` — the deterministic WHY behind a low score (C4):
+ * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
+ * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
+ * optional surface name narrows to one underperforming skill/agent (the
+ * optimizer's call). `--json` for the agent-consumable shape, `--harness=` to
+ * override detection.
+ */
+function handleExplain(restArgs: string[], args: string[]): void {
+  const dir = resolve(restArgs[0] ?? ".");
+  const surface = restArgs[1];
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
+  const exps = surface ? explainSurface(report, surface) : explainScore(report);
+  if (json) {
+    console.log(JSON.stringify(exps, null, 2));
+    return;
+  }
+  if (surface) console.log(`Explaining "${surface}":\n`);
+  console.log(formatExplanations(exps));
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -3427,6 +3463,9 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+  );
+  console.log(
+    "  vigiles explain <dir> [name]   Deterministic WHY a skill/agent underperforms + the fix (--json, --harness=)",
   );
   console.log("");
   console.log("Examples:");
@@ -3898,9 +3937,7 @@ async function main(): Promise<void> {
         console.log("Run `vigiles init` to create one.");
         process.exit(0);
       }
-      const harnessFlag = args
-        .find((a) => a.startsWith("--harness="))
-        ?.slice("--harness=".length);
+      const harnessFlag = harnessFlagFrom(args);
       const valid = await compile(specs, config, { harnessFlag });
       console.log("");
       if (valid) {
@@ -3970,9 +4007,7 @@ async function main(): Promise<void> {
         }
       } else {
         const root = resolve(targets[0]);
-        const harnessFlag = args
-          .find((a) => a.startsWith("--harness="))
-          ?.slice("--harness=".length);
+        const harnessFlag = harnessFlagFrom(args);
         const det = detectAdapterResult(root);
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
@@ -3998,6 +4033,10 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "explain":
+      handleExplain(restArgs, args);
+      break;
 
     // --- Plumbing ---
 
