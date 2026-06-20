@@ -74,6 +74,21 @@
 
 ## Shipped recently (don't rebuild)
 
+- **Effect-surface + purity contract + Bash classifier (2026-06-20)** — the
+  deterministic side-effect substrate. `src/core/effects.ts` (`classifyToolEffect`
+  / `effectSurface` / `purityViolations` + the pure/bounded/unrestricted ladder,
+  `dialect.sideEffectingTools`); the **`purity:` floor** on skill/agent
+  (`"pure" | "bounded" | "dangerously-unrestricted"`, enforced at compile —
+  absent tools = inherits-all = violation); the **scan effect-surface column**
+  (per-unit purity + `N pure · M bounded · K unrestricted` audit); and the
+  standalone **deterministic Bash-effect classifier** (`src/core/bash-effects.ts`,
+  `mvdan-sh` AST + catalog + fail-closed residue, zero-false-read-only gate). Two
+  design calls locked in: the enum mirrors the analysis vocabulary
+  (declare/report symmetry), and `dangerously-unrestricted` is loud at the
+  _declaration_ site but neutral `unrestricted` in the _report_ (no cry-wolf).
+  See [`side-effect-separation.md`](side-effect-separation.md) +
+  [`bash-effect-classification.md`](bash-effect-classification.md). **Next steps
+  are the runtime half — see "Effect-surface: the runtime half" under Now.**
 - **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
 - **`untested-surface` rule** + **skills conformance gate** — third gap detector;
@@ -90,6 +105,27 @@
   **symbol refs**, **dead-enforcement / stale-ref** (pillar 1 core).
 
 ## Now — cheap, high-leverage, do next
+
+- **Effect-surface: the runtime half (the keystone next step).** `purity` is
+  COMPILE-only today; the payoff is enforcing it IN THE LOOP. Two pieces, in
+  order: (1) the **`effect\`\``boundary mark + a`PreToolUse` gate** that denies a
+  side-effecting tool outside a marked boundary (runtime `bounded` enforcement,
+  reusing `decidePreToolUse` / the tool-contract rail + the bubblewrap sandbox for
+  the indirect/`Bash`-subprocess hole); (2) **wire `bash-effects.ts` into that
+  gate** — the classifier's REAL home, because the hook sees the ACTUAL command
+  (`git status`), so `isReadOnlyBash` lets a read-only Bash run inside a
+  pure/bounded boundary while denying `git push`. HONEST CORRECTION (this session):
+  the classifier does NOT cleanly refine the STATIC `effectSurface`/`scan` — those
+  see a tool _name_ + permission _pattern_ (`Bash(git:*)`), not a command; the
+  static win is modest (only a `Bash(<concrete command>)` restriction is
+  classifiable, and most real restrictions are broad). So aim the classifier at
+  the runtime gate first. The `effect\`\`` mark also doubles as the test seam
+(`tool-intercept`). See [`side-effect-separation.md`](side-effect-separation.md)
+  - [`bash-effect-classification.md`](bash-effect-classification.md). · **P1**
+- **Deferred authoring ergonomics** — `dir()` / `glob()` lightweight helpers
+  (mutates the `Ref` union → render + compile verification across every `Ref`
+  switch); lower priority than the runtime gate.
+  [`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
 
 - **More deterministic lint rules — the next moat surfaces (P1).** This session
   shipped 5 cross-referencing rules (agent-tool-contract, hook-events,

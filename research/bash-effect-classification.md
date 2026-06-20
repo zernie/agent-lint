@@ -257,6 +257,18 @@ restriction strings and the skill's documented commands:
 - It stays a **surface** claim, not a runtime claim: the verdict refines the static number; the
   sandbox still owns the runtime guarantee (no overclaim).
 
+> **Implementation calibration (2026-06-20, after shipping `src/core/bash-effects.ts`).** The
+> STATIC refinement above is real but **modest**, and the classifier's PRIMARY home is the
+> **runtime gate**, not `effectSurface`. Why: `effectSurface` sees a tool _name_ + permission
+> _pattern_ from the declared contract (`Bash(git:*)`), **not an actual command** — and a broad
+> restriction like `Bash(git:*)` still permits `git push`, so it correctly stays _effecting_; only
+> a `Bash(<concrete read-only command>)` (e.g. `Bash(git status:*)`) is statically downgradable,
+> which is the minority of real contracts. The classifier earns its keep at runtime, where a
+> `PreToolUse` hook sees the REAL command string (`git status`) and `isReadOnlyBash` can allow it
+> inside a `pure`/`bounded` boundary while denying `git push`. So: build the runtime
+> `effect\`\``-boundary gate first and feed the classifier there; treat the static-`effectSurface`
+> refinement as a small bonus for concrete-restriction contracts.
+
 ### How it composes with the sandbox
 
 Two layers, two jobs (the same defense-in-depth `side-effect-separation.md` already advocates):

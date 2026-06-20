@@ -1,3 +1,5 @@
+<!-- vigiles:ignore-file -->
+
 # End-to-end walkthrough — what it all looks like
 
 > Status: design illustration (2026-06-19). One realistic skill (`release`) carried from
