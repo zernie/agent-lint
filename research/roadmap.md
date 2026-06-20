@@ -73,15 +73,17 @@
 - [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
       column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
 - [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
-- [x] **Score-explainer pairing — core DONE (2026-06-20).** [`src/score-explainer.ts`](../src/score-explainer.ts)
+- [x] **Score-explainer pairing — DONE (2026-06-20), core + CLI.** [`src/score-explainer.ts`](../src/score-explainer.ts)
       (`explainScore` / `explainSurface` / `formatExplanations`, 12 vitest cases):
       pure over the `ScanReport` the linter already computes (one-detector-no-drift),
       it maps each cross-ref finding to the behavioral SYMPTOM a benchmark observes
       (wrong-skill-fires / skill-never-fires / agent-underperforms / hook-never-runs /
       subagent-never-dispatches) + a one-line fix — so the optimizer says "underperforms
       BECAUSE its description overlaps X — differentiate them", not just "drop it".
-      Remaining: wire it into `vigiles optimize` (A2) / a `vigiles explain` CLI. →
-      `measurement-authority.md`
+      Shipped as **`vigiles explain <dir> [name]`** (deterministic, `--json` for the
+      agent-consumable array; 4 e2e cases in `scan-cli.test.ts`, documented in
+      `docs/cli.md`). Remaining: have `vigiles optimize` (A2) call it beside each
+      drop/swap recommendation. → `measurement-authority.md`
 
 **Distribution:**
 
