@@ -661,11 +661,14 @@ export interface AgentSpec {
    */
   readonly tools?: readonly string[];
   /**
-   * The DENY-side contract — tools the worker may NOT use, even if `tools` (or
-   * inherit-all) would grant them. The complement of `tools`: a read-only reviewer
-   * declares `disallowedTools: ["Write", "Edit"]` so side effects are excluded.
-   * Rendered to the `disallowedTools:` frontmatter; close-typos are flagged (a
-   * typo'd entry blocks nothing). Pairs with `purity` for side-effect separation.
+   * The DENY-side contract — tools the worker may NOT use. Use this INSTEAD OF
+   * `tools`, not with it: `tools` is an allowlist (only these), so a tool not
+   * listed is already unavailable and a `disallowedTools` entry would be
+   * redundant. `disallowedTools` earns its place only when there's NO allowlist
+   * (the agent inherits ALL tools) and you want to subtract a few — e.g.
+   * `disallowedTools: ["Bash"]` on an otherwise-unrestricted worker. Rendered to
+   * the `disallowedTools:` frontmatter; close-typos are flagged (a typo'd entry
+   * blocks nothing). For a read-only floor prefer a tight `tools` list + `purity`.
    */
   readonly disallowedTools?: readonly string[];
   /**

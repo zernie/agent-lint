@@ -5,8 +5,9 @@
  * instruction is identical, but this adds our TYPED CONTRACT —
  *   - a `result()` outcome (the worker ends with a vigiles:ok/err block, so its
  *     outcome is deterministically parseable: assertAgentOk, no LLM judge), and
- *   - side-effect separation (`purity: "pure"` + `disallowedTools`) so a reviewer
- *     cannot write/edit.
+ *   - side-effect separation: a tight `tools` allowlist (read-only) + `purity:
+ *     "pure"`, so a reviewer cannot write/edit. (No `disallowedTools` — it'd be
+ *     redundant under an allowlist; use it only when inheriting all tools.)
  * The A/B eval (../../reviewer-ab.eval.mjs) measures whether that typed contract
  * helps (a parseable outcome) at NO quality cost (still finds the bug).
  */
@@ -16,8 +17,7 @@ export default agent({
   name: "code-reviewer",
   description: "Review a file for correctness defects and report them.",
   model: "sonnet",
-  tools: ["Read", "Grep"],
-  disallowedTools: ["Write", "Edit"], // a reviewer never mutates — deny side
+  tools: ["Read", "Grep"], // allowlist — already excludes Write/Edit
   purity: "pure", // read-only floor, enforced at compile + by the PreToolUse gate
   output: result(
     { defects: "string[]", summary: "string" },
