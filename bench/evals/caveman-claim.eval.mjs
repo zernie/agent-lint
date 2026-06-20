@@ -21,6 +21,21 @@
  * "full" ruleset (the real SKILL.md wasn't fetchable through the sandbox). It
  * captures the mechanism under test (telegraphic prose compression), which is
  * what the token claim rests on.
+ *
+ * FINDING (2026-06-20, real haiku, 3 trials/arm, on the Pro/Max subscription).
+ * Caveman claims ~65% OUTPUT reduction. Measured over 5 real coding tasks:
+ *   MEAN output cut  = -5%   (output went UP; only 1/5 tasks compressed at all)
+ *   MEAN cost cut    = -4%   (the bill went UP)
+ *   output share     = 1.1%  of session tokens (rest is input + cache)
+ *   correctness      = 0 regressions (every task 1.0/1.0 both arms)
+ * So: the 65% headline did NOT reproduce on agentic coding with haiku, AND output
+ * is ~1% of the session, so even a true 65% output cut would move the bill ~0.7%.
+ * "Measured << claimed", stark — the thesis-validating result. HONEST CAVEATS:
+ * caveman targets Sonnet/Opus (haiku is already terse + may underuse the style),
+ * the 65% was measured on single-shot Q&A not multi-turn coding, and per-task
+ * numbers are noisy at 3 trials (slugify flipped -9%→+12% pilot→full). The
+ * AGGREGATE direction + the ~1% output-share are robust; the sonnet/opus pass is
+ * the rigorous follow-up (the output-share point is model-agnostic regardless).
  */
 import { runEval } from "../../dist/eval.js";
 
