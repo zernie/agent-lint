@@ -395,6 +395,15 @@ interface SectionResult {
   errors: CompileError[];
 }
 
+// A generous default cap on a single named prose section. TypeScript types
+// cannot bound a string's length (template-literal-type recursion caps out ~463
+// chars; TS #52243 unresolved), so a helper's content is guarded at COMPILE time
+// instead — the ESLint-max-len / Prettier-printWidth precedent. Deliberately
+// generous (don't-cry-wolf): real prose sections are short, so this only trips on
+// an egregious dump (a whole essay pasted into one section / instructions``).
+// Override per spec with `maxSectionLines`; `maxTokens` is the global backstop.
+const DEFAULT_MAX_SECTION_LINES = 200;
+
 function validateSectionContent(
   name: string,
   text: string,
@@ -422,10 +431,11 @@ function validateSectionContent(
     }
   }
 
-  if (maxSectionLines && contentLines.length > maxSectionLines) {
+  const max = maxSectionLines ?? DEFAULT_MAX_SECTION_LINES;
+  if (contentLines.length > max) {
     errors.push({
       type: "section-too-long",
-      message: `Section "${name}" is ${String(contentLines.length)} lines (max ${String(maxSectionLines)}). Split into smaller named sections.`,
+      message: `Section "${name}" is ${String(contentLines.length)} lines (max ${String(max)}). Split into smaller named sections, move detail into a file() reference, or raise maxSectionLines if it's intentional.`,
     });
   }
 

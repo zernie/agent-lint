@@ -31,6 +31,8 @@ target: ["CLAUDE.md", "AGENTS.md"],  // emits both from one spec
 
 `Record<string, string | InstructionFragment[]>` -- Named prose sections. Each key becomes a `## Heading` in the compiled output (first letter uppercased). Values are either plain strings or tagged templates via `instructions` with embedded `file()`, `cmd()`, and `ref()` references.
 
+Each section (and each subagent section) is length-guarded at compile time: a single section over a **generous 200-line default** is rejected as a likely content dump (TypeScript types can't bound a string's length, so the cap lives in the compiler — the ESLint `max-len` precedent). Override per spec with `maxSectionLines` (tighter to enforce your own limit, larger for an intentionally long section); `maxTokens` caps the whole compiled file.
+
 <!-- vigiles:ignore -->
 
 ```ts

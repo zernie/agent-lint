@@ -427,7 +427,12 @@ export interface ClaudeSpec {
   readonly keyFiles?: Record<string, string>;
   /** Named prose sections — plain strings or tagged templates with file()/cmd()/ref(). */
   readonly sections?: Record<string, string | InstructionFragment[]>;
-  /** Maximum lines per prose section (per-spec override). */
+  /**
+   * Maximum lines for a single named prose section. Overrides the generous
+   * compile-time default (200 lines) that guards every section + agent section
+   * against an egregious content dump — set a tighter number to enforce your own
+   * house limit, or a larger one for an intentionally long section.
+   */
   readonly maxSectionLines?: number;
   /**
    * Maximum estimated tokens for the compiled output (~4 chars per token).
