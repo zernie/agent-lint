@@ -38,16 +38,22 @@ export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec;
 // @public
 export interface AgentSpec {
     readonly body?: string | InstructionFragment[];
+    readonly color?: string;
     readonly description: string;
+    readonly disallowedTools?: readonly string[];
     readonly model?: string;
     readonly name: string;
     readonly output?: OutputContract;
+    readonly purity?: AuthoredPurity;
     readonly rules?: Record<string, Rule>;
     readonly sections?: Record<string, string | InstructionFragment[]>;
     // (undocumented)
     readonly _specType: "agent";
     readonly tools?: readonly string[];
 }
+
+// @public
+export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
 
 // @public
 export function checkFileHash(filePath: string): HashCheckResult;
@@ -148,7 +154,7 @@ export interface CompileError {
     // (undocumented)
     path?: string;
     // (undocumented)
-    type: "stale-file" | "stale-command" | "stale-ref" | "invalid-rule" | "budget-exceeded" | "section-too-long" | "section-has-header" | "reserved-section-key" | "spec-name-mismatch" | "unknown-tool" | "invalid-railway";
+    type: "stale-file" | "stale-command" | "stale-ref" | "invalid-rule" | "budget-exceeded" | "section-too-long" | "section-has-header" | "reserved-section-key" | "spec-name-mismatch" | "unknown-tool" | "invalid-railway" | "purity-violation" | "output-without-fork";
 }
 
 // @public
@@ -207,7 +213,29 @@ export interface DetectedLinter {
 }
 
 // @public
+export function dir(path: string): DirRef;
+
+// @public
+export interface DirRef {
+    // (undocumented)
+    readonly path: VerifiedDir;
+    // (undocumented)
+    readonly _ref: "dir";
+}
+
+// @public
 export function editDistance(a: string, b: string): number;
+
+// @public
+export function effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
+
+// @public
+export interface EffectRegion {
+    // (undocumented)
+    readonly body: InstructionFragment[];
+    // (undocumented)
+    readonly _ref: "effect";
+}
 
 // @public
 export function enforce(ref: NoInfer<StrictLinterRule> | VigilesRef, why: string, options?: {
@@ -250,6 +278,17 @@ export interface FileRef {
 
 // @public
 export type Gate = CmdRef | FileRef | RoleGate;
+
+// @public
+export function glob(pattern: string): GlobRef;
+
+// @public
+export interface GlobRef {
+    // (undocumented)
+    readonly pattern: VerifiedGlob;
+    // (undocumented)
+    readonly _ref: "glob";
+}
 
 // @public
 export function guard(options: {
@@ -299,7 +338,7 @@ export function input(name: string, hint: string, opts?: {
 }): SkillInput;
 
 // @public (undocumented)
-export type InstructionFragment = string | Ref;
+export type InstructionFragment = string | Ref | EffectRegion;
 
 // @public
 export function instructions(strings: TemplateStringsArray, ...values: InstructionFragment[]): InstructionFragment[];
@@ -406,7 +445,7 @@ export type ReadyToEmit<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
 };
 
 // @public (undocumented)
-export type Ref = FileRef | CmdRef | SkillRef | SymbolRef;
+export type Ref = FileRef | CmdRef | SkillRef | SymbolRef | DirRef | GlobRef;
 
 // @public
 export function ref(path: string): SkillRef;
@@ -452,15 +491,19 @@ export interface SkillRef {
 export interface SkillSpec {
     readonly argumentHint?: string;
     readonly body?: string | InstructionFragment[];
+    readonly context?: "fork";
     readonly description: string;
     readonly disableModelInvocation?: boolean;
     readonly inputs?: readonly SkillInput[];
     readonly maxInlineCodeLines?: number;
     readonly name: string;
+    readonly output?: OutputContract;
+    readonly purity?: AuthoredPurity;
     readonly result?: Gate;
     // (undocumented)
     readonly _specType: "skill";
     readonly steps?: readonly SkillStep[];
+    readonly tools?: readonly string[];
 }
 
 // @public
@@ -507,7 +550,13 @@ export interface SymbolRef {
 export function validateCommandRef(command: string, basePath: string): CompileError | null;
 
 // @public (undocumented)
+export function validateDirRef(dirPath: string, basePath: string): CompileError | null;
+
+// @public (undocumented)
 export function validateFileRef(filePath: string, basePath: string): CompileError | null;
+
+// @public (undocumented)
+export function validateGlobRef(pattern: string, basePath: string): CompileError | null;
 
 // @public
 export function validateRailway(rw: Railway, knownAgents?: readonly string[]): CompileError[];
@@ -518,6 +567,16 @@ export function validateSymbolRef(file: string, name: string, basePath: string):
 // @public (undocumented)
 export type VerifiedCmd = string & {
     readonly [__brand]: "VerifiedCmd";
+};
+
+// @public (undocumented)
+export type VerifiedDir = string & {
+    readonly [__brand]: "VerifiedDir";
+};
+
+// @public (undocumented)
+export type VerifiedGlob = string & {
+    readonly [__brand]: "VerifiedGlob";
 };
 
 // @public (undocumented)
