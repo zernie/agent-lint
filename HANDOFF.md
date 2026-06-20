@@ -73,12 +73,14 @@ verification); optionally upgrade the ref-dense Architecture section only.
   (no consumers); trifecta deferred before any code. Both `[ ]` in roadmap.
 - **(prev) B1/B2 (`0fb7f2c`/`9c3e69f`) + dir()/glob() (`42f0b5e`) shipped.**
 
-## Environment note (this session)
+## Environment note (CORRECTED 2026-06-20)
 
-`claude` CLI is on PATH but there is **NO auth** (no API key, no creds file) — so the
-real-model measurement tiers (A1/A2-measured/A4/evals) CANNOT run here. Deterministic work
-(typed contracts, lint rules, corpus, docs) needs neither. Run the measurement layer yourself
-on the Pro/Max subscription.
+**Real-model runs DO work here** — earlier "no auth" was WRONG. There's no API-key
+file, but the env carries an OAuth token FD + `ANTHROPIC_BASE_URL` + a proxy, so
+`claude -p "..." --model claude-sonnet-4-6` (or `claude-haiku-4-5-20251001`) returns
+real output (verified). `claude-3-5-haiku-20241022` is RETIRED — use current models.
+So the **measurement tiers (A1/A2/A4/evals) CAN run here** — pilot tiny (1 trial)
+first, mind the subscription cost. Deterministic work needs no model regardless.
 
 ## Gotchas (carry forward)
 

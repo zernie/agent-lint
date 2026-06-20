@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   enforce,
   guidance,
+  result,
   file,
   cmd,
   ref,
@@ -328,6 +329,33 @@ describe("compileSkill()", () => {
     assert.ok(markdown.includes("description: A test skill"));
     assert.ok(markdown.includes("Do the thing."));
     assert.equal(errors.length, 0);
+  });
+
+  it("renders context: fork and a forked skill's typed output contract", () => {
+    const spec = skill({
+      name: "review",
+      description: "Review a file.",
+      context: "fork", // runs as a subagent → has a return boundary
+      output: result({ defects: "string[]" }, { reason: "string" }),
+      body: "Review the file.",
+    });
+    const { markdown, errors } = compileSkill(spec);
+    assert.equal(errors.length, 0);
+    assert.ok(markdown.includes("context: fork"));
+    assert.ok(markdown.includes("## Output contract"));
+    assert.ok(markdown.includes("```vigiles:ok"));
+    assert.ok(markdown.includes('"defects": string[]'));
+  });
+
+  it("errors when output is set WITHOUT context: fork (inline = no return)", () => {
+    const spec = skill({
+      name: "review",
+      description: "Review a file.",
+      output: result({ ok: "boolean" }, { reason: "string" }),
+      body: "Review the file.",
+    });
+    const { errors } = compileSkill(spec);
+    assert.ok(errors.some((e) => e.type === "output-without-fork"));
   });
 
   it("compiles a skill with tagged template body", () => {

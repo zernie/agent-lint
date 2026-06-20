@@ -32,11 +32,14 @@
  *   VIGILES_TRIALS=5 node examples/harness/dogfood/reviewer-ab.eval.mjs
  *
  * Real model → real cost. Needs the `claude` CLI + model auth + a built dist/.
- * WRITE-DON'T-RUN in a keyless env; this is the artifact that runs where a key is.
- * FINDING: (fill after a real run — rates per arm + the verdict.)
+ * FINDING (2026-06-20, sonnet): the hard part is getting the lead agent to actually
+ * DELEGATE — with a soft task it reviews inline (0% dispatch) and the A/B can't see
+ * the contract. The task now forces delegation. When the subagent DOES run, only the
+ * `spec` arm emits a parseable vigiles:ok/err block (the payoff); the planted bug is
+ * caught in both (quality holds). Re-run with VIGILES_TRIALS>=3 for the p-values.
  */
-import { measureArms, formatCheckReport, compareCheck } from "../../dist/eval.js";
-import { subagent, tool, output } from "../../dist/check.js";
+import { measureArms, formatCheckReport, compareCheck } from "../../../dist/eval.js";
+import { subagent, tool, output } from "../../../dist/check.js";
 import { fileURLToPath } from "node:url";
 
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
@@ -48,7 +51,10 @@ const report = await measureArms({
     "app.js":
       "function add(a, b) { return a - b; } // should add\nmodule.exports = { add };\n",
   },
-  task: "Use your code-reviewer subagent to review app.js and report any defects.",
+  task:
+    "You have a `code-reviewer` subagent. DELEGATE the review of app.js to it " +
+    "via the Task tool — do NOT read or review the file yourself. Then report " +
+    "exactly what the subagent returned.",
   model: "sonnet",
   trials,
   arms: {
@@ -74,10 +80,14 @@ for (const [name, r] of Object.entries(report.arms)) {
 // The significance read (Welch's t over the per-arm rates), prose = baseline:
 //   check 1 = foundBug (QUALITY) — want NOT significantly worse on `spec`.
 //   check 2 = typedOutcome (PAYOFF) — want significantly higher on `spec`.
+const pOf = (cmp) =>
+  cmp && typeof cmp.p === "number" && Number.isFinite(cmp.p)
+    ? `p=${cmp.p.toFixed(3)}`
+    : "p=n/a (needs variance across ≥2 trials)";
 const quality = compareCheck(report, "prose", "spec", 1);
 const payoff = compareCheck(report, "prose", "spec", 2);
-console.log(`\nquality  (foundBug, spec vs prose):    p=${quality.p.toFixed(3)}`);
-console.log(`payoff   (typedOutcome, spec vs prose): p=${payoff.p.toFixed(3)}`);
+console.log(`\nquality  (foundBug, spec vs prose):    ${pOf(quality)}`);
+console.log(`payoff   (typedOutcome, spec vs prose): ${pOf(payoff)}`);
 console.log(
   "\nVerdict: the spec HELPED iff quality did NOT regress (p high / spec≈prose) " +
     "AND payoff is a real win (p low, spec≫prose).",

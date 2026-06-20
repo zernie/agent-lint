@@ -562,6 +562,15 @@ export interface SkillSpec {
   /** Whether to disable model invocation (frontmatter flag). */
   readonly disableModelInvocation?: boolean;
   /**
+   * Execution context. `"fork"` runs the skill's body as the task inside a
+   * forked SUBAGENT (its own context window) instead of inline in the main
+   * conversation (Anthropic's `context: fork` frontmatter). This is the ONLY
+   * setting under which a skill gains a real call→return boundary — so it's the
+   * prerequisite for declaring an `output` Result contract (see `output`). Omit
+   * for the default inline execution.
+   */
+  readonly context?: "fork";
+  /**
    * The allowed-tools contract for this skill. Each entry must be a known
    * built-in tool or an MCP tool (`mcp__server__tool`). Omit to inherit all
    * tools. When `purity` is `"pure"`/`"bounded"`, the declared tools are checked
@@ -587,6 +596,18 @@ export interface SkillSpec {
    * Compiles to a `## Result` section + a `vigiles:result` marker.
    */
   readonly result?: Gate;
+  /**
+   * The skill's typed railway outcome — the SAME `Result<ok, err>` contract a
+   * subagent declares with `result(okShape, errShape)`. Valid ONLY with
+   * `context: "fork"`: a forked skill runs as a subagent, so it has the
+   * call→return boundary a typed outcome needs (compile errors if `output` is set
+   * without `context: "fork"`). When valid, compiles to a `## Output contract`
+   * with a `vigiles:ok` / `vigiles:err` block — parseable (`parseAgentResult`) and
+   * testable (`assertAgentOk`) via the existing subagent rail. An INLINE skill has
+   * no return, so a typed outcome there is a category error — hence the gate. See
+   * `research/spec-syntax-and-railway-scope.md`.
+   */
+  readonly output?: OutputContract;
   /** Freeform instruction body (linear/unstructured skills). Use this OR `steps`. */
   readonly body?: string | InstructionFragment[];
   /**
