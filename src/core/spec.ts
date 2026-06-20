@@ -319,6 +319,22 @@ export function instructions(
 // CLAUDE.md spec (#5 — conditional maxSectionLines)
 // ---------------------------------------------------------------------------
 
+/**
+ * The purity an author DECLARES for a skill/agent — the floor `compile`
+ * enforces against the tool contract (see `purityViolations` in
+ * `core/effects.ts`). Mirrors the analysis `PurityLevel` for the two meaningful
+ * rungs, so what you DECLARE and what `scan` REPORTS share one vocabulary:
+ * - `"pure"`:    only read-only tools — no side effects at all.
+ * - `"bounded"`: decidable side-effecting tools (Write, Edit, …) are allowed,
+ *   but not `Bash` / unknown-effect / inherits-all (the unbounded cells).
+ * - `"dangerously-unrestricted"`: the explicit escape hatch — no enforcement.
+ *   Deliberately loud (cf. React's `dangerouslySetInnerHTML`) so opting OUT of
+ *   the guardrail stands out in review. Omitting `purity` is the same
+ *   (unenforced) default WITHOUT typing the loud word — you write it only when
+ *   you mean to override a stricter level.
+ */
+export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
+
 /** Known markdown instruction file targets. */
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {}); // escape hatch for custom targets
 
@@ -465,6 +481,22 @@ export interface SkillSpec {
   /** Whether to disable model invocation (frontmatter flag). */
   readonly disableModelInvocation?: boolean;
   /**
+   * The allowed-tools contract for this skill. Each entry must be a known
+   * built-in tool or an MCP tool (`mcp__server__tool`). Omit to inherit all
+   * tools. When `purity` is `"pure"`/`"bounded"`, the declared tools are checked
+   * against that floor — compile rejects a tool looser than the declared level.
+   */
+  readonly tools?: readonly string[];
+  /**
+   * Declare this skill's purity floor — compile rejects a tool contract looser
+   * than it. `"pure"` allows only read-only tools; `"bounded"` also allows
+   * decidable side-effecting tools (Write, Edit, …) but bars `Bash` /
+   * unknown-effect / inherits-all; `"dangerously-unrestricted"` (or omitting it)
+   * enforces nothing. NOTE: `"pure"`/`"bounded"` require an explicit read-only
+   * `tools` list — an absent list inherits ALL tools and is a violation.
+   */
+  readonly purity?: AuthoredPurity;
+  /**
    * Gated pipeline steps. When set, the skill compiles to a `## Steps`
    * checklist with a deterministic gate per step. Use this OR `body`.
    */
@@ -546,6 +578,15 @@ export interface AgentSpec {
    * and testable (see `result()`, `parseAgentResult`, `assertAgentOk`).
    */
   readonly output?: OutputContract;
+  /**
+   * Declare this agent's purity floor — compile rejects a tool contract looser
+   * than it. `"pure"` allows only read-only tools; `"bounded"` also allows
+   * decidable side-effecting tools (Write, Edit, …) but bars `Bash` /
+   * unknown-effect / inherits-all; `"dangerously-unrestricted"` (or omitting it)
+   * enforces nothing. `"pure"`/`"bounded"` require an explicit `tools` list — a
+   * wildcard or absent-tools (inherits-all) is always a violation.
+   */
+  readonly purity?: AuthoredPurity;
 }
 
 /**

@@ -9,8 +9,16 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { agent, instructions, file, cmd, enforce, guidance } from "./spec.js";
-import { compileAgent, adoptDiff } from "./compile.js";
+import {
+  agent,
+  skill,
+  instructions,
+  file,
+  cmd,
+  enforce,
+  guidance,
+} from "./spec.js";
+import { compileAgent, compileSkill, adoptDiff } from "./compile.js";
 import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
 
@@ -262,4 +270,236 @@ test("adoptDiff round-trips a compiled agent (valid hash, no changes)", () => {
   } finally {
     cleanupTmpDir(dir);
   }
+});
+
+// ---------------------------------------------------------------------------
+// purity floor contract — compileAgent
+// ---------------------------------------------------------------------------
+
+test('purity: "pure" agent with read-only tools compiles clean', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "analyzer",
+      description: "Analyze code without mutating.",
+      purity: "pure",
+      tools: ["Read", "Grep", "Glob"],
+      body: "Analyze only.",
+    }),
+    { specFile: "agents/analyzer.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(errors, []);
+});
+
+test('purity: "pure" agent with a side-effecting tool errors, naming the tool', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "bad",
+      description: "Tries to write.",
+      purity: "pure",
+      tools: ["Read", "Write"],
+      body: "b",
+    }),
+    { specFile: "agents/bad.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.equal(pureErrors.length, 1);
+  assert.match(pureErrors[0].message, /"Write"/);
+  assert.match(pureErrors[0].message, /side-effecting/);
+});
+
+test('purity: "pure" agent with Bash errors', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "bad",
+      description: "Runs bash.",
+      purity: "pure",
+      tools: ["Read", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/bad.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /"Bash"/);
+});
+
+test('purity: "pure" agent with an unknown/MCP tool errors', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "bad",
+      description: "Uses MCP.",
+      purity: "pure",
+      tools: ["Read", "mcp__github__issue_write"],
+      body: "b",
+    }),
+    { specFile: "agents/bad.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /unknown effect class/);
+});
+
+test('purity: "pure" agent with wildcard tools errors', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "bad",
+      description: "Inherits all.",
+      purity: "pure",
+      tools: ["*"],
+      body: "b",
+    }),
+    { specFile: "agents/bad.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /inherits-all/);
+});
+
+test('purity: "pure" agent with NO tools list errors (absent = inherits-all)', () => {
+  const { errors } = compileAgent(
+    agent({
+      name: "bad",
+      description: "Pure but no tools — inherits everything.",
+      purity: "pure",
+      body: "b",
+    }),
+    { specFile: "agents/bad.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /inherits-all/);
+});
+
+test('purity: "bounded" allows a decidable side-effecting tool but bars Bash', () => {
+  // Write/Edit are fine in a bounded unit — effects confined to the boundary.
+  const ok = compileAgent(
+    agent({
+      name: "editor",
+      description: "Edits within a boundary.",
+      purity: "bounded",
+      tools: ["Read", "Write", "Edit"],
+      body: "b",
+    }),
+    { specFile: "agents/editor.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(
+    ok.errors.filter((e) => e.type === "purity-violation"),
+    [],
+  );
+
+  // Bash is undecidable/unbounded → barred even at the bounded floor.
+  const bad = compileAgent(
+    agent({
+      name: "editor2",
+      description: "Tries Bash.",
+      purity: "bounded",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/editor2.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const boundedErrors = bad.errors.filter((e) => e.type === "purity-violation");
+  assert.ok(boundedErrors.length > 0);
+  assert.match(boundedErrors[0].message, /"Bash"/);
+});
+
+test('purity: "dangerously-unrestricted" / omitted + side-effecting tools compiles (no enforcement)', () => {
+  // omitted
+  const omitted = compileAgent(
+    agent({
+      name: "writer",
+      description: "Writes files.",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/writer.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(
+    omitted.errors.filter((e) => e.type === "purity-violation"),
+    [],
+  );
+
+  // explicit escape hatch
+  const escaped = compileAgent(
+    agent({
+      name: "writer2",
+      description: "Writes files.",
+      purity: "dangerously-unrestricted",
+      tools: ["Read", "Write", "Bash"],
+      body: "b",
+    }),
+    { specFile: "agents/writer2.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(
+    escaped.errors.filter((e) => e.type === "purity-violation"),
+    [],
+  );
+});
+
+// ---------------------------------------------------------------------------
+// purity floor contract — compileSkill
+// ---------------------------------------------------------------------------
+
+test('purity: "pure" skill with read-only tools compiles clean', () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "review",
+      description: "Review code.",
+      purity: "pure",
+      tools: ["Read", "Grep"],
+      body: "Review.",
+    }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  assert.deepEqual(
+    errors.filter((e) => e.type === "purity-violation"),
+    [],
+  );
+});
+
+test('purity: "pure" skill with a side-effecting tool errors', () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "bad",
+      description: "Writes stuff.",
+      purity: "pure",
+      tools: ["Read", "Write"],
+      body: "b",
+    }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.equal(pureErrors.length, 1);
+  assert.match(pureErrors[0].message, /"Write"/);
+});
+
+test('purity: "pure" skill with no tools declared errors (absent = inherits-all)', () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "noop",
+      description: "Claims pure but inherits all tools.",
+      purity: "pure",
+      body: "Just think.",
+    }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /inherits-all/);
+});
+
+test('purity: "pure" skill with wildcard tools errors', () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "bad",
+      description: "Wildcard.",
+      purity: "pure",
+      tools: ["*"],
+      body: "b",
+    }),
+    { specFile: "SKILL.md.spec.ts", dialect: claudeCodeDialect },
+  );
+  const pureErrors = errors.filter((e) => e.type === "purity-violation");
+  assert.ok(pureErrors.length > 0);
+  assert.match(pureErrors[0].message, /inherits-all/);
 });

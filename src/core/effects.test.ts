@@ -13,6 +13,7 @@ import {
   classifyToolEffect,
   effectSurface,
   pureContractViolations,
+  purityViolations,
 } from "./effects.js";
 import type { ToolEffect, PurityLevel } from "./effects.js";
 import { claudeCodeDialect as d } from "../adapters/claude-code/dialect.js";
@@ -167,7 +168,7 @@ test("Write in a pure contract is a violation with an actionable message", () =>
   assert.equal(violations[0].tool, "Write");
   assert.equal(violations[0].effect, "side-effecting");
   assert.match(violations[0].message, /"Write" is side-effecting/);
-  assert.match(violations[0].message, /pure skill cannot declare it/);
+  assert.match(violations[0].message, /pure unit cannot declare it/);
 });
 
 test("Bash in a pure contract is a violation", () => {
@@ -216,4 +217,40 @@ test("a Bash(restriction) form is correctly flagged as side-effecting", () => {
   assert.equal(violations.length, 1);
   assert.equal(violations[0].tool, "Bash");
   assert.equal(violations[0].effect, "side-effecting");
+});
+
+// ---------------------------------------------------------------------------
+// purityViolations — the level-aware floor (bounded allows decidable effects)
+// ---------------------------------------------------------------------------
+
+test('purityViolations("bounded") allows a decidable side-effecting tool', () => {
+  // Write/Edit are confined to the boundary in a bounded unit — not a violation.
+  const violations = purityViolations(["Read", "Write", "Edit"], d, "bounded");
+  assert.deepEqual(violations, []);
+});
+
+test('purityViolations("bounded") bars Bash (undecidable/unbounded)', () => {
+  const violations = purityViolations(["Read", "Write", "Bash"], d, "bounded");
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].tool, "Bash");
+});
+
+test('purityViolations("bounded") bars an unknown-effect tool and a wildcard', () => {
+  assert.ok(purityViolations(["mcp__srv__tool"], d, "bounded").length > 0);
+  assert.ok(purityViolations(["*"], d, "bounded").length > 0);
+});
+
+test('purityViolations("unrestricted") never reports a violation', () => {
+  assert.deepEqual(
+    purityViolations(["Bash", "mcp__srv__tool", "*"], d, "unrestricted"),
+    [],
+  );
+});
+
+test('purityViolations("pure") matches pureContractViolations', () => {
+  const tools = ["Read", "Write", "Bash", "mcp__srv__tool"];
+  assert.deepEqual(
+    purityViolations(tools, d, "pure"),
+    pureContractViolations(tools, d),
+  );
 });

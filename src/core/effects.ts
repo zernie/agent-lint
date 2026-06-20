@@ -183,20 +183,30 @@ export function effectSurface(
 }
 
 /**
- * Returns the violations in a declared `pure:` contract — every tool that is
- * side-effecting or unknown-effect. An empty result means the contract is
- * genuinely pure.
+ * Returns the violations of a DECLARED purity floor — the tools that make the
+ * actual effect surface LOOSER than the declared level. Empty ⇒ the contract
+ * honours the declared level. The `message` on each is actionable (names the
+ * tool, the effect class, and what to do).
  *
- * A wildcard (`"*"` / `""`) contract is always a violation: "inherits-all"
- * grants access to every side-effecting tool, making purity unenforceable.
+ * What counts as a violation depends on `declared`:
+ * - `"pure"`:         every side-effecting, unknown-effect, or wildcard tool
+ *                     (a pure unit may only observe).
+ * - `"bounded"`:      only the UNBOUNDED tools — `Bash` (undecidable at the
+ *                     tool-name level), unknown-effect (MCP / unrecognized), or
+ *                     a wildcard. A decidable side-effecting tool (Write, Edit,
+ *                     …) is ALLOWED in a bounded unit — its effects are confined
+ *                     to the marked boundary, the whole point of the rung.
+ * - `"unrestricted"`: never a violation (the rung carries no constraint).
  *
- * The `message` on each violation is actionable — it names the tool, explains
- * the effect class, and tells the author what to do.
+ * A wildcard (`"*"` / `""`) contract is a violation at every constrained level:
+ * "inherits-all" grants every tool, so neither `pure` nor `bounded` can hold.
  */
-export function pureContractViolations(
+export function purityViolations(
   tools: readonly string[],
   dialect: HarnessDialect,
+  declared: PurityLevel,
 ): PureViolation[] {
+  if (declared === "unrestricted") return []; // no constraint to violate
   const violations: PureViolation[] = [];
   const seen = new Set<string>();
 
@@ -210,7 +220,7 @@ export function pureContractViolations(
         violations.push({
           tool: base,
           effect: "side-effecting",
-          message: `${key} (inherits-all) is not allowed in a pure contract — it grants access to every side-effecting tool. Declare only specific read-only tools instead.`,
+          message: `${key} (inherits-all) is not allowed in a ${declared} contract — it grants access to every tool, including side-effecting ones. Declare explicit tools instead.`,
         });
       }
       continue;
@@ -221,22 +231,27 @@ export function pureContractViolations(
 
     switch (effect) {
       case "read-only":
-        // No violation — pure contracts may declare read-only tools.
-        break;
-      case "side-effecting":
-        seen.add(base);
-        violations.push({
-          tool: base,
-          effect,
-          message: `"${base}" is side-effecting; a pure skill cannot declare it. Remove it or downgrade the skill to bounded/unrestricted.`,
-        });
-        break;
+        break; // allowed at every level
       case "unknown":
         seen.add(base);
         violations.push({
           tool: base,
           effect,
-          message: `"${base}" has unknown effect class (MCP or unrecognized tool); a pure skill cannot declare it — unknown tools may be side-effecting. Remove it or downgrade the skill to bounded/unrestricted.`,
+          message: `"${base}" has unknown effect class (MCP or unrecognized tool); a ${declared} contract cannot declare it — its effects are unbounded from static analysis. Remove it or declare the unit dangerously-unrestricted.`,
+        });
+        break;
+      case "side-effecting":
+        // In a BOUNDED unit a decidable side-effecting tool (Write, Edit, …) is
+        // allowed — only `Bash` is undecidable/unbounded and therefore barred.
+        if (declared === "bounded" && base !== "Bash") break;
+        seen.add(base);
+        violations.push({
+          tool: base,
+          effect,
+          message:
+            base === "Bash"
+              ? `"Bash" is undecidable at the tool-name level (unbounded); a ${declared} contract cannot declare it. Use a typed read-only/specific tool, or declare the unit dangerously-unrestricted.`
+              : `"${base}" is side-effecting; a pure unit cannot declare it. Remove it or declare the unit bounded.`,
         });
         break;
       default:
@@ -245,4 +260,16 @@ export function pureContractViolations(
   }
 
   return violations;
+}
+
+/**
+ * The violations of a `purity: "pure"` contract — every side-effecting,
+ * unknown-effect, or wildcard tool. A thin alias for `purityViolations(…,
+ * "pure")` kept for the common pure case.
+ */
+export function pureContractViolations(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): PureViolation[] {
+  return purityViolations(tools, dialect, "pure");
 }
