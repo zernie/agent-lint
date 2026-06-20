@@ -33,12 +33,14 @@ distribution D1–D3. The full ordered map + per-item status is in `research/roa
 ## In flight
 
 Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`.
-The spec-foundation review is DONE (two research-backed decisions recorded + two
-ships). Open research-backed FOLLOW-UPS (none started, all in roadmap P1
-"Spec authoring polish"): model `context: fork` on `SkillSpec` (routes a forked
-skill through the subagent contract — the one real skill gap); agent frontmatter
-fields (`disallowedTools`/`color`) for clean plugin round-trips; rename
-"migrate" → "adopt" in the migrate-to-spec skill + init hint. Ask before picking.
+Spec-foundation review DONE + the polish follow-ups SHIPPED: agent frontmatter
+fields `disallowedTools`/`color` (`95ce25f`) and the `migrate`→`adopt-spec` rename
+(`6137008`). ONE research-backed follow-up LEFT (roadmap P1): model `context: fork`
+on `SkillSpec` — the bridge that lets a forked (procedural) skill carry a `result()`
+outcome via the EXISTING subagent rail. OPEN QUESTION the user raised: whether to
+modernize our OWN `CLAUDE.md.spec.ts` (plain-string `sections` → `instructions\`\``
+for verified refs) — verdict below: low-priority (keyFiles already carries the
+verification); optionally upgrade the ref-dense Architecture section only.
 
 ## Decisions / shipped this session (spec-foundation review)
 
