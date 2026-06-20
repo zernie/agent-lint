@@ -123,6 +123,9 @@ the free tier that makes measurement affordable, explicable, and durable** — e
 
 ## See also
 
+- `typed-contracts-for-agents.md` — the durable purpose of the spec under this frame: typed
+  Result/railway contracts + side-effect boundaries make skills/agents _assertable_ (not
+  LLM-judged), which is what makes the measurement cheap and rigorous.
 - `strategy-verdict.md` — the prior (security-led) verdict this reframes; the spine there is
   now: benchmark/optimize (offense) > verify/test (substrate).
 - `divergent-bets.md` — the harness cost/ROI optimizer + CI-for-model-upgrades bets this
