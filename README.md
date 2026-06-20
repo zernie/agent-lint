@@ -5,11 +5,11 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>Lint &amp; test the harness your AI agent runs on.</strong>
+  <strong>Lint, test &amp; measure the harness your AI agent runs on.</strong>
 </p>
 
 <p align="center">
-  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, and nothing tests they <em>work</em>. vigiles does both.
+  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, nothing tests they <em>work</em>, and nothing measures whether they actually <em>help</em>. vigiles does all three.
 </p>
 
 <p align="center">
@@ -20,14 +20,17 @@
 
 ---
 
-`Agent = Model + Harness`. You'd never ship an app without a linter and a test
-suite — yet the harness steering your agent runs on vibes. vigiles[^name] is the
-deterministic layer for it, and does two independent things — adopt either, or both:
+`Agent = Model + Harness`. You'd never ship an app without a linter, a test suite,
+and a benchmark — yet the harness steering your agent runs on vibes. vigiles[^name]
+is the deterministic layer for it — and the only one that can **A/B-test what
+actually moves the needle on your Claude subscription**, not metered API. Three
+things, adopt any:
 
-|             |                                                                                                                                                                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **🔎 Lint** | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)**                      |
-| **🧪 Test** | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
+|                |                                                                                                                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **🔎 Lint**    | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)**                      |
+| **🧪 Test**    | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)** |
+| **📊 Measure** | Does that skill or plugin actually help — or just add cost? **A/B it on real tasks** and read the bill + correctness, not the vendor's headline. The same engine ranks the hyped ecosystem: **what works vs hype**. **[→](docs/measuring-skills.md)** |
 
 Pick the one that hurts today. **Works with Claude Code and Codex**
 ([`vigiles/codex`](docs/harnesses.md)), and you can
@@ -121,19 +124,48 @@ It goes well past _"did it fire?"_:
 
 - **Hooks block** what they must — `runHook`, or the real agent CLI via `runHarnessTest`.
 - **Skills trigger** on the right prompts and stay quiet on the wrong ones — recall _and_ precision (`measureTriggerRate`).
-- **Behaviour is good** — score a skill's output directly, or A/B it on-vs-off for the real lift over no-skill (`measure` / `runEval`, with significance testing).
+- **Behaviour is good** — score a skill's output directly, or A/B it on-vs-off for the real lift (`measure` / `runEval`, with significance testing).
 - **Safety holds** — the agent _didn't_ push to the wrong branch or hit a paid API; `interceptTools` catches the attempt so the side effect never happens.
 
-**The eval you can actually afford.** Almost every tier runs with **no model and
-no API key** — milliseconds, on every commit. The rest drive your own `claude` CLI:
+Almost every tier runs with **no model and no API key** — milliseconds, on every
+commit. Only the real-model evals need a model, and they run on your own `claude`
+CLI. **[How it works →](docs/harness-testing.md)** · **[Safety model →](docs/safety.md)**
+
+## ③ Measure — does it actually help, or just cost more?
+
+A skill claims "65% fewer tokens." A plugin promises "3× faster." Stars and
+vibes — **zero measurement**. vigiles A/Bs the claim on real coding tasks, the
+harness loaded exactly as it ships, and reports the **metric triple**:
+
+```typescript
+import { measureArms } from "vigiles/testing";
+
+const r = await measureArms({
+  fixture: { "in.txt": "Implement a slug helper." },
+  task: "Read in.txt, write slugify() to slug.js, explain. Stop.",
+  arms: { baseline: {}, skill: { files: { "SKILL.md": THE_SKILL } } },
+  measure: (ctx) => ({ cost: ctx.usage.costUsd, correct: check(ctx) }),
+});
+// → is the bill lower? did correctness survive? (not just "fewer output tokens")
+```
+
+- **The bill (`costUsd`)** — the honest number; it weights cache ~0.1× and output 1×, so a "saved tokens" headline can't hide behind cheap cache.
+- **The optimization target** — whatever the skill claims to move (output tokens, latency, tool calls). Verified on its own terms.
+- **The blast radius** — correctness, a deterministic 1/0. A token win that breaks the code is **not a win**.
+
+The kicker: every run is **your own `claude` CLI on your Pro/Max subscription** —
+so you can measure on every change, and the same engine powers the **ecosystem
+benchmark** ("we A/B-tested the most-hyped skills — what works vs hype"). That's
+the moat: continuous, sub-affordable measurement nobody metered-by-the-token can
+match. **[Measure a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**
+
+**The eval you can actually afford.** Most of vigiles needs no model at all; the
+rest drives your subscription:
 
 |                        | Runs on                 | Cost                                        |
 | ---------------------- | ----------------------- | ------------------------------------------- |
 | promptfoo, DeepEval, … | metered API SDK         | billed **per token, every run**             |
 | **vigiles**            | your Claude Pro/Max sub | **$0 extra** — and most tiers need no model |
-
-That's why you can eval your harness on every change, not just once.
-**[How it works →](docs/harness-testing.md)** · **[Why it's affordable →](docs/eval-architecture.md)** · **[Safety model →](docs/safety.md)**
 
 ## More
 
