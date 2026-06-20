@@ -29,8 +29,10 @@
       [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs)):
       claims ~65% output cut, measured **−5% output / −4% cost**, output only
       **~1.1% of session tokens**, 0 correctness regressions. "Measured ≪ claimed",
-      stark. Rigorous follow-up = sonnet/opus (caveman's target models) + the
-      reusable corpus. → `measurement-authority.md`, `benchmark-methodology.md`
+      stark. **SONNET follow-up DONE (2026-06-20, caveman's TARGET model, pilot
+      2×2): the debunk STRENGTHENS — −23% output / −20% cost (the bill went UP),
+      0 regressions.** Rules out the "haiku underuses the style" caveat. Widen to
+      5×3 for tighter CIs; direction is clear. → `measurement-authority.md`, `benchmark-methodology.md`
 
 **P1 — measurement (the identity):**
 
