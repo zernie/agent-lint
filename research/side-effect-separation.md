@@ -78,7 +78,10 @@ record-replay without an explicit boundary hits ~62% fidelity (fragile); the mar
 interception precise. This is the through-line to `typed-contracts-for-agents.md`: **declaring
 "side effects only here" buys both the safety gate AND deterministic testability from one mark.**
 
-## Compile-time purity: the `pure: true` contract + the purity ladder
+## Compile-time purity: the `purity` contract + the purity ladder
+
+> **Shipped** (`purity: "pure" | "bounded" | "dangerously-unrestricted"` on the skill/agent
+> builder; `purityViolations` in `src/core/effects.ts`; enforced in `compileSkill`/`compileAgent`).
 
 Can `compile` _statically ensure_ a skill has no side effects? **Yes — but enforce it on the
 declared tool contract + the gate, NOT by analyzing the prose.** Analyzing the body to infer
@@ -86,32 +89,41 @@ tool use is the wonky, non-deterministic trap (the body is model-interpreted; wh
 a runtime fact). Instead:
 
 ```ts
-skill({ name: "review", pure: true, tools: ["Read", "Grep"] }); // ✓ compiles
-skill({ name: "review", pure: true, tools: ["Read", "Write"] }); // ✗ compile error:
-//   "Write is side-effecting; a pure skill cannot declare it"
+skill({ name: "review", purity: "pure", tools: ["Read", "Grep"] }); // ✓ compiles
+skill({ name: "review", purity: "pure", tools: ["Read", "Write"] }); // ✗ compile error:
+//   "Write is side-effecting; a pure unit cannot declare it"
 ```
 
-- **Compile:** `pure: true` fails if the `tools:` contract holds **any** side-effecting tool —
+- **Compile:** `purity: "pure"` fails if the `tools:` contract holds **any** side-effecting tool —
   deterministic, because the tool list is static frontmatter and the read-only/side-effecting
-  split is the published catalog. It's the existing `verifyToolContract` detector asserting
-  "∅ side-effecting" (one-detector-no-drift).
+  split is the published catalog. It's the `purityViolations` detector asserting "∅ side-effecting"
+  (one-detector-no-drift, reused by `scan`). An **absent** `tools:` list inherits ALL tools, so it
+  is checked as the `"*"` wildcard — a violation at the pure/bounded floors, never "trivially pure."
 - **Runtime:** the compiled skill ships a rail that **denies every side-effecting tool**, so a
   model that tries one anyway (or a hand-edited `.md`) is still blocked.
 
-So purity is **guaranteed by the gate, not proven from the prose** — `pure:true` makes a pure
+So purity is **guaranteed by the gate, not proven from the prose** — `purity: "pure"` makes a pure
 skill _holding_ an effect tool **unrepresentable** (compile) and _doing_ an effect
-**unreachable** (runtime). It is the strict top of a **3-level ladder**, not forced on everyone:
+**unreachable** (runtime). It is the strict top of a **3-rung ladder**, not forced on everyone —
+and the rung you _declare_ uses the same vocabulary `scan` _reports_ (zero drift):
 
-| Level                      | Means                                | For                             |
-| -------------------------- | ------------------------------------ | ------------------------------- |
-| `pure: true`               | no side-effecting tools, period      | analysis / review / planning    |
-| **bounded** (`effect\`\``) | effects only inside the marked block | the default (the `release` ex.) |
-| unrestricted               | anything                             | legacy / escape hatch           |
+| Rung (`purity:`)             | Means                                             | For                             |
+| ---------------------------- | ------------------------------------------------- | ------------------------------- |
+| `"pure"`                     | no side-effecting tools, period                   | analysis / review / planning    |
+| `"bounded"`                  | decidable effects ok (Write, Edit); no `Bash`/MCP | the default (the `release` ex.) |
+| `"dangerously-unrestricted"` | anything (the loud, in-review escape hatch)       | legacy / opt-out                |
 
-The honest hole is the same `Bash` one: `pure:true` ⟹ **no `Bash`** (a side-effecting catch-all
+The loosest rung is named `dangerously-unrestricted` (cf. React's `dangerouslySetInnerHTML`) so
+opting OUT of the guardrail stands out in review; omitting `purity` is the same unenforced default
+without typing the loud word. NOTE the asymmetry: the **report** (`scan`/`effectSurface`) stays
+neutral `unrestricted` — a health report shouldn't scream "dangerous" at every legitimate `Bash`
+user (don't-cry-wolf); the alarm lives only at the **declaration** site.
+
+The honest hole is the same `Bash` one: `purity: "pure"` ⟹ **no `Bash`** (a side-effecting catch-all
 — `Bash(git log)` and `Bash(rm -rf /)` are one tool). A read-via-`Bash` skill is therefore
 `bounded`, not `pure`, unless it swaps to a typed read-only tool or opts into a narrow
-command-pattern allowlist (brittle). The sandbox remains the indirect-effect backstop.
+command-pattern allowlist — exactly the deterministic Bash-effect classification worked out in
+`bash-effect-classification.md`. The sandbox remains the indirect-effect backstop.
 
 ## Static effect-surface analysis (analyze the harness without running it)
 
