@@ -24,6 +24,7 @@ import type {
   OutputFieldType,
   Railway,
   RailwayStep,
+  AuthoredPurity,
 } from "./spec.js";
 
 import { checkLinterRule, extractLinterName } from "./linters.js";
@@ -920,6 +921,19 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
   return fm.join("\n");
 }
 
+/**
+ * The `<!-- vigiles:purity:LEVEL -->` marker the runtime PreToolUse gate reads to
+ * enforce a unit's declared purity floor against live tool calls (see
+ * `decidePurityGate` / `parseAgentPurity`). Returns "" when no purity is
+ * declared. The loud authoring word `dangerously-unrestricted` maps to the
+ * neutral report/runtime level `unrestricted` (no constraint to enforce).
+ */
+function purityMarker(purity: AuthoredPurity | undefined): string {
+  if (!purity) return "";
+  const level = purity === "dangerously-unrestricted" ? "unrestricted" : purity;
+  return `<!-- vigiles:purity:${level} -->`;
+}
+
 /** Render the subagent's named `##` system-prompt sections (verified like CLAUDE.md). */
 function renderAgentSections(
   sections: Record<string, string | InstructionFragment[]>,
@@ -1059,7 +1073,13 @@ export function compileAgent(
   const body = sections.join("\n\n");
   errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
 
-  const content = renderAgentFrontmatter(spec) + "\n\n" + body.trim() + "\n";
+  const marker = purityMarker(spec.purity);
+  const content =
+    renderAgentFrontmatter(spec) +
+    "\n\n" +
+    (marker ? marker + "\n\n" : "") +
+    body.trim() +
+    "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 

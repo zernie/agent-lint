@@ -16,6 +16,15 @@
  *                    actual effect surface is unbounded from static analysis
  *                    alone; "unrestricted" is the honest report.
  *
+ * SURFACE vs FLOOR — two related but distinct questions, intentionally. The
+ * `effectSurface` above is the STATIC surface: it can't see a `Bash` command, so
+ * any `Bash` makes the surface `unrestricted` (honest — statically unbounded).
+ * The purity FLOOR (`purityViolations` / `decidePurityGate`) is what's
+ * ENFORCED, and `bounded` admits `Bash` because the runtime gate refines it by
+ * command (`isReadOnlyBash`). So a `bounded`-declared unit with `Bash` reports an
+ * `unrestricted` surface yet enforces a `bounded` floor — the runtime gate is
+ * exactly what closes that gap.
+ *
  * ONE pure detector (`one-detector-no-drift`), dialect injected (core ⊄
  * adapter). The composition root passes `claudeCodeDialect` / `codexDialect`.
  *
@@ -23,6 +32,7 @@
  */
 import type { HarnessDialect } from "./dialect.js";
 import { assertNever } from "./hash.js";
+import { isReadOnlyBash } from "./bash-effects.js";
 
 /** The effect class of a single tool from a declared `tools:` contract. */
 export type ToolEffect = "read-only" | "side-effecting" | "unknown";
@@ -189,13 +199,15 @@ export function effectSurface(
  * tool, the effect class, and what to do).
  *
  * What counts as a violation depends on `declared`:
- * - `"pure"`:         every side-effecting, unknown-effect, or wildcard tool
- *                     (a pure unit may only observe).
- * - `"bounded"`:      only the UNBOUNDED tools — `Bash` (undecidable at the
- *                     tool-name level), unknown-effect (MCP / unrecognized), or
- *                     a wildcard. A decidable side-effecting tool (Write, Edit,
- *                     …) is ALLOWED in a bounded unit — its effects are confined
- *                     to the marked boundary, the whole point of the rung.
+ * - `"pure"`:         every side-effecting tool (incl. `Bash`), every
+ *                     unknown-effect tool, and any wildcard (a pure unit may
+ *                     only observe — no `Bash`, no effects, fully static).
+ * - `"bounded"`:      only the truly UNBOUNDED tools — unknown-effect (MCP /
+ *                     unrecognized) and wildcards. Every decidable side-effecting
+ *                     tool is ALLOWED: Write/Edit confine to the boundary, and
+ *                     `Bash` is admitted because the RUNTIME gate
+ *                     (`decidePurityGate`) refines it by command (read-only Bash
+ *                     is an observation; a mutating command is denied).
  * - `"unrestricted"`: never a violation (the rung carries no constraint).
  *
  * A wildcard (`"*"` / `""`) contract is a violation at every constrained level:
@@ -241,16 +253,19 @@ export function purityViolations(
         });
         break;
       case "side-effecting":
-        // In a BOUNDED unit a decidable side-effecting tool (Write, Edit, …) is
-        // allowed — only `Bash` is undecidable/unbounded and therefore barred.
-        if (declared === "bounded" && base !== "Bash") break;
+        // In a BOUNDED unit every decidable side-effecting tool is allowed:
+        // Write/Edit confine to the boundary, and `Bash` is admitted because the
+        // RUNTIME gate (`decidePurityGate`) refines it by command — a read-only
+        // Bash is an observation, a mutating command is denied. Only `pure` bars
+        // them (a pure unit may only observe; no `Bash`, no effects).
+        if (declared === "bounded") break;
         seen.add(base);
         violations.push({
           tool: base,
           effect,
           message:
             base === "Bash"
-              ? `"Bash" is undecidable at the tool-name level (unbounded); a ${declared} contract cannot declare it. Use a typed read-only/specific tool, or declare the unit dangerously-unrestricted.`
+              ? `"Bash" is undecidable at the tool-name level; a pure unit cannot declare it. A read-only Bash belongs in a bounded unit (the runtime gate confines it by command) — declare the unit bounded or dangerously-unrestricted.`
               : `"${base}" is side-effecting; a pure unit cannot declare it. Remove it or declare the unit bounded.`,
         });
         break;
@@ -272,4 +287,85 @@ export function pureContractViolations(
   dialect: HarnessDialect,
 ): PureViolation[] {
   return purityViolations(tools, dialect, "pure");
+}
+
+// ---------------------------------------------------------------------------
+// The runtime half — the live-call purity gate
+// ---------------------------------------------------------------------------
+
+/** A runtime allow/deny decision for the PreToolUse purity gate. */
+export interface PurityGateDecision {
+  readonly allow: boolean;
+  /** Reason fed back to the model on a deny; empty on allow. */
+  readonly message: string;
+}
+
+/**
+ * The RUNTIME half of the purity contract: decide whether a single LIVE tool
+ * call is allowed under the active unit's declared purity floor.
+ *
+ * Unlike `purityViolations` (which checks the DECLARED tools contract
+ * statically), this sees the ACTUAL call — including the `Bash` command string —
+ * so it refines `Bash` by effect via `isReadOnlyBash`. That command is the whole
+ * reason the gate's home is the runtime hook: only here is the concrete command
+ * visible (the static surface sees a tool name + a `Bash(git:*)` pattern, never
+ * the command).
+ *
+ * Rules (the ladder, command-refined):
+ * - `unrestricted` → always allow (no constraint).
+ * - read-only tool → allow at every level.
+ * - `Bash` → allow iff the command is provably read-only (an observation);
+ *   otherwise deny — a mutating/undecidable command's effect must move to a
+ *   marked boundary. Same at `pure` and `bounded`.
+ * - other side-effecting tool (Write, Edit, …) → allow under `bounded`
+ *   (a decidable, boundary-confined effect), deny under `pure` (observe-only).
+ * - unknown-effect (MCP / unrecognized) → deny under `pure`/`bounded`
+ *   (unbounded from static analysis).
+ *
+ * Dialect injected (core ⊄ adapter). Reuses `classifyToolEffect` +
+ * `isReadOnlyBash` — one-detector-no-drift with compile + scan.
+ */
+export function decidePurityGate(
+  declared: PurityLevel,
+  tool: string,
+  command: string | undefined,
+  dialect: HarnessDialect,
+): PurityGateDecision {
+  if (declared === "unrestricted") return { allow: true, message: "" };
+
+  const base = baseTool(tool);
+  const effect = classifyToolEffect(tool, dialect);
+
+  if (effect === "read-only") return { allow: true, message: "" };
+
+  if (base === "Bash") {
+    if (command !== undefined && isReadOnlyBash(command)) {
+      return { allow: true, message: "" };
+    }
+    const shown = command ? `"${command}" ` : "";
+    return {
+      allow: false,
+      message:
+        `Bash command ${shown}is not provably read-only; a ${declared} unit may run only read-only Bash ` +
+        `(observation). Move the side effect into a marked boundary, or declare the unit dangerously-unrestricted.`,
+    };
+  }
+
+  if (effect === "side-effecting") {
+    if (declared === "bounded") return { allow: true, message: "" };
+    return {
+      allow: false,
+      message:
+        `"${base}" is side-effecting; a pure unit may only observe. ` +
+        `Declare the unit bounded (or dangerously-unrestricted) to use it.`,
+    };
+  }
+
+  // unknown — MCP / unrecognized tool
+  return {
+    allow: false,
+    message:
+      `"${base}" has unknown effect class; a ${declared} unit cannot use it — its effects are unbounded. ` +
+      `Declare the unit dangerously-unrestricted to allow it.`,
+  };
 }

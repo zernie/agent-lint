@@ -14,6 +14,7 @@ import {
   effectSurface,
   pureContractViolations,
   purityViolations,
+  decidePurityGate,
 } from "./effects.js";
 import type { ToolEffect, PurityLevel } from "./effects.js";
 import { claudeCodeDialect as d } from "../adapters/claude-code/dialect.js";
@@ -229,15 +230,22 @@ test('purityViolations("bounded") allows a decidable side-effecting tool', () =>
   assert.deepEqual(violations, []);
 });
 
-test('purityViolations("bounded") bars Bash (undecidable/unbounded)', () => {
+test('purityViolations("bounded") ADMITS Bash (the runtime gate refines it by command)', () => {
+  // Bash is decidable at the COMMAND level (isReadOnlyBash), so it belongs in a
+  // bounded unit — the runtime `decidePurityGate` confines it, not compile.
   const violations = purityViolations(["Read", "Write", "Bash"], d, "bounded");
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0].tool, "Bash");
+  assert.deepEqual(violations, []);
 });
 
-test('purityViolations("bounded") bars an unknown-effect tool and a wildcard', () => {
+test('purityViolations("bounded") still bars an unknown-effect tool and a wildcard', () => {
   assert.ok(purityViolations(["mcp__srv__tool"], d, "bounded").length > 0);
   assert.ok(purityViolations(["*"], d, "bounded").length > 0);
+});
+
+test('purityViolations("pure") still bars Bash (a pure unit may only observe)', () => {
+  const violations = purityViolations(["Read", "Bash"], d, "pure");
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].tool, "Bash");
 });
 
 test('purityViolations("unrestricted") never reports a violation', () => {
@@ -253,4 +261,73 @@ test('purityViolations("pure") matches pureContractViolations', () => {
     purityViolations(tools, d, "pure"),
     pureContractViolations(tools, d),
   );
+});
+
+// ---------------------------------------------------------------------------
+// decidePurityGate — the runtime, command-refined gate
+// ---------------------------------------------------------------------------
+
+test("decidePurityGate: unrestricted allows anything", () => {
+  assert.equal(
+    decidePurityGate("unrestricted", "Write", undefined, d).allow,
+    true,
+  );
+  assert.equal(
+    decidePurityGate("unrestricted", "Bash", "rm -rf /", d).allow,
+    true,
+  );
+});
+
+test("decidePurityGate: a read-only tool is allowed at every level", () => {
+  assert.equal(decidePurityGate("pure", "Read", undefined, d).allow, true);
+  assert.equal(decidePurityGate("bounded", "Grep", undefined, d).allow, true);
+});
+
+test("decidePurityGate: a read-only Bash command is allowed (observation)", () => {
+  assert.equal(decidePurityGate("pure", "Bash", "git status", d).allow, true);
+  assert.equal(decidePurityGate("bounded", "Bash", "ls -la", d).allow, true);
+});
+
+test("decidePurityGate: a mutating Bash command is denied, naming the command", () => {
+  const dec = decidePurityGate("bounded", "Bash", "git push origin main", d);
+  assert.equal(dec.allow, false);
+  assert.match(dec.message, /git push origin main/);
+  assert.match(dec.message, /read-only/);
+});
+
+test("decidePurityGate: an undecidable Bash command (no command / eval) is denied", () => {
+  assert.equal(decidePurityGate("bounded", "Bash", undefined, d).allow, false);
+  assert.equal(
+    decidePurityGate("bounded", "Bash", 'eval "$X"', d).allow,
+    false,
+  );
+});
+
+test("decidePurityGate: a Bash(restriction) form is still command-refined", () => {
+  assert.equal(
+    decidePurityGate("bounded", "Bash(git:*)", "git log", d).allow,
+    true,
+  );
+  assert.equal(
+    decidePurityGate("bounded", "Bash(git:*)", "git commit -m x", d).allow,
+    false,
+  );
+});
+
+test("decidePurityGate: a non-Bash side-effecting tool is allowed under bounded, denied under pure", () => {
+  assert.equal(decidePurityGate("bounded", "Write", undefined, d).allow, true);
+  assert.equal(decidePurityGate("bounded", "Edit", undefined, d).allow, true);
+  const pure = decidePurityGate("pure", "Write", undefined, d);
+  assert.equal(pure.allow, false);
+  assert.match(pure.message, /only observe/);
+});
+
+test("decidePurityGate: an unknown-effect (MCP) tool is denied under pure and bounded", () => {
+  assert.equal(
+    decidePurityGate("pure", "mcp__srv__tool", undefined, d).allow,
+    false,
+  );
+  const dec = decidePurityGate("bounded", "mcp__srv__tool", undefined, d);
+  assert.equal(dec.allow, false);
+  assert.match(dec.message, /unknown effect class/);
 });
