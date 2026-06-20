@@ -190,6 +190,9 @@ export function decideHook(exitCode: number, json: HookOutput | null, protocol?:
     decision: HookRunResult["decision"];
 };
 
+// @public
+export function didNotWrite(path: string): Check<Trace>;
+
 // @public (undocumented)
 export interface DiffOptions {
     readonly alpha?: number;

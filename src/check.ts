@@ -318,17 +318,37 @@ export function wrote(path: string): Check<Trace> {
   };
 }
 
+/**
+ * The agent did NOT leave a file at this path — the **side-effect boundary**
+ * negative: a skill that declares it writes only `out.txt` should leave nothing
+ * at `secrets.env`. The symmetric sibling of `wrote()`; pairs with
+ * `notTool(...)` to assert a unit stayed inside its declared write surface
+ * deterministically (no model judge).
+ */
+export function didNotWrite(path: string): Check<Trace> {
+  return {
+    kind: "didNotWrite",
+    eval: (t) =>
+      t.file(path) === null
+        ? ok(`file "${path}" was not created`)
+        : no(`expected the agent NOT to create "${path}", but it exists`),
+    toJSON: () => ({ kind: "didNotWrite", path }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Subagent — a `Task` run as a nested trace. Run checks over what the SUBAGENT
 // did, not just that `Task` fired. Composes the whole vocabulary recursively.
 // ---------------------------------------------------------------------------
 
-/** Wrap a subagent's tool calls as a minimal `Trace` so checks run over it. */
+/** Wrap a subagent's tool calls + returned text as a minimal `Trace` so checks
+ * (incl. `output()` over the sub's RETURN — where a result() vigiles:ok/err block
+ * lands) run over it. */
 function subTrace(sub: SubagentTrace): Trace {
   return {
     toolCalls: sub.toolCalls,
     hooks: [],
-    output: "",
+    output: sub.output,
     modelRequests: [],
     turns: 0,
     subagents: [],
@@ -345,7 +365,13 @@ export function subagent(
     kind: "subagent",
     eval: (t) => {
       const subs = t.subagents ?? [];
-      const sub = subs.find((s) => s.name === name);
+      // A `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent`
+      // (e.g. "reviewer-spec:code-reviewer"), but callers pass the bare agent name
+      // — so match the full id OR its last `:`-segment. Non-namespaced (harness
+      // mock) names match exactly as before.
+      const bare = (n: string) =>
+        n.includes(":") ? n.slice(n.lastIndexOf(":") + 1) : n;
+      const sub = subs.find((s) => s.name === name || bare(s.name) === name);
       if (!sub) {
         return no(
           `expected subagent "${name}" to run; subagents that ran: ${subs.length > 0 ? `[${subs.map((s) => s.name).join(", ")}]` : "none"}`,

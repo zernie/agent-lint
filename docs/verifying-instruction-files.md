@@ -29,18 +29,35 @@ Each rule is checked against your real linter config — typos get closest-match
 suggestions, disabled rules are flagged. `vigiles lint` enforces them in CI.
 Zero install commitment, zero new files.
 
-> **Want editor autocomplete?** Promote the rules into a `vigiles:` YAML
-> frontmatter block and run `npx vigiles generate-schema` — your editor's YAML
-> language server then autocompletes rule names and red-squiggles typos at edit
-> time, still with no TypeScript. Same enforcement, nicer authoring.
-> [Markdown mode →](markdown-mode.md)
+> **Want editor autocomplete?** Move the rules into a `vigiles:` YAML
+> frontmatter block — `init` already generated the schema, so your editor's YAML
+> language server autocompletes rule names and squiggles typos at edit time, no
+> TypeScript required. [Markdown mode →](markdown-mode.md)
 
 ### Typed spec — compiler-grade guarantees
 
-When you want the strongest guarantees, compile a typed spec. Every linter rule
-reference is verified against your real config, every file path against the
-filesystem, every npm script against package.json. Stale references become
-compile errors — caught at edit time, not when the agent silently ignores you.
+**Markdown mode is not a lesser tier for verification.** It squiggles rule typos
+at edit time (the YAML schema `init` generates), and its inline marks —
+`vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file
+paths, scripts, symbols, and linter rules _woven into the prose_, exactly like the
+spec. If you have one instruction file and don't need to generate or share rules,
+stay in markdown; you give up nothing on reference verification.
+
+A typed spec adds one thing markdown can't: **rules and instructions become
+composable, type-checked code.**
+
+- **Compose and reuse.** Share a rule-set across many files or repos, generate
+  rules programmatically, and let `tsc` make a stale reference _unrepresentable_ as
+  you author — not just flagged on `lint`.
+- **One hashed source.** `compile` stamps the emitted CLAUDE.md with an integrity
+  hash, so the agent edits the spec and hand-edits to the artifact are caught.
+  (This only matters once you've chosen the spec-as-source model — in markdown the
+  file _is_ the source, so there's no drift to detect.)
+- **Monotonicity proofs.** A rule can be strengthened (`guidance` → `enforce`) but
+  never silently weakened or removed, gated by the proof system below.
+
+So: reach for the spec when you're standardizing rules across a codebase or
+generating them; otherwise markdown is the destination, not a stepping stone.
 
 ```typescript
 // CLAUDE.md.spec.ts
@@ -70,9 +87,9 @@ export default claude({
 });
 ```
 
-`npx vigiles compile` turns that into CLAUDE.md (with an integrity hash). The spec
-is the source of truth and CLAUDE.md is a build artifact: the agent edits the spec
-— hooks auto-compile, types catch typos in the editor, CI catches drift.
+`npx vigiles compile` turns that into CLAUDE.md. From there the loop runs itself:
+the agent edits the spec, hooks auto-compile, types catch typos in the editor, and
+CI catches drift.
 
 ## Three rule types
 

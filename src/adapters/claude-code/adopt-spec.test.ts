@@ -1,11 +1,11 @@
 /**
- * Dogfood the user-invoked `skills/migrate-to-spec` skill. Its procedure is
+ * Dogfood the user-invoked `skills/adopt-spec` skill. Its procedure is
  * model-driven (no deterministic logic to unit-test), but the skill SHOWS agents
  * an exact `import { … } from "vigiles/spec"` template — and a skill that teaches
  * a symbol the package no longer exports produces specs that don't compile. This
  * is the eat-our-own-dogfood check: every symbol the skill tells an agent to
  * import MUST be a real export of `vigiles/spec`. Catches skill ⇄ API drift and
- * (by naming `skills/migrate-to-spec`) is the surface's untested-coverage test.
+ * (by naming `skills/adopt-spec`) is the surface's untested-coverage test.
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 
 import * as spec from "../../core/spec.js";
 
-const SKILL = resolve(process.cwd(), "skills/migrate-to-spec/SKILL.md");
+const SKILL = resolve(process.cwd(), "skills/adopt-spec/SKILL.md");
 
 /** Pull every name out of the skill's `import { … } from "vigiles/spec"` block. */
 function taughtImports(md: string): string[] {
@@ -26,7 +26,7 @@ function taughtImports(md: string): string[] {
     .filter(Boolean);
 }
 
-test("migrate-to-spec teaches only symbols vigiles/spec actually exports", () => {
+test("adopt-spec teaches only symbols vigiles/spec actually exports", () => {
   const md = readFileSync(SKILL, "utf-8");
   const names = taughtImports(md);
 
@@ -41,7 +41,7 @@ test("migrate-to-spec teaches only symbols vigiles/spec actually exports", () =>
   assert.deepEqual(
     missing,
     [],
-    `migrate-to-spec imports symbols not exported by vigiles/spec: ${missing.join(", ")}`,
+    `adopt-spec imports symbols not exported by vigiles/spec: ${missing.join(", ")}`,
   );
 
   // The builders the skill's own steps lean on must be among them.

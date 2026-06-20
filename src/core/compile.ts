@@ -5,7 +5,8 @@
  * markdown instruction files with integrity hashes.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { globSync } from "glob";
 import { resolve, dirname, basename } from "node:path";
 
 import { sha256short, assertNever } from "./hash.js";
@@ -24,10 +25,12 @@ import type {
   OutputFieldType,
   Railway,
   RailwayStep,
+  AuthoredPurity,
 } from "./spec.js";
 
 import { checkLinterRule, extractLinterName } from "./linters.js";
-import { verifyToolContract } from "./tool-contract.js";
+import { verifyToolContract, disallowedToolIssues } from "./tool-contract.js";
+import { purityViolations } from "./effects.js";
 import type { LinterCheckResult } from "./linters.js";
 import type { HarnessDialect, SkillFrontmatterProfile } from "./dialect.js";
 
@@ -99,7 +102,9 @@ export interface CompileError {
     | "reserved-section-key"
     | "spec-name-mismatch"
     | "unknown-tool"
-    | "invalid-railway";
+    | "invalid-railway"
+    | "purity-violation"
+    | "output-without-fork";
   message: string;
   path?: string;
 }
@@ -202,44 +207,89 @@ export function validateSymbolRef(
   return null;
 }
 
+export function validateDirRef(
+  dirPath: string,
+  basePath: string,
+): CompileError | null {
+  const resolved = resolve(basePath, dirPath);
+  if (!existsSync(resolved)) {
+    return {
+      type: "stale-file",
+      message: `Directory not found: "${dirPath}"`,
+      path: dirPath,
+    };
+  }
+  if (!statSync(resolved).isDirectory()) {
+    return {
+      type: "stale-ref",
+      message: `Not a directory: "${dirPath}"`,
+      path: dirPath,
+    };
+  }
+  return null;
+}
+
+export function validateGlobRef(
+  pattern: string,
+  basePath: string,
+): CompileError | null {
+  // ≥1 match = the pattern resolves to something real. `dot` so a dotfile path
+  // (e.g. `.claude/**`) isn't silently a no-match.
+  const matches = globSync(pattern, { cwd: basePath, dot: true });
+  if (matches.length === 0) {
+    return {
+      type: "stale-ref",
+      message: `Glob matched no files: "${pattern}"`,
+      path: pattern,
+    };
+  }
+  return null;
+}
+
 function validateRefs(
   fragments: InstructionFragment[],
   basePath: string,
 ): CompileError[] {
   const errors: CompileError[] = [];
   for (const fragment of fragments) {
-    if (typeof fragment === "string") continue;
-    const r = fragment;
-    switch (r._ref) {
-      case "file": {
-        const err = validateFileRef(r.path, basePath);
-        if (err) errors.push(err);
-        break;
-      }
-      case "cmd": {
-        const err = validateCommandRef(r.command, basePath);
-        if (err) errors.push(err);
-        break;
-      }
-      case "skill": {
-        const err = validateFileRef(r.path, basePath);
-        if (err) {
-          errors.push({
-            type: "stale-ref",
-            message: `Skill not found: "${r.path}"`,
-            path: r.path,
-          });
-        }
-        break;
-      }
-      case "symbol": {
-        const err = validateSymbolRef(r.file, r.symbol, basePath);
-        if (err) errors.push(err);
-        break;
-      }
+    if (typeof fragment !== "string") {
+      errors.push(...validateOneRef(fragment, basePath));
     }
   }
   return errors;
+}
+
+const wrap = (e: CompileError | null): CompileError[] => (e ? [e] : []);
+
+/** Validate a single non-string fragment (a `Ref` or `EffectRegion`). */
+function validateOneRef(
+  r: Exclude<InstructionFragment, string>,
+  basePath: string,
+): CompileError[] {
+  switch (r._ref) {
+    case "file":
+      return wrap(validateFileRef(r.path, basePath));
+    case "cmd":
+      return wrap(validateCommandRef(r.command, basePath));
+    case "skill":
+      return validateFileRef(r.path, basePath)
+        ? [
+            {
+              type: "stale-ref",
+              message: `Skill not found: "${r.path}"`,
+              path: r.path,
+            },
+          ]
+        : [];
+    case "symbol":
+      return wrap(validateSymbolRef(r.file, r.symbol, basePath));
+    case "dir":
+      return wrap(validateDirRef(r.path, basePath));
+    case "glob":
+      return wrap(validateGlobRef(r.pattern, basePath));
+    case "effect":
+      return validateRefs(r.body, basePath);
+  }
 }
 
 function renderFragment(fragment: InstructionFragment): string {
@@ -253,6 +303,14 @@ function renderFragment(fragment: InstructionFragment): string {
       return `[${basename(dirname(fragment.path))}](${fragment.path})`;
     case "symbol":
       return `\`vigiles:symbol ${fragment.file}#${fragment.symbol}\``;
+    case "dir":
+      return `\`${fragment.path}\``;
+    case "glob":
+      return `\`${fragment.pattern}\``;
+    case "effect": {
+      const inner = fragment.body.map(renderFragment).join("").trim();
+      return `\n<!-- vigiles:effect -->\n\n${inner}\n\n<!-- /vigiles:effect -->\n`;
+    }
     default:
       return assertNever(fragment);
   }
@@ -338,6 +396,15 @@ interface SectionResult {
   errors: CompileError[];
 }
 
+// A generous default cap on a single named prose section. TypeScript types
+// cannot bound a string's length (template-literal-type recursion caps out ~463
+// chars; TS #52243 unresolved), so a helper's content is guarded at COMPILE time
+// instead — the ESLint-max-len / Prettier-printWidth precedent. Deliberately
+// generous (don't-cry-wolf): real prose sections are short, so this only trips on
+// an egregious dump (a whole essay pasted into one section / instructions``).
+// Override per spec with `maxSectionLines`; `maxTokens` is the global backstop.
+const DEFAULT_MAX_SECTION_LINES = 200;
+
 function validateSectionContent(
   name: string,
   text: string,
@@ -365,10 +432,11 @@ function validateSectionContent(
     }
   }
 
-  if (maxSectionLines && contentLines.length > maxSectionLines) {
+  const max = maxSectionLines ?? DEFAULT_MAX_SECTION_LINES;
+  if (contentLines.length > max) {
     errors.push({
       type: "section-too-long",
-      message: `Section "${name}" is ${String(contentLines.length)} lines (max ${String(maxSectionLines)}). Split into smaller named sections.`,
+      message: `Section "${name}" is ${String(contentLines.length)} lines (max ${String(max)}). Split into smaller named sections, move detail into a file() reference, or raise maxSectionLines if it's intentional.`,
     });
   }
 
@@ -717,8 +785,8 @@ function collectSkillRefs(spec: SkillSpec): InstructionFragment[] {
  * Build the SKILL.md YAML frontmatter block under the harness's frontmatter
  * profile. The `"minimal"` profile (Codex/OpenCode) emits ONLY name +
  * description; `"claude-code"` adds the CC-only keys (disable-model-invocation,
- * argument-hint). Default is `"claude-code"` so callers that pass no dialect get
- * byte-identical output to before.
+ * argument-hint, tools). Default is `"claude-code"` so callers that pass no
+ * dialect get byte-identical output to before.
  */
 function renderSkillFrontmatter(
   spec: SkillSpec,
@@ -738,11 +806,15 @@ function renderSkillFrontmatter(
         `disable-model-invocation: ${String(spec.disableModelInvocation)}`,
       );
     }
+    if (spec.context !== undefined) fm.push(`context: ${spec.context}`);
     const argHint =
       spec.inputs && spec.inputs.length > 0
         ? renderArgumentHint(spec.inputs)
         : spec.argumentHint;
     if (argHint) fm.push(`argument-hint: ${argHint}`);
+    if (spec.tools && spec.tools.length > 0) {
+      fm.push(`tools: ${spec.tools.join(", ")}`);
+    }
   }
   fm.push("", "---");
   return fm.join("\n");
@@ -763,6 +835,9 @@ function renderSkillSections(spec: SkillSpec): string {
     sections.push(renderSteps(spec.steps));
   }
   if (spec.result) sections.push(renderResult(spec.result));
+  // A forked skill (context: fork) runs as a subagent, so it may carry the SAME
+  // typed Result outcome — reuse the subagent renderer (one-renderer-no-drift).
+  if (spec.output) sections.push(renderOutputContract(spec.output));
   return sections.join("\n\n");
 }
 
@@ -838,6 +913,37 @@ export function compileSkill(
 
   errors.push(...validateRefs(collectSkillRefs(spec), basePath));
 
+  // A typed `output` Result contract is valid ONLY for a forked skill: an inline
+  // skill has no call→return boundary, so a typed outcome there is a category
+  // error (see research/spec-syntax-and-railway-scope.md). Enforce it at compile.
+  if (spec.output && spec.context !== "fork") {
+    errors.push({
+      type: "output-without-fork",
+      message:
+        'A skill `output` (result() contract) requires `context: "fork"` — an ' +
+        "inline skill has no return value to type. Add context:'fork' to run it " +
+        "as a subagent, or drop `output`.",
+    });
+  }
+
+  // purity floor check — the dialect is optional (callers that don't pass one
+  // skip the check rather than crash; the CLI always passes it). An absent
+  // tools list inherits ALL tools, so it's checked as the "*" wildcard (a
+  // violation at the pure/bounded floors), never as the empty set.
+  if (
+    spec.purity &&
+    spec.purity !== "dangerously-unrestricted" &&
+    options.dialect
+  ) {
+    for (const v of purityViolations(
+      spec.tools ?? ["*"],
+      options.dialect,
+      spec.purity,
+    )) {
+      errors.push({ type: "purity-violation", message: v.message });
+    }
+  }
+
   const sections = renderSkillSections(spec);
   errors.push(
     ...checkInlineCode(
@@ -846,8 +952,13 @@ export function compileSkill(
     ),
   );
 
+  const marker = purityMarker(spec.purity);
   const content =
-    renderSkillFrontmatter(spec, profile) + "\n\n" + sections.trim() + "\n";
+    renderSkillFrontmatter(spec, profile) +
+    "\n\n" +
+    (marker ? marker + "\n\n" : "") +
+    sections.trim() +
+    "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 
@@ -890,11 +1001,28 @@ function renderAgentFrontmatter(spec: AgentSpec): string {
     `description: ${spec.description}`,
   ];
   if (spec.model !== undefined) fm.push(`model: ${spec.model}`);
+  if (spec.color !== undefined) fm.push(`color: ${spec.color}`);
   if (spec.tools && spec.tools.length > 0) {
     fm.push(`tools: ${spec.tools.join(", ")}`);
   }
+  if (spec.disallowedTools && spec.disallowedTools.length > 0) {
+    fm.push(`disallowedTools: ${spec.disallowedTools.join(", ")}`);
+  }
   fm.push("", "---");
   return fm.join("\n");
+}
+
+/**
+ * The `<!-- vigiles:purity:LEVEL -->` marker the runtime PreToolUse gate reads to
+ * enforce a unit's declared purity floor against live tool calls (see
+ * `decidePurityGate` / `parseAgentPurity`). Returns "" when no purity is
+ * declared. The loud authoring word `dangerously-unrestricted` maps to the
+ * neutral report/runtime level `unrestricted` (no constraint to enforce).
+ */
+function purityMarker(purity: AuthoredPurity | undefined): string {
+  if (!purity) return "";
+  const level = purity === "dangerously-unrestricted" ? "unrestricted" : purity;
+  return `<!-- vigiles:purity:${level} -->`;
 }
 
 /** Render the subagent's named `##` system-prompt sections (verified like CLAUDE.md). */
@@ -1006,6 +1134,25 @@ export function compileAgent(
   }
 
   if (spec.tools) errors.push(...validateAgentTools(spec.tools, dialect));
+  if (spec.disallowedTools) {
+    // A disallowedTools entry that's a close typo of a real tool blocks NOTHING —
+    // the same high-precision detector scan + the disallowed-tools-contract rule use.
+    for (const issue of disallowedToolIssues(spec.disallowedTools, dialect)) {
+      errors.push({ type: "unknown-tool", message: issue.message });
+    }
+  }
+  if (spec.purity && spec.purity !== "dangerously-unrestricted") {
+    // Enforce the declared purity floor against the tool contract. An absent
+    // tools list inherits ALL tools, so it's checked as the "*" wildcard (a
+    // violation at the pure/bounded floors), never as the empty set.
+    for (const v of purityViolations(
+      spec.tools ?? ["*"],
+      dialect,
+      spec.purity,
+    )) {
+      errors.push({ type: "purity-violation", message: v.message });
+    }
+  }
   if (Array.isArray(spec.body)) {
     errors.push(...validateRefs(spec.body, basePath));
   }
@@ -1024,7 +1171,13 @@ export function compileAgent(
   const body = sections.join("\n\n");
   errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
 
-  const content = renderAgentFrontmatter(spec) + "\n\n" + body.trim() + "\n";
+  const marker = purityMarker(spec.purity);
+  const content =
+    renderAgentFrontmatter(spec) +
+    "\n\n" +
+    (marker ? marker + "\n\n" : "") +
+    body.trim() +
+    "\n";
   return { markdown: addHash(content, specFile), errors };
 }
 

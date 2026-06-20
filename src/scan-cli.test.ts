@@ -20,7 +20,9 @@ import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
+  readFileSync,
   readdirSync,
+  existsSync,
   rmSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -251,5 +253,207 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     });
     assert.equal(report.skills.length, 1);
     assert.equal(report.mcp, true);
+  });
+});
+
+// --- `vigiles explain` — the deterministic WHY (C4) over the real CLI ----------
+
+describe("explain e2e — deterministic cause + fix", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "explain-e2e-"));
+    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, "demo", ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(root, "demo", "agents"), { recursive: true });
+    // A subagent whose `tools:` names "Reed" — a close typo of the real "Read",
+    // so it's silently dropped: the subagent-tool-contract cause of an
+    // agent-underperforms symptom, with a did-you-mean fix.
+    writeFileSync(
+      join(root, "demo", "agents", "rev.md"),
+      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("names the deterministic cause, the symptom, and the one-line fix", () => {
+    const r = run(`explain ${join(root, "demo")}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /the subagent loses a declared tool/);
+    assert.match(r.stdout, /\[subagent-tool-contract\]/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
+  });
+
+  it("a surface name filters to that one underperformer", () => {
+    const r = run(`explain ${join(root, "demo")} rev`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Explaining "rev":/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
+  });
+
+  it("--json emits the structured explanation array", () => {
+    const r = run(`explain ${join(root, "demo")} --json`);
+    assert.equal(r.exitCode, 0);
+    const exps = JSON.parse(r.stdout) as {
+      surface: string;
+      symptom: string;
+      detector: string;
+      fix: string;
+      confidence: string;
+    }[];
+    assert.equal(exps.length, 1);
+    assert.equal(exps[0].symptom, "agent-underperforms");
+    assert.equal(exps[0].detector, "subagent-tool-contract");
+    assert.equal(exps[0].confidence, "likely");
+    assert.match(exps[0].fix, /Read/);
+  });
+
+  it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
+    const r = run(`explain ${join(root, "demo")} absent`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /No deterministic cause found/);
+  });
+});
+
+describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "fix-plan-e2e-"));
+    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, "demo", ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(root, "demo", "agents"), { recursive: true });
+    // Same typo'd-tool subagent as the explain fixture: a deterministic FIX.
+    writeFileSync(
+      join(root, "demo", "agents", "rev.md"),
+      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
+    const r = run(`scan ${join(root, "demo")} --fix-plan`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Harness health: \d+\/100/);
+    assert.match(r.stdout, /\[FIX\] rev/);
+    assert.match(r.stdout, /\[subagent-tool-contract\]/);
+    // The whole point: hand off the behavioral question to the measured layer.
+    assert.match(r.stdout, /--trigger/);
+  });
+
+  it("--fix-plan --json emits the structured plan (score, grade, recommendations)", () => {
+    const r = run(`scan ${join(root, "demo")} --fix-plan --json`);
+    assert.equal(r.exitCode, 0);
+    const plan = JSON.parse(r.stdout) as {
+      score: number;
+      grade: string;
+      empty: boolean;
+      recommendations: { surface: string; action: string; detector: string }[];
+    };
+    assert.equal(plan.empty, false);
+    assert.equal(plan.recommendations.length, 1);
+    assert.equal(plan.recommendations[0].action, "fix");
+    assert.equal(plan.recommendations[0].surface, "rev");
+    assert.equal(plan.recommendations[0].detector, "subagent-tool-contract");
+  });
+});
+
+describe("scaffold-test e2e — test-gen for untested surfaces (B1)", () => {
+  let root: string;
+  let plugin: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "scaffold-cli-"));
+    plugin = join(root, "demo");
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(plugin, ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    mkdirSync(join(plugin, "skills", "greet"), { recursive: true });
+    writeFileSync(
+      join(plugin, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly\n---\nGreet them.\n",
+    );
+    mkdirSync(join(plugin, "agents"), { recursive: true });
+    writeFileSync(
+      join(plugin, "agents", "reviewer.md"),
+      "---\nname: reviewer\ndescription: Reviews a diff\ntools: Read, Grep\n---\nReview.\n",
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("dry-run lists each untested surface with its kind + tier", () => {
+    const r = run(`scaffold-test ${plugin}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /skills\/greet\/greet\.eval\.mjs\s+\[skill → eval/);
+    assert.match(
+      r.stdout,
+      /agents\/reviewer\.harness\.mjs\s+\[agent → harness/,
+    );
+    // dry-run prints content, not files: nothing written yet.
+    assert.equal(
+      existsSync(join(plugin, "skills", "greet", "greet.eval.mjs")),
+      false,
+    );
+  });
+
+  it("--write creates the files with the right public imports + namespaced id", () => {
+    const r = run(`scaffold-test ${plugin} --write`);
+    assert.equal(r.exitCode, 0);
+    const evalFile = join(plugin, "skills", "greet", "greet.eval.mjs");
+    assert.ok(existsSync(evalFile));
+    const content = readFileSync(evalFile, "utf-8");
+    assert.match(content, /from "vigiles\/testing"/);
+    assert.match(content, /"demo:greet"/); // the manifest name, not the dir basename
+    assert.match(content, /measureTriggerRate/);
+  });
+
+  it("--write a second time skips the now-covered surfaces (no clobber)", () => {
+    const r = run(`scaffold-test ${plugin} --write`);
+    assert.equal(r.exitCode, 0);
+    // The skill+agent now have colocated tests → no longer untested → nothing to do.
+    assert.match(r.stdout, /Nothing to scaffold|skipped/);
+  });
+
+  it("--json emits the agent-consumable { path, content }[]", () => {
+    const fresh = join(root, "fresh");
+    mkdirSync(join(fresh, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(fresh, ".claude-plugin", "plugin.json"),
+      '{"name":"fresh"}\n',
+    );
+    mkdirSync(join(fresh, "skills", "hi"), { recursive: true });
+    writeFileSync(
+      join(fresh, "skills", "hi", "SKILL.md"),
+      "---\nname: hi\ndescription: Says hi\n---\nHi.\n",
+    );
+    const r = run(`scaffold-test ${fresh} --json`);
+    assert.equal(r.exitCode, 0);
+    const scaffolds = JSON.parse(r.stdout) as {
+      path: string;
+      kind: string;
+      tier: string;
+      content: string;
+    }[];
+    assert.equal(scaffolds.length, 1);
+    assert.equal(scaffolds[0].path, "skills/hi/hi.eval.mjs");
+    assert.equal(scaffolds[0].tier, "eval");
+    assert.match(scaffolds[0].content, /"fresh:hi"/);
   });
 });

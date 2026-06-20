@@ -6,7 +6,7 @@
  * axis the AWS skill-eval taught us — it should FIRE on harness-testing requests
  * (recall) and stay QUIET on unrelated coding work (precision). The
  * model-invocable shipped skills (`test-harness`, `strengthen`, `edit-spec`)
- * each get a trigger eval; the user-invoked ones (`migrate-to-spec`,
+ * each get a trigger eval; the user-invoked ones (`adopt-spec`,
  * `linter-docs`) can't auto-fire, so triggering doesn't apply — see
  * `src/adapters/claude-code/skills-dogfood.test.ts` for the (free) load gate
  * that covers every shipped skill.

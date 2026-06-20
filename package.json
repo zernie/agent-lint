@@ -128,6 +128,7 @@
     "glob": "^13.0.6",
     "js-yaml": "^4.1.0",
     "minimatch": "^10.0.1",
+    "mvdan-sh": "^0.10.1",
     "ts-essentials": "^10.2.1",
     "typescript": "^5.9.3"
   }

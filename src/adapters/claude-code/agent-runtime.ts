@@ -36,6 +36,10 @@ import {
   readFrontmatter,
   frontmatterList,
 } from "../../core/frontmatter-read.js";
+import { decidePurityGate } from "../../core/effects.js";
+import type { PurityLevel } from "../../core/effects.js";
+import { claudeCodeDialect } from "./dialect.js";
+import { hasEffectBoundary, readEffectActive } from "./effect-region.js";
 
 // ---------------------------------------------------------------------------
 // Parse the tool contract from a compiled agent .md
@@ -67,6 +71,20 @@ export function parseAgentToolList(
   key: string,
 ): string[] | null {
   return frontmatterList(readFrontmatter(markdown), key);
+}
+
+const PURITY_RE = /<!--\s*vigiles:purity:(pure|bounded|unrestricted)\s*-->/;
+
+/**
+ * Parse the declared purity floor from a compiled agent's `.md` — the
+ * `<!-- vigiles:purity:LEVEL -->` marker `compile` emits (see `purityMarker`).
+ * Returns null when no marker is present (the unit declared no floor, so the
+ * purity gate imposes no constraint). The single source of truth the runtime
+ * gate reads, exactly like `tools:` for the tool-contract rail.
+ */
+export function parseAgentPurity(markdown: string): PurityLevel | null {
+  const m = PURITY_RE.exec(markdown);
+  return m ? (m[1] as PurityLevel) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,19 +158,49 @@ export function readActiveAgent(cwd: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * PreToolUse-hook decision. If an agent is active, parse its compiled `.md`
- * tool contract and allow the call only when the tool is in the allowlist;
- * otherwise block and tell the model which tools it may use. With no active
- * agent (or an agent that inherits all tools), always allow — the rail only
- * constrains agents that declared a contract.
+ * PreToolUse-hook decision. If an agent is active, enforce BOTH deterministic
+ * rails its compiled `.md` declares, in order:
+ *
+ *  1. the tool-contract rail (`tools:`) — allow only listed tools;
+ *  2. the purity gate (`vigiles:purity:`) — allow only calls within the declared
+ *     effect floor, refining `Bash` by the live `command` (`decidePurityGate`).
+ *
+ * The first to deny wins, feeding its reason back to the model. With no active
+ * agent (or one that declared neither contract), always allow — the rails only
+ * constrain agents that opted in.
  */
-export function evaluatePreToolUse(cwd: string, tool: string): PreToolDecision {
+export function evaluatePreToolUse(
+  cwd: string,
+  tool: string,
+  command?: string,
+): PreToolDecision {
   const agentPath = readActiveAgent(cwd);
   if (!agentPath) return { allow: true, message: "" };
 
   const full = resolve(cwd, agentPath);
   if (!existsSync(full)) return { allow: true, message: "" };
 
-  const allowed = parseAgentTools(readFileSync(full, "utf-8"));
-  return decidePreToolUse(allowed, tool);
+  const md = readFileSync(full, "utf-8");
+
+  // 1) Tool-contract rail — the declared allowlist.
+  const rail = decidePreToolUse(parseAgentTools(md), tool);
+  if (!rail.allow) return rail;
+
+  // 2) Purity gate — the declared effect floor, refined by the live command.
+  //    If an effect boundary is declared, tighten to "pure" outside it and apply
+  //    the declared purity (or "unrestricted") inside.
+  const purity = parseAgentPurity(md);
+  const boundary = hasEffectBoundary(md);
+  if (boundary) {
+    const effective: PurityLevel = readEffectActive(cwd)
+      ? (purity ?? "unrestricted")
+      : "pure";
+    const gate = decidePurityGate(effective, tool, command, claudeCodeDialect);
+    if (!gate.allow) return gate;
+  } else if (purity) {
+    const gate = decidePurityGate(purity, tool, command, claudeCodeDialect);
+    if (!gate.allow) return gate;
+  }
+
+  return { allow: true, message: "" };
 }

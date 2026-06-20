@@ -56,4 +56,14 @@ export interface HarnessDialect {
    *   and OpenCode read; CC-only keys are omitted because they'd be inert noise).
    */
   readonly skillFrontmatter: SkillFrontmatterProfile;
+  /**
+   * Tools that PRODUCE side effects (write, exec, network, spawn) — the
+   * complement of read-only within `builtinAgentTools`. The basis for
+   * effect-surface analysis and the `pure:` contract: a tool here is denied to a
+   * pure skill and counts toward a harness's side-effect surface. `Bash` is
+   * listed (undecidable at the tool-name level → conservatively side-effecting);
+   * an MCP tool not classifiable from the name is treated as unknown-effect.
+   * Optional (additive, non-breaking) — absent ⇒ no tool is known-side-effecting.
+   */
+  readonly sideEffectingTools?: readonly string[];
 }

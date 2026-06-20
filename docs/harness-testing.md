@@ -124,6 +124,74 @@ The result is a `Trace` — the observable record of the run (`toolCalls`, `hook
 helpers, or read its fields directly. The full predicate/assertion/check vocabulary
 is in the **[reference](testing-api.md#the-trace-model)**.
 
+## Assert a subagent's typed outcome (railway / Result)
+
+When a subagent does real work, the question is _"did it succeed, with the right
+result?"_ — normally a job for an **LLM judge** (slow, costs tokens,
+non-deterministic). A **`result()` contract** turns it into a **deterministic
+assert** instead: the subagent ends its turn with a typed block — `vigiles:ok` on
+the success track, `vigiles:err` on the error track — and `assertAgentOk` /
+`assertAgentErr` / `assertAgentResult` parse and validate it against the contract.
+
+```ts
+import { result } from "vigiles";
+import { assertAgentOk, assertAgentResult } from "vigiles/testing";
+
+// The worker's contract: success = the files it changed + a summary.
+const implementer = result(
+  { files: "string[]", summary: "string" },
+  { reason: "string", step: "string" },
+);
+
+// `r.output` is the subagent's final text (a runHarnessTest run, a Task
+// sub-trace, or recorded output). Assert the OUTCOME, not prose:
+const ok = assertAgentOk(r.output, implementer); // throws unless it's a valid ok block
+assert.deepEqual(ok.files, ["src/parser.ts"]);
+
+// The general form — assert RICH detail, still model-free:
+assertAgentResult(
+  r.output,
+  (res) =>
+    res.kind === "ok" && res.value.files.some((f) => f.endsWith(".test.ts")),
+  implementer,
+);
+```
+
+This **replaces** `judged(output, "did the worker succeed and add a test?")` — the
+typed outcome _is_ the contract, and the assert reads it. A worker that emits the
+wrong shape, or prose instead of a block, is `malformed` (the honest third track) —
+caught, never a silent pass. Authoring side: declare the contract with `result()`
+on an `agent()`, or orchestrate flat workers with `railway()` / `delegate()`. The
+parse is pure (`text → Result<S, E>`), so most of this path runs with **no model
+and no key** — see the runnable example below. **Full guide:**
+[`railway-subagents.md`](railway-subagents.md) (the `agent()`/`result()`/`railway()`
+contract end to end, and why it's a subagent — not skill — primitive).
+
+## Assert a side-effect boundary (`wrote` / `didNotWrite` / `notTool`)
+
+The other half of a typed contract is _where a unit writes/calls_. A skill that
+declares it writes only `out.txt` and never pushes should be **asserted to stay
+inside that surface** — not eyeballed, and not handed to a model judge. The check
+vocabulary is the seam:
+
+```ts
+import { wrote, didNotWrite, notTool, assertChecks } from "vigiles/testing";
+
+assertChecks(r, [
+  wrote("out.txt"), // produced the artifact it promised
+  didNotWrite("secrets.env"), // left NOTHING outside the declared surface
+  notTool("Bash", { command: /git push/ }), // never reached for a forbidden effect
+]);
+```
+
+`wrote`/`didNotWrite` read the real post-run work dir; `notTool` reads the decision
+to act (a check a completion-grader structurally cannot make — it sees the agent's
+final text, not the tool call it _almost_ made). All three are **deterministic** —
+the scripted mock model only does what the script says, so a `Write` either landed
+or it didn't. Pair this with a `purity:` floor (`pure`/`bounded`) and `effect()`
+boundaries on the `skill()`/`agent()` spec to declare the surface the test then
+asserts. See the runnable example below.
+
 ## Test a skill fires (`measureTriggerRate`)
 
 A skill's whole value is its description **activating on the right task** — the #1
@@ -273,6 +341,8 @@ paying for a real model only at the eval tier. Full scorecard:
 - [`hook-unit.harness.mjs`](../examples/harness/hook-unit.harness.mjs) — `runHook`, no harness CLI (the cheap base).
 - [`policy-gate.harness.mjs`](../examples/harness/policy-gate.harness.mjs) — a PreToolUse Bash gate + SessionStart setup, deterministic.
 - [`plugin-cohesion.harness.mjs`](../examples/harness/plugin-cohesion.harness.mjs) — load a whole plugin, assert multiple hooks fire together.
+- [`railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs) — assert a subagent's typed outcome (`assertAgentOk`/`Err`/`Result`), deterministic, no key.
+- [`effect-boundary.harness.mjs`](../examples/harness/effect-boundary.harness.mjs) — assert a unit stayed inside its declared write surface (`wrote`/`didNotWrite`/`notTool`), deterministic, no key.
 - [`skill-trigger-rate.eval.mjs`](../examples/harness/skill-trigger-rate.eval.mjs) — does a skill's description _fire_? (`measureTriggerRate`)
 - [`skill-outcome.eval.mjs`](../examples/harness/skill-outcome.eval.mjs) — does a skill change the agent's output?
 
@@ -295,3 +365,5 @@ sandbox) is per-harness. Pick yours:
 - [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its tier + file.
 - [`research/harness-testing.md`](../research/harness-testing.md) — the design rationale (two-layers model, why deterministic-first).
+- [`railway-subagents.md`](railway-subagents.md) — the railway/Result subagent contract end to end (typed outcome, compose flat workers, assert deterministically).
+- [`research/railway-subagents.md`](../research/railway-subagents.md) — railway-oriented orchestration over flat subagents (the `result()`/`railway()` design).

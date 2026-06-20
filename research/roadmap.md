@@ -12,8 +12,195 @@
 > [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) and
 > [`divergent-bets.md`](divergent-bets.md).
 
+## Strategic direction (2026-06-19): measurement authority
+
+> The pivot (`measurement-authority.md`): vigiles is the **empirical authority on what makes
+> agentic coding actually work** — benchmark the ecosystem (viral) + auto-optimize your harness
+> (adoption), powered by the only real-model A/B eval stack cheap enough to run it (the sub).
+> Three layers, one machine, each makes the next affordable: **measurement (offense) → typed
+> contracts (cheap-to-test substrate + the spec's new purpose) → linting (free pre-filter)**.
+> Specs are reframed as the progressive, zero-friction on-ramp to testability
+> (`typed-contracts-for-agents.md`).
+
+**P0 — validate the thesis before building (cheapest, do first):**
+
+- [x] **Measure one hyped skill vs its claim — DONE (2026-06-20), thesis VALIDATED.**
+      caveman over 5 real coding tasks (real haiku, 3 trials, on the subscription,
+      [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs)):
+      claims ~65% output cut, measured **−5% output / −4% cost**, output only
+      **~1.1% of session tokens**, 0 correctness regressions. "Measured ≪ claimed",
+      stark. **SONNET follow-up DONE (2026-06-20, caveman's TARGET model, pilot
+      2×2): the debunk STRENGTHENS — −23% output / −20% cost (the bill went UP),
+      0 regressions.** Rules out the "haiku underuses the style" caveat. Widen to
+      5×3 for tighter CIs; direction is clear. → `measurement-authority.md`, `benchmark-methodology.md`
+
+**P1 — measurement (the identity):**
+
+- [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
+      corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
+      `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
+- [x] **Does-our-spec-help A/B — DONE (2026-06-20), the spec HELPED.** First real-model
+      A/B of vigiles's OWN typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
+      (prose vs spec code-reviewer, controlled, sonnet 2×). **Result: quality identical
+      (bug caught 100% both arms — no regression), payoff a categorical win (parseable
+      `vigiles:ok` outcome 0% prose → 100% spec).** So the typed contract adds
+      deterministic testability (assertAgentOk, no LLM judge) at ZERO quality cost — the
+      "typed contracts make measurement affordable" thesis, validated on our own contract.
+      → `measurement-authority.md`, `typed-contracts-for-agents.md`
+- [x] **FIX: subagent nested-trace recovery under `--plugin-dir` — SHIPPED (`212869d`).**
+      Two real CC behaviors fixed + validated against a captured live dispatch: (1) a
+      `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent` → match the bare
+      name; (2) the sub's `result()` block lands in its RETURN (the dispatch's top-level
+      `tool_result`) → captured as `SubagentTrace.output`. Unlocks
+      `subagent(name,[output(/vigiles:ok/)])` — any subagent-contract eval.
+- [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), shipped as
+      `scan --fix-plan`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
+      `formatOptimize`, 6 vitest + 2 e2e cases) surfaced as the **`vigiles scan <dir>
+--fix-plan`** lens (`--json`, `--harness=`, documented in `docs/cli.md`). The free
+      half: a structural-health score (reuses `scoreReport`/`gradeFor`) + a typed, ranked
+      `Recommendation[]` reusing `explainScore` (one-detector-no-drift) — `FIX` /
+      `DIFFERENTIATE`, likely dead-ends first — that you clear BEFORE spending a token,
+      then it hands off to the measured layer. **Folded into `scan` (NOT a standalone
+      `optimize` verb)** because, until the measured half lands, an optimizer that only
+      re-prints scan's findings is a third command on one report — see P2 below.
+      **Remaining (the measured half):** wire the real-model A/B so each add/drop/swap
+      carries a measured delta (`runEval` over `bench/corpus`, gated on the subscription).
+      → `measurement-authority.md`, `divergent-bets.md`
+- [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
+      doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
+      bill/target/blast-radius — grounded in the P0 caveman measurement). The
+      **reusable task-corpus module shipped:** [`bench/corpus/coding-tasks.mjs`](../bench/corpus/coding-tasks.mjs)
+      (5 neutral real coding tasks, each self-contained + checkable + agentic) +
+      [`verify.mjs`](../bench/corpus/verify.mjs) (a no-model self-check that every
+      correctness oracle discriminates good/bad). The P0 eval now consumes it, and
+      the ecosystem benchmark (A1) + `vigiles optimize` (A2) A/B over the SAME corpus.
+      Remaining: per-repo-variance handling (report the distribution across tasks,
+      not one mean). → `measurement-authority.md`
+
+**P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
+
+- [x] **Test-gen from free-form — SHIPPED (2026-06-20)** as `vigiles scaffold-test`
+      ([`src/scaffold-test.ts`](../src/scaffold-test.ts) + CLI). Free-form in, a runnable
+      starter test out, per kind at the untested-detector's suggested path. →
+      `typed-contracts-for-agents.md`
+- [x] **Elevate railway/Result contracts — SHIPPED (2026-06-20)** (docs + worked example).
+      `assertAgentOk/Err/Result` existed but were invisible; added
+      [`examples/harness/railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs)
+      (Part A pure, Part B a real mock turn) + a `docs/harness-testing.md` section. →
+      `typed-contracts-for-agents.md`, `railway-subagents.md`
+- [x] **Side-effect boundaries for skills — SHIPPED (2026-06-20).** The deterministic
+      side-effect-boundary ASSERTION (rung 2): added `didNotWrite()` (the symmetric no-write
+      sibling of `wrote()`) to the check vocabulary +
+      [`examples/harness/effect-boundary.harness.mjs`](../examples/harness/effect-boundary.harness.mjs)
+      (`wrote`/`didNotWrite`/`notTool` over a constructed Trace AND a real mock turn, no key).
+      The authoring half (`effect()`, the `purity:` floor) already shipped. The eval-tier
+      `tool-intercept` (real-model prevention) stays as is. → `typed-contracts-for-agents.md`
+- [ ] **Shareable typed templates (skills/agents) — DEFERRED (premature).** `preset()` /
+      `extend()` only pay off at SCALE (an org standard or monorepo consuming one published
+      preset), and vigiles has ~no consumers yet (`distribution-strategy.md`) — building the
+      network-effect layer before the network. The `off()` primitive in the sketch is also
+      mis-framed (it reads as "disable an eslint rule," but vigiles never touches eslint config
+      — it can only drop an inherited rule from the compiled instruction file). Revisit once
+      adoption exists and a real org wants a shared house style. → `shareable-presets.md`
+- [x] **`dir()` + `glob()` lightweight authoring — SHIPPED (2026-06-20).**
+      [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
+      (`validateDirRef` — exists AND is a directory; `validateGlobRef` — matches ≥1 path),
+      7 vitest cases, docs in [`docs/spec-format.md`](../docs/spec-format.md). →
+      `lightweight-spec-authoring.md`
+- [✗] **`doc()` builder — DROPPED (2026-06-20).** It would duplicate `instructions\`\``(the existing tagged template already does typed prose-with-refs). Research-backed:
+the spec syntax is already the correct hybrid (plain-object backbone + typed-value
+helpers + tagged template for prose-with-refs) — the win is RESTRAINT, not more
+helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and-railway-scope.md`
+- [x] **Spec authoring polish — SHIPPED (2026-06-20).** Length-guard (`989791e`),
+      agent frontmatter fields `disallowedTools`/`color` for clean round-trips +
+      side-effect separation (`95ce25f`), and the `migrate` → `adopt-spec` rename
+      (`6137008`). → `spec-syntax-and-railway-scope.md`
+- [x] **Spec REFERENCE docs complete — SHIPPED (2026-06-20, `44a8d54`).**
+      [`docs/spec-format.md`](../docs/spec-format.md) gained the entire subagent
+      surface (`agent()` field table + example), the full skill field table
+      (inputs/tools/purity/steps/result/context/output), a Purity & effects section,
+      and result/railway/delegate/effect pointers. Pairs with the public railway guide
+      [`docs/railway-subagents.md`](../docs/railway-subagents.md). Spec + its docs are
+      now complete; remaining spec gaps are niche (agent `level`/`skills` frontmatter,
+      a prose-command-file builder) — deferred. → `spec-syntax-and-railway-scope.md`
+- [x] **Model `context: fork` on `SkillSpec` — SHIPPED (2026-06-20, `b19febd`).**
+      `context?: "fork"` (rendered to frontmatter) + `output?: OutputContract` on a
+      skill, gated: `output` without `context:"fork"` is a compile error
+      (`output-without-fork`) — enforcing "a typed outcome needs the subagent
+      boundary" from the research. A forked skill's Output contract renders via the
+      SAME `renderOutputContract` the subagent uses (one-renderer-no-drift). →
+      `spec-syntax-and-railway-scope.md`
+
+**P2 — linting, repositioned (free pre-filter + diagnostic):**
+
+- [ ] **Reconsider a standalone `optimize` verb — only once the MEASURED half exists.**
+      The deterministic spine ships as `scan --fix-plan` (above), deliberately NOT its own
+      command: today an "optimizer" that just re-prints scan's structural findings is a
+      third verb over one `ScanReport` (`scan` reports / `explain` diagnoses one surface /
+      fix-plan ranks the repo) — confusing, no new capability. Revisit promoting it back to
+      `vigiles optimize` WHEN it genuinely optimizes: when each add/drop/swap recommendation
+      carries a real-model before/after delta (the A2 measured half over `bench/corpus`).
+      At that point "optimize" means something `scan` can't, and the verb is earned. The
+      pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
+      `measurement-authority.md` (A2)
+- [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
+- [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
+      column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
+- [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
+- [x] **Score-explainer pairing — DONE (2026-06-20), core + CLI.** [`src/score-explainer.ts`](../src/score-explainer.ts)
+      (`explainScore` / `explainSurface` / `formatExplanations`, 12 vitest cases):
+      pure over the `ScanReport` the linter already computes (one-detector-no-drift),
+      it maps each cross-ref finding to the behavioral SYMPTOM a benchmark observes
+      (wrong-skill-fires / skill-never-fires / agent-underperforms / hook-never-runs /
+      subagent-never-dispatches) + a one-line fix — so the optimizer says "underperforms
+      BECAUSE its description overlaps X — differentiate them", not just "drop it".
+      Shipped as **`vigiles explain <dir> [name]`** (deterministic, `--json` for the
+      agent-consumable array; 4 e2e cases in `scan-cli.test.ts`, documented in
+      `docs/cli.md`). Now also consumed by **`scan --fix-plan`** (A2) — each
+      recommendation IS an explanation reshaped with an action verb. →
+      `measurement-authority.md`
+
+**Distribution:**
+
+- [ ] **The "what actually works" benchmark report** = the viral artifact (follows P0/P1).
+- [ ] **Zero-config installer reframed** — "apply the empirically-best setup"; resident not
+      scaffolder; compose not curate. → `zero-config-mother-harness.md`
+
 ## Shipped recently (don't rebuild)
 
+- **Effect-surface + purity contract + Bash classifier (2026-06-20)** — the
+  deterministic side-effect substrate. `src/core/effects.ts` (`classifyToolEffect`
+  / `effectSurface` / `purityViolations` + the pure/bounded/unrestricted ladder,
+  `dialect.sideEffectingTools`); the **`purity:` floor** on skill/agent
+  (`"pure" | "bounded" | "dangerously-unrestricted"`, enforced at compile —
+  absent tools = inherits-all = violation); the **scan effect-surface column**
+  (per-unit purity + `N pure · M bounded · K unrestricted` audit); and the
+  standalone **deterministic Bash-effect classifier** (`src/core/bash-effects.ts`,
+  `mvdan-sh` AST + catalog + fail-closed residue, zero-false-read-only gate). Two
+  design calls locked in: the enum mirrors the analysis vocabulary
+  (declare/report symmetry), and `dangerously-unrestricted` is loud at the
+  _declaration_ site but neutral `unrestricted` in the _report_ (no cry-wolf).
+  See [`side-effect-separation.md`](side-effect-separation.md) +
+  [`bash-effect-classification.md`](bash-effect-classification.md).
+- **Runtime purity gate — the per-call FLOOR, wired (2026-06-20)** — `purity` is
+  no longer compile-only. `decidePurityGate` (`src/core/effects.ts`) is the
+  per-call gate, folded into the agent `PreToolUse` rail
+  (`src/adapters/claude-code/agent-runtime.ts` via `parseAgentPurity`); the
+  tool-contract rail fires first, then the purity gate, refining `Bash` by the
+  live command with `isReadOnlyBash`. `compile` emits a
+  `<!-- vigiles:purity:LEVEL -->` marker into a compiled agent's `.md`
+  (`dangerously-unrestricted` → neutral `unrestricted`). KEY ladder change:
+  `bounded` now **admits command-gated `Bash`** (read-only allowed as
+  observation, mutating denied) — `pure` still bars `Bash` entirely; the static
+  `effectSurface`/`scan` still reports any `Bash` as `unrestricted` (can't see
+  the command — the runtime gate is where the refinement lands). **Skill-parity
+  shipped same day** — skills now carry the SAME per-call gate
+  (`src/adapters/claude-code/skill-runtime.ts`: `parseSkillPurity` +
+  `evaluateSkillPreToolUse`, the `skill-tool-hook` CLI; the floor only, no
+  tools-allowlist rail for skills yet). Remaining: the position-aware
+  effect-BOUNDARY region mark (see "Effect-surface: the runtime half" under Now).
+  See [`side-effect-separation.md`](side-effect-separation.md) +
+  [`bash-effect-classification.md`](bash-effect-classification.md).
 - **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
 - **`untested-surface` rule** + **skills conformance gate** — third gap detector;
@@ -31,6 +218,28 @@
 
 ## Now — cheap, high-leverage, do next
 
+- **Effect-surface: the runtime half — DONE (2026-06-20).** Both pieces shipped:
+  the per-call FLOOR gate (`decidePurityGate` wired into the agent + skill
+  `PreToolUse` rails, `isReadOnlyBash` refining `Bash` by the live command, the
+  `vigiles:purity:` marker) AND the **position-aware effect-BOUNDARY** (the
+  `effect\`\`` `EffectRegion`builder →`<!-- vigiles:effect -->`markers; outside
+a region the gate tightens to the`"pure"`floor, inside it the declared floor;
+region tracked by`.vigiles/effect-active.json`via the`effect-enter`/`exit`CLI — fail-closed). The remaining boundary follow-ons are smaller: relaxing the
+inside-region floor so a`bounded`unit may run MUTATING`Bash`inside the mark
+(today even inside, mutating Bash is floor-denied — conservative), and the`tool-intercept` `outsideEffect`test-seam predicate. (Reminder: the classifier
+does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool
+_name_ + permission _pattern_ (`Bash(git:\*)`), not a command; the runtime gate
+is where it lands.) See
+[`side-effect-separation.md`](side-effect-separation.md) +
+[`bash-effect-classification.md`](bash-effect-classification.md) +
+[`effect-boundary-design.md`](effect-boundary-design.md). · **P1**
+- **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
+  lightweight verification helpers (the `Ref` union extended → render + compile
+  verification in every switch). `doc()` was the proposed next sibling but is now
+  DROPPED (duplicates `instructions\`\``) — see
+[`spec-syntax-and-railway-scope.md`](spec-syntax-and-railway-scope.md).
+[`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
+
 - **More deterministic lint rules — the next moat surfaces (P1).** This session
   shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
   agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
@@ -39,6 +248,18 @@
   `frontmatter-valid`, `hook-matcher` — is in
   [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
   "valid is not true" cross-reference on a new surface, high-precision by design.
+
+- **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook (P1).** The lint
+  consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
+  findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
+  minimal-token messages the agent applies directly, and (b) **lint-as-a-PostToolUse-hook**
+  that gates the moment the agent writes a bad reference — extend the existing refs-hook
+  from symbol marks to the whole cross-reference family (tool-contract, mcp-tool,
+  hook-events). Corollary: **FP-calibration becomes a SAFETY property, not just UX** — a
+  human ignores a noisy finding, but an agent _obediently "fixes" every one_, so a false
+  positive makes it edit correct content. The "don't cry wolf" discipline is load-bearing
+  once the consumer is a model. See [instruction-file-linter-landscape](instruction-file-linter-landscape.md)
+  (the moat in an agent-authored world). · **P1**
 
 - **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
   Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
