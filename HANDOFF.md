@@ -33,43 +33,43 @@ distribution D1–D3. The full ordered map + per-item status is in `research/roa
 ## In flight
 
 Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01cjr2`.
-**Awaiting direction** — the typed-contracts layer's useful half is done (B1/B2/B3);
-B4 + the lethal-trifecta check were both DEFERRED by the user (see below). Don't pick
-the next feature unilaterally; ask.
+The spec-foundation review is DONE (two research-backed decisions recorded + two
+ships). Open research-backed FOLLOW-UPS (none started, all in roadmap P1
+"Spec authoring polish"): model `context: fork` on `SkillSpec` (routes a forked
+skill through the subagent contract — the one real skill gap); agent frontmatter
+fields (`disallowedTools`/`color`) for clean plugin round-trips; rename
+"migrate" → "adopt" in the migrate-to-spec skill + init hint. Ask before picking.
 
-## Decisions / shipped this session
+## Decisions / shipped this session (spec-foundation review)
 
-- **B3 — side-effect boundary as a deterministic test (SHIPPED, `b7a121d`).** Rung 2 of
-  the typed-contracts ladder. Added `didNotWrite(path)` — the symmetric no-write sibling of
-  `wrote()` — to the check vocabulary (auto-public on `vigiles/testing`+`unit`, +1
-  `check.test.ts` case) + `examples/harness/effect-boundary.harness.mjs` (Part A asserts the
-  boundary over a constructed Trace incl. catching an escape; Part B the same
-  `wrote`/`didNotWrite`/`notTool` checks over a real scripted-mock `runHarness` turn — claude
-  BINARY, NO key). Validated: passes via `vigiles test`. Docs: a sibling section in
-  `docs/harness-testing.md`. The authoring half (`effect()`, `purity:` floor) already shipped.
-- **B4 — shareable typed presets: DEFERRED (user call).** `preset()`/`extend()` only pay off
-  at SCALE (org/monorepo consuming a published preset) and vigiles has ~no consumers yet —
-  network-effect-before-the-network. The `off()` primitive was also mis-framed (it reads as
-  "disable an eslint rule," but vigiles never touches eslint config — `enforce()` only
-  documents+verifies a rule is already enabled; `off()` could at most DROP an inherited rule
-  from the compiled instruction file). Roadmap P1 updated to `[ ] DEFERRED`.
-- **Lethal-trifecta / capability check: DEFERRED (user call).** Was the proposed nearer-term
-  P2 pick (deterministic, no-auth, the Analogical-Transfer forbidden-state moat example).
-  User said defer before any code was written — nothing built, stays `[ ]` in roadmap P2.
-- **(prev session) B1 + B2 shipped** — `vigiles scaffold-test` (`0fb7f2c`) + railway/Result
-  docs+example (`9c3e69f`); roadmap P1 now marks both `[x]`.
-- **`dir()` + `glob()` spec builders** (`42f0b5e`) — lightweight authoring helpers (research's
-  #1 gap). `src/core/spec.ts` builders + compile verification (`validateDirRef` = exists AND
-  is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases, docs in `docs/spec-format.md`.
-  Auto-public (the `.` export is spec.ts). `doc()` is the remaining sibling. NOTE:
-  `src/core/doc-refs.ts` does NOT yet recognize `dir(`/`glob(` in ```ts doc blocks — optional.
-- **`optimize` → folded into `scan --fix-plan`** (`24e24ee`, RESOLVED). User pushed on "what's
-  optimize for" — it was a 3rd command on the same `ScanReport` (scan reports / explain
-  diagnoses one / fix-plan ranks), no new capability until the measured half exists. Removed
-  the `optimize` verb; `scan --fix-plan` is the lens; pure `optimize()` kept. **P2 roadmap item
-  added** to reconsider an `optimize` verb once each rec carries a measured before/after delta.
-- **(prev) `dir/glob` predecessor work** — A1 corpus (`bench/corpus/`), C4 explainer
-  (`src/score-explainer.ts` + `vigiles explain`), the handoff system + SessionStart hook.
+- **Two decisions SETTLED with web research + recorded** (`660d12c`,
+  `research/spec-syntax-and-railway-scope.md`): (1) **railway/Result is a SUBAGENT
+  contract, NOT skills** — skills run inline (no return/parse-point), so a typed
+  outcome is a category error; `context: fork` is the bridge. The railway-for-skills
+  edit I'd started was REVERTED. (2) **spec syntax is already the correct hybrid**
+  (plain-object backbone + typed-value helpers like enforce()/file() + tagged
+  template `instructions\`\``for prose-with-refs) — the win is RESTRAINT:`doc()`DROPPED (dups instructions``), NO`section()` helper (keep the object map).
+- **Length-guard SHIPPED (`989791e`)** — `DEFAULT_MAX_SECTION_LINES = 200` in
+  `validateSectionContent`, now on claude AND agent sections (was opt-in,
+  claude-only), overridable via `maxSectionLines`. Generous on purpose
+  (don't-cry-wolf: our dogfood has a 262-line Key Files + 8298-char paragraph).
+  TS types CAN'T bound string length (confirmed: TS #52243); compile-time guard is
+  the mechanism. +2 spec.test.ts cases; docs in spec-format.md.
+- **Railway public docs SHIPPED (`bae46ad`)** — `docs/railway-subagents.md` (the
+  full agent()/result()/railway() guide + assert-not-judge + the subagents-not-skills
+  scope), cross-linked from harness-testing.md, indexed in CLAUDE.md. orphan-docs ✓.
+- **OSS-plugin round-trip finding** — rewrote a real skill (oh-my-claudecode `verify`)
+  as a spec: compiled output = byte-identical body + only the integrity stamp differs.
+  Skills round-trip CLEAN; the real gaps are agent frontmatter fields (disallowedTools/
+  color/level/skills) + no builder for prose command files (both follow-ups).
+
+## Earlier this session
+
+- **B3 — side-effect boundary deterministic test (`b7a121d`)** — `didNotWrite()`
+  check + `examples/harness/effect-boundary.harness.mjs` + docs.
+- **B4 presets + lethal-trifecta check: DEFERRED (user calls).** B4 premature
+  (no consumers); trifecta deferred before any code. Both `[ ]` in roadmap.
+- **(prev) B1/B2 (`0fb7f2c`/`9c3e69f`) + dir()/glob() (`42f0b5e`) shipped.**
 
 ## Environment note (this session)
 
