@@ -39,9 +39,15 @@ import type {
   RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
-import type { SurfaceKind } from "./test-coverage.js";
+import type { SurfaceKind, Surface } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
+import {
+  scaffoldTest,
+  formatScaffolds,
+  type ScaffoldInput,
+} from "./scaffold-test.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
+import type { ScanReport } from "./scan.js";
 import {
   explainScore,
   explainSurface,
@@ -3448,6 +3454,107 @@ function handleExplain(restArgs: string[], args: string[]): void {
   console.log(formatExplanations(exps));
 }
 
+/**
+ * The plugin's declared name for the namespaced skill id, read from the layout's
+ * manifest (adapter-aware path, not a hardcoded `.claude-plugin/`), falling back to
+ * the dir basename. JSON manifests only for now (a TOML/Codex manifest → basename).
+ */
+function pluginNameFor(dir: string, manifestPath: string): string {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(resolve(dir, manifestPath), "utf-8"),
+    ) as { name?: unknown };
+    if (typeof manifest.name === "string" && manifest.name)
+      return manifest.name;
+  } catch {
+    /* missing / non-JSON manifest → fall back */
+  }
+  return basename(dir);
+}
+
+/** Enrich an untested Surface with the metadata the right template needs. */
+function scaffoldInputFor(
+  s: Surface,
+  report: ScanReport,
+  pluginName: string,
+): ScaffoldInput {
+  const base = { kind: s.kind, name: s.name, path: s.path };
+  switch (s.kind) {
+    case "skill": {
+      const sk = report.skills.find((x) => x.name === s.name);
+      return { ...base, pluginName, userInvoked: sk?.userInvoked };
+    }
+    case "agent": {
+      const ag = report.agents.find((x) => x.name === s.name);
+      return { ...base, tools: ag?.tools ?? null };
+    }
+    case "hook":
+      return { ...base, hookCommand: `bash ${s.path}` };
+  }
+}
+
+/**
+ * `vigiles scaffold-test [dir]` — generate a runnable STARTER test for each
+ * untested skill/agent/hook (B1, test-gen from free-form). Reuses the
+ * untested-surface detector for the list + `scan` for the metadata, then emits the
+ * cheapest meaningful tier per kind (hook → `runHook`, skill → `measureTriggerRate`,
+ * subagent → `runHarnessTest`) at the surface's suggested test path. Dry-run by
+ * default (prints the scaffolds); `--write` creates the files (never clobbering an
+ * existing one); `--json` for the agent-consumable `{ path, content }[]`.
+ */
+function handleScaffoldTest(restArgs: string[], args: string[]): void {
+  const dir = resolve(restArgs[0] ?? ".");
+  const write = args.includes("--write");
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+
+  const { untested } = findUntestedSurfaces({
+    basePath: dir,
+    layout: adapter.layout,
+  });
+  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
+  const pluginName = pluginNameFor(dir, adapter.layout.manifestPath);
+  const scaffolds = untested.map((s) =>
+    scaffoldTest(scaffoldInputFor(s, report, pluginName)),
+  );
+
+  if (json) {
+    console.log(JSON.stringify(scaffolds, null, 2));
+    return;
+  }
+  if (!write) {
+    console.log(formatScaffolds(scaffolds));
+    for (const s of scaffolds) {
+      console.log(`\n# ${s.path}\n`);
+      console.log(s.content);
+    }
+    if (scaffolds.length > 0) {
+      console.log("Re-run with --write to create these files.");
+    }
+    return;
+  }
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const s of scaffolds) {
+    const target = resolve(dir, s.path);
+    if (existsSync(target)) {
+      skipped.push(s.path);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, s.content);
+    written.push(s.path);
+  }
+  for (const p of written) console.log(`✓ wrote ${p}`);
+  for (const p of skipped) console.log(`⊘ skipped ${p} (already exists)`);
+  if (written.length === 0 && skipped.length === 0) {
+    console.log("Nothing to scaffold — every surface already has a test.");
+  }
+}
+
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -3467,6 +3574,9 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles explain <dir> [name]   Deterministic WHY a skill/agent underperforms + the fix (--json, --harness=)",
+  );
+  console.log(
+    "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",
   );
   console.log("");
   console.log("Examples:");
@@ -4046,6 +4156,9 @@ async function main(): Promise<void> {
 
     case "explain":
       handleExplain(restArgs, args);
+      break;
+    case "scaffold-test":
+      handleScaffoldTest(restArgs, args);
       break;
 
     // --- Plumbing ---

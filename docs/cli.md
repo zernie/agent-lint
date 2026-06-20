@@ -16,6 +16,7 @@ npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness eva
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
+npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -218,6 +219,33 @@ recommendation — _"underperforms **because** its description overlaps X"_, not
 just _"drop it"_. The pairing is the strategy in
 [`research/measurement-authority.md`](../research/measurement-authority.md)
 (measurement = the _what_; linting = the deterministic _why_).
+
+### `scaffold-test [dir]`
+
+**Free-form in, a runnable starter test out.** For every **untested** skill /
+subagent / hook in a plugin (the surfaces `vigiles lint` flags via
+`untested-skill` / `untested-subagent` / `untested-hook`), generate a scaffolded
+test at its suggested path — the deterministic counterpart to the `test-harness`
+skill (which picks the tier with a model). Each scaffold wires the real public
+API + the surface's own metadata and leaves TODOs only where judgement is needed:
+
+| Surface      | Tier      | Generated                                                   |
+| ------------ | --------- | ----------------------------------------------------------- |
+| **hook**     | `runHook` | a unit test asserting the block/allow decision (free)       |
+| **skill**    | eval      | a `measureTriggerRate` recall + precision eval (real model) |
+| **subagent** | harness   | a `runHarnessTest` scaffold (points at the `result()` path) |
+
+```bash
+npx vigiles scaffold-test ./my-plugin          # dry-run: print the scaffolds
+npx vigiles scaffold-test ./my-plugin --write   # write each to its suggested path (never clobbers)
+npx vigiles scaffold-test ./my-plugin --json    # the agent-consumable { path, content, kind, tier }[]
+npx vigiles scaffold-test ./repo --harness=codex
+```
+
+`--write` skips any path that already exists, and the generated file lands where
+the untested-surface detector looks for it — so the surface stops being reported
+untested. Fill in the TODOs (prompts / event input / assertions), then run with
+`vigiles test` or `vigiles eval`.
 
 ### `scan --fix-plan [dir]`
 
