@@ -14,6 +14,7 @@ npx vigiles refs <file.md>          # Check the symbol references in an instruct
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
+npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
@@ -183,6 +184,39 @@ surfaced per-skill (`unmeasured`), never crashing the scan. See
 `measureTriggerRate` and [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md)
 for what it catches. (The remaining behavioural columns — observed egress,
 safety — build on the same footing.)
+
+### `explain [dir] [name]`
+
+The deterministic **WHY** behind a low score. A measurement (a trigger-rate
+eval, a benchmark) tells you a skill _underperforms_ — `explain` tells you the
+structural **cause** and the one-line **fix**, reading the same `ScanReport`
+`scan` computes (no model, free, every commit). It maps each cross-reference
+finding to the behavioural symptom it accounts for:
+
+| Symptom                            | Deterministic cause it surfaces                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| the selector fires the wrong skill | two skills with near-identical descriptions (`description-overlap`)                                       |
+| the skill never fires              | a skill with no usable description (`skill-frontmatter`)                                                  |
+| the subagent loses a tool          | a never-available / typo'd tool or undeclared MCP server (`subagent-tool-contract` / `mcp-tool-resolves`) |
+| the hook never runs                | a typo'd event or a missing script (`hook-events` / `hook-script-exists`)                                 |
+| the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
+
+```bash
+npx vigiles explain ./some-plugin          # every cause found, likely-first
+npx vigiles explain ./some-plugin caveman  # narrow to one underperformer
+npx vigiles explain ./some-plugin --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
+npx vigiles explain ./repo --harness=codex # override harness detection
+```
+
+`confidence` is `likely` (a hard dead-end — a missing script can't run) or
+`possible` (a high-precision proxy — an overlap _may_ collide; confirm with
+`scan --trigger`). With no deterministic cause, it says so and points you at the
+behavioural tier (the cause is likely in the prose, measured by an eval). It's
+the diagnostic the per-repo optimizer prints beside each drop/swap
+recommendation — _"underperforms **because** its description overlaps X"_, not
+just _"drop it"_. The pairing is the strategy in
+[`research/measurement-authority.md`](../research/measurement-authority.md)
+(measurement = the _what_; linting = the deterministic _why_).
 
 ## Lint vs scan — gate vs report
 
