@@ -90,6 +90,37 @@ hype-debunks. It is the viral artifact, it demonstrates the moat engine, it posi
 above the ecosystem, and it answers the question every user actually has. The per-repo
 optimizer (`vigiles optimize`) is the adoption product that follows.
 
+## What becomes of the linting (it gets its true job)
+
+The pivot does **not** kill the deterministic linting — it moves it from "headline identity"
+(where it was reinventing agnix) to **the free tier that makes the measurement affordable and
+actionable.** That's _more_ load-bearing, not less. Four roles:
+
+1. **The cheap pre-filter that makes the eval tier affordable.** Don't burn a slow real-model
+   eval to find a missing hook script or a never-available tool — the linter catches it
+   deterministically, free, every commit. Eval budget is spent only on configs that aren't
+   _structurally_ broken. The sub-affordability moat **depends** on this: it's the cost-ladder
+   (push everything decidable into the free tier so the model tier stays thin).
+2. **The diagnostic that EXPLAINS a low score** (the strongest pairing). Measurement finds the
+   _symptom_ ("this skill underperforms"); the cross-ref linter finds the deterministic _cause_
+   - the fix (description-overlap → trigger collision; never-available tool → silently dropped;
+     typo'd hook → never fires). So the optimizer says not "drop caveman" but **"it underperforms
+     _because_ its trigger collides with X — here's the one-line fix."** Measurement = the _what_;
+     linting = the deterministic _why_.
+3. **The resident drift-guard between measurements.** Once the optimizer picks the
+   empirically-best config, the linter keeps it from breaking/drifting without re-running
+   expensive evals every commit.
+4. **It's the substrate the benchmark runs on.** Measuring a plugin requires loading, parsing,
+   and cross-referencing it (loader + scan + the cross-ref engine) — the linting infrastructure
+   _is_ the foundation the measurement is built on.
+
+**What actually changes:** drop the ambition to "become THE linter / beat agnix on rule count"
+(the reinventing trap). Keep the **high-signal, FP-calibrated cross-ref engine** — the checks
+that explain measurement and gate cost — not a 425-rule breadth race. The pivot _clarifies_
+which linting to invest in. Net frame: **measurement = offense (the headline/moat); linting =
+the free tier that makes measurement affordable, explicable, and durable** — exactly vigiles's
+"deterministic constraints layer + keep the real-model surface thin."
+
 ## See also
 
 - `strategy-verdict.md` — the prior (security-led) verdict this reframes; the spine there is
