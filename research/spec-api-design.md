@@ -10,7 +10,8 @@
 
 ## Where `spec.ts` stands today
 
-- `instructions\`...\`` tagged template (`string | Ref`) **exists**; `sections`is a`Record`.
+- An `instructions` tagged template (returning `string | Ref`) **exists**; `sections` is a
+  `Record`.
 - `result(ok, err)` is **stringly-typed** (`OutputFieldType = "string"|"number"|"boolean"|"string[]"`)
   — the contract is declared but the parsed `Result` isn't _statically_ typed from it.
 - `delegate(agent: string)` isn't type-checked against sibling agent names.
