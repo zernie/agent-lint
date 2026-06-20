@@ -284,3 +284,55 @@ commands that need this classification — otherwise park it for the `doc()` pas
 - `src/adapters/claude-code/agent-runtime.ts` — `evaluatePreToolUse`,
   `setActiveAgent` / `readActiveAgent` — the pattern `effect-enter`/`effect-exit` mirrors.
 - `src/tool-intercept.ts` — the boundary-as-test-seam; `notTool` / `interceptTools`.
+
+## SUPERSEDED — mechanism (a) is wrong; bind the region to harness events (2026-06-20)
+
+> A dogfood (3 shipped workflow skills → `research/spec-syntax-and-railway-scope.md`)
+> plus a prior-art sweep overturned §3's "mechanism (a) recommended" verdict. Recorded
+> here so the design doc tracks reality.
+
+Mechanism (a) — the **model** calls `effect-enter`/`effect-exit` — is a category error:
+**a deterministic gate keyed on probabilistic model compliance, fail-closed, so a single
+missed call BREAKS the unit.** §3's "forgeable?" row hand-waved this; the dogfood proved
+it. Every mature system that confines "effect X may happen only here" delimits the region
+**structurally** (a scope the runtime/compiler owns) and **never** by an in-band signal
+the actor emits: object-capabilities (confine by NOT passing the capability into a scope,
+not by the code announcing it), [Sandlock](https://multikernel.io/2026/03/25/sandlock-mcp-per-tool-sandboxing/)
+per-tool sandboxing ("declared per tool, enforced at call time **without explicit agent
+signaling**"), Microsoft [Fides/IFC](https://arxiv.org/pdf/2505.23643) ("enforcement
+**independent of model behavior**, derived from the tool-call graph"), and lexical effect
+handlers / `runST` monadic regions (the _enclosing_ structure licenses the effect, never
+the scoped code). A model emitting `effect-enter` is **ambient authority re-introduced
+through a forgeable self-declared flag** — the anti-pattern ocap exists to remove.
+
+**The fix (ranked):**
+
+1. **Subagents — make the region structural via `SubagentStart`/`SubagentStop`.** A
+   subagent IS the region (isolated context, call→return = the `runST`/lexical scope).
+   The newly-confirmed Claude Code hooks `SubagentStart`/`SubagentStop` (carry
+   `agent_id`/`agent_type`) are the **deterministic, harness-emitted** bracket: wire
+   `SubagentStart` → `setActiveAgent` + open the effect window, `SubagentStop` → clear +
+   close. Deletes the model-facing signal AND closes the separately-tracked "which
+   subagent is active is still model-invoked" open problem. Finer boundaries become a
+   **two-subagent split** (a `pure` planner returning a `result()` plan → a
+   `bounded`/`unrestricted` executor — Plan-Then-Execute, reusing shipped
+   `result()`/`delegate()`/`railway()`).
+2. **Skills — drop the position `effect()`; keep the per-call purity floor.** A default
+   skill is spliced into the main conversation: no return, no per-section event, no
+   structural bracket. Remove `<!-- vigiles:effect -->` for skills + stop the skill rail
+   reading `effect-active.json`; the shipped `decidePurityGate` (the capability gate,
+   needs NO enter/exit) holds on every call. A workflow skill that must mutate uses
+   `context: fork` (shipped) → becomes a subagent → routes through path 1. "Skills can't
+   have a deterministic effect region" becomes "promote it to a fork when it needs one."
+3. **Taint/IFC (lethal-trifecta) is a SEPARATE future feature**, not an `effect()` fix —
+   labels flow through the tool graph (deterministic), not model declarations. Park it.
+
+**Migration:** retire the model-facing `vigiles effect-enter`/`effect-exit` CLI + the
+compiler-injected "call effect-enter before a side-effecting tool" prose (that prose IS
+the contradiction); keep `effect-region.ts`'s state file only as an INTERNAL mechanism
+written by the `SubagentStart` hook. Positioning: "purity floors are deterministic;
+effect regions are a **subagent** primitive" — never "purity/effect gates your skills"
+(the README already avoids this). Full prior-art set + the Plan-Then-Execute pattern:
+[securing LLM agents (arXiv 2506.08837)](https://arxiv.org/pdf/2506.08837), Koka/Unison
+abilities, [Monadic Regions](https://www.cs.cornell.edu/people/fluet/research/rgn-monad/SPACE04/space04.pdf),
+[Claude Code hooks](https://code.claude.com/docs/en/hooks).
