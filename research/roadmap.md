@@ -38,7 +38,10 @@
       tasks; recommend add/drop/swap with a measured delta. Builds on harness-ROI-optimizer +
       CI-for-model-upgrades. → `divergent-bets.md`
 - [ ] **Benchmark methodology + task corpus** — define "real task," the success metric, per-repo
-      variance; publish the method (the contestable part). → `measurement-authority.md`
+      variance; publish the method (the contestable part). **v0 doc shipped:**
+      [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
+      bill/target/blast-radius — grounded in the P0 caveman measurement); the
+      reusable task-corpus module is the remaining piece. → `measurement-authority.md`
 
 **P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
 
