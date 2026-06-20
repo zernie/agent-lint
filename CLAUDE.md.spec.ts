@@ -409,6 +409,8 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Worked eval verifying a token-compression claim (e.g. Caveman telegraphic style): two arms (verbose/caveman) over one task, measure outputTokens (the optimization target) AND correct (the fact that must survive) — proves the saving is real AND didn't regress behaviour. The on-brand framing for the compression-tool cluster: vigiles measures the claim + the blast radius, it doesn't compress",
     "examples/harness/plugin-cohesion.harness.mjs":
       "Canonical cohesion test (runHarnessTest with plugin:): load a whole plugin (.claude-plugin/plugin.json + CLAUDE.md) and assert multiple hooks fire together",
+    "examples/harness/railway-result.harness.mjs":
+      "Worked example of the railway/Result payoff — asserting a subagent's TYPED OUTCOME deterministically (the deterministic-assert-replaces-an-LLM-judge thesis made runnable). A result() contract's vigiles:ok/err block is parsed+validated by assertAgentOk/assertAgentErr/assertAgentResult: Part A runs anywhere (pure text→Result, the ok/err/malformed tracks + a rich predicate), Part B runs the SAME assert over a real runHarness turn driven by a scripted mock model (needs the claude binary, NO key). Surfaces the underweighted result()/railway() primitives for testability",
     "bench/evals/refs-hook.eval.mjs":
       "Worked eval reproducing benchmark #4 (forcing symbol marks → verifiable references?) as a runEval library call",
     "research/adoption-strategy.md":
