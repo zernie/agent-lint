@@ -145,7 +145,11 @@ spots), not "does N things"; call counts + effect _values_ stay in the eval tier
 - **`Bash` is undecidable at the tool-name level** (`cat` vs `rm -rf` are the same tool). Either
   pattern-match the command (brittle, needs an allowlist per command) or treat _all_ `Bash` as
   side-effecting (conservative — flags `ls` as an "effect," acceptable for forcing separation).
-  The **real** guarantee for `Bash`/subprocess effects is the **sandbox**, not the hook.
+  The **real** guarantee for `Bash`/subprocess effects is the **sandbox**, not the hook. A
+  deterministic refinement that classifies the _decidable subset_ of `Bash` command strings by
+  effect (AST + command catalog, fail-closed, no LLM — so `Bash(git status)` ≠ `Bash(rm -rf)`)
+  is worked out in `bash-effect-classification.md`; it sharpens this static surface measure but
+  does not replace the sandbox.
 - **MCP tools are unknown-effect by default** (only Codex has a `destructive` annotation) →
   treat unclassified MCP as side-effecting.
 - **Full coverage = capability-gate (tool) + boundary-marks + sandbox (process).** All three
