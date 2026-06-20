@@ -42,7 +42,26 @@ const model = process.env.VIGILES_MODEL || "haiku";
 const concurrency = Number(process.env.VIGILES_CONCURRENCY || 4);
 
 const SKILLS = selectSkills(process.env.VIGILES_SKILLS);
-const TASKS = CODING_TASKS.slice(0, taskLimit);
+// VIGILES_TASK_NAMES (comma list) targets specific tasks by name (e.g. the heavy
+// `review-doc` task for a focused sonnet pass); else the first `taskLimit` tasks.
+const TASKS = process.env.VIGILES_TASK_NAMES
+  ? (() => {
+      const want = new Set(
+        process.env.VIGILES_TASK_NAMES.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+      return CODING_TASKS.filter((t) => want.has(t.name));
+    })()
+  : CODING_TASKS.slice(0, taskLimit);
+
+if (TASKS.length === 0) {
+  console.error(
+    `No tasks matched VIGILES_TASK_NAMES=${process.env.VIGILES_TASK_NAMES}. ` +
+      `Known: ${CODING_TASKS.map((t) => t.name).join(", ")}.`,
+  );
+  process.exit(1);
+}
 
 if (SKILLS.length === 0) {
   console.error(

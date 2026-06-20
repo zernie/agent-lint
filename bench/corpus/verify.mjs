@@ -56,6 +56,22 @@ const FIXTURES = {
     },
     bad: { "email.js": "function isEmail(s){return s.length > 0;}" },
   },
+  "review-doc": {
+    good: {
+      "cart.fixed.js":
+        "function total(items,rate,discountPct){const sub=subtotal(items);const disc=applyDiscount(sub,discountPct);return withTax(disc,rate).toFixed(2);}",
+      "review.md":
+        "# Cart review\n\n`subtotal` sums price*qty over items. `applyDiscount` subtracts a percentage. `withTax` adds the tax rate. `total` composes them but the bug is it calls toFixed(0), truncating cents and losing money on every order. Fixed by using toFixed(2) so cents are preserved.",
+      "bug.txt": "ANSWER: total",
+    },
+    // the truncation bug left in place + a too-thin review
+    bad: {
+      "cart.fixed.js":
+        "function total(items,rate,discountPct){return withTax(applyDiscount(subtotal(items),discountPct),rate).toFixed(0);}",
+      "review.md": "looks fine",
+      "bug.txt": "ANSWER: subtotal",
+    },
+  },
 };
 
 let failures = 0;
