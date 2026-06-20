@@ -36,6 +36,15 @@ Clean — everything committed & pushed to `claude/rules-editor-autocomplete-01c
 
 ## Decisions / shipped this session
 
+- **B2 — elevate railway/Result contracts for testability (docs + worked example).**
+  The `assertAgentOk/Err/Result` helpers existed + were unit-tested but had NO worked
+  example and near-zero doc coverage (the "deterministic assert replaces an LLM judge"
+  payoff was invisible). Added `examples/harness/railway-result.harness.mjs` (Part A pure
+  text→Result, always runs; Part B the same assert over a real mock-driven `runHarness`
+  turn — needs the claude BINARY but NO key, so it RUNS here + in CI) + a new section in
+  `docs/harness-testing.md` + expanded the `docs/testing-api.md` stub. Validated: example
+  passes via `vigiles test`. Remaining typed-contracts siblings: B1 test-gen, B3 side-effect
+  boundaries, B4 shareable templates.
 - **`dir()` + `glob()` spec builders** (`42f0b5e`) — lightweight authoring helpers (research's
   #1 gap). `src/core/spec.ts` builders + compile verification (`validateDirRef` = exists AND
   is a dir; `validateGlobRef` = ≥1 match), 7 vitest cases, docs in `docs/spec-format.md`.

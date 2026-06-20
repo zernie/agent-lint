@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:f998dce21041e921 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:34c7dfcb7536a412 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -232,6 +232,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 - `examples/harness/dogfood/generate-logo.trigger.eval.mjs` — Dogfood trigger eval — vigiles's OWN generate-logo skill, an INTERNAL dev-only skill (lives under dev/skills/, NOT shipped to consumers) loaded via --plugin-dir dev/: a NARROW skill, so the risk is recall collapse not over-firing; checks both recall + precision against logo vs nearby-asset prompts
 - `examples/harness/skill-compression.eval.mjs` — Worked eval verifying a token-compression claim (e.g. Caveman telegraphic style): two arms (verbose/caveman) over one task, measure outputTokens (the optimization target) AND correct (the fact that must survive) — proves the saving is real AND didn't regress behaviour. The on-brand framing for the compression-tool cluster: vigiles measures the claim + the blast radius, it doesn't compress
 - `examples/harness/plugin-cohesion.harness.mjs` — Canonical cohesion test (runHarnessTest with plugin:): load a whole plugin (.claude-plugin/plugin.json + CLAUDE.md) and assert multiple hooks fire together
+- `examples/harness/railway-result.harness.mjs` — Worked example of the railway/Result payoff — asserting a subagent's TYPED OUTCOME deterministically (the deterministic-assert-replaces-an-LLM-judge thesis made runnable). A result() contract's vigiles:ok/err block is parsed+validated by assertAgentOk/assertAgentErr/assertAgentResult: Part A runs anywhere (pure text→Result, the ok/err/malformed tracks + a rich predicate), Part B runs the SAME assert over a real runHarness turn driven by a scripted mock model (needs the claude binary, NO key). Surfaces the underweighted result()/railway() primitives for testability
 - `bench/evals/refs-hook.eval.mjs` — Worked eval reproducing benchmark #4 (forcing symbol marks → verifiable references?) as a runEval library call
 - `research/adoption-strategy.md` — Adoption strategy: zero-config setup, progressive enforcement, agent workflows
 - `research/competitive-landscape.md` — Competitive landscape: rule-porter, rulesync, vibe-cli, Ruler
