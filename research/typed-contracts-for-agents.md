@@ -113,6 +113,10 @@ skill — and the more structure you let us add, the cheaper and sharper the tes
 
 ## See also
 
+- `spec-api-design.md` — the concrete API design for these contracts (`result()` typed via a
+  tagged error union, `doc()` vs structured builders, `extends()` merge, strict-typing borrows).
+- `side-effect-separation.md` — enforcing the side-effect boundary deterministically (the mark
+  doubles as the safety gate AND the test seam).
 - `measurement-authority.md` — the identity these contracts make affordable.
 - `shareable-presets.md` — the template/distribution axis (generalized to skills/agents here).
 - `railway-subagents.md` — the railway design this elevates from a feature to a purpose.
