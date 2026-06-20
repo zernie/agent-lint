@@ -1,0 +1,5 @@
+{
+  "name": "reviewer-prose",
+  "version": "0.0.0",
+  "description": "A/B arm: a code-reviewer subagent WITHOUT a vigiles spec (prose outcome)."
+}
