@@ -158,6 +158,13 @@ export function readActiveAgent(cwd: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
+ * EXPERIMENTAL — parked (P3), flat-only, do NOT auto-wire. This deterministic
+ * subagent-window tracking assumes FLAT dispatch (one active subagent at a time);
+ * it is NOT nesting-safe — Claude Code v2.1.172 added depth-5 nested subagents, so
+ * correct tracking needs a depth-aware STACK (push on dispatch, pop on SubagentStop)
+ * + verifying the spawn tool name (`Agent` vs `Task`). See
+ * research/effect-boundary-design.md ("Why dropped").
+ *
  * Resolve a `Task` tool's `subagent_type` to the compiled agent `.md` to
  * activate, or null when none is found. The DETERMINISTIC open signal that
  * replaces the model-invoked `agent-start`: Claude Code fires `PreToolUse` for

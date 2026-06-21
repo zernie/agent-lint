@@ -3784,6 +3784,10 @@ function agentHookCommand(): void {
 
   const cwd = process.cwd();
 
+  // EXPERIMENTAL (parked P3, flat-only — do NOT auto-wire): the Task/SubagentStop
+  // bracketing below assumes one active subagent at a time and is NOT nesting-safe
+  // (CC v2.1.172 depth-5 nesting needs a stack + spawn-tool-name check). See
+  // research/effect-boundary-design.md.
   // SubagentStop → CLOSE the window deterministically (no model `agent-done`):
   // the subagent returned, so its contract/purity no longer apply.
   if (event === "SubagentStop") {
