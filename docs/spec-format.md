@@ -2,6 +2,17 @@
 
 vigiles specs are TypeScript files (`*.spec.ts`) that compile to markdown instruction files. The spec is the source of truth; the markdown is a build artifact.
 
+## Why a spec? — it earns its place twice
+
+A typed spec is **not just a fancy way to write a CLAUDE.md**. It pays off on two layers:
+
+1. **Verify (lint).** Every reference in it — `file()`, `cmd()`, `ref()`, a linter rule, a subagent's `tools` — is checked against reality at compile time. A stale path or a disabled rule is a build error, not a thing your agent silently trusts.
+2. **Test (the part most people miss).** A spec is **typed contracts**, and typed contracts make your harness **deterministically testable** — the substrate the [Test](harness-testing.md) and [Measure](measuring-skills.md) tiers build on:
+   - a subagent's `result(okShape, errShape)` outcome → the run ends in a parseable `vigiles:ok`/`err` block you assert with **`assertAgentOk`** — a real test, **no LLM judge** (see [railway-subagents.md](railway-subagents.md));
+   - a declared `tools` allowlist / `purity` floor → the write surface a test can check (`wrote` / `didNotWrite` / `notTool`), and the contract a `PreToolUse` rail enforces.
+
+So the linting is the on-ramp; the lasting value is that **the spec is what makes the skill/subagent cheap to test**. The rest of this doc is the field reference.
+
 ## CLAUDE.md Specs
 
 Use `claude()` to define a CLAUDE.md spec. Export it as the default export.
