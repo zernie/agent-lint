@@ -20,6 +20,15 @@
 > Positioning anchors: `measurement-authority.md` (the offense pivot — measurement
 > is the headline, the spec is the on-ramp to testability), `CLAUDE.md` (the
 > deterministic-constraints-layer positioning, the adoption ladder, the rules).
+>
+> ⚠️ **READ THE COMMODITIZATION CHECK FIRST (§ "Competitive reality check,
+> 2026-06-21", before See also).** A same-day competitive sweep found the headline
+> "moats" below are substantially CLAIMED or closely analogized by shipping
+> competitors (riftmap, AgentAuditKit/PolicyLayer, Mastra, promptfoo). The durable
+> edge is the **substrate** (the instruction-file harness as a typed program) + the
+> **sub-affordable measurement** identity — NOT ownership of these capabilities.
+> Don't re-inflate the moat from the optimistic sections without that section's
+> deflation. See also `spec-value-model.md`.
 
 ## Contents
 
@@ -29,7 +38,8 @@
 4. The complete ranked record — every finding, every round
 5. The adoption tension (OPEN — for the founder to resolve)
 6. Proposed build order
-7. See also
+7. Competitive reality check (2026-06-21) — the moats are commoditizing
+8. See also
 
 ---
 
@@ -435,6 +445,23 @@ pivot wants; (5) is orthogonal correctness.
 > guardrail protects all of it.
 
 ---
+
+## Competitive reality check (2026-06-21) — the moats are commoditizing
+
+A skeptical same-day competitive sweep (web-verified) tested whether each headline
+moat is actually unclaimed. Verdict: **mostly not.** Record this so the optimistic
+sections above are read with the deflation, not as gospel.
+
+| Moat / candidate                                                                      | What competitors already ship                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Verdict                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **#2 capability-diff at PR (the "founder's favorite, most novel")**                   | **riftmap** — static analysis of config/manifests → **PR-time blast-radius DIFF** (read-only token, "who consumes this, what changed"), exactly the moat-#2 mechanism but for infra deps. **AgentAuditKit** — true CI version-diff with named rug-pull codes (`AAK-RUGPULL-001/002/003`: tool defs changed/added/removed). **PolicyLayer / SkillGate(`SG010`) / agent-audit(`AGENT-054`) / AgentsID / Pillar** — capability classification (Read/Write/Execute/Destructive/Financial) + drift baselines. The whole "agent blast radius" category is crowded (Sophos, GitHub, VentureBeat) + an NSA May-2026 hash-pin-and-diff advisory. | **TAKEN (generically).** Narrow unoccupied sliver: a diff of a **first-party agent harness's own effect surface read off a TYPED SPEC** ("did this PR widen what MY agent can do") — all incumbents are security-framed at **third-party MCP servers** (rug-pulls), not first-party harness config. But it's one short hop for AgentAuditKit/PolicyLayer, needs the spec substrate, and the classification primitive isn't novel. |
+| **#5 type-safe pipelining (typed cross-agent handoffs)**                              | **Mastra** (TS-first) types tool I/O + workflow steps via Zod (runtime validation + compile-time inference). Code-first frameworks already type workflow steps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **MOSTLY TAKEN.** vigiles edge narrows to **instruction-file-defined** agents + **whole-harness cross-file** type-check — unoccupied, but only matters to people defining harnesses as specs (~nobody yet = the adoption problem).                                                                                                                                                                                                |
+| **Deterministic judge-free contract oracle** (the spec-value-model "contract oracle") | **promptfoo** — `is-json`, JSON-schema, `is-valid-openai-tools-call`, javascript assertions: deterministic structured-output checks, no LLM judge, done by the harness not the model.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **TAKEN.** vigiles edge = the contract is **auto-derived from the spec** (`assertAgentOk` from `result()`) vs hand-written schema — a convenience, not a capability.                                                                                                                                                                                                                                                              |
+| **The control-flow thesis itself**                                                    | Brian Suh, _"Agents Need Control Flow"_ (2026) — independent manifesto for "deterministic scaffolds, LLM as a component." No implementation, but the IDEA is now named and spreading.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **Thesis no longer differentiating.** Validation of the frame, not a moat. (Recorded in `landscape-mid-2026.md`.)                                                                                                                                                                                                                                                                                                                 |
+
+**Synthesis.** The typed-compile _capabilities_ are commoditizing fast — riftmap/AgentAuditKit/PolicyLayer (capability-diff), Mastra (typed handoffs), promptfoo (deterministic oracle) all ship versions today. vigiles's real differentiation is **not a capability** but **(a) the substrate** — the markdown/instruction-file agent harness compiled as a typed program, which ~nobody else treats this way — and **(b) the sub-affordable measurement identity** (the ecosystem benchmark competitors structurally can't afford to run continuously). The substrate's value is gated on adoption that isn't there yet. **Net: there is probably no clean "killer feature" in the typed-compile direction; treat the compile layer as supporting substrate, and lead with measurement (A1).** Consistent with `measurement-authority.md` § Status & gaps and `spec-value-model.md`.
+
+**Sources:** riftmap.dev/blog/ai-doesnt-understand-blast-radius; github.com/marketplace/actions/agentauditkit-mcp-security-scan; policylayer.com/mcp-security; mastra.ai; promptfoo.dev/docs/configuration/expected-outputs/deterministic; bsuh.bearblog.dev/agents-need-control-flow. (Caveats: the competitive subagent fan-out was partly rate-limited; #8 static-purity was not verified; the destructive-actions pain-point report never landed.)
 
 ## 7. See also
 
