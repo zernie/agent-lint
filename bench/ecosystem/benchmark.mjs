@@ -170,6 +170,16 @@ for (const skill of SKILLS) {
   const claimGap =
     skill.claim.pct != null ? skill.claim.pct - meanOutCut : null;
 
+  // ---- Per-task SPREAD: the mean hides that a skill can help on one task and
+  // HURT on another (the real caveman finding: review-doc −45% / debounce −1%).
+  // Surface min/max + the help/hurt split instead of collapsing to one number.
+  const cuts = taskRows.map((r) => r.outCut);
+  const outCutMin = cuts.length ? Math.min(...cuts) : 0;
+  const outCutMax = cuts.length ? Math.max(...cuts) : 0;
+  const helped = cuts.filter((c) => c > 0).length;
+  const hurt = cuts.filter((c) => c < 0).length;
+  const mixed = helped > 0 && hurt > 0; // direction is not even consistent
+
   leaderboard.push({
     id: skill.id,
     title: skill.title,
@@ -178,6 +188,11 @@ for (const skill of SKILLS) {
     meanOutCut,
     meanCostCut,
     meanOutShare,
+    outCutMin,
+    outCutMax,
+    helped,
+    hurt,
+    mixed,
     claimGap,
     anyRegress,
     tasks: taskRows,
@@ -188,6 +203,8 @@ for (const skill of SKILLS) {
       `mean cost cut ${meanCostCut.toFixed(0)}%  ·  ` +
       `output share ${meanOutShare.toFixed(1)}%  ·  ` +
       `correctness regression: ${anyRegress ? "YES" : "no"}` +
+      `\n    -> per-task output cut spread ${outCutMin.toFixed(0)}%..${outCutMax.toFixed(0)}% ` +
+      `(helped ${helped}/${taskN}, hurt ${hurt}/${taskN}${mixed ? " — MIXED direction" : ""})` +
       (claimGap != null
         ? `\n    -> CLAIM ${skill.claim.pct}% vs MEASURED ${meanOutCut.toFixed(0)}% on the target ` +
           `=> overclaim gap ${claimGap.toFixed(0)} points`
@@ -216,7 +233,7 @@ if (debunks.length) {
           : "held up";
     console.log(
       `  ${r.title.padEnd(22)} claim ${String(r.claim.pct + "%").padStart(4)} · ` +
-        `measured ${r.meanOutCut.toFixed(0).padStart(4)}% · ` +
+        `measured ${r.meanOutCut.toFixed(0).padStart(4)}% (range ${r.outCutMin.toFixed(0)}..${r.outCutMax.toFixed(0)}%${r.mixed ? ", MIXED" : ""}) · ` +
         `bill ${r.meanCostCut >= 0 ? "-" : "+"}${Math.abs(r.meanCostCut).toFixed(0)}% · ` +
         `${r.anyRegress ? "BROKE correctness" : "no regression"} · ${verdict}`,
     );

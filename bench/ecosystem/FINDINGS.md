@@ -36,11 +36,34 @@ Caveats (honest): the corpus tasks top out at ~10 turns (not 322); the absolute 
 is noisy at 3 trials; the robust facts are the **direction** (no compression, bill
 up) and the **<1% output-share** (model-agnostic).
 
+## Token-Efficient CLAUDE.md — `drona23/claude-token-efficient@0d30a6d` (5.7k★)
+
+**Added to the manifest 2026-06-21; NOT yet measured.** A clean shape-(a) injectable
+prose file (a `CLAUDE.md`, not a SKILL.md) — the second cleanly-A/B-able compression
+entry beside caveman. **Claim:** README headline table "63%" reduction.
+
+**Expected debunk angle (self-documented upstream — measure to confirm):** the 63%
+is a 465→170 **WORD** count over 4 single-shot prompts; the repo's OWN reproducible
+token benchmark (`benchmark/SUMMARY.md`) admits actual **output-token** reduction is
+only ~4% (haiku) / ~12% (sonnet) / ~7% (opus), and the README itself notes the
+file's input-token overhead can make it net-negative at low output volume. So this
+is the SAME structural story as caveman (output is a thin slice of the bill), but
+here the author has already published the honest token numbers — our job is to
+reproduce them on the multi-turn agentic corpus and show the headline-vs-token gap.
+
 ## Quality plugins (superpowers / oh-my-claudecode / wshobson)
 
 Loaded natively via `--plugin-dir`; no single published % claim. Pilot only so far
 (n=1) — the bill they add on the neutral corpus is the column to fill on a fuller
 pass. No correctness regressions observed in the pilot.
+
+## Compression cluster — follow-on (needs-binary) tier
+
+The other hyped compression tools (RTK 60–90% / CodeGraph 57% / Claw 97% /
+claude-token-optimizer 90% / ClaudeSlim 60–85%) compress tool OUTPUTS via a real
+CLI/MCP binary, so they're a documented follow-on tier, not text-injection manifest
+entries. Context Mode (98%) is Elastic-licensed (not vendorable). Full
+classification + provenance in `SOURCES.md`.
 
 ## Caveman — prior art (don't claim our thesis as novel; lead with what's NEW)
 
