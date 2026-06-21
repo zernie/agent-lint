@@ -842,6 +842,16 @@ export type TypedAgentSpec<Ok extends Shape, Err extends Shape> = AgentSpec &
   TypedOutcome<Ok, Err>;
 
 /**
+ * Extract a typed agent's success (`result().ok`) SHAPE at the type level. The
+ * phantom `__outcome` symbol is module-private, so this is the exported reader
+ * the whole-harness registry uses: `OkOf<typeof registry["planner"]>` is the
+ * literal `ok` shape `planner` produces, the producer side of a cross-file
+ * `Handoff<>` check. A plain `AgentSpec` (no `result()` contract) carries no
+ * phantom, so `OkOf` widens to the erased `Shape` — a no-op handoff, additive.
+ */
+export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
+
+/**
  * Define a subagent specification (compiles to `agents/<name>.md`).
  *
  *   // agents/reviewer.md.spec.ts
@@ -953,13 +963,41 @@ export interface RailwayStep {
   readonly agent: string;
   /** Optional task hint passed to the worker. */
   readonly task?: string;
+  /**
+   * Optional input contract the step reads from its predecessor's `result().ok`.
+   * When present, the whole-harness registry (`generate-harness`) emits a
+   * per-edge `Handoff<>` assertion so a CROSS-FILE handoff mismatch (a missing
+   * field or wrong type vs the prior step's `ok`) is a `tsc` error naming the
+   * field. Absent `needs` = no handoff check (today's behavior, the string-path
+   * backstop). Built by `needs(...)`, the same builder a typed `pipeStep` uses.
+   */
+  readonly needs?: Shape;
 }
 
-/** Build a railway step that dispatches `agent` (optionally with a task hint). */
-export function delegate(agent: string, task?: string): RailwayStep {
-  return task === undefined
-    ? { _step: "delegate", agent }
-    : { _step: "delegate", agent, task };
+/**
+ * Build a railway step that dispatches `agent`.
+ *
+ *   delegate("planner")                                  // no task, no handoff
+ *   delegate("implementer", "implement the plan")        // task hint only
+ *   delegate("reviewer", undefined, needs({ diff: "string" }))  // + handoff check
+ *
+ * The optional 3rd argument carries the step's input `needs` (built by
+ * `needs(...)`). When present, the whole-harness registry asserts that the
+ * PREVIOUS success-track step's `result().ok` SUPPLIES it — a cross-file
+ * handoff that doesn't line up is a `tsc` error naming the offending field.
+ * Omitting it (the historical 1-/2-arg call) keeps the exact string-path
+ * behavior — fully backwards-compatible.
+ */
+export function delegate(
+  agent: string,
+  task?: string,
+  needsContract?: Shape,
+): RailwayStep {
+  const base: RailwayStep =
+    task === undefined
+      ? { _step: "delegate", agent }
+      : { _step: "delegate", agent, task };
+  return needsContract === undefined ? base : { ...base, needs: needsContract };
 }
 
 /**
@@ -1084,6 +1122,23 @@ export type Supplies<Producer extends Shape, Consumer extends Shape> = {
         }
     : { readonly __missing: K; readonly required: Consumer[K] };
 }[keyof Consumer];
+
+/**
+ * Per-edge CROSS-FILE handoff check — the registry-scale form of `Supplies<>`,
+ * mirroring `KnownAgentName` (the dangling-delegate per-edge check). `Producer`
+ * is the prior success-track step's `result().ok` shape (read off the registry
+ * via `OkOf`); `Consumer` is THIS step's `needs(...)` input contract. Collapses
+ * to `true` when the producer supplies every field the consumer needs (matching
+ * types), else to a descriptive error object naming the offending field
+ * (`__handoff_error` wrapping `Supplies`'s `__missing`/`__mismatch`), so
+ * assigning `true` to it is a `tsc` error at edit time. Shallow (one wrap over
+ * the per-field `Supplies` mapped type, no recursion); the generator emits one
+ * assertion per consecutive step pair (O(N)), keeping clear of TS2589.
+ */
+export type Handoff<Producer extends Shape, Consumer extends Shape> =
+  Supplies<Producer, Consumer> extends true
+    ? true
+    : { readonly __handoff_error: Supplies<Producer, Consumer> };
 
 /** A typed pipeline value — carries the LAST step's `ok` and the UNION of every
  *  step's `err` (any step can short-circuit to the error track). */

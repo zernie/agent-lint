@@ -147,6 +147,105 @@ test("an empty harness emits AgentName = never and no edges", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Cross-file typed composition — per-edge handoff assertions (pure emission)
+// ---------------------------------------------------------------------------
+
+test("a handoff edge emits a Handoff<OkOf<registry[from]>, needs> assertion", () => {
+  const r = generateHarness(
+    {
+      agents,
+      edges: [
+        { from: "ship", target: "planner" },
+        { from: "ship", target: "implementer" },
+      ],
+      handoffs: [
+        {
+          railway: "ship",
+          from: "planner",
+          to: "implementer",
+          needs: { plan: "string", files: "string[]" },
+        },
+      ],
+    },
+    { dialect: d, outDir: "/h" },
+  );
+  expect(r.handoffCount).toBe(1);
+  // imports the handoff type machinery only when there are handoffs
+  expect(r.gen).toContain("import type { KnownAgentName, Handoff, OkOf } from");
+  // one shallow per-pair assertion reading the producer's ok off the registry
+  expect(r.gen).toContain(
+    'const _handoff_0: Handoff<OkOf<typeof registry["planner"]>, { "plan": "string"; "files": "string[]" }> = true;',
+  );
+  expect(r.gen).toContain("// ship: planner → implementer");
+});
+
+test("no handoffs → the import + assertions are unchanged (backwards-compat)", () => {
+  const r = generateHarness(model, { dialect: d, outDir: "/h" });
+  expect(r.handoffCount).toBe(0);
+  // the type-only import stays the original single name — no Handoff/OkOf noise
+  expect(r.gen).toContain("import type { KnownAgentName } from");
+  expect(r.gen).not.toContain("Handoff");
+  expect(r.gen).not.toContain("_handoff_");
+});
+
+test("loadHarnessModel builds a handoff from a consecutive step's needs", async () => {
+  const load = (abs: string): Promise<Record<string, unknown> | null> => {
+    if (abs.endsWith("planner.spec.ts"))
+      return Promise.resolve({ _specType: "agent", name: "planner" });
+    if (abs.endsWith("impl.spec.ts"))
+      return Promise.resolve({ _specType: "agent", name: "impl" });
+    if (abs.endsWith("ship.spec.ts"))
+      return Promise.resolve({
+        _specType: "railway",
+        name: "ship",
+        steps: [
+          { agent: "planner" },
+          { agent: "impl", needs: { steps: "string[]" } },
+        ],
+      });
+    return Promise.resolve(null);
+  };
+  const dir = mkdtempSync(join(resolve("."), ".tmp-genh-handoff-"));
+  try {
+    writeFileSync(join(dir, "planner.spec.ts"), "");
+    writeFileSync(join(dir, "impl.spec.ts"), "");
+    writeFileSync(join(dir, "ship.spec.ts"), "");
+    const m = await loadHarnessModel(dir, load);
+    expect(m.handoffs).toEqual([
+      {
+        railway: "ship",
+        from: "planner",
+        to: "impl",
+        needs: { steps: "string[]" },
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a first step's needs (no predecessor) yields no handoff", async () => {
+  const load = (abs: string): Promise<Record<string, unknown> | null> => {
+    if (abs.endsWith("ship.spec.ts"))
+      return Promise.resolve({
+        _specType: "railway",
+        name: "ship",
+        // a needs on the FIRST step has no producer — never a handoff edge
+        steps: [{ agent: "planner", needs: { x: "string" } }],
+      });
+    return Promise.resolve(null);
+  };
+  const dir = mkdtempSync(join(resolve("."), ".tmp-genh-handoff1-"));
+  try {
+    writeFileSync(join(dir, "ship.spec.ts"), "");
+    const m = await loadHarnessModel(dir, load);
+    expect(m.handoffs).toEqual([]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // loadHarnessModel — railway edges (steps + recover + onError) become edges
 // ---------------------------------------------------------------------------
 
@@ -367,4 +466,115 @@ test("a DANGLING delegate is rejected by tsc, naming the missing target", async 
   expect(r.status).not.toBe(0);
   expect(r.out).toContain('__dangling_delegate: "ghost"');
   expect(r.out).toContain('from: "ship"');
+}, 60_000);
+
+// ---------------------------------------------------------------------------
+// tsc smoke — CROSS-FILE handoff: a supplied `needs` compiles, a mismatch /
+// missing field is rejected by tsc alone, the diagnostic naming the field.
+//
+// Two agents: producer `planner` emits result().ok { steps: "string[]" }; the
+// railway's second step (`implementer`) declares the `needs` shape under test.
+// ---------------------------------------------------------------------------
+
+const HANDOFF_PLANNER = `import { agent, result } from "vigiles/spec";
+export default agent({
+  name: "planner",
+  description: "Produce the ordered plan with its step list.",
+  tools: ["Read"],
+  output: result({ steps: "string[]" }, { reason: "string" }),
+});
+`;
+const HANDOFF_IMPLEMENTER = `import { agent, result } from "vigiles/spec";
+export default agent({
+  name: "implementer",
+  description: "Implement the supplied plan.",
+  tools: ["Read", "Edit"],
+  output: result({ files: "string[]" }, { reason: "string" }),
+});
+`;
+
+/** Write a 2-agent railway whose second step `needs` the given field shape. */
+function writeHandoffFixture(
+  dir: string,
+  needsLiteral: string, // e.g. `{ steps: "string[]" }`
+): void {
+  writeFileSync(join(dir, "planner.spec.ts"), HANDOFF_PLANNER);
+  writeFileSync(join(dir, "implementer.spec.ts"), HANDOFF_IMPLEMENTER);
+  writeFileSync(
+    join(dir, "ship.spec.ts"),
+    `import { railway, delegate, needs } from "vigiles/spec";
+export default railway({
+  name: "ship",
+  steps: [delegate("planner"), delegate("implementer", undefined, needs(${needsLiteral}))],
+});
+`,
+  );
+  writeFileSync(join(dir, "tsconfig.json"), TSCONFIG);
+}
+
+/** Build the model for the handoff fixture: parse the second step's needs. */
+async function genHandoff(
+  dir: string,
+  needs: Record<string, string>,
+): Promise<void> {
+  const m: HarnessModel = await loadHarnessModel(dir, (abs) => {
+    const base = abs.split("/").pop() ?? "";
+    if (base === "planner.spec.ts")
+      return Promise.resolve({
+        _specType: "agent",
+        name: "planner",
+        tools: ["Read"],
+      });
+    if (base === "implementer.spec.ts")
+      return Promise.resolve({
+        _specType: "agent",
+        name: "implementer",
+        tools: ["Read", "Edit"],
+      });
+    if (base === "ship.spec.ts")
+      return Promise.resolve({
+        _specType: "railway",
+        name: "ship",
+        steps: [{ agent: "planner" }, { agent: "implementer", needs }],
+      });
+    return Promise.resolve(null);
+  });
+  expect(m.handoffs?.length).toBe(1);
+  const r = generateHarness(m, { dialect: d, outDir: dir });
+  expect(r.duplicate).toBeUndefined();
+  writeFileSync(join(dir, "harness.gen.ts"), r.gen);
+}
+
+test("a CLEAN cross-file handoff compiles (producer ok supplies needs)", async () => {
+  const dir = fixtureDir();
+  writeHandoffFixture(dir, `{ steps: "string[]" }`);
+  await genHandoff(dir, { steps: "string[]" });
+  const r = tsc(dir);
+  expect(r.out).toBe("");
+  expect(r.status).toBe(0);
+}, 60_000);
+
+test("a MISMATCHED handoff is rejected by tsc, naming the field", async () => {
+  const dir = fixtureDir();
+  // producer emits steps: "string[]"; the edge needs steps: "string" → mismatch
+  writeHandoffFixture(dir, `{ steps: "string" }`);
+  await genHandoff(dir, { steps: "string" });
+  const r = tsc(dir);
+  expect(r.status).not.toBe(0);
+  expect(r.out).toContain("__handoff_error");
+  expect(r.out).toContain('__mismatch: "steps"');
+  expect(r.out).toContain('expected: "string"');
+  expect(r.out).toContain('got: "string[]"');
+}, 60_000);
+
+test("a MISSING-field handoff is rejected by tsc, naming the field", async () => {
+  const dir = fixtureDir();
+  // producer has no `diff` field; the edge needs it → missing
+  writeHandoffFixture(dir, `{ diff: "string[]" }`);
+  await genHandoff(dir, { diff: "string[]" });
+  const r = tsc(dir);
+  expect(r.status).not.toBe(0);
+  expect(r.out).toContain("__handoff_error");
+  expect(r.out).toContain('__missing: "diff"');
+  expect(r.out).toContain('required: "string[]"');
 }, 60_000);

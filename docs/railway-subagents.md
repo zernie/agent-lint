@@ -16,6 +16,7 @@
 - [What it compiles to](#what-it-compiles-to)
 - [Compose flat workers](#compose-flat-workers)
 - [Typed composition — handoffs that must line up](#typed-composition--handoffs-that-must-line-up)
+  - [Cross-file handoffs — the whole-harness registry](#cross-file-handoffs--the-whole-harness-registry)
 - [Test the outcome deterministically](#test-the-outcome-deterministically)
 - [Scope: subagents, not skills](#scope-subagents-not-skills)
 - [See also](#see-also)
@@ -208,6 +209,45 @@ explicitly or fall back to the string `railway`.
 
 The type-level proof (a correct pipeline + the three `@ts-expect-error` failures):
 [`test/types/composition.ts`](../test/types/composition.ts).
+
+### Cross-file handoffs — the whole-harness registry
+
+`pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
+When each agent lives in its **own** `*.spec.ts` and a `railway()` composes them by
+**name**, the same check is lifted to the **whole-harness registry** that
+[`vigiles generate-harness`](cli.md#generate-harness-dir-out) emits — so a
+**cross-file** handoff mismatch is a `tsc` error too.
+
+Declare the handoff with the optional 3rd argument of `delegate()` — the same
+`needs(...)` builder `pipeStep` uses. The registry then asserts the **previous**
+success-track step's agent `result().ok` SUPPLIES it:
+
+```ts
+import { railway, delegate, needs } from "vigiles/spec";
+
+// agents/planner.md.spec.ts emits result({ steps: "string[]" }, …)
+// agents/implementer.md.spec.ts emits result({ files: "string[]" }, …)
+export default railway({
+  name: "ship-pr",
+  steps: [
+    delegate("planner"),
+    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok ⊇ { steps }
+    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok ⊇ { summary }
+  ],
+});
+```
+
+Run `vigiles generate-harness` over the agents directory; the generated
+`harness.gen.ts` carries one shallow per-pair assertion
+(`Handoff<OkOf<typeof registry["planner"]>, { steps: "string[]" }>`). If the
+producer's `ok` is missing the field or has the wrong type, `tsc` rejects the gen
+file naming it (`__handoff_error: { __missing: "steps" }` /
+`{ __mismatch: "steps", expected: …, got: … }`) — **no vigiles run, across files,
+in your editor**. The check is **opt-in per edge**: a `delegate()` with no `needs`
+generates and behaves exactly as before. It's scoped to the **linear success
+track** for now — `recover`/`onError` edges consume an `err`, not the prior `ok`,
+so they're a noted follow-up. Worked dogfood:
+[`examples/railway/ship-pr.md.spec.ts`](../examples/railway/ship-pr.md.spec.ts).
 
 ## Test the outcome deterministically
 

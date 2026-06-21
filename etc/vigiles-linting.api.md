@@ -215,7 +215,7 @@ export type ConfigEnabledStatus = "enabled" | "disabled" | "unknown";
 export function defineConfig(config: VigilesV2Config): VigilesV2Config;
 
 // @public
-export function delegate(agent: string, task?: string): RailwayStep;
+export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
 
 // @public (undocumented)
 export interface DetectedLinter {
@@ -334,6 +334,11 @@ export interface GuidanceRule {
     readonly text: string;
 }
 
+// @public
+export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<Producer, Consumer> extends true ? true : {
+    readonly __handoff_error: Supplies<Producer, Consumer>;
+};
+
 // @public (undocumented)
 export interface HashCheckResult {
     // (undocumented)
@@ -409,6 +414,9 @@ export function needs<const N extends Shape>(shape: N): NeedsContract<N>;
 
 // @public
 export type NeedsContract<N extends Shape> = N;
+
+// @public
+export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
 
 // @public
 export interface OpenToolVocabulary extends ToolVocabulary {
@@ -508,6 +516,7 @@ export function railway(spec: Omit<Railway, "_specType">): Railway;
 // @public
 export interface RailwayStep {
     readonly agent: string;
+    readonly needs?: Shape;
     // (undocumented)
     readonly _step: "delegate";
     readonly task?: string;

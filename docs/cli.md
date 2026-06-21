@@ -283,8 +283,7 @@ Emit **one typed registry** — `harness.gen.ts` — over every `*.spec.ts` unde
 `dir`, so a single `tsc --noEmit` cross-checks the **whole harness as one
 program** (think TanStack Router's `routeTree.gen.ts` or the Prisma client). It's
 the third generated artifact beside `generate-types` (`.d.ts`) and
-`generate-schema` (JSON Schema). The first increment ships three cross-spec
-checks:
+`generate-schema` (JSON Schema). It ships four cross-spec checks:
 
 - **Dangling `delegate` → a `tsc` error at edit time.** Every `railway()`
   delegate target (`steps`, `recover.step`, `onError`) is checked against the
@@ -296,6 +295,18 @@ checks:
   `name` make `generate-harness` exit `2` naming the collision. This is an O(N)
   check in the generator, **not** a type — a set-uniqueness type is the TS2589
   wall (see the research).
+- **Cross-file typed composition → a `tsc` error at edit time.** When a
+  `railway()` success-track step declares what it `needs()`, the gen file asserts
+  the **previous** step's agent `result().ok` SUPPLIES it — **across files**. A
+  step that needs `diff: "string[]"` whose producer emits `diff: "string"` (or
+  doesn't emit `diff` at all) is a `tsc` error naming the field
+  (`__handoff_error: { __mismatch: "diff", expected: "string[]", got: "string" }`
+  / `__missing: "diff"`). This is the repo-scale generalization of the per-file
+  `pipe`/`Supplies` composition — one shallow per-pair assertion (O(N), no
+  recursion). Scoped to the **linear success track**; `recover`/`onError` edges
+  (which consume an `err`, not the prior `ok`) are a noted follow-up. A railway
+  whose `delegate()`s declare **no** `needs` generates exactly as before — the
+  check is purely additive and opt-in per edge.
 - **The whole-harness capability lattice.** A computed `harnessCapabilities`
   export — the union of every agent's effect surface (read-only / side-effecting
   / unknown tools + the loosest purity) — the substrate a future repo-scale
@@ -319,11 +330,24 @@ as `recompile-on-spec-change`):
 guard({ watch: "*.spec.ts", run: "npx vigiles generate-harness" });
 ```
 
-Cross-file **typed composition** — carrying a `result()` data SHAPE forward
-across files so a handoff mismatch is a `tsc` error naming the field — is the
-documented next increment built on this registry. See
-[`research/whole-harness-codegen.md`](../research/whole-harness-codegen.md) for
-the design, the measured TS-scaling verdict, and the encoding rule.
+Declare a handoff with the optional 3rd argument of `delegate()` — the same
+`needs(...)` builder a typed `pipeStep` uses:
+
+```ts
+import { railway, delegate, needs } from "vigiles/spec";
+railway({
+  name: "ship-pr",
+  steps: [
+    delegate("planner"),
+    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok must supply `steps`
+    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok must supply `summary`
+  ],
+});
+```
+
+See [`docs/railway-subagents.md`](railway-subagents.md) for the typed-composition
+guide and [`research/whole-harness-codegen.md`](../research/whole-harness-codegen.md)
+for the design, the measured TS-scaling verdict, and the encoding rule.
 
 ## Lint vs scan — gate vs report
 
