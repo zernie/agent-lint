@@ -192,9 +192,9 @@ assertChecks(r, [
 to act (a check a completion-grader structurally cannot make — it sees the agent's
 final text, not the tool call it _almost_ made). All three are **deterministic** —
 the scripted mock model only does what the script says, so a `Write` either landed
-or it didn't. Pair this with a `purity:` floor (`pure`/`bounded`) and `effect()`
-boundaries on the `skill()`/`agent()` spec to declare the surface the test then
-asserts. See the runnable example below.
+or it didn't. Pair this with a `purity:` floor (`pure`/`bounded`) on the
+`skill()`/`agent()` spec to declare the surface the test then asserts. See the
+runnable example below.
 
 ## Test a skill fires (`measureTriggerRate`)
 

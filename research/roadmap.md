@@ -218,21 +218,29 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 
 ## Now — cheap, high-leverage, do next
 
-- **Effect-surface: the runtime half — DONE (2026-06-20).** Both pieces shipped:
-  the per-call FLOOR gate (`decidePurityGate` wired into the agent + skill
-  `PreToolUse` rails, `isReadOnlyBash` refining `Bash` by the live command, the
-  `vigiles:purity:` marker) AND the **position-aware effect-BOUNDARY** (the
-  `effect\`\`` `EffectRegion`builder →`<!-- vigiles:effect -->`markers; outside
-a region the gate tightens to the`"pure"`floor, inside it the declared floor;
-region tracked by`.vigiles/effect-active.json`via the`effect-enter`/`exit`CLI — fail-closed). The remaining boundary follow-ons are smaller: relaxing the
-inside-region floor so a`bounded`unit may run MUTATING`Bash`inside the mark
-(today even inside, mutating Bash is floor-denied — conservative), and the`tool-intercept` `outsideEffect`test-seam predicate. (Reminder: the classifier
-does NOT cleanly refine the STATIC`effectSurface`/`scan` — those see a tool
-_name_ + permission _pattern_ (`Bash(git:\*)`), not a command; the runtime gate
-is where it lands.) See
-[`side-effect-separation.md`](side-effect-separation.md) +
-[`bash-effect-classification.md`](bash-effect-classification.md) +
-[`effect-boundary-design.md`](effect-boundary-design.md). · **P1**
+- **Purity FLOOR gate — DONE + STABLE (2026-06-20).** The per-call floor
+  (`decidePurityGate` wired into the agent + skill `PreToolUse` rails,
+  `isReadOnlyBash` refining `Bash` by the live command, the `vigiles:purity:`
+  marker) is the keeper: deterministic, whole-unit, shipped. See
+  [`side-effect-separation.md`](side-effect-separation.md) +
+  [`bash-effect-classification.md`](bash-effect-classification.md).
+- **`effect()` sub-region BOUNDARY — EXPERIMENTAL, PARKED (P3, revisit).** The
+  in-flow side-effect sub-region (`effect\`\``→`<!-- vigiles:effect -->`markers,
+"pure outside / declared floor inside") is **dropped as a goal**, not a near-term
+build. 2026-06-20 redesign + dogfood: the model-emitted`effect-enter`/`exit`
+signal is a category error (a deterministic gate keyed on probabilistic model
+compliance, fail-closed). For **skills** it's now a **compile error**
+(`effect-in-skill`; a skill uses the floor + `context:'fork'`) — KEEP. For
+**subagents** a flat-only deterministic tracker shipped (`PreToolUse(tool=Task)`open +`SubagentStop`close,`f045554`) but is **NOT nesting-safe**: Claude Code
+v2.1.172 added depth-5 nesting, so correct tracking needs a depth-aware **stack**
+(push/pop) + spawn-tool-name verification (`Agent`vs`Task`). Marked EXPERIMENTAL;
+**do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
+harness signal, and the subagent-split alternative is **weaker AND costlier** than
+intended (whole-unit granularity, context-isolation, depth-5 cap, subagent spam) —
+so the realistic safety story is the **whole-unit floor + a stateful pre-hook**
+(read-before-write, conntrack/eBPF-style over the tool stream). Revisit via the
+pre-hook, not the split. See
+[`effect-boundary-design.md`](effect-boundary-design.md). · **P3**
 - **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
   lightweight verification helpers (the `Ref` union extended → render + compile
   verification in every switch). `doc()` was the proposed next sibling but is now

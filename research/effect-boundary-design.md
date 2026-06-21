@@ -2,14 +2,20 @@
 
 # Effect-boundary design — `effect()` region mark
 
-> Status: SHIPPED (2026-06-20) — this doc designed it and it landed as designed.
-> The `effect\`\`` `EffectRegion`builder +`<!-- vigiles:effect -->`compile
-markers + the`effect-enter`/`effect-exit`state file + the boundary gate in
-both`PreToolUse`rails are all in`main` (mechanism (a) below, fail-closed).
-Retained as the design record. The per-call purity FLOOR gate it builds on is
-likewise shipped (`decidePurityGate`). See
-[`side-effect-separation.md`](side-effect-separation.md) for the full design
-rationale; [`roadmap.md`](roadmap.md) for what remains (smaller follow-ons).
+> Status: **EXPERIMENTAL — PARKED (P3, revisit) as of 2026-06-21.** The per-call
+> purity FLOOR gate (`decidePurityGate`) is the stable keeper. The `effect()`
+> _sub-region_ boundary this doc designed (mechanism (a) below) is **dropped as a
+> goal**: for skills it's now a compile error (`effect-in-skill` — use the floor +
+> `context:'fork'`); for subagents a flat-only deterministic tracker shipped
+> (`PreToolUse(Task)`+`SubagentStop`, `f045554`) but is NOT nesting-safe (CC v2.1.172
+> added depth-5 nesting → needs a depth-aware stack + spawn-tool-name check) and
+> must NOT be auto-wired. **Final call (see "Why dropped" below): a deterministic
+> in-flow sub-region has no harness signal, and the subagent-split is weaker AND
+> costlier than intended — the realistic safety story is the whole-unit floor + a
+> stateful pre-hook.** Read this doc top-to-bottom for the design history; the
+> SUPERSEDED + "Why dropped" sections at the end are the current verdict. See
+> [`side-effect-separation.md`](side-effect-separation.md) for the full design
+> rationale; [`roadmap.md`](roadmap.md) for what remains (smaller follow-ons).
 
 ---
 
@@ -354,3 +360,37 @@ corrected). Full prior-art set + the Plan-Then-Execute pattern:
 [securing LLM agents (arXiv 2506.08837)](https://arxiv.org/pdf/2506.08837), Koka/Unison
 abilities, [Monadic Regions](https://www.cs.cornell.edu/people/fluet/research/rgn-monad/SPACE04/space04.pdf),
 [Claude Code hooks](https://code.claude.com/docs/en/hooks).
+
+## Why dropped — the subagent-split is weaker AND costlier (2026-06-21, final)
+
+After shipping the skill half + the flat subagent tracker, a CC-facts check (via the
+claude-code-guide) settled it: **the sub-region goal isn't worth chasing.**
+
+**New substrate fact:** Claude Code **v2.1.172 (2026-06-10)** added nested subagents —
+a subagent with `Agent` in its `tools` can spawn its own, **up to depth 5 (fixed, not
+configurable)**; a depth-5 subagent gets no `Agent` tool. (Source: code.claude.com
+/docs/en/sub-agents#spawn-nested-subagents + changelog.) So nesting is real now — which
+both enables the two-subagent split locally AND breaks the flat tracker I shipped
+(single slot, not a stack).
+
+**But the split is the wrong tool for sub-region scoping, on two axes:**
+
+1. **Weaker than intended.** `effect()` wanted an in-flow sub-region inside ONE body
+   sharing working memory ("these actions write, the rest is read-only"). The split
+   gives only **whole-subagent** granularity, across a **context boundary** — the
+   writer doesn't have the planner's memory; you hand-marshal a plan out of one and
+   into the other. That's "rebuild the flow as two programs talking through a pipe,"
+   not "scope a region." Plus the **depth-5 ceiling**.
+2. **Costlier.** Each phase is a fresh dispatch = a fresh context window (no compaction
+   benefit; re-pays context in input tokens) + a round-trip + trace bloat. For "this
+   one block writes," a whole subagent is wildly disproportionate — **subagent spam**.
+
+**Verdict:** a deterministic _in-flow_ sub-region has no harness signal (same wall as
+the model-narration problem), and the split is a downgrade on both granularity and
+cost. So drop the sub-region as a goal. The realistic, in-place, deterministic safety
+story is: **whole-unit `purity` floor (shipped) + a stateful PreToolUse gate** keyed on
+the tool stream (read-before-write / ordering — the conntrack/eBPF-maps pattern; needs
+no restructuring and no subagent spam). If revisited (P3), build the **stateful
+pre-hook**, not the split — and make the f045554 tracker nesting-safe (depth-aware
+stack + verified spawn-tool name) only if the active-agent contract enforcement itself
+is wanted under nesting, independent of `effect()`.

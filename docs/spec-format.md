@@ -168,9 +168,13 @@ contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
 `"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
 tools and is a violation.
 
-`effect\`…\``marks a **side-effect boundary** inside a body (a tagged template
-usable as an interpolated fragment). It compiles to`<!-- vigiles:effect -->`…`<!-- /vigiles:effect -->` markers that tighten the runtime gate to read-only
-_outside_ the region and the declared floor _inside_ it.
+> **`effect()` is experimental and parked (P3) — not for general use.** It aimed to
+> mark a side-effect _sub-region_ inside one body, but a deterministic in-flow
+> boundary has no reliable signal in the harness, so it's a **compile error in a
+> skill** and flat-only/dormant for subagents. Use the whole-unit `purity` floor
+> above (and, when you genuinely need phase separation, separate subagents). Status
+>
+> - the depth-5 nesting analysis: [`research/effect-boundary-design.md`](../research/effect-boundary-design.md).
 
 ## Reference Helpers
 
@@ -205,7 +209,6 @@ Tagged template literal that interleaves strings and refs. Use it for `sections`
 - `result(okShape, errShape)` — a subagent's (or forked skill's) typed `Result<ok, err>` outcome. Field types: `"string" | "number" | "boolean" | "string[]"`. Full guide: **[railway-subagents.md](railway-subagents.md)**.
 - `railway({ name, steps, recover, onError })` + `delegate(agent, task?)` — compose flat subagents into a success track with bounded recovery. See [railway-subagents.md](railway-subagents.md).
 - `input(name, hint)` / `step(do, { gate, retry })` / `project(role)` — a skill's typed inputs, gated pipeline steps, and portable command gates.
-- `effect\`…\`` — a side-effect boundary inside a body (see [Purity & effects](#purity--effects)).
 
 ```ts
 instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;
