@@ -394,3 +394,33 @@ no restructuring and no subagent spam). If revisited (P3), build the **stateful
 pre-hook**, not the split — and make the f045554 tracker nesting-safe (depth-aware
 stack + verified spawn-tool name) only if the active-agent contract enforcement itself
 is wanted under nesting, independent of `effect()`.
+
+## Last salvage attempt: `effect()` as a test/mock seam — also rejected (2026-06-21)
+
+A final reframe worth recording so it isn't re-tried: drop enforcement and position
+entirely; for an **agent**, a tight `tools` allowlist already pins the effect surface,
+so let `effect()` just **name "the hole"** (the one side-effecting op) to make it the
+**mock point** for tests. Sounds clean — functional core / imperative shell, mock at the
+shell. But the hole **already exists three ways without the primitive**:
+
+1. **Enforcement** — the `tools` allowlist + `purity` floor already make "pure except
+   for this one call" a runtime guarantee.
+2. **Identification** — `effects.ts` `effectSurface(tools, dialect)` / `classifyToolEffect`
+   already bucket a tool list into read-only vs side-effecting **deterministically**, so
+   the hole is **computed from the allowlist**, no annotation needed.
+3. **Test seam** — `interceptTools` + the `ArgMatcher` (`when:{command:/git push/}`)
+   already mocks the **exact invocation** at sub-tool granularity.
+
+So `effect()` would only move the matcher from the test into the spec — a
+single-source-of-truth convenience, **not a capability** — failing "earns its place" the
+same way `doc()` and `section()` did. Two honest limits on the framing: `interceptTools`
+is intercept-**and-prevent** (deny + assert the attempt), which is right for a
+**destructive** hole (push, charge, paid API) but is **not** a faithful mock that returns
+a fake success — a hole that must **return a value the flow consumes** is the
+**record-replay / R2** tier, also not `effect()`.
+
+**The useful nugget** (the one thing worth building from this): have `scaffold-test` read
+the **existing** tools + `effectSurface` and **auto-derive an `interceptTools` entry** per
+side-effecting tool. That delivers "the agent's hole is easy to test/mock" — the actual
+goal — with **zero new spec surface**. Folds into the scaffold-test enhancement, not an
+`effect()` revival.

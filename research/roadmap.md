@@ -255,6 +255,24 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
     restructuring, no subagent spam. The `f045554` tracker only needs nesting-safety
     (depth-aware stack + verified spawn-tool name) IF active-agent CONTRACT enforcement
     under nesting is wanted independently of `effect()`.
+  - **"effect() as a test/mock seam instead of an enforcement boundary" — considered, rejected (2026-06-21).**
+    The reframe: forget position; for an agent a tight `tools` allowlist already pins the
+    effect surface, so `effect()` could just NAME "the hole" — the one side-effecting op —
+    to make it the mock point. Verdict: the hole already exists three ways without the
+    primitive. (1) Enforcement: the `tools` allowlist + `purity` floor pin it. (2)
+    Identification: `effects.ts` `effectSurface(tools, dialect)` / `classifyToolEffect`
+    ALREADY bucket a tool list into read-only vs side-effecting deterministically — the hole
+    is COMPUTED from the allowlist, no annotation. (3) Test seam: `interceptTools` + the
+    `ArgMatcher` (`when:{command:/git push/}`) already mock the EXACT invocation at sub-tool
+    granularity. So `effect()` would only move the matcher from the test into the spec
+    (single-source-of-truth convenience, not a capability) — fails "earns its place" like
+    `doc()`/`section()`. Honest limit on the framing too: `interceptTools` is
+    intercept-and-PREVENT (deny + assert the attempt), right for a DESTRUCTIVE hole (push,
+    charge); a hole that must RETURN a fake value is the record-replay/R2 tier, also not
+    `effect()`. The useful NUGGET to keep: have `scaffold-test` read the existing tools +
+    `effectSurface` and AUTO-DERIVE the `interceptTools` entry per side-effecting tool —
+    delivers "the agent's hole is easy to test/mock" with zero new spec surface. → folds
+    into the scaffold-test enhancement, NOT an `effect()` revival.
   - See [`effect-boundary-design.md`](effect-boundary-design.md). · **P3**
 - **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
   lightweight verification helpers (the `Ref` union extended → render + compile
