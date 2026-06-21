@@ -5,7 +5,7 @@
  * either approves (ok) or returns blocking findings (err) that route to the
  * recovery / error track.
  */
-import { agent, result, instructions, cmd } from "../../src/spec.js";
+import { agent, result, instructions, cmd } from "../../src/core/spec.js";
 
 export default agent({
   name: "reviewer",

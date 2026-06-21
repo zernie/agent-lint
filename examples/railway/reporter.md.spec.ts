@@ -5,7 +5,7 @@
  * runs with the failing step's error payload and records the failure clearly so
  * a human can pick it up.
  */
-import { agent, result, instructions } from "../../src/spec.js";
+import { agent, result, instructions } from "../../src/core/spec.js";
 
 export default agent({
   name: "reporter",
