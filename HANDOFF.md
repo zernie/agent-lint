@@ -31,9 +31,13 @@ cross-ref / typed / test-eval / capability-diff. So in-market vigiles UNIQUELY o
 cross-ref + typed + test/eval; NOT differentiated on surface linting. **Field is WIDE OPEN
 — no incumbent, near-zero mindshare** (biggest = agnix 296★/1-HN-pt, 414 rules + LSP but no
 cross-ref/eval; rest 6–41★; none in awesome-claude-code 47k★). So: don't out-rule-count or
-match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + works on plain markdown =
-zero adoption barrier) + test/eval. **Battle is DISTRIBUTION, not capability** → reinforces
-A1. Full: `landscape-mid-2026.md` §"Market-segmented competitive matrix" + §"Benchmark prior art".
+match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markdown = zero
+adoption barrier) + test/eval. **REFINEMENT (2026-06-21): the valuable cross-check is
+HARNESS-NATIVE** (tools/MCP `server#tool`/hook-events/paths/delegates — fail silently,
+agent-era), NOT the linter-catalog leg (legacy/supporting; don't add more catalogs).
+**IN PROGRESS: live MCP tool resolution** of real `mcp__server__tool` refs (engine in
+src/core/mcp.ts, today only wired to the `vigiles:mcp` mark). **Battle is DISTRIBUTION**
+→ reinforces A1. Full: `landscape-mid-2026.md` §"Market-segmented matrix" (REFINEMENT) + roadmap §Now.
 
 ## Next move (pick — none started)
 
