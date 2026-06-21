@@ -22,26 +22,18 @@ priority = the **ADOPTION ENGINE** (the at-scale ecosystem benchmark "what works
 hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat depth.
 Bridge bet = **capability-diff (#2)**. Full: `research/measurement-authority.md` § "Status & gaps".
 
-⚠️ **COMPETITIVE READ (2026-06-21, web-verified + market-corrected) — read before
-re-pitching the moat.** First pass said "typed-spec moats are commoditizing" — that was a
-**MARKET CONFLATION**, now corrected. The fancy capabilities (typed handoffs, det.
-oracle, capability-diff) live in ADJACENT markets — **app-building** (Mastra/promptfoo,
-zero CLAUDE.md contact), **infra** (riftmap), **MCP-server security** (AgentAuditKit) —
-NOT vigiles's market. In vigiles's ACTUAL market (verify a coding-agent harness) the only
-competitors are **pure static surface linters**: **claudelint** (114 rules), **cclint** ×2,
-**`claude plugin validate`** — confirmed via their docs to do NO cross-referencing, NO
-typed specs, NO compile-time, NO test/eval, NO capability-diff. So in-market vigiles
-UNIQUELY owns cross-ref + typed + test/eval; it is NOT differentiated on surface linting.
-**Adoption pass DONE: field is WIDE OPEN — no incumbent, near-zero mindshare.** Biggest
-competitor = **agnix** (296★, ~414 rules, Rust, 7-harness + LSP — crowds vigiles's
-multi-harness/LSP words but does NOT do cross-ref/typed/eval); rest 6–41★; none in
-awesome-claude-code (47k★); npm downloads CI-inflated (agnix Show HN = 1 pt). Only
-entrenched thing = Anthropic `claude plugin validate` (shallow manifest floor). So: don't
-out-rule-count agnix or match its LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true": only
-vigiles checks the named rule EXISTS + is ENABLED — unique in-market, works on plain
-markdown = zero adoption barrier) + the test/eval tier. **The real battle is
-DISTRIBUTION/mindshare, not capability** → reinforces A1/adoption-engine. Full:
-`landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md` §"Competitive reality check".
+⚠️ **COMPETITIVE READ (2026-06-21, web-verified + market-corrected).** "Typed-spec moats
+commoditizing" was a MARKET CONFLATION — the fancy capabilities live in ADJACENT markets
+(app-building: Mastra/promptfoo; infra: riftmap; MCP-security: AgentAuditKit), NOT
+vigiles's. In vigiles's ACTUAL market the only rivals are pure static surface linters
+(claudelint 114 rules, cclint ×2, `claude plugin validate`) — confirmed via docs to do NO
+cross-ref / typed / test-eval / capability-diff. So in-market vigiles UNIQUELY owns
+cross-ref + typed + test/eval; NOT differentiated on surface linting. **Field is WIDE OPEN
+— no incumbent, near-zero mindshare** (biggest = agnix 296★/1-HN-pt, 414 rules + LSP but no
+cross-ref/eval; rest 6–41★; none in awesome-claude-code 47k★). So: don't out-rule-count or
+match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + works on plain markdown =
+zero adoption barrier) + test/eval. **Battle is DISTRIBUTION, not capability** → reinforces
+A1. Full: `landscape-mid-2026.md` §"Market-segmented competitive matrix" + §"Benchmark prior art".
 
 ## Next move (pick — none started)
 
