@@ -45,7 +45,10 @@ import {
   scaffoldTest,
   formatScaffolds,
   type ScaffoldInput,
+  type ResultContract,
+  type ContractField,
 } from "./scaffold-test.js";
+import { effectSurface } from "./core/effects.js";
 import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
 import type { ScanReport } from "./scan.js";
 import {
@@ -3474,10 +3477,39 @@ function pluginNameFor(dir: string, manifestPath: string): string {
 }
 
 /** Enrich an untested Surface with the metadata the right template needs. */
+/** Extract `"name": type` fields from one rendered `vigiles:ok`/`err` shape block. */
+function parseContractFields(block: string): ContractField[] {
+  const fields: ContractField[] = [];
+  const re = /"([^"]+)"\s*:\s*(string\[\]|string|number|boolean)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block)) !== null) {
+    fields.push({ name: m[1], type: m[2] });
+  }
+  return fields;
+}
+
+/**
+ * Parse a subagent's compiled `## Output contract` (the `vigiles:ok` / `vigiles:err`
+ * blocks the compiler emits) back into a typed `ResultContract`, so the generator
+ * can write an `assertAgentOk` test against the real fields. Returns null when the
+ * agent has no result() contract.
+ */
+function parseResultContract(md: string): ResultContract | null {
+  const ok = /```vigiles:ok\n([\s\S]*?)```/.exec(md);
+  const err = /```vigiles:err\n([\s\S]*?)```/.exec(md);
+  if (!ok && !err) return null;
+  const okFields = ok ? parseContractFields(ok[1]) : [];
+  const errFields = err ? parseContractFields(err[1]) : [];
+  if (okFields.length === 0 && errFields.length === 0) return null;
+  return { ok: okFields, err: errFields };
+}
+
 function scaffoldInputFor(
   s: Surface,
   report: ScanReport,
   pluginName: string,
+  dir: string,
+  dialect: HarnessDialect,
 ): ScaffoldInput {
   const base = { kind: s.kind, name: s.name, path: s.path };
   switch (s.kind) {
@@ -3487,7 +3519,19 @@ function scaffoldInputFor(
     }
     case "agent": {
       const ag = report.agents.find((x) => x.name === s.name);
-      return { ...base, tools: ag?.tools ?? null };
+      const tools = ag?.tools ?? null;
+      const sideEffectingTools = tools
+        ? effectSurface(tools, dialect).sideEffecting
+        : undefined;
+      let resultContract: ResultContract | null = null;
+      try {
+        resultContract = parseResultContract(
+          readFileSync(resolve(dir, s.path), "utf-8"),
+        );
+      } catch {
+        // agent .md unreadable → no contract to generate against
+      }
+      return { ...base, tools, sideEffectingTools, resultContract };
     }
     case "hook":
       return { ...base, hookCommand: `bash ${s.path}` };
@@ -3519,7 +3563,7 @@ function handleScaffoldTest(restArgs: string[], args: string[]): void {
   const report = scanPlugin(dir, adapter.layout, adapter.dialect);
   const pluginName = pluginNameFor(dir, adapter.layout.manifestPath);
   const scaffolds = untested.map((s) =>
-    scaffoldTest(scaffoldInputFor(s, report, pluginName)),
+    scaffoldTest(scaffoldInputFor(s, report, pluginName, dir, adapter.dialect)),
   );
 
   if (json) {
