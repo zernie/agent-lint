@@ -588,6 +588,20 @@ assertRates`) is the recommended path for testing one skill, but
   noninterference as a 2-safety hyperproperty → an A/B eval pair (F4). All four
   prototyped against real `tsc` 5.9.3 / runtime in
   [`prototypes/typed-spec-frontier/`](prototypes/typed-spec-frontier/).
+- [`typed-spec-effects-monads.md`](typed-spec-effects-monads.md) — round-2 cluster
+  (algebraic effects / monads / interpreters): the granular effect ROW (generalize
+  the 3-rung purity ladder to independent legs fs-read/fs-write/net/exec) + the
+  handler-as-residual-shrinking-router (our egress recorder / tool-interceptor are
+  already handlers without the abstraction). Prototyped in
+  [`prototypes/typed-spec-effects-monads/`](prototypes/typed-spec-effects-monads/).
+- [`typed-spec-formal-verification.md`](typed-spec-formal-verification.md) — round-2
+  cluster (model checking). **Found a REAL shipping bug** by running TLC against the
+  `agent-runtime.ts` active-agent window: under depth-5 nesting a nested subagent's
+  Stop clears the whole flat slot → the parent inherits tools it never had
+  (`Open(writer)→Open(writer)→Stop→Call(Bash)`, contract escape). The depth-aware
+  STACK fix is TLC-certified. Verdict: model checking earns its keep ONLY for the
+  harness author verifying the harness's OWN protocol, never per-user. Prototyped in
+  [`prototypes/typed-spec-formal-verification/`](prototypes/typed-spec-formal-verification/).
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·

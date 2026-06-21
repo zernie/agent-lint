@@ -1,0 +1,35 @@
+========================================================================
+vigiles agent-runtime state machine — bounded model check
+invariant: a tool call is allowed ONLY IF the EXECUTING subagent's
+           contract permits it (ground truth = the real call stack).
+bound: traceLen=6, depthMax=3
+========================================================================
+
+### FLAT model (ships today — single active-agent.json slot)
+states explored: 17
+VERDICT: ✗ invariant VIOLATED — counterexample found:
+  trace: open:writer  →  open:writer  →  stop  →  call:Bash
+  at the final call(Bash): the FLAT model says ALLOW, but the
+  subagent actually executing forbids Bash — a CONTRACT ESCAPE.
+
+### STACK model (the proposed nesting-safe fix)
+states explored: 4497
+VERDICT: ✓ invariant HOLDS for all interleavings up to bound
+
+========================================================================
+LIVENESS / TEMPORAL fragment — what types cannot express
+========================================================================
+
+### L1 — orphaned/stale active-agent window
+states explored: 5
+VERDICT: ✗ liveness DEFECT — a stale window is reachable:
+  trace: open:writer  →  drop(no-Stop)
+  control returned to top level but active-agent.json is still set →
+  the PARENT's next tool call is gated by a DEAD subagent's contract.
+
+### L2 — railway bounded-recovery termination
+max=3:   terminates=true  longest path=3 attempts
+max=100: terminates=true  longest path=100 attempts
+VERDICT: ✓ termination PROVEN (bounded) — every path reaches ok|err in ≤ max+1
+  → the sub-Turing claim holds: recover.max is a hard decreasing measure.
+
