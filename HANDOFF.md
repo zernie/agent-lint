@@ -41,8 +41,7 @@ out-rule-count agnix or match its LSP; **LEAD WITH CROSS-REFERENCING** ("valid�
 vigiles checks the named rule EXISTS + is ENABLED — unique in-market, works on plain
 markdown = zero adoption barrier) + the test/eval tier. **The real battle is
 DISTRIBUTION/mindshare, not capability** → reinforces A1/adoption-engine. Full:
-`landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md`
-§"Competitive reality check". Caveat: #8 (static purity) + destructive-actions unverified.
+`landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md` §"Competitive reality check".
 
 ## Next move (pick — none started)
 
