@@ -95,7 +95,9 @@ CLAUDE.md:
 File paths, scripts, and code symbols — plus linter rules across **7 catalogs**
 (the rule exists **and is enabled**). Start with one inline comment, no new files;
 step up to a typed `.spec.ts` (compiled to CLAUDE.md, compiler-grade) when you want
-it. **[Full guide →](docs/verifying-instruction-files.md)**
+it — and that same spec is what makes your skills & subagents deterministically
+**testable** (a `result()` contract → an assert, no LLM judge — see ② below), not
+just lint-able. **[Full guide →](docs/verifying-instruction-files.md)**
 
 **Same cross-reference, any plugin.** `npx vigiles scan` checks a plugin's
 _contracts_ — every subagent tool, `mcp__server__tool`, `mcp_tool` hook, hook
