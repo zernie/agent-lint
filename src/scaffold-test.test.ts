@@ -129,6 +129,67 @@ describe("scaffoldTest — agent (harness tier)", () => {
   });
 });
 
+describe("scaffoldTest — agent with a typed contract (the typed-spec payoff)", () => {
+  const withContract: ScaffoldInput = {
+    kind: "agent",
+    name: "reviewer",
+    path: "agents/reviewer.md",
+    tools: ["Read", "Grep", "Bash"],
+    sideEffectingTools: ["Bash"],
+    resultContract: {
+      ok: [{ name: "summary", type: "string" }],
+      err: [
+        { name: "findings", type: "string[]" },
+        { name: "blocking", type: "boolean" },
+      ],
+    },
+  };
+
+  it("generates an assertAgentOk outcome test from the result() contract", () => {
+    const { content } = scaffoldTest(withContract);
+    expect(content).toContain('import { result } from "vigiles/spec"');
+    expect(content).toContain("assertAgentOk(okOutput, contract)");
+    // the contract is reconstructed with the REAL parsed fields
+    expect(content).toContain('{ summary: "string" }');
+    expect(content).toContain('{ findings: "string[]", blocking: "boolean" }');
+    // no LLM judge — the whole point
+    expect(content).not.toContain("judged(");
+  });
+
+  it("generates a safety check from the side-effecting tools contract", () => {
+    const { content } = scaffoldTest(withContract);
+    expect(content).toContain("assertChecks(");
+    expect(content).toContain(
+      'notTool("Bash", { command: /git push|rm -rf/ })',
+    );
+    expect(content).toContain("side-effecting tools: Bash");
+  });
+
+  it("derives didNotWrite from a Write/Edit contract", () => {
+    const { content } = scaffoldTest({
+      ...withContract,
+      sideEffectingTools: ["Write"],
+    });
+    expect(content).toContain('didNotWrite("secrets.env")');
+  });
+
+  it("omits the safety block when no tools are side-effecting", () => {
+    const { content } = scaffoldTest({
+      ...withContract,
+      sideEffectingTools: [],
+    });
+    expect(content).not.toContain("Safety (deterministic)");
+    expect(content).not.toContain("assertChecks(");
+  });
+
+  it("produces syntactically valid JS for the contract + safety paths", () => {
+    assertValidJs(scaffoldTest(withContract).content);
+    assertValidJs(
+      scaffoldTest({ ...withContract, sideEffectingTools: ["Write"] }).content,
+    );
+  });
+});
+
 describe("formatScaffolds", () => {
   it("reports the empty case honestly", () => {
     expect(formatScaffolds([])).toContain("Nothing to scaffold");
