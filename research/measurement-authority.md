@@ -16,6 +16,52 @@
 > (haiku is the cheap v0 pass); the ~1% output-share is model-agnostic. Method:
 > [`benchmark-methodology.md`](benchmark-methodology.md).
 
+## Status & gaps (2026-06-21) — honest read of where the pivot stands
+
+A candid self-assessment after a heavy typed-spec research+build push (see
+[`typed-spec-moat.md`](typed-spec-moat.md) for the full record).
+
+**Verdict: the thesis is genuinely cool and defensible; the execution is mostly
+_potential_, and the work has leaned maker-cool (the typed-spec moat) over user-pull
+(the measurement identity this doc is about).**
+
+**What's genuinely cool (not hype).** The moat thesis is A-tier positioning — _the
+harness becomes a compilable, analyzable formal object; vigiles is a
+compiler/verifier, everyone else is a linter for prose_ — coherent, true, and it beats
+**both** the markdown tools (can't type anything) and the code-based orchestration
+frameworks (LangGraph/CrewAI pass untyped dicts at runtime). It is not vaporware:
+**shipped + verified this cycle** — typed purity, typed composition (a pipeline won't
+compile if handoffs don't line up), and `generate-harness` (`tsc` over the whole
+harness). The research is exceptional and honest (a real Applicative/Selective/Monad
+boundary _theorem_; a formal-verification bug-find with a TLC-certified fix; crisp
+kills).
+
+**What's underwhelming / the risk.** (1) The _novel_ moats are unbuilt — of the three,
+only #1 shipped, and #1 (type-checking) is the least novel; **#2 capability-diff** (the
+genuinely new "permissions-diff for your agent at PR time") and **#3 covering-array
+eval** are roadmap. (2) **The adoption engine got starved** — the measurement identity
+THIS doc argues for (the ecosystem benchmark "what works vs hype", the viral artifact)
+is still ~v0, not run at scale, not published — while the session poured effort into the
+_author-facing_ moat that only pays off at Level-2 spec adoption, for a product with
+**~no users**. We optimized the thing that NEEDS adoption over the thing that CREATES
+it. (3) Maker's dream vs user's need: users want "does my skill work / what should I
+install" more than "my pipeline type-checks."
+
+**Concrete gaps (prioritized).** (1) the at-scale ecosystem benchmark (the adoption
+flywheel); (2) #2 capability-diff + its engine (the effect-row M1 + cross-step
+accumulation); (3) cross-file typed composition (in flight); (4) the V1 nesting bug
+(found + certified-fix-in-hand, not yet fixed — a live correctness hole); (5) adoption
+ergonomics (value without authoring typed specs); (6) parked safety (macOS sandbox,
+ephemeral env).
+
+**The sequencing call.** The moat is the right long-game/defensibility story — keep it
+as the depth people discover. But for a no-users product the near-term priority is
+**pull, not depth**: ship the benchmark + the zero-friction `scan`/measure (no typed
+spec required) and let the compiler-for-harnesses be what they find after. The one
+feature that serves BOTH is **capability-diff (#2)** — a free PR comment, partial on
+plain plugins via `scan`, richer on specs — so it's the bridge bet. _We've been
+building the castle before the road to it._
+
 ## The critique that forced this
 
 1. **Hygiene doesn't go viral.** Linters/validators/test tools win by becoming necessary

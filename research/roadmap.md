@@ -21,6 +21,15 @@
 > contracts (cheap-to-test substrate + the spec's new purpose) → linting (free pre-filter)**.
 > Specs are reframed as the progressive, zero-friction on-ramp to testability
 > (`typed-contracts-for-agents.md`).
+>
+> **Reality check (2026-06-21):** a heavy typed-spec moat push shipped real features
+> (typed purity + composition + `generate-harness`) and a coherent "compiler for
+> harnesses" category — but the work has leaned **maker-cool (the moat) over user-pull
+> (the measurement/benchmark identity)**, and vigiles still has ~no users. Near-term
+> priority is the **adoption engine** (the at-scale ecosystem benchmark + zero-friction
+> `scan`/measure that needs no typed spec), with the moat as the depth users discover
+> after. The bridge bet = **capability-diff (#2)** (serves both). Full status & gaps:
+> [`measurement-authority.md`](measurement-authority.md#status--gaps-2026-06-21--honest-read-of-where-the-pivot-stands).
 
 **P0 — validate the thesis before building (cheapest, do first):**
 
