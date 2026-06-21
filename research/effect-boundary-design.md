@@ -6,10 +6,16 @@
 > purity FLOOR gate (`decidePurityGate`) is the stable keeper. The `effect()`
 > _sub-region_ boundary this doc designed (mechanism (a) below) is **dropped as a
 > goal**: for skills it's now a compile error (`effect-in-skill` — use the floor +
-> `context:'fork'`); for subagents a flat-only deterministic tracker shipped
-> (`PreToolUse(Task)`+`SubagentStop`, `f045554`) but is NOT nesting-safe (CC v2.1.172
-> added depth-5 nesting → needs a depth-aware stack + spawn-tool-name check) and
-> must NOT be auto-wired. **Final call (see "Why dropped" below): a deterministic
+> `context:'fork'`); for subagents a deterministic tracker shipped
+> (`PreToolUse(Task)`+`SubagentStop`, `f045554`). It was originally flat (single
+> slot) and NOT nesting-safe; the **depth-aware STACK fix has since shipped**
+> (push on dispatch, pop on `SubagentStop`, gate on the top + recognize both
+> `Task`/`Agent` spawn tools), closing the contract-escape CC v2.1.172 depth-5
+> nesting exposed — TLC-certified in
+> [`prototypes/typed-spec-formal-verification/AgentWindowStack.tla`](prototypes/typed-spec-formal-verification/AgentWindowStack.tla).
+> It still must NOT be auto-wired (the `effect()` sub-region it served is dropped;
+> the stack is kept for when nested active-agent contract enforcement is wanted on
+> its own). **Final call (see "Why dropped" below): a deterministic
 > in-flow sub-region has no harness signal, and the subagent-split is weaker AND
 > costlier than intended — the realistic safety story is the whole-unit floor + a
 > stateful pre-hook.** Read this doc top-to-bottom for the design history; the
@@ -370,8 +376,9 @@ claude-code-guide) settled it: **the sub-region goal isn't worth chasing.**
 a subagent with `Agent` in its `tools` can spawn its own, **up to depth 5 (fixed, not
 configurable)**; a depth-5 subagent gets no `Agent` tool. (Source: code.claude.com
 /docs/en/sub-agents#spawn-nested-subagents + changelog.) So nesting is real now — which
-both enables the two-subagent split locally AND breaks the flat tracker I shipped
-(single slot, not a stack).
+both enables the two-subagent split locally AND broke the flat tracker I shipped
+(single slot, not a stack) — since fixed with the depth-aware stack (see the
+status banner + the next note).
 
 **But the split is the wrong tool for sub-region scoping, on two axes:**
 
@@ -391,9 +398,10 @@ cost. So drop the sub-region as a goal. The realistic, in-place, deterministic s
 story is: **whole-unit `purity` floor (shipped) + a stateful PreToolUse gate** keyed on
 the tool stream (read-before-write / ordering — the conntrack/eBPF-maps pattern; needs
 no restructuring and no subagent spam). If revisited (P3), build the **stateful
-pre-hook**, not the split — and make the f045554 tracker nesting-safe (depth-aware
-stack + verified spawn-tool name) only if the active-agent contract enforcement itself
-is wanted under nesting, independent of `effect()`.
+pre-hook**, not the split. The f045554 tracker has since been made nesting-safe
+(depth-aware stack + both `Task`/`Agent` spawn tools recognized — the TLC-certified
+fix shipped), so active-agent contract enforcement now holds under nesting,
+independent of `effect()`.
 
 ## Last salvage attempt: `effect()` as a test/mock seam — also rejected (2026-06-21)
 

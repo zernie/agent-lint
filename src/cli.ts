@@ -109,8 +109,8 @@ import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import {
   evaluatePreToolUse,
-  setActiveAgent,
-  clearActiveAgent,
+  pushActiveAgent,
+  popActiveAgent,
   decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
@@ -3942,31 +3942,34 @@ function agentHookCommand(): void {
 
   const cwd = process.cwd();
 
-  // EXPERIMENTAL (parked P3, flat-only — do NOT auto-wire): the Task/SubagentStop
-  // bracketing below assumes one active subagent at a time and is NOT nesting-safe
-  // (CC v2.1.172 depth-5 nesting needs a stack + spawn-tool-name check). See
-  // research/effect-boundary-design.md.
-  // SubagentStop → CLOSE the window deterministically (no model `agent-done`):
-  // the subagent returned, so its contract/purity no longer apply.
+  // EXPERIMENTAL (parked P3 — do NOT auto-wire). The spawn/SubagentStop bracketing
+  // is now nesting-safe: a depth-aware STACK (push on dispatch, POP on SubagentStop)
+  // closes the contract-escape the flat single-slot model allowed under CC v2.1.172
+  // depth-5 nesting. See research/effect-boundary-design.md + AgentWindowStack.tla.
+  //
+  // SubagentStop → CLOSE the window deterministically (no model `agent-done`): the
+  // subagent returned, so POP its frame — control returns to its PARENT, whose
+  // contract the gate enforces again (NOT a full clear, which would drop the parent).
   if (event === "SubagentStop") {
-    clearActiveAgent(cwd);
+    popActiveAgent(cwd);
     clearEffectActive(cwd);
     return;
   }
 
-  // PreToolUse(Task) → OPEN the window deterministically (no model `agent-start`
-  // / `effect-enter`): the parent is dispatching a subagent, so activate that
-  // subagent's compiled contract for the tool calls it is about to make. The
-  // Task dispatch itself is the PARENT's action — don't gate it against the
-  // subagent's contract; just open the window and allow.
-  if (tool === "Task") {
+  // PreToolUse(spawn) → OPEN the window deterministically (no model `agent-start` /
+  // `effect-enter`): the parent is dispatching a subagent, so PUSH that subagent's
+  // compiled contract for the tool calls it is about to make. Recognize both spawn
+  // tool names — `Task` (top-level dispatch) and `Agent` (nested-spawn, CC v2.1.172)
+  // — gated on a resolvable `subagent_type` so a non-spawn call never opens a frame.
+  // The dispatch itself is the PARENT's action — don't gate it; just open + allow.
+  if (tool === "Task" || tool === "Agent") {
     const agentPath = decideTaskDispatch(
       toolInput,
       cwd,
       process.env.CLAUDE_PLUGIN_ROOT,
     );
     if (agentPath) {
-      setActiveAgent(cwd, agentPath);
+      pushActiveAgent(cwd, agentPath);
       setEffectActive(cwd);
     }
     return;
@@ -4010,7 +4013,7 @@ function agentStartCommand(target: string | undefined): void {
     console.error("Usage: vigiles agent-start <agents/<name>.md>");
     process.exit(2);
   }
-  setActiveAgent(process.cwd(), target);
+  pushActiveAgent(process.cwd(), target);
   console.log(`Active agent: ${target}`);
 }
 
@@ -4036,7 +4039,7 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       agentStartCommand(restArgs[0]);
       return true;
     case "agent-done":
-      clearActiveAgent(process.cwd());
+      popActiveAgent(process.cwd());
       return true;
     case "agent-hook":
       agentHookCommand();

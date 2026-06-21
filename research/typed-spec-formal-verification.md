@@ -33,6 +33,14 @@ checker prints the exact 4-event trace and certifies the proposed fix. That gap
 — between a prose hedge and a mechanical counterexample + a certified fix — is
 the entire value proposition of this cluster, and it is real.
 
+> **UPDATE (2026-06-21) — the certified fix has SHIPPED.** The depth-aware STACK
+> (`pushActiveAgent`/`popActiveAgent`, gate on the top) replaced the flat slot in
+> `src/adapters/claude-code/agent-runtime.ts`; `SubagentStop` now POPS to the
+> parent instead of clearing the whole slot, and the open signal recognizes both
+> `Task`/`Agent` spawn tools. The TLC counterexample `Open;Open;Stop;Call(Bash)`
+> is now a regression test (`agent-runtime.test.ts`) asserting the call is DENIED.
+> So this cluster didn't just find a bug and model a fix — the fix is in the tree.
+
 ## The ranking
 
 | #      | Idea                                                                                                                                | What a checker gives that types/lint/runtime cannot                                                                           | Buildability                          | Verdict                                                                |

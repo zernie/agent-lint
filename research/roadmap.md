@@ -282,14 +282,14 @@ build. 2026-06-20 redesign + dogfood: the model-emitted`effect-enter`/`exit`
 signal is a category error (a deterministic gate keyed on probabilistic model
 compliance, fail-closed). For **skills** it's now a **compile error**
 (`effect-in-skill`; a skill uses the floor + `context:'fork'`) — KEEP. For
-**subagents** a flat-only deterministic tracker shipped (`PreToolUse(tool=Task)`open +`SubagentStop`close,`f045554`) but is **NOT nesting-safe**: Claude Code
-v2.1.172 added depth-5 nesting, so correct tracking needs a depth-aware **stack**
-(push/pop) + spawn-tool-name verification (`Agent`vs`Task`). Marked EXPERIMENTAL;
-**do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
+**subagents** a deterministic tracker shipped (`PreToolUse(tool=Task)`open +`SubagentStop`close,`f045554`). It was flat (single slot) and not nesting-safe;
+the depth-aware **STACK fix has since SHIPPED** (push on dispatch, pop on
+`SubagentStop`back to the parent, gate on the top + recognize both`Task`/`Agent`spawn tools — TLC-certified,`AgentWindowStack.tla`; the `Open;Open;Stop;Call(Bash)`counterexample is now a regression test), closing the contract-escape CC v2.1.172
+depth-5 nesting exposed. Still marked EXPERIMENTAL; **do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
 harness signal, and the subagent-split alternative is **weaker AND costlier** than
 intended (whole-unit granularity, context-isolation, depth-5 cap, subagent spam) —
 so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
-  **Hidden from public docs** (removed from `spec-format.md`/`harness-testing.md`;
+  **Hidden from public docs** (removed from`spec-format.md`/`harness-testing.md`;
   `docs/safety.md` unlinked from the README + WIP-bannered) — don't re-surface until
   it's coherent end-to-end.
   - **Open inconsistency to reconcile (don't keep the skill special-case).** The
@@ -303,9 +303,9 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
     keyed on the tool stream (conntrack/eBPF-maps pattern): read-before-write ("no
     `Write` to a file not `Read` this run"), ordering invariants ("no mutating Bash
     until X"), state in a `.vigiles/` file or read from the transcript — no
-    restructuring, no subagent spam. The `f045554` tracker only needs nesting-safety
-    (depth-aware stack + verified spawn-tool name) IF active-agent CONTRACT enforcement
-    under nesting is wanted independently of `effect()`.
+    restructuring, no subagent spam. The `f045554` tracker's nesting-safety (depth-aware
+    stack + both spawn tools recognized) has SHIPPED, so active-agent CONTRACT enforcement
+    now holds under nesting independently of `effect()`.
   - **"effect() as a test/mock seam instead of an enforcement boundary" — considered, rejected (2026-06-21).**
     The reframe: forget position; for an agent a tight `tools` allowlist already pins the
     effect surface, so `effect()` could just NAME "the hole" — the one side-effecting op —
