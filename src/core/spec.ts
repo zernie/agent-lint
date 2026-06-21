@@ -804,10 +804,42 @@ export interface AgentSpec {
 export type AgentSpecInput<
   P extends AuthoredPurity | undefined,
   V extends ToolVocabulary,
-> = Omit<AgentSpec, "_specType" | "tools" | "purity"> & {
+  Ok extends Shape = Shape,
+  Err extends Shape = Shape,
+> = Omit<AgentSpec, "_specType" | "tools" | "purity" | "output"> & {
   readonly purity?: P;
   readonly tools?: readonly AllowedAt<P, V>[];
+  /** The typed result contract — `result(ok, err)`. Its literal field shapes are
+   *  captured into the returned `TypedAgentSpec` so a typed `pipe` can check them. */
+  readonly output?: OutputContract<Ok, Err>;
 };
+
+// ---------------------------------------------------------------------------
+// Typed composition carrier (additive — the typed half of railway composition)
+//
+// `agent()` returns `AgentSpec` (every existing consumer reads that). To ALSO
+// remember the agent's result SHAPE at the type level — so a typed `pipe` can
+// cross-reference one step's `ok` against the next step's needs — the return is
+// the SAME `AgentSpec` intersected with a PHANTOM carrier of the ok/err shapes.
+// The phantom field is `declare`-only (a unique symbol), so it never exists at
+// runtime and never changes the value; an `AgentSpec & TypedOutcome<Ok, Err>` is
+// still assignable to `AgentSpec`, so nothing downstream breaks. This is the
+// shallow encoding TS2589 demands: the shapes ride on one phantom property, not
+// a recursive type, so inference stays flat.
+// ---------------------------------------------------------------------------
+
+declare const __outcome: unique symbol;
+
+/** Phantom carrier of an agent's success/error result shapes (type-level only). */
+export interface TypedOutcome<Ok extends Shape, Err extends Shape> {
+  readonly [__outcome]: { readonly ok: Ok; readonly err: Err };
+}
+
+/** An `AgentSpec` that REMEMBERS its `result()` ok/err shapes at the type level
+ *  (via a phantom field). Still an `AgentSpec`, so it flows everywhere one does.
+ *  The input to a typed `pipe` / `then`. */
+export type TypedAgentSpec<Ok extends Shape, Err extends Shape> = AgentSpec &
+  TypedOutcome<Ok, Err>;
 
 /**
  * Define a subagent specification (compiles to `agents/<name>.md`).
@@ -828,12 +860,23 @@ export type AgentSpecInput<
  * constraint). A harness adapter re-exports a vocabulary-bound `agent` (e.g.
  * `vigiles/claude-code`) so `purity: "pure"` + a side-effecting tool is a `tsc`
  * error at edit time; the bare core `agent()` accepts any tools, as before.
+ *
+ * Also generic over the result's `Ok`/`Err` shapes, inferred from `output:
+ * result(...)`. The returned value is a `TypedAgentSpec<Ok, Err>` — an
+ * `AgentSpec` that carries those shapes at the type level, so a typed `pipe`
+ * can cross-reference the handoff. With no `output` the shapes default to the
+ * erased `Shape`, and the value is still a plain `AgentSpec` — backwards-compatible.
  */
 export function agent<
   const P extends AuthoredPurity | undefined = undefined,
   V extends ToolVocabulary = OpenToolVocabulary,
->(spec: AgentSpecInput<P, V>): AgentSpec {
-  return { _specType: "agent", ...spec } as AgentSpec;
+  Ok extends Shape = Shape,
+  Err extends Shape = Shape,
+>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err> {
+  return { _specType: "agent", ...spec } as AgentSpec as TypedAgentSpec<
+    Ok,
+    Err
+  >;
 }
 
 // ---------------------------------------------------------------------------
@@ -853,17 +896,30 @@ export function agent<
 /** The field types a result contract can declare (kept tiny + dependency-free). */
 export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
 
+/** A field SHAPE — a record of field-name → field-type, kept in the TYPE so a
+ *  typed pipeline can cross-reference one agent's `ok` against the next agent's
+ *  `needs`. The erased runtime form is `Record<string, OutputFieldType>`. */
+export type Shape = Readonly<Record<string, OutputFieldType>>;
+
 /**
  * A subagent's typed result contract: the shape it must return on success
  * (`ok`) and on failure (`err`). Rich on both tracks — an error is structured
  * detail, not a bare pass/fail bit. Compiles into the worker's system prompt
  * (the `vigiles:ok` / `vigiles:err` block it must emit) and is the schema the
  * `parseAgentResult` parser + the `assertAgentOk/Err` test helpers validate.
+ *
+ * Generic over its `ok`/`err` field shapes so a typed value REMEMBERS them at
+ * the type level (the basis of typed composition — see `pipe`). The default
+ * type parameters widen to the historical erased `Shape`, so an `OutputContract`
+ * named with no arguments behaves exactly as before — backwards-compatible.
  */
-export interface OutputContract {
+export interface OutputContract<
+  Ok extends Shape = Shape,
+  Err extends Shape = Shape,
+> {
   readonly _ref: "output";
-  readonly ok: Readonly<Record<string, OutputFieldType>>;
-  readonly err: Readonly<Record<string, OutputFieldType>>;
+  readonly ok: Ok;
+  readonly err: Err;
 }
 
 /**
@@ -876,11 +932,17 @@ export interface OutputContract {
  *
  * (Distinct from a skill's `result:` postcondition gate — this types a
  * subagent's *return value*, the success/error tracks of the railway.)
+ *
+ * The literal field shapes are PRESERVED in the return type (`const` inference),
+ * not erased to `Record<string, OutputFieldType>` — this is what lets `pipe`
+ * cross-reference one agent's `ok` against the next agent's needs at `tsc` time.
+ * The return is still an `OutputContract`, so every existing consumer (the
+ * `output:` field, `renderOutputContract`, `parseAgentResult`) is unchanged.
  */
-export function result(
-  ok: Record<string, OutputFieldType>,
-  err: Record<string, OutputFieldType>,
-): OutputContract {
+export function result<const Ok extends Shape, const Err extends Shape>(
+  ok: Ok,
+  err: Err,
+): OutputContract<Ok, Err> {
   return { _ref: "output", ok, err };
 }
 
@@ -930,6 +992,264 @@ export interface Railway {
 export function railway(spec: Omit<Railway, "_specType">): Railway {
   return { _specType: "railway", ...spec };
 }
+
+// ---------------------------------------------------------------------------
+// Typed composition — "your multi-agent pipeline doesn't compile if the
+// handoffs don't line up."
+//
+// The string-based `railway({ steps: [delegate("name"), …] })` above resolves
+// delegate targets by NAME at COMPILE time (a value-level cross-reference). It
+// cannot check DATA handoffs: a string name carries no type, so the producer's
+// `result()` shape is invisible to the consumer. Typed composition is the
+// ADDITIVE second path: `pipe(a, b, c)` references the agent OBJECTS (which now
+// carry their `ok`/`err` shapes via `TypedAgentSpec`), so the compiler verifies
+// that step N's `ok` SUPPLIES step N+1's `needs` — a missing field, a type
+// mismatch, or an out-of-order step is a `tsc` error naming the offending field.
+//
+// The check is expressed as a SHALLOW conditional (`Supplies`) keyed per field —
+// no recursive type walk — to stay clear of TS2589 ("excessively deep"). The
+// chain is left-folded so each link checks exactly one handoff.
+//
+// This is a strict addition: it does not touch `delegate`/`railway`/
+// `compileRailway`/`validateRailway`, which remain the string-path backstop.
+// ---------------------------------------------------------------------------
+
+/**
+ * A subagent's INPUT contract — the fields it reads from the prior step's `ok`.
+ * Declared via `needs(...)` and threaded into the typed agent so `pipe` can
+ * cross-reference it. Independent of `result()` (the output) — an agent both
+ * `needs` an input shape and produces an `ok`/`err` output shape.
+ */
+export type NeedsContract<N extends Shape> = N;
+
+/**
+ * Declare the input fields a step reads from its predecessor's success payload.
+ * Pass it as `needs:` on a typed pipeline step. `needs({})` (the default) is a
+ * step with no upstream requirement — valid as the FIRST step of a pipeline.
+ *
+ *   needs({ plan: "string", files: "string[]" })
+ */
+export function needs<const N extends Shape>(shape: N): NeedsContract<N> {
+  return shape;
+}
+
+/**
+ * A typed pipeline step: a `TypedAgentSpec` paired with the input `needs` it
+ * reads from the prior step's `ok`. `step()` builds one; `pipe` checks that the
+ * prior step's `ok` shape supplies this step's `needs`.
+ */
+export interface PipeStep<
+  Needs extends Shape,
+  Ok extends Shape,
+  Err extends Shape,
+> {
+  readonly _step: "typed-delegate";
+  readonly agent: TypedAgentSpec<Ok, Err>;
+  readonly needs: Needs;
+}
+
+/**
+ * Pair a typed agent with the input it `needs` from the previous step. The first
+ * argument is an `agent()` VALUE (which carries its `result()` shape); the
+ * second is the `needs(...)` input contract.
+ *
+ *   pipeStep(implementer, needs({ plan: "string", files: "string[]" }))
+ */
+export function pipeStep<
+  Needs extends Shape,
+  Ok extends Shape,
+  Err extends Shape,
+>(
+  a: TypedAgentSpec<Ok, Err>,
+  needsContract: Needs = {} as Needs,
+): PipeStep<Needs, Ok, Err> {
+  return { _step: "typed-delegate", agent: a, needs: needsContract };
+}
+
+/**
+ * True iff `Producer` provides EVERY field `Consumer` needs, with matching
+ * field types. When satisfiable it is `true`; otherwise it collapses to a
+ * descriptive error object naming the offending field (`__missing` /
+ * `__mismatch`), which surfaces at the mismatched call. Shallow (a per-field
+ * mapped type, not a recursion) to avoid TS2589.
+ */
+export type Supplies<Producer extends Shape, Consumer extends Shape> = {
+  [K in keyof Consumer]: K extends keyof Producer
+    ? Producer[K] extends Consumer[K]
+      ? true
+      : {
+          readonly __mismatch: K;
+          readonly expected: Consumer[K];
+          readonly got: Producer[K];
+        }
+    : { readonly __missing: K; readonly required: Consumer[K] };
+}[keyof Consumer];
+
+/** A typed pipeline value — carries the LAST step's `ok` and the UNION of every
+ *  step's `err` (any step can short-circuit to the error track). */
+export interface Pipeline<Ok extends Shape, Err extends Shape> {
+  readonly _specType: "pipeline";
+  /** Ordered agent names — the resolved compose order. */
+  readonly agents: readonly string[];
+  /** The final step's success shape. */
+  readonly ok: Ok;
+  /** The union of every step's error shape. */
+  readonly err: Err;
+  /** The underlying string-path railway, for `compileRailway` reuse. */
+  readonly railway: Railway;
+}
+
+/**
+ * Begin a typed pipeline from its first step. The first step has no upstream, so
+ * its `needs` must be empty (`needs({})` or omitted). Returns a `Pipeline`
+ * carrying that step's `ok`/`err` forward.
+ */
+export function start<Ok extends Shape, Err extends Shape>(
+  first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>,
+): Pipeline<Ok, Err> {
+  const step =
+    "_step" in first ? first : pipeStep(first, {} as Record<string, never>);
+  const out = step.agent.output;
+  return {
+    _specType: "pipeline",
+    agents: [step.agent.name],
+    ok: (out ? out.ok : {}) as Ok,
+    err: (out ? out.err : {}) as Err,
+    railway: railway({
+      name: step.agent.name,
+      steps: [delegate(step.agent.name)],
+    }),
+  };
+}
+
+/**
+ * Append a step to a typed pipeline. The handoff is CHECKED: the constraint
+ * `Supplies<PriorOk, Needs>` must be `true`, else the `next` parameter's type
+ * collapses to a `__HANDOFF_ERROR` object and `tsc` rejects the call, naming the
+ * missing/mismatched field. Carries the new step's `ok` forward and accumulates
+ * the error track. Shallow per-call check — no recursive chain type.
+ *
+ * Named `andThen` (Wlaschin's railway `bind`/`andThen`), NOT `then`: a module
+ * exporting a function called `then` becomes a thenable, so `await import()` of
+ * any barrel re-exporting it would invoke it — a footgun the rename avoids.
+ */
+export function andThen<
+  PriorOk extends Shape,
+  PriorErr extends Shape,
+  Needs extends Shape,
+  Ok extends Shape,
+  Err extends Shape,
+>(
+  prior: Pipeline<PriorOk, PriorErr>,
+  next: Supplies<PriorOk, Needs> extends true
+    ? PipeStep<Needs, Ok, Err>
+    : { readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs> },
+): Pipeline<Ok, PriorErr | Err> {
+  const real = next as PipeStep<Needs, Ok, Err>;
+  const out = real.agent.output;
+  const rw = railway({
+    name: prior.railway.name,
+    steps: [...prior.railway.steps, delegate(real.agent.name)],
+  });
+  return {
+    _specType: "pipeline",
+    agents: [...prior.agents, real.agent.name],
+    ok: (out ? out.ok : {}) as Ok,
+    err: (out ? out.err : {}) as PriorErr | Err,
+    railway: rw,
+  };
+}
+
+/**
+ * Compose a typed pipeline in one call — the ergonomic form of
+ * `andThen(andThen(start(a), b), c)`. Each adjacent handoff is checked
+ * left-to-right: the FIRST step is the producer, the rest are
+ * `pipeStep(agent, needs(...))` consumers, and the compiler rejects the whole
+ * expression if ANY handoff's producer `ok` does not supply the consumer's
+ * `needs` (variadic chains hit TS2589 quickly, so `pipe` is a fixed set of
+ * overloads over the shallow `start`/`andThen` fold rather than a recursive
+ * variadic type — keep chains to a handful of steps; for longer ones, fold
+ * `andThen` explicitly).
+ *
+ *   pipe(
+ *     planner,                                              // produces ok
+ *     pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+ *     pipeStep(reviewer, needs({ diff: "string" })),
+ *   ) // ← won't compile if a handoff doesn't line up
+ */
+/* eslint-disable no-redeclare -- TypeScript function overloads (the base
+   no-redeclare rule, unlike @typescript-eslint/no-redeclare, flags the overload
+   signatures; each `pipe` line is one arity of the SAME function). */
+export function pipe<A extends Shape, AE extends Shape>(
+  a: TypedAgentSpec<A, AE>,
+): Pipeline<A, AE>;
+export function pipe<
+  A extends Shape,
+  AE extends Shape,
+  BN extends Shape,
+  B extends Shape,
+  BE extends Shape,
+>(
+  a: TypedAgentSpec<A, AE>,
+  b: Supplies<A, BN> extends true
+    ? PipeStep<BN, B, BE>
+    : { readonly __HANDOFF_ERROR: Supplies<A, BN> },
+): Pipeline<B, AE | BE>;
+export function pipe<
+  A extends Shape,
+  AE extends Shape,
+  BN extends Shape,
+  B extends Shape,
+  BE extends Shape,
+  CN extends Shape,
+  C extends Shape,
+  CE extends Shape,
+>(
+  a: TypedAgentSpec<A, AE>,
+  b: Supplies<A, BN> extends true
+    ? PipeStep<BN, B, BE>
+    : { readonly __HANDOFF_ERROR: Supplies<A, BN> },
+  c: Supplies<B, CN> extends true
+    ? PipeStep<CN, C, CE>
+    : { readonly __HANDOFF_ERROR: Supplies<B, CN> },
+): Pipeline<C, AE | BE | CE>;
+export function pipe<
+  A extends Shape,
+  AE extends Shape,
+  BN extends Shape,
+  B extends Shape,
+  BE extends Shape,
+  CN extends Shape,
+  C extends Shape,
+  CE extends Shape,
+  DN extends Shape,
+  D extends Shape,
+  DE extends Shape,
+>(
+  a: TypedAgentSpec<A, AE>,
+  b: Supplies<A, BN> extends true
+    ? PipeStep<BN, B, BE>
+    : { readonly __HANDOFF_ERROR: Supplies<A, BN> },
+  c: Supplies<B, CN> extends true
+    ? PipeStep<CN, C, CE>
+    : { readonly __HANDOFF_ERROR: Supplies<B, CN> },
+  d: Supplies<C, DN> extends true
+    ? PipeStep<DN, D, DE>
+    : { readonly __HANDOFF_ERROR: Supplies<C, DN> },
+): Pipeline<D, AE | BE | CE | DE>;
+export function pipe(
+  first: TypedAgentSpec<Shape, Shape>,
+  ...rest: readonly PipeStep<Shape, Shape, Shape>[]
+): Pipeline<Shape, Shape> {
+  // The overloads above enforce each handoff at the type level; the runtime body
+  // is the same left fold of start/andThen, untyped (the checks already happened).
+  let pipeline: Pipeline<Shape, Shape> = start(first);
+  for (const s of rest) {
+    pipeline = andThen(pipeline, s);
+  }
+  return pipeline;
+}
+/* eslint-enable no-redeclare */
 
 // ---------------------------------------------------------------------------
 // Spec file naming convention (#11)
