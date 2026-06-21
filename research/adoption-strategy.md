@@ -83,47 +83,18 @@ Commit `.vigiles/generated.d.ts`. Now `enforce("eslint/no-consolee")` is a type 
 
 A repo where SOME skills/agents/CLAUDE.mds have a `.spec.ts` and some don't is the
 **designed-for normal state**, not an edge case — vigiles operates **per file, not
-per repo**. Each surface is handled according to what _it_ has, and you upgrade
-file-by-file (the TypeScript-`strict` model).
+per repo**. Each surface is handled by what _it_ has: a spec'd file is compiled
+(integrity hash + compile-time ref verification + edit-time typing); a hand-written
+file still gets every deterministic **surface** lint rule (tool-contract, frontmatter,
+hooks, MCP, test-coverage, ref nudges) and is reported by `scan` (labeled
+spec-managed vs hand-written), just without compile/integrity. You upgrade file-by-file.
 
-**A file WITH a `.spec.ts` (Level 2)** — the spec is the source of truth, the
-markdown is a build artifact:
-
-- compiled `.spec.ts` → markdown, stamped with a SHA-256 **integrity hash**;
-- its declared references (`enforce(...)`, `file()`, `cmd()`) are **verified at
-  compile** (rule exists & enabled, path real, script real);
-- a **recompile guard** + **integrity check** flag a hand-edit to the _compiled_
-  markdown (the hash stops matching — that's drift).
-
-**A file WITHOUT a spec (hand-written)** — a normal file; nothing forces a spec to
-exist. It is NOT ignored: every deterministic **surface** lint rule still runs,
-because those rules read the actual markdown regardless of provenance —
-`subagent-tool-contract`, `frontmatter-valid`, `hook-events`, `mcp-*`,
-`description-overlap`, `untested-skill`/`untested-subagent`/`untested-hook`, the
-`unmarked-refs` nudge. It just gets no compile-time ref verification and no
-integrity hash (there's no spec to declare refs, and nothing to protect).
-
-**No "spec everything" mandate.** `require-spec` (CLAUDE.md/AGENTS.md) defaults
-**off**; `require-skill-spec` is **deprecated/off** — skills are legitimately
-hand-written, so requiring a spec per SKILL.md was the wrong constraint
-(superseded by `untested-skill`: every skill ships a test/eval, spec or not).
-
-**`scan` is spec-agnostic.** The no-model report runs on a repo with zero specs and
-labels each instruction file **spec-managed vs hand-written** (so a spec-less repo
-is never reported "empty") — the zero-friction entry point precisely because it
-needs no spec.
-
-| Capability                                                        | Spec'd file               | Hand-written file         |
-| ----------------------------------------------------------------- | ------------------------- | ------------------------- |
-| Surface lint rules (tool contract, hooks, MCP, fm, test coverage) | ✅                        | ✅                        |
-| `scan` report                                                     | ✅ (labeled spec-managed) | ✅ (labeled hand-written) |
-| Compile-time ref verification (`enforce`/`file`/`cmd`)            | ✅                        | ✗ (no spec declares them) |
-| Integrity hash / hand-edit detection                              | ✅                        | ✗ (nothing to protect)    |
-
-**Net:** the deterministic verification floor (the cross-referencing moat) applies
-to EVERYTHING; specs add the extra layer — compiler-grade ref guarantees + integrity
-— on the specific files where it's worth it. Spec the load-bearing CLAUDE.md or a
-critical agent, leave the rest hand-written, upgrade incrementally.
+**What a spec actually buys per capability/surface — and the settled `require-*-spec`
+defaults — live in the canonical [`spec-value-model.md`](spec-value-model.md).** The
+short version: lint/test/eval all run on markdown; only whole-harness type-checking +
+a deterministic contract oracle are spec-exclusive (and land mostly on composing
+agents) — so the `require-*-spec` rules all default off and the nudge is
+capability-triggered.
 
 ## Pain Points (Updated)
 
