@@ -1,0 +1,58 @@
+# Keep the PR DESCRIPTION fresh automatically — the permanent fix for the
+# "title/body goes stale as the branch grows" problem (PRs are opened early by
+# Claude Code on the web, then accumulate a whole session of commits).
+#
+# Fully FIRST-PARTY: git + the `gh` CLI + `.github/scripts/pr-summary.py` (stdlib
+# only). No third-party Action, no maintenance dependency, nothing to go stale. It
+# regenerates an auto-managed block (between markers the script inserts) from the
+# branch's Conventional Commits, grouped by type. Prose you write OUTSIDE the
+# markers is preserved; put `vigiles:pr-summary:skip` anywhere in the body to opt out.
+#
+# Non-blocking + non-required: this only edits the PR BODY. It does NOT gate CI or
+# merge — if it ever fails, the worst case is the body just isn't refreshed. The
+# TITLE is left to a deliberate human/agent choice (it drives semantic-release);
+# `pr-title.yml` still validates it.
+name: PR Describe
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# One run per PR; a newer push supersedes an in-flight update.
+concurrency:
+  group: pr-describe-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  describe:
+    runs-on: ubuntu-latest
+    # Fork PRs get a read-only GITHUB_TOKEN, so the write would fail — skip them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Regenerate the auto-summary block from commits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Everything goes through FILES, never shell interpolation, so a crafted
+          # commit message can't inject anything.
+          git log --reverse --format=%s "$BASE_SHA..$HEAD_SHA" > /tmp/commits.txt
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body > /tmp/body.md
+          python3 .github/scripts/pr-summary.py /tmp/commits.txt /tmp/body.md /tmp/newbody.md
+          if ! cmp -s /tmp/body.md /tmp/newbody.md; then
+            gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/newbody.md
+            echo "PR #$PR_NUMBER description refreshed."
+          else
+            echo "No change."
+          fi

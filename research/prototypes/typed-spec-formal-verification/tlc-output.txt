@@ -1,0 +1,42 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 82 and seed -8998589270415530021 with 1 worker on 4 cores with 4020MB heap and 64MB offheap memory [pid: 20485] (Linux 6.18.5 amd64, Ubuntu 21.0.10 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /home/user/vigiles/research/prototypes/typed-spec-formal-verification/AgentWindow.tla
+Parsing file /tmp/Naturals.tla
+Parsing file /tmp/Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module AgentWindow
+Starting... (2026-06-21 06:36:13)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-06-21 06:36:13.
+Error: Invariant NoContractEscape is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ callStack = <<>>
+/\ lastCall = [tool |-> "none", allowedFlat |-> TRUE, allowedTrue |-> TRUE]
+/\ active = "none"
+
+State 2: <Open line 60, col 5 to line 63, col 25 of module AgentWindow>
+/\ callStack = <<"writer">>
+/\ lastCall = [tool |-> "none", allowedFlat |-> TRUE, allowedTrue |-> TRUE]
+/\ active = "writer"
+
+State 3: <Open line 60, col 5 to line 63, col 25 of module AgentWindow>
+/\ callStack = <<"writer", "writer">>
+/\ lastCall = [tool |-> "none", allowedFlat |-> TRUE, allowedTrue |-> TRUE]
+/\ active = "writer"
+
+State 4: <Stop line 68, col 5 to line 71, col 25 of module AgentWindow>
+/\ callStack = <<"writer">>
+/\ lastCall = [tool |-> "none", allowedFlat |-> TRUE, allowedTrue |-> TRUE]
+/\ active = "none"
+
+State 5: <Call line 75, col 5 to line 81, col 40 of module AgentWindow>
+/\ callStack = <<"writer">>
+/\ lastCall = [tool |-> "Bash", allowedFlat |-> TRUE, allowedTrue |-> FALSE]
+/\ active = "none"
+
+89 states generated, 45 distinct states found, 28 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 3 (minimum is 0, the maximum 6 and the 95th percentile is 6).
+Finished in 00s at (2026-06-21 06:36:13)

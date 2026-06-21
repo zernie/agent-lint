@@ -37,6 +37,11 @@ New here? Start with the [README](../README.md).
 - [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
 - [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), tiers and limits.
 
+## Measure what works (layer 3)
+
+- [`measuring-skills.md`](measuring-skills.md) — A/B a skill, plugin, model, or rule change on real coding tasks: the metric triple (bill / target / blast-radius correctness), the worked `measureArms` example, the ecosystem benchmark, and why it's affordable on your subscription. (Method: [`../research/benchmark-methodology.md`](../research/benchmark-methodology.md); strategy: [`../research/measurement-authority.md`](../research/measurement-authority.md).)
+- [`eval-architecture.md`](eval-architecture.md) — the cost model + the two testing verbs reconciled with what ships.
+
 ## Skills & agents
 
 - [`skills.md`](skills.md) — authoring a SKILL.md across the three on-ramps; the prose-vs-gates split.

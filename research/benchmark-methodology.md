@@ -99,6 +99,11 @@ cheap v0 sweep; sonnet/opus — a skill's target models — for the rigorous pas
 - [`measurement-authority.md`](measurement-authority.md) — the strategy this serves.
 - [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs) —
   the first worked instance (the P0 caveman measurement).
+- [`bench/ecosystem/`](../bench/ecosystem/) — the A1 ecosystem-benchmark v0: the
+  generalized loop (`benchmark.mjs`) over a real, SHA-pinned skill manifest
+  (`skills.mjs`, provenance in `SOURCES.md`), reusing this exact method over a SET
+  of skills. Pilot: `VIGILES_SKILLS=caveman VIGILES_TASKS=2 VIGILES_TRIALS=2 node
+bench/ecosystem/benchmark.mjs`.
 - [`eval-api-landscape.md`](eval-api-landscape.md) — the eval infra (cost/cache
   capture, significance, regression gating) this method runs on.
 - [`skill-eval-landscape.md`](skill-eval-landscape.md) — prior-art skill evals

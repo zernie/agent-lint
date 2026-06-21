@@ -141,3 +141,33 @@ existing typed contract helps (measurement-first); until then, **no fp dependenc
   existing file") — non-scary, incremental. No new CLI (the deterministic
   scaffold stays a follow-up); the `migrate-to-spec` skill + `init` hint get the
   gentler wording.
+
+## Dogfood finding: skill `purity`/`effect` fits read-only skills, not workflow skills (2026-06-20)
+
+Probed whether to convert our 3 model-invocable shipped skills (strengthen,
+edit-spec, test-harness) to specs using the new skill features (`purity`,
+`effect()`). Verdict: **don't** — the features fit **read-only/advisory** skills
+and **fixed-contract subagents** (where the `reviewer-ab` agent A/B already proved
+the typed-contract win), **not** code-heavy _mutating workflow_ skills. Four
+independent walls, all hit on these three skills:
+
+1. **`purity:bounded/pure` breaks them.** `decidePurityGate` denies any non-read-only
+   Bash; their core command IS mutating (`vigiles generate-types` / `compile`,
+   `npm i`), so the gate blocks it. `dangerously-unrestricted` is honest but a no-op.
+2. **`effect()` is fail-closed + probabilistic.** Read-only-outside-the-region needs
+   the _model_ to call `vigiles effect-enter/exit` around its own mutation; a miss
+   blocks the command. A deterministic gate that depends on probabilistic model
+   compliance isn't a deterministic guarantee for a model-invocable skill.
+3. **Backtick-heavy bodies fight the spec.** The verified-refs payoff needs the
+   `instructions` tagged-template form, but these SKILL.md bodies are full of code
+   fences (every backtick must be escaped). The one reason to spec-ify a skill
+   (verified `file()`/`cmd()`/`ref()`) conflicts with code-heavy prose.
+4. **Their refs don't cleanly verify.** `npx vigiles generate-types` isn't an npm
+   script (`cmd()` checks those) and `.vigiles/generated.d.ts` is gitignored
+   (`file()` existence would fail).
+
+Consistent with the project's own stance (`require-skill-spec` deprecated — skills
+are legitimately hand-written). **Consequence for positioning:** the README claims
+the **agent** typed-contract win (measured) + lint/test/measure (shipped) — it must
+NOT claim "purity gates your skills." A future fit: a read-only _advisory_ skill
+(no mutation) is a clean `purity:bounded` candidate; revisit then.

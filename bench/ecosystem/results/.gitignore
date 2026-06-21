@@ -1,0 +1,2 @@
+# Run artifacts — the held benchmark data; regenerated, not source.
+*.json

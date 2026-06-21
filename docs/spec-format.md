@@ -2,6 +2,62 @@
 
 vigiles specs are TypeScript files (`*.spec.ts`) that compile to markdown instruction files. The spec is the source of truth; the markdown is a build artifact.
 
+## Why a spec? — what markdown can't do
+
+Be honest about what a spec is **not** for. The reference checks — does this
+`file()` exist, is this linter rule enabled, is this `cmd()` a real script — do
+**not** need a spec. vigiles runs them on a plain CLAUDE.md via inline
+[`<!-- vigiles:enforce -->` comments](inline-mode.md) (Level 0) or a
+[`vigiles:` frontmatter](markdown-mode.md) block (Level 1), on purpose, as the
+on-ramp. If verification is all you want, **stay in markdown**.
+
+A spec earns its place when you cross from **declaring** your harness to
+**testing it as code** — the things a string format structurally cannot give you:
+
+1. **A typed _contract with structure_, not a string.** A subagent's
+   `result(okShape, errShape)` is a discriminated union of typed fields. It
+   compiles to a `vigiles:ok`/`err` block the runtime emits and a test parses with
+   **`assertAgentOk`** — a real assertion, **no LLM judge** (see
+   [railway-subagents.md](railway-subagents.md)). A frontmatter `description:` is a
+   flat string; it can't carry a multi-field outcome, and a test has nothing
+   deterministic to parse. **This is the differentiator** — the substrate the
+   [Test](harness-testing.md) and [Measure](measuring-skills.md) tiers build on.
+2. **Checked by a compiler you already run.** Tool names and rule IDs get a red
+   squiggle at edit time via the generated `.d.ts`, before any vigiles command.
+   (The JSON-Schema generator gives frontmatter LSP autocomplete too, so this part
+   is _partially_ replicable in YAML — but only for flat name fields, not a
+   structured contract.)
+3. **It compiles and composes.** One spec → CLAUDE.md _and_ AGENTS.md
+   byte-identical; `railway()`/`delegate()` resolve targets across sibling specs at
+   compile time. Markdown is inert per-file text — it can't fan out or compose.
+
+So: **markdown declares; a spec is testable as code.** Reach for a spec exactly
+when you want `result()` → `assertAgentOk`. The rest is the field reference.
+
+> **See it concretely:** [`examples/scaffold-demo/`](../examples/scaffold-demo/) — a
+> typed agent spec, and the outcome + safety test `vigiles scaffold-test` **generates
+> from it** (an `assertAgentOk` over the real `result()` fields + a `notTool` safety
+> check derived from the `tools` contract). Nobody hand-writes those assertions.
+
+### Enforce vs. verify
+
+A spec gives you a `tools` allowlist and a `purity` floor. It's tempting to read
+those as "the same thing the tests check, twice." They are **not** — they answer
+different questions:
+
+| Layer              | What it is                                                                              | When it runs            | What it guarantees                                                            |
+| ------------------ | --------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| **Enforce** (gate) | the `purity` floor / `tools` allowlist → a `PreToolUse` rail that **denies** a bad call | **runtime**, every call | the disallowed action is **impossible in the loop** — deterministic, no model |
+| **Verify** (test)  | `assertAgentOk`, `wrote`/`didNotWrite`, `notTool`                                       | **author-time / CI**    | the harness **does its job** and **stays in its lane** — a different property |
+
+The gate **prevents**; the test **proves behaviour**. A test is not re-checking
+the gate — you use `notTool`/`didNotWrite` to verify a _prose_ instruction that
+has no runtime enforcement (can the agent be talked out of it?), or to assert the
+wiring fires, never to second-guess `decidePurityGate`. Where you have a floor,
+trust it: it's a structural guarantee, not a probabilistic one. Where you only
+have prose, the test is how you find out it leaks — and that's the signal to add a
+floor. See [harness-testing.md](harness-testing.md).
+
 ## CLAUDE.md Specs
 
 Use `claude()` to define a CLAUDE.md spec. Export it as the default export.
@@ -168,9 +224,46 @@ contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
 `"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
 tools and is a violation.
 
-`effect\`…\``marks a **side-effect boundary** inside a body (a tagged template
-usable as an interpolated fragment). It compiles to`<!-- vigiles:effect -->`…`<!-- /vigiles:effect -->` markers that tighten the runtime gate to read-only
-_outside_ the region and the declared floor _inside_ it.
+### Three layers of enforcement
+
+The same floor is enforced at three points, weakest-author-effort first:
+
+| Layer                | When                         | How                                                                                                                       |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Type** (authoring) | your spec's own `tsc`        | A typed `agent`/`skill` rejects a bad `purity`×`tools` combination at **edit time**, before any vigiles command runs.     |
+| **Compile**          | `vigiles compile`            | `purityViolations` re-checks the declared `tools` against the floor and fails the compile.                                |
+| **Runtime** (gate)   | every tool call, in the loop | the `PreToolUse` purity gate (`decidePurityGate`) denies a bad **live** call — including the command-level Bash decision. |
+
+**The type layer is opt-in by import** and a strict ADDITION — it never replaces
+the compile/runtime checks, which stay the universal backstop. Import `agent` /
+`skill` from **`vigiles/claude-code`** to get the compile-time type error against
+the Claude Code tool catalog:
+
+```ts
+import { agent } from "vigiles/claude-code";
+
+agent({ name: "r", description: "…", purity: "pure", tools: ["Read", "Bash"] });
+//                                                              ^^^^^^ tsc error — Bash is side-effecting
+agent({
+  name: "f",
+  description: "…",
+  purity: "bounded",
+  tools: ["Read", "Bash", "Write"],
+}); // OK — bounded admits Bash
+agent({ name: "x", description: "…", purity: "bounded", tools: ["mcp__s__t"] });
+//                                                              ^^^^^^^^^^^ tsc error — MCP is unknown-effect
+```
+
+The **core** `agent` / `skill` (from `vigiles/spec`, the default import) stay
+**harness-agnostic and unconstrained** — they accept any `tools` at any purity,
+exactly as before (backwards-compatible), and rely on the compile + runtime
+checks. So an existing spec importing the core builder is unaffected.
+
+> **The runtime gate remains the backstop for the command level.** A `bounded`
+> unit may declare `Bash` (the type admits the _tool_), but whether a given Bash
+> _command_ runs is decided at runtime by `decidePurityGate` / `isReadOnlyBash` —
+> a read-only command is allowed, a mutating one denied. The type system cannot
+> see the command string, so that decision is, and stays, the runtime gate's job.
 
 ## Reference Helpers
 
@@ -205,7 +298,6 @@ Tagged template literal that interleaves strings and refs. Use it for `sections`
 - `result(okShape, errShape)` — a subagent's (or forked skill's) typed `Result<ok, err>` outcome. Field types: `"string" | "number" | "boolean" | "string[]"`. Full guide: **[railway-subagents.md](railway-subagents.md)**.
 - `railway({ name, steps, recover, onError })` + `delegate(agent, task?)` — compose flat subagents into a success track with bounded recovery. See [railway-subagents.md](railway-subagents.md).
 - `input(name, hint)` / `step(do, { gate, retry })` / `project(role)` — a skill's typed inputs, gated pipeline steps, and portable command gates.
-- `effect\`…\`` — a side-effect boundary inside a body (see [Purity & effects](#purity--effects)).
 
 ```ts
 instructions`Check ${file("tsconfig.json")} then run ${cmd("npm test")}.`;

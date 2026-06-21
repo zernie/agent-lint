@@ -9,6 +9,10 @@ Most of it runs with **no model and no API key** — milliseconds, on every comm
 Only the real-model tier (evals) needs a model, and it runs on your own `claude`
 CLI, not metered tokens.
 
+> Want to know whether a skill or plugin actually **helps** — does it beat the
+> no-skill baseline, and at what cost? That's the measurement layer on top of these
+> tiers: see [Measuring skills & plugins](measuring-skills.md).
+
 ## Your first test
 
 A hook is just a process: the harness pipes it a JSON event and reads back an exit
@@ -188,9 +192,14 @@ assertChecks(r, [
 to act (a check a completion-grader structurally cannot make — it sees the agent's
 final text, not the tool call it _almost_ made). All three are **deterministic** —
 the scripted mock model only does what the script says, so a `Write` either landed
-or it didn't. Pair this with a `purity:` floor (`pure`/`bounded`) and `effect()`
-boundaries on the `skill()`/`agent()` spec to declare the surface the test then
-asserts. See the runnable example below.
+or it didn't.
+
+These checks **verify** behaviour; a `purity:` floor (`pure`/`bounded`) on the
+`skill()`/`agent()` spec **enforces** it — a `PreToolUse` rail that _denies_ the
+bad call at runtime. They're different layers, not a double-check: the floor makes
+the action impossible in the loop, the test proves the good behaviour happens (and
+is how you catch a _prose_ instruction leaking when there's no floor to lean on).
+See [Enforce vs. verify](spec-format.md#enforce-vs-verify).
 
 ## Test a skill fires (`measureTriggerRate`)
 

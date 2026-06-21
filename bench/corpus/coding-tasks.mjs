@@ -122,6 +122,55 @@ export const CODING_TASKS = [
         : 0;
     },
   },
+  {
+    // The PROSE-HEAVY, multi-step task: read a module, fix a bug, AND write a
+    // thorough prose review across several files. It forces many turns + a large
+    // explanatory surface — the closest the corpus gets to a real multi-turn
+    // session (vs the ~2-turn tasks above), and the STEELMAN for a compression
+    // skill: the more explanatory prose a task elicits, the more room caveman has
+    // to hit its claim. If it still doesn't compress here, the debunk is strongest.
+    name: "review-doc",
+    files: {
+      "cart.js":
+        "// Shopping-cart utilities\n" +
+        "function subtotal(items) { let s = 0; for (const it of items) s += it.price * it.qty; return s; }\n" +
+        "function applyDiscount(amount, pct) { return amount - (amount * pct) / 100; }\n" +
+        "function withTax(amount, rate) { return amount + amount * rate; }\n" +
+        "function total(items, rate, discountPct) {\n" +
+        "  const sub = subtotal(items);\n" +
+        "  const disc = applyDiscount(sub, discountPct);\n" +
+        "  return withTax(disc, rate).toFixed(0); // returns a money value\n" +
+        "}\n" +
+        "module.exports = { subtotal, applyDiscount, withTax, total };\n",
+    },
+    task:
+      "Read cart.js — a shopping-cart money module. Do THREE things, each in detail:\n" +
+      "1) `total` has a precision bug: it truncates cents with `toFixed(0)`. Write a " +
+      "corrected `total` (keeping cents, e.g. `toFixed(2)`) to cart.fixed.js.\n" +
+      "2) Write a THOROUGH code review to review.md: explain in prose what EACH of the " +
+      "four functions (subtotal, applyDiscount, withTax, total) does, describe the bug " +
+      "and why it loses money, and justify your fix. Be detailed.\n" +
+      "3) Write the buggy function's name ALONE on the last line of bug.txt, prefixed " +
+      "'ANSWER: '.\n" +
+      "Be thorough in your explanations. Stop when all three files exist.",
+    target: "outputTokens",
+    check: (ctx) => {
+      const fixed = ctx.file("cart.fixed.js") ?? "";
+      const review = ctx.file("review.md") ?? "";
+      const ans = /ANSWER:\s*(\w+)/i.exec(ctx.file("bug.txt") ?? "")?.[1] ?? "";
+      // (a) the truncation bug is gone AND total still computes via the helpers;
+      const fixedOk =
+        /total/.test(fixed) &&
+        /withTax/.test(fixed) &&
+        !/toFixed\(\s*0\s*\)/.test(fixed);
+      // (b) a substantial review naming at least two functions;
+      const reviewOk =
+        review.length > 200 && /subtotal/.test(review) && /total/.test(review);
+      // (c) the bug is attributed to `total`.
+      const ansOk = /total/i.test(ans);
+      return fixedOk && reviewOk && ansOk ? 1 : 0;
+    },
+  },
 ];
 
 /** Look up a corpus task by name (the benchmark/optimizer selects a subset). */

@@ -2,14 +2,20 @@
 
 # Effect-boundary design — `effect()` region mark
 
-> Status: SHIPPED (2026-06-20) — this doc designed it and it landed as designed.
-> The `effect\`\`` `EffectRegion`builder +`<!-- vigiles:effect -->`compile
-markers + the`effect-enter`/`effect-exit`state file + the boundary gate in
-both`PreToolUse`rails are all in`main` (mechanism (a) below, fail-closed).
-Retained as the design record. The per-call purity FLOOR gate it builds on is
-likewise shipped (`decidePurityGate`). See
-[`side-effect-separation.md`](side-effect-separation.md) for the full design
-rationale; [`roadmap.md`](roadmap.md) for what remains (smaller follow-ons).
+> Status: **EXPERIMENTAL — PARKED (P3, revisit) as of 2026-06-21.** The per-call
+> purity FLOOR gate (`decidePurityGate`) is the stable keeper. The `effect()`
+> _sub-region_ boundary this doc designed (mechanism (a) below) is **dropped as a
+> goal**: for skills it's now a compile error (`effect-in-skill` — use the floor +
+> `context:'fork'`); for subagents a flat-only deterministic tracker shipped
+> (`PreToolUse(Task)`+`SubagentStop`, `f045554`) but is NOT nesting-safe (CC v2.1.172
+> added depth-5 nesting → needs a depth-aware stack + spawn-tool-name check) and
+> must NOT be auto-wired. **Final call (see "Why dropped" below): a deterministic
+> in-flow sub-region has no harness signal, and the subagent-split is weaker AND
+> costlier than intended — the realistic safety story is the whole-unit floor + a
+> stateful pre-hook.** Read this doc top-to-bottom for the design history; the
+> SUPERSEDED + "Why dropped" sections at the end are the current verdict. See
+> [`side-effect-separation.md`](side-effect-separation.md) for the full design
+> rationale; [`roadmap.md`](roadmap.md) for what remains (smaller follow-ons).
 
 ---
 
@@ -284,3 +290,137 @@ commands that need this classification — otherwise park it for the `doc()` pas
 - `src/adapters/claude-code/agent-runtime.ts` — `evaluatePreToolUse`,
   `setActiveAgent` / `readActiveAgent` — the pattern `effect-enter`/`effect-exit` mirrors.
 - `src/tool-intercept.ts` — the boundary-as-test-seam; `notTool` / `interceptTools`.
+
+## SUPERSEDED — mechanism (a) is wrong; bind the region to harness events (2026-06-20)
+
+> A dogfood (3 shipped workflow skills → `research/spec-syntax-and-railway-scope.md`)
+> plus a prior-art sweep overturned §3's "mechanism (a) recommended" verdict. Recorded
+> here so the design doc tracks reality.
+
+Mechanism (a) — the **model** calls `effect-enter`/`effect-exit` — is a category error:
+**a deterministic gate keyed on probabilistic model compliance, fail-closed, so a single
+missed call BREAKS the unit.** §3's "forgeable?" row hand-waved this; the dogfood proved
+it. Every mature system that confines "effect X may happen only here" delimits the region
+**structurally** (a scope the runtime/compiler owns) and **never** by an in-band signal
+the actor emits: object-capabilities (confine by NOT passing the capability into a scope,
+not by the code announcing it), [Sandlock](https://multikernel.io/2026/03/25/sandlock-mcp-per-tool-sandboxing/)
+per-tool sandboxing ("declared per tool, enforced at call time **without explicit agent
+signaling**"), Microsoft [Fides/IFC](https://arxiv.org/pdf/2505.23643) ("enforcement
+**independent of model behavior**, derived from the tool-call graph"), and lexical effect
+handlers / `runST` monadic regions (the _enclosing_ structure licenses the effect, never
+the scoped code). A model emitting `effect-enter` is **ambient authority re-introduced
+through a forgeable self-declared flag** — the anti-pattern ocap exists to remove.
+
+**The fix (ranked):**
+
+1. **Subagents — make the region structural via harness events (FOLLOW-ON).** A
+   subagent IS the region (isolated context, call→return = the `runST`/lexical scope).
+   **CORRECTION:** the research agent assumed a Claude Code **`SubagentStart`** hook — it
+   does NOT exist (CC's verified `dialect.hookEvents` has `SubagentStop` but no Start;
+   the agent conflated Codex, which has both). So for CC the deterministic, harness-emitted
+   bracket is **`PreToolUse` with `tool_name === "Task"`** (dispatch begins, parent context)
+   → open the window + `setActiveAgent`, and **`SubagentStop`** → clear + close. This still
+   deletes the model-facing signal AND closes the "which subagent is active is still
+   model-invoked" open problem. Whole-subagent-is-the-region is the simplest semantics;
+   finer boundaries become a **two-subagent split** (a `pure` planner returning a
+   `result()` plan → a `bounded`/`unrestricted` executor — Plan-Then-Execute, reusing
+   shipped `result()`/`delegate()`/`railway()`). **✅ SHIPPED (2026-06-20):** the agent-hook
+   now brackets the subagent's active window on the events CC has — `PreToolUse(tool=Task)`
+   OPENS it (`decideTaskDispatch`/`resolveDispatchedAgent` resolve `tool_input.subagent_type`
+   → the `agents/<name>.md` under cwd or `$CLAUDE_PLUGIN_ROOT`, fail-open on an unknown agent;
+   the Task dispatch itself is the parent's action, allowed) and `SubagentStop` CLOSES it
+   (clear active-agent + effect). The tool-contract rail + purity floor + effect window now
+   fire **without a model call** (`agent-start`/`effect-enter`/`exit` stay as manual
+   fallbacks); a consumer registers `agent-hook` on BOTH `PreToolUse` and `SubagentStop`.
+   Remaining: the whole-subagent window collapses the in-body `effect()` sub-region into the
+   declared floor (a subagent with `effect()` + no `purity` is unrestricted-while-active,
+   bounded only by its tool contract) — finer phase separation is the two-subagent split, and
+   retiring the `effect-enter`/`exit` CLI + the compiler-injected prose is the cleanup follow-on.
+2. **Skills — drop the position `effect()`; keep the per-call purity floor. ✅ SHIPPED
+   (2026-06-20).** A default skill is spliced into the main conversation: no return, no
+   per-section event, no structural bracket. `compileSkill` now **errors** on `effect()` in
+   a skill body (`effect-in-skill`, a category gate mirroring `output-without-fork`), and
+   `evaluateSkillPreToolUse` no longer reads `effect-active.json` — the shipped
+   `decidePurityGate` (the capability gate, needs NO enter/exit) holds on every call. A
+   workflow skill that must mutate uses `context: fork` (shipped) → becomes a subagent →
+   routes through path 1. "Skills can't have a deterministic effect region" becomes
+   "promote it to a fork when it needs one."
+3. **Taint/IFC (lethal-trifecta) is a SEPARATE future feature**, not an `effect()` fix —
+   labels flow through the tool graph (deterministic), not model declarations. Park it.
+
+**Migration:** the follow-on (path 1) retires the model-facing `vigiles
+effect-enter`/`effect-exit` CLI + the compiler-injected "call effect-enter before a
+side-effecting tool" prose (that prose IS the contradiction), keeping
+`effect-region.ts`'s state file only as an INTERNAL mechanism written by the
+`PreToolUse(Task)`/`SubagentStop` hooks. This pass keeps those CLI commands for the AGENT
+rail as the interim (skills no longer reach them — `effect()` is a compile error there).
+Positioning (DONE): "purity floors are deterministic; effect regions are a **subagent**
+primitive" — never "purity/effect gates your skills" (README + CLAUDE.md keyFiles
+corrected). Full prior-art set + the Plan-Then-Execute pattern:
+[securing LLM agents (arXiv 2506.08837)](https://arxiv.org/pdf/2506.08837), Koka/Unison
+abilities, [Monadic Regions](https://www.cs.cornell.edu/people/fluet/research/rgn-monad/SPACE04/space04.pdf),
+[Claude Code hooks](https://code.claude.com/docs/en/hooks).
+
+## Why dropped — the subagent-split is weaker AND costlier (2026-06-21, final)
+
+After shipping the skill half + the flat subagent tracker, a CC-facts check (via the
+claude-code-guide) settled it: **the sub-region goal isn't worth chasing.**
+
+**New substrate fact:** Claude Code **v2.1.172 (2026-06-10)** added nested subagents —
+a subagent with `Agent` in its `tools` can spawn its own, **up to depth 5 (fixed, not
+configurable)**; a depth-5 subagent gets no `Agent` tool. (Source: code.claude.com
+/docs/en/sub-agents#spawn-nested-subagents + changelog.) So nesting is real now — which
+both enables the two-subagent split locally AND breaks the flat tracker I shipped
+(single slot, not a stack).
+
+**But the split is the wrong tool for sub-region scoping, on two axes:**
+
+1. **Weaker than intended.** `effect()` wanted an in-flow sub-region inside ONE body
+   sharing working memory ("these actions write, the rest is read-only"). The split
+   gives only **whole-subagent** granularity, across a **context boundary** — the
+   writer doesn't have the planner's memory; you hand-marshal a plan out of one and
+   into the other. That's "rebuild the flow as two programs talking through a pipe,"
+   not "scope a region." Plus the **depth-5 ceiling**.
+2. **Costlier.** Each phase is a fresh dispatch = a fresh context window (no compaction
+   benefit; re-pays context in input tokens) + a round-trip + trace bloat. For "this
+   one block writes," a whole subagent is wildly disproportionate — **subagent spam**.
+
+**Verdict:** a deterministic _in-flow_ sub-region has no harness signal (same wall as
+the model-narration problem), and the split is a downgrade on both granularity and
+cost. So drop the sub-region as a goal. The realistic, in-place, deterministic safety
+story is: **whole-unit `purity` floor (shipped) + a stateful PreToolUse gate** keyed on
+the tool stream (read-before-write / ordering — the conntrack/eBPF-maps pattern; needs
+no restructuring and no subagent spam). If revisited (P3), build the **stateful
+pre-hook**, not the split — and make the f045554 tracker nesting-safe (depth-aware
+stack + verified spawn-tool name) only if the active-agent contract enforcement itself
+is wanted under nesting, independent of `effect()`.
+
+## Last salvage attempt: `effect()` as a test/mock seam — also rejected (2026-06-21)
+
+A final reframe worth recording so it isn't re-tried: drop enforcement and position
+entirely; for an **agent**, a tight `tools` allowlist already pins the effect surface,
+so let `effect()` just **name "the hole"** (the one side-effecting op) to make it the
+**mock point** for tests. Sounds clean — functional core / imperative shell, mock at the
+shell. But the hole **already exists three ways without the primitive**:
+
+1. **Enforcement** — the `tools` allowlist + `purity` floor already make "pure except
+   for this one call" a runtime guarantee.
+2. **Identification** — `effects.ts` `effectSurface(tools, dialect)` / `classifyToolEffect`
+   already bucket a tool list into read-only vs side-effecting **deterministically**, so
+   the hole is **computed from the allowlist**, no annotation needed.
+3. **Test seam** — `interceptTools` + the `ArgMatcher` (`when:{command:/git push/}`)
+   already mocks the **exact invocation** at sub-tool granularity.
+
+So `effect()` would only move the matcher from the test into the spec — a
+single-source-of-truth convenience, **not a capability** — failing "earns its place" the
+same way `doc()` and `section()` did. Two honest limits on the framing: `interceptTools`
+is intercept-**and-prevent** (deny + assert the attempt), which is right for a
+**destructive** hole (push, charge, paid API) but is **not** a faithful mock that returns
+a fake success — a hole that must **return a value the flow consumes** is the
+**record-replay / R2** tier, also not `effect()`.
+
+**The useful nugget** (the one thing worth building from this): have `scaffold-test` read
+the **existing** tools + `effectSurface` and **auto-derive an `interceptTools` entry** per
+side-effecting tool. That delivers "the agent's hole is easy to test/mock" — the actual
+goal — with **zero new spec surface**. Folds into the scaffold-test enhancement, not an
+`effect()` revival.

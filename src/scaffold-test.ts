@@ -20,6 +20,23 @@ export type SurfaceKind = "skill" | "agent" | "hook";
 /** The cheapest meaningful tier for a surface kind (mirrors the test-harness skill). */
 export type TestTier = "unit" | "harness" | "eval";
 
+/** One field of a subagent's `result()` contract, parsed from its compiled `.md`. */
+export interface ContractField {
+  readonly name: string;
+  /** The `OutputFieldType` literal: `"string" | "number" | "boolean" | "string[]"`. */
+  readonly type: string;
+}
+
+/**
+ * A subagent's typed `result(ok, err)` outcome contract — the typed-spec payoff
+ * the generator turns into a real `assertAgentOk` test (no LLM judge). Parsed from
+ * the `vigiles:ok` / `vigiles:err` blocks the compiler emits into the agent `.md`.
+ */
+export interface ResultContract {
+  readonly ok: readonly ContractField[];
+  readonly err: readonly ContractField[];
+}
+
 /** What the generator needs to know about a surface to scaffold its test. */
 export interface ScaffoldInput {
   readonly kind: SurfaceKind;
@@ -33,6 +50,19 @@ export interface ScaffoldInput {
   readonly userInvoked?: boolean;
   /** A subagent's declared tool contract (drives the assertion hint); null = inherits all. */
   readonly tools?: readonly string[] | null;
+  /**
+   * The side-effecting tools in the contract (`effectSurface(tools).sideEffecting`,
+   * computed by the CLI with the resolved dialect — kept harness-agnostic here). A
+   * non-empty list drives a generated SAFETY check: the agent's "hole" is mocked/denied
+   * and asserted to stay in its lane — the typed `tools` contract writing its own test.
+   */
+  readonly sideEffectingTools?: readonly string[];
+  /**
+   * The subagent's `result()` contract parsed from its compiled `.md`. Present →
+   * the generator emits a deterministic `assertAgentOk` outcome test (no LLM judge);
+   * the single most-concrete "the typed spec wrote your test" payoff.
+   */
+  readonly resultContract?: ResultContract | null;
   /** How the CLI invokes the hook (e.g. `bash hooks/pre-edit.sh`); a TODO when unknown. */
   readonly hookCommand?: string;
 }
@@ -137,22 +167,78 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.3 });
 `;
 }
 
-/** A subagent → the deterministic harness tier; point at the railway/Result path. */
-function agentScaffold(input: ScaffoldInput): string {
+/** A JSON value placeholder for an `OutputFieldType`, for the `vigiles:ok` block. */
+function placeholderFor(type: string): unknown {
+  switch (type) {
+    case "number":
+      return 1;
+    case "boolean":
+      return true;
+    case "string[]":
+      return ["example"];
+    default:
+      return "example";
+  }
+}
+
+/** Render a `result(ok, err)` builder call reconstructed from the parsed contract. */
+function renderContractBuilder(contract: ResultContract): string {
+  const shape = (fields: readonly ContractField[]): string =>
+    `{ ${fields.map((f) => `${f.name}: ${JSON.stringify(f.type)}`).join(", ")} }`;
+  return `result(\n  ${shape(contract.ok)},\n  ${shape(contract.err)},\n)`;
+}
+
+/**
+ * The OUTCOME test, GENERATED FROM the subagent's `result()` contract: reconstruct
+ * the contract, build a matching `vigiles:ok` block, and `assertAgentOk` it —
+ * deterministic, no LLM judge. This is the typed-spec payoff a markdown
+ * `description:` cannot give you: a parseable, typed outcome a test reads directly.
+ */
+function outcomeSection(
+  input: ScaffoldInput,
+  contract: ResultContract,
+): string {
+  const okValue = Object.fromEntries(
+    contract.ok.map((f) => [f.name, placeholderFor(f.type)]),
+  );
+  const firstField = contract.ok[0]?.name;
+  const fieldAssertion = firstField
+    ? `// TODO: assert the VALUES you expect (the shape is already validated above), e.g.:\n//   assert.ok(value.${firstField}, "expected a ${firstField}");`
+    : "";
+  return `import assert from "node:assert/strict";
+import { result } from "vigiles/spec";
+import { assertAgentOk } from "vigiles/testing";
+
+// Reconstructed from ${input.name}'s ## Output contract (its compiled .md) — the
+// typed result() the spec wrote. assertAgentOk parses + validates the outcome
+// with NO model judge; swap \`okOutput\` for a real \`runHarness\` turn (Part B in
+// examples/harness/railway-result.harness.mjs) to assert REAL behaviour.
+const contract = ${renderContractBuilder(contract)};
+
+const okOutput = [
+  "${input.name} finished its task.",
+  "\`\`\`vigiles:ok",
+  ${JSON.stringify(JSON.stringify(okValue))},
+  "\`\`\`",
+].join("\\n");
+
+const value = assertAgentOk(okOutput, contract); // deterministic — no LLM judge
+${fieldAssertion}
+console.log("✓ ${input.name}: result() outcome parses + validates against its typed contract");
+`;
+}
+
+/** The fallback when the subagent has no `result()` contract — assert a tool use. */
+function fallbackSection(input: ScaffoldInput): string {
   const toolHint =
     input.tools && input.tools.length > 0
       ? `assertToolUsed(r, ${JSON.stringify(input.tools[0])}); // its declared contract: ${input.tools.join(", ")}`
       : `assertToolUsed(r, "Task"); // TODO: assert what the subagent should do`;
-  return `${header(
-    `Starter harness test for the \`${input.name}\` subagent.`,
-    `npx vigiles test ${suggestedPath(input)}`,
-  )}
-import { runHarnessTest, assertToolUsed } from "vigiles/testing";
+  return `import { runHarnessTest, assertToolUsed } from "vigiles/testing";
 
-// A subagent's OUTCOME is best asserted via a result() contract — deterministic,
-// no LLM judge. If ${input.name} has one, use assertAgentOk(r.output, contract)
-// instead; see the railway-result example in the vigiles docs.
-
+// ${input.name} has no result() contract, so its outcome can't be asserted
+// deterministically — add one (result() on its agent() spec) for a no-judge
+// outcome test. For now, assert it reaches for the right tool.
 const r = await runHarnessTest({
   plugin: ".", // TODO: the plugin dir holding this subagent
   // TODO: a prompt that dispatches ${input.name} (via the Task tool).
@@ -164,6 +250,77 @@ const r = await runHarnessTest({
 ${toolHint}
 console.log("✓ ${input.name}: subagent test ran");
 `;
+}
+
+/**
+ * The SAFETY check, GENERATED FROM the subagent's side-effecting `tools`: assert it
+ * stays inside its declared write surface and never reaches for a destructive op.
+ * The `tools` allowlist + effectSurface identify the "hole"; the check asserts it —
+ * a test the typed contract writes for you (markdown can declare the tools, not test them).
+ */
+function safetySection(
+  input: ScaffoldInput,
+  sideEffecting: readonly string[],
+): string {
+  const checks: string[] = [];
+  if (sideEffecting.includes("Bash")) {
+    checks.push(
+      `  notTool("Bash", { command: /git push|rm -rf/ }), // never a destructive op`,
+    );
+  }
+  if (sideEffecting.some((t) => t === "Write" || t === "Edit")) {
+    checks.push(
+      `  didNotWrite("secrets.env"), // TODO: the path(s) it must NOT write outside its surface`,
+    );
+  }
+  if (checks.length === 0) {
+    checks.push(
+      `  // TODO: a notTool()/didNotWrite() per side-effecting tool: ${sideEffecting.join(", ")}`,
+    );
+  }
+  return `
+// --- Safety (deterministic) — generated from ${input.name}'s side-effecting tools: ${sideEffecting.join(", ")} ---
+// In a real run, replace this constructed Trace with a real \`runHarness\` /
+// \`measure\` turn (use interceptTools so a real model's attempt is DENIED, never
+// executed — see docs/eval-architecture.md). The checks below are derived from the
+// declared tools contract — the agent's "hole" asserted to stay in its lane.
+{
+  const trace = {
+    output: "done",
+    turns: 1,
+    hooks: [],
+    toolCalls: [
+      // TODO: the tool calls a benign run of ${input.name} makes.
+      { name: "Bash", input: { command: "git status" } },
+    ],
+    file: () => null,
+  };
+  assertChecks(trace, [
+${checks.join("\n")}
+  ]);
+  console.log("✓ ${input.name}: stayed inside its declared side-effect surface");
+}
+`;
+}
+
+/** A subagent → deterministic outcome + safety tests, generated from its typed contract. */
+function agentScaffold(input: ScaffoldInput): string {
+  const head = header(
+    `Starter harness test for the \`${input.name}\` subagent.`,
+    `npx vigiles test ${suggestedPath(input)}`,
+  );
+  const safetyImport =
+    input.sideEffectingTools && input.sideEffectingTools.length > 0
+      ? `import { notTool, didNotWrite, assertChecks } from "vigiles/testing";\n`
+      : "";
+  const body = input.resultContract
+    ? outcomeSection(input, input.resultContract)
+    : fallbackSection(input);
+  const safety =
+    input.sideEffectingTools && input.sideEffectingTools.length > 0
+      ? safetySection(input, input.sideEffectingTools)
+      : "";
+  return `${head}\n${safetyImport}${body}${safety}`;
 }
 
 const TIER: Record<SurfaceKind, TestTier> = {

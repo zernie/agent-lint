@@ -5,7 +5,7 @@
  * worker that returns a typed Result: a plan on success, a reason on failure.
  * Run `vigiles compile` to regenerate the markdown.
  */
-import { agent, result, instructions, cmd } from "../../src/spec.js";
+import { agent, result, instructions, cmd } from "../../src/core/spec.js";
 
 export default agent({
   name: "planner",

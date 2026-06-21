@@ -16,6 +16,52 @@
 > (haiku is the cheap v0 pass); the ~1% output-share is model-agnostic. Method:
 > [`benchmark-methodology.md`](benchmark-methodology.md).
 
+## Status & gaps (2026-06-21) — honest read of where the pivot stands
+
+A candid self-assessment after a heavy typed-spec research+build push (see
+[`typed-spec-moat.md`](typed-spec-moat.md) for the full record).
+
+**Verdict: the thesis is genuinely cool and defensible; the execution is mostly
+_potential_, and the work has leaned maker-cool (the typed-spec moat) over user-pull
+(the measurement identity this doc is about).**
+
+**What's genuinely cool (not hype).** The moat thesis is A-tier positioning — _the
+harness becomes a compilable, analyzable formal object; vigiles is a
+compiler/verifier, everyone else is a linter for prose_ — coherent, true, and it beats
+**both** the markdown tools (can't type anything) and the code-based orchestration
+frameworks (LangGraph/CrewAI pass untyped dicts at runtime). It is not vaporware:
+**shipped + verified this cycle** — typed purity, typed composition (a pipeline won't
+compile if handoffs don't line up), and `generate-harness` (`tsc` over the whole
+harness). The research is exceptional and honest (a real Applicative/Selective/Monad
+boundary _theorem_; a formal-verification bug-find with a TLC-certified fix; crisp
+kills).
+
+**What's underwhelming / the risk.** (1) The _novel_ moats are unbuilt — of the three,
+only #1 shipped, and #1 (type-checking) is the least novel; **#2 capability-diff** (the
+genuinely new "permissions-diff for your agent at PR time") and **#3 covering-array
+eval** are roadmap. (2) **The adoption engine got starved** — the measurement identity
+THIS doc argues for (the ecosystem benchmark "what works vs hype", the viral artifact)
+is still ~v0, not run at scale, not published — while the session poured effort into the
+_author-facing_ moat that only pays off at Level-2 spec adoption, for a product with
+**~no users**. We optimized the thing that NEEDS adoption over the thing that CREATES
+it. (3) Maker's dream vs user's need: users want "does my skill work / what should I
+install" more than "my pipeline type-checks."
+
+**Concrete gaps (prioritized).** (1) the at-scale ecosystem benchmark (the adoption
+flywheel); (2) #2 capability-diff + its engine (the effect-row M1 + cross-step
+accumulation); (3) cross-file typed composition (in flight); (4) the V1 nesting bug
+(found + certified-fix-in-hand, not yet fixed — a live correctness hole); (5) adoption
+ergonomics (value without authoring typed specs); (6) parked safety (macOS sandbox,
+ephemeral env).
+
+**The sequencing call.** The moat is the right long-game/defensibility story — keep it
+as the depth people discover. But for a no-users product the near-term priority is
+**pull, not depth**: ship the benchmark + the zero-friction `scan`/measure (no typed
+spec required) and let the compiler-for-harnesses be what they find after. The one
+feature that serves BOTH is **capability-diff (#2)** — a free PR comment, partial on
+plain plugins via `scan`, richer on specs — so it's the bridge bet. _We've been
+building the castle before the road to it._
+
 ## The critique that forced this
 
 1. **Hygiene doesn't go viral.** Linters/validators/test tools win by becoming necessary
@@ -88,6 +134,37 @@ eval; at first model-judged), then add typed contracts rung by rung, each one co
 expensive model-judge into a cheap deterministic assert. The spec is how you _onboard_ into the
 measurement identity. See `typed-contracts-for-agents.md`.
 
+### The deeper cut: the spec makes the harness a _compilable, analyzable formal object_
+
+The substrate layer is more than a testability on-ramp — it is the one thing that gives vigiles
+a category, not just a feature. **Markdown is inert prose; a typed `.spec.ts` is a _program_**,
+so the entire PL / formal-methods toolbox applies to the harness — and **none of it can apply to
+a markdown file.** The category line: **vigiles is a compiler/verifier for agent harnesses;
+everyone else is a linter for prose.** This is the sharper, structural form of the
+"deterministic-constraints layer" — a leaked capability, a busted effect floor, a mismatched
+hand-off becomes a _type error at edit time_, not a runtime surprise a linter notices after the
+fact. Three concrete, markdown-impossible moats fall out:
+
+1. **Unsafe harnesses don't compile** (SHIPPED — typed purity + typed composition). A config
+   that leaks, exceeds its declared effect floor, hands off mismatched data, or mutates out of
+   order is a `tsc` error. `purity:'pure' + 'Bash'` won't type-check; the keystone is
+   **type-safe pipelining** — `pipe(producer, pipeStep(agent, needs({…})))` cross-references at
+   compile time that step N's `ok` _supplies_ step N+1's `needs`, so **a multi-agent pipeline
+   that won't compile if the hand-offs don't line up** — categorically beyond the
+   runtime-untyped orchestration frameworks (LangGraph / CrewAI / Agent SDK), let alone a
+   markdown linter.
+2. **Semantic capability-diff at PR time** — "this PR widened the agent's blast radius" read off
+   the typed effect surface, not grepped from prose.
+3. **Affordable interaction-testing** — a covering-array over the typed config space, run on the
+   subscription (folds into the measurement engine above).
+
+The graduated nuance is load-bearing and must NOT read as rigid: enforcement is **opt-in, never
+all-or-nothing** — the Level 0/1/2 ladder, the open-core `agent()` vs the opt-in typed
+`vigiles/claude-code` import, the `purity:'dangerously-unrestricted'` escape hatch — progressive
+like TypeScript's `strict`, not a wall. The full record (the three moats, type-safe pipelining,
+the markdown-impossibility argument, and the founder endorsement) lives in
+`typed-spec-moat.md`.
+
 ## Honest risks
 
 - **Benchmark methodology is hard and contestable** — what's a representative task, what counts
@@ -145,6 +222,10 @@ the free tier that makes measurement affordable, explicable, and durable** — e
 - `typed-contracts-for-agents.md` — the durable purpose of the spec under this frame: typed
   Result/railway contracts + side-effect boundaries make skills/agents _assertable_ (not
   LLM-judged), which is what makes the measurement cheap and rigorous.
+- `typed-spec-moat.md` — the full record of the compiler-vs-linter category: the harness as a
+  compilable formal object, the three markdown-impossible moats (unsafe harnesses don't compile;
+  capability-diff at PR time; affordable interaction-testing), and type-safe pipelining as the
+  keystone — the structural form of the substrate layer above.
 - `strategy-verdict.md` — the prior (security-led) verdict this reframes; the spine there is
   now: benchmark/optimize (offense) > verify/test (substrate).
 - `divergent-bets.md` — the harness cost/ROI optimizer + CI-for-model-upgrades bets this
