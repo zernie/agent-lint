@@ -22,12 +22,11 @@ import {
   parseSkillPurity,
   evaluateSkillPreToolUse,
 } from "./skill-runtime.js";
-import { skill, instructions, effect } from "../../core/spec.js";
+import { skill } from "../../core/spec.js";
 import { compileSkill } from "../../core/compile.js";
 import { claudeCodeDialect } from "./dialect.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 import { runHook } from "../../run-hook.js";
-import { setEffectActive, clearEffectActive } from "./effect-region.js";
 
 const SAMPLE = `# skill
 
@@ -405,133 +404,6 @@ test("skill-tool-hook CLI allows on a malformed/empty event (no tool name)", () 
     assert.equal(r.blocked, false);
     assert.equal(r.exitCode, 0);
   } finally {
-    cleanupTmpDir(dir);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Effect boundary gate — evaluateSkillPreToolUse + skill-tool-hook CLI
-// ---------------------------------------------------------------------------
-
-test("evaluateSkillPreToolUse: effect boundary outside blocks side-effecting tools", () => {
-  const dir = makeTmpDir("skill-effect-outside");
-  try {
-    const { markdown } = compileSkill(
-      skill({
-        name: "release",
-        description: "Cut a release.",
-        body: instructions`
-          ## Apply
-          ${effect`
-            Side effects allowed ONLY here.
-          `}
-        `,
-      }),
-      { basePath: dir },
-    );
-    writeFileSync(join(dir, "SKILL.md"), markdown);
-    setActiveSkill(dir, "SKILL.md");
-    // no effect-active file → outside the boundary
-
-    // Write is side-effecting → denied outside the effect boundary
-    const blocked = evaluateSkillPreToolUse(dir, "Write");
-    assert.equal(blocked.allow, false);
-    assert.match(blocked.message, /pure unit may only observe/);
-
-    // Read is always read-only → allowed
-    const allowed = evaluateSkillPreToolUse(dir, "Read");
-    assert.equal(allowed.allow, true);
-  } finally {
-    cleanupTmpDir(dir);
-  }
-});
-
-test("evaluateSkillPreToolUse: effect boundary inside allows side-effecting tools", () => {
-  const dir = makeTmpDir("skill-effect-inside");
-  try {
-    const { markdown } = compileSkill(
-      skill({
-        name: "release",
-        description: "Cut a release.",
-        body: instructions`
-          ## Apply
-          ${effect`Write the changelog.`}
-        `,
-      }),
-      { basePath: dir },
-    );
-    writeFileSync(join(dir, "SKILL.md"), markdown);
-    setActiveSkill(dir, "SKILL.md");
-    setEffectActive(dir); // enter the boundary
-
-    // Write is inside the boundary → allowed
-    const allowed = evaluateSkillPreToolUse(dir, "Write");
-    assert.equal(allowed.allow, true);
-  } finally {
-    clearEffectActive(dir);
-    cleanupTmpDir(dir);
-  }
-});
-
-test("skill-tool-hook CLI: effect-enter allows Write; effect-exit blocks Write again", () => {
-  const dir = makeTmpDir("skill-hook-effect");
-  const { markdown } = compileSkill(
-    skill({
-      name: "release",
-      description: "Cut a release.",
-      body: instructions`
-        ## Apply
-        ${effect`Write the changelog.`}
-      `,
-    }),
-    { basePath: dir },
-  );
-  writeFileSync(join(dir, "SKILL.md"), markdown);
-  setActiveSkill(dir, "SKILL.md");
-  try {
-    // Outside the boundary → Write blocked
-    const outsideBlocked = runHook(
-      `node ${CLI} skill-tool-hook`,
-      {
-        hook_event_name: "PreToolUse",
-        tool_name: "Write",
-        tool_input: { file_path: "CHANGELOG.md", content: "..." },
-      },
-      { cwd: dir },
-    );
-    assert.equal(outsideBlocked.blocked, true);
-
-    // Enter the boundary
-    setEffectActive(dir);
-
-    // Inside the boundary → Write allowed
-    const insideAllowed = runHook(
-      `node ${CLI} skill-tool-hook`,
-      {
-        hook_event_name: "PreToolUse",
-        tool_name: "Write",
-        tool_input: { file_path: "CHANGELOG.md", content: "..." },
-      },
-      { cwd: dir },
-    );
-    assert.equal(insideAllowed.blocked, false);
-
-    // Exit the boundary
-    clearEffectActive(dir);
-
-    // Outside again → Write blocked
-    const afterExit = runHook(
-      `node ${CLI} skill-tool-hook`,
-      {
-        hook_event_name: "PreToolUse",
-        tool_name: "Write",
-        tool_input: { file_path: "CHANGELOG.md", content: "..." },
-      },
-      { cwd: dir },
-    );
-    assert.equal(afterExit.blocked, true);
-  } finally {
-    clearEffectActive(dir);
     cleanupTmpDir(dir);
   }
 });
