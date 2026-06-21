@@ -558,6 +558,11 @@ assertRates`) is the recommended path for testing one skill, but
 
 ## See also
 
+- [`typed-spec-power.md`](typed-spec-power.md) — the non-replicable wins of a
+  typed `.spec.ts` over markdown (ranked + prototyped): typed handoff composition
+  (`A.ok` must satisfy `B.needs`, checked by `tsc`) and typed purity (a `pure`
+  agent can't be given `Bash` — a type error). The strongest "why a spec, not
+  markdown" answer.
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·
