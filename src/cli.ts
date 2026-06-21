@@ -102,6 +102,7 @@ import {
   evaluatePreToolUse,
   setActiveAgent,
   clearActiveAgent,
+  decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
   setEffectActive,
@@ -3763,20 +3764,54 @@ function agentHookCommand(): void {
   }
   let tool = "";
   let command: string | undefined;
+  let event = "";
+  let toolInput: unknown;
   try {
     const parsed = JSON.parse(raw) as {
+      hook_event_name?: string;
       tool_name?: string;
       tool_input?: { command?: unknown };
     };
+    event = parsed.hook_event_name ?? "";
     tool = parsed.tool_name ?? "";
+    toolInput = parsed.tool_input;
     if (typeof parsed.tool_input?.command === "string") {
       command = parsed.tool_input.command;
     }
   } catch {
     /* malformed input → no tool, allow */
   }
+
+  const cwd = process.cwd();
+
+  // SubagentStop → CLOSE the window deterministically (no model `agent-done`):
+  // the subagent returned, so its contract/purity no longer apply.
+  if (event === "SubagentStop") {
+    clearActiveAgent(cwd);
+    clearEffectActive(cwd);
+    return;
+  }
+
+  // PreToolUse(Task) → OPEN the window deterministically (no model `agent-start`
+  // / `effect-enter`): the parent is dispatching a subagent, so activate that
+  // subagent's compiled contract for the tool calls it is about to make. The
+  // Task dispatch itself is the PARENT's action — don't gate it against the
+  // subagent's contract; just open the window and allow.
+  if (tool === "Task") {
+    const agentPath = decideTaskDispatch(
+      toolInput,
+      cwd,
+      process.env.CLAUDE_PLUGIN_ROOT,
+    );
+    if (agentPath) {
+      setActiveAgent(cwd, agentPath);
+      setEffectActive(cwd);
+    }
+    return;
+  }
+
   if (!tool) return;
-  const decision = evaluatePreToolUse(process.cwd(), tool, command);
+  const decision = evaluatePreToolUse(cwd, tool, command);
   if (!decision.allow) {
     console.error(decision.message);
     process.exit(2);

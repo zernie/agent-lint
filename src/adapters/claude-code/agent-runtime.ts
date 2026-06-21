@@ -30,7 +30,7 @@ import {
   mkdirSync,
   rmSync,
 } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 
 import {
   readFrontmatter,
@@ -156,6 +156,47 @@ export function readActiveAgent(cwd: string): string | null {
 // ---------------------------------------------------------------------------
 // PreToolUse-hook decision
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve a `Task` tool's `subagent_type` to the compiled agent `.md` to
+ * activate, or null when none is found. The DETERMINISTIC open signal that
+ * replaces the model-invoked `agent-start`: Claude Code fires `PreToolUse` for
+ * the parent's `Task` dispatch (and `SubagentStop` when it returns), so the
+ * harness — not the model — brackets the subagent's active window. The name is
+ * the last ":"-segment (a `--plugin-dir` subagent_type is namespaced
+ * "plugin:name"); searched in `agents/` under the cwd then the plugin root. A
+ * path under the cwd is returned relative (readActiveAgent resolves vs cwd); a
+ * plugin-root hit is absolute. Returns null on an unknown agent (fail-open: an
+ * unresolved subagent is simply not gated, exactly as before agent-start ran).
+ */
+export function resolveDispatchedAgent(
+  subagentType: string,
+  cwd: string,
+  pluginRoot?: string,
+): string | null {
+  const name = subagentType.split(":").pop()?.trim();
+  if (!name) return null;
+  const rel = join("agents", `${name}.md`);
+  if (existsSync(resolve(cwd, rel))) return rel;
+  if (pluginRoot && existsSync(resolve(pluginRoot, rel))) {
+    return resolve(pluginRoot, rel);
+  }
+  return null;
+}
+
+/**
+ * The agent `.md` to activate for a `PreToolUse(Task)` event, or null. Pure
+ * (reads `tool_input.subagent_type`, resolves via {@link resolveDispatchedAgent}).
+ */
+export function decideTaskDispatch(
+  toolInput: unknown,
+  cwd: string,
+  pluginRoot?: string,
+): string | null {
+  const st = (toolInput as { subagent_type?: unknown } | null)?.subagent_type;
+  if (typeof st !== "string" || !st) return null;
+  return resolveDispatchedAgent(st, cwd, pluginRoot);
+}
 
 /**
  * PreToolUse-hook decision. If an agent is active, enforce BOTH deterministic

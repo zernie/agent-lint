@@ -318,10 +318,18 @@ through a forgeable self-declared flag** — the anti-pattern ocap exists to rem
    model-invoked" open problem. Whole-subagent-is-the-region is the simplest semantics;
    finer boundaries become a **two-subagent split** (a `pure` planner returning a
    `result()` plan → a `bounded`/`unrestricted` executor — Plan-Then-Execute, reusing
-   shipped `result()`/`delegate()`/`railway()`). NOT shipped this pass (needs a live-CC
-   Task/SubagentStop wiring + a semantics decision); the model-emitted `effect-enter`/`exit`
-   stays for agents as the interim, where a fixed-contract subagent is far less fragile than
-   a workflow skill.
+   shipped `result()`/`delegate()`/`railway()`). **✅ SHIPPED (2026-06-20):** the agent-hook
+   now brackets the subagent's active window on the events CC has — `PreToolUse(tool=Task)`
+   OPENS it (`decideTaskDispatch`/`resolveDispatchedAgent` resolve `tool_input.subagent_type`
+   → the `agents/<name>.md` under cwd or `$CLAUDE_PLUGIN_ROOT`, fail-open on an unknown agent;
+   the Task dispatch itself is the parent's action, allowed) and `SubagentStop` CLOSES it
+   (clear active-agent + effect). The tool-contract rail + purity floor + effect window now
+   fire **without a model call** (`agent-start`/`effect-enter`/`exit` stay as manual
+   fallbacks); a consumer registers `agent-hook` on BOTH `PreToolUse` and `SubagentStop`.
+   Remaining: the whole-subagent window collapses the in-body `effect()` sub-region into the
+   declared floor (a subagent with `effect()` + no `purity` is unrestricted-while-active,
+   bounded only by its tool contract) — finer phase separation is the two-subagent split, and
+   retiring the `effect-enter`/`exit` CLI + the compiler-injected prose is the cleanup follow-on.
 2. **Skills — drop the position `effect()`; keep the per-call purity floor. ✅ SHIPPED
    (2026-06-20).** A default skill is spliced into the main conversation: no return, no
    per-section event, no structural bracket. `compileSkill` now **errors** on `effect()` in
