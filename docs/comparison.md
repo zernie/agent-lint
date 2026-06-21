@@ -2,18 +2,19 @@
 
 ## Claude Code
 
-|                                     | Without vigiles              | With vigiles                                                  |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------- |
-| **Instructions**                    | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                     |
-| **Linter rule references**          | Trust-based (nobody checks)  | Verified at compile time against real config                  |
-| **File paths**                      | Rot silently when renamed    | `file()` references checked against filesystem                |
-| **Commands**                        | Stale scripts go unnoticed   | `cmd()` references checked against package.json               |
-| **Direct edits to CLAUDE.md**       | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec               |
-| **Linter config changes**           | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                       |
-| **Spec edits**                      | N/A                          | PostToolUse hook auto-compiles to markdown                    |
-| **guidance → enforce upgrades**     | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades        |
-| **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry        |
-| **CI**                              | Nothing to verify            | `vigiles lint` catches hash drift, disabled rules, stale refs |
+|                                        | Without vigiles              | With vigiles                                                                             |
+| -------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| **Instructions**                       | Hand-written CLAUDE.md       | Compiled from `.spec.ts` (build artifact)                                                |
+| **Linter rule references**             | Trust-based (nobody checks)  | Verified at compile time against real config                                             |
+| **File paths**                         | Rot silently when renamed    | `file()` references checked against filesystem                                           |
+| **Commands**                           | Stale scripts go unnoticed   | `cmd()` references checked against package.json                                          |
+| **Direct edits to CLAUDE.md**          | Anyone can, nobody knows     | PreToolUse hook blocks edits, redirects to spec                                          |
+| **Linter config changes**              | CLAUDE.md drifts out of sync | PostToolUse hook auto-regenerates types                                                  |
+| **Spec edits**                         | N/A                          | PostToolUse hook auto-compiles to markdown                                               |
+| **guidance → enforce upgrades**        | Manual guesswork             | `/strengthen` reads per-linter docs, suggests upgrades                                   |
+| **New lint rules from PR feedback**    | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry                                   |
+| **Does a skill/plugin actually help?** | Unknown — stars + vibes      | A/B measured on real tasks: bill + correctness ([measuring-skills](measuring-skills.md)) |
+| **CI**                                 | Nothing to verify            | `vigiles lint` catches hash drift, disabled rules, stale refs                            |
 
 ## Codex
 

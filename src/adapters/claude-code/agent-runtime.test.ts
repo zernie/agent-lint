@@ -19,11 +19,17 @@ import {
   readActiveAgent,
   clearActiveAgent,
   evaluatePreToolUse,
+  resolveDispatchedAgent,
+  decideTaskDispatch,
 } from "./agent-runtime.js";
-import { setEffectActive, clearEffectActive } from "./effect-region.js";
+import {
+  setEffectActive,
+  clearEffectActive,
+  readEffectActive,
+} from "./effect-region.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 import { runHook } from "../../run-hook.js";
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -713,6 +719,115 @@ test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again"
     assert.equal(afterExit.blocked, true);
   } finally {
     clearEffectActive(dir);
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Deterministic subagent window — PreToolUse(Task) opens, SubagentStop closes
+// (replaces the model-invoked agent-start / effect-enter; harness-bracketed)
+// ---------------------------------------------------------------------------
+
+test("resolveDispatchedAgent resolves agents/<name>.md under cwd (relative)", () => {
+  const dir = makeTmpDir("dispatch-cwd");
+  try {
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    writeFileSync(join(dir, "agents", "reviewer.md"), "x");
+    assert.equal(
+      resolveDispatchedAgent("reviewer", dir),
+      join("agents", "reviewer.md"),
+    );
+    // namespaced "plugin:name" → last segment
+    assert.equal(
+      resolveDispatchedAgent("my-plugin:reviewer", dir),
+      join("agents", "reviewer.md"),
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveDispatchedAgent falls back to the plugin root (absolute)", () => {
+  const cwd = makeTmpDir("dispatch-cwd2");
+  const pluginRoot = makeTmpDir("dispatch-plugin");
+  try {
+    mkdirSync(join(pluginRoot, "agents"), { recursive: true });
+    writeFileSync(join(pluginRoot, "agents", "worker.md"), "x");
+    assert.equal(
+      resolveDispatchedAgent("worker", cwd, pluginRoot),
+      resolve(pluginRoot, "agents", "worker.md"),
+    );
+  } finally {
+    cleanupTmpDir(cwd);
+    cleanupTmpDir(pluginRoot);
+  }
+});
+
+test("resolveDispatchedAgent / decideTaskDispatch return null when unresolved", () => {
+  const dir = makeTmpDir("dispatch-miss");
+  try {
+    assert.equal(resolveDispatchedAgent("nope", dir), null);
+    assert.equal(decideTaskDispatch({ subagent_type: "nope" }, dir), null);
+    // missing / non-string subagent_type → null
+    assert.equal(decideTaskDispatch({}, dir), null);
+    assert.equal(decideTaskDispatch({ subagent_type: 3 }, dir), null);
+    assert.equal(decideTaskDispatch(null, dir), null);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("agent-hook CLI: PreToolUse(Task) opens the window; SubagentStop closes it", () => {
+  const dir = makeTmpDir("dispatch-hook");
+  try {
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    writeFileSync(join(dir, "agents", "reviewer.md"), "x");
+
+    // Parent dispatches a subagent → PreToolUse(Task) sets the active agent +
+    // effect window deterministically (no model agent-start), and is itself
+    // allowed (exit 0 — the Task dispatch is the parent's action).
+    const open = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Task",
+        tool_input: { subagent_type: "reviewer", prompt: "review it" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(open.blocked, false);
+    assert.equal(readActiveAgent(dir), join("agents", "reviewer.md"));
+    assert.equal(readEffectActive(dir), true);
+
+    // Subagent returns → SubagentStop clears both (no model agent-done).
+    const close = runHook(
+      `node ${CLI} agent-hook`,
+      { hook_event_name: "SubagentStop" },
+      { cwd: dir },
+    );
+    assert.equal(close.blocked, false);
+    assert.equal(readActiveAgent(dir), null);
+    assert.equal(readEffectActive(dir), false);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("agent-hook CLI: PreToolUse(Task) with an unknown subagent activates nothing (fail-open)", () => {
+  const dir = makeTmpDir("dispatch-unknown");
+  try {
+    const r = runHook(
+      `node ${CLI} agent-hook`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Task",
+        tool_input: { subagent_type: "does-not-exist" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(r.blocked, false);
+    assert.equal(readActiveAgent(dir), null);
+  } finally {
     cleanupTmpDir(dir);
   }
 });

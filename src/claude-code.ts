@@ -19,6 +19,15 @@ export {
   claudeAvailable,
 } from "./harness-test.js";
 export * from "./adapters/claude-code/dialect.js";
+// The typed Claude Code authoring surface: `agent` / `skill` with the `purity`
+// floor enforced AT COMPILE TIME against the CC tool catalog (a `tsc` error for
+// e.g. `purity: "pure"` + `"Bash"`). A strict addition to the runtime/compile
+// purity checks; the bare core `agent()`/`skill()` (`vigiles/spec`) stay open.
+export {
+  agent,
+  skill,
+  type ClaudeCodeToolVocabulary,
+} from "./adapters/claude-code/typed-spec.js";
 export * from "./adapters/claude-code/layout.js";
 export * from "./adapters/claude-code/runtime.js";
 export * from "./adapters/claude-code/hook-protocol.js";

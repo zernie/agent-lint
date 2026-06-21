@@ -457,3 +457,83 @@ describe("scaffold-test e2e — test-gen for untested surfaces (B1)", () => {
     assert.match(scaffolds[0].content, /"fresh:hi"/);
   });
 });
+
+// --- generate-harness: the whole-harness typed registry ------------------------
+//
+// Drives the REAL built CLI to emit `harness.gen.ts` over a dir of real specs.
+// The fixture lives UNDER the repo root and the CLI runs with cwd = repo root,
+// so both `vigiles/spec` (the spec imports + the gen file's KnownAgentName) and
+// the gen file's sibling `*.spec.ts` imports resolve. Covers the CLI wiring the
+// library-level generate-harness.test.ts can't: spec loading, the duplicate
+// non-zero exit, and the emitted file.
+describe("generate-harness CLI", () => {
+  const REPO = resolve(__dirname, "..");
+  let dir = "";
+
+  const PLANNER = `import { agent, result } from "vigiles/spec";
+export default agent({
+  name: "planner",
+  description: "Break the request into an ordered plan. Dispatch first.",
+  tools: ["Read", "Grep", "Glob"],
+  output: result({ steps: "string[]" }, { reason: "string" }),
+});
+`;
+  const IMPLEMENTER = `import { agent } from "vigiles/spec";
+export default agent({
+  name: "implementer",
+  description: "Implement the plan and prove the build passes.",
+  tools: ["Read", "Edit", "Write", "Bash"],
+});
+`;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(REPO, ".tmp-genh-cli-"));
+  });
+  afterAll(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("emits harness.gen.ts over a dir of specs (exit 0)", () => {
+    writeFileSync(join(dir, "planner.spec.ts"), PLANNER);
+    writeFileSync(join(dir, "implementer.spec.ts"), IMPLEMENTER);
+    writeFileSync(
+      join(dir, "ship.spec.ts"),
+      `import { railway, delegate } from "vigiles/spec";
+export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });
+`,
+    );
+    const out = join(dir, "harness.gen.ts");
+    const r = run(`generate-harness ${dir} ${out}`, REPO);
+    assert.equal(r.exitCode, 0, r.stdout);
+    assert.ok(existsSync(out));
+    const gen = readFileSync(out, "utf-8");
+    assert.match(gen, /export const registry =/);
+    assert.match(gen, /export type AgentName =/);
+    assert.match(gen, /_edge_0: KnownAgentName<"planner", AgentName, "ship">/);
+    assert.match(gen, /export const harnessCapabilities =/);
+    // --check on the just-written file is a no-op (up to date)
+    const chk = run(`generate-harness ${dir} ${out} --check`, REPO);
+    assert.equal(chk.exitCode, 0);
+    assert.match(chk.stdout, /up to date/);
+  });
+
+  it("exits non-zero on a duplicate agent name", () => {
+    const dupDir = mkdtempSync(join(REPO, ".tmp-genh-dup-"));
+    try {
+      writeFileSync(join(dupDir, "a.spec.ts"), PLANNER);
+      writeFileSync(
+        join(dupDir, "b.spec.ts"),
+        PLANNER.replace("Break the request", "A second planner colliding"),
+      );
+      const r = run(
+        `generate-harness ${dupDir} ${join(dupDir, "harness.gen.ts")}`,
+        REPO,
+      );
+      assert.notEqual(r.exitCode, 0);
+      assert.match(r.stdout, /duplicate agent name "planner"/);
+      assert.ok(!existsSync(join(dupDir, "harness.gen.ts")));
+    } finally {
+      rmSync(dupDir, { recursive: true, force: true });
+    }
+  });
+});

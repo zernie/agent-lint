@@ -104,7 +104,8 @@ export interface CompileError {
     | "unknown-tool"
     | "invalid-railway"
     | "purity-violation"
-    | "output-without-fork";
+    | "output-without-fork"
+    | "effect-in-skill";
   message: string;
   path?: string;
 }
@@ -923,6 +924,26 @@ export function compileSkill(
         'A skill `output` (result() contract) requires `context: "fork"` — an ' +
         "inline skill has no return value to type. Add context:'fork' to run it " +
         "as a subagent, or drop `output`.",
+    });
+  }
+
+  // effect() is a SUBAGENT primitive. A deterministic effect REGION needs a
+  // structural call→return bracket to scope it; a default skill is spliced into
+  // the main conversation and has none (the dogfood that proved the model-emitted
+  // boundary is fragile — research/effect-boundary-design.md). A skill bounds its
+  // effects with a `purity` floor and promotes to `context:'fork'` (a subagent)
+  // when it must mutate.
+  if (
+    collectSkillRefs(spec).some(
+      (f) => typeof f !== "string" && f._ref === "effect",
+    )
+  ) {
+    errors.push({
+      type: "effect-in-skill",
+      message:
+        "effect() is a subagent primitive — a skill has no call→return boundary to " +
+        "scope an effect region. Declare a `purity` floor on the skill and use " +
+        "context:'fork' to run it as a subagent when it must mutate.",
     });
   }
 

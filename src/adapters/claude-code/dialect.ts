@@ -9,28 +9,56 @@
  */
 import type { HarnessDialect } from "../../core/dialect.js";
 
+/**
+ * The Claude Code built-in subagent tool catalog as a `const` tuple, so a typed
+ * authoring surface can derive a LITERAL union (`ClaudeCodeBuiltinTool`) from it.
+ * `claudeCodeDialect.builtinAgentTools` references this same array — one source
+ * of truth for the runtime catalog AND the compile-time tool vocabulary.
+ */
+export const claudeCodeBuiltinAgentTools = [
+  "Read",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "Bash",
+  "BashOutput",
+  "KillBash",
+  "Grep",
+  "Glob",
+  "LS",
+  "WebSearch",
+  "WebFetch",
+  "NotebookEdit",
+  "TodoWrite",
+  "Task",
+  "Skill",
+] as const;
+
+/**
+ * The Claude Code side-effecting tools as a `const` tuple (the complement of
+ * read-only within `builtinAgentTools`). `claudeCodeDialect.sideEffectingTools`
+ * references this; the typed vocabulary derives the read-only / bounded splits.
+ */
+export const claudeCodeSideEffectingTools = [
+  "Bash",
+  "BashOutput",
+  "KillBash",
+  "Edit",
+  "MultiEdit",
+  "Write",
+  "NotebookEdit",
+  "WebFetch",
+  "WebSearch",
+  "Skill",
+  "Task",
+  "TodoWrite",
+] as const;
+
 export const claudeCodeDialect: HarnessDialect = {
   name: "claude-code",
   // The tool contract a subagent may declare — the rails it runs on. Anything
   // else must be an MCP tool, else it's a typo / nonexistent tool.
-  builtinAgentTools: [
-    "Read",
-    "Write",
-    "Edit",
-    "MultiEdit",
-    "Bash",
-    "BashOutput",
-    "KillBash",
-    "Grep",
-    "Glob",
-    "LS",
-    "WebSearch",
-    "WebFetch",
-    "NotebookEdit",
-    "TodoWrite",
-    "Task",
-    "Skill",
-  ],
+  builtinAgentTools: claudeCodeBuiltinAgentTools,
   // Tools the platform never exposes to a subagent, whatever the list says — so
   // a subagent listing one is a guaranteed-dead reference only a compiler catches.
   neverAvailableTools: [
@@ -76,20 +104,53 @@ export const claudeCodeDialect: HarnessDialect = {
   // which are not in the subagent catalog). Bash is side-effecting because
   // `cat` and `rm -rf` are the same tool at the tool-name level — the
   // sandbox is the only closure for subprocess effects.
-  sideEffectingTools: [
-    "Bash",
-    "BashOutput",
-    "KillBash",
-    "Edit",
-    "MultiEdit",
-    "Write",
-    "NotebookEdit",
-    "WebFetch",
-    "WebSearch",
-    "Skill",
-    "Task",
-    "TodoWrite",
-  ],
+  sideEffectingTools: claudeCodeSideEffectingTools,
 };
+
+// ---------------------------------------------------------------------------
+// Typed tool vocabulary — the compile-time half of the purity contract.
+//
+// Derives literal unions from the `const` catalogs above so the
+// `vigiles/claude-code` typed `agent`/`skill` can reject an invalid
+// `purity`×`tools` combination at the spec's own `tsc`. Mirrors the runtime
+// ladder in `core/effects.ts`: `pure` = read-only built-ins; `bounded` =
+// read-only ∪ decidable side-effecting ∪ `Bash`.
+// ---------------------------------------------------------------------------
+
+/** Every Claude Code built-in subagent tool (literal union). */
+export type ClaudeCodeBuiltinTool =
+  (typeof claudeCodeBuiltinAgentTools)[number];
+
+/** The side-effecting subset (literal union). */
+export type ClaudeCodeSideEffectingTool =
+  (typeof claudeCodeSideEffectingTools)[number];
+
+/**
+ * Read-only built-in tools — the complement of the side-effecting set within
+ * the built-in catalog. The tools a `pure` CC unit may declare.
+ */
+export type ClaudeCodeReadOnlyTool = Exclude<
+  ClaudeCodeBuiltinTool,
+  ClaudeCodeSideEffectingTool
+>;
+
+/**
+ * Tools a `bounded` CC unit may declare: read-only ∪ the decidable
+ * side-effecting tools (Write/Edit/MultiEdit/NotebookEdit) ∪ `Bash` (its
+ * command is decided at RUNTIME by the gate). Bars MCP / unknown / wildcard —
+ * those are simply not in the built-in union, so listing one is a `tsc` error.
+ *
+ * NOTE: `BashOutput`/`KillBash` are read-only-ish helpers tied to a running
+ * Bash; `Bash` is the admitting tool, so they're included via the read-only
+ * exclusion path only if read-only — here they stay side-effecting, hence the
+ * explicit add of the bounded-decidable set plus `Bash`.
+ */
+export type ClaudeCodeBoundedTool =
+  | ClaudeCodeReadOnlyTool
+  | "Write"
+  | "Edit"
+  | "MultiEdit"
+  | "NotebookEdit"
+  | "Bash";
 
 export type { HarnessDialect } from "../../core/dialect.js";

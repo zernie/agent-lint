@@ -1,5 +1,14 @@
 # Safety — vigiles runs untrusted code, and a real model that decides
 
+> **Status: INTERNAL / WIP — not surfaced in the public docs yet.** The shipped,
+> solid pieces are host **confinement** (bubblewrap + egress — see
+> [`sandboxing.md`](sandboxing.md)) and the eval-tier **`interceptTools`**
+> side-effect prevention. The deterministic _authoring-side_ safety model it ties
+> together (the `purity` floor + the **parked** `effect()` sub-region — see
+> [`../research/effect-boundary-design.md`](../research/effect-boundary-design.md))
+> is still settling, so this "safety model" front door isn't linked from the README
+> until it's coherent end-to-end. Read it as the design intent, not a finished guarantee.
+
 Testing a harness means **executing other people's code with your privileges**,
 and — at the eval tier — letting a **real model decide which tools to call**. Both
 are deliberate (that's the point: test what actually ships), and both are risks.

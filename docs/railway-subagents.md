@@ -15,6 +15,8 @@
 - [Declare a typed outcome](#declare-a-typed-outcome)
 - [What it compiles to](#what-it-compiles-to)
 - [Compose flat workers](#compose-flat-workers)
+- [Typed composition — handoffs that must line up](#typed-composition--handoffs-that-must-line-up)
+  - [Cross-file handoffs — the whole-harness registry](#cross-file-handoffs--the-whole-harness-registry)
 - [Test the outcome deterministically](#test-the-outcome-deterministically)
 - [Scope: subagents, not skills](#scope-subagents-not-skills)
 - [See also](#see-also)
@@ -114,6 +116,137 @@ The success track flows worker → worker; the first `vigiles:err` short-circuit
 `recover` (up to `max` times), and an exhausted failure routes to `onError`. The
 whole thing is a finite tree — termination is readable off the value, the thing an
 ultra-plan's generated script can't guarantee. See the runnable dogfood:
+[`examples/railway/ship-pr.md.spec.ts`](../examples/railway/ship-pr.md.spec.ts).
+
+`railway()` + `delegate("name")` resolve each step **by name** against the sibling
+agent specs at compile time — a value-level cross-reference. It checks that every
+delegate target is a real agent, the steps are non-empty, and recovery is bounded.
+What it **cannot** see is the **data handoff**: a string name carries no type, so a
+producer's `result()` shape is invisible to the consumer. That's what typed
+composition adds.
+
+## Typed composition — handoffs that must line up
+
+> **Your multi-agent pipeline doesn't compile if the handoffs don't line up.**
+
+`agent()` now **remembers** its `result()` shape at the type level. So a second,
+typed composition surface — `pipe(...)` (or the `start` / `andThen` fold) over the
+agent **objects** — checks at `tsc` time that **step N's `ok` output supplies step
+N+1's declared `needs`**. A missing field, a wrong field type, or an out-of-order
+step is a **compile error** at the mismatched step, naming the offending field. No
+markdown or YAML railway can do this; it is a cross-reference only types can carry.
+
+Each consumer declares the fields it reads from its predecessor with `needs(...)`,
+paired to its agent via `pipeStep(agent, needs(...))`:
+
+```ts
+import { agent, result, pipe, pipeStep, needs } from "vigiles";
+
+const planner = agent({
+  name: "planner",
+  description: "Plan the change.",
+  output: result({ plan: "string", files: "string[]" }, { reason: "string" }),
+});
+
+const implementer = agent({
+  name: "implementer",
+  description: "Implement the plan.",
+  output: result(
+    { diff: "string", touched: "string[]" },
+    { reason: "string", retryable: "boolean" },
+  ),
+});
+
+const reviewer = agent({
+  name: "reviewer",
+  description: "Review the diff.",
+  output: result({ approved: "boolean" }, { reason: "string" }),
+});
+
+// COMPILES — planner.ok ⊇ implementer.needs, implementer.ok ⊇ reviewer.needs.
+export const shipPr = pipe(
+  planner,
+  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+  pipeStep(reviewer, needs({ diff: "string" })),
+);
+```
+
+These three each **fail `tsc`** — the bug is caught at edit time, not at runtime:
+
+```ts
+// MISSING FIELD — nobody upstream produces `securityScan`.
+pipe(
+  planner,
+  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+  pipeStep(reviewer, needs({ securityScan: "string" })), // ✗ won't compile
+);
+
+// TYPE MISMATCH — implementer produces diff:"string", reviewer needs diff:"string[]".
+pipe(
+  planner,
+  pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
+  pipeStep(reviewer, needs({ diff: "string[]" })), // ✗ won't compile
+);
+
+// ORDER ERROR — reviewer before implementer never sees `diff`.
+pipe(
+  planner,
+  pipeStep(reviewer, needs({ diff: "string" })), // ✗ won't compile
+);
+```
+
+**Which surface gives the type check — and which still works.** Typed composition
+(`pipe` / `start` / `andThen` over agent **objects**) is the **additive** path that
+checks data handoffs. The string-based `railway({ steps: [delegate("name")] })`
+path is **unchanged** and still works exactly as before — it's the name-resolution
+backstop (`validateRailway` / `compileRailway`), and it's what compiles to the
+orchestrator command today. A typed `pipe`/`Pipeline` carries an underlying
+`railway` (`pipeline.railway`) for that compile step, so you get both: the
+edit-time handoff check **and** the compiled orchestrator. Keep typed chains to a
+handful of steps (deep type recursion is avoided by design — the handoff check is
+shallow, one field-level pass per step); for longer pipelines, fold `andThen`
+explicitly or fall back to the string `railway`.
+
+The type-level proof (a correct pipeline + the three `@ts-expect-error` failures):
+[`test/types/composition.ts`](../test/types/composition.ts).
+
+### Cross-file handoffs — the whole-harness registry
+
+`pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
+When each agent lives in its **own** `*.spec.ts` and a `railway()` composes them by
+**name**, the same check is lifted to the **whole-harness registry** that
+[`vigiles generate-harness`](cli.md#generate-harness-dir-out) emits — so a
+**cross-file** handoff mismatch is a `tsc` error too.
+
+Declare the handoff with the optional 3rd argument of `delegate()` — the same
+`needs(...)` builder `pipeStep` uses. The registry then asserts the **previous**
+success-track step's agent `result().ok` SUPPLIES it:
+
+```ts
+import { railway, delegate, needs } from "vigiles/spec";
+
+// agents/planner.md.spec.ts emits result({ steps: "string[]" }, …)
+// agents/implementer.md.spec.ts emits result({ files: "string[]" }, …)
+export default railway({
+  name: "ship-pr",
+  steps: [
+    delegate("planner"),
+    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok ⊇ { steps }
+    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok ⊇ { summary }
+  ],
+});
+```
+
+Run `vigiles generate-harness` over the agents directory; the generated
+`harness.gen.ts` carries one shallow per-pair assertion
+(`Handoff<OkOf<typeof registry["planner"]>, { steps: "string[]" }>`). If the
+producer's `ok` is missing the field or has the wrong type, `tsc` rejects the gen
+file naming it (`__handoff_error: { __missing: "steps" }` /
+`{ __mismatch: "steps", expected: …, got: … }`) — **no vigiles run, across files,
+in your editor**. The check is **opt-in per edge**: a `delegate()` with no `needs`
+generates and behaves exactly as before. It's scoped to the **linear success
+track** for now — `recover`/`onError` edges consume an `err`, not the prior `ok`,
+so they're a noted follow-up. Worked dogfood:
 [`examples/railway/ship-pr.md.spec.ts`](../examples/railway/ship-pr.md.spec.ts).
 
 ## Test the outcome deterministically

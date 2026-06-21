@@ -21,6 +21,8 @@ npx vigiles generate-types          # Emit .d.ts from project state (for spec mo
 npx vigiles generate-types --check  # Verify .d.ts is up to date
 npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
 npx vigiles generate-schema --check # Verify schema.json is up to date
+npx vigiles generate-harness [dir]  # Emit harness.gen.ts — one typed registry over every spec
+npx vigiles generate-harness --check # Verify harness.gen.ts is up to date
 ```
 
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
@@ -274,6 +276,78 @@ flag rather than its own `optimize` verb until that measured half lands (an
 optimizer that only re-prints scan's findings hasn't earned a separate command).
 See [`research/measurement-authority.md`](../research/measurement-authority.md)
 (A2) and the [roadmap](../research/roadmap.md).
+
+### `generate-harness [dir] [out]`
+
+Emit **one typed registry** — `harness.gen.ts` — over every `*.spec.ts` under
+`dir`, so a single `tsc --noEmit` cross-checks the **whole harness as one
+program** (think TanStack Router's `routeTree.gen.ts` or the Prisma client). It's
+the third generated artifact beside `generate-types` (`.d.ts`) and
+`generate-schema` (JSON Schema). It ships four cross-spec checks:
+
+- **Dangling `delegate` → a `tsc` error at edit time.** Every `railway()`
+  delegate target (`steps`, `recover.step`, `onError`) is checked against the
+  literal union of every agent name. A `delegate("ghost")` whose target has no
+  spec makes the generated assertion a `tsc` error naming the missing target
+  (`__dangling_delegate: "ghost"` from its railway) — no vigiles run, in your
+  editor.
+- **Duplicate agent names → a non-zero exit.** Two specs declaring the same
+  `name` make `generate-harness` exit `2` naming the collision. This is an O(N)
+  check in the generator, **not** a type — a set-uniqueness type is the TS2589
+  wall (see the research).
+- **Cross-file typed composition → a `tsc` error at edit time.** When a
+  `railway()` success-track step declares what it `needs()`, the gen file asserts
+  the **previous** step's agent `result().ok` SUPPLIES it — **across files**. A
+  step that needs `diff: "string[]"` whose producer emits `diff: "string"` (or
+  doesn't emit `diff` at all) is a `tsc` error naming the field
+  (`__handoff_error: { __mismatch: "diff", expected: "string[]", got: "string" }`
+  / `__missing: "diff"`). This is the repo-scale generalization of the per-file
+  `pipe`/`Supplies` composition — one shallow per-pair assertion (O(N), no
+  recursion). Scoped to the **linear success track**; `recover`/`onError` edges
+  (which consume an `err`, not the prior `ok`) are a noted follow-up. A railway
+  whose `delegate()`s declare **no** `needs` generates exactly as before — the
+  check is purely additive and opt-in per edge.
+- **The whole-harness capability lattice.** A computed `harnessCapabilities`
+  export — the union of every agent's effect surface (read-only / side-effecting
+  / unknown tools + the loosest purity) — the substrate a future repo-scale
+  capability-diff reads.
+
+```bash
+npx vigiles generate-harness ./agents               # → ./agents/harness.gen.ts
+npx vigiles generate-harness ./agents out.gen.ts    # custom out path
+npx vigiles generate-harness ./agents --check        # CI: assert the gen file is up to date (exit 1 if stale)
+npx vigiles generate-harness ./agents --harness=codex
+```
+
+**tsconfig need:** the gen file imports sibling `*.spec.ts` directly, so the
+tsconfig that type-checks it needs `"allowImportingTsExtensions": true` (under
+`Node16`/`NodeNext` resolution). Commit `harness.gen.ts` like a lockfile and add
+a `--check` step to CI so a stale registry is caught, then let `tsc --noEmit`
+enforce the cross-checks. Wire regeneration to a spec guard (the same mechanism
+as `recompile-on-spec-change`):
+
+```ts
+guard({ watch: "*.spec.ts", run: "npx vigiles generate-harness" });
+```
+
+Declare a handoff with the optional 3rd argument of `delegate()` — the same
+`needs(...)` builder a typed `pipeStep` uses:
+
+```ts
+import { railway, delegate, needs } from "vigiles/spec";
+railway({
+  name: "ship-pr",
+  steps: [
+    delegate("planner"),
+    delegate("implementer", undefined, needs({ steps: "string[]" })), // planner.ok must supply `steps`
+    delegate("reviewer", undefined, needs({ summary: "string" })), // implementer.ok must supply `summary`
+  ],
+});
+```
+
+See [`docs/railway-subagents.md`](railway-subagents.md) for the typed-composition
+guide and [`research/whole-harness-codegen.md`](../research/whole-harness-codegen.md)
+for the design, the measured TS-scaling verdict, and the encoding rule.
 
 ## Lint vs scan — gate vs report
 

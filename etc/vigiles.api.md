@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec;
+export function agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
 
 // @public
 export interface AgentSpec {
@@ -23,6 +23,21 @@ export interface AgentSpec {
     readonly _specType: "agent";
     readonly tools?: readonly string[];
 }
+
+// @public
+export type AgentSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape> = Omit<AgentSpec, "_specType" | "tools" | "purity" | "output"> & {
+    readonly purity?: P;
+    readonly tools?: readonly AllowedAt<P, V>[];
+    readonly output?: OutputContract<Ok, Err>;
+};
+
+// @public
+export type AllowedAt<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = P extends "pure" ? V["readOnly"] : P extends "bounded" ? V["bounded"] : string;
+
+// @public
+export function andThen<PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
+    readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs>;
+}): Pipeline<Ok, PriorErr | Err>;
 
 // @public
 export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
@@ -61,7 +76,7 @@ export interface CmdRef {
 export function defineConfig(config: VigilesV2Config): VigilesV2Config;
 
 // @public
-export function delegate(agent: string, task?: string): RailwayStep;
+export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
 
 // @public
 export function dir(path: string): DirRef;
@@ -158,6 +173,11 @@ export interface GuidanceRule {
     readonly text: string;
 }
 
+// @public
+export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<Producer, Consumer> extends true ? true : {
+    readonly __handoff_error: Supplies<Producer, Consumer>;
+};
+
 // @public (undocumented)
 export type HookEvent = "PreToolUse" | "PostToolUse" | "PreSession" | "PostSession" | "Notification";
 
@@ -174,6 +194,12 @@ export function instructions(strings: TemplateStringsArray, ...values: Instructi
 
 // @public
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {});
+
+// @public
+export type KnownAgentName<Target extends string, Names extends string, From extends string = string> = [Target] extends [Names] ? true : {
+    readonly __dangling_delegate: Target;
+    readonly from: From;
+};
 
 // @public
 export interface KnownLinterRules {
@@ -199,11 +225,28 @@ export type LintersVerified<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T &
 };
 
 // @public
-export interface OutputContract {
+export function needs<const N extends Shape>(shape: N): NeedsContract<N>;
+
+// @public
+export type NeedsContract<N extends Shape> = N;
+
+// @public
+export type OkOf<T> = T extends TypedOutcome<infer Ok, Shape> ? Ok : Shape;
+
+// @public
+export interface OpenToolVocabulary extends ToolVocabulary {
     // (undocumented)
-    readonly err: Readonly<Record<string, OutputFieldType>>;
+    readonly bounded: string;
     // (undocumented)
-    readonly ok: Readonly<Record<string, OutputFieldType>>;
+    readonly readOnly: string;
+}
+
+// @public
+export interface OutputContract<Ok extends Shape = Shape, Err extends Shape = Shape> {
+    // (undocumented)
+    readonly err: Err;
+    // (undocumented)
+    readonly ok: Ok;
     // (undocumented)
     readonly _ref: "output";
 }
@@ -213,6 +256,53 @@ export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
 
 // @public
 export type OutputPath<Spec extends `${string}.md.spec.ts`> = Spec extends `${infer Base}.spec.ts` ? Base : never;
+
+// @public
+export function pipe<A extends Shape, AE extends Shape>(a: TypedAgentSpec<A, AE>): Pipeline<A, AE>;
+
+// @public (undocumented)
+export function pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+    readonly __HANDOFF_ERROR: Supplies<A, BN>;
+}): Pipeline<B, AE | BE>;
+
+// @public (undocumented)
+export function pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+    readonly __HANDOFF_ERROR: Supplies<A, BN>;
+}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
+    readonly __HANDOFF_ERROR: Supplies<B, CN>;
+}): Pipeline<C, AE | BE | CE>;
+
+// @public (undocumented)
+export function pipe<A extends Shape, AE extends Shape, BN extends Shape, B extends Shape, BE extends Shape, CN extends Shape, C extends Shape, CE extends Shape, DN extends Shape, D extends Shape, DE extends Shape>(a: TypedAgentSpec<A, AE>, b: Supplies<A, BN> extends true ? PipeStep<BN, B, BE> : {
+    readonly __HANDOFF_ERROR: Supplies<A, BN>;
+}, c: Supplies<B, CN> extends true ? PipeStep<CN, C, CE> : {
+    readonly __HANDOFF_ERROR: Supplies<B, CN>;
+}, d: Supplies<C, DN> extends true ? PipeStep<DN, D, DE> : {
+    readonly __HANDOFF_ERROR: Supplies<C, DN>;
+}): Pipeline<D, AE | BE | CE | DE>;
+
+// @public
+export interface Pipeline<Ok extends Shape, Err extends Shape> {
+    readonly agents: readonly string[];
+    readonly err: Err;
+    readonly ok: Ok;
+    readonly railway: Railway;
+    // (undocumented)
+    readonly _specType: "pipeline";
+}
+
+// @public
+export interface PipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape> {
+    // (undocumented)
+    readonly agent: TypedAgentSpec<Ok, Err>;
+    // (undocumented)
+    readonly needs: Needs;
+    // (undocumented)
+    readonly _step: "typed-delegate";
+}
+
+// @public
+export function pipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs): PipeStep<Needs, Ok, Err>;
 
 // @public
 export function project(role: ProjectRole): RoleGate;
@@ -241,6 +331,7 @@ export function railway(spec: Omit<Railway, "_specType">): Railway;
 // @public
 export interface RailwayStep {
     readonly agent: string;
+    readonly needs?: Shape;
     // (undocumented)
     readonly _step: "delegate";
     readonly task?: string;
@@ -268,7 +359,7 @@ export type RefsValidated<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
 };
 
 // @public
-export function result(ok: Record<string, OutputFieldType>, err: Record<string, OutputFieldType>): OutputContract;
+export function result<const Ok extends Shape, const Err extends Shape>(ok: Ok, err: Err): OutputContract<Ok, Err>;
 
 // @public
 export interface RoleGate {
@@ -282,7 +373,10 @@ export interface RoleGate {
 export type Rule = EnforceRule | GuidanceRule | GuardRule;
 
 // @public
-export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec;
+export type Shape = Readonly<Record<string, OutputFieldType>>;
+
+// @public
+export function skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
 
 // @public
 export interface SkillInput {
@@ -319,6 +413,12 @@ export interface SkillSpec {
 }
 
 // @public
+export type SkillSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = Omit<SkillSpec, "_specType" | "tools" | "purity"> & {
+    readonly purity?: P;
+    readonly tools?: readonly AllowedAt<P, V>[];
+};
+
+// @public
 export interface SkillStep {
     readonly do: string | InstructionFragment[];
     readonly gate?: Gate;
@@ -327,6 +427,9 @@ export interface SkillStep {
 
 // @public
 export type SpecPath<Output extends `${string}.md`> = `${Output}.spec.ts`;
+
+// @public
+export function start<Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>): Pipeline<Ok, Err>;
 
 // @public
 export function step(instr: string | InstructionFragment[], opts?: {
@@ -346,6 +449,18 @@ export type StrictLinterRule = [keyof KnownLinterRules] extends [never] ? Linter
 }[keyof KnownLinterRules];
 
 // @public
+export type Supplies<Producer extends Shape, Consumer extends Shape> = {
+    [K in keyof Consumer]: K extends keyof Producer ? Producer[K] extends Consumer[K] ? true : {
+        readonly __mismatch: K;
+        readonly expected: Consumer[K];
+        readonly got: Producer[K];
+    } : {
+        readonly __missing: K;
+        readonly required: Consumer[K];
+    };
+}[keyof Consumer];
+
+// @public
 export function symbol(file: NoInfer<StrictFile>, name: string): SymbolRef;
 
 // @public
@@ -356,6 +471,24 @@ export interface SymbolRef {
     readonly _ref: "symbol";
     // (undocumented)
     readonly symbol: string;
+}
+
+// @public
+export interface ToolVocabulary {
+    readonly bounded: string;
+    readonly readOnly: string;
+}
+
+// @public
+export type TypedAgentSpec<Ok extends Shape, Err extends Shape> = AgentSpec & TypedOutcome<Ok, Err>;
+
+// @public
+export interface TypedOutcome<Ok extends Shape, Err extends Shape> {
+    // (undocumented)
+    readonly [__outcome]: {
+        readonly ok: Ok;
+        readonly err: Err;
+    };
 }
 
 // @public (undocumented)
