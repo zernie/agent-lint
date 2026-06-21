@@ -26,7 +26,9 @@ P1**. Full: `research/measurement-authority.md` § "Status & gaps".
 ## Next move (pick — none started)
 
 1. **ADOPTION: the at-scale ecosystem benchmark (A1)** — the viral artifact, still
-   ~v0 / not run at scale. The flywheel. (Real-model, needs sub auth; pilot tiny.)
+   ~v0. ENGINE READY + manifest now 5 skills (2 cleanly-A/B compression debunks:
+   caveman + token-efficient). REMAINING: run the full manifest at scale (real-model,
+   needs sub auth — spend decision) + publish a findings writeup. The flywheel.
 2. **capability-diff (#2, P1, the bridge)** — needs the UNBUILT **effect-row (M1) +
    cross-step accumulation** engine (compute the capability surface), then the v1→v2
    diff (already prototyped, fp-theory T2). Carry a loud sign-off hatch (don't cry wolf).
@@ -34,26 +36,35 @@ P1**. Full: `research/measurement-authority.md` § "Status & gaps".
    active-agent stack; a live contract-escape in EXPERIMENTAL agent-runtime). Orthogonal.
 4. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
 
-## Shipped (this session — all pushed, tree clean, HEAD==origin)
+## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
 
-- **feat:** typed purity (`pure`+`Bash` won't tsc) · typed composition (pipeline won't
-  compile if handoffs misalign) · `generate-harness` (one `tsc` over the WHOLE harness —
-  dangling-`delegate` + duplicate-name + capability lattice) · cross-file typed
-  composition (handoff mismatch ACROSS files won't compile) · scaffold-test now consumes
-  the typed contract (`assertAgentOk` + tools→safety check).
-- **research:** 9 cross-linked docs + runnable tsc/runtime prototypes (typed-spec-power /
-  frontier / effects-monads / formal-verification / refinement / covering-arrays /
-  fp-theory / whole-harness-codegen + the **typed-spec-moat** synthesis). Headlines: the
-  Applicative/Selective/Monad boundary THEOREM (never add a monadic `bind` — the shipped
-  `pipe` is already applicative); a REAL nesting bug found by running TLC; covering-array
-  eval = 99.4% fewer real-model runs; effect-row generalizes the purity ladder.
-- **docs/positioning:** moat framing folded into README + CLAUDE.md + measurement-authority;
-  status/gaps + sequencing recorded; capability-diff added as P1; fixed broken
-  `examples/railway/*.spec.ts` imports (`src/spec.js` → `src/core/spec.js`).
+Picked **A1 (the adoption flywheel)**. Deterministic, zero-budget prep — left the
+real-model pilot as a one-command spend decision for the user.
+
+- **chore(bench)** `dd80681`: A1 manifest expanded 4→5 — added **token-efficient**
+  (`drona23/claude-token-efficient@0d30a6d`, MIT, 5.7k★), a 2nd cleanly-A/B compression
+  entry (injectable CLAUDE.md). Its viral "63%" is a WORD cut over 4 prompts; the repo's
+  OWN token benchmark admits ~4–12% — a self-documented claim≫measured debunk. Vendored
+  the real file + MIT LICENSE; full provenance + the follow-on (RTK/CodeGraph/Claw —
+  needs-binary) + license-blocked (Context Mode/Elastic) cluster map in SOURCES.md/
+  FINDINGS.md. Also: leaderboard now surfaces **per-task spread** (output-cut range +
+  helped/hurt split + MIXED-direction flag) instead of hiding it behind one mean.
+- Web research (verified GitHub-API stars + licenses + verbatim claims) classified the
+  whole compression cluster; only drona23 was a clean new A/B add (rest are CLI/MCP
+  binaries → follow-on, or Elastic-licensed → reject; pinchtab dropped, not compression).
+
+## Next move on A1 (none started)
+
+- **RUN the pilot** (spend decision): `claude` CLI + sub auth ARE present in this env, so
+  `VIGILES_SKILLS=caveman,token-efficient VIGILES_TASKS=2 VIGILES_TRIALS=2 node bench/ecosystem/benchmark.mjs`
+  (cheap haiku) validates the 5-skill engine end-to-end + fills token-efficient's row.
+  Then a fuller sonnet pass + a gated findings writeup.
+- Build the **needs-binary follow-on tier** (RTK/CodeGraph/Claw) if the cluster debunk
+  is worth the install cost — bigger lift, deferred.
 
 ## In flight
 
-Nothing. All subagents complete; tree clean; local == remote.
+Nothing. Research subagent complete + verified; tree clean; local == remote.
 
 ## Gotchas (carry forward)
 
