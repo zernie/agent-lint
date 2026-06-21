@@ -20,8 +20,19 @@ Thesis is A-tier + real features shipped, BUT the work leaned **maker-cool (the 
 over user-pull (the measurement identity)**, and vigiles has ~no users. Near-term
 priority = the **ADOPTION ENGINE** (the at-scale ecosystem benchmark "what works vs
 hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat depth.
-The moat is the depth users discover after. Bridge bet = **capability-diff (#2), now
-P1**. Full: `research/measurement-authority.md` § "Status & gaps".
+Bridge bet = **capability-diff (#2)**. Full: `research/measurement-authority.md` § "Status & gaps".
+
+⚠️ **COMMODITIZATION FINDING (2026-06-21 late, web-verified) — DON'T re-inflate the
+moat.** A competitive sweep found the headline typed-spec "moats" are mostly claimed:
+**riftmap** = PR-time blast-radius diff (=moat #2 for infra), **AgentAuditKit/PolicyLayer**
+= capability-diff/drift for MCP servers, **Mastra** = typed workflow handoffs (#5),
+**promptfoo** = deterministic structured oracle (#7); the control-flow thesis is now a
+named idea (bsuh "Agents Need Control Flow"). Net: NO clean killer feature in the
+typed-compile direction — capabilities are commoditizing. The durable edge = **substrate**
+(markdown-harness-as-typed-program, ~nobody else) **+ sub-affordable measurement (A1)**.
+Recorded: `typed-spec-moat.md` §"Competitive reality check" + `spec-value-model.md` +
+`landscape-mid-2026.md`. Caveats: subagent fan-out partly rate-limited; #8 (static purity)
+unverified; destructive-actions pain report never landed.
 
 ## Next move (pick — none started)
 
@@ -39,46 +50,20 @@ P1**. Full: `research/measurement-authority.md` § "Status & gaps".
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
 
-Picked **A1 (the adoption flywheel)**. Deterministic, zero-budget prep — left the
-real-model pilot as a one-command spend decision for the user.
-
-- **chore(bench)** `dd80681`: A1 manifest expanded 4→5 — added **token-efficient**
-  (`drona23/claude-token-efficient@0d30a6d`, MIT, 5.7k★), a 2nd cleanly-A/B compression
-  entry (injectable CLAUDE.md). Its viral "63%" is a WORD cut over 4 prompts; the repo's
-  OWN token benchmark admits ~4–12% — a self-documented claim≫measured debunk. Vendored
-  the real file + MIT LICENSE; full provenance + the follow-on (RTK/CodeGraph/Claw —
-  needs-binary) + license-blocked (Context Mode/Elastic) cluster map in SOURCES.md/
-  FINDINGS.md. Also: leaderboard now surfaces **per-task spread** (output-cut range +
-  helped/hurt split + MIXED-direction flag) instead of hiding it behind one mean.
-- Web research (verified GitHub-API stars + licenses + verbatim claims) classified the
-  whole compression cluster; only drona23 was a clean new A/B add (rest are CLI/MCP
-  binaries → follow-on, or Elastic-licensed → reject; pinchtab dropped, not compression).
-
-## Pilot RAN (haiku, $0.29) — `f609d00`, recorded in FINDINGS.md
-
-5-skill engine validated end-to-end across both arm shapes. **token-efficient DEBUNKED**:
-claim 63% vs measured −2% output (output GREW, bill +3%) — worse than the repo's own
-honest ~4% haiku admission (CLAUDE.md input overhead is net-negative, as its README
-warns). **caveman**: +30% here vs −18% on the prior same-config run → 48-pt swing flagged
-as a noise signal (raise trials ≥5; only the <1% output-share structural fact is robust).
-
-## Next move on A1 (none started)
-
-- **Sonnet pass + raise trials (≥5)** to quote stable magnitudes (haiku 2×2 is too noisy)
-  - add the heavier `review-doc` task — then a GATED findings writeup (the viral artifact).
-- Fill the **quality-plugin bill columns** (superpowers/OMC/wshobson still n=1).
-- Build the **needs-binary follow-on tier** (RTK/CodeGraph/Claw) if worth the install — deferred.
-
-## Also shipped this session (`c50b826`)
-
-**V1 nesting bug FIXED** — `src/adapters/claude-code/agent-runtime.ts` active-agent
-tracking is now a depth-aware STACK (pushActiveAgent/popActiveAgent, readActiveAgent
-= top; legacy {agent} back-compat). SubagentStop POPS to the parent (was: cleared the
-whole slot → contract escape under CC v2.1.172 depth-5 nesting). Open signal handles
-both Task + Agent spawn tools. TLC counterexample Open;Open;Stop;Call(Bash) is a
-regression test (pure + runHook e2e). full suite green (1426 passed). docs synced
-(CLAUDE.md.spec recompiled, effect-boundary/formal-verification/roadmap). Still
-EXPERIMENTAL/not auto-wired — the effect() sub-region it served stays dropped.
+- **A1 (`dd80681`,`f609d00`):** manifest 4→5 (added **token-efficient** drona23@0d30a6d,
+  MIT, 5.7k★, injectable CLAUDE.md; full cluster map in SOURCES/FINDINGS) + per-task
+  spread in the leaderboard. **Pilot RAN (haiku, $0.29):** token-efficient DEBUNKED
+  (claim 63% vs −2%, output grew); caveman +30% vs prior −18% → noise flag (raise
+  trials ≥5). NEXT on A1: sonnet pass ≥5 trials + review-doc task → gated writeup.
+- **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK
+  (push/pop/gate-on-top, SubagentStop POPS to parent; both Task/Agent spawn tools);
+  TLC counterexample Open;Open;Stop;Call(Bash) is a regression test. Suite green (1426).
+  Still EXPERIMENTAL/not auto-wired.
+- **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — what a
+  spec buys vs markdown: capability axis, two-oracle model, leg-grading, require-\*-spec
+  split defaults); the competitive reality-check folded into `typed-spec-moat.md` +
+  `landscape-mid-2026.md` (bsuh control-flow article); per-file note in
+  `adoption-strategy.md`. See the COMMODITIZATION FINDING above.
 
 ## In flight
 
