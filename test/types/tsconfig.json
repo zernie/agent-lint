@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": ["smoke.vitest.ts", "smoke.jest.ts"]
+  "include": ["smoke.vitest.ts", "smoke.jest.ts", "purity.ts"]
 }
