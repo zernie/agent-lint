@@ -215,7 +215,28 @@ Show HN got **1 point**).
 4. **The single best wedge = cross-referencing** — unique in-market, the founding feature,
    and works on **plain markdown, no spec required** (zero adoption barrier). That's the
    "valid is not true" line: every competitor checks your config is well-FORMED; only
-   vigiles checks the rule it names actually EXISTS and is ENABLED.
+   vigiles checks the reference it names actually EXISTS and RESOLVES.
+
+> **REFINEMENT (2026-06-21) — lead with HARNESS-NATIVE cross-check, demote the
+> linter-catalog leg.** Cross-referencing's value is NOT uniform across reference types:
+>
+> - **HIGH value — harness-native references** (the moat): a subagent's **tool** exists
+>   (typo / never-available), an **MCP `server#tool` resolves on the LIVE server** (the
+>   `create_issue`→`issue_write` rename rot), a **hook event** is real (typo → silently
+>   never fires), a **file/script path** still exists, a **delegate/skill target** isn't
+>   dangling. These are agent-era-specific, current, and fail SILENTLY — nobody else
+>   checks them. **Deepen here**, esp. **live MCP tool resolution of the real
+>   `mcp__server__tool` contract refs** (engine exists in `src/core/mcp.ts`, today only
+>   wired to the explicit `vigiles:mcp` mark).
+> - **LOW value — the 7-linter-catalog integration** (ESLint/Ruff/Clippy/…): the
+>   founding feature, but the WEAKEST leg in the agent era — the linter self-enforces
+>   regardless of the prose mention (redundant), it's a code-quality concern bolted onto
+>   a harness concern, it's the heaviest engineering for the least harness-specific
+>   payoff, and "we enforce rule X" is a small slice of real CLAUDE.md content. Keep it
+>   (free, dogfooded), but it is **supporting, not the headline** — do NOT prioritize
+>   more catalogs (Cedar/Biome) over harness-native resolution. The moat one-liner
+>   sharpens to: **"the references in your agent's config — tools, MCP servers, hooks,
+>   files, sub-agents — are real and live, not silently broken."**
 
 Risk = a polished in-market linter (agnix/claudelint) ADDING cross-ref, or an adjacent
 player porting in — not present-day direct competition. Full corrected synthesis:

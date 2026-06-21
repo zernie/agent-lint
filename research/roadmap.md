@@ -269,6 +269,19 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 
 ## Now — cheap, high-leverage, do next
 
+- **Harness-native cross-check — DEEPEN (2026-06-21, IN PROGRESS).** The moat refinement
+  (see [`landscape-mid-2026.md`](landscape-mid-2026.md) §"Read of Market C" REFINEMENT):
+  cross-referencing's value is the HARNESS-NATIVE references (tools, MCP `server#tool`,
+  hook events, paths, delegates), NOT the linter-catalog leg (legacy/supporting — don't
+  add more catalogs). **First build: live MCP tool resolution of the real
+  `mcp__server__tool` contract refs** — the live engine exists (`src/core/mcp.ts`
+  `listMcpTools`/`closest`) but is wired only to the explicit `vigiles:mcp` mark;
+  bridge it to the actual `mcp__server__tool` references (subagent contracts + bodies)
+  so a renamed/removed tool (`create_issue`→`issue_write`) is caught, not just an
+  undeclared server (the static `mcp-tool-resolves` only checks the server is declared).
+  Opt-in (starts the server, not a free CI default); test against the existing
+  `examples/harness/fixture-mcp-server.mjs`.
+
 - **Purity FLOOR gate — DONE + STABLE (2026-06-20).** The per-call floor
   (`decidePurityGate` wired into the agent + skill `PreToolUse` rails,
   `isReadOnlyBash` refining `Bash` by the live command, the `vigiles:purity:`
