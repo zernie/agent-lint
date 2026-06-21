@@ -69,11 +69,16 @@ DISTRIBUTION/mindshare, not capability** → reinforces A1/adoption-engine. Full
   (push/pop/gate-on-top, SubagentStop POPS to parent; both Task/Agent spawn tools);
   TLC counterexample Open;Open;Stop;Call(Bash) is a regression test. Suite green (1426).
   Still EXPERIMENTAL/not auto-wired.
-- **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — what a
-  spec buys vs markdown: capability axis, two-oracle model, leg-grading, require-\*-spec
-  split defaults); the competitive reality-check folded into `typed-spec-moat.md` +
-  `landscape-mid-2026.md` (bsuh control-flow article); per-file note in
-  `adoption-strategy.md`. See the COMMODITIZATION FINDING above.
+- **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
+  markdown: capability axis, two-oracle, leg-grading, require-\*-spec defaults); the
+  full **market-segmented competitive matrix** + agnix find + poach list in
+  `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`; bsuh
+  control-flow article; per-file note in `adoption-strategy.md`. See COMPETITIVE READ above.
+- **New ideas captured (roadmap §Explore + distribution-strategy):** (1) **tiered README
+  badge** (lint→test→eval funnel as a growth loop) — top distribution lever; (2) **viral
+  debunk articles** ("caveman is vaporware" = measurement-as-marketing); (3) **open-core +
+  build-on-top + AI-lab-acquisition** posture; (4) **Zod-schema'd `result()`** poached from
+  Mastra/Pydantic (one schema → type+validator+JSON-schema), feature-ideas §14b.
 
 ## In flight
 
