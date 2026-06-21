@@ -413,6 +413,27 @@ capability layers accumulate across steps. (1) is done; (2)→(3) is the path to
 differentiator; (4) is the affordable measurement tier that the measurement-authority
 pivot wants; (5) is orthogonal correctness.
 
+> **Update (2026-06-21, post round-3 + the codegen dig + founder steer).** Three
+> refinements to the above:
+>
+> - **Safety ≠ moat (founder).** The trifecta-_prevention_ / cross-step accumulation is
+>   an ENABLER, not the headline — the moat is the **capability-DIFF (#2)** and
+>   whole-program type-checking, not the safety check. Reframe (2) as "compute the
+>   surface so you can DIFF it," not "prevent the trifecta."
+> - **Whole-harness codegen is the engine at REPO scale** (`whole-harness-codegen.md`,
+>   VALIDATED + scales). A generated `harness.gen.ts` registry makes #1 cross-file and
+>   gives the **repo-scale capability lattice** the #2 diff needs. This is arguably a
+>   stronger next lever than the per-pipeline accumulation — it makes the WHOLE harness
+>   one `tsc`-checked program. Sequence it alongside/ahead of (2).
+> - **Guardrail to land cheaply (fp-theory T1):** "the composition surface stays
+>   selective-applicative; **never add a monadic `bind` combinator**" — the one move
+>   that forfeits the compile-time blast-radius guarantee the moat rests on. A doc line +
+>   a `CLAUDE.md` rule; the shipped `pipe`/`andThen` is already on the right side.
+>
+> Net: the moat is **capability-diff (#2) over a whole-harness-typed program**; the
+> engine is **codegen registry + cross-step accumulation**; safety is a byproduct; the
+> guardrail protects all of it.
+
 ---
 
 ## 7. See also
