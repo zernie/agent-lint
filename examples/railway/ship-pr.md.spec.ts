@@ -9,7 +9,7 @@
  * finite tree, so it always terminates and every delegate() target is resolved
  * against the real agent specs in this directory at compile time.
  */
-import { railway, delegate } from "../../src/spec.js";
+import { railway, delegate } from "../../src/core/spec.js";
 
 export default railway({
   name: "ship-pr",

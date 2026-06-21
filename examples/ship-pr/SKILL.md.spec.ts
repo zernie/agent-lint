@@ -7,7 +7,7 @@
  *
  * Run `vigiles compile` to generate SKILL.md from this spec.
  */
-import { skill, step, input, cmd } from "../../src/spec.js";
+import { skill, step, input, cmd } from "../../src/core/spec.js";
 
 export default skill({
   name: "ship-pr",
