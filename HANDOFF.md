@@ -53,14 +53,20 @@ real-model pilot as a one-command spend decision for the user.
   whole compression cluster; only drona23 was a clean new A/B add (rest are CLI/MCP
   binaries → follow-on, or Elastic-licensed → reject; pinchtab dropped, not compression).
 
+## Pilot RAN (haiku, $0.29) — `f609d00`, recorded in FINDINGS.md
+
+5-skill engine validated end-to-end across both arm shapes. **token-efficient DEBUNKED**:
+claim 63% vs measured −2% output (output GREW, bill +3%) — worse than the repo's own
+honest ~4% haiku admission (CLAUDE.md input overhead is net-negative, as its README
+warns). **caveman**: +30% here vs −18% on the prior same-config run → 48-pt swing flagged
+as a noise signal (raise trials ≥5; only the <1% output-share structural fact is robust).
+
 ## Next move on A1 (none started)
 
-- **RUN the pilot** (spend decision): `claude` CLI + sub auth ARE present in this env, so
-  `VIGILES_SKILLS=caveman,token-efficient VIGILES_TASKS=2 VIGILES_TRIALS=2 node bench/ecosystem/benchmark.mjs`
-  (cheap haiku) validates the 5-skill engine end-to-end + fills token-efficient's row.
-  Then a fuller sonnet pass + a gated findings writeup.
-- Build the **needs-binary follow-on tier** (RTK/CodeGraph/Claw) if the cluster debunk
-  is worth the install cost — bigger lift, deferred.
+- **Sonnet pass + raise trials (≥5)** to quote stable magnitudes (haiku 2×2 is too noisy)
+  - add the heavier `review-doc` task — then a GATED findings writeup (the viral artifact).
+- Fill the **quality-plugin bill columns** (superpowers/OMC/wshobson still n=1).
+- Build the **needs-binary follow-on tier** (RTK/CodeGraph/Claw) if worth the install — deferred.
 
 ## In flight
 
