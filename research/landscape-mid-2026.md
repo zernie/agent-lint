@@ -125,6 +125,20 @@ The paper isn't about instruction files specifically — it's about the broader 
 
 ---
 
+## "Agents Need Control Flow" — independent statement of the vigiles thesis (2026)
+
+**Source:** Brian Suh, [`bsuh.bearblog.dev/agents-need-control-flow/`](https://bsuh.bearblog.dev/agents-need-control-flow/) — a software-engineer manifesto, not a product.
+
+**Thesis (verbatim):** _"Reliable agents tackling complex tasks need deterministic control flow encoded in software, not increasingly elaborate prompt chains."_ Prompts are _"non-deterministic, weakly specified, and difficult to verify"_; the fix is to move logic _"out of prose and into runtime"_ via _"deterministic scaffolds: explicit state transitions and validation checkpoints that treat the LLM as a component, not the system."_
+
+**Why it's relevant.** This is vigiles's exact positioning arrived at from the outside — the **Agent = Model + Harness** frame and the **deterministic-constraints over probabilistic-compliance** split (see `CLAUDE.md`). His three failure modes for systems lacking _"deterministic orchestration AND aggressive error detection"_ — **"human babysitting, exhaustive post-run audits, or accepting outputs on faith"** — map 1:1 onto the pain points the 2026-06-21 research surfaced (the "verify the agent did what it claimed" white space) AND onto vigiles's answer: the verify layer + the test/eval layers are the "aggressive error detection," the typed railway/control-flow is the "deterministic scaffold."
+
+**The double edge (record this — don't only cheer).** It's external **validation** of the frame, but it also **confirms the commoditization signal** from the same-day competitive double-check (riftmap = capability-diff, Mastra = typed workflow handoffs, promptfoo = deterministic contract asserts): "deterministic control flow for agents" is now a **named, spreading idea**, so the _thesis_ is no longer differentiating — others will build scaffolding. The article is a manifesto with **no implementation** ("doesn't detail specific technologies"), which is the opening, but the direction is crowding. Consistent with the spec-value-model conclusion: vigiles's edge is the **substrate** (the instruction-file harness compiled as a typed program) + the **sub-affordable measurement** identity, NOT ownership of the control-flow thesis itself.
+
+**Verdict.** Cite it as third-party validation of the positioning (README/landing "why deterministic constraints" — alongside the Compiled-AI paper); do NOT read it as a moat. The moat is execution on the substrate + measurement, not the idea.
+
+---
+
 ## Unified comparison matrix
 
 Combining the existing tables in `competitive-landscape.md` with mid-2026 entrants. Rows are projects; columns are the dimensions that matter for positioning vigiles.
