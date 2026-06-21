@@ -99,6 +99,13 @@ it — and that same spec is what makes your skills & subagents deterministicall
 **testable** (a `result()` contract → an assert, no LLM judge — see ② below), not
 just lint-able. **[Full guide →](docs/verifying-instruction-files.md)**
 
+> **Markdown is prose; a typed spec is a _program_.** Opt in and an agent that
+> leaks, exceeds its effect floor, or hands off mismatched data is a **type
+> error** — your **multi-agent pipeline won't compile if the handoffs don't line
+> up**. Others lint prose after the fact; vigiles is a **compiler for harnesses**.
+> Graduated like TypeScript's `strict` — markdown still works, type-safety is
+> opt-in. **[The moat →](research/typed-spec-moat.md)**
+
 **Same cross-reference, any plugin.** `npx vigiles scan` checks a plugin's
 _contracts_ — every subagent tool, `mcp__server__tool`, `mcp_tool` hook, hook
 event, and script path actually **exists and resolves**, not just parses (valid
