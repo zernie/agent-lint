@@ -192,9 +192,14 @@ assertChecks(r, [
 to act (a check a completion-grader structurally cannot make — it sees the agent's
 final text, not the tool call it _almost_ made). All three are **deterministic** —
 the scripted mock model only does what the script says, so a `Write` either landed
-or it didn't. Pair this with a `purity:` floor (`pure`/`bounded`) on the
-`skill()`/`agent()` spec to declare the surface the test then asserts. See the
-runnable example below.
+or it didn't.
+
+These checks **verify** behaviour; a `purity:` floor (`pure`/`bounded`) on the
+`skill()`/`agent()` spec **enforces** it — a `PreToolUse` rail that _denies_ the
+bad call at runtime. They're different layers, not a double-check: the floor makes
+the action impossible in the loop, the test proves the good behaviour happens (and
+is how you catch a _prose_ instruction leaking when there's no floor to lean on).
+See [Enforce vs. verify](spec-format.md#enforce-vs-verify).
 
 ## Test a skill fires (`measureTriggerRate`)
 

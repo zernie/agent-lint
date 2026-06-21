@@ -2,16 +2,56 @@
 
 vigiles specs are TypeScript files (`*.spec.ts`) that compile to markdown instruction files. The spec is the source of truth; the markdown is a build artifact.
 
-## Why a spec? — it earns its place twice
+## Why a spec? — what markdown can't do
 
-A typed spec is **not just a fancy way to write a CLAUDE.md**. It pays off on two layers:
+Be honest about what a spec is **not** for. The reference checks — does this
+`file()` exist, is this linter rule enabled, is this `cmd()` a real script — do
+**not** need a spec. vigiles runs them on a plain CLAUDE.md via inline
+[`<!-- vigiles:enforce -->` comments](inline-mode.md) (Level 0) or a
+[`vigiles:` frontmatter](markdown-mode.md) block (Level 1), on purpose, as the
+on-ramp. If verification is all you want, **stay in markdown**.
 
-1. **Verify (lint).** Every reference in it — `file()`, `cmd()`, `ref()`, a linter rule, a subagent's `tools` — is checked against reality at compile time. A stale path or a disabled rule is a build error, not a thing your agent silently trusts.
-2. **Test (the part most people miss).** A spec is **typed contracts**, and typed contracts make your harness **deterministically testable** — the substrate the [Test](harness-testing.md) and [Measure](measuring-skills.md) tiers build on:
-   - a subagent's `result(okShape, errShape)` outcome → the run ends in a parseable `vigiles:ok`/`err` block you assert with **`assertAgentOk`** — a real test, **no LLM judge** (see [railway-subagents.md](railway-subagents.md));
-   - a declared `tools` allowlist / `purity` floor → the write surface a test can check (`wrote` / `didNotWrite` / `notTool`), and the contract a `PreToolUse` rail enforces.
+A spec earns its place when you cross from **declaring** your harness to
+**testing it as code** — the things a string format structurally cannot give you:
 
-So the linting is the on-ramp; the lasting value is that **the spec is what makes the skill/subagent cheap to test**. The rest of this doc is the field reference.
+1. **A typed _contract with structure_, not a string.** A subagent's
+   `result(okShape, errShape)` is a discriminated union of typed fields. It
+   compiles to a `vigiles:ok`/`err` block the runtime emits and a test parses with
+   **`assertAgentOk`** — a real assertion, **no LLM judge** (see
+   [railway-subagents.md](railway-subagents.md)). A frontmatter `description:` is a
+   flat string; it can't carry a multi-field outcome, and a test has nothing
+   deterministic to parse. **This is the differentiator** — the substrate the
+   [Test](harness-testing.md) and [Measure](measuring-skills.md) tiers build on.
+2. **Checked by a compiler you already run.** Tool names and rule IDs get a red
+   squiggle at edit time via the generated `.d.ts`, before any vigiles command.
+   (The JSON-Schema generator gives frontmatter LSP autocomplete too, so this part
+   is _partially_ replicable in YAML — but only for flat name fields, not a
+   structured contract.)
+3. **It compiles and composes.** One spec → CLAUDE.md _and_ AGENTS.md
+   byte-identical; `railway()`/`delegate()` resolve targets across sibling specs at
+   compile time. Markdown is inert per-file text — it can't fan out or compose.
+
+So: **markdown declares; a spec is testable as code.** Reach for a spec exactly
+when you want `result()` → `assertAgentOk`. The rest is the field reference.
+
+### Enforce vs. verify
+
+A spec gives you a `tools` allowlist and a `purity` floor. It's tempting to read
+those as "the same thing the tests check, twice." They are **not** — they answer
+different questions:
+
+| Layer              | What it is                                                                              | When it runs            | What it guarantees                                                            |
+| ------------------ | --------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| **Enforce** (gate) | the `purity` floor / `tools` allowlist → a `PreToolUse` rail that **denies** a bad call | **runtime**, every call | the disallowed action is **impossible in the loop** — deterministic, no model |
+| **Verify** (test)  | `assertAgentOk`, `wrote`/`didNotWrite`, `notTool`                                       | **author-time / CI**    | the harness **does its job** and **stays in its lane** — a different property |
+
+The gate **prevents**; the test **proves behaviour**. A test is not re-checking
+the gate — you use `notTool`/`didNotWrite` to verify a _prose_ instruction that
+has no runtime enforcement (can the agent be talked out of it?), or to assert the
+wiring fires, never to second-guess `decidePurityGate`. Where you have a floor,
+trust it: it's a structural guarantee, not a probabilistic one. Where you only
+have prose, the test is how you find out it leaks — and that's the signal to add a
+floor. See [harness-testing.md](harness-testing.md).
 
 ## CLAUDE.md Specs
 
