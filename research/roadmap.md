@@ -94,11 +94,12 @@
       purity floor: `vigiles/claude-code`'s `agent()`/`skill()` make `purity:"pure"` +
       `"Bash"` a `tsc` error at edit time (core `vigiles/spec` stays open, backwards-compatible).
       A strict addition to the runtime `decidePurityGate`. → `typed-spec-power.md`
-- [ ] **Typed composition — IN FLIGHT.** Make `agent()`/`railway()` carry the `result()`
-      field shapes as generics so a multi-agent pipeline whose handoffs don't line up
-      (missing field / wrong type / wrong order) **won't compile** — the headline
-      non-replicable typed-spec win. Additive over the string-based `delegate()` path.
-      → `typed-spec-power.md` (idea #1, prototyped)
+- [x] **Typed composition — SHIPPED (2026-06-21).** `agent()`/`result()` preserve the
+      `result()` field shapes as types; `pipe(producer, pipeStep(agent, needs({…})))` (+ the
+      `start`/`andThen` fold) cross-references at `tsc` time that step N's `ok` SUPPLIES step
+      N+1's `needs` — a missing field / wrong type / out-of-order handoff **won't compile**.
+      The headline non-replicable typed-spec win. Additive over the string-based `delegate()`
+      path; shallow `Supplies<>` encoding (TS2589-safe). → `typed-spec-power.md`, `typed-spec-moat.md`
 - [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
       unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
       `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler
@@ -620,6 +621,13 @@ assertRates`) is the recommended path for testing one skill, but
   can't be fed to a CA generator) + ties the eval moat. Lint/scan is a crisp NO (free
   cells). Prototyped (real IPOG-style generator) in
   [`prototypes/covering-arrays/`](prototypes/covering-arrays/).
+- [`typed-spec-moat.md`](typed-spec-moat.md) — the consolidated synthesis of all
+  five typed-spec research rounds + the founder-endorsed moat thesis: the harness as
+  a compilable, analyzable formal object, the three concrete moats (unsafe harnesses
+  don't compile / semantic capability-diff at PR / affordable interaction-testing),
+  the type-safe pipelining keystone, the full ranked record of every finding, the
+  adoption-tension catalog, and the proposed build order. The pick-what-to-build-later
+  record.
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·
