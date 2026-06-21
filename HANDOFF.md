@@ -63,8 +63,11 @@ DISTRIBUTION/mindshare, not capability** → reinforces A1/adoption-engine. Full
 - **A1 (`dd80681`,`f609d00`):** manifest 4→5 (added **token-efficient** drona23@0d30a6d,
   MIT, 5.7k★, injectable CLAUDE.md; full cluster map in SOURCES/FINDINGS) + per-task
   spread in the leaderboard. **Pilot RAN (haiku, $0.29):** token-efficient DEBUNKED
-  (claim 63% vs −2%, output grew); caveman +30% vs prior −18% → noise flag (raise
-  trials ≥5). NEXT on A1: sonnet pass ≥5 trials + review-doc task → gated writeup.
+  (claim 63% vs −2%); caveman noisy on haiku. **SONNET PASS DONE (`da08504`, $3.43,
+  5 trials):** caveman 75%→**−18%** (stable; bill +8%; review-doc −55%), token-efficient
+  63%→**−10%** (bill +3%; worse than its own ~12% sonnet claim); both 0-regress, output
+  ~0.7% of session. CREDIBLE + publishable. NEXT on A1: publish v0 leaderboard + the
+  "caveman is vaporware" debunk article (numbers now in FINDINGS.md).
 - **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK
   (push/pop/gate-on-top, SubagentStop POPS to parent; both Task/Agent spawn tools);
   TLC counterexample Open;Open;Stop;Call(Bash) is a regression test. Suite green (1426).
