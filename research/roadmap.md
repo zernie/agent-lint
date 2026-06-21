@@ -630,6 +630,15 @@ assertRates`) is the recommended path for testing one skill, but
   T2 the spec-AST-as-abstract-interpreters (validated the #2 v1→v2 capability-diff) and
   T3 effect accumulation ≡ the `proofs.ts` join-semilattice. Prototyped in
   [`prototypes/typed-spec-fp-theory/`](prototypes/typed-spec-fp-theory/).
+- [`whole-harness-codegen.md`](whole-harness-codegen.md) — the "wild idea", VALIDATED +
+  perf-measured: a generated registry (`harness.gen.ts`, à la TanStack `routeTree.gen.ts`)
+  imports every spec so `tsc` enforces the WHOLE harness as ONE program — cross-file typed
+  composition, dangling-`delegate` + duplicate-name errors at edit time, and the repo-scale
+  capability lattice that feeds the #2 capability-diff. **TS scales**: TS2589 only at N≈1000
+  and ONLY in the naive O(N²) uniqueness encoding; the design uses per-edge O(N) types +
+  uniqueness in the JS generator (~100ms at a realistic tens-of-specs harness). A MOAT lever
+  (markdown- AND framework-impossible). Prototyped in
+  [`prototypes/whole-harness-codegen/`](prototypes/whole-harness-codegen/).
 - [`typed-spec-moat.md`](typed-spec-moat.md) — the consolidated synthesis of all
   five typed-spec research rounds + the founder-endorsed moat thesis: the harness as
   a compilable, analyzable formal object, the three concrete moats (unsafe harnesses
