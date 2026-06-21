@@ -32,8 +32,9 @@ P1**. Full: `research/measurement-authority.md` § "Status & gaps".
 2. **capability-diff (#2, P1, the bridge)** — needs the UNBUILT **effect-row (M1) +
    cross-step accumulation** engine (compute the capability surface), then the v1→v2
    diff (already prototyped, fp-theory T2). Carry a loud sign-off hatch (don't cry wolf).
-3. **V1 nesting bug** — found + TLC-certified-fix-in-hand, NOT fixed (depth-aware
-   active-agent stack; a live contract-escape in EXPERIMENTAL agent-runtime). Orthogonal.
+3. ~~V1 nesting bug~~ **FIXED this session (`c50b826`)** — depth-aware active-agent
+   STACK shipped (push/pop/gate-on-top + both Task/Agent spawn tools); TLC
+   counterexample is now a regression test. Still EXPERIMENTAL/not auto-wired.
 4. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
@@ -68,9 +69,20 @@ as a noise signal (raise trials ≥5; only the <1% output-share structural fact 
 - Fill the **quality-plugin bill columns** (superpowers/OMC/wshobson still n=1).
 - Build the **needs-binary follow-on tier** (RTK/CodeGraph/Claw) if worth the install — deferred.
 
+## Also shipped this session (`c50b826`)
+
+**V1 nesting bug FIXED** — `src/adapters/claude-code/agent-runtime.ts` active-agent
+tracking is now a depth-aware STACK (pushActiveAgent/popActiveAgent, readActiveAgent
+= top; legacy {agent} back-compat). SubagentStop POPS to the parent (was: cleared the
+whole slot → contract escape under CC v2.1.172 depth-5 nesting). Open signal handles
+both Task + Agent spawn tools. TLC counterexample Open;Open;Stop;Call(Bash) is a
+regression test (pure + runHook e2e). full suite green (1426 passed). docs synced
+(CLAUDE.md.spec recompiled, effect-boundary/formal-verification/roadmap). Still
+EXPERIMENTAL/not auto-wired — the effect() sub-region it served stays dropped.
+
 ## In flight
 
-Nothing. Research subagent complete + verified; tree clean; local == remote.
+Nothing. Tree clean; local == remote.
 
 ## Gotchas (carry forward)
 
