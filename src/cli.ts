@@ -20,6 +20,12 @@ import {
 import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
+import {
+  loadHarnessModel,
+  generateHarness,
+  labelFor,
+  HARNESS_GEN_FILENAME,
+} from "./core/generate-harness.js";
 import { validate, loadConfig } from "./core/validate.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
@@ -3350,6 +3356,105 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
 }
 
 /**
+ * `vigiles generate-harness [dir] [out]` — emit one typed registry over every
+ * `*.spec.ts` under `dir`, so a single `tsc --noEmit` cross-checks the whole
+ * harness (dangling delegates → a tsc error; duplicate names → this command
+ * exits non-zero; the capability lattice → a computed export). The third
+ * generated artifact beside `generate-types` / `generate-schema`. See
+ * docs/cli.md and research/whole-harness-codegen.md.
+ */
+async function handleGenerateHarness(
+  args: string[],
+  restArgs: string[],
+): Promise<void> {
+  const checkOnly = args.includes("--check");
+  const dir = resolve(restArgs[0] ?? ".");
+  const outPath = restArgs[1] ?? resolve(dir, HARNESS_GEN_FILENAME);
+  const fullOut = resolve(process.cwd(), outPath);
+  const specImport =
+    args
+      .filter((a) => a.startsWith("--spec-import="))
+      .map((a) => a.split("=")[1])
+      .filter(Boolean)[0] ?? undefined;
+
+  // Resolve the harness ONCE (honour --harness / config / auto-detect) so the
+  // capability lattice is computed against the right dialect — never defaulting
+  // to Claude Code in core. The dialect is INJECTED into the generator.
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+
+  console.log(`Scanning ${labelFor(process.cwd(), dir)} for *.spec.ts...\n`);
+
+  const model = await loadHarnessModel(
+    dir,
+    (abs) =>
+      loadSpec(abs) as Promise<{
+        _specType?: string;
+        name?: string;
+        tools?: readonly string[];
+      } | null>,
+  );
+
+  const result = generateHarness(model, {
+    dialect: adapter.dialect,
+    outDir: dirname(fullOut),
+    specImport,
+  });
+
+  console.log(
+    `  ${String(result.agentCount)} agent(s), ${String(result.edgeCount)} delegate edge(s)`,
+  );
+  console.log(
+    `  capabilities: ${result.capabilities.purity} (` +
+      `${String(result.capabilities.sideEffecting.length)} side-effecting, ` +
+      `${String(result.capabilities.unknown.length)} unknown)`,
+  );
+
+  // DUPLICATE NAME — the O(N) JS check (never a type). Exit non-zero, no write.
+  if (result.duplicate) {
+    console.log(`\n✗ ${result.duplicate.message}`);
+    console.log(`::error::${result.duplicate.message}`);
+    process.exit(2);
+  }
+
+  if (checkOnly) {
+    if (!existsSync(fullOut)) {
+      console.log(
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate-harness\` to create it.`,
+      );
+      process.exit(1);
+    }
+    const existing = readFileSync(fullOut, "utf-8");
+    const normalize = (s: string): string =>
+      s
+        .split("\n")
+        .map((l) => l.trimEnd())
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    if (normalize(existing) === normalize(result.gen)) {
+      console.log(`\n✓ ${outPath} is up to date`);
+    } else {
+      console.log(
+        `\n✗ ${outPath} is stale. Run \`vigiles generate-harness\` to update.`,
+      );
+      process.exit(1);
+    }
+    return;
+  }
+
+  const outDir = dirname(fullOut);
+  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+  writeFileSync(fullOut, result.gen);
+  console.log(`\n✓ Generated ${labelFor(process.cwd(), fullOut)}`);
+  console.log(
+    "  `tsc --noEmit` over this file now checks every delegate target resolves.",
+  );
+}
+
+/**
  * `vigiles test` / `vigiles eval` — discover and run the two-tier harness
  * scripts (deterministic `*.harness.mjs` / real-model `*.eval.mjs`) as child
  * `node` processes, aggregating exit codes so they work as a CI command. See
@@ -3641,6 +3746,12 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles generate-schema --check Verify schema.json is up to date",
+  );
+  console.log(
+    "  vigiles generate-harness [dir] Emit harness.gen.ts — one typed registry",
+  );
+  console.log(
+    "  vigiles generate-harness --check Verify harness.gen.ts is up to date",
   );
   console.log("  vigiles --version             Print the version number");
   if (command && command !== "--help") {
@@ -4252,6 +4363,10 @@ async function main(): Promise<void> {
 
     case "generate-schema":
       handleGenerateSchema(args, restArgs);
+      break;
+
+    case "generate-harness":
+      await handleGenerateHarness(args, restArgs);
       break;
 
     default:
