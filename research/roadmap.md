@@ -83,6 +83,13 @@
       ([`src/scaffold-test.ts`](../src/scaffold-test.ts) + CLI). Free-form in, a runnable
       starter test out, per kind at the untested-detector's suggested path. →
       `typed-contracts-for-agents.md`
+- [ ] **Auto-derive `interceptTools` from the tools allowlist in `scaffold-test`** — the
+      salvaged nugget from the rejected `effect()`-as-test-seam reframe (2026-06-21): read a
+      skill/agent's declared `tools` + `effectSurface(tools, dialect)` (which already buckets
+      read-only vs side-effecting deterministically) and emit a ready `interceptTools` entry
+      per side-effecting tool, so a side-effecting agent's "hole" is mocked/denied in a
+      generated test with **zero new spec surface**. Bounded — reuses `src/core/effects.ts` + the existing scaffold paths. → `effect-boundary-design.md` (the salvage section),
+      `typed-contracts-for-agents.md` · **MEDIUM**
 - [x] **Elevate railway/Result contracts — SHIPPED (2026-06-20)** (docs + worked example).
       `assertAgentOk/Err/Result` existed but were invisible; added
       [`examples/harness/railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs)
@@ -281,40 +288,6 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 [`spec-syntax-and-railway-scope.md`](spec-syntax-and-railway-scope.md).
 [`lightweight-spec-authoring.md`](lightweight-spec-authoring.md)
 
-- **More deterministic lint rules — the next moat surfaces (P1).** This session
-  shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
-  agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
-  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`,
-  `duplicate-names`, the novel `description-overlap` (NCD precision proxy),
-  `frontmatter-valid`, `hook-matcher` — is in
-  [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
-  "valid is not true" cross-reference on a new surface, high-precision by design.
-
-- **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook (P1).** The lint
-  consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
-  findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
-  minimal-token messages the agent applies directly, and (b) **lint-as-a-PostToolUse-hook**
-  that gates the moment the agent writes a bad reference — extend the existing refs-hook
-  from symbol marks to the whole cross-reference family (tool-contract, mcp-tool,
-  hook-events). Corollary: **FP-calibration becomes a SAFETY property, not just UX** — a
-  human ignores a noisy finding, but an agent _obediently "fixes" every one_, so a false
-  positive makes it edit correct content. The "don't cry wolf" discipline is load-bearing
-  once the consumer is a model. See [instruction-file-linter-landscape](instruction-file-linter-landscape.md)
-  (the moat in an agent-authored world). · **P1**
-
-- **Cross-platform confinement — macOS Seatbelt backend (P1).** Confinement is
-  Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
-  refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
-  Extract the `vigiles/os-isolation` port and add a `sandbox-exec`/Seatbelt backend
-  beside `bwrap`. Per-host egress stays Linux-only (Seatbelt can't packet-filter
-  per host); macOS degrades honestly to deny-all-net. **Phased design is ready**
-  (interface + layout + capability matrix + 4 green-keeping phases + the
-  Seatbelt-blocks-localhost limitation): [os-isolation-port](os-isolation-port.md),
-  decided in [cross-platform-sandboxing](cross-platform-sandboxing.md). **Note: the
-  maintainer has no Mac**, so this needs a macOS CI runner (or a Mac-having
-  contributor) to validate the backend end-to-end — the pure policy/args seams can
-  still be unit-tested without one. · **P1**
-
 - **Run the behavioral (eval) tier in CI as a gate** — today `vigiles eval` is
   manual-only and results are frozen as `FINDING:` comments (a snapshot is
   documentation, not protection). Wire the _cheap_ tier (`measureTriggerRate` /
@@ -322,7 +295,6 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   haiku, which under-measures trigger-rate) as a per-PR gate, then the
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
   roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
-
 - **PATH-shim / record-replay helper (fake-on-PATH)** — the R2 tier: a fake
   binary earlier on PATH that emits a result **recorded once** from the real tool
   and replayed deterministically (never model-synthesized — drift → false
@@ -346,25 +318,56 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **#2 Reverse coverage** — "your CLAUDE.md documents 5 of 47 enabled rules": the
   one item that is both moat and a shareable distribution artifact.
   [feature-ideas #2](feature-ideas.md) · **HIGH**
-- **AGENTS.md + SKILL.md as first-class verified inputs** — the engine is already
-  format-agnostic; rides the 60k-repo / 32-tool wave.
-  [standards-conformance](standards-conformance.md) · [synthesis T1#1](strategic-synthesis-2026-06.md)
-- **Wire `composeCollisions` into `vigiles lint`** — warn when a compile target
-  is a file Ruler/rulesync regenerates (stales the integrity hash); suggest the
-  source-slot redirect. Detector shipped (`src/compose.ts`); CLI wiring + a
-  `compile --into <dir>` flag are the remaining steps.
-  [sync-tool-compatibility](sync-tool-compatibility.md)
-- **"Valid is not true" positioning** — one comparison row vs structural linters
-  (agnix); pure messaging, no build. [standards-conformance](standards-conformance.md)
 - **Dogfood popular plugins + emit a per-plugin `COVERAGE.md` scorecard** — run the
   rung classifier over popular community plugin collections and emit a per-plugin
   `COVERAGE.md` (R1/R2/R3 distribution + the R3 service shortlist + a testability
   grade). Validates the ~90% R1+R2 claim on real artifacts AND is a shareable
   distribution artifact (the leaderboard's testability sibling).
   [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
+- **More deterministic lint rules — the next moat surfaces.** This session
+  shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
+  agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
+  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`,
+  `duplicate-names`, the novel `description-overlap` (NCD precision proxy),
+  `frontmatter-valid`, `hook-matcher` — is in
+  [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
+  "valid is not true" cross-reference on a new surface, high-precision by design. · **P1**
+- **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook.** The lint
+  consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
+  findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
+  minimal-token messages the agent applies directly, and (b) **lint-as-a-PostToolUse-hook**
+  that gates the moment the agent writes a bad reference — extend the existing refs-hook
+  from symbol marks to the whole cross-reference family (tool-contract, mcp-tool,
+  hook-events). Corollary: **FP-calibration becomes a SAFETY property, not just UX** — a
+  human ignores a noisy finding, but an agent _obediently "fixes" every one_, so a false
+  positive makes it edit correct content. The "don't cry wolf" discipline is load-bearing
+  once the consumer is a model. See [instruction-file-linter-landscape](instruction-file-linter-landscape.md)
+  (the moat in an agent-authored world). · **P1**
+- **Cross-platform confinement — macOS Seatbelt backend.** Confinement is
+  Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
+  refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
+  Extract the `vigiles/os-isolation` port and add a `sandbox-exec`/Seatbelt backend
+  beside `bwrap`. Per-host egress stays Linux-only (Seatbelt can't packet-filter
+  per host); macOS degrades honestly to deny-all-net. **Phased design is ready**
+  (interface + layout + capability matrix + 4 green-keeping phases + the
+  Seatbelt-blocks-localhost limitation): [os-isolation-port](os-isolation-port.md),
+  decided in [cross-platform-sandboxing](cross-platform-sandboxing.md). **Note: the
+  maintainer has no Mac**, so this needs a macOS CI runner (or a Mac-having
+  contributor) to validate the backend end-to-end — the pure policy/args seams can
+  still be unit-tested without one. · **P1**
+- **AGENTS.md + SKILL.md as first-class verified inputs** — the engine is already
+  format-agnostic; rides the 60k-repo / 32-tool wave.
+  [standards-conformance](standards-conformance.md) · [synthesis T1#1](strategic-synthesis-2026-06.md) · **MED**
 - **`scan` → observed-egress column** — boot each hook under `recordEgress`, list
   hosts reached; turns `scan` from static into behavioural, feeding the
-  leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md)
+  leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md) · **MED**
+- **Wire `composeCollisions` into `vigiles lint`** — warn when a compile target
+  is a file Ruler/rulesync regenerates (stales the integrity hash); suggest the
+  source-slot redirect. Detector shipped (`src/compose.ts`); CLI wiring + a
+  `compile --into <dir>` flag are the remaining steps.
+  [sync-tool-compatibility](sync-tool-compatibility.md) · **MED**
+- **"Valid is not true" positioning** — one comparison row vs structural linters
+  (agnix); pure messaging, no build. [standards-conformance](standards-conformance.md) · **LOW**
 
 ## Next — differentiated, medium effort
 
@@ -426,28 +429,28 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
-  [synthesis T2#6](strategic-synthesis-2026-06.md) · [supply-chain #2](agent-supply-chain-security.md)
+  [synthesis T2#6](strategic-synthesis-2026-06.md) · [supply-chain #2](agent-supply-chain-security.md) · **MED**
 - **OTel-GenAI span emission** from the test tiers (`src/otel.ts`, opt-in) — make
   test-time traces speak prod-observability's wire format.
-  [runtime-guardrails #1](runtime-guardrails-observability.md)
+  [runtime-guardrails #1](runtime-guardrails-observability.md) · **P3**
 - **`enforce()` over AI-linter catalogs** — a `semgrep/` resolver in `linters.ts`,
-  then CodeRabbit/Greptile. [ai-native-linting #1](ai-native-linting.md)
+  then CodeRabbit/Greptile. [ai-native-linting #1](ai-native-linting.md) · **MED**
 - **MCP-reference conformance** + a typed `mcp()` / `mcpConfig` harness hook —
   "does the cited `server#tool` still exist" via live or `.well-known`.
-  [standards #3](standards-conformance.md) · [coverage-matrix](harness-testing-coverage-matrix.md)
+  [standards #3](standards-conformance.md) · [coverage-matrix](harness-testing-coverage-matrix.md) · **MED**
 - **Unify `scan` + `lint` on one rule engine** — promote scan's hard-coded
   structural findings (no-description skill, no-tool-contract agent, missing hook)
   to documented, configurable, CI-gatable rules; scan becomes inventory + a
   rule-derived score. The ESLint model: one rule vocabulary, two frontends.
-  [scan-lint-unification](scan-lint-unification.md)
+  [scan-lint-unification](scan-lint-unification.md) · **MED**
 - **`compile --policy` → Cedar/OPA codegen** — one `tools:` declaration drives the
   dev-loop hook, the prod gate, and the trace check; emit-and-verify only.
-  [runtime #3](runtime-guardrails-observability.md) · [landscape-mid-2026](landscape-mid-2026.md)
+  [runtime #3](runtime-guardrails-observability.md) · [landscape-mid-2026](landscape-mid-2026.md) · **P3**
 - **Multi-harness compile & the mirror story** — `harness` in project config
   (select-by-config, not just auto-detect), a byte-identical `CLAUDE.md`⇄`AGENTS.md`
   copy-mirror when no sync tool fans out, and per-harness skill verify/compile.
   Kills the silent harness-mismatch footgun in `compile`.
-  [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md)
+  [multi-harness-compile](multi-harness-compile.md) · [sync-tool-compatibility](sync-tool-compatibility.md) · **MED**
 - **Mock-ergonomics borrow-list (NEW — 2026-06-17 multi-SDK probe, this PR)** —
   concrete ergonomics to adopt from other SDKs' first-party mocks into `scriptModel`
   / the eval tier, surfaced by the current-evidence probe. Borrow: Pydantic
@@ -463,7 +466,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
     reaffirmed vigiles owns the gaps no SDK fills (tool-contract _enforcement_ of the
     assembled agent, trigger-rate recall+precision, record/replay caching,
     sub-affordability). [sdk-harness-testing.md](sdk-harness-testing.md) (the
-    2026-06-17 section)
+    2026-06-17 section) · **LOW**
 
 - **Per-check rate thresholds in `assertRates` (DONE — 2026-06-17, API review;
   additive, non-breaking).** The absolute oracle (`measure({ checks }) +
@@ -490,20 +493,20 @@ assertRates`) is the recommended path for testing one skill, but
     been **deleted**. What's still needed: ONE polished, reliably-passing demo plus a
     recorded GIF/asciinema, framed by the three "best"s — the stale-`enforce()`
     "lies" story as the one-sentence sell, and `vigiles scan` as the zero-setup wedge.
-    [distribution-strategy](distribution-strategy.md) · feature-ideas #14
+    [distribution-strategy](distribution-strategy.md) · feature-ideas #14 · **MED**
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
-  structural score. [divergent-bets #9](divergent-bets.md)
+  structural score. [divergent-bets #9](divergent-bets.md) · **LOW**
 - **Harness cost/ROI optimizer** — A/B token-cost eval (full vs trimmed CLAUDE.md);
   a money story. [divergent-bets #10](divergent-bets.md) · **strong**
 - **CI for model upgrades** — `--model` matrix over an eval baseline; catch the
-  harness a new model silently breaks. [divergent-bets #8](divergent-bets.md)
+  harness a new model silently breaks. [divergent-bets #8](divergent-bets.md) · **LOW**
 - **Measured `judge()` rule — as an experiment first** — one `*.eval.mjs` that
   grades a code property + reports its FP rate; ship the rule kind only if the
-  rate is publishable. [ai-native-linting #2](ai-native-linting.md) · [synthesis T2#8](strategic-synthesis-2026-06.md)
+  rate is publishable. [ai-native-linting #2](ai-native-linting.md) · [synthesis T2#8](strategic-synthesis-2026-06.md) · **LOW**
 - **Sandboxed eval tier + non-Linux backend** — `runEval` still spawns `claude`
-  unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md)
+  unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md) · **LOW**
 - **Deterministic subagent / command wiring** — register + drive without a model.
-  [coverage-matrix](harness-testing-coverage-matrix.md)
+  [coverage-matrix](harness-testing-coverage-matrix.md) · **LOW**
 
 ## Backlog — lower priority / niche
 
