@@ -621,6 +621,15 @@ assertRates`) is the recommended path for testing one skill, but
   can't be fed to a CA generator) + ties the eval moat. Lint/scan is a crisp NO (free
   cells). Prototyped (real IPOG-style generator) in
   [`prototypes/covering-arrays/`](prototypes/covering-arrays/).
+- [`typed-spec-fp-theory.md`](typed-spec-fp-theory.md) — round-3 deep FP/monad theory.
+  Headline (a THEOREM): **Applicative / Selective / Monad is the boundary of static
+  analyzability** — a selective-applicative pipeline's effect surface is a compile-time
+  fold (the shipped `pipe`/`andThen` is ALREADY applicative — proven in `tsc`: monadic
+  `bind` WIDENS the surface to all legs, precision provably lost), so the discipline is
+  **never add a monadic `bind` combinator** (the one move that forfeits the moat). Plus
+  T2 the spec-AST-as-abstract-interpreters (validated the #2 v1→v2 capability-diff) and
+  T3 effect accumulation ≡ the `proofs.ts` join-semilattice. Prototyped in
+  [`prototypes/typed-spec-fp-theory/`](prototypes/typed-spec-fp-theory/).
 - [`typed-spec-moat.md`](typed-spec-moat.md) — the consolidated synthesis of all
   five typed-spec research rounds + the founder-endorsed moat thesis: the harness as
   a compilable, analyzable formal object, the three concrete moats (unsafe harnesses
