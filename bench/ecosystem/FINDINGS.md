@@ -12,10 +12,17 @@
 **Claim:** "cuts token usage ~75%" (skill description) / "65%" (README) — OUTPUT
 prose only. **Verdict: DEBUNKED** on agentic coding.
 
-| Pass                      | tasks × trials | mean output cut | mean bill cut      | output % of session | correctness |
-| ------------------------- | -------------- | --------------- | ------------------ | ------------------- | ----------- |
-| haiku (pilot)             | 2 × 2          | −18%            | −1%                | 1.1%                | 0 regress   |
-| **sonnet** (target model) | 3 × 3          | **−18%**        | **−10%** (bill UP) | 0.7%                | 0 regress   |
+| Pass                       | tasks × trials | mean output cut | mean bill cut      | output % of session | correctness |
+| -------------------------- | -------------- | --------------- | ------------------ | ------------------- | ----------- |
+| haiku (pilot)              | 2 × 2          | −18%            | −1%                | 1.1%                | 0 regress   |
+| haiku (re-run, 2026-06-21) | 2 × 2          | **+30%**        | +16%               | 1.3%                | 0 regress   |
+| **sonnet** (target model)  | 3 × 3          | **−18%**        | **−10%** (bill UP) | 0.7%                | 0 regress   |
+
+> **Variance flag:** the two haiku 2×2 runs (same slugify+debounce tasks) swung from
+> −18% to +30% output cut — a 48-point spread that confirms 2 trials of haiku is far
+> too noisy to trust the MAGNITUDE. Only the structural facts are robust: output is
+> ~1% of session tokens (so even a real cut barely moves the bill), and the 30–75%
+> headline never reproduces. Raise trials (≥5) before quoting any caveman number.
 
 Per-task on sonnet: slugify −8%, debounce −1%, **review-doc −45%** (the
 prose-heavy, multi-turn task — caveman's best-case surface — is where it does the
@@ -38,18 +45,23 @@ up) and the **<1% output-share** (model-agnostic).
 
 ## Token-Efficient CLAUDE.md — `drona23/claude-token-efficient@0d30a6d` (5.7k★)
 
-**Added to the manifest 2026-06-21; NOT yet measured.** A clean shape-(a) injectable
-prose file (a `CLAUDE.md`, not a SKILL.md) — the second cleanly-A/B-able compression
-entry beside caveman. **Claim:** README headline table "63%" reduction.
+**Claim:** README headline table "63%" reduction. **Verdict: DEBUNKED** on agentic coding.
 
-**Expected debunk angle (self-documented upstream — measure to confirm):** the 63%
-is a 465→170 **WORD** count over 4 single-shot prompts; the repo's OWN reproducible
-token benchmark (`benchmark/SUMMARY.md`) admits actual **output-token** reduction is
-only ~4% (haiku) / ~12% (sonnet) / ~7% (opus), and the README itself notes the
-file's input-token overhead can make it net-negative at low output volume. So this
-is the SAME structural story as caveman (output is a thin slice of the bill), but
-here the author has already published the honest token numbers — our job is to
-reproduce them on the multi-turn agentic corpus and show the headline-vs-token gap.
+| Pass          | tasks × trials | mean output cut | mean bill cut     | output % of session | correctness |
+| ------------- | -------------- | --------------- | ----------------- | ------------------- | ----------- |
+| haiku (pilot) | 2 × 2          | **−2%**         | **−3%** (bill UP) | 1.1%                | 0 regress   |
+
+Per-task on haiku: slugify −1%, debounce −2% — output GREW on both (overclaim gap
+**65 points** vs the 63% headline). Notably this is WORSE than the repo's own honest
+token benchmark (~4% haiku) — the CLAUDE.md's persistent input-token overhead made it
+net-negative, exactly as the README itself warns ("at low usage it costs more than it
+saves"). The 63% headline is a 465→170 **WORD** count over 4 single-shot prompts; on
+multi-turn coding the output-token saving is absent and the bill grew.
+
+Caveats (honest): haiku, 2 tasks, 2 trials — directional + noisy. The robust fact is
+the **direction** (net-negative: output + bill both up), which matches the repo's own
+admission. Next: a sonnet pass (its README reports ~12% there) + the heavier review-doc
+task to test whether it ever pays off.
 
 ## Quality plugins (superpowers / oh-my-claudecode / wshobson)
 
