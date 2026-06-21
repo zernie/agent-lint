@@ -17,6 +17,9 @@ etc/
 # SKILL.md snapshots (pinned by SHA, formatted by their upstreams, not us).
 bench/ecosystem/results/
 bench/ecosystem/skills/
+# Archived canonical run JSON is machine-written archival data — exact bytes, not
+# formatter-owned (the README.md alongside it IS prettier-checked).
+bench/ecosystem/results-archive/*.json
 
 # The root CLAUDE.md is a vigiles-COMPILED artifact: `vigiles compile` owns its
 # exact bytes (an integrity hash over the output gates it in CI). Prettier would
