@@ -12,21 +12,23 @@
 **Claim:** "cuts token usage ~75%" (skill description) / "65%" (README) — OUTPUT
 prose only. **Verdict: DEBUNKED** on agentic coding.
 
-| Pass                       | tasks × trials | mean output cut | mean bill cut      | output % of session | correctness |
-| -------------------------- | -------------- | --------------- | ------------------ | ------------------- | ----------- |
-| haiku (pilot)              | 2 × 2          | −18%            | −1%                | 1.1%                | 0 regress   |
-| haiku (re-run, 2026-06-21) | 2 × 2          | **+30%**        | +16%               | 1.3%                | 0 regress   |
-| **sonnet** (target model)  | 3 × 3          | **−18%**        | **−10%** (bill UP) | 0.7%                | 0 regress   |
+| Pass                               | tasks × trials | mean output cut | mean bill cut     | output % of session | correctness |
+| ---------------------------------- | -------------- | --------------- | ----------------- | ------------------- | ----------- |
+| haiku (pilot)                      | 2 × 2          | −18%            | −1%               | 1.1%                | 0 regress   |
+| haiku (re-run, 2026-06-21)         | 2 × 2          | **+30%**        | +16%              | 1.3%                | 0 regress   |
+| sonnet (3 tasks × 3)               | 3 × 3          | −18%            | −10%              | 0.7%                | 0 regress   |
+| **sonnet (3 tasks × 5, CREDIBLE)** | 3 × 5          | **−18%**        | **+8%** (bill UP) | **0.7%**            | 0 regress   |
 
-> **Variance flag:** the two haiku 2×2 runs (same slugify+debounce tasks) swung from
-> −18% to +30% output cut — a 48-point spread that confirms 2 trials of haiku is far
-> too noisy to trust the MAGNITUDE. Only the structural facts are robust: output is
-> ~1% of session tokens (so even a real cut barely moves the bill), and the 30–75%
-> headline never reproduces. Raise trials (≥5) before quoting any caveman number.
+> **The sonnet −18% is now STABLE** (two independent sonnet runs both land at −18% mean
+> output cut), so it's the number to quote — NOT the noisy haiku figures (the two haiku
+> 2×2 runs swung −18%↔+30%, a 48-pt spread; 2-trial haiku is too noisy for magnitude).
+> Robust facts, model-agnostic: output is ~0.7–1% of session tokens (so even a real cut
+> barely moves the bill), and the 63–75% headline NEVER reproduces — on multi-turn coding
+> output GROWS and the bill goes UP.
 
-Per-task on sonnet: slugify −8%, debounce −1%, **review-doc −45%** (the
-prose-heavy, multi-turn task — caveman's best-case surface — is where it does the
-WORST; output grew 45%, bill grew 22%).
+Per-task on sonnet (5 trials): slugify −8%, debounce +8%, **review-doc −55%** (the
+prose-heavy, multi-turn task — caveman's supposed best-case surface — is where it does
+the WORST: output grew 55%, bill grew 23%). The "best case" is the worst case.
 
 **Why the claim misleads (the structural kill):** output is **<1% of session
 tokens** (the rest is input + cache from reads/tool-results), so even a _true_ 75%
@@ -47,21 +49,23 @@ up) and the **<1% output-share** (model-agnostic).
 
 **Claim:** README headline table "63%" reduction. **Verdict: DEBUNKED** on agentic coding.
 
-| Pass          | tasks × trials | mean output cut | mean bill cut     | output % of session | correctness |
-| ------------- | -------------- | --------------- | ----------------- | ------------------- | ----------- |
-| haiku (pilot) | 2 × 2          | **−2%**         | **−3%** (bill UP) | 1.1%                | 0 regress   |
+| Pass                               | tasks × trials | mean output cut | mean bill cut     | output % of session | correctness |
+| ---------------------------------- | -------------- | --------------- | ----------------- | ------------------- | ----------- |
+| haiku (pilot)                      | 2 × 2          | **−2%**         | **−3%** (bill UP) | 1.1%                | 0 regress   |
+| **sonnet (3 tasks × 5, CREDIBLE)** | 3 × 5          | **−10%**        | **+3%** (bill UP) | **0.7%**            | 0 regress   |
 
-Per-task on haiku: slugify −1%, debounce −2% — output GREW on both (overclaim gap
-**65 points** vs the 63% headline). Notably this is WORSE than the repo's own honest
-token benchmark (~4% haiku) — the CLAUDE.md's persistent input-token overhead made it
-net-negative, exactly as the README itself warns ("at low usage it costs more than it
-saves"). The 63% headline is a 465→170 **WORD** count over 4 single-shot prompts; on
-multi-turn coding the output-token saving is absent and the bill grew.
+Per-task on sonnet (5 trials): slugify +3%, debounce +1%, **review-doc −35%** (output
+GREW 35% on the prose-heavy task; overclaim gap **73 points** vs the 63% headline).
+**The key kill:** the repo's OWN reproducible token benchmark claims ~12% output reduction
+on sonnet — we measured **−10% (output grew)** on multi-turn coding, so even the author's
+honest number doesn't reproduce here. The CLAUDE.md's persistent input-token overhead
+makes it net-negative, exactly as the README itself warns ("at low usage it costs more
+than it saves"). The 63% headline is a 465→170 **WORD** count over 4 single-shot prompts.
 
-Caveats (honest): haiku, 2 tasks, 2 trials — directional + noisy. The robust fact is
-the **direction** (net-negative: output + bill both up), which matches the repo's own
-admission. Next: a sonnet pass (its README reports ~12% there) + the heavier review-doc
-task to test whether it ever pays off.
+Caveats (honest): output is ~0.7% of session tokens so the bill impact is tiny either
+way; the robust fact is the **direction** (net-negative: output + bill both up), which
+holds across haiku + sonnet and matches the repo's own admission. Both compression skills
+do WORST on the prose-heavy review-doc task — the surface telegraphic style should help.
 
 ## Quality plugins (superpowers / oh-my-claudecode / wshobson)
 
