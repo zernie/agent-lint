@@ -585,6 +585,18 @@ assertRates`) is the recommended path for testing one skill, but
   viral 75% token-saving skill and it grew my bill"_). The benchmark IS the content;
   each debunk drives mindshare the linters can't buy (agnix's 1-HN-point problem). Ties
   A1 → adoption. See [measurement-authority.md](measurement-authority.md), `bench/ecosystem/`.
+- **PUBLIC plugin leaderboard (site + GitHub) — the persistent viral artifact.** Promote
+  A1 from internal findings to a public, always-on **ranking of real plugins/skills by
+  claim-vs-measured + structural health**, with **head-to-head within a category** (e.g.
+  compression: caveman vs token-efficient vs … on the same corpus). It's the durable
+  home the debunk articles link into and the data moat accumulates in. Reuses what's
+  already built: `src/leaderboard.ts` (structural-health score/grade) + `bench/ecosystem/`
+  (A1 claim-vs-measured) — the new work is curation, a web surface, and a re-run cadence
+  (sub-affordable, so it can stay current — the thing competitors can't afford). The
+  README **badge** (above) is the per-plugin face of this leaderboard. The
+  highest-leverage distribution bet; pairs with A1. See
+  [measurement-authority.md](measurement-authority.md) (the two-products section),
+  [divergent-bets.md](divergent-bets.md) (#9 leaderboard), `bench/ecosystem/`.
 - **Build-business-on-top + acquisition posture:** position so (a) others can build on
   vigiles (open-core `agent()` + the `vigiles/adapter` authoring kit + the measurement
   DATA as the moat), and (b) it's an acquisition target for a top AI lab that wants to

@@ -175,15 +175,25 @@ the mindshare tell. **No incumbent; near-zero mindshare** (none listed in
 awesome-claude-code, 47k★; npm downloads are CI-inflated vanity — agnix is 28k/mo but its
 Show HN got **1 point**).
 
-| Tool                         | Surface lint  | Cross-ref (exists **+ enabled**) | Typed spec / compile | Test/eval       | Capability-diff | Multi-harness / LSP  | Stars / signal           | Lang  | License   |
-| ---------------------------- | ------------- | -------------------------------- | -------------------- | --------------- | --------------- | -------------------- | ------------------------ | ----- | --------- |
-| **agnix** (agent-sh)         | ✅ ~414 rules | ❌                               | ❌                   | ❌              | ❌              | ✅ 7 harnesses + LSP | 296★ / 1 HN pt           | Rust  | OSS       |
-| **claudelint** (114 rules)   | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 9★ / 13k npm (CI)        | TS    | MIT       |
-| **AgentLint** (0xmariowu)    | ✅ 51 checks  | ❌                               | ❌                   | ◑ AI checks     | ❌              | CC/Codex/Cursor      | 41★                      | JS    | OSS       |
-| **cclint** (×2)              | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 20★ / 6★                 | TS    | MIT       |
-| **SkillCheck**               | ✅ skills     | ❌                               | ❌                   | ◑               | ❌              | cross-tool           | 32★ / commercial         | shell | freemium  |
-| **`claude plugin validate`** | ✅ manifest   | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 1st-party (the floor)    | —     | 1st-party |
-| **vigiles**                  | ✅ ~31 rules  | ✅ **only one in-market**        | ✅ **only one**      | ✅ **only one** | ◑ prototyped    | ✅ CC+Codex          | — / — (no mindshare yet) | TS    | OSS       |
+| Tool                         | Surface lint  | Cross-ref (exists **+ enabled**) | Typed spec / compile | Test/eval       | Capability-diff | Multi-harness / LSP  | Stars / signal        | Lang  | License   |
+| ---------------------------- | ------------- | -------------------------------- | -------------------- | --------------- | --------------- | -------------------- | --------------------- | ----- | --------- |
+| **agnix** (agent-sh)         | ✅ ~414 rules | ❌                               | ❌                   | ❌              | ❌              | ✅ 7 harnesses + LSP | 296★ / 1 HN pt        | Rust  | OSS       |
+| **claudelint** (114 rules)   | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 9★ / 13k npm (CI)     | TS    | MIT       |
+| **AgentLint** (0xmariowu)    | ✅ 51 checks  | ❌                               | ❌                   | ◑ AI checks     | ❌              | CC/Codex/Cursor      | 41★                   | JS    | OSS       |
+| **cclint** (×2)              | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 20★ / 6★              | TS    | MIT       |
+| **SkillCheck**               | ✅ skills     | ❌                               | ❌                   | ◑               | ❌              | cross-tool           | 32★ / commercial      | shell | freemium  |
+| **`claude plugin validate`** | ✅ manifest   | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 1st-party (the floor) | —     | 1st-party |
+| **vigiles**                  | ✅ ~20 rules  | ✅ **only one in-market**        | ✅ **only one**      | ✅ **only one** | ◑ prototyped    | ✅ CC+Codex          | **11★ (friends)**     | TS    | OSS       |
+
+> **Rule-count is apples-to-oranges — do NOT read this as "agnix wins on lint."** agnix's
+> ~414 and claudelint's 114 are MICRO-checks (one per structural assertion); vigiles ships
+> ~20 SEMANTIC rules, several of which do something the others structurally can't —
+> **cross-reference** the named rule against the real linter config, the named tool against
+> the harness catalog, the named MCP tool against the declared servers. One vigiles
+> `subagent-tool-contract` ≠ one agnix style-check. Read the CAPABILITY columns
+> (cross-ref / typed / test-eval), not the count. And the star column is the real story:
+> **vigiles is at 11 (friends); the whole category is pre-mindshare** — a land-grab, not a
+> catch-up.
 
 **Read of Market C (adoption-calibrated):**
 

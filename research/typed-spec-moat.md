@@ -21,14 +21,19 @@
 > is the headline, the spec is the on-ramp to testability), `CLAUDE.md` (the
 > deterministic-constraints-layer positioning, the adoption ladder, the rules).
 >
-> ⚠️ **READ THE COMMODITIZATION CHECK FIRST (§ "Competitive reality check,
-> 2026-06-21", before See also).** A same-day competitive sweep found the headline
-> "moats" below are substantially CLAIMED or closely analogized by shipping
-> competitors (riftmap, AgentAuditKit/PolicyLayer, Mastra, promptfoo). The durable
-> edge is the **substrate** (the instruction-file harness as a typed program) + the
-> **sub-affordable measurement** identity — NOT ownership of these capabilities.
-> Don't re-inflate the moat from the optimistic sections without that section's
-> deflation. See also `spec-value-model.md`.
+> ⚠️ **READ THE COMPETITIVE CHECK FIRST (§ "Competitive reality check", before See
+> also) — it was MARKET-CORRECTED.** First pass said these moats are "commoditizing";
+> grounded re-check found that was a **market conflation**. The tools that ship these
+> capabilities (riftmap, AgentAuditKit/PolicyLayer, Mastra, promptfoo) are in **DIFFERENT
+> markets** (infra, MCP-server security, app-building) and never touch a coding-agent
+> harness. In vigiles's ACTUAL market the only rivals are **pure surface linters**
+> (claudelint/cclint/agnix/`claude plugin validate`) that do **none** of vigiles's
+> cross-ref / typed / test-eval work — and the whole category is **pre-mindshare** (vigiles
+> 11★; biggest rival agnix 296★/1-HN-pt). So the moats aren't "taken" in-market — they're
+> unoccupied; the real bottleneck is **distribution, not capability**, and the durable
+> edge is the **substrate + sub-affordable measurement**. Don't re-inflate the
+> per-row "TAKEN" labels below without the market correction. Full segmented matrix:
+> `landscape-mid-2026.md`; see also `spec-value-model.md`.
 
 ## Contents
 
@@ -38,7 +43,7 @@
 4. The complete ranked record — every finding, every round
 5. The adoption tension (OPEN — for the founder to resolve)
 6. Proposed build order
-7. Competitive reality check (2026-06-21) — the moats are commoditizing
+7. Competitive reality check (2026-06-21, market-corrected) — capabilities live in adjacent markets; vigiles's own market is wide open
 8. See also
 
 ---
@@ -446,7 +451,7 @@ pivot wants; (5) is orthogonal correctness.
 
 ---
 
-## Competitive reality check (2026-06-21) — the moats are commoditizing
+## Competitive reality check (2026-06-21, market-corrected) — capabilities live in adjacent markets; vigiles's own market is wide open
 
 A skeptical same-day competitive sweep (web-verified) tested whether each headline
 moat is actually unclaimed. Verdict: **mostly not.** Record this so the optimistic

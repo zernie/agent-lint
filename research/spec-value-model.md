@@ -114,3 +114,7 @@ harness as one program**, and a **deterministic, judge-free contract oracle**.
   mixed-repo behavior (points here for the capability model).
 - [`effect-boundary-design.md`](effect-boundary-design.md) — why the `effect()`
   sub-region leg was dropped.
+- [`landscape-mid-2026.md`](landscape-mid-2026.md) § "Market-segmented competitive
+  matrix" — the COMPETITIVE complement to this capability matrix: who else is in
+  vigiles's actual market (cc/codex-harness linters) and what they don't do. The two
+  matrix hubs: this doc = "what a spec buys"; that one = "who competes".
