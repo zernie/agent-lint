@@ -563,6 +563,13 @@ assertRates`) is the recommended path for testing one skill, but
   (`A.ok` must satisfy `B.needs`, checked by `tsc`) and typed purity (a `pure`
   agent can't be given `Bash` — a type error). The strongest "why a spec, not
   markdown" answer.
+- [`typed-spec-frontier.md`](typed-spec-frontier.md) — the deeper PL-theory +
+  formal-methods round (builds on `typed-spec-power.md`): the lethal trifecta as a
+  forbidden compile-time TYPE (F1, the headline), a plan-before-mutate typestate
+  protocol (F2), separation-logic disjoint-write runtime gates (F3), and
+  noninterference as a 2-safety hyperproperty → an A/B eval pair (F4). All four
+  prototyped against real `tsc` 5.9.3 / runtime in
+  [`prototypes/typed-spec-frontier/`](prototypes/typed-spec-frontier/).
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·
