@@ -124,6 +124,18 @@ those is the opposite of how a coding agent actually runs._
 
 ## Caveman — prior art (don't claim our thesis as novel; lead with what's NEW)
 
+> **⚠️ SATURATION WARNING (2026-06-21): the caveman debunk is CROWDED and ~6 months old.**
+> A fresh "caveman is vaporware" article is LATE and will draw "already covered" pushback.
+> Web-confirmed: input-dominance is the consensus take (top HN comment), independent
+> measurements exist (Kuba Guzik 14–21%, GrowwStacks "no savings", devneeddev/X, Decrypt,
+> andrew.ooo), the author conceded "preliminary testing," and token-efficient's author
+> debunked his own headline. **Do NOT make caveman the flagship.** Our novelty is the
+> METHOD, not the verdict: a reproducible, multi-turn, correctness-gated harness (others
+> ran one-off single-shot tests), the benchmark-CODE audit (others only asserted "input
+> dominates"), the sharper finding (output GROWS / −55% on the best-case task), and the
+> SAME harness across N skills. **Lead with the leaderboard/method; caveman is one
+> validation ROW (it agrees with prior work → proves the harness is sound), not the story.**
+
 A 2026-06 web sweep found the space is **loudly claimed but lightly measured** — which
 is the opening, but our qualitative thesis is already public, so cite it:
 
