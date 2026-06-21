@@ -33,11 +33,7 @@ type Shape = Readonly<Record<string, FieldType>>;
 // `Err`    — the error fields it produces.
 // ---------------------------------------------------------------------------
 
-interface TypedAgent<
-  Needs extends Shape,
-  Ok extends Shape,
-  Err extends Shape,
-> {
+interface TypedAgent<Needs extends Shape, Ok extends Shape, Err extends Shape> {
   readonly _specType: "agent";
   readonly name: string;
   /** Input contract: the fields the agent reads from the prior step's `ok`. */

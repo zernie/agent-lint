@@ -21,7 +21,9 @@ interface PureAgentSpec<P extends Purity> {
   readonly purity: P;
   readonly tools: readonly AllowedAt<P>[];
 }
-function agent<const P extends Purity>(spec: PureAgentSpec<P>): PureAgentSpec<P> {
+function agent<const P extends Purity>(
+  spec: PureAgentSpec<P>,
+): PureAgentSpec<P> {
   return spec;
 }
 

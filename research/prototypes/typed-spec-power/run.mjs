@@ -28,11 +28,10 @@ const TSC_FLAGS = [
 ];
 
 function tsc(file) {
-  const r = spawnSync(
-    "npx",
-    ["tsc", ...TSC_FLAGS, join(here, file)],
-    { cwd: repoRoot, encoding: "utf8" },
-  );
+  const r = spawnSync("npx", ["tsc", ...TSC_FLAGS, join(here, file)], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
   return { code: r.status ?? 1, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 

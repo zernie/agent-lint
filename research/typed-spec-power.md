@@ -30,16 +30,16 @@ yes, it's ranked down — even if it sounds good.
 
 ## The ranking
 
-| # | Idea | Non-replicable? | Value | Buildable? | Verdict |
-|---|------|-----------------|-------|------------|---------|
-| 1 | **Typed handoff composition** (`A.ok` must satisfy `B.needs`, checked by `tsc`) | **Yes — structural** | **High** | Med (POC done) | **PURSUE — the killer use** |
-| 2 | **Make-invalid-states-unrepresentable: typed purity** (a `pure` agent CANNOT be given `Bash` — a type error) | **Yes** | **High** | **Low (POC done)** | **PURSUE — cheapest big win** |
-| 3 | Exhaustiveness via discriminated unions (`assertNever` over hook events / tool effects) | Yes | Med | Low | Adopt where a union exists |
-| 4 | Test-generation from typed fields (exhaustive cases from a `result()` union) | Partly | Med | Med | Sibling workstream; types add exhaustiveness |
-| 5 | Refactor/rename safety + queryable model ("every agent that can push") | Mostly | Med-Low | Med | Real but modest; falls out of #1/#2 |
-| 6 | Higher-order / parameterized specs (`(cfg) => spec`, shared rule-sets, org presets) | **No** | Med | Low | DRY only — markdown-replicable via a generator |
-| 7 | One source → many *formats* (CLAUDE.md + `.mdc` + `.clinerules` …) | No | Low | — | **KILLED** (divergent-bets #2); compose, don't absorb |
-| 7b | One source → many *consistency-critical* artifacts (tool list → Cedar policy) | Yes | Med | Med | Narrow keeper — note below |
+| #   | Idea                                                                                                         | Non-replicable?      | Value    | Buildable?         | Verdict                                               |
+| --- | ------------------------------------------------------------------------------------------------------------ | -------------------- | -------- | ------------------ | ----------------------------------------------------- |
+| 1   | **Typed handoff composition** (`A.ok` must satisfy `B.needs`, checked by `tsc`)                              | **Yes — structural** | **High** | Med (POC done)     | **PURSUE — the killer use**                           |
+| 2   | **Make-invalid-states-unrepresentable: typed purity** (a `pure` agent CANNOT be given `Bash` — a type error) | **Yes**              | **High** | **Low (POC done)** | **PURSUE — cheapest big win**                         |
+| 3   | Exhaustiveness via discriminated unions (`assertNever` over hook events / tool effects)                      | Yes                  | Med      | Low                | Adopt where a union exists                            |
+| 4   | Test-generation from typed fields (exhaustive cases from a `result()` union)                                 | Partly               | Med      | Med                | Sibling workstream; types add exhaustiveness          |
+| 5   | Refactor/rename safety + queryable model ("every agent that can push")                                       | Mostly               | Med-Low  | Med                | Real but modest; falls out of #1/#2                   |
+| 6   | Higher-order / parameterized specs (`(cfg) => spec`, shared rule-sets, org presets)                          | **No**               | Med      | Low                | DRY only — markdown-replicable via a generator        |
+| 7   | One source → many _formats_ (CLAUDE.md + `.mdc` + `.clinerules` …)                                           | No                   | Low      | —                  | **KILLED** (divergent-bets #2); compose, don't absorb |
+| 7b  | One source → many _consistency-critical_ artifacts (tool list → Cedar policy)                                | Yes                  | Med      | Med                | Narrow keeper — note below                            |
 
 The two clear winners are **#1 typed handoff composition** and **#2 typed
 purity**. Both were prototyped against real `tsc` (evidence below). Everything
@@ -49,7 +49,7 @@ else is either modest, already-shipped, or markdown-replicable.
 
 ## #1 — Typed handoff composition (the killer use) — PROTOTYPED
 
-**The claim.** A multi-agent railway is a *pipeline*: planner → implementer →
+**The claim.** A multi-agent railway is a _pipeline_: planner → implementer →
 reviewer. Each worker PRODUCES a success payload (`result().ok`) and the next
 worker CONSUMES some of those fields. The interesting bugs are at the **seams**:
 
@@ -75,7 +75,7 @@ frontmatter blocks and compare field NAMES with a custom rule. But:
 2. It cannot **carry the shape forward through composition** — after `then(A, B)`
    the pipeline's type IS `B`'s output, so the NEXT `then` is checked against the
    real, computed downstream shape. A linter re-derives this by hand; the type
-   system propagates it for free. This is *computation over the spec*, the thing a
+   system propagates it for free. This is _computation over the spec_, the thing a
    string format has no access to.
 3. Field TYPES (`string` vs `string[]`), not just names, are compared structurally.
 
@@ -115,8 +115,8 @@ shipping this means a typed overload of `agent()`/`railway()` that PRESERVES the
 field shapes (the POC shows the mechanism; the shipped builders would need the
 generic-carrying variant). It is the highest-value, medium-effort item.
 
-**How it pays into the existing pillars.** This is the *compile-time* twin of the
-shipped `result()` → `assertAgentOk` *test-time* win: `result()` lets you assert one
+**How it pays into the existing pillars.** This is the _compile-time_ twin of the
+shipped `result()` → `assertAgentOk` _test-time_ win: `result()` lets you assert one
 worker's outcome with no LLM judge; typed composition lets you prove the **wiring
 between** workers before you run them. Same substrate (typed contracts), extended
 from one node to the graph — exactly the "railway is a verified orchestration
@@ -134,7 +134,7 @@ can reject it **earlier and for free**: make `tools` for a `pure` agent a
 **Why markdown + a linter cannot do this.** A linter CAN flag a `pure` skill whose
 `tools:` includes `Bash` — and vigiles' `scan`/compile do. But the type-system
 version is categorically better in one way a string format never reaches: the bad
-state is **unrepresentable**, not *detected-then-rejected*. The author cannot even
+state is **unrepresentable**, not _detected-then-rejected_. The author cannot even
 TYPE the invalid spec; the editor refuses it at the keystroke. "Detected and
 rejected" (linter) vs "cannot be expressed" (type) is the make-invalid-states-
 unrepresentable distinction (`harness-state-space.md`) — the type closes the window
@@ -155,11 +155,11 @@ A `pure` agent **cannot be handed `Bash`**; a `bounded` agent **cannot be handed
 `Bash`** — at the author's `tsc`, no vigiles run, clean native error messages.
 
 **Cost / risk — and the honest caveat.** This is the cheapest win to ship (a
-discriminated `tools` field type), and its error messages are *cleaner* than #1's.
+discriminated `tools` field type), and its error messages are _cleaner_ than #1's.
 BUT: the type can only gate the **statically-decidable** half. The shipped runtime
 gate (`decidePurityGate` + `isReadOnlyBash`) does something the type CANNOT — it
 admits `git status` and denies `git push` under `bounded` by classifying the
-*actual command at the live call*. A type sees `"Bash"`, not the command string.
+_actual command at the live call_. A type sees `"Bash"`, not the command string.
 So typed purity is a **strict author-time addition** to the runtime gate, never a
 replacement: it stops you from writing a contradiction, the gate still confines the
 allowed-but-undecidable cases at runtime. Frame it that way and it's pure upside.
@@ -168,7 +168,7 @@ allowed-but-undecidable cases at runtime. Frame it that way and it's pure upside
 
 Discriminated unions + `default: assertNever(x)` make "every hook event handled,"
 "every tool classified" a compile error when a case is added and a handler isn't.
-Genuinely non-replicable (markdown has no `switch`), but it's an *internal*
+Genuinely non-replicable (markdown has no `switch`), but it's an _internal_
 implementation discipline vigiles already uses (`src/core/hash.ts` `assertNever`),
 not a NEW user-facing spec power. Adopt it wherever a spec field is a closed union
 (e.g. an author handling every `OutputFieldType`), but it's a Med-value rider on
@@ -189,7 +189,7 @@ first). Medium value, gated on #1.
 
 "Rename an agent and the compiler finds every `delegate` to it"; "statically list
 every agent that can push." Both are true once the spec is typed data — but they're
-mostly a *consequence* of #1/#2, not a separate build. Rename-safety already partly
+mostly a _consequence_ of #1/#2, not a separate build. Rename-safety already partly
 holds (a renamed agent breaks `delegate("old")`'s known-agent check at compile, and
 with #1's typed targets it would break at `tsc`). The "query the model" angle
 (`scan` already answers "which agent has no tool contract," "which skills overlap")
@@ -210,10 +210,10 @@ give. Useful, low-novelty; do it because it's cheap, not because it's a moat.
 #2, founder "no"; `CLAUDE.md`'s compose-with-sync-tools rule). vigiles emits the
 canonical CLAUDE.md/AGENTS.md and lets Ruler/rulesync fan out; it does NOT absorb
 per-tool format maintenance. The `target: [...]` byte-identical CLAUDE.md+AGENTS.md
-is already shipped and is the *only* fan-out vigiles owns.
+is already shipped and is the _only_ fan-out vigiles owns.
 
 **#7b (one source → a consistency-CRITICAL second artifact) is a narrow keeper.**
-The interesting case is NOT another markdown flavour but a different *kind* of
+The interesting case is NOT another markdown flavour but a different _kind_ of
 artifact that must stay in lockstep with the spec: e.g. compile an agent's `tools`
 allowlist into a **Cedar policy** (or a JSON-Schema, or a settings.json permission
 block) so the runtime gate and the declared contract are provably the same source.
@@ -227,11 +227,11 @@ Med-value and downstream of #1/#2; park it as a follow-on, not a headline.
 of a typed spec, with #2 (typed purity) as the cheap companion shipped first.**
 
 - **#2 ships first** — it's a one-field type change (`tools: readonly
-  AllowedAt<P>[]`), has the cleanest error messages, and is pure upside over the
+AllowedAt<P>[]`), has the cleanest error messages, and is pure upside over the
   existing runtime gate. It's the proof-of-concept that "the type rejects what the
   linter only flags."
-- **#1 is the headline** — it's the genuinely new capability: *the compiler proves
-  the data-flow wiring of a multi-agent railway before anything runs.* It's the
+- **#1 is the headline** — it's the genuinely new capability: _the compiler proves
+  the data-flow wiring of a multi-agent railway before anything runs._ It's the
   compile-time twin of the one already-celebrated win (`result()` →
   `assertAgentOk`), extending typed contracts from a single node to the whole graph.
   It needs the real lift (a generic-carrying `agent()`/`railway()` that preserves
