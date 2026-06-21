@@ -260,6 +260,39 @@ Not competitors (different market), but their mechanics are worth stealing:
 
 ---
 
+## Benchmark / leaderboard prior art (2026-06-21) — what exists for the A1 leaderboard to beat
+
+Before building the public plugin leaderboard, a web sweep of who ALREADY benchmarks/ranks
+Claude Code skills. The space splits three ways, and the reproducible-claim-gated slice is
+still open:
+
+1. **Subjective "best skills 2026" listicles — ABUNDANT (SEO content).** Composio,
+   firecrawl, turbodocx, mejba, raxxo, scriptbyai, "11 tested / 4 worth keeping"
+   (buildtolaunch). Curated opinion, no reproducible measurement. Saturated but low-signal.
+2. **Install / adoption leaderboards — EXIST (popularity, not effectiveness).**
+   `quemsah/awesome-claude-plugins` auto-collects plugin adoption metrics via n8n; published
+   install counts (Frontend Design 829k, Superpowers 752k, Context7 349k as of 2026-06-01).
+   Ranks by POPULARITY, says nothing about whether a claim holds.
+3. **One-off measured benchmarks — a few, each ad-hoc / single-skill.** caveman (SATURATED,
+   see FINDINGS); a **superpowers 12-session A/B** (6 with / 6 without → 9% cheaper, 14%
+   fewer tokens, "better quality" — a REAL controlled study that VINDICATES superpowers, so
+   the leaderboard won't be all debunks); MindStudio "5 skills cut 70%" (claim-PUSHING,
+   uncritical — live hype to verify); browser MCP-vs-CLI token tests (~4×).
+
+**The open slice vigiles's leaderboard owns:** none of the above is **reproducible +
+re-runnable + multi-skill + claim-VS-measured + correctness-gated + head-to-head +
+continuous + open-method** all at once. Install leaderboards rank by popularity; listicles
+by vibes; the A/Bs are one-off single-skill. So position the leaderboard NOT as "ranking
+plugins" (install boards exist) or "I tested N skills" (listicles exist) but on the
+**claim-gap + reproducibility + correctness** axes — "the published % vs what re-runs, with
+a correctness gate, head-to-head, on the same corpus." Honest framing: some claims HOLD
+(superpowers' own A/B is credible) — the leaderboard's value is sorting the real from the
+hyped, not blanket debunking. Sources: buildtolaunch.substack.com/p/best-claude-code-plugins-tested-review;
+mindstudio.ai/blog/5-claude-code-skills-cut-token-costs-70-percent-benchmarked;
+github.com/quemsah/awesome-claude-plugins; composio.dev/content/top-claude-code-plugins.
+
+---
+
 ## Unified comparison matrix
 
 Combining the existing tables in `competitive-landscape.md` with mid-2026 entrants. Rows are projects; columns are the dimensions that matter for positioning vigiles.
