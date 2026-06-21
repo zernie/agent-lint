@@ -307,32 +307,42 @@ through a forgeable self-declared flag** — the anti-pattern ocap exists to rem
 
 **The fix (ranked):**
 
-1. **Subagents — make the region structural via `SubagentStart`/`SubagentStop`.** A
+1. **Subagents — make the region structural via harness events (FOLLOW-ON).** A
    subagent IS the region (isolated context, call→return = the `runST`/lexical scope).
-   The newly-confirmed Claude Code hooks `SubagentStart`/`SubagentStop` (carry
-   `agent_id`/`agent_type`) are the **deterministic, harness-emitted** bracket: wire
-   `SubagentStart` → `setActiveAgent` + open the effect window, `SubagentStop` → clear +
-   close. Deletes the model-facing signal AND closes the separately-tracked "which
-   subagent is active is still model-invoked" open problem. Finer boundaries become a
-   **two-subagent split** (a `pure` planner returning a `result()` plan → a
-   `bounded`/`unrestricted` executor — Plan-Then-Execute, reusing shipped
-   `result()`/`delegate()`/`railway()`).
-2. **Skills — drop the position `effect()`; keep the per-call purity floor.** A default
-   skill is spliced into the main conversation: no return, no per-section event, no
-   structural bracket. Remove `<!-- vigiles:effect -->` for skills + stop the skill rail
-   reading `effect-active.json`; the shipped `decidePurityGate` (the capability gate,
-   needs NO enter/exit) holds on every call. A workflow skill that must mutate uses
-   `context: fork` (shipped) → becomes a subagent → routes through path 1. "Skills can't
-   have a deterministic effect region" becomes "promote it to a fork when it needs one."
+   **CORRECTION:** the research agent assumed a Claude Code **`SubagentStart`** hook — it
+   does NOT exist (CC's verified `dialect.hookEvents` has `SubagentStop` but no Start;
+   the agent conflated Codex, which has both). So for CC the deterministic, harness-emitted
+   bracket is **`PreToolUse` with `tool_name === "Task"`** (dispatch begins, parent context)
+   → open the window + `setActiveAgent`, and **`SubagentStop`** → clear + close. This still
+   deletes the model-facing signal AND closes the "which subagent is active is still
+   model-invoked" open problem. Whole-subagent-is-the-region is the simplest semantics;
+   finer boundaries become a **two-subagent split** (a `pure` planner returning a
+   `result()` plan → a `bounded`/`unrestricted` executor — Plan-Then-Execute, reusing
+   shipped `result()`/`delegate()`/`railway()`). NOT shipped this pass (needs a live-CC
+   Task/SubagentStop wiring + a semantics decision); the model-emitted `effect-enter`/`exit`
+   stays for agents as the interim, where a fixed-contract subagent is far less fragile than
+   a workflow skill.
+2. **Skills — drop the position `effect()`; keep the per-call purity floor. ✅ SHIPPED
+   (2026-06-20).** A default skill is spliced into the main conversation: no return, no
+   per-section event, no structural bracket. `compileSkill` now **errors** on `effect()` in
+   a skill body (`effect-in-skill`, a category gate mirroring `output-without-fork`), and
+   `evaluateSkillPreToolUse` no longer reads `effect-active.json` — the shipped
+   `decidePurityGate` (the capability gate, needs NO enter/exit) holds on every call. A
+   workflow skill that must mutate uses `context: fork` (shipped) → becomes a subagent →
+   routes through path 1. "Skills can't have a deterministic effect region" becomes
+   "promote it to a fork when it needs one."
 3. **Taint/IFC (lethal-trifecta) is a SEPARATE future feature**, not an `effect()` fix —
    labels flow through the tool graph (deterministic), not model declarations. Park it.
 
-**Migration:** retire the model-facing `vigiles effect-enter`/`effect-exit` CLI + the
-compiler-injected "call effect-enter before a side-effecting tool" prose (that prose IS
-the contradiction); keep `effect-region.ts`'s state file only as an INTERNAL mechanism
-written by the `SubagentStart` hook. Positioning: "purity floors are deterministic;
-effect regions are a **subagent** primitive" — never "purity/effect gates your skills"
-(the README already avoids this). Full prior-art set + the Plan-Then-Execute pattern:
+**Migration:** the follow-on (path 1) retires the model-facing `vigiles
+effect-enter`/`effect-exit` CLI + the compiler-injected "call effect-enter before a
+side-effecting tool" prose (that prose IS the contradiction), keeping
+`effect-region.ts`'s state file only as an INTERNAL mechanism written by the
+`PreToolUse(Task)`/`SubagentStop` hooks. This pass keeps those CLI commands for the AGENT
+rail as the interim (skills no longer reach them — `effect()` is a compile error there).
+Positioning (DONE): "purity floors are deterministic; effect regions are a **subagent**
+primitive" — never "purity/effect gates your skills" (README + CLAUDE.md keyFiles
+corrected). Full prior-art set + the Plan-Then-Execute pattern:
 [securing LLM agents (arXiv 2506.08837)](https://arxiv.org/pdf/2506.08837), Koka/Unison
 abilities, [Monadic Regions](https://www.cs.cornell.edu/people/fluet/research/rgn-monad/SPACE04/space04.pdf),
 [Claude Code hooks](https://code.claude.com/docs/en/hooks).

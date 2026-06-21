@@ -591,10 +591,10 @@ test('purity: "pure" skill with wildcard tools errors', () => {
   assert.match(pureErrors[0].message, /inherits-all/);
 });
 
-test("effect() body compiles to <!-- vigiles:effect --> markers in a skill", () => {
-  const { markdown } = compileSkill(
-    skill({
-      name: "release",
+test("effect() body compiles to <!-- vigiles:effect --> markers in an agent", () => {
+  const { markdown } = compileAgent(
+    agent({
+      name: "releaser",
       description: "Cut a release.",
       body: instructions`
         ## Prepare (pure)
@@ -608,7 +608,7 @@ test("effect() body compiles to <!-- vigiles:effect --> markers in a skill", () 
         `}
       `,
     }),
-    { basePath: process.cwd() },
+    { specFile: "agents/releaser.md.spec.ts", dialect: claudeCodeDialect },
   );
   assert.ok(
     markdown.includes("<!-- vigiles:effect -->"),
@@ -625,19 +625,37 @@ test("effect() body compiles to <!-- vigiles:effect --> markers in a skill", () 
 });
 
 test("effect() with a bad inner file ref reports stale-file error", () => {
-  const { errors } = compileSkill(
-    skill({
-      name: "release",
+  const { errors } = compileAgent(
+    agent({
+      name: "releaser",
       description: "Cut a release.",
       body: instructions`
         ${effect`write ${file("nonexistent-xyz.md")}`}
       `,
     }),
-    { basePath: process.cwd() },
+    { specFile: "agents/releaser.md.spec.ts", dialect: claudeCodeDialect },
   );
   const stale = errors.filter((e) => e.type === "stale-file");
   assert.ok(
     stale.length > 0,
     "should report stale-file for bad ref inside effect()",
+  );
+});
+
+test("effect() in a SKILL is a compile error (subagent-only primitive)", () => {
+  const { errors } = compileSkill(
+    skill({
+      name: "release",
+      description: "Cut a release.",
+      body: instructions`
+        ## Apply
+        ${effect`write the changelog`}
+      `,
+    }),
+    { basePath: process.cwd() },
+  );
+  assert.ok(
+    errors.some((e) => e.type === "effect-in-skill"),
+    "effect() in a skill body should report effect-in-skill",
   );
 });
