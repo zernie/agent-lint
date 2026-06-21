@@ -580,11 +580,16 @@ assertRates`) is the recommended path for testing one skill, but
   ladder (lint→test→eval, the exact funnel). Needs a `vigiles badge`/shield endpoint +
   a public verdict. The single highest-leverage distribution artifact tied to the
   product. See [distribution-strategy.md](distribution-strategy.md).
-- **Viral debunk articles** (measurement-as-marketing): publish the A1 findings as
-  shareable "X is vaporware" pieces (e.g. _"Caveman Mode is vaporware: I measured the
-  viral 75% token-saving skill and it grew my bill"_). The benchmark IS the content;
-  each debunk drives mindshare the linters can't buy (agnix's 1-HN-point problem). Ties
-  A1 → adoption. See [measurement-authority.md](measurement-authority.md), `bench/ecosystem/`.
+- **Viral debunk articles** (measurement-as-marketing) — but **method-first, NOT
+  caveman-first.** The caveman take is SATURATED (~6mo old; Kuba Guzik/GrowwStacks/HN/
+  Decrypt already covered it; the author conceded), so a "caveman is vaporware" piece is
+  late and draws "already covered" pushback. The defensible angle is the **reproducible
+  harness applied at SCALE** ("I built a re-runnable harness and measured N hyped skills'
+  claims — here's the leaderboard"), where caveman is one VALIDATION row (agreeing with
+  prior work proves the harness is sound) and the fresh content is the under-measured
+  skills (token-efficient, the cluster) + head-to-head + the output-GROWS / best-case-is-
+  worst finding. Ties A1 → adoption. See [measurement-authority.md](measurement-authority.md),
+  `bench/ecosystem/FINDINGS.md` (§ saturation warning + methodology audit).
 - **PUBLIC plugin leaderboard (site + GitHub) — the persistent viral artifact.** Promote
   A1 from internal findings to a public, always-on **ranking of real plugins/skills by
   claim-vs-measured + structural health**, with **head-to-head within a category** (e.g.
