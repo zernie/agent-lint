@@ -90,6 +90,24 @@
       per side-effecting tool, so a side-effecting agent's "hole" is mocked/denied in a
       generated test with **zero new spec surface**. Bounded — reuses `src/core/effects.ts` + the existing scaffold paths. → `effect-boundary-design.md` (the salvage section),
       `typed-contracts-for-agents.md` · **MEDIUM**
+- [x] **Typed purity — SHIPPED (2026-06-21, `249aead`).** Compile-time half of the
+      purity floor: `vigiles/claude-code`'s `agent()`/`skill()` make `purity:"pure"` +
+      `"Bash"` a `tsc` error at edit time (core `vigiles/spec` stays open, backwards-compatible).
+      A strict addition to the runtime `decidePurityGate`. → `typed-spec-power.md`
+- [ ] **Typed composition — IN FLIGHT.** Make `agent()`/`railway()` carry the `result()`
+      field shapes as generics so a multi-agent pipeline whose handoffs don't line up
+      (missing field / wrong type / wrong order) **won't compile** — the headline
+      non-replicable typed-spec win. Additive over the string-based `delegate()` path.
+      → `typed-spec-power.md` (idea #1, prototyped)
+- [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
+      unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
+      `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler
+      demands. Rides typed purity's EXACT machinery (the same `const` tools tuple → a typed
+      capability lattice). Defense-in-depth: the type tier (config, edit-time) sits above the
+      planned `scan` check (config, CI) + the runtime egress wall (behaviour) + F4's
+      hyperproperty (the true noninterference question). Honest limit: the type sees the
+      capability COMBINATION, not the data FLOW (that's runtime). → `typed-spec-frontier.md`
+      (F1, prototyped) · **P0**
 - [x] **Elevate railway/Result contracts — SHIPPED (2026-06-20)** (docs + worked example).
       `assertAgentOk/Err/Result` existed but were invisible; added
       [`examples/harness/railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs)
