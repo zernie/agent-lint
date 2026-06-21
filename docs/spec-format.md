@@ -168,14 +168,6 @@ contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
 `"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
 tools and is a violation.
 
-> **`effect()` is experimental and parked (P3) — not for general use.** It aimed to
-> mark a side-effect _sub-region_ inside one body, but a deterministic in-flow
-> boundary has no reliable signal in the harness, so it's a **compile error in a
-> skill** and flat-only/dormant for subagents. Use the whole-unit `purity` floor
-> above (and, when you genuinely need phase separation, separate subagents). Status
->
-> - the depth-5 nesting analysis: [`research/effect-boundary-design.md`](../research/effect-boundary-design.md).
-
 ## Reference Helpers
 
 Reference helpers create branded types that the compiler validates at compile time.

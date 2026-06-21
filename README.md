@@ -129,7 +129,7 @@ It goes well past _"did it fire?"_:
 
 Almost every tier runs with **no model and no API key** — milliseconds, on every
 commit. Only the real-model evals need a model, and they run on your own `claude`
-CLI. **[How it works →](docs/harness-testing.md)** · **[Safety model →](docs/safety.md)**
+CLI. **[How it works →](docs/harness-testing.md)**
 
 ## ③ Measure — does it actually help, or just cost more?
 

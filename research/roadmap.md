@@ -237,10 +237,25 @@ v2.1.172 added depth-5 nesting, so correct tracking needs a depth-aware **stack*
 **do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
 harness signal, and the subagent-split alternative is **weaker AND costlier** than
 intended (whole-unit granularity, context-isolation, depth-5 cap, subagent spam) —
-so the realistic safety story is the **whole-unit floor + a stateful pre-hook**
-(read-before-write, conntrack/eBPF-style over the tool stream). Revisit via the
-pre-hook, not the split. See
-[`effect-boundary-design.md`](effect-boundary-design.md). · **P3**
+so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
+  **Hidden from public docs** (removed from `spec-format.md`/`harness-testing.md`;
+  `docs/safety.md` unlinked from the README + WIP-bannered) — don't re-surface until
+  it's coherent end-to-end.
+  - **Open inconsistency to reconcile (don't keep the skill special-case).** The
+    `effect-in-skill` compile error's whole rationale was "the runtime sub-region gate
+    needs a structural boundary a skill lacks" — but that gate is now parked, so
+    erroring in skills while ALLOWING `effect()` in subagents treats it as a real
+    subagent feature it no longer is (and a `context:'fork'` skill IS a subagent, yet
+    still errors). When revisited, decide `effect()`'s fate **uniformly** —
+    deprecate-everywhere / doc-marker-only / drop the builder — not special-case skills.
+  - **When revisited, build the PRE-HOOK, not the split.** A stateful `PreToolUse` gate
+    keyed on the tool stream (conntrack/eBPF-maps pattern): read-before-write ("no
+    `Write` to a file not `Read` this run"), ordering invariants ("no mutating Bash
+    until X"), state in a `.vigiles/` file or read from the transcript — no
+    restructuring, no subagent spam. The `f045554` tracker only needs nesting-safety
+    (depth-aware stack + verified spawn-tool name) IF active-agent CONTRACT enforcement
+    under nesting is wanted independently of `effect()`.
+  - See [`effect-boundary-design.md`](effect-boundary-design.md). · **P3**
 - **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
   lightweight verification helpers (the `Ref` union extended → render + compile
   verification in every switch). `doc()` was the proposed next sibling but is now
