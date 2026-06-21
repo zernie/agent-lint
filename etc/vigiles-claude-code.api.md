@@ -5,6 +5,9 @@
 ```ts
 
 // @public
+export function agent<const P extends AuthoredPurity | undefined = undefined>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec;
+
+// @public
 export function buildClaudeArgs(spec: HarnessTestSpec, hasSettings: boolean): string[];
 
 // @public
@@ -12,6 +15,15 @@ export function claudeAvailable(): boolean;
 
 // @public (undocumented)
 export const claudeCodeAdapter: HarnessAdapter;
+
+// @public
+export type ClaudeCodeBoundedTool = ClaudeCodeReadOnlyTool | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Bash";
+
+// @public
+export const claudeCodeBuiltinAgentTools: readonly ["Read", "Write", "Edit", "MultiEdit", "Bash", "BashOutput", "KillBash", "Grep", "Glob", "LS", "WebSearch", "WebFetch", "NotebookEdit", "TodoWrite", "Task", "Skill"];
+
+// @public
+export type ClaudeCodeBuiltinTool = (typeof claudeCodeBuiltinAgentTools)[number];
 
 // @public (undocumented)
 export const claudeCodeDialect: HarnessDialect;
@@ -28,8 +40,25 @@ export const claudeCodeLayout: PluginLayout;
 // @public (undocumented)
 export const claudeCodeModelMock: ModelMock;
 
+// @public
+export type ClaudeCodeReadOnlyTool = Exclude<ClaudeCodeBuiltinTool, ClaudeCodeSideEffectingTool>;
+
 // @public (undocumented)
 export const claudeCodeRuntime: HarnessRuntime;
+
+// @public
+export type ClaudeCodeSideEffectingTool = (typeof claudeCodeSideEffectingTools)[number];
+
+// @public
+export const claudeCodeSideEffectingTools: readonly ["Bash", "BashOutput", "KillBash", "Edit", "MultiEdit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Skill", "Task", "TodoWrite"];
+
+// @public
+export interface ClaudeCodeToolVocabulary extends ToolVocabulary {
+    // (undocumented)
+    readonly bounded: ClaudeCodeBoundedTool;
+    // (undocumented)
+    readonly readOnly: ClaudeCodeReadOnlyTool;
+}
 
 // @public
 export function extractRequest(body: {
@@ -104,6 +133,9 @@ export function resolveHarness(opts: {
 
 // @public
 export function scriptModel(turns: readonly ModelTurn[]): ModelTurn[];
+
+// @public
+export function skill<const P extends AuthoredPurity | undefined = undefined>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec;
 
 // @public
 export function startMock(script: readonly ModelTurn[], opts?: {

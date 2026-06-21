@@ -224,6 +224,47 @@ contract can't be looser than the floor) AND at runtime (a PreToolUse gate):
 `"pure"`/`"bounded"` require an explicit `tools` list — an absent list inherits ALL
 tools and is a violation.
 
+### Three layers of enforcement
+
+The same floor is enforced at three points, weakest-author-effort first:
+
+| Layer                | When                         | How                                                                                                                       |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Type** (authoring) | your spec's own `tsc`        | A typed `agent`/`skill` rejects a bad `purity`×`tools` combination at **edit time**, before any vigiles command runs.     |
+| **Compile**          | `vigiles compile`            | `purityViolations` re-checks the declared `tools` against the floor and fails the compile.                                |
+| **Runtime** (gate)   | every tool call, in the loop | the `PreToolUse` purity gate (`decidePurityGate`) denies a bad **live** call — including the command-level Bash decision. |
+
+**The type layer is opt-in by import** and a strict ADDITION — it never replaces
+the compile/runtime checks, which stay the universal backstop. Import `agent` /
+`skill` from **`vigiles/claude-code`** to get the compile-time type error against
+the Claude Code tool catalog:
+
+```ts
+import { agent } from "vigiles/claude-code";
+
+agent({ name: "r", description: "…", purity: "pure", tools: ["Read", "Bash"] });
+//                                                              ^^^^^^ tsc error — Bash is side-effecting
+agent({
+  name: "f",
+  description: "…",
+  purity: "bounded",
+  tools: ["Read", "Bash", "Write"],
+}); // OK — bounded admits Bash
+agent({ name: "x", description: "…", purity: "bounded", tools: ["mcp__s__t"] });
+//                                                              ^^^^^^^^^^^ tsc error — MCP is unknown-effect
+```
+
+The **core** `agent` / `skill` (from `vigiles/spec`, the default import) stay
+**harness-agnostic and unconstrained** — they accept any `tools` at any purity,
+exactly as before (backwards-compatible), and rely on the compile + runtime
+checks. So an existing spec importing the core builder is unaffected.
+
+> **The runtime gate remains the backstop for the command level.** A `bounded`
+> unit may declare `Bash` (the type admits the _tool_), but whether a given Bash
+> _command_ runs is decided at runtime by `decidePurityGate` / `isReadOnlyBash` —
+> a read-only command is allowed, a mutating one denied. The type system cannot
+> see the command string, so that decision is, and stays, the runtime gate's job.
+
 ## Reference Helpers
 
 Reference helpers create branded types that the compiler validates at compile time.

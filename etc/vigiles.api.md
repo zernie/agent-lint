@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec;
+export function agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: AgentSpecInput<P, V>): AgentSpec;
 
 // @public
 export interface AgentSpec {
@@ -23,6 +23,15 @@ export interface AgentSpec {
     readonly _specType: "agent";
     readonly tools?: readonly string[];
 }
+
+// @public
+export type AgentSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = Omit<AgentSpec, "_specType" | "tools" | "purity"> & {
+    readonly purity?: P;
+    readonly tools?: readonly AllowedAt<P, V>[];
+};
+
+// @public
+export type AllowedAt<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = P extends "pure" ? V["readOnly"] : P extends "bounded" ? V["bounded"] : string;
 
 // @public
 export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
@@ -199,6 +208,14 @@ export type LintersVerified<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T &
 };
 
 // @public
+export interface OpenToolVocabulary extends ToolVocabulary {
+    // (undocumented)
+    readonly bounded: string;
+    // (undocumented)
+    readonly readOnly: string;
+}
+
+// @public
 export interface OutputContract {
     // (undocumented)
     readonly err: Readonly<Record<string, OutputFieldType>>;
@@ -282,7 +299,7 @@ export interface RoleGate {
 export type Rule = EnforceRule | GuidanceRule | GuardRule;
 
 // @public
-export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec;
+export function skill<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary>(spec: SkillSpecInput<P, V>): SkillSpec;
 
 // @public
 export interface SkillInput {
@@ -317,6 +334,12 @@ export interface SkillSpec {
     readonly steps?: readonly SkillStep[];
     readonly tools?: readonly string[];
 }
+
+// @public
+export type SkillSpecInput<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = Omit<SkillSpec, "_specType" | "tools" | "purity"> & {
+    readonly purity?: P;
+    readonly tools?: readonly AllowedAt<P, V>[];
+};
 
 // @public
 export interface SkillStep {
@@ -356,6 +379,12 @@ export interface SymbolRef {
     readonly _ref: "symbol";
     // (undocumented)
     readonly symbol: string;
+}
+
+// @public
+export interface ToolVocabulary {
+    readonly bounded: string;
+    readonly readOnly: string;
 }
 
 // @public (undocumented)

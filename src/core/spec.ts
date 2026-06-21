@@ -98,6 +98,70 @@ export type StrictCmd = [keyof KnownNpmScripts] extends [never]
 /* eslint-enable @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-duplicate-type-constituents */
 
 // ---------------------------------------------------------------------------
+// Typed purity — a harness-neutral, compile-time constraint on a tool contract
+//
+// `purity` is a runtime/compile floor (see `purityViolations` in
+// `core/effects.ts` + the PreToolUse gate); these types let a TYPED authoring
+// surface reject an invalid `purity`×`tools` combination at the spec's own
+// `tsc`, BEFORE any vigiles command runs. The runtime checks stay the universal
+// backstop — typed purity is a strict addition that only helps a typed import.
+//
+// Core stays harness-agnostic: it defines only the MECHANISM (the `AllowedAt`
+// conditional) parameterized by a `ToolVocabulary`. The concrete tool names are
+// a HARNESS fact, so the CC vocabulary is wired in at the `vigiles/claude-code`
+// composition layer (derived from `claudeCodeDialect`), never hard-coded here.
+// The DEFAULT vocabulary is fully open (`string` at every level), so core
+// `agent()`/`skill()` with no vocabulary param accept any tools, exactly as
+// before — backwards compatibility is preserved.
+// ---------------------------------------------------------------------------
+
+/**
+ * A harness's tool vocabulary, split by the purity floor that admits it. The
+ * read-only/side-effecting split is harness-specific (it comes from the
+ * dialect's `builtinAgentTools` − `sideEffectingTools`), so the concrete unions
+ * are supplied by the adapter; core only describes the SHAPE.
+ *
+ * - `readOnly`: tools a `pure` unit may declare (observation only).
+ * - `bounded`: tools a `bounded` unit may declare — the read-only set PLUS the
+ *   decidable side-effecting tools (Write/Edit/NotebookEdit) AND `Bash` (its
+ *   command is decided at RUNTIME by the gate; the floor admits the tool). Bars
+ *   MCP / unknown / wildcard.
+ *
+ * The default (`string` at both) imposes no constraint — any tool is accepted at
+ * every level, the historical behaviour of an untyped `agent()`/`skill()`.
+ */
+export interface ToolVocabulary {
+  /** Union of tool names allowed under `purity: "pure"`. */
+  readonly readOnly: string;
+  /** Union of tool names allowed under `purity: "bounded"`. */
+  readonly bounded: string;
+}
+
+/** The fully-open default vocabulary — no constraint at any purity level. */
+export interface OpenToolVocabulary extends ToolVocabulary {
+  readonly readOnly: string;
+  readonly bounded: string;
+}
+
+/**
+ * The tool names ALLOWED at a declared `purity`, given a vocabulary `V`:
+ * - `"pure"`  → only `V["readOnly"]`.
+ * - `"bounded"` → `V["bounded"]` (read-only ∪ decidable side-effecting ∪ `Bash`).
+ * - `"dangerously-unrestricted"` (or no purity) → `string` (anything).
+ *
+ * With the open default vocabulary every branch widens to `string`, so an
+ * untyped surface accepts any tools.
+ */
+export type AllowedAt<
+  P extends AuthoredPurity | undefined,
+  V extends ToolVocabulary,
+> = P extends "pure"
+  ? V["readOnly"]
+  : P extends "bounded"
+    ? V["bounded"]
+    : string;
+
+// ---------------------------------------------------------------------------
 // Claude Code tool types (for hook validation)
 //
 // The typed mirror of the Claude Code dialect (src/core/dialect.ts:
@@ -620,13 +684,34 @@ export interface SkillSpec {
 }
 
 /**
+ * The input to `skill()` — `SkillSpec` minus `_specType`, with `tools`
+ * constrained by the declared `purity` and vocabulary `V` (same mechanism as
+ * `AgentSpecInput`). The open default vocabulary leaves it unconstrained.
+ */
+export type SkillSpecInput<
+  P extends AuthoredPurity | undefined,
+  V extends ToolVocabulary,
+> = Omit<SkillSpec, "_specType" | "tools" | "purity"> & {
+  readonly purity?: P;
+  readonly tools?: readonly AllowedAt<P, V>[];
+};
+
+/**
  * Define a SKILL.md specification.
  *
  *   // skills/my-skill/SKILL.md.spec.ts
  *   export default skill({ name: "my-skill", description: "...", body: "..." });
+ *
+ * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
+ * constraint), exactly like `agent()`: a vocabulary-bound `skill` (e.g.
+ * `vigiles/claude-code`) makes `purity: "pure"` + a side-effecting tool a `tsc`
+ * error; the bare core `skill()` accepts any tools, as before.
  */
-export function skill(spec: Omit<SkillSpec, "_specType">): SkillSpec {
-  return { _specType: "skill", ...spec };
+export function skill<
+  const P extends AuthoredPurity | undefined = undefined,
+  V extends ToolVocabulary = OpenToolVocabulary,
+>(spec: SkillSpecInput<P, V>): SkillSpec {
+  return { _specType: "skill", ...spec } as SkillSpec;
 }
 
 // ---------------------------------------------------------------------------
@@ -705,6 +790,26 @@ export interface AgentSpec {
 }
 
 /**
+ * The input to `agent()` — `AgentSpec` minus the internal `_specType`, with the
+ * `tools` list constrained by the declared `purity` and the tool vocabulary `V`.
+ * `P` is inferred from the literal `purity` field (`const` inference), and
+ * `tools` is then typed `AllowedAt<P, V>[]`:
+ * - `purity: "pure"`   → `tools` may list only `V["readOnly"]` tools.
+ * - `purity: "bounded"`→ `tools` may list `V["bounded"]` tools (admits `Bash`).
+ * - no `purity` / `"dangerously-unrestricted"` → `tools` is `string[]` (open).
+ *
+ * With the open default vocabulary (core `agent()`) every level widens to
+ * `string`, so any tools compile — backwards-compatible.
+ */
+export type AgentSpecInput<
+  P extends AuthoredPurity | undefined,
+  V extends ToolVocabulary,
+> = Omit<AgentSpec, "_specType" | "tools" | "purity"> & {
+  readonly purity?: P;
+  readonly tools?: readonly AllowedAt<P, V>[];
+};
+
+/**
  * Define a subagent specification (compiles to `agents/<name>.md`).
  *
  *   // agents/reviewer.md.spec.ts
@@ -718,9 +823,17 @@ export interface AgentSpec {
  *       "no-floating": enforce("@typescript-eslint/no-floating-promises", "Await promises."),
  *     },
  *   });
+ *
+ * Generic over a tool `Vocabulary` (default `OpenToolVocabulary` — no
+ * constraint). A harness adapter re-exports a vocabulary-bound `agent` (e.g.
+ * `vigiles/claude-code`) so `purity: "pure"` + a side-effecting tool is a `tsc`
+ * error at edit time; the bare core `agent()` accepts any tools, as before.
  */
-export function agent(spec: Omit<AgentSpec, "_specType">): AgentSpec {
-  return { _specType: "agent", ...spec };
+export function agent<
+  const P extends AuthoredPurity | undefined = undefined,
+  V extends ToolVocabulary = OpenToolVocabulary,
+>(spec: AgentSpecInput<P, V>): AgentSpec {
+  return { _specType: "agent", ...spec } as AgentSpec;
 }
 
 // ---------------------------------------------------------------------------
