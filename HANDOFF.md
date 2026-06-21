@@ -31,14 +31,18 @@ NOT vigiles's market. In vigiles's ACTUAL market (verify a coding-agent harness)
 competitors are **pure static surface linters**: **claudelint** (114 rules), **cclint** ×2,
 **`claude plugin validate`** — confirmed via their docs to do NO cross-referencing, NO
 typed specs, NO compile-time, NO test/eval, NO capability-diff. So in-market vigiles
-UNIQUELY owns cross-ref + typed + test/eval + capability-diff; it is NOT differentiated on
-surface linting (claudelint out-covers it there). **Lead with CROSS-REFERENCING** (unique
-in-market, founding feature, works on plain markdown = zero adoption barrier), not the
-typed moat. Durable positioning still = substrate + sub-affordable measurement (A1). Risk
-= claudelint adding cross-ref / adjacent player porting in, not today's competition.
-Full: `landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md`
-§"Competitive reality check". Reviews/adoption pass on claudelint/cclint IN FLIGHT.
-Caveats: #8 (static purity) unverified; destructive-actions pain report never landed.
+UNIQUELY owns cross-ref + typed + test/eval; it is NOT differentiated on surface linting.
+**Adoption pass DONE: field is WIDE OPEN — no incumbent, near-zero mindshare.** Biggest
+competitor = **agnix** (296★, ~414 rules, Rust, 7-harness + LSP — crowds vigiles's
+multi-harness/LSP words but does NOT do cross-ref/typed/eval); rest 6–41★; none in
+awesome-claude-code (47k★); npm downloads CI-inflated (agnix Show HN = 1 pt). Only
+entrenched thing = Anthropic `claude plugin validate` (shallow manifest floor). So: don't
+out-rule-count agnix or match its LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true": only
+vigiles checks the named rule EXISTS + is ENABLED — unique in-market, works on plain
+markdown = zero adoption barrier) + the test/eval tier. **The real battle is
+DISTRIBUTION/mindshare, not capability** → reinforces A1/adoption-engine. Full:
+`landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md`
+§"Competitive reality check". Caveat: #8 (static purity) + destructive-actions unverified.
 
 ## Next move (pick — none started)
 

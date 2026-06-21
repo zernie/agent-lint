@@ -169,28 +169,49 @@ CLAUDE.md/skills/hooks. Listed only to stop conflating them with vigiles.
 
 ### Market C — Agentic-coding-harness verification (vigiles's ACTUAL market)
 
-All confirmed **pure static surface linters** (their own docs). Adoption numbers TBD by
-the in-flight reviews pass.
+All confirmed **pure static surface linters** (their own docs) — none do cross-ref,
+typed specs, test/eval, or capability-diff. Adoption (reviews pass, 2026-06-21): stars +
+the mindshare tell. **No incumbent; near-zero mindshare** (none listed in
+awesome-claude-code, 47k★; npm downloads are CI-inflated vanity — agnix is 28k/mo but its
+Show HN got **1 point**).
 
-| Tool                         | Surface lint | Cross-ref (rule exists **+ enabled**) | Typed spec / compile | Test/eval (fires? blocks?) | Capability-diff | Lang | License   |
-| ---------------------------- | ------------ | ------------------------------------- | -------------------- | -------------------------- | --------------- | ---- | --------- |
-| **claudelint** (114 rules)   | ✅           | ❌                                    | ❌                   | ❌                         | ❌              | TS   | MIT       |
-| **cclint** (×2)              | ✅           | ❌                                    | ❌                   | ❌                         | ❌              | TS   | MIT       |
-| **`claude plugin validate`** | ✅ basic     | ❌                                    | ❌                   | ❌                         | ❌              | —    | 1st-party |
-| **vigiles**                  | ✅           | ✅ **only one in-market**             | ✅ **only one**      | ✅ **only one**            | ◑ prototyped    | TS   | OSS       |
+| Tool                         | Surface lint  | Cross-ref (exists **+ enabled**) | Typed spec / compile | Test/eval       | Capability-diff | Multi-harness / LSP  | Stars / signal           | Lang  | License   |
+| ---------------------------- | ------------- | -------------------------------- | -------------------- | --------------- | --------------- | -------------------- | ------------------------ | ----- | --------- |
+| **agnix** (agent-sh)         | ✅ ~414 rules | ❌                               | ❌                   | ❌              | ❌              | ✅ 7 harnesses + LSP | 296★ / 1 HN pt           | Rust  | OSS       |
+| **claudelint** (114 rules)   | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 9★ / 13k npm (CI)        | TS    | MIT       |
+| **AgentLint** (0xmariowu)    | ✅ 51 checks  | ❌                               | ❌                   | ◑ AI checks     | ❌              | CC/Codex/Cursor      | 41★                      | JS    | OSS       |
+| **cclint** (×2)              | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 20★ / 6★                 | TS    | MIT       |
+| **SkillCheck**               | ✅ skills     | ❌                               | ❌                   | ◑               | ❌              | cross-tool           | 32★ / commercial         | shell | freemium  |
+| **`claude plugin validate`** | ✅ manifest   | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 1st-party (the floor)    | —     | 1st-party |
+| **vigiles**                  | ✅ ~31 rules  | ✅ **only one in-market**        | ✅ **only one**      | ✅ **only one** | ◑ prototyped    | ✅ CC+Codex          | — / — (no mindshare yet) | TS    | OSS       |
 
-**Read of Market C:** vigiles is **not** differentiated on surface linting (claudelint
-likely out-covers it on raw structural rules). It uniquely owns, in-market,
-**cross-referencing** (rule-exists-AND-enabled across 7 catalogs), **typed/compiled
-specs**, **testing/eval**, and **capability-diff** — none of which any in-market
-competitor does. The most defensible + lowest-adoption-friction wedge is
-**cross-referencing**, because it's unique in-market AND works on plain markdown (no spec
-required). The fancy typed capabilities are proven in Markets A/B but absent in Market C;
-the risk is claudelint adding cross-ref or an adjacent player porting in — not present-day
-direct competition. Full record + the corrected synthesis: `typed-spec-moat.md`
-§ "Competitive reality check".
+**Read of Market C (adoption-calibrated):**
 
-**Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/pdugan20/claudelint; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
+1. **The field is WIDE OPEN — no incumbent, near-zero mindshare.** Biggest is agnix at
+   296★ (1 HN point); the rest are 6–41★; none appear in awesome-claude-code (47k★). npm
+   downloads (agnix 28k/mo, claudelint 13k/mo) are CI-inflated, not users. The only
+   genuinely entrenched thing is Anthropic's `claude plugin validate` — but it's a shallow
+   manifest validator (the floor, not depth). **Nobody has won this. The real battle is
+   DISTRIBUTION/mindshare, not capability** — which matches the "adoption engine, not more
+   moat depth" sequencing.
+2. **vigiles is OUT-engineered on the two things it can't win on:** surface-lint breadth
+   (agnix ~414 + claudelint 114 rules vs vigiles ~31) and multi-harness+LSP polish (agnix
+   ships 7 harnesses + a full LSP). Do NOT try to out-rule-count agnix or match its LSP.
+3. **vigiles uniquely owns, in-market, the three capability gaps NONE of them have:**
+   **cross-referencing** (rule-exists-AND-enabled across 7 catalogs), **typed/compiled
+   specs**, and **testing/eval** (does a skill fire, does a hook block). agnix and
+   AgentLint crowd the _positioning words_ (multi-harness, "lint your agent harness") but
+   not these capabilities. Lead with the capabilities, not the words.
+4. **The single best wedge = cross-referencing** — unique in-market, the founding feature,
+   and works on **plain markdown, no spec required** (zero adoption barrier). That's the
+   "valid is not true" line: every competitor checks your config is well-FORMED; only
+   vigiles checks the rule it names actually EXISTS and is ENABLED.
+
+Risk = a polished in-market linter (agnix/claudelint) ADDING cross-ref, or an adjacent
+player porting in — not present-day direct competition. Full corrected synthesis:
+`typed-spec-moat.md` § "Competitive reality check".
+
+**Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/pdugan20/claudelint; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/agent-sh/agnix; github.com/0xmariowu/AgentLint; getskillcheck.com; code.claude.com/docs/en/plugins; hesreallyhim/awesome-claude-code; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
 
 ---
 
