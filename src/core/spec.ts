@@ -1252,6 +1252,41 @@ export function pipe(
 /* eslint-enable no-redeclare */
 
 // ---------------------------------------------------------------------------
+// Whole-harness registry cross-checks (the codegen layer — see
+// `generate-harness.ts` and research/whole-harness-codegen.md).
+//
+// `generate-harness` emits ONE `harness.gen.ts` that imports every `*.spec.ts`
+// and folds the agents into a `registry`, then asserts the cross-spec
+// invariants at the TYPE level so a single `tsc --noEmit` checks the whole
+// harness as one program. The shipped scope is the PER-EDGE dangling-delegate
+// check (below); duplicate NAMES are caught in the JS generator (O(N), the
+// TS2589-safe encoding — a set-uniqueness MAPPED TYPE is the wall to avoid),
+// and the capability lattice is a generator-computed value.
+//
+// The encoding rule (measured, research/whole-harness-codegen.md): a per-edge
+// check is a SHALLOW conditional (`KnownAgentName` is one literal lookup), so it
+// is O(N) over the edges and never recurses — the same discipline `Supplies`
+// follows for a per-field handoff.
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-edge dangling-`delegate` check. `Target` is a delegate target NAME (a
+ * string literal the generator reads off a `railway()` value); `Names` is the
+ * literal union of every agent name in the harness (emitted by the generator).
+ * Collapses to `true` when the target resolves, else to a descriptive error
+ * object naming the dangling target + the railway it came from — so assigning
+ * `true` to it is a `tsc` error at edit time. Shallow (one conditional, no
+ * recursion); the generator emits one assertion per edge (O(N)).
+ */
+export type KnownAgentName<
+  Target extends string,
+  Names extends string,
+  From extends string = string,
+> = [Target] extends [Names]
+  ? true
+  : { readonly __dangling_delegate: Target; readonly from: From };
+
+// ---------------------------------------------------------------------------
 // Spec file naming convention (#11)
 //
 // Type-level proof that a spec filename maps to its output.

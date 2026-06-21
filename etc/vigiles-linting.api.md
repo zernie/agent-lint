@@ -362,6 +362,12 @@ export function instructions(strings: TemplateStringsArray, ...values: Instructi
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {});
 
 // @public
+export type KnownAgentName<Target extends string, Names extends string, From extends string = string> = [Target] extends [Names] ? true : {
+    readonly __dangling_delegate: Target;
+    readonly from: From;
+};
+
+// @public
 export interface KnownLinterRules {
 }
 
