@@ -22,17 +22,23 @@ priority = the **ADOPTION ENGINE** (the at-scale ecosystem benchmark "what works
 hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat depth.
 Bridge bet = **capability-diff (#2)**. Full: `research/measurement-authority.md` § "Status & gaps".
 
-⚠️ **COMMODITIZATION FINDING (2026-06-21 late, web-verified) — DON'T re-inflate the
-moat.** A competitive sweep found the headline typed-spec "moats" are mostly claimed:
-**riftmap** = PR-time blast-radius diff (=moat #2 for infra), **AgentAuditKit/PolicyLayer**
-= capability-diff/drift for MCP servers, **Mastra** = typed workflow handoffs (#5),
-**promptfoo** = deterministic structured oracle (#7); the control-flow thesis is now a
-named idea (bsuh "Agents Need Control Flow"). Net: NO clean killer feature in the
-typed-compile direction — capabilities are commoditizing. The durable edge = **substrate**
-(markdown-harness-as-typed-program, ~nobody else) **+ sub-affordable measurement (A1)**.
-Recorded: `typed-spec-moat.md` §"Competitive reality check" + `spec-value-model.md` +
-`landscape-mid-2026.md`. Caveats: subagent fan-out partly rate-limited; #8 (static purity)
-unverified; destructive-actions pain report never landed.
+⚠️ **COMPETITIVE READ (2026-06-21, web-verified + market-corrected) — read before
+re-pitching the moat.** First pass said "typed-spec moats are commoditizing" — that was a
+**MARKET CONFLATION**, now corrected. The fancy capabilities (typed handoffs, det.
+oracle, capability-diff) live in ADJACENT markets — **app-building** (Mastra/promptfoo,
+zero CLAUDE.md contact), **infra** (riftmap), **MCP-server security** (AgentAuditKit) —
+NOT vigiles's market. In vigiles's ACTUAL market (verify a coding-agent harness) the only
+competitors are **pure static surface linters**: **claudelint** (114 rules), **cclint** ×2,
+**`claude plugin validate`** — confirmed via their docs to do NO cross-referencing, NO
+typed specs, NO compile-time, NO test/eval, NO capability-diff. So in-market vigiles
+UNIQUELY owns cross-ref + typed + test/eval + capability-diff; it is NOT differentiated on
+surface linting (claudelint out-covers it there). **Lead with CROSS-REFERENCING** (unique
+in-market, founding feature, works on plain markdown = zero adoption barrier), not the
+typed moat. Durable positioning still = substrate + sub-affordable measurement (A1). Risk
+= claudelint adding cross-ref / adjacent player porting in, not today's competition.
+Full: `landscape-mid-2026.md` §"Market-segmented competitive matrix" + `typed-spec-moat.md`
+§"Competitive reality check". Reviews/adoption pass on claudelint/cclint IN FLIGHT.
+Caveats: #8 (static purity) unverified; destructive-actions pain report never landed.
 
 ## Next move (pick — none started)
 
