@@ -213,6 +213,41 @@ player porting in — not present-day direct competition. Full corrected synthes
 
 **Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/pdugan20/claudelint; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/agent-sh/agnix; github.com/0xmariowu/AgentLint; getskillcheck.com; code.claude.com/docs/en/plugins; hesreallyhim/awesome-claude-code; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
 
+### The agnix signal — linting-without-eval may simply not pull a community
+
+The single most strategically useful data point: **agnix is the most-built tool in the
+category by a mile** (414 rules, Rust, 7 harnesses, a full LSP, releases ~daily) and it
+got **1 point on Show HN** and sits at 296★ with no community footprint. Two hypotheses:
+
+1. agnix is just bad at promotion (a distribution miss); or
+2. **comprehensive linting-without-testing/evals isn't interesting to the community** —
+   a 414-rule structural linter is a chore-tool nobody gets excited about.
+
+If (2) is even partly true it is **strong evidence FOR the measurement pivot**: the lint
+layer is table-stakes/boring (so out-rule-counting agnix is a trap), and the thing that
+generates PULL is the **eval/measurement layer** — "does my skill actually FIRE / does my
+harness actually WORK / is the hyped skill vaporware" (the caveman-debunk shape). vigiles
+should treat linting as the free floor and lead marketing with measurement. This also
+reframes the wedge: not "a better linter" but "the only one that **tests** your harness."
+
+### Poach list — non-competitors (Markets A/B) with ideas worth lifting
+
+Not competitors (different market), but their mechanics are worth stealing:
+
+- **Zod-schema'd contracts** (Mastra / Pydantic AI / Vercel AI SDK all do typed tool I/O
+  via Zod/Pydantic): vigiles's `result()` currently hand-parses + shape-validates the
+  `vigiles:ok/err` block (`agent-result.ts`). A **Zod-based `result()`** would unify ONE
+  schema into (a) the compile-time type, (b) the runtime validator (`assertAgentOk`), and
+  (c) the JSON Schema `generate-schema` already emits — one source, three artifacts.
+  Strong candidate; record as a feature idea.
+- **promptfoo's named deterministic assertions** (`is-json`, `is-valid-openai-tools-call`,
+  json-schema): a menu to expand vigiles's `check` vocabulary with.
+- **riftmap's distribution model** — "one read-only token → queryable graph + ship the
+  OpenAPI so any agent can call it as a tool." vigiles results-as-an-MCP-tool is a GTM
+  idea (an agent can ASK "is my harness verified?"). Also riftmap/SkillCheck/PolicyLayer
+  prove a **business CAN be built on this** (closed SaaS / freemium / self-host tiers) —
+  vigiles's open-core + measurement-data is a defensible base others can build on top of.
+
 ---
 
 ## Unified comparison matrix

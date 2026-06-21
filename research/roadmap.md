@@ -572,6 +572,25 @@ assertRates`) is the recommended path for testing one skill, but
 - **Positioning pivot:** lead with _"conformance/attestation for the agent
   harness"_, demote "linter for instruction files".
   [strategic-synthesis](strategic-synthesis-2026-06.md)
+- **README STATUS BADGE for cc/codex plugins** (adoption flywheel, 2026-06-21 idea):
+  a GitHub badge a plugin author drops in their README showing their harness is
+  **verified / tested / evaled**, with TIERS (e.g. 🛡 lint-clean → ✅ tested (runHook)
+  → 🎯 evaled (trigger-rate/behavior)). Same viral mechanic as build-passing/coverage
+  badges — every badge is an ad + social proof, and the tiers pull authors UP the
+  ladder (lint→test→eval, the exact funnel). Needs a `vigiles badge`/shield endpoint +
+  a public verdict. The single highest-leverage distribution artifact tied to the
+  product. See [distribution-strategy.md](distribution-strategy.md).
+- **Viral debunk articles** (measurement-as-marketing): publish the A1 findings as
+  shareable "X is vaporware" pieces (e.g. _"Caveman Mode is vaporware: I measured the
+  viral 75% token-saving skill and it grew my bill"_). The benchmark IS the content;
+  each debunk drives mindshare the linters can't buy (agnix's 1-HN-point problem). Ties
+  A1 → adoption. See [measurement-authority.md](measurement-authority.md), `bench/ecosystem/`.
+- **Build-business-on-top + acquisition posture:** position so (a) others can build on
+  vigiles (open-core `agent()` + the `vigiles/adapter` authoring kit + the measurement
+  DATA as the moat), and (b) it's an acquisition target for a top AI lab that wants to
+  own the quality/safety-verification layer of its coding agent. Closed SaaS rivals
+  (riftmap/SkillCheck/PolicyLayer) prove a business exists on this shape.
+  [divergent-bets.md](divergent-bets.md), [landscape-mid-2026.md](landscape-mid-2026.md)
 
 ## Rejected / parked (don't relitigate)
 

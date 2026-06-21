@@ -62,6 +62,22 @@ feature that serves BOTH is **capability-diff (#2)** — a free PR comment, part
 plain plugins via `scan`, richer on specs — so it's the bridge bet. _We've been
 building the castle before the road to it._
 
+**Competitive confirmation (2026-06-21).** A grounded sweep of the actual in-market
+competition (the cc/codex-harness linters — see [`landscape-mid-2026.md`](landscape-mid-2026.md)
+§ "Market-segmented competitive matrix") sharpens the pivot two ways. (1) **The agnix
+signal:** the most-built linter in the space (414 rules, Rust, 7 harnesses, LSP, daily
+releases) got **1 Show-HN point** — comprehensive _linting alone does not pull a
+community_, which is direct evidence that the **eval/measurement layer is the puller**,
+not rule-count. Lead with "the only tool that TESTS your harness," treat linting as the
+free floor. (2) **No incumbent, near-zero mindshare across the category** → the bottleneck
+is distribution, exactly this section's thesis. Two product-tied distribution levers fall
+out (recorded in [`roadmap.md`](roadmap.md) § Explore + [`distribution-strategy.md`](distribution-strategy.md)):
+a **tiered README badge** (lint→test→eval, the funnel as a growth loop) and **viral
+debunk articles** (the A1 benchmark AS marketing — "caveman is vaporware"). Strategic
+posture to hold: open-core + the `vigiles/adapter` kit + the measurement DATA as the moat,
+so others can build a business on top and a top AI lab has a reason to acquire the
+quality/safety-verification layer of its coding agent.
+
 ## The critique that forced this
 
 1. **Hygiene doesn't go viral.** Linters/validators/test tools win by becoming necessary

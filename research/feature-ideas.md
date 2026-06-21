@@ -397,6 +397,20 @@ const r = await runHarnessTest({
 
 ---
 
+## 14b. Zod-schema'd `result()` contracts (poached from the app-building frameworks)
+
+**Source:** the 2026-06-21 competitive sweep ([`landscape-mid-2026.md`](landscape-mid-2026.md) § poach list). Mastra / Pydantic AI / Vercel AI SDK all express typed tool I/O as a **Zod/Pydantic schema** — one declaration that gives both a compile-time type AND a runtime validator. They're a different market (app-building, not competitors), but the mechanic is worth lifting.
+
+**The idea.** Today vigiles's `result()` contract is a TS-typed shape that `compile` renders to `vigiles:ok/err` blocks, which `agent-result.ts` then hand-parses + shape-validates at test time (`assertAgentOk`). A **Zod-based `result()`** would collapse that to ONE source → three artifacts:
+
+1. the compile-time type (Zod's `z.infer`),
+2. the runtime validator (`assertAgentOk` = `schema.safeParse` on the parsed block — kills the hand-rolled shape checker), and
+3. the JSON Schema `generate-schema` already emits (Zod → JSON Schema is a one-liner), so the YAML-LSP autocomplete and the contract stay in lockstep.
+
+**Why it fits (earns its place):** removes a hand-maintained validator, makes the contract↔schema↔type single-source, and is the deterministic-oracle half of the spec-value-model — strengthened, not a new surface. Bounded: swap the internals of `result()`/`agent-result.ts`/`generate-schema`; the authored API can stay the same. Optional peer-dep on `zod` (already ubiquitous). Record as a real feature candidate, not just a note.
+
+---
+
 ## Summary
 
 | #   | Feature                    | Programming Analog                   | User Problem Solved                                          |
