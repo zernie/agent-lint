@@ -602,6 +602,24 @@ assertRates`) is the recommended path for testing one skill, but
   STACK fix is TLC-certified. Verdict: model checking earns its keep ONLY for the
   harness author verifying the harness's OWN protocol, never per-user. Prototyped in
   [`prototypes/typed-spec-formal-verification/`](prototypes/typed-spec-formal-verification/).
+- [`typed-spec-refinement-types.md`](typed-spec-refinement-types.md) — round-2 cluster
+  (refinement / dependent / session types). The pick: **refinement → runtime guard**
+  (parse-don't-validate — a `result()` brand minted only after a predicate passes, the
+  payload-contract twin of typed composition's wire check); plus full branching/recursive
+  session types for the railway ok/err arms (TS-encodable but a recursive walk hits TS2589,
+  so the shipped typed `pipe` is fixed-arity). Key insight: the type-vs-runtime line is set
+  by ARITY (literal shape → type, arbitrary value → runtime guard, protocol structure →
+  shallow type). Prototyped in
+  [`prototypes/typed-spec-refinement-types/`](prototypes/typed-spec-refinement-types/).
+- [`covering-arrays-for-harness.md`](covering-arrays-for-harness.md) — the NIST
+  pairwise / covering-array direction (`prune-the-timeline`). The pick: **eval
+  interaction-testing as prune-then-sample** — the spec enumerates the config space,
+  typed purity PRUNES the impossible configs (PICT-style constraints), a 2-way covering
+  array SAMPLES the rest, and the subscription eval runs them; measured 3072 → 18 rows
+  (99.4% fewer real-model runs) on a 10-skill × 3-model space. Non-replicable (markdown
+  can't be fed to a CA generator) + ties the eval moat. Lint/scan is a crisp NO (free
+  cells). Prototyped (real IPOG-style generator) in
+  [`prototypes/covering-arrays/`](prototypes/covering-arrays/).
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·
