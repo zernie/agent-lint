@@ -139,6 +139,61 @@ The paper isn't about instruction files specifically — it's about the broader 
 
 ---
 
+## Market-segmented competitive matrix (2026-06-21) — the corrected cut
+
+The single most important competitive insight (a same-day correction of an earlier
+market-conflation): **the "typed-spec capabilities are commoditizing" worry was wrong
+because it mixed three different MARKETS.** Segment by who the tool is FOR, and vigiles's
+actual competition shrinks to a handful of pure surface linters. Grounded by reading each
+tool's own docs.
+
+### Market A — App-building (NOT vigiles competitors)
+
+You write code to ship an LLM product. Different audience; zero contact with
+CLAUDE.md/skills/hooks. Listed only to stop conflating them with vigiles.
+
+| Tool                                      | For                             | Lang  | License         |
+| ----------------------------------------- | ------------------------------- | ----- | --------------- |
+| Mastra                                    | build AI apps/agents in TS      | TS    | Apache-2.0 + ee |
+| LangGraph / CrewAI / AutoGen / Google ADK | build agents                    | Py/JS | MIT/Apache      |
+| Pydantic AI / Vercel AI SDK               | build agents                    | Py/TS | MIT/Apache      |
+| promptfoo / DeepEval                      | eval YOUR app's prompts/outputs | TS/Py | MIT/Apache-2.0  |
+
+### Market B — Infra / MCP-server security (adjacent, different substrate)
+
+| Tool                                               | Substrate                        | Static/Runtime  | License        |
+| -------------------------------------------------- | -------------------------------- | --------------- | -------------- |
+| riftmap                                            | infra deps (Terraform/Helm/CI)   | static PR-diff  | closed SaaS    |
+| AgentAuditKit                                      | 3rd-party MCP servers (rug-pull) | static CI-diff  | MIT            |
+| PolicyLayer / Waxell / Straiker / Operant / Pillar | live MCP traffic                 | runtime gateway | closed/partial |
+
+### Market C — Agentic-coding-harness verification (vigiles's ACTUAL market)
+
+All confirmed **pure static surface linters** (their own docs). Adoption numbers TBD by
+the in-flight reviews pass.
+
+| Tool                         | Surface lint | Cross-ref (rule exists **+ enabled**) | Typed spec / compile | Test/eval (fires? blocks?) | Capability-diff | Lang | License   |
+| ---------------------------- | ------------ | ------------------------------------- | -------------------- | -------------------------- | --------------- | ---- | --------- |
+| **claudelint** (114 rules)   | ✅           | ❌                                    | ❌                   | ❌                         | ❌              | TS   | MIT       |
+| **cclint** (×2)              | ✅           | ❌                                    | ❌                   | ❌                         | ❌              | TS   | MIT       |
+| **`claude plugin validate`** | ✅ basic     | ❌                                    | ❌                   | ❌                         | ❌              | —    | 1st-party |
+| **vigiles**                  | ✅           | ✅ **only one in-market**             | ✅ **only one**      | ✅ **only one**            | ◑ prototyped    | TS   | OSS       |
+
+**Read of Market C:** vigiles is **not** differentiated on surface linting (claudelint
+likely out-covers it on raw structural rules). It uniquely owns, in-market,
+**cross-referencing** (rule-exists-AND-enabled across 7 catalogs), **typed/compiled
+specs**, **testing/eval**, and **capability-diff** — none of which any in-market
+competitor does. The most defensible + lowest-adoption-friction wedge is
+**cross-referencing**, because it's unique in-market AND works on plain markdown (no spec
+required). The fancy typed capabilities are proven in Markets A/B but absent in Market C;
+the risk is claudelint adding cross-ref or an adjacent player porting in — not present-day
+direct competition. Full record + the corrected synthesis: `typed-spec-moat.md`
+§ "Competitive reality check".
+
+**Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/pdugan20/claudelint; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
+
+---
+
 ## Unified comparison matrix
 
 Combining the existing tables in `competitive-landscape.md` with mid-2026 entrants. Rows are projects; columns are the dimensions that matter for positioning vigiles.
