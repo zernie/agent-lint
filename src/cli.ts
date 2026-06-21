@@ -3404,7 +3404,10 @@ async function handleGenerateHarness(
   });
 
   console.log(
-    `  ${String(result.agentCount)} agent(s), ${String(result.edgeCount)} delegate edge(s)`,
+    `  ${String(result.agentCount)} agent(s), ${String(result.edgeCount)} delegate edge(s)` +
+      (result.handoffCount > 0
+        ? `, ${String(result.handoffCount)} handoff check(s)`
+        : ""),
   );
   console.log(
     `  capabilities: ${result.capabilities.purity} (` +

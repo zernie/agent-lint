@@ -8,15 +8,28 @@
  * exhausted failure routes to the reporter. No loop combinator — the value is a
  * finite tree, so it always terminates and every delegate() target is resolved
  * against the real agent specs in this directory at compile time.
+ *
+ * The two later steps also declare what they `needs()` from their predecessor's
+ * result().ok — so `vigiles generate-harness` emits a CROSS-FILE handoff check:
+ * planner.ok supplies the implementer's `steps`, and implementer.ok supplies the
+ * reviewer's `summary`. A mismatch would be a `tsc` error naming the field.
  */
-import { railway, delegate } from "../../src/core/spec.js";
+import { railway, delegate, needs } from "../../src/core/spec.js";
 
 export default railway({
   name: "ship-pr",
   steps: [
     delegate("planner", "break the request into an ordered plan"),
-    delegate("implementer", "implement the plan; prove build + tests pass"),
-    delegate("reviewer", "review the diff for correctness"),
+    delegate(
+      "implementer",
+      "implement the plan; prove build + tests pass",
+      needs({ steps: "string[]" }),
+    ),
+    delegate(
+      "reviewer",
+      "review the diff for correctness",
+      needs({ summary: "string" }),
+    ),
   ],
   recover: {
     step: delegate(

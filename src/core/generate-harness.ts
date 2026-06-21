@@ -21,9 +21,14 @@
  *  3. The whole-harness CAPABILITY LATTICE: the UNION of every agent's
  *     `effectSurface(tools, dialect)` — a generator-computed value + type, the
  *     substrate the future repo-scale capability-diff reads.
- *
- * Cross-file TYPED COMPOSITION (data-shape handoffs lifted to the registry) is a
- * documented FOLLOW-UP, not built here — see the module-end note + the research.
+ *  4. CROSS-FILE TYPED COMPOSITION: when a `railway()` success-track step declares
+ *     what it `needs()`, the gen file emits one shallow per-pair assertion
+ *     (`Handoff<OkOf<typeof registry[producer]>, needs>` — O(N), no recursion)
+ *     that the PRIOR step's `result().ok` SUPPLIES it, so a cross-file handoff
+ *     mismatch (a missing field / wrong type) is a `tsc` error naming the field.
+ *     The repo-scale generalization of the per-file `pipe`/`Supplies` composition.
+ *     Scoped to the linear success track; recover/onError (which consume an `err`,
+ *     not the prior `ok`) are a noted follow-up.
  *
  * Harness-agnostic: the `dialect` (for the capability lattice) is INJECTED by
  * the composition root (the CLI), never hard-coded — mirroring `compileAgent` /
@@ -57,10 +62,35 @@ export interface HarnessDelegateEdge {
   readonly target: string;
 }
 
+/**
+ * One CROSS-FILE handoff edge: a consecutive success-track pair where the
+ * CONSUMER (`to`) declares the input it `needs`, asserted against the PRODUCER
+ * (`from`, the prior step's agent) `result().ok` at the type level. The
+ * registry already imports each agent's `TypedAgentSpec`, so the generator reads
+ * the producer's `ok` shape off the registry (`OkOf<typeof registry[from]>`) and
+ * emits one shallow `Handoff<>` assertion per such pair (O(N), no recursion).
+ */
+export interface HarnessHandoffEdge {
+  /** The railway the edge originates from (for the diagnostic). */
+  readonly railway: string;
+  /** The PRODUCER agent name (the prior success-track step) — registry key. */
+  readonly from: string;
+  /** The CONSUMER agent name (this step) — names the failing edge. */
+  readonly to: string;
+  /** The consumer's declared input shape (`needs(...)`) — the literal emitted. */
+  readonly needs: Readonly<Record<string, string>>;
+}
+
 /** Everything the generator needs, already loaded (the pure-core input). */
 export interface HarnessModel {
   readonly agents: readonly HarnessAgentEntry[];
   readonly edges: readonly HarnessDelegateEdge[];
+  /**
+   * Cross-file handoff edges (consecutive success-track step pairs whose
+   * consumer declares `needs`). Optional + defaults to none, so an existing
+   * model with no handoffs generates exactly as before — backwards-compatible.
+   */
+  readonly handoffs?: readonly HarnessHandoffEdge[];
 }
 
 export interface GenerateHarnessOptions {
@@ -112,6 +142,8 @@ export interface GenerateHarnessResult {
   /** The number of agents + edges folded in (for the CLI summary). */
   readonly agentCount: number;
   readonly edgeCount: number;
+  /** The number of cross-file handoff assertions emitted (for the CLI summary). */
+  readonly handoffCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +244,33 @@ function relImport(fromDir: string, toFile: string): string {
 }
 
 /**
+ * Emit the cross-file handoff assertions. For each consecutive success-track
+ * pair whose CONSUMER declares `needs`, read the PRODUCER's `result().ok` off
+ * the registry (`OkOf<typeof registry[from]>`) and assert `Handoff<producerOk,
+ * needs>` is `true`. A missing field / wrong type collapses it to
+ * `{ __handoff_error: … }`, so `= true` is a tsc error naming the field — across
+ * files, at edit time. One shallow assertion per pair (O(N), no recursion).
+ */
+function handoffCheckLines(handoffs: readonly HarnessHandoffEdge[]): string[] {
+  const L: string[] = [
+    "// CHECK: every declared handoff lines up — the producer's result().ok",
+    "// must SUPPLY the consumer's needs. A mismatch makes `Handoff<…>` a",
+    "// `{ __handoff_error: … }` object, so `= true` is a tsc error naming the field.",
+  ];
+  handoffs.forEach((h, i) => {
+    const needsLiteral = `{ ${Object.entries(h.needs)
+      .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+      .join("; ")} }`;
+    L.push(
+      `const _handoff_${String(i)}: Handoff<OkOf<typeof registry[${JSON.stringify(h.from)}]>, ${needsLiteral}> = true;`,
+    );
+    L.push(`void _handoff_${String(i)}; // ${h.railway}: ${h.from} → ${h.to}`);
+  });
+  L.push("");
+  return L;
+}
+
+/**
  * Generate the `harness.gen.ts` source over an already-loaded `HarnessModel`.
  *
  * Pure: no filesystem read, no spec loading — just string emission + the two
@@ -248,7 +307,12 @@ export function generateHarness(
     "// Regenerate with `vigiles generate-harness` (wired to a spec guard).",
   );
   L.push("");
-  L.push(`import type { KnownAgentName } from ${JSON.stringify(specImport)};`);
+  const handoffs = model.handoffs ?? [];
+  const specTypeImports =
+    handoffs.length > 0 ? "KnownAgentName, Handoff, OkOf" : "KnownAgentName";
+  L.push(
+    `import type { ${specTypeImports} } from ${JSON.stringify(specImport)};`,
+  );
   L.push("");
 
   for (const b of bindings) {
@@ -305,6 +369,9 @@ export function generateHarness(
     L.push("");
   }
 
+  // ---- CHECK: cross-file handoff → tsc error (one shallow assertion per pair) -
+  if (handoffs.length > 0) L.push(...handoffCheckLines(handoffs));
+
   // ---- The whole-harness capability lattice (a generator-computed value) ------
   L.push(
     "// The whole-harness capability lattice — the UNION of every agent's",
@@ -326,6 +393,7 @@ export function generateHarness(
     duplicate,
     agentCount: agents.length,
     edgeCount: model.edges.length,
+    handoffCount: handoffs.length,
   };
 }
 
@@ -338,7 +406,10 @@ interface LoadedSpecLike {
   readonly _specType?: string;
   readonly name?: string;
   readonly tools?: readonly string[];
-  readonly steps?: readonly { readonly agent?: string }[];
+  readonly steps?: readonly {
+    readonly agent?: string;
+    readonly needs?: Readonly<Record<string, string>>;
+  }[];
   readonly onError?: { readonly agent?: string };
   readonly recover?: { readonly step?: { readonly agent?: string } };
 }
@@ -363,6 +434,7 @@ export async function loadHarnessModel(
   const files = findHarnessSpecFiles(dir);
   const agents: HarnessAgentEntry[] = [];
   const edges: HarnessDelegateEdge[] = [];
+  const handoffs: HarnessHandoffEdge[] = [];
 
   for (const file of files) {
     const abs = `${dir}/${file}`;
@@ -371,18 +443,59 @@ export async function loadHarnessModel(
     if (spec._specType === "agent" && typeof spec.name === "string") {
       agents.push({ name: spec.name, tools: spec.tools, file: abs });
     } else if (spec._specType === "railway" && typeof spec.name === "string") {
-      const from = spec.name;
-      const push = (agentName: string | undefined): void => {
-        if (typeof agentName === "string")
-          edges.push({ from, target: agentName });
-      };
-      for (const step of spec.steps ?? []) push(step.agent);
-      push(spec.recover?.step?.agent);
-      push(spec.onError?.agent);
+      edges.push(...railwayEdges(spec.name, spec));
+      handoffs.push(...railwayHandoffs(spec.name, spec.steps ?? []));
     }
   }
 
-  return { agents, edges };
+  return { agents, edges, handoffs };
+}
+
+/** The delegate edges a railway contributes (steps + recover + onError). */
+function railwayEdges(
+  from: string,
+  spec: LoadedSpecLike,
+): HarnessDelegateEdge[] {
+  const out: HarnessDelegateEdge[] = [];
+  const push = (agentName: string | undefined): void => {
+    if (typeof agentName === "string") out.push({ from, target: agentName });
+  };
+  for (const step of spec.steps ?? []) push(step.agent);
+  push(spec.recover?.step?.agent);
+  push(spec.onError?.agent);
+  return out;
+}
+
+/**
+ * The cross-file handoff edges a railway contributes: each consecutive
+ * success-track pair whose CONSUMER declares `needs` asserts the PRODUCER (the
+ * prior step) supplies it. Scoped to the LINEAR success track — recover/onError
+ * consume an `err`, not the prior `ok`, so they are a noted follow-up.
+ */
+function railwayHandoffs(
+  railwayName: string,
+  steps: NonNullable<LoadedSpecLike["steps"]>,
+): HarnessHandoffEdge[] {
+  const out: HarnessHandoffEdge[] = [];
+  for (let i = 1; i < steps.length; i++) {
+    const producer = steps[i - 1].agent;
+    const consumer = steps[i].agent;
+    const need = steps[i].needs;
+    if (
+      need &&
+      Object.keys(need).length > 0 &&
+      typeof producer === "string" &&
+      typeof consumer === "string"
+    ) {
+      out.push({
+        railway: railwayName,
+        from: producer,
+        to: consumer,
+        needs: need,
+      });
+    }
+  }
+  return out;
 }
 
 /** Convenience: the gen file's basename, used by the CLI default out path. */
