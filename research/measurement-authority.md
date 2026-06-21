@@ -88,6 +88,37 @@ eval; at first model-judged), then add typed contracts rung by rung, each one co
 expensive model-judge into a cheap deterministic assert. The spec is how you _onboard_ into the
 measurement identity. See `typed-contracts-for-agents.md`.
 
+### The deeper cut: the spec makes the harness a _compilable, analyzable formal object_
+
+The substrate layer is more than a testability on-ramp — it is the one thing that gives vigiles
+a category, not just a feature. **Markdown is inert prose; a typed `.spec.ts` is a _program_**,
+so the entire PL / formal-methods toolbox applies to the harness — and **none of it can apply to
+a markdown file.** The category line: **vigiles is a compiler/verifier for agent harnesses;
+everyone else is a linter for prose.** This is the sharper, structural form of the
+"deterministic-constraints layer" — a leaked capability, a busted effect floor, a mismatched
+hand-off becomes a _type error at edit time_, not a runtime surprise a linter notices after the
+fact. Three concrete, markdown-impossible moats fall out:
+
+1. **Unsafe harnesses don't compile** (SHIPPED — typed purity + typed composition). A config
+   that leaks, exceeds its declared effect floor, hands off mismatched data, or mutates out of
+   order is a `tsc` error. `purity:'pure' + 'Bash'` won't type-check; the keystone is
+   **type-safe pipelining** — `pipe(producer, pipeStep(agent, needs({…})))` cross-references at
+   compile time that step N's `ok` _supplies_ step N+1's `needs`, so **a multi-agent pipeline
+   that won't compile if the hand-offs don't line up** — categorically beyond the
+   runtime-untyped orchestration frameworks (LangGraph / CrewAI / Agent SDK), let alone a
+   markdown linter.
+2. **Semantic capability-diff at PR time** — "this PR widened the agent's blast radius" read off
+   the typed effect surface, not grepped from prose.
+3. **Affordable interaction-testing** — a covering-array over the typed config space, run on the
+   subscription (folds into the measurement engine above).
+
+The graduated nuance is load-bearing and must NOT read as rigid: enforcement is **opt-in, never
+all-or-nothing** — the Level 0/1/2 ladder, the open-core `agent()` vs the opt-in typed
+`vigiles/claude-code` import, the `purity:'dangerously-unrestricted'` escape hatch — progressive
+like TypeScript's `strict`, not a wall. The full record (the three moats, type-safe pipelining,
+the markdown-impossibility argument, and the founder endorsement) lives in
+`typed-spec-moat.md`.
+
 ## Honest risks
 
 - **Benchmark methodology is hard and contestable** — what's a representative task, what counts
@@ -145,6 +176,10 @@ the free tier that makes measurement affordable, explicable, and durable** — e
 - `typed-contracts-for-agents.md` — the durable purpose of the spec under this frame: typed
   Result/railway contracts + side-effect boundaries make skills/agents _assertable_ (not
   LLM-judged), which is what makes the measurement cheap and rigorous.
+- `typed-spec-moat.md` — the full record of the compiler-vs-linter category: the harness as a
+  compilable formal object, the three markdown-impossible moats (unsafe harnesses don't compile;
+  capability-diff at PR time; affordable interaction-testing), and type-safe pipelining as the
+  keystone — the structural form of the substrate layer above.
 - `strategy-verdict.md` — the prior (security-led) verdict this reframes; the spine there is
   now: benchmark/optimize (offense) > verify/test (substrate).
 - `divergent-bets.md` — the harness cost/ROI optimizer + CI-for-model-upgrades bets this
