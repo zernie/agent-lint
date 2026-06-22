@@ -4,10 +4,12 @@
 > real, documented Codex/Claude Code incidents. The existing FP work
 > (`typed-spec-effects-monads.md` M1–M6, `harness-state-space.md`, `fp-for-agent-harness.md`)
 > all types the harness's **static capability SET** — what tools/effects an agent _has_
-> (effect rows, capability graph, the lethal-trifecta co-occurrence). This doc opens two
-> axes a set structurally cannot express, both markdown-impossible, both landing on the
-> worst real failures: **ORDER** (session types / typestate) and **FLOW** (information-flow
-> / noninterference).
+> (effect rows, capability graph, the lethal-trifecta co-occurrence). This doc opens the
+> THREE axes a set structurally cannot express — sequence, provenance, cardinality — all
+> markdown-impossible, all landing on the worst real failures: **ORDER** (session types /
+> typestate), **FLOW** (information-flow / noninterference), **REPLAY** (linear types /
+> idempotent effects). The real prize isn't three new checks — it's recognizing they form a
+> deterministic **reliability RUNTIME** for the harness (the category, not a linter).
 
 ## Why "set" is not enough — the gap the existing moats leave
 
