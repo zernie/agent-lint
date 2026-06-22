@@ -17,6 +17,7 @@ npx vigiles scan [dir]              # Report what a plugin/repo ships + what's b
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
 npx vigiles scan <dir> --collisions # Measure cross-skill selection collision (one skill hijacks a sibling's prompt; model)
+npx vigiles capability-diff <before> <after>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
@@ -249,6 +250,29 @@ Three things to know:
   Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
   (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
   in a real plugin): [`research/plugin-structural-findings.md`](../research/plugin-structural-findings.md).
+
+### `capability-diff <before> <after>`
+
+**Did this change widen the agent's blast radius?** Computes each version's
+whole-harness **capability lattice** from its scanned agents — the union of every
+agent's reachable tools (read-only / side-effecting / unknown-MCP) plus the loosest
+purity floor — and diffs them. A change **WIDENS** the surface iff it adds a
+side-effecting or unknown/MCP tool, or loosens the purity floor; new read-only tools
+and removals are reported but are **not** a widening. Deterministic, no model.
+
+`<before>` and `<after>` are two directories — e.g. two git worktrees (a PR's base
+vs head), or any two plugin versions. The intended home is a **PR comment**, so it's
+**informational by default** (exit 0); pass `--fail-on-widen` to make a widening a
+non-zero exit (the opt-in CI gate — don't cry wolf, since widening is often intended).
+
+```bash
+npx vigiles capability-diff ./base ./head                  # report (exit 0)
+npx vigiles capability-diff ./base ./head --fail-on-widen  # exit 1 if widened
+npx vigiles capability-diff ./base ./head --json           # structured diff
+```
+
+This is moat #2 (`research/typed-spec-moat.md`): the capability surface is the typed
+effect lattice `generate-harness` already computes; the diff reads it.
 
 ### `explain [dir] [name]`
 
