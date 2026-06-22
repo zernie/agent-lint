@@ -121,15 +121,15 @@ export default defineHook({
 });
 ```
 
-This makes **whole classes of bugs unrepresentable**: you never write the exit
-code / JSON field (false confidence), the matcher is **AST-backed** (catches the
-compound bypass a glob misses), the only import allowed is `vigiles/hook`
-(capability = API surface), and the artifact is **stamped** (a later hand-edit is
-refused). A real, widely-copied OSS safety hook blocks **2/7** of the disaster
-battery; the compiled rewrite blocks **7/7**. Honest: this fixes the hook's
-_logic_, not the harness's _delivery_ — a subagent's tool calls still bypass any
-PreToolUse hook ([#34692](https://github.com/anthropics/claude-code/issues/34692)),
-a strong default, not an unbypassable wall. **[Compiled hooks →](docs/compiled-hooks.md)**
+This **eliminates an entire class of bugs**: you never write the exit code / JSON
+field (false confidence), the matcher is **AST-backed** (catches the compound
+bypass a glob misses), the only import allowed is `vigiles/hook` (capability = API
+surface), and the artifact is **stamped** (a later hand-edit is refused). A real,
+widely-copied OSS safety hook blocks **2/7** of the disaster battery; the compiled
+rewrite blocks **7/7**. Honest about the cons: this fixes a hook's _logic_, not
+the harness's _delivery_ — a subagent's tool calls still bypass any PreToolUse
+hook ([#34692](https://github.com/anthropics/claude-code/issues/34692)), so it's a
+strong default, not an unbypassable wall. **[Compiled hooks — bug classes + trade-offs →](docs/compiled-hooks.md)**
 
 ## ③ Test — does your harness do its job?
 
