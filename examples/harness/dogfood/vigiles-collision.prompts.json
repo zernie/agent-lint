@@ -1,0 +1,23 @@
+{
+  "strengthen": {
+    "prompts": [
+      "Harden my spec: which guidance rules could become enforce()?",
+      "Can you make my vigiles guidance() rules enforceable by finding matching linter rules?",
+      "Strengthen the rules in my CLAUDE.md — upgrade the guidance ones where a linter rule exists."
+    ]
+  },
+  "edit-spec": {
+    "prompts": [
+      "Add a rule to our CLAUDE.md that we always route output through logger.ts.",
+      "Remove the outdated rule about the legacy build step from CLAUDE.md.",
+      "Change the testing guidance in our CLAUDE.md."
+    ]
+  },
+  "test-harness": {
+    "prompts": [
+      "Write a test that my PreToolUse hook blocks `git commit --no-verify`.",
+      "Check that my skill triggers across different prompts.",
+      "I want to know if my CLAUDE.md rule actually changes the agent's behavior — measure it."
+    ]
+  }
+}

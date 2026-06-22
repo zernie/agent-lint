@@ -13,13 +13,16 @@
  * makes the column trustworthy. See `research/plugin-behavioral-findings.md`.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { scanPlugin } from "./scan.js";
 import {
   measureTriggerRate,
   claudeEvalDriver,
+  runPool,
+  runSkillSelectionTrial,
+  stubbedPluginDir,
   type TriggerRateReport,
   type EvalDriver,
 } from "./eval.js";
@@ -228,6 +231,285 @@ export function formatBehavioralReport(b: BehavioralReport): string {
     const mark = (r.recall ?? 0) >= 0.6 ? "✓" : "⚠";
     lines.push(
       `  ${mark} ${r.skill} — recall ${pct(r.recall ?? 0)} (${extra.join(", ")})`,
+    );
+  }
+  return lines.join("\n");
+}
+
+// ─── Plugin selection-collision matrix ───────────────────────────────────────
+//
+// The behavioral CONFIRMATION of the deterministic `description-overlap` proxy
+// (src/core/description-overlap.ts). The per-skill trigger-rate column above asks
+// each skill in ISOLATION — "does X fire on X's prompts, quiet on X's irrelevant?"
+// — so it can't see the failure that actually breaks a multi-skill plugin: one
+// skill HIJACKING a SIBLING's prompt. This measures that directly. For each
+// model-invocable skill it runs the skill's OWN prompts against the whole installed
+// plugin and records WHICH skills fired (whichSkillsFired), building an N×N matrix:
+// the diagonal is recall, off-diagonal mass is collision. Claude Code only — Codex
+// has no skill-selection event to read. See research/plugin-selection-collision.md.
+
+/** Knobs for the selection-collision measurement. */
+export interface SelectionOptions {
+  /** Repeats per prompt (default 1). */
+  readonly trials?: number;
+  /** Selector model — defaults to Sonnet (a weaker model under-selects). */
+  readonly model?: string;
+  /** Parallel runs across the prompts × trials grid (default 1). */
+  readonly concurrency?: number;
+  /** Which harness drives it (default `"claude-code"`; others report n/a). */
+  readonly harness?: ProbeHarness;
+}
+
+/** One run's outcome for the matrix: which of the plugin's OWN skills fired. */
+interface SelectionRun {
+  readonly intended: string;
+  readonly firedBare: readonly string[];
+}
+
+export interface SkillSelectionStat {
+  readonly skill: string;
+  /** Fraction of its own prompts on which it fired (matrix diagonal). */
+  readonly recall: number;
+  /** Fraction of its own prompts on which a SIBLING skill also/instead fired. */
+  readonly collisionRate: number;
+  /** Non-errored runs measured for this skill. */
+  readonly n: number;
+  /** Sibling skills that fired on this skill's prompts, by rate (desc, rate>0). */
+  readonly collidesWith: readonly {
+    readonly skill: string;
+    readonly rate: number;
+  }[];
+}
+
+export interface SelectionReport {
+  /** False when the harness CLI / auth is absent, or the harness has no selector. */
+  readonly available: boolean;
+  /** Matrix axes — the plugin's model-invocable skill names (bare). */
+  readonly skills: readonly string[];
+  /** matrix[i][j] = times skill j fired when skill i's prompt was given. */
+  readonly matrix: readonly (readonly number[])[];
+  readonly perSkill: readonly SkillSelectionStat[];
+  /** Plugin-level: fraction of all runs where a non-intended skill fired. */
+  readonly collisionRate: number;
+  readonly n: number;
+  readonly note?: string;
+}
+
+/** Map a namespaced skill id (`ns:name`) to its bare name. */
+function bareSkillName(id: string): string {
+  const i = id.lastIndexOf(":");
+  return i >= 0 ? id.slice(i + 1) : id;
+}
+
+function emptySelection(skills: readonly string[]): SelectionReport {
+  return {
+    available: true,
+    skills,
+    matrix: skills.map(() => []),
+    perSkill: [],
+    collisionRate: 0,
+    n: 0,
+  };
+}
+
+interface SkillStatInput {
+  readonly skill: string;
+  readonly i: number;
+  readonly skills: readonly string[];
+  readonly row: readonly number[];
+  readonly n: number;
+  readonly collisions: number;
+}
+
+function buildSkillStat(a: SkillStatInput): SkillSelectionStat {
+  const { skill, i, skills, row, n, collisions } = a;
+  const collidesWith = skills
+    .map((s, j) => ({ skill: s, rate: n > 0 ? row[j] / n : 0 }))
+    .filter((c) => c.skill !== skill && c.rate > 0)
+    .sort((x, y) => y.rate - x.rate);
+  return {
+    skill,
+    recall: n > 0 ? row[i] / n : 0,
+    collisionRate: n > 0 ? collisions / n : 0,
+    n,
+    collidesWith,
+  };
+}
+
+/**
+ * Pure aggregation: fold per-run fired-skill sets into the N×N selection matrix +
+ * per-skill recall/collision + the plugin-level collision rate. Separated from the
+ * model-driving so it's unit-testable with synthetic runs (no model).
+ */
+export function buildSelectionReport(
+  skills: readonly string[],
+  runs: readonly SelectionRun[],
+): SelectionReport {
+  const index = new Map(skills.map((s, i) => [s, i]));
+  const n = skills.length;
+  const matrix = skills.map(() => new Array<number>(n).fill(0));
+  const nBy = new Array<number>(n).fill(0);
+  const collisionBy = new Array<number>(n).fill(0);
+  let collisionTotal = 0;
+  for (const run of runs) {
+    const i = index.get(run.intended);
+    if (i === undefined) continue;
+    nBy[i] += 1;
+    let collided = false;
+    for (const fb of run.firedBare) {
+      const j = index.get(fb);
+      if (j === undefined) continue;
+      matrix[i][j] += 1;
+      if (j !== i) collided = true;
+    }
+    if (collided) {
+      collisionBy[i] += 1;
+      collisionTotal += 1;
+    }
+  }
+  const total = nBy.reduce((a, b) => a + b, 0);
+  return {
+    available: true,
+    skills,
+    matrix,
+    perSkill: skills.map((s, i) =>
+      buildSkillStat({
+        skill: s,
+        i,
+        skills,
+        row: matrix[i],
+        n: nBy[i],
+        collisions: collisionBy[i],
+      }),
+    ),
+    collisionRate: total > 0 ? collisionTotal / total : 0,
+    n: total,
+  };
+}
+
+/** Build the prompts × trials work list across every skill that has prompts. */
+function selectionJobs(
+  candidates: readonly { readonly name: string }[],
+  promptSet: TriggerPromptSet,
+  trials: number,
+): { readonly intended: string; readonly prompt: string }[] {
+  return candidates.flatMap((c) => {
+    const ps = promptSet[c.name];
+    if (!ps || ps.prompts.length === 0) return [];
+    return ps.prompts.flatMap((prompt) =>
+      Array.from({ length: trials }, () => ({ intended: c.name, prompt })),
+    );
+  });
+}
+
+/** The injectable core (for tests): drive the matrix via a fake/real probe. */
+export async function measurePluginSelectionWith(
+  dir: string,
+  promptSet: TriggerPromptSet,
+  probe: HarnessProbe,
+  opts: SelectionOptions = {},
+): Promise<SelectionReport> {
+  const candidates = scanPlugin(dir).skills.filter(
+    (s) => !s.userInvoked && s.hasDescription,
+  );
+  const skills = candidates.map((c) => c.name);
+  if (skills.length < 2) {
+    return {
+      ...emptySelection(skills),
+      note: "needs ≥2 model-invocable skills to measure cross-skill collision",
+    };
+  }
+  const own = new Set(skills);
+  const jobs = selectionJobs(
+    candidates,
+    promptSet,
+    Math.max(1, opts.trials ?? 1),
+  );
+  if (jobs.length === 0) {
+    return {
+      ...emptySelection(skills),
+      note: "no prompts supplied for any skill",
+    };
+  }
+  // Selection is decided at the frontmatter (the selector picks BEFORE the body
+  // loads), so stub each body to a no-op: the run stops AT selection instead of
+  // executing the whole workflow — the same affordability trick trigger-rate uses.
+  const pluginDir = probe.stub ? stubbedPluginDir(dir) : dir;
+  try {
+    const d = probe.evalDriver;
+    const outcomes = await runPool(
+      jobs,
+      Math.max(1, opts.concurrency ?? 1),
+      (job) =>
+        runSkillSelectionTrial({
+          prompt: job.prompt,
+          pluginDir,
+          runner: d.runner,
+          parse: d.parse,
+          runError: d.runError,
+          model: opts.model ?? "sonnet",
+        }),
+    );
+    const runs: SelectionRun[] = [];
+    jobs.forEach((job, k) => {
+      if (outcomes[k].errored) return;
+      runs.push({
+        intended: job.intended,
+        firedBare: outcomes[k].fired
+          .map(bareSkillName)
+          .filter((b) => own.has(b)),
+      });
+    });
+    return buildSelectionReport(skills, runs);
+  } finally {
+    if (probe.stub) rmSync(pluginDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Measure a plugin's cross-skill selection-collision matrix against the real
+ * harness (Claude Code only — Codex has no skill-selection event). Needs the
+ * `claude` CLI + model auth; degrades to `available: false` otherwise.
+ */
+export async function measurePluginSelection(
+  dir: string,
+  promptSet: TriggerPromptSet,
+  opts: SelectionOptions = {},
+): Promise<SelectionReport> {
+  const harness = opts.harness ?? "claude-code";
+  if (harness !== "claude-code") {
+    return {
+      ...emptySelection([]),
+      available: false,
+      note: `selection-collision is Claude Code only (no skill-selection event on ${harness})`,
+    };
+  }
+  const probe = buildProbe(dir, harness);
+  if (!probe.available()) {
+    return {
+      ...emptySelection([]),
+      available: false,
+      note: "needs the claude CLI + model auth",
+    };
+  }
+  return measurePluginSelectionWith(dir, promptSet, probe, opts);
+}
+
+/** Format the selection-collision matrix as a scan-report section. */
+export function formatSelectionReport(r: SelectionReport): string {
+  if (!r.available)
+    return `Selection-collision: unavailable — ${r.note ?? "n/a"}`;
+  if (r.n === 0) return `Selection-collision: ${r.note ?? "not measured"}`;
+  const lines = [
+    `Selection-collision: ${pct(r.collisionRate)} of ${String(r.n)} runs hit a sibling skill`,
+  ];
+  for (const s of r.perSkill) {
+    if (s.n === 0) continue;
+    const mark = s.collisionRate === 0 ? "✓" : "⚠";
+    const top = s.collidesWith[0];
+    const tail = top ? ` — top collider: ${top.skill} ${pct(top.rate)}` : "";
+    lines.push(
+      `  ${mark} ${s.skill} — recall ${pct(s.recall)}, collision ${pct(s.collisionRate)}${tail}`,
     );
   }
   return lines.join("\n");

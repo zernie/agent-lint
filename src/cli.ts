@@ -71,6 +71,8 @@ import {
 import {
   probePluginTriggers,
   formatBehavioralReport,
+  measurePluginSelection,
+  formatSelectionReport,
   type TriggerPromptSet,
   type ProbeHarness,
 } from "./scan-behavioral.js";
@@ -3251,6 +3253,53 @@ async function handleScanTrigger(
   );
 }
 
+/**
+ * The `scan --collisions` selection-collision column: reuse the `--prompts` file
+ * (each skill's `prompts` array; `irrelevant` is ignored here) to measure whether
+ * one skill's prompt wrongly fires a SIBLING — the behavioral confirmation of the
+ * deterministic `description-overlap` finding. Claude Code only; model-gated.
+ */
+async function handleScanCollisions(
+  root: string,
+  args: string[],
+  json: boolean,
+  harness: ProbeHarness,
+): Promise<void> {
+  const promptsPath = flagValue(args, "--prompts");
+  if (!promptsPath) {
+    console.error(
+      "scan --collisions needs --prompts=<file.json> (a map of skill name → { prompts }).",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  let promptSet: TriggerPromptSet;
+  try {
+    promptSet = JSON.parse(
+      readFileSync(resolve(promptsPath), "utf-8"),
+    ) as TriggerPromptSet;
+  } catch (e) {
+    console.error(
+      `scan --collisions: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const concurrencyRaw = flagValue(args, "--concurrency");
+  const trialsRaw = flagValue(args, "--trials");
+  const report = await measurePluginSelection(root, promptSet, {
+    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
+    trials: trialsRaw ? Number(trialsRaw) : undefined,
+    model: flagValue(args, "--model"),
+    harness,
+  });
+  console.log(
+    json
+      ? JSON.stringify(report, null, 2)
+      : `\n${formatSelectionReport(report)}`,
+  );
+}
+
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
   const checkOnly = args.includes("--check");
   const outPath = restArgs[0] ?? ".vigiles/generated.d.ts";
@@ -4370,6 +4419,11 @@ async function main(): Promise<void> {
           const harness: ProbeHarness =
             adapter.name === "codex" ? "codex" : "claude-code";
           await handleScanTrigger(root, args, json, harness);
+        }
+        if (args.includes("--collisions")) {
+          const harness: ProbeHarness =
+            adapter.name === "codex" ? "codex" : "claude-code";
+          await handleScanCollisions(root, args, json, harness);
         }
       }
       break;

@@ -1,0 +1,16 @@
+{
+  "test-driven-development": {
+    "prompts": [
+      "I'm adding a new email-validation feature to this module — where should I start?",
+      "Implement a debounce helper for this utils file",
+      "There's a bug: the cart total is wrong when a coupon is applied — fix it"
+    ]
+  },
+  "systematic-debugging": {
+    "prompts": [
+      "My test suite started failing after the refactor and I can't figure out why",
+      "The server crashes on startup with a null reference — help me find the cause",
+      "This function returns undefined for empty input but I expected an empty array"
+    ]
+  }
+}
