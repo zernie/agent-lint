@@ -28,6 +28,7 @@ import {
 } from "./eval.js";
 import { skillResolved } from "./harness-assert.js";
 import { claudeAvailable, type Trace } from "./harness-test.js";
+import { loadPlugin } from "./adapters/claude-code/plugin-loader.js";
 import { codexEvalDriver, codexSkillFired } from "./adapters/codex/eval.js";
 import { codexDriver } from "./adapters/codex/driver.js";
 
@@ -116,6 +117,46 @@ function pluginName(dir: string): string | null {
   }
 }
 
+/**
+ * Does the plugin declare a SessionStart hook? The STUBBED measurement path rebuilds
+ * the plugin to skills-only (`packageSkillsDir`), DROPPING `hooks/` — so a SessionStart
+ * hook that primes skill selection (e.g. superpowers' `using-superpowers` gateway
+ * injection) is silently lost, and a recall collapse to 0 under stubbing is then a
+ * measurement ARTIFACT, not a real miss. Detect it to LABEL honestly (Layer 1) rather
+ * than report a misleading 0%. See `research/plugin-selection-collision.md`.
+ */
+function hasSessionStartHook(dir: string): boolean {
+  try {
+    const hooks = (
+      loadPlugin(dir).settings as { hooks?: Record<string, unknown> }
+    ).hooks;
+    return hooks !== undefined && Object.keys(hooks).includes("SessionStart");
+  } catch {
+    return false;
+  }
+}
+
+const HOOK_PRIMED_NOTE =
+  "hook-primed — the stubbed run dropped the plugin's SessionStart hook (which can " +
+  "prime skill selection), so 0% recall is likely a measurement artifact; re-run " +
+  "against the full plugin install to measure faithfully";
+
+/**
+ * Layer-1 honesty: a STUBBED run on a SessionStart-hooked plugin where EVERY measured
+ * skill sits at recall 0 is the dropped-hook artifact — not a real result. The
+ * all-zero gate keeps a genuine single-skill miss reported as real (if siblings fired,
+ * the hook ran or wasn't needed). Applied to both the trigger column and the matrix.
+ */
+function isStubbedHookArtifact(
+  dir: string,
+  stub: boolean,
+  recalls: readonly number[],
+): boolean {
+  if (!stub || recalls.length === 0) return false;
+  if (!recalls.every((r) => r === 0)) return false;
+  return hasSessionStartHook(dir);
+}
+
 /** Shared per-run inputs, so `probeSkill` stays a small (ctx, name, prompts) call. */
 interface ProbeCtx {
   readonly dir: string;
@@ -189,7 +230,25 @@ export async function probePluginTriggersWith(
     }
     results.push(await probeSkill(ctx, s.name, ps));
   }
-  return { available: true, results };
+  return {
+    available: true,
+    results: relabelTriggerArtifact(dir, probe, results),
+  };
+}
+
+/** Relabel an all-zero-recall stubbed run on a hooked plugin as unmeasured (Layer 1). */
+function relabelTriggerArtifact(
+  dir: string,
+  probe: HarnessProbe,
+  results: readonly SkillTriggerResult[],
+): SkillTriggerResult[] {
+  const recalls = results.filter((r) => r.measured).map((r) => r.recall ?? 0);
+  if (!isStubbedHookArtifact(dir, probe.stub, recalls)) return [...results];
+  return results.map((r) =>
+    r.measured && (r.recall ?? 0) === 0
+      ? { skill: r.skill, measured: false, note: HOOK_PRIMED_NOTE }
+      : r,
+  );
 }
 
 /**
@@ -460,7 +519,14 @@ export async function measurePluginSelectionWith(
           .filter((b) => own.has(b)),
       });
     });
-    return buildSelectionReport(skills, runs);
+    const report = buildSelectionReport(skills, runs);
+    // Layer-1 honesty: an all-zero-recall stubbed run on a hooked plugin is the
+    // dropped-hook artifact — flag it instead of presenting a 0%-collision result
+    // computed from a plugin that never fired.
+    const recalls = report.perSkill.filter((s) => s.n > 0).map((s) => s.recall);
+    return isStubbedHookArtifact(dir, probe.stub, recalls)
+      ? { ...report, note: HOOK_PRIMED_NOTE }
+      : report;
   } finally {
     if (probe.stub) rmSync(pluginDir, { recursive: true, force: true });
   }
@@ -503,6 +569,7 @@ export function formatSelectionReport(r: SelectionReport): string {
   const lines = [
     `Selection-collision: ${pct(r.collisionRate)} of ${String(r.n)} runs hit a sibling skill`,
   ];
+  if (r.note) lines.push(`  ⓘ ${r.note}`);
   for (const s of r.perSkill) {
     if (s.n === 0) continue;
     const mark = s.collisionRate === 0 ? "✓" : "⚠";

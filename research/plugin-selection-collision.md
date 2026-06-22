@@ -102,12 +102,24 @@ So the 0% is a **measurement artifact, not evidence superpowers is broken.** vig
 own skills (Attempt 2) fire because their descriptions map directly to the request;
 superpowers' process-skills ("use TDD when implementing") need the hook's nudge.
 
-**Limitation surfaced (follow-up):** our trigger/collision tier can't faithfully
-measure a **hook-primed plugin** — it strips the very SessionStart hook that drives
-selection. Fix options: carry the plugin's `hooks/` into the stubbed plugin, or run
-the whole-plugin install (unstubbed) when a SessionStart hook is present. Recorded in
-`research/roadmap.md`. The discipline holds: `scan`'s broken-ref column flags the
-missing gateway up front, so the null result is explainable, not mysterious.
+**Limitation surfaced — Layer 1 SHIPPED, Layer 2 deferred.** Our trigger/collision tier
+can't faithfully measure a **hook-primed plugin** — it strips the very SessionStart hook
+that drives selection. The fix is layered, honesty before fidelity:
+
+- **Layer 1 (SHIPPED):** never present a misleading clean `0%`. When a STUBBED run on a
+  plugin that declares a **SessionStart hook** shows EVERY measured skill at recall 0,
+  that's the dropped-hook artifact — `hasSessionStartHook` + `isStubbedHookArtifact`
+  (scan-behavioral.ts) relabel it `ⓘ hook-primed … likely a measurement artifact; re-run
+against the full plugin install` on BOTH columns. The **all-zero gate** is the
+  precision guard: a genuine single-skill miss (siblings fired → the hook ran or wasn't
+  needed) stays reported as real, so the label can't mask a true 0%. Verified on the live
+  superpowers run + CI fake-driver tests (hooked→labeled; non-hooked 0%→stays real).
+- **Layer 2 (deferred, roadmap):** the faithful path — a `--no-stub` whole-plugin
+  install, with auto-fallback to it on a 0%-recall hook-bearing plugin — so the result
+  is either measured faithfully or honestly marked, never a silent 0%.
+
+The discipline holds: `scan`'s broken-ref column flags the missing gateway up front, so
+the null result is explainable, not mysterious.
 
 ### Attempt 2 — vigiles's OWN plugin: clean, + a recall signal
 
