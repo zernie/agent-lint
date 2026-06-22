@@ -30,6 +30,10 @@ import {
   defineInject,
   inject,
   runInject,
+  defineReact,
+  run,
+  notice,
+  runReact,
 } from "./hook-program.js";
 
 // The hook an author writes — a pure function against the closed API. No exit
@@ -204,4 +208,55 @@ test("probe2: an inject hook CANNOT express a block — correct-by-construction 
   });
   // Runtime backstop: even if forced, there's no block to emit — just context.
   assert.ok(bad.role === "inject");
+});
+
+// ---------------------------------------------------------------------------
+// PROBE 3 — the REACT shape (PostToolUse): side effects re-enter, but BOUNDED
+// ---------------------------------------------------------------------------
+
+// "format after edit" — a react hook that runs prettier on a written src file.
+const formatOnWrite = defineReact({
+  on: "PostToolUse",
+  match: tools("Edit", "Write"),
+  react: (e) =>
+    e.path.under(["src"])
+      ? run(`prettier --write ${e.path.raw}`)
+      : notice("not a src file"),
+});
+
+const postEv = (tool_name: string, file_path: string) => ({
+  tool_name,
+  tool_input: { file_path },
+});
+
+test("probe3: a react hook's action is EFFECT-CLASSIFIED at construction (analyzable side effects)", () => {
+  const r = runReact(formatOnWrite, postEv("Write", "src/x.ts"));
+  assert.equal(r.kind, "run");
+  if (r.kind === "run") {
+    assert.match(r.command, /prettier --write src\/x\.ts/);
+    // The effect is known WITHOUT running it — prettier mutates → side-effecting.
+    assert.equal(r.effect, "side-effecting");
+  }
+  // A read-only reaction is classified as such; a non-src file → a notice, no run.
+  assert.equal(run("git status").effect, "read-only");
+  assert.equal(
+    runReact(formatOnWrite, postEv("Write", "/etc/hosts")).kind,
+    "notice",
+  );
+  // A tool it doesn't match → nothing.
+  assert.equal(
+    runReact(formatOnWrite, postEv("Read", "src/x.ts")).kind,
+    "none",
+  );
+});
+
+test("probe3: a react hook CANNOT block — 'block on PostToolUse' is a type error (tsc)", () => {
+  const bad = defineReact({
+    on: "PostToolUse",
+    match: tools("Edit"),
+    // @ts-expect-error — deny() returns a Decision, not a Reaction; a PostToolUse hook
+    // can't block (the tool already ran), so the documented mistake is a TYPE error.
+    react: () => deny("too late to block"),
+  });
+  assert.ok(bad.role === "react");
 });
