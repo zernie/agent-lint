@@ -128,8 +128,22 @@ runtime. Honest limits unchanged: buy-in (rewrite as a typed program), node-star
 and CC delivery bugs (#34692) still bypass any compiled hook — compile fixes AUTHORING +
 ANALYSIS, not delivery. Verdict: the model is real and coherent ("a hook becomes a formal
 object"); the open question is whether the `vigiles/hook` API stays minimal-but-sufficient
-for real hook shapes. NEXT (if pursued): widen the API past the Bash/PreToolUse probe shape
-(other tools/events, context-injection, action-runner) and decide buy-in vs. the latency cost.
+for real hook shapes.
+
+**PROBE 2 — vocabulary holds across two more shapes (2026-06-22, `3c00be5`).** Widened to a
+path-confine GATE (Edit/Write, a `PathView.under()` matcher — different tool/field/matcher,
+extends cleanly) and a context-INJECTION hook (SessionStart, returns `Injection` text, not a
+Decision). Finding: the vocabulary holds, and it's a small **FAMILY keyed by hook ROLE**
+(gate vs inject) whose per-role OUTPUT TYPE eliminates two MORE verified pains by construction:
+(a) the compiler emits the RIGHT JSON field per role (`additionalContext` for inject vs
+exit-2/`permissionDecision` for a gate) — the wrong-field pain vanishes; (b) an inject hook
+CANNOT return `deny()` (tsc error, build-enforced via @ts-expect-error) — so "block on a
+SessionStart/PostToolUse hook" (a documented mistake) is a TYPE error, not a silent no-op.
+
+So the model strengthens as it widens: each hook ROLE is a typed kind, and the wrong-output
+bugs become unrepresentable. NEXT (if pursued): a 3rd shape (PostToolUse react / action-runner),
+then the real decision — buy-in (rewrite hooks as typed programs) vs. node-startup latency vs.
+the payoff; and whether to surface `vigiles/hook` as a public authoring API.
 
 ## Honest boundary — the CC delivery bugs we CANNOT fix
 
