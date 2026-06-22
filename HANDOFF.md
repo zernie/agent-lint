@@ -51,14 +51,18 @@ survives compaction), NOT a lint rule — "make the harness measurably more reli
 via the eval layer (the face-wipe A/B). Grounded: prose-doesn't-bind (#32163 "@enforce"),
 declared≠enforced (SDK #172/#162/#189), METR <10%@4h, trifecta 98% of prod agents. Companions
 poached: `typed-claude-md-poach.md` (Mastra/Pydantic/Effect-TS).
-**PROTOTYPE RUNS (`959e88c`,`4336f4a`):** `src/core/guards.ts` = typed safe-by-construction
-guards (block/requireBefore/confine) + a runnable `vigiles guard-hook` PreToolUse gate —
-loads `.vigiles/guards.json` + a session ledger (`.vigiles/guard-ledger.json`), runs
-`decideGuards`, blocks (exit 2) or records the allowed call. **ORDER axis enforced LIVE**
-(runHook e2e: destroy blocked before plan, allowed after — across hook invocations). The
-command is vigiles's OWN gate, never user shell (closes the CVE-2025-59536 hook-RCE class).
-EXPERIMENTAL, not on the public API. NEXT: the measured-reliability demo (eval A/B: guard
-on vs off on a destroy-before-backup task) + decide whether to surface `guards` in a spec.
+🎯 **KILLER FEATURE SHIPPED (`a5abf70`): "prove your guardrail actually blocks."** 5-pass
+web research (`research/hook-pain-points.md`) → #1 hook pain is FALSE CONFIDENCE (a safety
+hook silently doesn't block: exit 1≠2, wrong jq path; "3 teams believed they'd blocked
+force pushes"; RFC #45427 closed not-planned). `src/guardrail-check.ts` (on `vigiles/unit`):
+DISASTER_CATALOG + `verifyGuardrail` (feeds force-push/rm-rf/--no-verify/ssh-read/curl|sh to
+a hook via runHook) + `assertBlocksDisasters` (CI gate) + NEUTRAL coverage map; wired into
+`scaffold-test`. Deterministic, no model, works on hand-written hooks (zero spec) — verifies
+LOGIC not delivery (flags but doesn't fix CC's subagent-bypass #34692). Dogfood receipt: tells
+an exit-1 fake guard from an exit-2 real one. ⚠️ GATE work (`959e88c`/`4336f4a` guard-hook +
+ledger, ORDER axis live) DEMOTED to MED — the same CC bugs (#34692, exit-2-stops-Claude
+#24327) undercut any PreToolUse gate incl. ours; prefer VERIFY over GATE. NEXT: a curated
+catalog + `scan` coverage column; dogfood on a real OSS safety hook to find a secret no-op.
 
 ## Next move (pick)
 
@@ -77,22 +81,16 @@ on vs off on a destroy-before-backup task) + decide whether to surface `guards` 
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
 
-- **A1 (`dd80681`,`f609d00`):** manifest 4→5 (added **token-efficient** drona23@0d30a6d,
-  MIT, 5.7k★, injectable CLAUDE.md; full cluster map in SOURCES/FINDINGS) + per-task
-  spread in the leaderboard. **Pilot RAN (haiku, $0.29):** token-efficient DEBUNKED
-  (claim 63% vs −2%); caveman noisy on haiku. **SONNET PASS DONE (`da08504`, $3.43,
-  5 trials):** caveman 75%→**−18%** (stable; bill +8%; review-doc −55%), token-efficient
-  63%→**−10%** (bill +3%; worse than its own ~12% sonnet claim); both 0-regress, output
-  ~0.7% of session. Audited their OWN benchmarks (FINDINGS §methodology audit): single-shot
-  Q&A, output-tokens-only, vanilla baseline, no correctness gate → why they report a win.
-  ⚠️ **caveman debunk is SATURATED** — do NOT lead with a caveman article; position on
-  claim-gap/reproducibility/correctness ("sort real from hyped"). Prior-art in landscape-mid-2026.md.
-- **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK (push/pop/
-  gate-on-top); TLC counterexample is a regression test. Still EXPERIMENTAL/not auto-wired.
-- **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
-  markdown: capability axis, two-oracle, leg-grading); the **market-segmented competitive
-  matrix** + poach list in `landscape-mid-2026.md`; reality-check in `typed-spec-moat.md`.
-- **Ideas captured (roadmap §Explore):** tiered README badge; PUBLIC leaderboard; open-core.
+- **Guardrail VERIFY killer feature (`a5abf70`):** `src/guardrail-check.ts` on `vigiles/unit`
+  (catalog + verifyGuardrail/assertBlocksDisasters/neutral-map) + scaffold-test wiring. THE bet.
+- **5-pass hook research (`d24bfa6`):** `research/hook-pain-points.md` (verified corpus); roadmap
+  updated (VERIFY = HIGH, GATE = MED). The evidence base for everything above.
+- **hook-spec spike (`d3471c0`):** typed/effect-classified hooks (`src/core/hook-spec.ts`) —
+  wrong-field & mutating-observe-hook = compile errors. EXPERIMENTAL, parked (correctness win).
+- **guard-hook GATE (`959e88c`/`4336f4a`):** typed guards + runnable PreToolUse gate + ledger;
+  ORDER axis live. EXPERIMENTAL; demoted MED (CC bugs undercut any gate). Don't build more.
+- **Prior session (don't rebuild):** A1 sonnet pass (caveman −18%, token-efficient −10%, both
+  debunked — SATURATED, don't lead with caveman); V1 nesting STACK fix (`c50b826`); leaderboard v0.
 
 ## Gotchas (carry forward)
 
