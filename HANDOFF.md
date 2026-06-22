@@ -106,10 +106,9 @@ Nothing. Tree clean; local == remote.
 
 ## Budget protocol
 
-- Read THIS file, not the docs, to orient; open a doc only when a step needs it.
-- **Delegate** searches/reads + big builds to subagents (keep file dumps out of main
-  context); verify their output. Bounded commits; **refresh this file after each
-  shippable commit** so state is always current.
+- Orient from THIS file; open a doc only when a step needs it. **Delegate** searches +
+  big builds to subagents (verify their output). Bounded commits; **refresh this file
+  after each shippable commit**.
 
 ## Don't re-read unless the task needs it
 
