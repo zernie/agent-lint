@@ -83,6 +83,14 @@ scan` output. Keep it constructive — the goal is a working plugin, not a gotch
 > `lighthouse_audit`, `press_key`, `type_text`, `take_heapsnapshot` — and NOT
 > `emulate_cpu`/`emulate_network`/`navigate_page_history`. CI-safe coverage of the same
 > engine is in `src/core/mcp.test.ts` (against `examples/harness/fixture-mcp-server.mjs`).
+>
+> **Scope (honest, from dogfooding all 4 vendored plugins 2026-06-22):** the live check is
+> HIGH-VALUE but NARROW — only **MadAppGang** pins `mcp__server__tool` refs in a contract
+> (where it found the 3 dead refs). superpowers + wshobson-accessibility reference **no**
+> MCP tools; oh-my-claudecode declares a server (`t`) but **no surface pins its tools**, so
+> nothing to verify. So this check bites only on plugins that hard-list specific MCP tool
+> names in a subagent contract — a real but minority pattern. Don't overstate its breadth:
+> it's one sharp harness-native check among several, not a universal one.
 
 ## Scanner false positives — found by the sweep, fixed
 
