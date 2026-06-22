@@ -16,6 +16,7 @@ npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness eva
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
+npx vigiles scan <dir> --collisions # Measure cross-skill selection collision (one skill hijacks a sibling's prompt; model)
 npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
@@ -189,6 +190,29 @@ surfaced per-skill (`unmeasured`), never crashing the scan. See
 `measureTriggerRate` and [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md)
 for what it catches. (The remaining behavioural columns — observed egress,
 safety — build on the same footing.)
+
+#### Selection-collision matrix — `scan --collisions`
+
+`--trigger` measures each skill in **isolation**. **`--collisions`** measures the
+failure that breaks a **multi-skill** plugin: one skill **hijacking a sibling's
+prompt**. It runs each model-invocable skill's own prompts against the whole
+installed plugin and records **which** skills fired — an N×N matrix whose diagonal
+is recall and whose off-diagonal mass is collision. This is the **behavioral
+confirmation** of the deterministic `description-overlap` rule (the lint rule says
+"these two look confusable"; this says "they collide X% of the time").
+
+It reuses the `--trigger` prompts file (only each skill's `prompts` array; an
+`irrelevant` set is ignored here) and bodies are stubbed, so a run stops at
+selection. **Claude Code only** — collision is a property of the discrete
+skill-selection event, which Codex doesn't have, so it reports `unavailable` there.
+
+```bash
+npx vigiles scan ./some-plugin --collisions --prompts=./probes.json --trials=2
+```
+
+Needs ≥2 model-invocable skills (collision is meaningless for one). Flags:
+`--prompts=`, `--trials=`, `--concurrency=`, `--model=`. See
+[`research/plugin-selection-collision.md`](../research/plugin-selection-collision.md).
 
 #### Live MCP tool resolution — `scan --verify-mcp`
 
