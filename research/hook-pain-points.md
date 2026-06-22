@@ -146,3 +146,30 @@ Smallest real build: a curated disaster-event catalog + the `scan`/`scaffold-tes
 surface over it, dogfooded on a real OSS safety hook to find one that's secretly a
 no-op. See `research/harness-protocol-flow-moat.md` for the moat framing and
 `research/roadmap.md` for sequencing.
+
+## Status — SHIPPED v0 (2026-06-22, `a5abf70`)
+
+`src/guardrail-check.ts` on the `vigiles/unit` surface: `DISASTER_CATALOG` (force-push
+incl. compound, `reset --hard`, `rm -rf`, `--no-verify`, ssh-key read, `curl | sh`) +
+`verifyGuardrail` (feeds each via `runHook`) + `assertBlocksDisasters` (the CI gate) +
+`formatGuardrailReport`. Wired into `scaffold-test` (a hook scaffolds the runnable
+battery). Committed receipt: an exit-1 fake guard vs an exit-2 real one are told apart.
+
+**Design lesson from dogfooding (the load-bearing one).** Running the battery on our own
+`pre-edit.sh` reported "blocks 0/7" — _correct but misleading_: that hook protects compiled
+`.md` files, it was never a bash-safety guard. So the coverage map MUST be **neutral** (report
+what's blocked, judge nothing), and the **"false confidence" verdict only fires once intent is
+DECLARED** (`assertBlocksDisasters(cmd, { categories })`). Two levels, by design:
+
+- **Level 0 — coverage map:** neutral facts, zero buy-in, no false positives ("a hook that
+  allows these may simply not be a bash-safety guard").
+- **Level 1 — declared-intent gate:** the user states the categories the hook is responsible
+  for → a miss is a real CI failure. This is the only place "false confidence" is asserted.
+
+This is the false-positive discipline (don't-cry-wolf) that the whole tool lives or dies on,
+learned the moment we pointed it at a real hook with a different purpose.
+
+**NEXT:** a `scan` coverage column + a dogfood on a REAL public plugin's PreToolUse safety
+hook — find one that's secretly a no-op (the adoption demo: a stranger's verified-broken
+guardrail). Our vendored corpus has no PreToolUse bash guard yet, so this needs vendoring one
+(or network) — the honest gating constraint.
