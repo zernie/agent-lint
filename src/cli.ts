@@ -4428,6 +4428,23 @@ async function compileHookCommand(
   console.log(
     `✓ ${file} compiled (role: ${dispatchKind(program)}, harness: ${adapter.name}).`,
   );
+  // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
+  // but an inject/react hook's OUTPUT shape is only confirmed for Claude Code. On
+  // another harness it would emit CC-shaped output that may not be read — exactly
+  // the silent-failure this feature exists to prevent. Say so, loudly.
+  const role = dispatchKind(program);
+  if (
+    adapter.name !== "claude-code" &&
+    (role === "inject" || role === "react")
+  ) {
+    console.warn(
+      `\n⚠ ${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
+        `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
+        `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
+        `${adapter.name} for now, or confirm the ${role} output against the real ` +
+        `binary first (research/compiled-hooks-codex.md §Deferred).`,
+    );
+  }
   console.log(`\nAdd this to ${target}:\n`);
   console.log(compiled.settingsBlock);
   console.log(
