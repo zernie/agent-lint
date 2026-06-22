@@ -169,11 +169,17 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - **Buy-in.** It's a dependency plus a build step, and you author in JS/TS, not a
   3-line inline `bash` hook. For a trivial one-liner the compiled path is heavier
   — the payoff is on the guards that actually have to be _correct_.
-- **A bounded vocabulary is a ceiling, by design.** "Capability = API surface"
-  cuts both ways: if a hook genuinely needs something outside `vigiles/hook`
-  (call a service, hold complex state), you can't express it. That _is_ the
-  safety guarantee, but it means some hooks stay hand-written — keep a plain
-  shell hook for those and verify it with the disaster battery.
+- **A bounded vocabulary is a ceiling, by design** — but be precise about which
+  bound. (1) What a hook can _do_: `checkHookImports` forbids any import but
+  `vigiles/hook` (no `fs`/`net`/`child_process`), so a hook that must _call a
+  service, read a file, or hold cross-invocation state_ to decide can't be
+  expressed. That is the **deliberate** ceiling — it _is_ the safety guarantee,
+  and such hooks stay hand-written (keep a plain shell hook and verify it with
+  the disaster battery). (2) What a hook can _see_: the AST matchers
+  (`runs`/`touches`/`pipesToShell`/`under`) are a **soft, extensible** limit, not
+  a fundamental one — if you need to match a shape they don't expose yet, the fix
+  is a new matcher (e.g. `touches`/`pipesToShell` were added the same way), not a
+  redesign.
 - **Compiling proves the protocol, not your policy.** A compiled hook can't have
   the wrong exit code — but it can still `deny` the wrong thing. Compiling is
   necessary, not sufficient; test the _logic_ with
