@@ -38,31 +38,19 @@ scan 14→6 flags; NEW `vigiles measure <dir>` = model-gated behavioral front do
 folded to `scan <after> --capability-diff=<before>`. OPEN (user floated): fold `scan` into `lint`
 (directionally right, deferred — don't thrash).
 
-🚀 **BIG-MOAT DIRECTION (2026-06-22, user steer "huge moat, way more reliable harness — not
-small linter improvements").** Deep FP pass + web-verified failure corpus →
-`research/harness-protocol-flow-moat.md`. Thesis: existing moats type the static capability
-SET; the prize is typing the harness's DYNAMIC structure — the 3 things a set discards:
-**ORDER** (typestate: destructive action unreachable until its guard step ran — kills
-destroy-without-backup), **FLOW** (info-flow/noninterference: untrusted input can't reach a
-sink — the trifecta as a real path), **REPLAY** (linear/idempotent: exactly-once side effects
-— the unsolved duplicate-on-replay hole, ACRFence). Reframed as a CATEGORY: a deterministic
-**reliability RUNTIME** (spec→PreToolUse gate, enforced OUTSIDE the context window so it
-survives compaction), NOT a lint rule — "make the harness measurably more reliable," provable
-via the eval layer (the face-wipe A/B). Grounded: prose-doesn't-bind (#32163 "@enforce"),
-declared≠enforced (SDK #172/#162/#189), METR <10%@4h, trifecta 98% of prod agents. Companions
-poached: `typed-claude-md-poach.md` (Mastra/Pydantic/Effect-TS).
-🎯 **KILLER FEATURE SHIPPED (`a5abf70`): "prove your guardrail actually blocks."** 5-pass
-web research (`research/hook-pain-points.md`) → #1 hook pain is FALSE CONFIDENCE (a safety
-hook silently doesn't block: exit 1≠2, wrong jq path; "3 teams believed they'd blocked
-force pushes"; RFC #45427 closed not-planned). `src/guardrail-check.ts` (on `vigiles/unit`):
-DISASTER_CATALOG + `verifyGuardrail` (feeds force-push/rm-rf/--no-verify/ssh-read/curl|sh to
-a hook via runHook) + `assertBlocksDisasters` (CI gate) + NEUTRAL coverage map; wired into
-`scaffold-test`. Deterministic, no model, works on hand-written hooks (zero spec) — verifies
-LOGIC not delivery (flags but doesn't fix CC's subagent-bypass #34692). Dogfood receipt: tells
-an exit-1 fake guard from an exit-2 real one. ⚠️ GATE work (`959e88c`/`4336f4a` guard-hook +
-ledger, ORDER axis live) DEMOTED to MED — the same CC bugs (#34692, exit-2-stops-Claude
-#24327) undercut any PreToolUse gate incl. ours; prefer VERIFY over GATE. NEXT: a curated
-catalog + `scan` coverage column; dogfood on a real OSS safety hook to find a secret no-op.
+🚀 **BIG-MOAT DIRECTION (2026-06-22).** `research/harness-protocol-flow-moat.md`: type the
+harness's DYNAMIC structure (ORDER/FLOW/REPLAY) a capability SET discards — a deterministic
+reliability RUNTIME, not a lint rule. Grounded: #32163 "@enforce", SDK #172, trifecta 98%.
+🎯 **HOOKS DEEP-DIVE (2026-06-22) — see `research/hook-pain-points.md`.** 5-pass verified
+research: #1 hook pain = FALSE CONFIDENCE (a guard silently doesn't block: exit 1≠2, wrong
+field; "3 teams believed they'd blocked force pushes"; RFC #45427 not-planned). TWO threads:
+
+- VERIFY (SHIPPED `a5abf70`): "prove your guardrail blocks" — `src/guardrail-check.ts` on
+  `vigiles/unit` (DISASTER_CATALOG + verifyGuardrail + assertBlocksDisasters + neutral map);
+  dogfooded on disler/cc-hooks-mastery (blocks rm/.env, no-ops vs force-push/ssh-read). Honest
+  reassessment: useful but NOT a moat — it's a thin catalog+runHook wrapper / a lint-ish check.
+- COMPILE (the moat, probed — see Shipped). GATE work (`959e88c`/`4336f4a`) DEMOTED MED (CC
+  bugs #34692/#24327 undercut any PreToolUse gate). Prefer VERIFY/COMPILE over GATE.
 
 ## Next move (pick)
 
