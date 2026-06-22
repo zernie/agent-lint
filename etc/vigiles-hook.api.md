@@ -51,11 +51,20 @@ export interface CompiledHookProgram {
             readonly command: string;
         }[];
     }[]>;
+    readonly settingsBlock: string;
     readonly stamp: SHA256Hash;
 }
 
 // @public
-export function compileHookProgram(source: string, hook: AnyHook, gateCommand?: string): CompiledHookProgram;
+export interface CompileHookOptions {
+    readonly dialect?: HarnessDialect;
+    readonly gateCommand?: string;
+    readonly hookProtocol?: HookProtocol;
+    readonly settingsFormat?: "json" | "toml";
+}
+
+// @public
+export function compileHookProgram(source: string, hook: AnyHook, opts?: CompileHookOptions): CompiledHookProgram;
 
 // @public
 export function decideFileGate(hook: FileGateHook, raw: {

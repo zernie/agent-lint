@@ -80,4 +80,5 @@ export type {
   Reaction,
   RunReaction,
   CompiledHookProgram,
+  CompileHookOptions,
 } from "./core/hook-program.js";

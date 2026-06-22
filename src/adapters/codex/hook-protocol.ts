@@ -11,6 +11,9 @@ export const codexHookProtocol: HookProtocol = {
   name: "codex",
   blockExitCode: 2,
   denyDecisionValues: ["block", "deny"],
+  // Codex matchers are anchored regexes (`matcher = "^Bash$"`), unlike Claude
+  // Code's exact tool name / `A|B` alternation.
+  matcherStyle: "regex",
   eventEnvVars: [
     "session_id",
     "cwd",

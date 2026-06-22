@@ -123,6 +123,12 @@ capability creep); see the [compiled-hooks guide](compiled-hooks.md) for the why
   `deny`, an inject prints `additionalContext`, a react runs its classified
   command. Exit codes: `0` allow, `2` deny/refuse.
 
+`compile-hook` is **multi-harness**: it emits for the detected harness, or pass
+`--harness=codex` to emit a Codex `config.toml` `[[hooks.<event>]]` block (an
+anchored-regex matcher) instead of the Claude Code `settings.json` JSON. The same
+typed program compiles to either; the gate runtime is shared (Codex vetoes via
+`exit 2` identically).
+
 Honest scope: this fixes the hook's authoring + logic, not the harness's
 delivery — a subagent's tool calls still bypass any PreToolUse hook
 ([#34692](https://github.com/anthropics/claude-code/issues/34692)).
