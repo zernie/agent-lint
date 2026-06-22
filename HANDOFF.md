@@ -1,115 +1,90 @@
 # HANDOFF — volatile cross-session state
 
-> Overwrite each session; keep ≤120 lines. The durable map is `research/roadmap.md`.
-> The SessionStart hook injects this file so a new session starts oriented WITHOUT
-> re-reading CLAUDE.md + research. Read first, then open what "Next move" points at.
+> Overwrite each session; keep ≤120 lines. Durable map = `research/roadmap.md`.
+> The SessionStart hook injects this so a new session starts oriented. Read first.
 
-## Now
+## RESUME HERE — shipping COMPILED HOOKS (in flight, 2026-06-22)
 
-Pivot = **measurement-authority** (`research/measurement-authority.md`): vigiles = the
-empirical authority on what makes agentic coding work (measurement → typed contracts →
-linting). This multi-session run went DEEP on the **typed-spec MOAT**: _"the harness
-becomes a compilable, analyzable formal object — vigiles is a compiler/verifier for
-agent harnesses; everyone else is a linter for prose."_ Full record + every research
-finding: **`research/typed-spec-moat.md`**.
+**Decision (user, via AskUserQuestion):** (1) SHIP compiled hooks for real, (2) REPOSITION
+the README around **"harness reliability"**, (3) design the **Codex compiled-hook adapter**.
+Do in that order. Tree clean @ `895809e`, all pushed to `claude/what-now-umafgi`. No code
+written yet for this arc — was mid-reading `package.json` exports + `cli.ts` dispatch.
 
-## Status & gaps (READ — the honest 2026-06-21 self-assessment)
+**CONTEXT:** a "compiled hook" = a hook authored as a PURE typed fn against a CLOSED
+`vigiles/hook` API; vigiles compiles it. Proven across 3 probes (a sound gate/inject/react
+FAMILY) in `src/core/hook-program.ts` — NOT yet on the public API. Full record + why it
+matters: **`research/hook-pain-points.md`**. Reliability moat thesis: `harness-protocol-flow-moat.md`.
 
-Thesis is A-tier + real features shipped, BUT the work leaned **maker-cool (the moat)
-over user-pull (the measurement identity)**, and vigiles has ~no users. Near-term
-priority = the **ADOPTION ENGINE** (the at-scale ecosystem benchmark "what works vs
-hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat depth.
-Bridge bet = **capability-diff (#2)**. Full: `research/measurement-authority.md` § "Status & gaps".
+⚠️ **DELIVERY FLOOR — stay honest in EVERY doc.** Compile/verify fix the hook's AUTHORING +
+LOGIC (correct, safe, AST-matched, capability-bounded, stamped). They do NOT fix DELIVERY:
+CC's **#34692** (PreToolUse hooks DON'T fire for subagent tool calls; closed not-planned)
+bypasses ANY compiled hook — incl. ours (guard-hook + the agent-runtime rail are PreToolUse
+hooks too). So VERIFY (a claim about logic) survives the bug; GATE (live enforcement) is
+capped MED. **Never claim "unbypassable."**
 
-⚠️ **COMPETITIVE READ (2026-06-21, web-verified + market-corrected).** "Typed-spec moats
-commoditizing" was a MARKET CONFLATION — fancy capabilities live in ADJACENT markets
-(app-building Mastra/promptfoo; infra riftmap; MCP-security AgentAuditKit), NOT vigiles's.
-In-market rivals are pure static surface linters (claudelint/cclint/`claude plugin validate`,
-NO cross-ref/typed/eval); field WIDE OPEN (biggest = agnix 296★, no cross-ref/eval). So:
-**LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markdown) + test/eval. The
-valuable cross-check is HARNESS-NATIVE (tools/MCP `server#tool`/events/paths/delegates), NOT
-more linter catalogs. Full record: `typed-spec-moat.md` + `landscape-mid-2026.md`.
-**SHIPPED live MCP tool resolution** (`scan --verify-mcp`, `2982510`) — starts the declared
-server, checks each `mcp__server__tool` exists; dogfood found a real MadAppGang dead-tools bug.
+### STEP 1 — ship compiled hooks (dependency for honest docs)
 
-**SHIPPED: SELECTION-COLLISION matrix** (now `vigiles measure`) + Layer-1 hook-primed-artifact
-honesty (`852a05d`); full in `plugin-selection-collision.md`. **CLI CONSOLIDATED (`2aedc5b`):**
-scan 14→6 flags; NEW `vigiles measure <dir>` = model-gated behavioral front door; capability-diff
-folded to `scan <after> --capability-diff=<before>`. OPEN (user floated): fold `scan` into `lint`
-(directionally right, deferred — don't thrash).
+- `src/hook.ts` barrel re-exporting the public vocab from `core/hook-program.ts` (mirror
+  `src/unit.ts`): defineHook/defineFileGate/defineInject/defineReact, allow/deny/ask,
+  inject/notice/run/nothing, tool/tools, commandView/pathView, decideProgram/runInject/
+  runReact, compileHookProgram/checkHookImports/stampHook/verifyHookStamp, types.
+- `package.json` exports: add `"./hook": "./dist/hook.js"`. Then `npm run api:report`.
+- CLI (mirror `agentHookCommand` @ cli.ts:3982; dispatch switch @ 4319 / handleSkillCommand @ 4110):
+  - `compile-hook <file>`: checkHookImports → on clean, emit the settings block + `stampHook`
+    to a sidecar; throw HookCompileError on an out-of-API import.
+  - `run-hook-program <file>`: the runtime the compiled settings command points at — import
+    the program's default export, read stdin event (`readFileSync(0)`), dispatch by role:
+    gate→decideProgram→`exit 2`+reason on deny; inject→runInject→print additionalContext JSON;
+    react→runReact→spawnSync the classified `run` cmd. Load .mjs/.js via `import()`; TS via
+    tsx like run-scripts (defer/note if heavy).
+- Tests: e2e via `runHook` over `node dist/cli.js run-hook-program <fixture.mjs>` — gate denies
+  `git push -f` (exit 2) + allows benign; inject emits additionalContext. build+vitest+lint+fmt; commit.
 
-🚀 **BIG-MOAT DIRECTION (2026-06-22).** `research/harness-protocol-flow-moat.md`: type the
-harness's DYNAMIC structure (ORDER/FLOW/REPLAY) a capability SET discards — a deterministic
-reliability RUNTIME, not a lint rule. Grounded: #32163 "@enforce", SDK #172, trifecta 98%.
-🎯 **HOOKS DEEP-DIVE (2026-06-22) — see `research/hook-pain-points.md`.** 5-pass verified
-research: #1 hook pain = FALSE CONFIDENCE (a guard silently doesn't block: exit 1≠2, wrong
-field; "3 teams believed they'd blocked force pushes"; RFC #45427 not-planned). TWO threads:
+### STEP 2 — reposition docs (public + internal)
 
-- VERIFY (SHIPPED `a5abf70`): "prove your guardrail blocks" — `src/guardrail-check.ts` on
-  `vigiles/unit` (DISASTER_CATALOG + verifyGuardrail + assertBlocksDisasters + neutral map);
-  dogfooded on disler/cc-hooks-mastery (blocks rm/.env, no-ops vs force-push/ssh-read). Honest
-  reassessment: useful but NOT a moat — it's a thin catalog+runHook wrapper / a lint-ish check.
-- COMPILE (the moat, probed — see Shipped). GATE work (`959e88c`/`4336f4a`) DEMOTED MED (CC
-  bugs #34692/#24327 undercut any PreToolUse gate). Prefer VERIFY/COMPILE over GATE.
+- README: top-line = **"deterministic reliability for the agent harness"**; cross-ref/Lint/Test
+  become pillars under it; ADD compiled-hooks (now shipped) + the verify feature. Honest:
+  verify=shipped, compile=shipped, GATE capped by #34692. README ≤200 lines, install above fold,
+  promptfoo cost contrast. REWRITE, not a patch.
+- Subdocs: `docs/harness-testing*.md`, `docs/verifying-instruction-files.md`, NEW
+  `docs/compiled-hooks.md`; cross-link. Internal: CLAUDE.md `## Positioning` + research.
+  Rules in play: readme-brevity, docs-quality, public-vs-internal-docs, rules-docs-in-sync.
 
-## Next move (pick)
+### STEP 3 — Codex compiled-hook adapter (design first, in research/)
 
-0. **PUBLIC LEADERBOARD — v0 SHIPPED (`3011e08`), now BROADEN it.** chosen adoption
-   bet. `scan <dirs> --md` = publishable Markdown table; `rankPlugins` labels by manifest
-   name; `bench/leaderboard/{run.mjs,corpus.json,RESULTS.md}` = reproducible generator
-   (clones public repos, ranks, scores-only). First run: 83 plugins (superpowers +
-   wshobson/agents) → A:16 B:28 C:17 D:9 F:13, real outliers (dead tool, uncontracted/
-   untested F-tier). NEXT: (a) broaden the corpus beyond 2 authors (wshobson-heavy);
-   (b) add the BEHAVIORAL columns (trigger-rate/collisions) on top; (c) publish externally.
-1. **A1 ecosystem benchmark** — claim-vs-measured (compression debunks); engine ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
-2. **capability-diff (#2) — v0 SHIPPED** (`scan <after> --capability-diff=<before>`,
-   src/core/capability-diff.ts): WIDENED verdict + `--fail-on-widen`. v0 = tool-bucket
-   lattice; RICHER per-step effect-row + cross-step accumulation (M1) = next.
-3. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
+- The compiled-hook model is harness-NEUTRAL; per-harness EMIT goes through the HookProtocol
+  port. Codex facts (`research/codex-prototype-findings.md` + `harness-landscape.md`): hooks in
+  `config.toml [hooks]` (TOML not JSON), block via permissionDecision/exit-2 (HookProtocol
+  ~identical to CC), event set differs (Codex HAS SubagentStart; Stop uses `continue:false`).
+  OpenCode hooks are in-process TS modules = NATIVE fit. Design: `compileHookProgram` dispatches
+  emit per layout/protocol (CC hooks.json vs Codex TOML); the typed program + decide/inject/react
+  is shared. Write the design section before implementing.
 
-## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
+## Shipped this session (pushed, tree clean @ 895809e)
 
-- **Guardrail VERIFY killer feature (`a5abf70`):** `src/guardrail-check.ts` on `vigiles/unit`
-  (catalog + verifyGuardrail/assertBlocksDisasters/neutral-map) + scaffold-test wiring. THE bet.
-- **5-pass hook research (`d24bfa6`):** `research/hook-pain-points.md` (verified corpus); roadmap
-  updated (VERIFY = HIGH, GATE = MED). The evidence base for everything above.
-- **hook-spec spike (`d3471c0`):** typed/effect-classified hooks (`src/core/hook-spec.ts`) —
-  wrong-field & mutating-observe-hook = compile errors. EXPERIMENTAL, parked (correctness win).
-- **COMPILED-HOOKS probe (`bd33aa4`/`3c00be5`/`890aa3e`):** `src/core/hook-program.ts` — hook =
-  pure typed fn vs a closed `vigiles/hook` API. P1: 5 claims (pure/testable, AST match via new
-  `bash-effects.leafCommands` beats glob #30519+grep, compiles to CC, capability=API surface,
-  tamper-evident STAMP). P2/P3: the vocabulary is a SOUND role-keyed FAMILY — gate(Decision,pure)/
-  inject(Injection,pure)/react(Reaction,bounded+effect-classified); each role's output type makes
-  its wrong-output bug (exit-code/wrong-field/block-on-wrong-event) unrepresentable. The real
-  compiled-hooks moat ("a hook is a formal object"). Open Q is now ADOPTION economics
-  (buy-in vs node latency vs payoff), NOT coverage. Not on public API.
-- **guard-hook GATE (`959e88c`/`4336f4a`):** typed guards + runnable gate + ledger; ORDER axis
-  live. EXPERIMENTAL; demoted MED (CC bugs undercut any gate). Don't build more.
-- **Prior (don't rebuild):** A1 sonnet (caveman −18% / token-efficient −10%, both debunked —
-  SATURATED); V1 nesting STACK fix (`c50b826`); leaderboard v0.
+- **COMPILED-HOOKS probe (`bd33aa4`/`3c00be5`/`890aa3e`):** `src/core/hook-program.ts` — the
+  gate/inject/react family, AST matcher (`bash-effects.leafCommands`), checkHookImports, stamp.
+  SOUND across shapes; NOT on public API (STEP 1 ships it).
+- **VERIFY feature (`a5abf70`):** `src/guardrail-check.ts` on `vigiles/unit` — "prove your
+  guardrail blocks" (DISASTER_CATALOG + verifyGuardrail + assertBlocksDisasters + neutral map).
+  Honest: useful, lint-ish, NOT a moat. Dogfooded on disler/cc-hooks-mastery.
+- **hook-spec spike (`d3471c0`)**; **5-pass hook research (`d24bfa6`)**; **guard-hook GATE
+  (`959e88c`/`4336f4a`, EXPERIMENTAL/MED)**.
+- **Prior (don't rebuild):** A1 sonnet debunks (caveman −18%/token-efficient −10%, SATURATED);
+  V1 nesting STACK fix (`c50b826`); leaderboard v0.
 
-## Gotchas (carry forward)
+## Gotchas
 
-- **Subagents must NOT use worktree isolation**; VERIFY their output (git diff + build +
-  tests + run the thing) — don't trust "done". Apply their reported keyFiles deltas to
-  `CLAUDE.md.spec.ts` yourself + recompile.
-- **TS-encoding rule:** per-edge check → SHALLOW generated type (O(N)); whole-set
-  uniqueness → JS generator (variadic/recursive types hit TS2589 ~N=1000). See typed-spec-moat.md.
-- Real-model tiers (A1/evals) need sub auth + are slow — pilot tiny; deterministic work
-  needs neither.
-- Conventional-commit subjects; `build` + `vitest` + `lint` + `fmt:check` before commit;
-  recompile `CLAUDE.md` after editing `CLAUDE.md.spec.ts`; `api:report` when the public
-  surface changes; cross-link new research docs (orphan-docs lint); **NO session links /
-  model IDs in commits**.
-
-## Budget protocol
-
-- Orient from THIS file; open a doc only when a step needs it. **Delegate** searches + big
-  builds to subagents (verify output). Bounded commits; **refresh this file after each commit**.
+- Subagents NOT worktree-isolated; VERIFY their output (build+tests+run it).
+- TS-encoding: per-edge check → shallow generated type O(N); whole-set uniqueness → JS generator.
+- Conventional commits; build+vitest+lint+fmt:check before commit; `api:report` on public-surface
+  change; recompile CLAUDE.md after editing its spec; cross-link research (orphan-docs lint);
+  **NO session links / model IDs in commits**. HANDOFF ≤120 lines.
+- Real-model tiers need sub auth + slow; deterministic work needs neither.
 
 ## Don't re-read unless the task needs it
 
-- `research/roadmap.md` — ordered map (capability-diff **P1**, trifecta F1 **P0**, See-also index).
-- `research/{typed-spec-moat,measurement-authority}.md` — moat synthesis + the pivot/"Status & gaps".
-- `research/harness-protocol-flow-moat.md` — the reliability-runtime moat (ORDER/FLOW/REPLAY).
-- `bench/ecosystem/` — A1 engine + manifest + FINDINGS + archived runs (leaderboard substrate).
+- `research/hook-pain-points.md` — the hook corpus + compiled-hooks probe record (THE doc for this arc).
+- `research/harness-protocol-flow-moat.md` — the reliability moat (ORDER/FLOW/REPLAY).
+- `research/{roadmap,typed-spec-moat,measurement-authority}.md` — map + moat synthesis + the pivot.
+- `research/codex-prototype-findings.md` + `harness-landscape.md` — Codex hook facts (STEP 3).
