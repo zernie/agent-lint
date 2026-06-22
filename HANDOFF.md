@@ -50,19 +50,21 @@ SessionStart-hooked plugin with all-zero recall is relabeled "hook-primed — li
 artifact" (both columns; all-zero gate keeps genuine misses real). Layer 2 (`--no-stub`
 faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selection-collision.md`.
 
-## Next move (pick — none started)
+## Next move (pick)
 
-1. **ADOPTION: the at-scale ecosystem benchmark (A1)** — the viral artifact, still
-   ~v0. ENGINE READY + manifest now 5 skills (2 cleanly-A/B compression debunks:
-   caveman + token-efficient). REMAINING: run the full manifest at scale (real-model,
-   needs sub auth — spend decision) + publish a findings writeup. The flywheel.
+0. **PUBLIC LEADERBOARD — v0 SHIPPED (`3011e08`), now BROADEN it.** chosen adoption
+   bet. `scan <dirs> --md` = publishable Markdown table; `rankPlugins` labels by manifest
+   name; `bench/leaderboard/{run.mjs,corpus.json,RESULTS.md}` = reproducible generator
+   (clones public repos, ranks, scores-only). First run: 83 plugins (superpowers +
+   wshobson/agents) → A:16 B:28 C:17 D:9 F:13, real outliers (dead tool, uncontracted/
+   untested F-tier). NEXT: (a) broaden the corpus beyond 2 authors (wshobson-heavy);
+   (b) add the BEHAVIORAL columns (trigger-rate/collisions) on top; (c) publish externally.
+1. **A1 ecosystem benchmark** — the claim-vs-measured (compression debunks) half; engine
+   ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
 2. **capability-diff (#2, P1, the bridge)** — needs the UNBUILT **effect-row (M1) +
    cross-step accumulation** engine (compute the capability surface), then the v1→v2
    diff (already prototyped, fp-theory T2). Carry a loud sign-off hatch (don't cry wolf).
-3. ~~V1 nesting bug~~ **FIXED this session (`c50b826`)** — depth-aware active-agent
-   STACK shipped (push/pop/gate-on-top + both Task/Agent spawn tools); TLC
-   counterexample is now a regression test. Still EXPERIMENTAL/not auto-wired.
-4. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
+3. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
 
@@ -74,11 +76,8 @@ faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selecti
   63%→**−10%** (bill +3%; worse than its own ~12% sonnet claim); both 0-regress, output
   ~0.7% of session. Audited their OWN benchmarks (FINDINGS §methodology audit): single-shot
   Q&A, output-tokens-only, vanilla baseline, no correctness gate → why they report a win.
-  ⚠️ **caveman debunk is SATURATED** (Kuba Guzik/GrowwStacks/HN/Decrypt + author conceded) —
-  do NOT lead with a caveman article. **NEXT on A1: the LEADERBOARD** (reproducible +
-  claim-vs-measured + correctness + head-to-head — the open slice; position on
-  claim-gap/reproducibility/correctness, "sort real from hyped" not blanket-debunk).
-  Benchmark prior-art in landscape-mid-2026.md.
+  ⚠️ **caveman debunk is SATURATED** — do NOT lead with a caveman article; position on
+  claim-gap/reproducibility/correctness ("sort real from hyped"). Prior-art in landscape-mid-2026.md.
 - **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK (push/pop/
   gate-on-top); TLC counterexample is a regression test. Still EXPERIMENTAL/not auto-wired.
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
