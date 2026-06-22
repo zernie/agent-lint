@@ -456,3 +456,34 @@ export function classifyBashCommand(command: string): BashEffect {
 export function isReadOnlyBash(command: string): boolean {
   return classifyBashCommand(command) === "read-only";
 }
+
+/**
+ * Extract the static argv of every simple command (CallExpr) in `command`, each
+ * as an array of literal words (dynamic / quoted-interpolated words are dropped).
+ * AST-backed, so a leaf nested in a pipeline, `&&`/`;`/`|`, a subshell, or a
+ * compound command is still found — the structural query a robust matcher needs
+ * (a regex over the raw string misses `cd x && git push`). Parse failure → [].
+ *
+ * This is the matching primitive a typed hook's `command.runs("git push")` is
+ * built on: it sees the real `git push` leaf however it's wrapped, which the
+ * native `Bash(git:*)` glob (issue #30519) and a hand-written `grep` both miss.
+ */
+export function leafCommands(command: string): string[][] {
+  let file: MvdanNode;
+  try {
+    file = sh.syntax.NewParser().Parse(command, "cmd.sh");
+  } catch {
+    return [];
+  }
+  const out: string[][] = [];
+  sh.syntax.Walk(file, (node) => {
+    if (sh.syntax.NodeType(node) === "CallExpr" && node.Args) {
+      const argv = node.Args.map((w) => getLiteral(w)).filter(
+        (s): s is string => s !== null,
+      );
+      if (argv.length > 0) out.push(argv);
+    }
+    return true;
+  });
+  return out;
+}
