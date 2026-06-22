@@ -1,9 +1,8 @@
 # HANDOFF — volatile cross-session state
 
-> Overwrite each session; keep ≤120 lines. The durable map is `research/roadmap.md`;
-> this is the cheap pointer to it. The SessionStart hook (`.claude/hooks/session-handoff.sh`)
-> injects this file so a new session starts oriented WITHOUT re-reading CLAUDE.md +
-> the research docs. Read this first, then open only what "Next move" points at.
+> Overwrite each session; keep ≤120 lines. The durable map is `research/roadmap.md`.
+> The SessionStart hook injects this file so a new session starts oriented WITHOUT
+> re-reading CLAUDE.md + research. Read first, then open what "Next move" points at.
 
 ## Now
 
