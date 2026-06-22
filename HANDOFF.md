@@ -82,9 +82,8 @@ faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selecti
 - **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK (push/pop/
   gate-on-top); TLC counterexample is a regression test. Still EXPERIMENTAL/not auto-wired.
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
-  markdown: capability axis, two-oracle, leg-grading, require-\*-spec defaults); the
-  full **market-segmented competitive matrix** + agnix find + poach list in
-  `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`. See above.
+  markdown: capability axis, two-oracle, leg-grading); the **market-segmented competitive
+  matrix** + poach list in `landscape-mid-2026.md`; reality-check in `typed-spec-moat.md`.
 - **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge;
   viral debunk articles (caveman SATURATED); PUBLIC plugin leaderboard; open-core posture.
 
