@@ -255,6 +255,14 @@ export interface VigilesConfig {
   /** Orphan-docs check configuration. Include/exclude globs, tsconfig-style. */
   orphans?: OrphansConfig;
   /**
+   * Glob patterns of instruction/skill files to EXCLUDE from `lint` discovery
+   * (tsconfig-style, relative to the repo root). Use it for vendored or
+   * benchmark fixtures the repo's own lint shouldn't police — e.g.
+   * `["bench/**"]` so a third-party `CLAUDE.md` injected verbatim as a benchmark
+   * arm isn't held to `require-spec`. `node_modules`/`dist` are always excluded.
+   */
+  exclude?: readonly string[];
+  /**
    * The harness(es) this repo targets — selects the compile dialect / skill
    * frontmatter profile / instruction-file shape, instead of sniffing the cwd.
    * A single name (`"codex"`) for the common single-harness repo, or an array

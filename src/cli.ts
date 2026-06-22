@@ -1243,7 +1243,7 @@ async function runLint(
   const json = flags.includes("--json");
   const silent = summary || json;
 
-  const files = findInstructionFiles(restArgs);
+  const files = findInstructionFiles(restArgs, config?.exclude);
 
   // Resolve the active harness ONCE so the harness-specific checks below run
   // against the right adapter's dialect (tool/event catalogs) and surfaces —
@@ -3218,13 +3218,22 @@ async function countGuidanceRules(silent = false): Promise<number> {
 // Command handlers for main()
 // ---------------------------------------------------------------------------
 
-function findInstructionFiles(restArgs: string[]): string[] {
+function findInstructionFiles(
+  restArgs: string[],
+  exclude: readonly string[] = [],
+): string[] {
   if (restArgs.length > 0) return restArgs;
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
   const files: string[] = [];
   for (const pattern of patterns) {
     files.push(
-      ...globSync(pattern, { ignore: IGNORE_NODE_MODULES, cwd: process.cwd() }),
+      ...globSync(pattern, {
+        // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the
+        // repo's own lint shouldn't police — a third-party CLAUDE.md isn't held
+        // to require-spec. node_modules/dist/.git stay always-excluded.
+        ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude],
+        cwd: process.cwd(),
+      }),
     );
   }
   return files;
