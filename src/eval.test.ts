@@ -2661,7 +2661,7 @@ test("runSkillSelectionTrial reports which skills fired — deduped, excluding e
     fixture: { "seed.txt": "x" }, // also exercises the fixture-seeding branch
   });
   assert.equal(r.errored, false);
-  assert.deepEqual(r.fired.sort(), ["p:a"]);
+  assert.deepEqual([...r.fired].sort(), ["p:a"]);
 });
 
 test("runSkillSelectionTrial flags an errored run (excluded, not a clean miss)", async () => {
