@@ -25,7 +25,11 @@
  * limits in the research doc: buy-in cost, node-startup latency, and CC delivery
  * bugs (subagent-bypass #34692) still apply — compile fixes AUTHORING, not delivery.
  */
-import { leafCommands, classifyBashCommand } from "./bash-effects.js";
+import {
+  leafCommands,
+  classifyBashCommand,
+  type BashEffect,
+} from "./bash-effects.js";
 import { sha256short, type SHA256Hash } from "./hash.js";
 
 // ---------------------------------------------------------------------------
@@ -326,4 +330,65 @@ export function runInject(
       additionalContext: out.context,
     },
   };
+}
+
+// --- PROBE 3 — the REACT shape (PostToolUse): where side effects re-enter ---
+//
+// gate + inject are PURE. A react hook (PostToolUse) fires AFTER the tool ran, so
+// it can't block — its job is to DO something in reaction (format, recompile, warn).
+// That reintroduces side effects, the exact thing we constrained away. The principled
+// answer keeps them BOUNDED: a react's action isn't arbitrary shell, it's a typed
+// `Reaction` whose `run(cmd)` is EFFECT-CLASSIFIED at construction (bash-effects). So
+// even the side-effecting role stays ANALYZABLE — you can list/diff exactly what every
+// react hook runs and its effect — and a react still CANNOT block (no `deny` in
+// Reaction), making "block on a PostToolUse hook" (a documented mistake) a type error.
+
+export interface RunReaction {
+  readonly kind: "run";
+  readonly command: string;
+  readonly effect: BashEffect;
+}
+export type Reaction =
+  | RunReaction
+  | { readonly kind: "notice"; readonly message: string }
+  | { readonly kind: "none" };
+
+/** Run a command in reaction — its effect is classified AT CONSTRUCTION (audit/diff-able). */
+export const run = (command: string): RunReaction => ({
+  kind: "run",
+  command,
+  effect: classifyBashCommand(command),
+});
+/** Surface a non-blocking note (no execution). */
+export const notice = (message: string): Reaction => ({
+  kind: "notice",
+  message,
+});
+/** Do nothing. */
+export const nothing = (): Reaction => ({ kind: "none" });
+
+export interface ReactHook {
+  readonly role: "react";
+  readonly on: string;
+  readonly match: { readonly tools: readonly string[] };
+  /** Reacts to a tool that already ran. Returns a Reaction — NO `deny` exists here. */
+  readonly react: (e: FileToolEvent) => Reaction;
+}
+export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
+  role: "react",
+  ...p,
+});
+
+/** Run a react hook against a raw PostToolUse event → the (classified) Reaction. */
+export function runReact(
+  hook: ReactHook,
+  raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+): Reaction {
+  const t = raw.tool_name ?? "";
+  if (!hook.match.tools.includes(t)) return nothing();
+  const fp =
+    typeof raw.tool_input?.file_path === "string"
+      ? raw.tool_input.file_path
+      : "";
+  return hook.react({ event: hook.on, tool: t, path: pathView(fp) });
 }
