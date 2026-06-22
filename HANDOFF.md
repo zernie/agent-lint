@@ -94,10 +94,8 @@ Nothing. Tree clean; local == remote.
 - **Subagents must NOT use worktree isolation**; VERIFY their output (git diff + build +
   tests + run the thing) — don't trust "done". Apply their reported keyFiles deltas to
   `CLAUDE.md.spec.ts` yourself + recompile.
-- **The recurring TS-encoding rule:** per-edge / per-entry check → a SHALLOW generated TS
-  type (O(N)); whole-set cardinality (uniqueness) → the JS generator (O(N) exit-non-zero).
-  Variadic/recursive types hit **TS2589** (~N=1000). `pipe`/`Supplies`/`KnownAgentName`/
-  `Handoff` all follow this — keep it.
+- **TS-encoding rule:** per-edge check → SHALLOW generated type (O(N)); whole-set
+  uniqueness → JS generator (variadic/recursive types hit TS2589 ~N=1000). See typed-spec-moat.md.
 - Real-model tiers (A1/evals) need sub auth + are slow — pilot tiny; deterministic work
   needs neither.
 - Conventional-commit subjects; `build` + `vitest` + `lint` + `fmt:check` before commit;
@@ -119,5 +117,4 @@ Nothing. Tree clean; local == remote.
 - `research/typed-spec-moat.md` — the moat synthesis: every finding, the build order,
   the adoption-tension catalog.
 - `research/measurement-authority.md` — the pivot + the "Status & gaps" section.
-- `bench/corpus/coding-tasks.mjs` + `bench/evals/caveman-claim.eval.mjs` — the
-  measurement substrate for A1.
+- `bench/ecosystem/` — A1 engine + manifest + FINDINGS + archived runs (the leaderboard substrate).
