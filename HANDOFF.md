@@ -115,7 +115,6 @@ Nothing. Tree clean; local == remote.
 
 - `research/roadmap.md` — the ordered map (per-item status; capability-diff **P1**,
   trifecta F1 **P0**, the See-also index to every research doc).
-- `research/typed-spec-moat.md` — the moat synthesis: every finding, the build order,
-  the adoption-tension catalog.
+- `research/typed-spec-moat.md` — the moat synthesis: findings, build order, tensions.
 - `research/measurement-authority.md` — the pivot + the "Status & gaps" section.
 - `bench/ecosystem/` — A1 engine + manifest + FINDINGS + archived runs (the leaderboard substrate).
