@@ -125,6 +125,198 @@ The paper isn't about instruction files specifically — it's about the broader 
 
 ---
 
+## "Agents Need Control Flow" — independent statement of the vigiles thesis (2026)
+
+**Source:** Brian Suh, [`bsuh.bearblog.dev/agents-need-control-flow/`](https://bsuh.bearblog.dev/agents-need-control-flow/) — a software-engineer manifesto, not a product.
+
+**Thesis (verbatim):** _"Reliable agents tackling complex tasks need deterministic control flow encoded in software, not increasingly elaborate prompt chains."_ Prompts are _"non-deterministic, weakly specified, and difficult to verify"_; the fix is to move logic _"out of prose and into runtime"_ via _"deterministic scaffolds: explicit state transitions and validation checkpoints that treat the LLM as a component, not the system."_
+
+**Why it's relevant.** This is vigiles's exact positioning arrived at from the outside — the **Agent = Model + Harness** frame and the **deterministic-constraints over probabilistic-compliance** split (see `CLAUDE.md`). His three failure modes for systems lacking _"deterministic orchestration AND aggressive error detection"_ — **"human babysitting, exhaustive post-run audits, or accepting outputs on faith"** — map 1:1 onto the pain points the 2026-06-21 research surfaced (the "verify the agent did what it claimed" white space) AND onto vigiles's answer: the verify layer + the test/eval layers are the "aggressive error detection," the typed railway/control-flow is the "deterministic scaffold."
+
+**The double edge (record this — don't only cheer).** It's external **validation** of the frame, but it also **confirms the commoditization signal** from the same-day competitive double-check (riftmap = capability-diff, Mastra = typed workflow handoffs, promptfoo = deterministic contract asserts): "deterministic control flow for agents" is now a **named, spreading idea**, so the _thesis_ is no longer differentiating — others will build scaffolding. The article is a manifesto with **no implementation** ("doesn't detail specific technologies"), which is the opening, but the direction is crowding. Consistent with the spec-value-model conclusion: vigiles's edge is the **substrate** (the instruction-file harness compiled as a typed program) + the **sub-affordable measurement** identity, NOT ownership of the control-flow thesis itself.
+
+**Verdict.** Cite it as third-party validation of the positioning (README/landing "why deterministic constraints" — alongside the Compiled-AI paper); do NOT read it as a moat. The moat is execution on the substrate + measurement, not the idea.
+
+---
+
+## Market-segmented competitive matrix (2026-06-21) — the corrected cut
+
+The single most important competitive insight (a same-day correction of an earlier
+market-conflation): **the "typed-spec capabilities are commoditizing" worry was wrong
+because it mixed three different MARKETS.** Segment by who the tool is FOR, and vigiles's
+actual competition shrinks to a handful of pure surface linters. Grounded by reading each
+tool's own docs.
+
+### Market A — App-building (NOT vigiles competitors)
+
+You write code to ship an LLM product. Different audience; zero contact with
+CLAUDE.md/skills/hooks. Listed only to stop conflating them with vigiles.
+
+| Tool                                      | For                             | Lang  | License         |
+| ----------------------------------------- | ------------------------------- | ----- | --------------- |
+| Mastra                                    | build AI apps/agents in TS      | TS    | Apache-2.0 + ee |
+| LangGraph / CrewAI / AutoGen / Google ADK | build agents                    | Py/JS | MIT/Apache      |
+| Pydantic AI / Vercel AI SDK               | build agents                    | Py/TS | MIT/Apache      |
+| promptfoo / DeepEval                      | eval YOUR app's prompts/outputs | TS/Py | MIT/Apache-2.0  |
+
+### Market B — Infra / MCP-server security (adjacent, different substrate)
+
+| Tool                                               | Substrate                        | Static/Runtime  | License        |
+| -------------------------------------------------- | -------------------------------- | --------------- | -------------- |
+| riftmap                                            | infra deps (Terraform/Helm/CI)   | static PR-diff  | closed SaaS    |
+| AgentAuditKit                                      | 3rd-party MCP servers (rug-pull) | static CI-diff  | MIT            |
+| PolicyLayer / Waxell / Straiker / Operant / Pillar | live MCP traffic                 | runtime gateway | closed/partial |
+
+### Market C — Agentic-coding-harness verification (vigiles's ACTUAL market)
+
+All confirmed **pure static surface linters** (their own docs) — none do cross-ref,
+typed specs, test/eval, or capability-diff. Adoption (reviews pass, 2026-06-21): stars +
+the mindshare tell. **No incumbent; near-zero mindshare** (none listed in
+awesome-claude-code, 47k★; npm downloads are CI-inflated vanity — agnix is 28k/mo but its
+Show HN got **1 point**).
+
+| Tool                         | Surface lint  | Cross-ref (exists **+ enabled**) | Typed spec / compile | Test/eval       | Capability-diff | Multi-harness / LSP  | Stars / signal        | Lang  | License   |
+| ---------------------------- | ------------- | -------------------------------- | -------------------- | --------------- | --------------- | -------------------- | --------------------- | ----- | --------- |
+| **agnix** (agent-sh)         | ✅ ~414 rules | ❌                               | ❌                   | ❌              | ❌              | ✅ 7 harnesses + LSP | 296★ / 1 HN pt        | Rust  | OSS       |
+| **claudelint** (114 rules)   | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 9★ / 13k npm (CI)     | TS    | MIT       |
+| **AgentLint** (0xmariowu)    | ✅ 51 checks  | ❌                               | ❌                   | ◑ AI checks     | ❌              | CC/Codex/Cursor      | 41★                   | JS    | OSS       |
+| **cclint** (×2)              | ✅            | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 20★ / 6★              | TS    | MIT       |
+| **SkillCheck**               | ✅ skills     | ❌                               | ❌                   | ◑               | ❌              | cross-tool           | 32★ / commercial      | shell | freemium  |
+| **`claude plugin validate`** | ✅ manifest   | ❌                               | ❌                   | ❌              | ❌              | CC-only              | 1st-party (the floor) | —     | 1st-party |
+| **vigiles**                  | ✅ ~20 rules  | ✅ **only one in-market**        | ✅ **only one**      | ✅ **only one** | ◑ prototyped    | ✅ CC+Codex          | **11★ (friends)**     | TS    | OSS       |
+
+> **Rule-count is apples-to-oranges — do NOT read this as "agnix wins on lint."** agnix's
+> ~414 and claudelint's 114 are MICRO-checks (one per structural assertion); vigiles ships
+> ~20 SEMANTIC rules, several of which do something the others structurally can't —
+> **cross-reference** the named rule against the real linter config, the named tool against
+> the harness catalog, the named MCP tool against the declared servers. One vigiles
+> `subagent-tool-contract` ≠ one agnix style-check. Read the CAPABILITY columns
+> (cross-ref / typed / test-eval), not the count. And the star column is the real story:
+> **vigiles is at 11 (friends); the whole category is pre-mindshare** — a land-grab, not a
+> catch-up.
+
+**Read of Market C (adoption-calibrated):**
+
+1. **The field is WIDE OPEN — no incumbent, near-zero mindshare.** Biggest is agnix at
+   296★ (1 HN point); the rest are 6–41★; none appear in awesome-claude-code (47k★). npm
+   downloads (agnix 28k/mo, claudelint 13k/mo) are CI-inflated, not users. The only
+   genuinely entrenched thing is Anthropic's `claude plugin validate` — but it's a shallow
+   manifest validator (the floor, not depth). **Nobody has won this. The real battle is
+   DISTRIBUTION/mindshare, not capability** — which matches the "adoption engine, not more
+   moat depth" sequencing.
+2. **vigiles is OUT-engineered on the two things it can't win on:** surface-lint breadth
+   (agnix ~414 + claudelint 114 rules vs vigiles ~31) and multi-harness+LSP polish (agnix
+   ships 7 harnesses + a full LSP). Do NOT try to out-rule-count agnix or match its LSP.
+3. **vigiles uniquely owns, in-market, the three capability gaps NONE of them have:**
+   **cross-referencing** (rule-exists-AND-enabled across 7 catalogs), **typed/compiled
+   specs**, and **testing/eval** (does a skill fire, does a hook block). agnix and
+   AgentLint crowd the _positioning words_ (multi-harness, "lint your agent harness") but
+   not these capabilities. Lead with the capabilities, not the words.
+4. **The single best wedge = cross-referencing** — unique in-market, the founding feature,
+   and works on **plain markdown, no spec required** (zero adoption barrier). That's the
+   "valid is not true" line: every competitor checks your config is well-FORMED; only
+   vigiles checks the reference it names actually EXISTS and RESOLVES.
+
+> **REFINEMENT (2026-06-21) — lead with HARNESS-NATIVE cross-check, demote the
+> linter-catalog leg.** Cross-referencing's value is NOT uniform across reference types:
+>
+> - **HIGH value — harness-native references** (the moat): a subagent's **tool** exists
+>   (typo / never-available), an **MCP `server#tool` resolves on the LIVE server** (the
+>   `create_issue`→`issue_write` rename rot), a **hook event** is real (typo → silently
+>   never fires), a **file/script path** still exists, a **delegate/skill target** isn't
+>   dangling. These are agent-era-specific, current, and fail SILENTLY — nobody else
+>   checks them. **Deepen here**, esp. **live MCP tool resolution of the real
+>   `mcp__server__tool` contract refs** (engine exists in `src/core/mcp.ts`, today only
+>   wired to the explicit `vigiles:mcp` mark).
+> - **LOW value — the 7-linter-catalog integration** (ESLint/Ruff/Clippy/…): the
+>   founding feature, but the WEAKEST leg in the agent era — the linter self-enforces
+>   regardless of the prose mention (redundant), it's a code-quality concern bolted onto
+>   a harness concern, it's the heaviest engineering for the least harness-specific
+>   payoff, and "we enforce rule X" is a small slice of real CLAUDE.md content. Keep it
+>   (free, dogfooded), but it is **supporting, not the headline** — do NOT prioritize
+>   more catalogs (Cedar/Biome) over harness-native resolution. The moat one-liner
+>   sharpens to: **"the references in your agent's config — tools, MCP servers, hooks,
+>   files, sub-agents — are real and live, not silently broken."**
+
+Risk = a polished in-market linter (agnix/claudelint) ADDING cross-ref, or an adjacent
+player porting in — not present-day direct competition. Full corrected synthesis:
+`typed-spec-moat.md` § "Competitive reality check".
+
+**Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/pdugan20/claudelint; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/agent-sh/agnix; github.com/0xmariowu/AgentLint; getskillcheck.com; code.claude.com/docs/en/plugins; hesreallyhim/awesome-claude-code; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
+
+### The agnix signal — linting-without-eval may simply not pull a community
+
+The single most strategically useful data point: **agnix is the most-built tool in the
+category by a mile** (414 rules, Rust, 7 harnesses, a full LSP, releases ~daily) and it
+got **1 point on Show HN** and sits at 296★ with no community footprint. Two hypotheses:
+
+1. agnix is just bad at promotion (a distribution miss); or
+2. **comprehensive linting-without-testing/evals isn't interesting to the community** —
+   a 414-rule structural linter is a chore-tool nobody gets excited about.
+
+If (2) is even partly true it is **strong evidence FOR the measurement pivot**: the lint
+layer is table-stakes/boring (so out-rule-counting agnix is a trap), and the thing that
+generates PULL is the **eval/measurement layer** — "does my skill actually FIRE / does my
+harness actually WORK / is the hyped skill vaporware" (the caveman-debunk shape). vigiles
+should treat linting as the free floor and lead marketing with measurement. This also
+reframes the wedge: not "a better linter" but "the only one that **tests** your harness."
+
+### Poach list — non-competitors (Markets A/B) with ideas worth lifting
+
+Not competitors (different market), but their mechanics are worth stealing:
+
+- **Zod-schema'd contracts** (Mastra / Pydantic AI / Vercel AI SDK all do typed tool I/O
+  via Zod/Pydantic): vigiles's `result()` currently hand-parses + shape-validates the
+  `vigiles:ok/err` block (`agent-result.ts`). A **Zod-based `result()`** would unify ONE
+  schema into (a) the compile-time type, (b) the runtime validator (`assertAgentOk`), and
+  (c) the JSON Schema `generate-schema` already emits — one source, three artifacts.
+  Strong candidate; record as a feature idea. **Full poach→typed-CLAUDE.md→moat
+  synthesis (web-verified 2026-06-22): [`typed-claude-md-poach.md`](typed-claude-md-poach.md)**
+  — the whole-harness registry is unique to vigiles; cross-agent handoff checking is
+  universally weak even in Pydantic/LangGraph/Mastra.
+- **promptfoo's named deterministic assertions** (`is-json`, `is-valid-openai-tools-call`,
+  json-schema): a menu to expand vigiles's `check` vocabulary with.
+- **riftmap's distribution model** — "one read-only token → queryable graph + ship the
+  OpenAPI so any agent can call it as a tool." vigiles results-as-an-MCP-tool is a GTM
+  idea (an agent can ASK "is my harness verified?"). Also riftmap/SkillCheck/PolicyLayer
+  prove a **business CAN be built on this** (closed SaaS / freemium / self-host tiers) —
+  vigiles's open-core + measurement-data is a defensible base others can build on top of.
+
+---
+
+## Benchmark / leaderboard prior art (2026-06-21) — what exists for the A1 leaderboard to beat
+
+Before building the public plugin leaderboard, a web sweep of who ALREADY benchmarks/ranks
+Claude Code skills. The space splits three ways, and the reproducible-claim-gated slice is
+still open:
+
+1. **Subjective "best skills 2026" listicles — ABUNDANT (SEO content).** Composio,
+   firecrawl, turbodocx, mejba, raxxo, scriptbyai, "11 tested / 4 worth keeping"
+   (buildtolaunch). Curated opinion, no reproducible measurement. Saturated but low-signal.
+2. **Install / adoption leaderboards — EXIST (popularity, not effectiveness).**
+   `quemsah/awesome-claude-plugins` auto-collects plugin adoption metrics via n8n; published
+   install counts (Frontend Design 829k, Superpowers 752k, Context7 349k as of 2026-06-01).
+   Ranks by POPULARITY, says nothing about whether a claim holds.
+3. **One-off measured benchmarks — a few, each ad-hoc / single-skill.** caveman (SATURATED,
+   see FINDINGS); a **superpowers 12-session A/B** (6 with / 6 without → 9% cheaper, 14%
+   fewer tokens, "better quality" — a REAL controlled study that VINDICATES superpowers, so
+   the leaderboard won't be all debunks); MindStudio "5 skills cut 70%" (claim-PUSHING,
+   uncritical — live hype to verify); browser MCP-vs-CLI token tests (~4×).
+
+**The open slice vigiles's leaderboard owns:** none of the above is **reproducible +
+re-runnable + multi-skill + claim-VS-measured + correctness-gated + head-to-head +
+continuous + open-method** all at once. Install leaderboards rank by popularity; listicles
+by vibes; the A/Bs are one-off single-skill. So position the leaderboard NOT as "ranking
+plugins" (install boards exist) or "I tested N skills" (listicles exist) but on the
+**claim-gap + reproducibility + correctness** axes — "the published % vs what re-runs, with
+a correctness gate, head-to-head, on the same corpus." Honest framing: some claims HOLD
+(superpowers' own A/B is credible) — the leaderboard's value is sorting the real from the
+hyped, not blanket debunking. Sources: buildtolaunch.substack.com/p/best-claude-code-plugins-tested-review;
+mindstudio.ai/blog/5-claude-code-skills-cut-token-costs-70-percent-benchmarked;
+github.com/quemsah/awesome-claude-plugins; composio.dev/content/top-claude-code-plugins.
+
+---
+
 ## Unified comparison matrix
 
 Combining the existing tables in `competitive-landscape.md` with mid-2026 entrants. Rows are projects; columns are the dimensions that matter for positioning vigiles.

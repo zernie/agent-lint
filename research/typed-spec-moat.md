@@ -20,6 +20,20 @@
 > Positioning anchors: `measurement-authority.md` (the offense pivot — measurement
 > is the headline, the spec is the on-ramp to testability), `CLAUDE.md` (the
 > deterministic-constraints-layer positioning, the adoption ladder, the rules).
+>
+> ⚠️ **READ THE COMPETITIVE CHECK FIRST (§ "Competitive reality check", before See
+> also) — it was MARKET-CORRECTED.** First pass said these moats are "commoditizing";
+> grounded re-check found that was a **market conflation**. The tools that ship these
+> capabilities (riftmap, AgentAuditKit/PolicyLayer, Mastra, promptfoo) are in **DIFFERENT
+> markets** (infra, MCP-server security, app-building) and never touch a coding-agent
+> harness. In vigiles's ACTUAL market the only rivals are **pure surface linters**
+> (claudelint/cclint/agnix/`claude plugin validate`) that do **none** of vigiles's
+> cross-ref / typed / test-eval work — and the whole category is **pre-mindshare** (vigiles
+> 11★; biggest rival agnix 296★/1-HN-pt). So the moats aren't "taken" in-market — they're
+> unoccupied; the real bottleneck is **distribution, not capability**, and the durable
+> edge is the **substrate + sub-affordable measurement**. Don't re-inflate the
+> per-row "TAKEN" labels below without the market correction. Full segmented matrix:
+> `landscape-mid-2026.md`; see also `spec-value-model.md`.
 
 ## Contents
 
@@ -29,7 +43,8 @@
 4. The complete ranked record — every finding, every round
 5. The adoption tension (OPEN — for the founder to resolve)
 6. Proposed build order
-7. See also
+7. Competitive reality check (2026-06-21, market-corrected) — capabilities live in adjacent markets; vigiles's own market is wide open
+8. See also
 
 ---
 
@@ -436,6 +451,65 @@ pivot wants; (5) is orthogonal correctness.
 
 ---
 
+## Competitive reality check (2026-06-21, market-corrected) — capabilities live in adjacent markets; vigiles's own market is wide open
+
+A skeptical same-day competitive sweep (web-verified) tested whether each headline
+moat is actually unclaimed. Verdict: **mostly not.** Record this so the optimistic
+sections above are read with the deflation, not as gospel.
+
+> **MARKET CORRECTION (added 2026-06-21, later).** The table below is factually right
+> — those tools DO ship those capabilities — but the "TAKEN / commoditizing" verdicts
+> were a **MARKET-CONFLATION**: nearly every tool listed serves a DIFFERENT market and
+> does not touch the agentic-coding harness vigiles verifies. **Read the corrected
+> synthesis below the table, not the per-row "TAKEN" labels.** Grounded by reading the
+> tools' own docs: **Mastra** ("the modern TypeScript framework for AI-powered
+> applications and agents") and **promptfoo** ("evaluating and red-teaming LLM apps")
+> are **APP-BUILDING** tools — you write code to ship an LLM product; **zero** contact
+> with CLAUDE.md/skills/hooks. **riftmap** = infra deps (closed SaaS). **AgentAuditKit /
+> PolicyLayer / MCP scanners** = third-party MCP-**server** security. The ACTUAL
+> in-market competitors are **claudelint** (114 rules) + **cclint** ×2 + **`claude
+plugin validate`** — and all three are confirmed (their own docs) to be **pure static
+> surface linters**: NO cross-referencing of declared linter rules vs the real
+> ESLint/Ruff config, NO typed/compiled specs, NO compile-time checking, NO
+> capability-diff, NO test/eval. So in-market, vigiles's cross-ref + typed + test/eval +
+> capability-diff layers are **unoccupied** — the capabilities are proven in ADJACENT
+> markets but absent in vigiles's own. Full market-segmented matrix + in-market feature
+> comparison: `landscape-mid-2026.md` § "Market-segmented competitive matrix".
+
+| Moat / candidate                                                                      | What competitors already ship                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Verdict                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **#2 capability-diff at PR (the "founder's favorite, most novel")**                   | **riftmap** — static analysis of config/manifests → **PR-time blast-radius DIFF** (read-only token, "who consumes this, what changed"), exactly the moat-#2 mechanism but for infra deps. **AgentAuditKit** — true CI version-diff with named rug-pull codes (`AAK-RUGPULL-001/002/003`: tool defs changed/added/removed). **PolicyLayer / SkillGate(`SG010`) / agent-audit(`AGENT-054`) / AgentsID / Pillar** — capability classification (Read/Write/Execute/Destructive/Financial) + drift baselines. The whole "agent blast radius" category is crowded (Sophos, GitHub, VentureBeat) + an NSA May-2026 hash-pin-and-diff advisory. | **TAKEN (generically).** Narrow unoccupied sliver: a diff of a **first-party agent harness's own effect surface read off a TYPED SPEC** ("did this PR widen what MY agent can do") — all incumbents are security-framed at **third-party MCP servers** (rug-pulls), not first-party harness config. But it's one short hop for AgentAuditKit/PolicyLayer, needs the spec substrate, and the classification primitive isn't novel. |
+| **#5 type-safe pipelining (typed cross-agent handoffs)**                              | **Mastra** (TS-first) types tool I/O + workflow steps via Zod (runtime validation + compile-time inference). Code-first frameworks already type workflow steps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **MOSTLY TAKEN.** vigiles edge narrows to **instruction-file-defined** agents + **whole-harness cross-file** type-check — unoccupied, but only matters to people defining harnesses as specs (~nobody yet = the adoption problem).                                                                                                                                                                                                |
+| **Deterministic judge-free contract oracle** (the spec-value-model "contract oracle") | **promptfoo** — `is-json`, JSON-schema, `is-valid-openai-tools-call`, javascript assertions: deterministic structured-output checks, no LLM judge, done by the harness not the model.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **TAKEN.** vigiles edge = the contract is **auto-derived from the spec** (`assertAgentOk` from `result()`) vs hand-written schema — a convenience, not a capability.                                                                                                                                                                                                                                                              |
+| **The control-flow thesis itself**                                                    | Brian Suh, _"Agents Need Control Flow"_ (2026) — independent manifesto for "deterministic scaffolds, LLM as a component." No implementation, but the IDEA is now named and spreading.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **Thesis no longer differentiating.** Validation of the frame, not a moat. (Recorded in `landscape-mid-2026.md`.)                                                                                                                                                                                                                                                                                                                 |
+
+**Synthesis (corrected for market).** The typed-compile capabilities exist and are
+proven — but in **ADJACENT markets** (app-building: Mastra/promptfoo; infra: riftmap;
+MCP-server security: AgentAuditKit/PolicyLayer), NOT in vigiles's market. **In vigiles's
+actual market — verifying an agentic-coding harness — every competitor is a pure static
+surface linter** (claudelint/cclint/`claude plugin validate`), and NONE do
+cross-referencing, typed specs, test/eval, or capability-diff. So:
+
+- vigiles is **NOT differentiated on surface linting** (claudelint's 114 rules likely
+  out-cover it on raw structural checks — don't fight there).
+- vigiles **uniquely owns, in-market**: **cross-referencing** (rule-exists-AND-enabled
+  across 7 catalogs), **typed/compiled specs**, **testing/eval** (does a skill fire, does
+  a hook block), and **capability-diff**. No in-market competitor does any of these.
+- The most defensible + adoption-friendly wedge is **cross-referencing** — unique
+  in-market, the founding feature, and **works on plain markdown (no spec required)**, so
+  zero adoption barrier. Lead with this, not the typed moat.
+
+So the earlier "everything's commoditized → no killer feature" read was a market-
+conflation artifact. Corrected: the fancy capabilities are unoccupied in-market today;
+the real risks are (a) a polished in-market linter (claudelint) ADDING cross-referencing,
+or (b) an adjacent player porting in — not present-day direct competition. The durable
+positioning is still **substrate + sub-affordable measurement (A1)**, but the
+near-term, no-adoption-barrier differentiator is the **cross-referencing engine on plain
+markdown**. Consistent with `measurement-authority.md` § Status & gaps,
+`spec-value-model.md`, and the matrix in `landscape-mid-2026.md`.
+
+**Sources:** riftmap.dev/blog/ai-doesnt-understand-blast-radius; github.com/marketplace/actions/agentauditkit-mcp-security-scan; policylayer.com/mcp-security; mastra.ai; promptfoo.dev/docs/configuration/expected-outputs/deterministic; bsuh.bearblog.dev/agents-need-control-flow. (Caveats: the competitive subagent fan-out was partly rate-limited; #8 static-purity was not verified; the destructive-actions pain-point report never landed.)
+
 ## 7. See also
 
 - `typed-spec-power.md` — round 1a: typed composition (#1, SHIPPED) + typed purity (#2, SHIPPED). The strongest "why a spec, not markdown" base.
@@ -447,5 +521,6 @@ pivot wants; (5) is orthogonal correctness.
 - `typed-spec-fp-theory.md` — round 3: the Applicative/Selective/Monad boundary of static analyzability (the shipped `pipe` is already applicative; never add a monadic `bind` — the discipline that protects the moat); the spec-AST-as-abstract-interpreters (the #2 capability-diff engine, prototyped as a v1→v2 diff); effect accumulation ≡ the `proofs.ts` join-semilattice.
 - `whole-harness-codegen.md` — the wild idea, VALIDATED + perf-measured: a generated registry importing every spec → `tsc` over the WHOLE harness as one program (cross-file typed composition, dangling-`delegate`/duplicate-name errors, the repo-scale capability lattice that feeds the #2 capability-diff). Scales (TS2589 only at N≈1000 in the naive O(N²) uniqueness encoding; per-edge types O(N), uniqueness in the JS generator).
 - `measurement-authority.md` — the offense pivot: measurement is the headline, linting is the free tier that makes it affordable, and the spec is the progressive on-ramp to testability (the frame the adoption ladder serves).
+- `spec-value-model.md` — the settled answer to "what does a spec buy vs plain markdown, per capability and surface": the capability axis, the two-oracle model (behavioral vs deterministic contract), the honest leg-grading (shape/flow/purity held; `effect()` sub-region dropped), and the `require-*-spec` split + capability-triggered defaults.
 - `CLAUDE.md` — the deterministic-constraints-layer positioning, the Level 0/1/2 adoption ladder, the `enforce()`/`guard()`/`guidance()` rule types, and the rules this synthesis stays consistent with.
 - `harness-state-space.md` · `railway-subagents.md` · `side-effect-separation.md` · `effect-boundary-design.md` · `reference-verification-limits.md` · `formal-proofs-for-agents.md` — the upstream theses each round builds on.

@@ -1,0 +1,139 @@
+{
+  "model": "haiku",
+  "trials": 2,
+  "tasks": [
+    "slugify",
+    "debounce"
+  ],
+  "runningCost": 0.28652140000000004,
+  "leaderboard": [
+    {
+      "id": "caveman",
+      "title": "Caveman Mode",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 75,
+        "text": "cuts token usage ~75% by \"talking like caveman\" (telegraphic OUTPUT prose)"
+      },
+      "meanOutCut": 30.46373719035015,
+      "meanCostCut": 15.549342718986999,
+      "meanOutShare": 1.250830512499965,
+      "outCutMin": 29.58469435370975,
+      "outCutMax": 31.342780026990553,
+      "helped": 2,
+      "hurt": 0,
+      "mixed": false,
+      "claimGap": 44.53626280964985,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 38,
+            "outputTokens": 1482,
+            "cacheTokens": 101093,
+            "costUsd": 0.020631649999999998,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 38,
+            "outputTokens": 1017.5,
+            "cacheTokens": 100787,
+            "costUsd": 0.0176525,
+            "correct": 1
+          },
+          "outCut": 31.342780026990553,
+          "costCut": 14.439707924475245,
+          "outShare": 1.4442614483544969,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 38,
+            "outputTokens": 1071.5,
+            "cacheTokens": 100224,
+            "costUsd": 0.017557200000000002,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 34,
+            "outputTokens": 754.5,
+            "cacheTokens": 88860.5,
+            "costUsd": 0.014632349999999999,
+            "correct": 1
+          },
+          "outCut": 29.58469435370975,
+          "costCut": 16.65897751349875,
+          "outShare": 1.0573995766454332,
+          "regress": false
+        }
+      ]
+    },
+    {
+      "id": "token-efficient",
+      "title": "Token-Efficient CLAUDE.md",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 63,
+        "text": "README headline \"63%\" reduction (a 465→170 WORD count over 4 prompts); the repo's own token benchmark measures only ~4% haiku / ~12% sonnet / ~7% opus output-token reduction."
+      },
+      "meanOutCut": -1.6926755324967573,
+      "meanCostCut": -3.078487506024545,
+      "meanOutShare": 1.0912925439181829,
+      "outCutMin": -1.9471488178025034,
+      "outCutMax": -1.4382022471910112,
+      "helped": 0,
+      "hurt": 2,
+      "mixed": false,
+      "claimGap": 64.69267553249676,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 34,
+            "outputTokens": 1112.5,
+            "cacheTokens": 89384.5,
+            "costUsd": 0.016732450000000003,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 34,
+            "outputTokens": 1128.5,
+            "cacheTokens": 90227.5,
+            "costUsd": 0.017291,
+            "correct": 1
+          },
+          "outCut": -1.4382022471910112,
+          "costCut": -3.3381244229027898,
+          "outShare": 1.2288608322011245,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 42,
+            "outputTokens": 1078.5,
+            "cacheTokens": 111962.5,
+            "costUsd": 0.0191124,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 42,
+            "outputTokens": 1099.5,
+            "cacheTokens": 113073.5,
+            "costUsd": 0.01965115,
+            "correct": 1
+          },
+          "outCut": -1.9471488178025034,
+          "costCut": -2.8188505891463005,
+          "outShare": 0.9537242556352413,
+          "regress": false
+        }
+      ]
+    }
+  ]
+}

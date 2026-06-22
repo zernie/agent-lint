@@ -20,6 +20,9 @@ export function assertAgentOk(output: string, contract?: OutputContract): Record
 export function assertAgentResult(output: string, predicate: (r: ParsedAgentResult) => boolean, contract?: OutputContract): void;
 
 // @public
+export function assertBlocksDisasters(hookCommand: string, opts?: VerifyGuardrailOptions): void;
+
+// @public
 export function assertChecks<T>(target: T, checks: readonly Check<T>[]): void;
 
 // @public
@@ -32,7 +35,13 @@ export function assertEgressOnly(r: HasEgress, allowed: ReadonlyArray<string | R
 export function assertHookAllowed(r: HookRunResult): void;
 
 // @public
+export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
 export function assertHookBlocked(r: HookRunResult): void;
+
+// @public
+export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void;
 
 // @public
 export function assertHookFired(trace: Trace, name: string | RegExp, opts?: {
@@ -216,6 +225,21 @@ export type DiffStatus = "regressed" | "improved" | "unchanged";
 export function diffToJUnit(diff: BaselineDiff): string;
 
 // @public
+export const DISASTER_CATALOG: readonly DisasterEvent[];
+
+// @public
+export type DisasterCategory = "destructive-git" | "destructive-fs" | "bypass-verification" | "secret-exfiltration" | "remote-code";
+
+// @public
+export interface DisasterEvent {
+    readonly category: DisasterCategory;
+    readonly id: string;
+    readonly input: Record<string, unknown>;
+    readonly label: string;
+    readonly tool: string;
+}
+
+// @public
 export function egressHosts(r: HasEgress): string[];
 
 // @public (undocumented)
@@ -226,6 +250,17 @@ export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResu
 
 // @public
 export function formatBaselineDiff(diff: BaselineDiff): string;
+
+// @public
+export function formatGuardrailReport(hookCommand: string, results: readonly GuardrailResult[]): string;
+
+// @public
+export interface GuardrailResult {
+    readonly blocked: boolean;
+    // (undocumented)
+    readonly event: DisasterEvent;
+    readonly exitCode: number;
+}
 
 // @public
 export interface HarnessTestDriver {
@@ -573,7 +608,20 @@ export function turns(opts: {
 }): Check<Trace>;
 
 // @public
+export function unblockedDisasters(results: readonly GuardrailResult[]): GuardrailResult[];
+
+// @public
 export function usedTool(trace: Trace, name: string | RegExp): boolean;
+
+// @public
+export function verifyGuardrail(hookCommand: string, opts?: VerifyGuardrailOptions): GuardrailResult[];
+
+// @public (undocumented)
+export interface VerifyGuardrailOptions extends RunHookOptions {
+    readonly categories?: readonly DisasterCategory[];
+    readonly event?: string;
+    readonly events?: readonly DisasterEvent[];
+}
 
 // @public
 export const vigilesMatchers: {

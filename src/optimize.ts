@@ -111,7 +111,7 @@ const ACTION_LABEL: Record<OptimizeAction, string> = {
 };
 
 const measureHint = (dir: string): string =>
-  `\`vigiles scan ${dir} --trigger\` — real-model, runs on your subscription`;
+  `\`vigiles measure ${dir} --prompts=<file>\` — real-model, runs on your subscription`;
 
 /** Render an optimization plan for the CLI. */
 export function formatOptimize(rep: OptimizeReport): string {

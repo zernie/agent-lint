@@ -24,4 +24,11 @@ export interface HookProtocol {
    * Code passes the event on stdin only; Codex adds session_id/cwd/PLUGIN_ROOT/…).
    */
   readonly eventEnvVars: readonly string[];
+  /**
+   * How a tool matcher is written in the emitted hooks block — `"exact"` (Claude
+   * Code: the tool name / `A|B` alternation) or `"regex"` (Codex: an anchored
+   * regex `^(A|B)$`). Optional (additive, non-breaking) — absent ⇒ `"exact"`.
+   * Used by `compileHookProgram` when rendering the settings block.
+   */
+  readonly matcherStyle?: "exact" | "regex";
 }

@@ -119,7 +119,13 @@ export function assertEgressOnly(r: HasEgress, allowed: ReadonlyArray<string | R
 export function assertHookAllowed(r: HookRunResult): void;
 
 // @public
+export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
 export function assertHookBlocked(r: HookRunResult): void;
+
+// @public
+export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void;
 
 // @public
 export function assertHookFired(trace: Trace, name: string | RegExp, opts?: {
@@ -928,6 +934,19 @@ export interface RunOut {
 export function runPool<T, R>(items: readonly T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]>;
 
 // @public
+export function runSkillSelectionTrial(args: {
+    readonly prompt: string;
+    readonly pluginDir: string;
+    readonly runner: AgentRunner;
+    readonly parse?: ModelOutputParser;
+    readonly model: string;
+    readonly tools?: readonly string[];
+    readonly timeoutMs?: number;
+    readonly fixture?: Record<string, string>;
+    readonly runError?: (out: RunOut) => string | null;
+}): Promise<SelectionTrialResult>;
+
+// @public
 export function sandboxAvailable(): boolean;
 
 // @public
@@ -935,6 +954,14 @@ export type SandboxMode = "auto" | "strict" | false;
 
 // @public
 export function seedEphemeralHome(throwawayHome: string, realHome: string, keep?: readonly string[]): void;
+
+// @public
+export interface SelectionTrialResult {
+    // (undocumented)
+    readonly errored: boolean;
+    // (undocumented)
+    readonly fired: readonly string[];
+}
 
 // @public
 export function significantlyBeats(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): boolean;
@@ -1076,6 +1103,9 @@ export const vigilesMatchers: {
     toPass<T>(received: T, check: Check<T>): MatcherOutput;
     toPassAll<T>(received: T, checks: readonly Check<T>[]): MatcherOutput;
 };
+
+// @public
+export function whichSkillsFired(trace: Trace): string[];
 
 // @public
 export function withHarness<T>(spec: HarnessTestSpec, fn: (r: HarnessTestResult) => T | Promise<T>): Promise<T>;

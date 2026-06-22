@@ -245,3 +245,17 @@ What it is _not_: the "scan the user's OWN repo and surface their pre-existing b
 **E1 substance now exists.** The proposal to "run scan on popular repos and publish findings" needs real targets; the harness work shipped exactly that — vigiles loads and verifies real **obra/superpowers** and **wshobson/agents** plugins (`examples/harness/vendor/`, `real-*.harness.mjs`). The dogfood is the evidence base for an E1 post: _"we pointed vigiles at the top Claude Code plugins — here's what resolves and what doesn't."_ The first behavioral findings from this are logged in [plugin-behavioral-findings](plugin-behavioral-findings.md) — most notably that superpowers' `brainstorming` skill, structurally green, fires on only ~20–30% of its own use-case prompts (a recall bug only the model-gated layer can see). The **deterministic** sweep (444 unique plugins across ~13 marketplaces) is logged in [plugin-structural-findings](plugin-structural-findings.md) — the public-disclosures list (one real bug so far: a plugin shipping skills with no frontmatter) plus the scanner false positives the sweep exposed and we fixed, which is the larger E1 story: a credible scanner, hardened on real plugins.
 
 Order of operations from here is unchanged but now unblocked: the demo is the artifact (**A**, done) → publish an E1 piece using the real-plugin dogfood → seed into communities (**B**). The open question is still **measurement**: does any of this move the npm/star baseline? Nothing here is worth repeating until that signal exists.
+
+## Update (2026-06-21): the competitive read changes the distribution play
+
+A grounded competitive sweep (full record in [`landscape-mid-2026.md`](landscape-mid-2026.md) § "Market-segmented competitive matrix") reframes distribution:
+
+- **No incumbent; the field is an awareness vacuum.** Every in-market rival is a tiny hobby linter (agnix 296★/1-HN-pt is the biggest; rest 6–41★; none in awesome-claude-code's 47k★ list). **The bottleneck is mindshare, not capability or a competitor to dislodge.** So distribution IS the work.
+- **The agnix lesson:** the most-built linter (414 rules, LSP, multi-harness) generated ~zero interest. Comprehensive **linting alone does not pull a community.** Lead distribution with the **eval/measurement** angle, not rule-count.
+
+Two new highest-leverage artifacts (also in [roadmap.md](roadmap.md) § Explore):
+
+1. **README status BADGE for cc/codex plugins** — a shield an author drops in their README showing their harness is verified, with TIERS: 🛡 lint-clean → ✅ tested (`runHook`) → 🎯 evaled (trigger-rate/behavior). Every badge is a free ad + social proof, AND the tiers pull authors up the lint→test→eval ladder (the product funnel as a growth loop). Build: a `vigiles badge` verdict + a shields.io-style endpoint. This is the strongest product-tied distribution lever — beats another blog post because it lives in N other READMEs.
+2. **Viral debunk articles** — publish A1 findings as "_X is vaporware_" pieces (lead: _"Caveman Mode is vaporware — I measured the viral 75% token-skill and it grew my bill"_). The benchmark is the content; debunks travel (the thing agnix couldn't manufacture). Directly answers the open "does anything move the baseline?" question — measurement-as-marketing.
+
+Net: the prior order still holds (demo → E1 dogfood post → seed communities) but the **badge** (distribution baked into the product) and the **debunk articles** (measurement-as-marketing) are the two adds, and the framing shifts from "better linter" to "the only one that **tests** your harness."

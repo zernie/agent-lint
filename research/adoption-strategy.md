@@ -79,6 +79,23 @@ Commit `.vigiles/generated.d.ts`. Now `enforce("eslint/no-consolee")` is a type 
 
 ---
 
+## Mixed repos: per-file, spec'd and hand-written files coexist
+
+A repo where SOME skills/agents/CLAUDE.mds have a `.spec.ts` and some don't is the
+**designed-for normal state**, not an edge case — vigiles operates **per file, not
+per repo**. Each surface is handled by what _it_ has: a spec'd file is compiled
+(integrity hash + compile-time ref verification + edit-time typing); a hand-written
+file still gets every deterministic **surface** lint rule (tool-contract, frontmatter,
+hooks, MCP, test-coverage, ref nudges) and is reported by `scan` (labeled
+spec-managed vs hand-written), just without compile/integrity. You upgrade file-by-file.
+
+**What a spec actually buys per capability/surface — and the settled `require-*-spec`
+defaults — live in the canonical [`spec-value-model.md`](spec-value-model.md).** The
+short version: lint/test/eval all run on markdown; only whole-harness type-checking +
+a deterministic contract oracle are spec-exclusive (and land mostly on composing
+agents) — so the `require-*-spec` rules all default off and the nudge is
+capability-triggered.
+
 ## Pain Points (Updated)
 
 | Pain Point                        | Status    | Resolution                                      |

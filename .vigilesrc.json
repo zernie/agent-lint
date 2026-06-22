@@ -3,5 +3,6 @@
     "require-spec": "error",
     "integrity": "warn",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
-  }
+  },
+  "exclude": ["bench/**"]
 }

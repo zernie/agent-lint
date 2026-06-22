@@ -8,7 +8,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { scoreReport, rankPlugins, formatLeaderboard } from "./leaderboard.js";
+import {
+  scoreReport,
+  rankPlugins,
+  formatLeaderboard,
+  formatLeaderboardMarkdown,
+} from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
@@ -216,4 +221,47 @@ test("formatLeaderboard renders ranks, grades, and reasons", () => {
   assert.ok(text.includes("demo"));
   assert.ok(text.includes("C"));
   assert.ok(text.includes("2 untested surface(s)"));
+});
+
+test("formatLeaderboardMarkdown renders a publishable table", () => {
+  const md = formatLeaderboardMarkdown([
+    {
+      dir: "d",
+      name: "demo",
+      score: 70,
+      grade: "C",
+      issues: ["2 untested surface(s)", "1 broken intra-plugin reference(s)"],
+      report: report(),
+    },
+    {
+      dir: "e",
+      name: "clean-one",
+      score: 100,
+      grade: "A",
+      issues: [],
+      report: report(),
+    },
+  ]);
+  assert.match(md, /\| # \| grade \| score \| plugin \| top issues \|/);
+  assert.match(md, /\| 1 \| C \| 70 \| `demo` \| 2 untested surface\(s\);/);
+  assert.match(md, /`clean-one` \| — clean \|/); // no issues → clean
+  assert.match(md, /Structural health only/);
+});
+
+test("rankPlugins labels a plugin by its manifest name, not the dir basename", () => {
+  const dir = makeTmpDir("lb-name");
+  const sub = join(dir, "plugin@abc123"); // a SHA-pinned dir basename
+  mkdirSync(join(sub, ".claude-plugin"), { recursive: true });
+  writeFileSync(
+    join(sub, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "cool-plugin" }),
+  );
+  mkdirSync(join(sub, "skills", "ok"), { recursive: true });
+  writeFileSync(
+    join(sub, "skills", "ok", "SKILL.md"),
+    "---\nname: ok\ndescription: A healthy skill with a usable long description\n---\n#ok\n",
+  );
+  const ranked = rankPlugins([sub]);
+  assert.equal(ranked[0].name, "cool-plugin"); // not "plugin@abc123"
+  cleanupTmpDir(dir);
 });

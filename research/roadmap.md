@@ -109,22 +109,30 @@
       N+1's `needs` — a missing field / wrong type / out-of-order handoff **won't compile**.
       The headline non-replicable typed-spec win. Additive over the string-based `delegate()`
       path; shallow `Supplies<>` encoding (TS2589-safe). → `typed-spec-power.md`, `typed-spec-moat.md`
-- [ ] **Semantic capability-diff at PR time (Moat #2) — the bridge bet.** A
-      permissions-diff for your agent: on a PR, compute the harness's capability surface
-      before/after and tell the reviewer what the agent can now **DO** that it couldn't —
-      "this PR gives `summarizer` network access / removes the review gate / opens a
-      cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
-      gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
-      BOTH moat and adoption** (a free PR comment — partial on plain plugins via `scan`,
-      richer on specs — so value without authoring a typed spec). Built on: the
-      whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
-      `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
-      (unbuilt — the surface to diff); the v1→v2 diff itself was **prototyped** as an
-      abstract-interpreter (fp-theory T2). MUST carry a loud sign-off hatch
-      (`vigiles:allow-net` / `allowTrifecta`) so an intentional widening doesn't cry wolf.
-      A **Snyk/Dependabot-for-harnesses** trajectory bet — early to the market, but the one
-      moat feature that also pulls adoption. → `typed-spec-moat.md` (Moat #2),
-      `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
+- [~] **Semantic capability-diff at PR time (Moat #2) — the bridge bet. v0 SHIPPED.**
+  `vigiles capability-diff <before> <after>` (src/core/capability-diff.ts +
+  the CLI handler): diffs the two whole-harness capability lattices and reports the
+  WIDENED verdict (new side-effecting/unknown tool, or loosened purity), informational
+  by default + `--fail-on-widen` for the opt-in CI gate (don't cry wolf). Pure core +
+  CLI e2e (exit-code contract). v0 reads the **tool-bucket** lattice
+  (`computeHarnessCapabilities`); the RICHER surface (per-step effect-row + cross-step
+  accumulation, M1 below) is the deferred follow-up that turns "gained Bash" into
+  "opened a cross-step exfil path". Original framing:
+  A permissions-diff for your agent: on a PR, compute the harness's capability surface
+  before/after and tell the reviewer what the agent can now **DO** that it couldn't —
+  "this PR gives `summarizer` network access / removes the review gate / opens a
+  cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
+  gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
+  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `scan`,
+  richer on specs — so value without authoring a typed spec). Built on: the
+  whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
+  `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
+  (unbuilt — the surface to diff); the v1→v2 diff itself was **prototyped** as an
+  abstract-interpreter (fp-theory T2). MUST carry a loud sign-off hatch
+  (`vigiles:allow-net` / `allowTrifecta`) so an intentional widening doesn't cry wolf.
+  A **Snyk/Dependabot-for-harnesses** trajectory bet — early to the market, but the one
+  moat feature that also pulls adoption. → `typed-spec-moat.md` (Moat #2),
+  `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
 - [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
       unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
       `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler
@@ -269,6 +277,19 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 
 ## Now — cheap, high-leverage, do next
 
+- **Harness-native cross-check — DEEPEN (2026-06-21, IN PROGRESS).** The moat refinement
+  (see [`landscape-mid-2026.md`](landscape-mid-2026.md) §"Read of Market C" REFINEMENT):
+  cross-referencing's value is the HARNESS-NATIVE references (tools, MCP `server#tool`,
+  hook events, paths, delegates), NOT the linter-catalog leg (legacy/supporting — don't
+  add more catalogs). **First build: live MCP tool resolution of the real
+  `mcp__server__tool` contract refs** — the live engine exists (`src/core/mcp.ts`
+  `listMcpTools`/`closest`) but is wired only to the explicit `vigiles:mcp` mark;
+  bridge it to the actual `mcp__server__tool` references (subagent contracts + bodies)
+  so a renamed/removed tool (`create_issue`→`issue_write`) is caught, not just an
+  undeclared server (the static `mcp-tool-resolves` only checks the server is declared).
+  Opt-in (starts the server, not a free CI default); test against the existing
+  `examples/harness/fixture-mcp-server.mjs`.
+
 - **Purity FLOOR gate — DONE + STABLE (2026-06-20).** The per-call floor
   (`decidePurityGate` wired into the agent + skill `PreToolUse` rails,
   `isReadOnlyBash` refining `Bash` by the live command, the `vigiles:purity:`
@@ -282,14 +303,14 @@ build. 2026-06-20 redesign + dogfood: the model-emitted`effect-enter`/`exit`
 signal is a category error (a deterministic gate keyed on probabilistic model
 compliance, fail-closed). For **skills** it's now a **compile error**
 (`effect-in-skill`; a skill uses the floor + `context:'fork'`) — KEEP. For
-**subagents** a flat-only deterministic tracker shipped (`PreToolUse(tool=Task)`open +`SubagentStop`close,`f045554`) but is **NOT nesting-safe**: Claude Code
-v2.1.172 added depth-5 nesting, so correct tracking needs a depth-aware **stack**
-(push/pop) + spawn-tool-name verification (`Agent`vs`Task`). Marked EXPERIMENTAL;
-**do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
+**subagents** a deterministic tracker shipped (`PreToolUse(tool=Task)`open +`SubagentStop`close,`f045554`). It was flat (single slot) and not nesting-safe;
+the depth-aware **STACK fix has since SHIPPED** (push on dispatch, pop on
+`SubagentStop`back to the parent, gate on the top + recognize both`Task`/`Agent`spawn tools — TLC-certified,`AgentWindowStack.tla`; the `Open;Open;Stop;Call(Bash)`counterexample is now a regression test), closing the contract-escape CC v2.1.172
+depth-5 nesting exposed. Still marked EXPERIMENTAL; **do NOT auto-wire**. Conclusion: a deterministic _in-flow_ sub-region has no
 harness signal, and the subagent-split alternative is **weaker AND costlier** than
 intended (whole-unit granularity, context-isolation, depth-5 cap, subagent spam) —
 so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
-  **Hidden from public docs** (removed from `spec-format.md`/`harness-testing.md`;
+  **Hidden from public docs** (removed from`spec-format.md`/`harness-testing.md`;
   `docs/safety.md` unlinked from the README + WIP-bannered) — don't re-surface until
   it's coherent end-to-end.
   - **Open inconsistency to reconcile (don't keep the skill special-case).** The
@@ -303,9 +324,9 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
     keyed on the tool stream (conntrack/eBPF-maps pattern): read-before-write ("no
     `Write` to a file not `Read` this run"), ordering invariants ("no mutating Bash
     until X"), state in a `.vigiles/` file or read from the transcript — no
-    restructuring, no subagent spam. The `f045554` tracker only needs nesting-safety
-    (depth-aware stack + verified spawn-tool name) IF active-agent CONTRACT enforcement
-    under nesting is wanted independently of `effect()`.
+    restructuring, no subagent spam. The `f045554` tracker's nesting-safety (depth-aware
+    stack + both spawn tools recognized) has SHIPPED, so active-agent CONTRACT enforcement
+    now holds under nesting independently of `effect()`.
   - **"effect() as a test/mock seam instead of an enforcement boundary" — considered, rejected (2026-06-21).**
     The reframe: forget position; for an agent a tight `tools` allowlist already pins the
     effect surface, so `effect()` could just NAME "the hole" — the one side-effecting op —
@@ -415,6 +436,53 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [ ] **"Prove your guardrail actually blocks" — the verify-not-gate killer feature.**
+      The #1 verified hook pain is FALSE CONFIDENCE: a safety hook looks like a guardrail and
+      silently isn't (exit 1≠exit 2, wrong JSON field, PostToolUse-can't-block, wrong jq path) —
+      "three teams believed they'd blocked force pushes"; a not-planned RFC (#45427) names it.
+      Feed the DISASTER event (`git push --force`, `rm -rf /`, `--no-verify`, `cat ~/.ssh/*`) to
+      the user's EXISTING hook via `runHook` + `decideHook` and assert it BLOCKS. Deterministic,
+      model-free, CI, works on hand-written hooks with NO spec/compile (zero adoption tax) —
+      and it sidesteps CC's runtime delivery bugs (subagent-bypass #34692 etc.) by verifying
+      LOGIC, not delivering enforcement. Receipt proven 2026-06-22 (runHook caught an exit-1
+      fake guard). Smallest build: a curated disaster-event catalog + the `scan`/`scaffold-test`
+      surface over it; dogfood on a real OSS safety hook to find a secret no-op. Compile is the
+      OPTIONAL Level-2 (declared intent → auto-generated test); verify is the mechanism.
+      [hook-pain-points](hook-pain-points.md) · **HIGH — highest-conviction, lowest-risk**
+- [~] **Reliability RUNTIME: typed safe-by-construction guards (the big-moat bet).**
+  The harness's safety failures (destroy-without-backup, untrusted→sink, prose rules
+  ignored) are ORDER/FLOW/REPLAY properties a capability SET can't see, and they can't be
+  fixed by more prose (it decays under compaction). Fix: DECLARE a guard from a closed
+  audited vocabulary; vigiles GENERATES the PreToolUse hooks block pointing at its own gate
+  (no user shell → safe-by-construction; closes the CVE-2025-59536 hook-RCE class). v0
+  PROTOTYPED + the live gate RUNS (`src/core/guards.ts` + `vigiles guard-hook` CLI + session
+  ledger, `959e88c`/`4336f4a`): `guard.block` / `requireBefore` (the ORDER axis:
+  destroy-after-plan, enforced live across hook invocations) / `confine`. ⚠️ The 5-pass hook
+  research (hook-pain-points.md) found GATE is undercut by CC bugs (subagent-bypass #34692,
+  exit-2-stops-Claude #24327) that also hit our own PreToolUse gate — so prefer VERIFY (above)
+  over GATE near-term. NEXT (if pursued): the measurable A/B (harness ± guards → fewer
+  destructive actions). [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **MED (gate undercut by CC bugs)**
+  - _Parked prototype files (linked in CLAUDE.md Key Files so they're not orphaned):_
+    `src/core/guards.ts` (+test, WIRED via `vigiles guard-hook` but EXPERIMENTAL) and
+    `src/core/hook-spec.ts` (+test, a pure spike imported NOWHERE). The hook-spec
+    "typed effect-classified hook" idea was **superseded** by the SHIPPED compiled
+    hooks (`src/core/hook-program.ts` → `vigiles/hook`, `c4d4d85`), which took the
+    closed-vocabulary angle further (role family + AST matcher + stamp). Keep
+    hook-spec only as the design record; resume guards from here if the GATE bet is
+    revived. [harness-protocol-flow-moat](harness-protocol-flow-moat.md)
+- [ ] **FLOW axis — information-flow / noninterference over the typed pipeline.** Label tool
+      I/O (untrusted/secret) and prove no untrusted→sink path — the lethal trifecta as a real
+      dataflow, not co-occurrence. Harder than ORDER (needs taint across calls); the second
+      reliability-runtime guarantee. [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **P3 (the deep one)**
+- [ ] **REPLAY axis — exactly-once side effects (linear types / idempotency).** Declare an
+      effect's idempotency; the gate keeps a per-session ledger keyed on semantic intent (NOT
+      byte-identity — ACRFence shows that fails for LLMs) and blocks a second fire. The
+      duplicate-on-replay hole 12 frameworks share — but MEDIUM for the coding-harness market
+      (the catastrophic cases are prod agent-frameworks, not CC/Codex), so it ranks behind
+      ORDER+FLOW. [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **P3 (MED)**
+- **Poach-list follow-ups (typed CLAUDE.md).** Zod-`result()` (feature-ideas §14b), typed
+  context/needs contract (Pydantic-style deps), exhaustive err-track (Effect-TS). Mechanics
+  verified against Mastra/Pydantic/Vercel/Effect-TS. [typed-claude-md-poach](typed-claude-md-poach.md) · **P3**
 - **Ephemeral run environment (not just CWD)** — every model-driven run already
   uses a throwaway `cwd`, but the direct/non-bwrap path inherits the real `$HOME` +
   env, so a model-driven `git push` / write to `~` escapes — even for a trusted
@@ -470,6 +538,19 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
   (~20 stubbed runs) to confirm the curve is real + model-dependent before any
   matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
+- **Plugin selection-collision matrix** — **SHIPPED (core + CLI `scan --collisions`).**
+  The behavioral CONFIRMATION of the deterministic `description-overlap` rule: run
+  each model-invocable skill's own prompts against the whole installed plugin and
+  record WHICH skills fired (N×N matrix; diagonal = recall, off-diagonal = a sibling
+  hijacking the prompt). The cross-skill precision question per-skill trigger-rate
+  can't see; the leaderboard's blast-radius column. Claude Code only (needs a discrete
+  skill-selection event). [plugin-selection-collision](plugin-selection-collision.md) · **DONE**
+- **Trigger/collision: carry plugin hooks (hook-primed plugins)** — the trigger/collision
+  tier stubs a plugin to skills-only (`packageSkillsDir`), DROPPING `hooks/` — so a plugin
+  that primes proactive skill use via a SessionStart hook (e.g. superpowers' `using-superpowers`
+  gateway injection) shows artificially 0% recall. Fix: carry `hooks/` into the stubbed plugin,
+  or run the whole-plugin install (unstubbed) when a SessionStart hook is present.
+  [plugin-selection-collision](plugin-selection-collision.md) · **P3 (MED)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
@@ -572,6 +653,42 @@ assertRates`) is the recommended path for testing one skill, but
 - **Positioning pivot:** lead with _"conformance/attestation for the agent
   harness"_, demote "linter for instruction files".
   [strategic-synthesis](strategic-synthesis-2026-06.md)
+- **README STATUS BADGE for cc/codex plugins** (adoption flywheel, 2026-06-21 idea):
+  a GitHub badge a plugin author drops in their README showing their harness is
+  **verified / tested / evaled**, with TIERS (e.g. 🛡 lint-clean → ✅ tested (runHook)
+  → 🎯 evaled (trigger-rate/behavior)). Same viral mechanic as build-passing/coverage
+  badges — every badge is an ad + social proof, and the tiers pull authors UP the
+  ladder (lint→test→eval, the exact funnel). Needs a `vigiles badge`/shield endpoint +
+  a public verdict. The single highest-leverage distribution artifact tied to the
+  product. See [distribution-strategy.md](distribution-strategy.md).
+- **Viral debunk articles** (measurement-as-marketing) — but **method-first, NOT
+  caveman-first.** The caveman take is SATURATED (~6mo old; Kuba Guzik/GrowwStacks/HN/
+  Decrypt already covered it; the author conceded), so a "caveman is vaporware" piece is
+  late and draws "already covered" pushback. The defensible angle is the **reproducible
+  harness applied at SCALE** ("I built a re-runnable harness and measured N hyped skills'
+  claims — here's the leaderboard"), where caveman is one VALIDATION row (agreeing with
+  prior work proves the harness is sound) and the fresh content is the under-measured
+  skills (token-efficient, the cluster) + head-to-head + the output-GROWS / best-case-is-
+  worst finding. Ties A1 → adoption. See [measurement-authority.md](measurement-authority.md),
+  `bench/ecosystem/FINDINGS.md` (§ saturation warning + methodology audit).
+- **PUBLIC plugin leaderboard (site + GitHub) — the persistent viral artifact.** Promote
+  A1 from internal findings to a public, always-on **ranking of real plugins/skills by
+  claim-vs-measured + structural health**, with **head-to-head within a category** (e.g.
+  compression: caveman vs token-efficient vs … on the same corpus). It's the durable
+  home the debunk articles link into and the data moat accumulates in. Reuses what's
+  already built: `src/leaderboard.ts` (structural-health score/grade) + `bench/ecosystem/`
+  (A1 claim-vs-measured) — the new work is curation, a web surface, and a re-run cadence
+  (sub-affordable, so it can stay current — the thing competitors can't afford). The
+  README **badge** (above) is the per-plugin face of this leaderboard. The
+  highest-leverage distribution bet; pairs with A1. See
+  [measurement-authority.md](measurement-authority.md) (the two-products section),
+  [divergent-bets.md](divergent-bets.md) (#9 leaderboard), `bench/ecosystem/`.
+- **Build-business-on-top + acquisition posture:** position so (a) others can build on
+  vigiles (open-core `agent()` + the `vigiles/adapter` authoring kit + the measurement
+  DATA as the moat), and (b) it's an acquisition target for a top AI lab that wants to
+  own the quality/safety-verification layer of its coding agent. Closed SaaS rivals
+  (riftmap/SkillCheck/PolicyLayer) prove a business exists on this shape.
+  [divergent-bets.md](divergent-bets.md), [landscape-mid-2026.md](landscape-mid-2026.md)
 
 ## Rejected / parked (don't relitigate)
 

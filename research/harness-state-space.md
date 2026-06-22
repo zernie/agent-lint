@@ -304,4 +304,7 @@ the bot be _invited_ and welcome rather than blocked. Sources: [curl ends bug bo
 - `agent-supply-chain-security.md` — the prior security stance this sharpens into the
   capability-graph check.
 - `divergent-bets.md` — the leaderboard bet (#14) and adjacent strategic moves.
+- `harness-protocol-flow-moat.md` — the SEQUEL: the dynamic axes a capability SET can't see
+  (ORDER/FLOW/REPLAY) framed as the **reliability RUNTIME** moat, grounded in the 2026-06
+  failure corpus. This doc is the static-SET axis; that one is time/provenance/cardinality.
 - `roadmap.md` — where the Tier-1/2 bets land.

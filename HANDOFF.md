@@ -1,89 +1,94 @@
 # HANDOFF — volatile cross-session state
 
-> Overwrite each session; keep ≤120 lines. The durable map is `research/roadmap.md`;
-> this is the cheap pointer to it. The SessionStart hook (`.claude/hooks/session-handoff.sh`)
-> injects this file so a new session starts oriented WITHOUT re-reading CLAUDE.md +
-> the research docs. Read this first, then open only what "Next move" points at.
+> Overwrite each session; keep ≤120 lines. Durable map = `research/roadmap.md`.
+> The SessionStart hook injects this so a new session starts oriented. Read first.
 
-## Now
+## RESUME HERE — compiled hooks SHIPPED (CC + Codex) + repositioned (2026-06-22)
 
-Pivot = **measurement-authority** (`research/measurement-authority.md`): vigiles = the
-empirical authority on what makes agentic coding work (measurement → typed contracts →
-linting). This multi-session run went DEEP on the **typed-spec MOAT**: _"the harness
-becomes a compilable, analyzable formal object — vigiles is a compiler/verifier for
-agent harnesses; everyone else is a linter for prose."_ Full record + every research
-finding: **`research/typed-spec-moat.md`**.
+Done and pushed to `claude/what-now-umafgi` (@ `81d11b5`, tree clean). Compiled
+hooks are a real public capability for **both Claude Code AND Codex**; the
+README/docs are repositioned around **harness reliability**. No open task — pick
+up a NEW direction from the user (or the small deferred item below).
 
-## Status & gaps (READ — the honest 2026-06-21 self-assessment)
+⚠️ **DELIVERY-FLOOR caveat — keep in EVERY doc/claim.** Compile/verify fix a
+hook's AUTHORING + LOGIC, not DELIVERY: CC's **#34692** (PreToolUse hooks don't
+fire for subagent tool calls; closed not-planned) bypasses ANY compiled hook. So
+VERIFY (a logic claim) survives the bug; GATE (live enforcement) is a strong
+default, **never "unbypassable."**
 
-Thesis is A-tier + real features shipped, BUT the work leaned **maker-cool (the moat)
-over user-pull (the measurement identity)**, and vigiles has ~no users. Near-term
-priority = the **ADOPTION ENGINE** (the at-scale ecosystem benchmark "what works vs
-hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat depth.
-The moat is the depth users discover after. Bridge bet = **capability-diff (#2), now
-P1**. Full: `research/measurement-authority.md` § "Status & gaps".
+### SHIPPED this arc (don't rebuild)
 
-## Next move (pick — none started)
+- **STEP 1 — compiled hooks (`c4d4d85`).** `vigiles/hook` public surface
+  (`src/hook.ts` ← `src/core/hook-program.ts`) + CLI `compile-hook` /
+  `run-hook-program`. A hook = a pure typed `(event)=>Decision` against a CLOSED
+  vocab; role FAMILY gate/inject/react. Makes whole bug classes UNREPRESENTABLE
+  (false confidence, matcher bypass via AST `command.runs`, capability=API-surface
+  via `checkHookImports`, tamper-evident `stampHook`, category mistake = tsc
+  error). Expanded `CommandView` with `touches()` (secret reads) + `pipesToShell()`
+  (curl|sh). Tests: `src/hook.test.ts` (E2E over the real CLI), `src/core/hook-program.test.ts`.
+  `package.json` exports `./hook`; api-extractor tracks `etc/vigiles-hook.api.md`.
+- **OSS dogfood (`c4d4d85`).** `src/hook-dogfood.test.ts`: a hand-written substring
+  guard (the widely-copied disler shape) misses 5/7 of `DISASTER_CATALOG`; the
+  compiled rewrite (`examples/harness/safe-bash-guard.mjs`) blocks **7/7**.
+  Model-free, in CI. The "prove worth" artifact.
+- **STEP 2 — docs reposition (`2b3739b`).** README top-line = "make the harness
+  reliable", four instruments (Verify/Guard/Test/Measure); Guard = compiled hooks.
+  New `docs/compiled-hooks.md` (says "whole classes of bugs unrepresentable" + the
+  bug-class table). Cross-linked from README, docs index, cli.md, harness-testing,
+  verifying. CLAUDE.md positioning + keyFiles updated (via spec, recompiled).
+  README is 203 lines (cap ~200 — fine, gained a pillar).
+- **STEP 3 — Codex design (`b0b1429`).** `research/compiled-hooks-codex.md`.
 
-1. **ADOPTION: the at-scale ecosystem benchmark (A1)** — the viral artifact, still
-   ~v0 / not run at scale. The flywheel. (Real-model, needs sub auth; pilot tiny.)
-2. **capability-diff (#2, P1, the bridge)** — needs the UNBUILT **effect-row (M1) +
-   cross-step accumulation** engine (compute the capability surface), then the v1→v2
-   diff (already prototyped, fp-theory T2). Carry a loud sign-off hatch (don't cry wolf).
-3. **V1 nesting bug** — found + TLC-certified-fix-in-hand, NOT fixed (depth-aware
-   active-agent stack; a live contract-escape in EXPERIMENTAL agent-runtime). Orthogonal.
-4. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
+### STEP 4 — Codex compiled-hook emit, BUILT (`81d11b5`)
 
-## Shipped (this session — all pushed, tree clean, HEAD==origin)
+`compileHookProgram(source, hook, opts?: CompileHookOptions)` (was a positional
+`gateCommand`): opts `{ gateCommand?, dialect?, hookProtocol?, settingsFormat? }`
+default to CC (back-compat). Validates `hook.on` via `verifyHookEvents` (typo
+won't compile), styles the matcher via `HookProtocol.matcherStyle` (CC exact vs
+Codex `^(A|B)$` regex), renders `settingsBlock` per `settingsFormat` (CC JSON vs
+Codex TOML `[[hooks.<event>]]`, `@iarna/toml`). `compile-hook --harness=codex`
+threads the resolved adapter. Gate runtime SHARED (exit-2). Tests in
+`hook-program.test.ts` (non-CC TOML+regex dogfood + event-reject + CC back-compat).
 
-- **feat:** typed purity (`pure`+`Bash` won't tsc) · typed composition (pipeline won't
-  compile if handoffs misalign) · `generate-harness` (one `tsc` over the WHOLE harness —
-  dangling-`delegate` + duplicate-name + capability lattice) · cross-file typed
-  composition (handoff mismatch ACROSS files won't compile) · scaffold-test now consumes
-  the typed contract (`assertAgentOk` + tools→safety check).
-- **research:** 9 cross-linked docs + runnable tsc/runtime prototypes (typed-spec-power /
-  frontier / effects-monads / formal-verification / refinement / covering-arrays /
-  fp-theory / whole-harness-codegen + the **typed-spec-moat** synthesis). Headlines: the
-  Applicative/Selective/Monad boundary THEOREM (never add a monadic `bind` — the shipped
-  `pipe` is already applicative); a REAL nesting bug found by running TLC; covering-array
-  eval = 99.4% fewer real-model runs; effect-row generalizes the purity ladder.
-- **docs/positioning:** moat framing folded into README + CLAUDE.md + measurement-authority;
-  status/gaps + sequencing recorded; capability-diff added as P1; fixed broken
-  `examples/railway/*.spec.ts` imports (`src/spec.js` → `src/core/spec.js`).
+**Deferred (small):** the inject/ask OUTPUT JSON is still CC-shaped in
+`run-hook-program` — gate/`deny` (exit-2) is cross-harness now, but inject's
+`additionalContext` / ask's `permissionDecision` need Codex's field names
+confirmed against the real binary before routing through `HookProtocol`. The gap
+is LOUD: `compile-hook --harness=codex` warns on an inject/react hook. See
+`research/compiled-hooks-codex.md` (§Deferred).
 
-## In flight
+### STEP 5 — in-process hook testing (shipped)
 
-Nothing. All subagents complete; tree clean; local == remote.
+`runHookProgram(hook, event)` (`vigiles/hook`) — one in-process role-dispatcher →
+normalized `HookProgramOutcome` (decision|injection|reaction), no subprocess/model;
+`assertHookDenies`/`assertHookAllows` (`vigiles/unit`+`testing`, in harness-assert)
+= the throwing asserts over a compiled hook DIRECTLY (sibling of assertHookBlocked/
+Allowed which take a `runHook` subprocess result). Docs: docs/compiled-hooks.md
+§"Testing a compiled hook" (3 tiers by cost) + testing-api.md entry. Behavior
+tier deliberately NOT added (a hook isn't model-selected; "does it fire" =
+runHarnessTest).
 
-## Gotchas (carry forward)
+### Prior shipped (earlier sessions, don't rebuild)
 
-- **Subagents must NOT use worktree isolation**; VERIFY their output (git diff + build +
-  tests + run the thing) — don't trust "done". Apply their reported keyFiles deltas to
-  `CLAUDE.md.spec.ts` yourself + recompile.
-- **The recurring TS-encoding rule:** per-edge / per-entry check → a SHALLOW generated TS
-  type (O(N)); whole-set cardinality (uniqueness) → the JS generator (O(N) exit-non-zero).
-  Variadic/recursive types hit **TS2589** (~N=1000). `pipe`/`Supplies`/`KnownAgentName`/
-  `Handoff` all follow this — keep it.
-- Real-model tiers (A1/evals) need sub auth + are slow — pilot tiny; deterministic work
-  needs neither.
-- Conventional-commit subjects; `build` + `vitest` + `lint` + `fmt:check` before commit;
-  recompile `CLAUDE.md` after editing `CLAUDE.md.spec.ts`; `api:report` when the public
-  surface changes; cross-link new research docs (orphan-docs lint); **NO session links /
-  model IDs in commits**.
+- **VERIFY feature (`a5abf70`):** `src/guardrail-check.ts` on `vigiles/unit` —
+  "prove your guardrail blocks" (DISASTER_CATALOG + assertBlocksDisasters + neutral
+  map). Useful, lint-ish, NOT a moat. Distinct from compiled hooks (it AUDITS any
+  hook; compiled hooks AUTHOR a correct one).
+- **guard-hook GATE (`959e88c`/`4336f4a`, EXPERIMENTAL/MED)**; **hook-spec spike
+  (`d3471c0`)**; A1 sonnet debunks (caveman −18%, SATURATED); V1 nesting STACK fix.
 
-## Budget protocol
+## Gotchas
 
-- Read THIS file, not the docs, to orient; open a doc only when a step needs it.
-- **Delegate** searches/reads + big builds to subagents (keep file dumps out of main
-  context); verify their output. Bounded commits; **refresh this file after each
-  shippable commit** so state is always current.
+- Subagents NOT worktree-isolated; VERIFY their output (build+tests+run it).
+- `api:report` on any public-surface change; recompile CLAUDE.md after editing its
+  spec; cross-link new research/docs (orphan-docs lint); build+vitest+lint+fmt:check
+  before commit. Conventional commits. **NO session links / model IDs in commits.**
+- TS-encoding: per-edge check → shallow generated type O(N); whole-set uniqueness → JS.
+- Real-model tiers need sub auth + slow; deterministic work needs neither.
 
 ## Don't re-read unless the task needs it
 
-- `research/roadmap.md` — the ordered map (per-item status; capability-diff **P1**,
-  trifecta F1 **P0**, the See-also index to every research doc).
-- `research/typed-spec-moat.md` — the moat synthesis: every finding, the build order,
-  the adoption-tension catalog.
-- `research/measurement-authority.md` — the pivot + the "Status & gaps" section.
-- `bench/corpus/coding-tasks.mjs` + `bench/evals/caveman-claim.eval.mjs` — the
-  measurement substrate for A1.
+- `research/hook-pain-points.md` — the hook corpus + the compiled-hooks/verify ship record.
+- `research/compiled-hooks-codex.md` — the Codex emit design (the NEXT item).
+- `docs/compiled-hooks.md` — the public guide (the user-facing source of truth).
+- `research/{roadmap,harness-protocol-flow-moat,codex-prototype-findings}.md` — map + moat + Codex facts.

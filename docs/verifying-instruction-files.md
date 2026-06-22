@@ -324,4 +324,5 @@ compilation pipeline. [Determinism breakdown and flow diagram →](comparison.md
 - [Spec format reference](spec-format.md) — every section and rule kind.
 - [Linter support](linter-support.md) — the 7 catalogs + `generate-types` / `generate-schema`.
 - [CLI & CI reference](cli.md) · [Agent setup](agent-setup.md).
+- [Compiled hooks](compiled-hooks.md) — the deterministic **gate** instrument: author a hook that can't be wrong.
 - [Testing your harness](harness-testing.md) — Layer 2.
