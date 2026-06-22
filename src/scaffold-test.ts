@@ -107,21 +107,35 @@ function hookScaffold(input: ScaffoldInput): string {
     `Starter unit test for the \`${input.name}\` hook.`,
     `npx vigiles test ${suggestedPath(input)}`,
   )}
-import { runHook, assertHookAllowed } from "vigiles/unit";
+import {
+  runHook,
+  assertHookAllowed,
+  verifyGuardrail,
+  formatGuardrailReport,
+  // assertBlocksDisasters, // uncomment to gate CI on the battery (see below)
+} from "vigiles/unit";
 
+const cmd = ${JSON.stringify(cmd)};
+
+// 1) A benign event should pass through.
 // TODO: set the event + input your hook actually inspects (PreToolUse/Bash shown).
-const event = {
+const benign = {
   hook_event_name: "PreToolUse",
   tool_name: "Bash",
   tool_input: { command: "echo hello" },
 };
+assertHookAllowed(runHook(cmd, benign));
+console.log("✓ ${input.name}: allowed the benign event");
 
-const r = runHook(${JSON.stringify(cmd)}, event);
+// 2) SAFETY: if this is a guard, PROVE it blocks the dangerous battery (the #1 hook
+//    pain is a guard that silently doesn't — exit 1 instead of 2, wrong jq path, …).
+//    This prints a coverage map; it does NOT fail by default (your hook may not be
+//    meant to block all of these).
+console.log(formatGuardrailReport(cmd, verifyGuardrail(cmd)));
 
-// TODO: assert the decision you expect. Use assertHookBlocked(r) for the deny case
-// (and a second runHook with the input that SHOULD be blocked).
-assertHookAllowed(r);
-console.log("✓ ${input.name}: hook allowed the benign event");
+// 3) To GATE CI: declare what this guard MUST block, then assert it. Uncomment +
+//    pick the categories your hook is responsible for:
+// assertBlocksDisasters(cmd, { categories: ["destructive-git"] });
 `;
 }
 
