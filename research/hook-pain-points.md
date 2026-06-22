@@ -242,3 +242,28 @@ has a narrower scope than a copier assumes).
 **NEXT:** a `scan` coverage column (surface this on any repo with a PreToolUse hook); vendor a
 licence-clean slice as a golden regression fixture; publish the finding as the adoption artifact
 ("your installed safety hooks don't stop these 5 things").
+
+## COMPILED HOOKS — SHIPPED (2026-06-22, `c4d4d85`)
+
+Beyond verifying a hook's logic, vigiles now lets you AUTHOR a hook that can't be wrong.
+`vigiles/hook` (core `src/core/hook-program.ts`, public `src/hook.ts`) + the CLI
+(`compile-hook` / `run-hook-program`) ship the constrained-typed-program model the earlier
+probe validated: a pure `(event) => Decision` against a closed vocabulary, compiled to the
+harness protocol. The role FAMILY (gate/inject/react) + the AST matcher
+(`command.runs`/`touches`/`pipesToShell`) + capability-check + tamper-evident stamp make whole
+bug classes UNREPRESENTABLE. Public guide: [`docs/compiled-hooks.md`](../docs/compiled-hooks.md).
+
+**Compiled-hook OSS dogfood (the "prove worth" artifact), DONE.** `src/hook-dogfood.test.ts`
+turns the disler finding above into a runnable, model-free regression: a faithful substring
+guard (the widely-copied hand-written shape) misses 5/7 of `DISASTER_CATALOG`; the compiled
+rewrite ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs))
+blocks **7/7** by construction — same intent, no blind spots, no protocol bug. The two API
+additions the full intent needed (`touches` for secret reads, `pipesToShell` for `curl | sh`)
+stayed high-signal (a shell _with_ a script file is not flagged).
+
+**Honest scope (unchanged):** compile fixes AUTHORING + LOGIC, not DELIVERY — #34692 still
+bypasses any PreToolUse hook. A gate is a strong default, never an unbypassable wall.
+
+**NEXT — multi-harness:** the model is harness-neutral; only the EMIT differs (CC JSON settings
+vs Codex TOML `[hooks]`, glob vs regex matcher), and Codex's veto is exit-2-identical so the
+runtime is shared. Design: [`compiled-hooks-codex.md`](compiled-hooks-codex.md).

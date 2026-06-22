@@ -68,7 +68,10 @@ kit** and drives the real engine against Codex-shaped fixtures:
 So the **format axis (`HarnessDialect`) and layout axis (`PluginLayout` +
 `settingsFormat`) are proven** — adding Codex's _authoring/verification_ support
 is writing value objects, no core edits, exactly as designed. `HookProtocol`
-came out **identical** to Claude Code (the thin port was right).
+came out **identical** to Claude Code (the thin port was right). That identical
+protocol is exactly why a **Codex compiled-hook** is small — only the emit (TOML
+`[hooks]` vs JSON, regex matcher) differs, the exit-2 veto is shared. Design:
+[`compiled-hooks-codex.md`](compiled-hooks-codex.md).
 
 ## Gaps the prototype concretely exposed (the honest part)
 
