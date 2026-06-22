@@ -35,7 +35,13 @@ export function assertEgressOnly(r: HasEgress, allowed: ReadonlyArray<string | R
 export function assertHookAllowed(r: HookRunResult): void;
 
 // @public
+export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void;
+
+// @public
 export function assertHookBlocked(r: HookRunResult): void;
+
+// @public
+export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void;
 
 // @public
 export function assertHookFired(trace: Trace, name: string | RegExp, opts?: {

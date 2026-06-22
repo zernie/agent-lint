@@ -52,6 +52,7 @@ export {
   decideFileGate,
   runInject,
   runReact,
+  runHookProgram,
   decisionExitCode,
   dispatchKind,
   hookRouting,
@@ -81,4 +82,6 @@ export type {
   RunReaction,
   CompiledHookProgram,
   CompileHookOptions,
+  RawHookEvent,
+  HookProgramOutcome,
 } from "./core/hook-program.js";

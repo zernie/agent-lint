@@ -34,7 +34,7 @@ import {
   classifyBashCommand,
   type BashEffect,
 } from "./bash-effects.js";
-import { sha256short, type SHA256Hash } from "./hash.js";
+import { sha256short, assertNever, type SHA256Hash } from "./hash.js";
 import { stringify as stringifyToml } from "@iarna/toml";
 import type { HarnessDialect } from "./dialect.js";
 import type { HookProtocol } from "./hook-protocol.js";
@@ -545,4 +545,65 @@ export function runReact(
       ? raw.tool_input.file_path
       : "";
   return hook.react({ event: hook.on, tool: t, path: pathView(fp) });
+}
+
+// ---------------------------------------------------------------------------
+// runHookProgram — one in-process dispatcher over the whole role family. The
+// cheapest test tier for a compiled hook: a hook's decision is a PURE function,
+// so this evaluates it with NO subprocess and NO model (vs `runHook`, which
+// spawns the real CLI runtime). Dispatches by role so a test never has to pick
+// `decideProgram` vs `decideFileGate` vs `runReact`/`runInject` by hand — the
+// in-process twin of the `vigiles run-hook-program` CLI.
+// ---------------------------------------------------------------------------
+
+/** The raw event fields the decode functions read (the union across roles). */
+export interface RawHookEvent {
+  readonly tool_name?: string;
+  readonly tool_input?: {
+    readonly command?: unknown;
+    readonly file_path?: unknown;
+  };
+  /** SessionStart / UserPromptSubmit (inject). */
+  readonly source?: string;
+}
+
+/** The normalized outcome of running a hook program — discriminated by role. */
+export type HookProgramOutcome =
+  | { readonly kind: "decision"; readonly decision: Decision }
+  | { readonly kind: "injection"; readonly context: string }
+  | { readonly kind: "reaction"; readonly reaction: Reaction };
+
+/**
+ * Evaluate a compiled hook against a raw event, in-process, dispatching by role:
+ * a gate → its `Decision`, an inject → the injected context text, a react → its
+ * (effect-classified) `Reaction`. Pure — no subprocess, no model. The ergonomic
+ * base for testing a compiled hook (see `assertHookDenies` / `assertHookAllows`).
+ */
+export function runHookProgram(
+  hook: AnyHook,
+  event: RawHookEvent,
+): HookProgramOutcome {
+  const kind = dispatchKind(hook);
+  switch (kind) {
+    case "bash-gate":
+      return {
+        kind: "decision",
+        decision: decideProgram(hook as HookProgram, event),
+      };
+    case "file-gate":
+      return {
+        kind: "decision",
+        decision: decideFileGate(hook as FileGateHook, event),
+      };
+    case "inject":
+      return {
+        kind: "injection",
+        context: runInject(hook as InjectHook, event).hookSpecificOutput
+          .additionalContext,
+      };
+    case "react":
+      return { kind: "reaction", reaction: runReact(hook as ReactHook, event) };
+    default:
+      return assertNever(kind);
+  }
 }

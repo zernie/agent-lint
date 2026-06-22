@@ -158,6 +158,18 @@ export interface HookProgram {
 }
 
 // @public
+export type HookProgramOutcome = {
+    readonly kind: "decision";
+    readonly decision: Decision;
+} | {
+    readonly kind: "injection";
+    readonly context: string;
+} | {
+    readonly kind: "reaction";
+    readonly reaction: Reaction;
+};
+
+// @public
 export function hookRouting(hook: AnyHook): {
     on: string;
     matcher?: string;
@@ -199,6 +211,18 @@ export interface PathView {
 // @public (undocumented)
 export function pathView(raw: string): PathView;
 
+// @public
+export interface RawHookEvent {
+    readonly source?: string;
+    // (undocumented)
+    readonly tool_input?: {
+        readonly command?: unknown;
+        readonly file_path?: unknown;
+    };
+    // (undocumented)
+    readonly tool_name?: string;
+}
+
 // @public (undocumented)
 export interface ReactHook {
     // (undocumented)
@@ -222,6 +246,9 @@ export type Reaction = RunReaction | {
 
 // @public
 export const run: (command: string) => RunReaction;
+
+// @public
+export function runHookProgram(hook: AnyHook, event: RawHookEvent): HookProgramOutcome;
 
 // @public
 export function runInject(hook: InjectHook, raw: {

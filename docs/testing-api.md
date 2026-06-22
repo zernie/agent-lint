@@ -86,6 +86,38 @@ assertCreated(r, "DONE"); // a file was created
 `withHarness(spec, fn)` wraps a deterministic run with try/finally cleanup so a
 test doesn't leak temp dirs.
 
+### Test a compiled hook in-process (no subprocess)
+
+A [compiled hook](compiled-hooks.md) (a `vigiles/hook` program) has a **pure**
+decision, so you can test it without spawning the CLI at all — pass the hook's
+default export and a raw event:
+
+```ts
+import {
+  assertHookDenies,
+  assertHookAllows,
+  runHookProgram,
+} from "vigiles/unit";
+import guard from "./safe-bash-guard.mjs";
+
+assertHookDenies(guard, {
+  tool_name: "Bash",
+  tool_input: { command: "git push -f" },
+});
+assertHookAllows(guard, {
+  tool_name: "Bash",
+  tool_input: { command: "git status" },
+});
+
+// the raw primitive: a normalized, role-dispatched outcome
+runHookProgram(guard, event); // → { kind: "decision" | "injection" | "reaction", … }
+```
+
+`assertHookBlocked` / `assertHookAllowed` (above) are the sibling assertions over
+a `runHook` **result** (the hook run as a real subprocess); `assertHookDenies` /
+`assertHookAllows` evaluate the typed program **directly** — cheaper, and they
+work for inject/react hooks too via `runHookProgram`.
+
 ### Assert a subagent's typed outcome
 
 For the railway/result subagent contract, `assertAgentOk` / `assertAgentErr` /
