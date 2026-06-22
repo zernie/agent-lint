@@ -73,10 +73,9 @@ slice can't fire (missing gateway skill). Detection proven by CI fake-driver tes
   Q&A, output-tokens-only, vanilla baseline, no correctness gate → why they report a win.
   ⚠️ **caveman debunk is SATURATED** (Kuba Guzik/GrowwStacks/HN/Decrypt + author conceded) —
   do NOT lead with a caveman article. **NEXT on A1: the LEADERBOARD** (reproducible +
-  claim-vs-measured + correctness + head-to-head — the open slice; install boards + "best
-  skills" listicles already exist, so position on claim-gap/reproducibility/correctness,
-  honest "sort real from hyped" not blanket-debunk). Expand manifest w/ under-measured hyped
-  skills (e.g. MindStudio "5 skills 70%" list). Benchmark prior-art in landscape-mid-2026.md.
+  claim-vs-measured + correctness + head-to-head — the open slice; position on
+  claim-gap/reproducibility/correctness, "sort real from hyped" not blanket-debunk).
+  Benchmark prior-art in landscape-mid-2026.md.
 - **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK (push/pop/
   gate-on-top); TLC counterexample is a regression test. Still EXPERIMENTAL/not auto-wired.
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
