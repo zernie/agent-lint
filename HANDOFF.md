@@ -35,9 +35,11 @@ match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markd
 adoption barrier) + test/eval. **REFINEMENT (2026-06-21): the valuable cross-check is
 HARNESS-NATIVE** (tools/MCP `server#tool`/hook-events/paths/delegates — fail silently,
 agent-era), NOT the linter-catalog leg (legacy/supporting; don't add more catalogs).
-**IN PROGRESS: live MCP tool resolution** of real `mcp__server__tool` refs (engine in
-src/core/mcp.ts, today only wired to the `vigiles:mcp` mark). **Battle is DISTRIBUTION**
-→ reinforces A1. Full: `landscape-mid-2026.md` §"Market-segmented matrix" (REFINEMENT) + roadmap §Now.
+**SHIPPED (`6edd6a0`): live MCP tool resolution** of real `mcp__server__tool` refs
+(`verifyMcpContractTools` in src/core/mcp.ts — starts the declared server, checks the
+tool exists w/ did-you-mean; catches the rename rot the static check misses; 5 tests vs
+the real fixture server). NEXT: wire it into scan/CLI as opt-in `--verify-mcp`. Full:
+`landscape-mid-2026.md` §"Market-segmented matrix" (REFINEMENT) + roadmap §Now.
 
 ## Next move (pick — none started)
 
@@ -78,11 +80,10 @@ src/core/mcp.ts, today only wired to the `vigiles:mcp` mark). **Battle is DISTRI
   full **market-segmented competitive matrix** + agnix find + poach list in
   `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`; bsuh
   control-flow article; per-file note in `adoption-strategy.md`. See COMPETITIVE READ above.
-- **New ideas captured (roadmap §Explore + distribution-strategy):** (1) **tiered README
-  badge** (lint→test→eval funnel as a growth loop) — top distribution lever; (2) **viral
-  debunk articles** ("caveman is vaporware" = measurement-as-marketing); (3) **open-core +
-  build-on-top + AI-lab-acquisition** posture; (4) **Zod-schema'd `result()`** poached from
-  Mastra/Pydantic (one schema → type+validator+JSON-schema), feature-ideas §14b.
+- **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge
+  (lint→test→eval growth loop); viral debunk articles (method-first, caveman SATURATED);
+  PUBLIC plugin leaderboard (the open slice); open-core + AI-lab-acquisition posture;
+  Zod-schema'd `result()` (feature-ideas §14b); benchmark prior-art + moat ranking.
 
 ## In flight
 
