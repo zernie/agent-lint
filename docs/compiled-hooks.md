@@ -18,21 +18,22 @@ express it.
 - [The vocabulary](#the-vocabulary)
 - [Compile and run](#compile-and-run)
 - [Proof: the OSS dogfood](#proof-the-oss-dogfood)
-- [Honest scope — the delivery floor](#honest-scope--the-delivery-floor)
+- [Limitations & trade-offs (the cons)](#limitations--trade-offs-the-cons)
 - [See also](#see-also)
 
 ## The bug classes it eliminates
 
-Each is a _verified_, common failure of hand-written hooks (full corpus:
-[`research/hook-pain-points.md`](../research/hook-pain-points.md)). A compiled hook
-makes each one impossible **by construction**, not by catching it after the fact:
+A compiled hook **eliminates an entire class of bugs by construction** — not by
+catching them after the fact, but by making them impossible to write. Each row
+below is a _verified_, common failure of hand-written hooks (sources linked; full
+corpus: [`research/hook-pain-points.md`](../research/hook-pain-points.md)):
 
-| Bug class                                                                                                                                                                                                 | Why it can't happen                                                                                                                                                                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **False confidence** — the #1 pain. `exit 1` instead of `exit 2`, the wrong JSON field (`decision` vs `permissionDecision`), a wrong `jq` path → a guard that _looks_ like it blocks and silently allows. | You never write the protocol. You return `deny(reason)`; the compiler emits the correct exit code / JSON field for the event. The bug has no place to live.                                                                                   |
-| **Matcher bypass** — `Bash(git push:*)` (or a hand-written `grep`) misses `cd repo && git push -f` ([#30519](https://github.com/anthropics/claude-code/issues/30519)).                                    | `command.runs("git push", { force: true })` is **AST-backed** — it sees the real `git push` leaf however it's wrapped (compound, subshell, pipeline). A `grep` false-_positive_ is gone too.                                                  |
-| **Capability creep / supply chain** — a hook is arbitrary code; a copied or edited one can read secrets or phone home.                                                                                    | **Capability = API surface.** An `import` of anything but `vigiles/hook` (or `eval`/`Function`) **does not compile**. And the compiled artifact is **stamped** (SHA-256) — a later hand-edit breaks the stamp and the runtime **refuses** it. |
-| **Category mistakes** — "block on a `SessionStart`/`PostToolUse` hook" (a documented no-op, since those events can't block).                                                                              | Each role has its own return type. An inject/react hook has **no `deny`** in its vocabulary, so the mistake is a **`tsc` type error**, not a silent no-op.                                                                                    |
+| Bug class                                                                                                                                                                                                                                                                                                                                          | Why it can't happen                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **False confidence** — the #1 pain: `exit 1` instead of `exit 2`, the wrong JSON field (`decision` vs `permissionDecision`), a wrong `jq` path → a guard that _looks_ like it blocks and silently allows ([RFC #45427](https://github.com/anthropics/claude-code/issues/45427), [#24327](https://github.com/anthropics/claude-code/issues/24327)). | You never write the protocol. You return `deny(reason)`; the compiler emits the correct exit code / JSON field for the event. The bug has no place to live.                                                                               |
+| **Matcher bypass** — `Bash(git push:*)` (or a hand-written `grep`) misses `cd repo && git push -f` ([#30519](https://github.com/anthropics/claude-code/issues/30519)).                                                                                                                                                                             | `command.runs("git push", { force: true })` is **AST-backed** — it sees the real `git push` leaf however it's wrapped (compound, subshell, pipeline). A `grep` false-_positive_ is gone too.                                              |
+| **Capability creep / supply chain** — a hook is arbitrary code; a copied or edited one can read secrets or phone home ([CVE-2025-59536](https://www.cve.org/CVERecord?id=CVE-2025-59536)).                                                                                                                                                         | **Capability = API surface.** An `import` of anything but `vigiles/hook` (or `eval`/`Function`) **does not compile**. The compiled artifact is **stamped** (SHA-256) — a later hand-edit breaks the stamp and the runtime **refuses** it. |
+| **Category mistakes** — "block on a `SessionStart`/`PostToolUse` hook", whose decision is a documented no-op ([#4362](https://github.com/anthropics/claude-code/issues/4362)).                                                                                                                                                                     | Each role has its own return type. An inject/react hook has **no `deny`** in its vocabulary, so the mistake is a **`tsc` type error**, not a silent no-op.                                                                                |
 
 The unifying idea: a hook is a tiny program, and a closed, typed vocabulary
 shrinks its state space until the bad states are simply not expressible. (The
@@ -144,21 +145,44 @@ The contrast is a runnable, model-free regression test
 ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)). Full finding:
 [`research/hook-pain-points.md`](../research/hook-pain-points.md).
 
-## Honest scope — the delivery floor
+## Limitations & trade-offs (the cons)
 
-Compiling a hook fixes its **authoring** and its **logic** — that it is correct,
-safe, AST-accurate, capability-bounded, and tamper-evident. It does **not** change
-how the harness **delivers** events to it. In particular, Claude Code's
-[#34692](https://github.com/anthropics/claude-code/issues/34692) (closed
-not-planned) means a `PreToolUse` hook **does not fire for a subagent's tool
-calls** — so a gate, compiled or hand-written, is a **strong default, never an
-unbypassable wall**. A compiled hook removes the bugs that are _yours_ to remove;
-it can't remove the harness's.
+Compiled hooks are neither free nor magic. The honest downsides:
 
-The corollary: the most robust claim is about **logic**, not live enforcement —
-which is why [guardrail verification](harness-testing.md) (prove your hook blocks
-the disaster battery) survives the delivery bug, and a gate is positioned as a
-default, not a guarantee.
+- **Delivery floor — a gate is a strong default, not an unbypassable wall.**
+  Compiling fixes a hook's _authoring_ and _logic_, **not** how the harness
+  _delivers_ events to it. Claude Code's
+  [#34692](https://github.com/anthropics/claude-code/issues/34692) (closed
+  not-planned) means a `PreToolUse` hook **does not fire for a subagent's tool
+  calls**, and the model can route around a tool entirely
+  ([#45427](https://github.com/anthropics/claude-code/issues/45427) /
+  [#32376](https://github.com/anthropics/claude-code/issues/32376) — e.g. a Bash
+  heredoc instead of `Write`). A compiled hook removes the bugs that are
+  _yours_; it can't remove the harness's. So the most robust claim is about
+  **logic**, not live enforcement — which is why
+  [guardrail verification](harness-testing.md) (prove the decision blocks the
+  disaster battery) is the companion that survives this bug. **Never call a gate
+  "unbypassable."**
+- **Runtime cost.** Every matching event spawns `node` and dynamic-imports your
+  program — tens to hundreds of ms per call. Fine for a `PreToolUse` gate; think
+  twice before a hot-path `PostToolUse` react that fires on every edit.
+- **Buy-in.** It's a dependency plus a build step, and you author in JS/TS, not a
+  3-line inline `bash` hook. For a trivial one-liner the compiled path is heavier
+  — the payoff is on the guards that actually have to be _correct_.
+- **A bounded vocabulary is a ceiling, by design.** "Capability = API surface"
+  cuts both ways: if a hook genuinely needs something outside `vigiles/hook`
+  (call a service, hold complex state), you can't express it. That _is_ the
+  safety guarantee, but it means some hooks stay hand-written — keep a plain
+  shell hook for those and verify it with the disaster battery.
+- **Compiling proves the protocol, not your policy.** A compiled hook can't have
+  the wrong exit code — but it can still `deny` the wrong thing. Compiling is
+  necessary, not sufficient; test the _logic_ with
+  [guardrail verification](harness-testing.md).
+- **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is
+  cross-harness today; an inject/react hook's _output_ shape is Claude-Code-confirmed
+  only, so `compile-hook --harness=codex` **warns loudly** on those rather than
+  ship a maybe-no-op (see [Compile and run](#compile-and-run) and
+  [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md)).
 
 ## See also
 

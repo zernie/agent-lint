@@ -3,7 +3,10 @@
 Your hooks, skills, settings, and instruction file are **code** — vigiles tests
 they do their job: hooks block, skills fire, the assembled agent does the task and
 not the dangerous thing. The [README](../README.md) has the pitch; this is the
-how-to. For the linting layer, see [Verifying your instruction files](verifying-instruction-files.md).
+how-to. Testing is one of four reliability instruments — alongside
+[verifying](verifying-instruction-files.md) references are true and
+[guarding](compiled-hooks.md) with a compiled hook that can't be wrong (the
+deterministic gate); this guide is the **test** instrument.
 
 Most of it runs with **no model and no API key** — milliseconds, on every commit.
 Only the real-model tier (evals) needs a model, and it runs on your own `claude`
