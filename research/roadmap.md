@@ -436,6 +436,32 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [~] **Reliability RUNTIME: typed safe-by-construction guards (the big-moat bet).**
+  The harness's safety failures (destroy-without-backup, untrusted→sink, prose rules
+  ignored) are ORDER/FLOW/REPLAY properties a capability SET can't see, and they can't be
+  fixed by more prose (it decays under compaction). Fix: DECLARE a guard from a closed
+  audited vocabulary; vigiles GENERATES the PreToolUse hooks block pointing at its own gate
+  (no user shell → safe-by-construction; closes the CVE-2025-59536 hook-RCE class). v0
+  PROTOTYPED (`src/core/guards.ts`, `959e88c`): `guard.block` / `requireBefore` (the ORDER
+  axis: destroy-after-plan) / `confine`; pure `decideGuards` + `compileGuards`; 4 tests.
+  NEXT: the live `guard-hook` CLI + session ledger (runnable in a real CC session), the
+  read-and-check `block` primitive, then the honest structural "verified guardrails" badge
+  (structured surfaces only — skills/agents/hooks, NOT freeform CLAUDE.md). The measurable
+  A/B (harness ± guards → fewer destructive actions) is the demo.
+  [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **HIGH (the moat)**
+- [ ] **FLOW axis — information-flow / noninterference over the typed pipeline.** Label tool
+      I/O (untrusted/secret) and prove no untrusted→sink path — the lethal trifecta as a real
+      dataflow, not co-occurrence. Harder than ORDER (needs taint across calls); the second
+      reliability-runtime guarantee. [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **P3 (the deep one)**
+- [ ] **REPLAY axis — exactly-once side effects (linear types / idempotency).** Declare an
+      effect's idempotency; the gate keeps a per-session ledger keyed on semantic intent (NOT
+      byte-identity — ACRFence shows that fails for LLMs) and blocks a second fire. The
+      duplicate-on-replay hole 12 frameworks share — but MEDIUM for the coding-harness market
+      (the catastrophic cases are prod agent-frameworks, not CC/Codex), so it ranks behind
+      ORDER+FLOW. [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **P3 (MED)**
+- **Poach-list follow-ups (typed CLAUDE.md).** Zod-`result()` (feature-ideas §14b), typed
+  context/needs contract (Pydantic-style deps), exhaustive err-track (Effect-TS). Mechanics
+  verified against Mastra/Pydantic/Vercel/Effect-TS. [typed-claude-md-poach](typed-claude-md-poach.md) · **P3**
 - **Ephemeral run environment (not just CWD)** — every model-driven run already
   uses a throwaway `cwd`, but the direct/non-bwrap path inherits the real `$HOME` +
   env, so a model-driven `git push` / write to `~` escapes — even for a trusted
