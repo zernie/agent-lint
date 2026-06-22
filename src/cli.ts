@@ -124,6 +124,7 @@ import {
 import type { InstructionMirror } from "./core/compose.js";
 import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
+import { runGuardHook } from "./core/guards.js";
 import {
   evaluatePreToolUse,
   pushActiveAgent,
@@ -4073,6 +4074,28 @@ function interceptToolHookCommand(): void {
   }
 }
 
+/**
+ * `vigiles guard-hook` — the PreToolUse gate for typed safe-by-construction guards
+ * (EXPERIMENTAL). Reads the live event on stdin, runs the declared guard set
+ * (`.vigiles/guards.json`) against the session ledger (`.vigiles/guard-ledger.json`),
+ * and blocks (exit 2 + reason) or records the allowed call. The command in the
+ * generated hooks block IS this gate — not user shell — so the enforcement is
+ * safe-by-construction. See src/core/guards.ts.
+ */
+function guardHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  const { decision } = runGuardHook(process.cwd(), raw);
+  if (!decision.allow) {
+    console.error(decision.reason ?? "Blocked by a vigiles guard.");
+    process.exit(2);
+  }
+}
+
 /** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
 function agentStartCommand(target: string | undefined): void {
   if (!target) {
@@ -4112,6 +4135,9 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       return true;
     case "intercept-tool-hook":
       interceptToolHookCommand();
+      return true;
+    case "guard-hook":
+      guardHookCommand();
       return true;
     case "action-hook":
       actionHookCommand();
