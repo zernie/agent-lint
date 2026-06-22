@@ -71,7 +71,7 @@ test("a structurally clean repo → top score, no fixes, hand off to measurement
   const out = formatOptimize(plan);
   assert.match(out, /No deterministic fixes/);
   // The clean case must point at the MEASURED layer, not invent work.
-  assert.match(out, /--trigger/);
+  assert.match(out, /vigiles measure/);
   assert.match(out, /subscription/);
 });
 
