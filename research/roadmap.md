@@ -462,6 +462,14 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   exit-2-stops-Claude #24327) that also hit our own PreToolUse gate — so prefer VERIFY (above)
   over GATE near-term. NEXT (if pursued): the measurable A/B (harness ± guards → fewer
   destructive actions). [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **MED (gate undercut by CC bugs)**
+  - _Parked prototype files (linked in CLAUDE.md Key Files so they're not orphaned):_
+    `src/core/guards.ts` (+test, WIRED via `vigiles guard-hook` but EXPERIMENTAL) and
+    `src/core/hook-spec.ts` (+test, a pure spike imported NOWHERE). The hook-spec
+    "typed effect-classified hook" idea was **superseded** by the SHIPPED compiled
+    hooks (`src/core/hook-program.ts` → `vigiles/hook`, `c4d4d85`), which took the
+    closed-vocabulary angle further (role family + AST matcher + stamp). Keep
+    hook-spec only as the design record; resume guards from here if the GATE bet is
+    revived. [harness-protocol-flow-moat](harness-protocol-flow-moat.md)
 - [ ] **FLOW axis — information-flow / noninterference over the typed pipeline.** Label tool
       I/O (untrusted/secret) and prove no untrusted→sink path — the lethal trifecta as a real
       dataflow, not co-occurrence. Harder than ORDER (needs taint across calls); the second
