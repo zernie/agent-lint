@@ -436,19 +436,32 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [ ] **"Prove your guardrail actually blocks" — the verify-not-gate killer feature.**
+      The #1 verified hook pain is FALSE CONFIDENCE: a safety hook looks like a guardrail and
+      silently isn't (exit 1≠exit 2, wrong JSON field, PostToolUse-can't-block, wrong jq path) —
+      "three teams believed they'd blocked force pushes"; a not-planned RFC (#45427) names it.
+      Feed the DISASTER event (`git push --force`, `rm -rf /`, `--no-verify`, `cat ~/.ssh/*`) to
+      the user's EXISTING hook via `runHook` + `decideHook` and assert it BLOCKS. Deterministic,
+      model-free, CI, works on hand-written hooks with NO spec/compile (zero adoption tax) —
+      and it sidesteps CC's runtime delivery bugs (subagent-bypass #34692 etc.) by verifying
+      LOGIC, not delivering enforcement. Receipt proven 2026-06-22 (runHook caught an exit-1
+      fake guard). Smallest build: a curated disaster-event catalog + the `scan`/`scaffold-test`
+      surface over it; dogfood on a real OSS safety hook to find a secret no-op. Compile is the
+      OPTIONAL Level-2 (declared intent → auto-generated test); verify is the mechanism.
+      [hook-pain-points](hook-pain-points.md) · **HIGH — highest-conviction, lowest-risk**
 - [~] **Reliability RUNTIME: typed safe-by-construction guards (the big-moat bet).**
   The harness's safety failures (destroy-without-backup, untrusted→sink, prose rules
   ignored) are ORDER/FLOW/REPLAY properties a capability SET can't see, and they can't be
   fixed by more prose (it decays under compaction). Fix: DECLARE a guard from a closed
   audited vocabulary; vigiles GENERATES the PreToolUse hooks block pointing at its own gate
   (no user shell → safe-by-construction; closes the CVE-2025-59536 hook-RCE class). v0
-  PROTOTYPED (`src/core/guards.ts`, `959e88c`): `guard.block` / `requireBefore` (the ORDER
-  axis: destroy-after-plan) / `confine`; pure `decideGuards` + `compileGuards`; 4 tests.
-  NEXT: the live `guard-hook` CLI + session ledger (runnable in a real CC session), the
-  read-and-check `block` primitive, then the honest structural "verified guardrails" badge
-  (structured surfaces only — skills/agents/hooks, NOT freeform CLAUDE.md). The measurable
-  A/B (harness ± guards → fewer destructive actions) is the demo.
-  [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **HIGH (the moat)**
+  PROTOTYPED + the live gate RUNS (`src/core/guards.ts` + `vigiles guard-hook` CLI + session
+  ledger, `959e88c`/`4336f4a`): `guard.block` / `requireBefore` (the ORDER axis:
+  destroy-after-plan, enforced live across hook invocations) / `confine`. ⚠️ The 5-pass hook
+  research (hook-pain-points.md) found GATE is undercut by CC bugs (subagent-bypass #34692,
+  exit-2-stops-Claude #24327) that also hit our own PreToolUse gate — so prefer VERIFY (above)
+  over GATE near-term. NEXT (if pursued): the measurable A/B (harness ± guards → fewer
+  destructive actions). [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **MED (gate undercut by CC bugs)**
 - [ ] **FLOW axis — information-flow / noninterference over the typed pipeline.** Label tool
       I/O (untrusted/secret) and prove no untrusted→sink path — the lethal trifecta as a real
       dataflow, not co-occurrence. Harder than ORDER (needs taint across calls); the second

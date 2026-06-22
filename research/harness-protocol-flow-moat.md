@@ -240,6 +240,8 @@ ship only the required-precedence rule and the declared-pipeline reachability qu
 
 ## See also
 
+- `research/hook-pain-points.md` — the verified 5-pass hook failure corpus + the
+  "prove your guardrail actually blocks" killer feature (the verify-not-gate framing).
 - `research/harness-state-space.md` — the SET-axis bets (trifecta, capability-min) this extends.
 - `research/typed-spec-effects-monads.md` — the effect-row (M1); FLOW labels ride the same fold.
 - `research/typed-claude-md-poach.md` — Effect-TS's typed error surface (the err-track analog).
