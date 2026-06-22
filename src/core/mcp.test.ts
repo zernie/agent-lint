@@ -12,8 +12,11 @@ import {
   verifyMcpTool,
   parseMcpRefs,
   verifyMcpRefs,
+  verifyMcpContractTools,
+  mcpContractToolMessage,
   type McpServerConfig,
 } from "./mcp.js";
+import { claudeCodeDialect } from "../adapters/claude-code/dialect.js";
 
 // __dirname is dist/ at runtime; the fixture server lives at the repo root.
 const server: McpServerConfig = {
@@ -83,4 +86,64 @@ test("verifyMcpRefs: ok passes, typo errors+suggests, undeclared server flagged"
     errs.find((e) => e.server === "ghost")?.reason,
     "server-undeclared",
   );
+});
+
+// --- verifyMcpContractTools: live resolution of real mcp__server__tool refs ---
+
+const dialect = claudeCodeDialect;
+
+test("verifyMcpContractTools: existing tools on a declared server resolve (no errors)", async () => {
+  const errs = await verifyMcpContractTools(
+    ["mcp__fixture__echo", "mcp__fixture__add", "Read"],
+    { fixture: server },
+    dialect,
+  );
+  assert.deepEqual(errs, []);
+});
+
+test("verifyMcpContractTools: a renamed/missing tool is flagged with a suggestion", async () => {
+  const errs = await verifyMcpContractTools(
+    ["mcp__fixture__ekho"],
+    { fixture: server },
+    dialect,
+  );
+  assert.equal(errs.length, 1);
+  assert.equal(errs[0].reason, "tool-missing");
+  assert.equal(errs[0].server, "fixture");
+  assert.equal(errs[0].toolName, "ekho");
+  assert.ok(errs[0].suggestions.includes("echo"));
+  assert.match(
+    mcpContractToolMessage(errs[0]),
+    /not found.*did you mean.*echo/,
+  );
+});
+
+test("verifyMcpContractTools: a ref to an UNDECLARED server is skipped (static check's job)", async () => {
+  const errs = await verifyMcpContractTools(
+    ["mcp__ghost__whatever"],
+    { fixture: server },
+    dialect,
+  );
+  assert.deepEqual(errs, []);
+});
+
+test("verifyMcpContractTools: plugin-namespaced + non-MCP tools are skipped", async () => {
+  const errs = await verifyMcpContractTools(
+    ["mcp__plugin_foo_bar__baz", "Bash", "Grep"],
+    { fixture: server },
+    dialect,
+  );
+  assert.deepEqual(errs, []);
+});
+
+test("verifyMcpContractTools: a declared server that won't start is server-unreachable", async () => {
+  const errs = await verifyMcpContractTools(
+    ["mcp__bad__x"],
+    { bad: { command: "definitely-not-a-real-binary-xyz" } },
+    dialect,
+    3000,
+  );
+  assert.equal(errs.length, 1);
+  assert.equal(errs[0].reason, "server-unreachable");
+  assert.match(mcpContractToolMessage(errs[0]), /failed to start/);
 });
