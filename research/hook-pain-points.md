@@ -169,7 +169,18 @@ DECLARED** (`assertBlocksDisasters(cmd, { categories })`). Two levels, by design
 This is the false-positive discipline (don't-cry-wolf) that the whole tool lives or dies on,
 learned the moment we pointed it at a real hook with a different purpose.
 
-**NEXT:** a `scan` coverage column + a dogfood on a REAL public plugin's PreToolUse safety
-hook — find one that's secretly a no-op (the adoption demo: a stranger's verified-broken
-guardrail). Our vendored corpus has no PreToolUse bash guard yet, so this needs vendoring one
-(or network) — the honest gating constraint.
+**Real-plugin dogfood — DONE (2026-06-22).** Ran the battery against
+`disler/claude-code-hooks-mastery` (a popular, widely-copied "Claude Code hooks" reference
+repo) `pre_tool_use.py`. It is correctly coded (exit 2) and blocks its declared domain —
+`rm -rf` ✅ and `.env` access ✅ — but is a **NO-OP against 5/7 of the battery**: force-push,
+force-push-compound, `reset --hard`, `--no-verify`, private-SSH-key read (`cat ~/.ssh/id_rsa`),
+`curl | sh`. The sharp finding: its own docstring says it "blocks access to sensitive
+environment files," yet a **private SSH key read sails through** — it protects one class of
+secret (`.env`) and misses another (`~/.ssh`). This is the adoption demo: a stranger's
+real safety hook, with its exact blind spots shown deterministically (and FAIRLY — the
+neutral map says "allows," not "broken"; the gap is real but the hook isn't lying, it just
+has a narrower scope than a copier assumes).
+
+**NEXT:** a `scan` coverage column (surface this on any repo with a PreToolUse hook); vendor a
+licence-clean slice as a golden regression fixture; publish the finding as the adoption artifact
+("your installed safety hooks don't stop these 5 things").
