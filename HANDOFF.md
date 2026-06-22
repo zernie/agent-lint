@@ -50,8 +50,15 @@ sink — the trifecta as a real path), **REPLAY** (linear/idempotent: exactly-on
 survives compaction), NOT a lint rule — "make the harness measurably more reliable," provable
 via the eval layer (the face-wipe A/B). Grounded: prose-doesn't-bind (#32163 "@enforce"),
 declared≠enforced (SDK #172/#162/#189), METR <10%@4h, trifecta 98% of prod agents. Companions
-poached: `typed-claude-md-poach.md` (Mastra/Pydantic/Effect-TS). NEXT: turn this into a build
-plan (which axis ships first as a runtime gate + the measured-reliability demo).
+poached: `typed-claude-md-poach.md` (Mastra/Pydantic/Effect-TS).
+**PROTOTYPE RUNS (`959e88c`,`4336f4a`):** `src/core/guards.ts` = typed safe-by-construction
+guards (block/requireBefore/confine) + a runnable `vigiles guard-hook` PreToolUse gate —
+loads `.vigiles/guards.json` + a session ledger (`.vigiles/guard-ledger.json`), runs
+`decideGuards`, blocks (exit 2) or records the allowed call. **ORDER axis enforced LIVE**
+(runHook e2e: destroy blocked before plan, allowed after — across hook invocations). The
+command is vigiles's OWN gate, never user shell (closes the CVE-2025-59536 hook-RCE class).
+EXPERIMENTAL, not on the public API. NEXT: the measured-reliability demo (eval A/B: guard
+on vs off on a destroy-before-backup task) + decide whether to surface `guards` in a spec.
 
 ## Next move (pick)
 
@@ -87,10 +94,6 @@ plan (which axis ships first as a runtime gate + the measured-reliability demo).
   matrix** + poach list in `landscape-mid-2026.md`; reality-check in `typed-spec-moat.md`.
 - **Ideas captured (roadmap §Explore):** tiered README badge; PUBLIC leaderboard; open-core.
 
-## In flight
-
-Nothing. Tree clean; local == remote.
-
 ## Gotchas (carry forward)
 
 - **Subagents must NOT use worktree isolation**; VERIFY their output (git diff + build +
@@ -107,14 +110,12 @@ Nothing. Tree clean; local == remote.
 
 ## Budget protocol
 
-- Orient from THIS file; open a doc only when a step needs it. **Delegate** searches +
-  big builds to subagents (verify their output). Bounded commits; **refresh this file
-  after each shippable commit**.
+- Orient from THIS file; open a doc only when a step needs it. **Delegate** searches + big
+  builds to subagents (verify output). Bounded commits; **refresh this file after each commit**.
 
 ## Don't re-read unless the task needs it
 
-- `research/roadmap.md` — the ordered map (per-item status; capability-diff **P1**,
-  trifecta F1 **P0**, the See-also index to every research doc).
-- `research/typed-spec-moat.md` — the moat synthesis: findings, build order, tensions.
-- `research/measurement-authority.md` — the pivot + the "Status & gaps" section.
-- `bench/ecosystem/` — A1 engine + manifest + FINDINGS + archived runs (the leaderboard substrate).
+- `research/roadmap.md` — ordered map (capability-diff **P1**, trifecta F1 **P0**, See-also index).
+- `research/{typed-spec-moat,measurement-authority}.md` — moat synthesis + the pivot/"Status & gaps".
+- `research/harness-protocol-flow-moat.md` — the reliability-runtime moat (ORDER/FLOW/REPLAY).
+- `bench/ecosystem/` — A1 engine + manifest + FINDINGS + archived runs (leaderboard substrate).
