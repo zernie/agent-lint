@@ -141,9 +141,28 @@ CANNOT return `deny()` (tsc error, build-enforced via @ts-expect-error) — so "
 SessionStart/PostToolUse hook" (a documented mistake) is a TYPE error, not a silent no-op.
 
 So the model strengthens as it widens: each hook ROLE is a typed kind, and the wrong-output
-bugs become unrepresentable. NEXT (if pursued): a 3rd shape (PostToolUse react / action-runner),
-then the real decision — buy-in (rewrite hooks as typed programs) vs. node-startup latency vs.
-the payoff; and whether to surface `vigiles/hook` as a public authoring API.
+bugs become unrepresentable.
+
+**PROBE 3 — react/PostToolUse completes the family (2026-06-22, `890aa3e`).** A react hook fires
+AFTER the tool ran (can't block) — its job is to DO something (format/recompile/warn), so this
+is where side effects RE-ENTER (gate + inject are pure). The constrained API keeps them
+BOUNDED: a react returns a typed `Reaction` whose `run(cmd)` is EFFECT-CLASSIFIED at construction
+(`RunReaction.effect` via bash-effects), so even the side-effecting role stays ANALYZABLE — you
+can list/diff exactly what every react runs and its effect. And a react still CANNOT `deny()`
+(tsc error) — "block on a PostToolUse hook" (the documented mistake) is unrepresentable.
+
+**The family is now complete and the thesis holds across all three roles:**
+
+- `gate` (`decide` → `Decision`, PURE) — PreToolUse allow/deny/ask;
+- `inject` (`produce` → `Injection`, PURE) — SessionStart/UserPromptSubmit context text;
+- `react` (`react` → `Reaction`, BOUNDED side effects) — PostToolUse classified action.
+
+Each role's OUTPUT TYPE makes its wrong-output bug class impossible to write (exit-code, wrong
+JSON field, block-on-wrong-event), and the side-effecting role is bounded+classified, not
+arbitrary. Verdict: the closed `vigiles/hook` vocabulary is SOUND across the real hook shapes.
+The remaining questions are NOT "does it cover the shapes" (it does) but the adoption economics:
+buy-in (rewrite hooks as typed programs) vs. node-startup latency vs. payoff, and whether to
+promote `vigiles/hook` to a public authoring API + a real bundler/`run-hook-program` runtime.
 
 ## Honest boundary — the CC delivery bugs we CANNOT fix
 
