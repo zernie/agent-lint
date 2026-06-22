@@ -40,7 +40,9 @@ agent-era), NOT the linter-catalog leg (legacy/supporting; don't add more catalo
 5 CI-safe tests vs fixture server). **DOGFOODED (`d813d82`): found a REAL bug** — MadAppGang
 tester.md lists 3 dead chrome-devtools tools (emulate_cpu/emulate_network→`emulate`,
 navigate_page_history removed) vs the live server; invisible to every static linter
-(see plugin-structural-findings.md). NEXT: wire into scan/CLI as opt-in `--verify-mcp`.
+(see plugin-structural-findings.md). **WIRED (`2982510`): `scan --verify-mcp`** — opt-in,
+side-effecting CLI surface (`verifyLiveMcpTools`/`formatMcpContractReport` in src/scan.ts,
+`--verify-mcp` block in cli.ts, 2 CI-safe scan tests, docs/cli.md matrix row). Done.
 
 ## Next move (pick — none started)
 
