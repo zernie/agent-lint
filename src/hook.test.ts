@@ -214,3 +214,38 @@ test("compile-hook then run: a clean hook compiles, stamps, and the stamp gates 
     cleanupTmpDir(dir);
   }
 });
+
+test("compile-hook --harness=codex: emits TOML for a gate, warns LOUDLY on inject (the honest gap)", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    writeFileSync(
+      resolve(dir, "brief.mjs"),
+      `import { defineInject, inject } from "vigiles/hook";
+export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " + e.source) });`,
+    );
+    // A gate compiles to a Codex TOML block with a regex matcher — no warning
+    // (deny→exit 2 is cross-harness).
+    const gate = spawnSync(
+      "node",
+      [CLI, "compile-hook", "guard.mjs", "--harness=codex"],
+      { cwd: dir, encoding: "utf-8" },
+    );
+    assert.equal(gate.status, 0, gate.stderr);
+    assert.match(gate.stdout, /\[\[hooks\.PreToolUse\]\]/);
+    assert.doesNotMatch(gate.stderr, /only confirmed for Claude Code/);
+
+    // An inject hook still compiles, but the inject OUTPUT shape is unconfirmed
+    // on Codex — so it warns loudly instead of silently shipping a maybe-no-op.
+    const inj = spawnSync(
+      "node",
+      [CLI, "compile-hook", "brief.mjs", "--harness=codex"],
+      { cwd: dir, encoding: "utf-8" },
+    );
+    assert.equal(inj.status, 0, inj.stderr);
+    assert.match(inj.stderr, /inject output is only confirmed for Claude Code/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});

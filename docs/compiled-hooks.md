@@ -126,8 +126,10 @@ Node ≥ 23.6). `vigiles/hook` is the **only** import a compiled hook may use.
 differs. `compile-hook --harness=codex` writes a Codex `config.toml`
 `[[hooks.<event>]]` block (an anchored-regex matcher) instead of Claude Code's
 `settings.json` JSON — and the gate runtime is shared, since Codex vetoes a tool
-call via `exit 2` exactly as Claude Code does. (Inject/ask output on Codex is the
-one deferred piece — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).)
+call via `exit 2` exactly as Claude Code does. Inject/ask **output** on Codex is
+the one deferred piece (its field shape is CC-confirmed only); `compile-hook
+--harness=codex` warns loudly on an inject/react hook rather than ship a
+maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).
 
 ## Proof: the OSS dogfood
 

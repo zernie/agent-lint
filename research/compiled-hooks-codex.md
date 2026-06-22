@@ -96,6 +96,12 @@ prints CC's `hookSpecificOutput.additionalContext` and `ask` prints CC's
 of the Codex transport work. Gate/`deny` hooks (the safety case) are fully
 cross-harness now; inject/ask on Codex is the remaining item.
 
+The gap is **loud, not silent** (no-silent-skips): `compile-hook --harness=codex`
+on an inject/react hook still emits the TOML routing but prints a `⚠` warning that
+the output shape is CC-confirmed only and may not apply on Codex — so a user is
+never handed a clean-looking inject that quietly no-ops. A gate hook compiles with
+no warning (its output IS cross-harness).
+
 ## Boundary + dogfood
 
 - **Boundary:** the generalized emit stays in `src/core/hook-program.ts` and
