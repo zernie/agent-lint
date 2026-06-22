@@ -225,6 +225,99 @@ test("measurePluginSelectionWith catches a sibling hijack (fake driver)", async 
   cleanupTmpDir(dir);
 });
 
+// A plugin WITH a SessionStart hook (the priming surface a stubbed run drops).
+function hookedPlugin(): string {
+  const dir = makeTmpDir("scan-hooked");
+  write(
+    dir,
+    ".claude-plugin/plugin.json",
+    JSON.stringify({ name: "myplugin" }),
+  );
+  write(
+    dir,
+    "hooks/hooks.json",
+    JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup",
+            hooks: [{ type: "command", command: "echo hi" }],
+          },
+        ],
+      },
+    }),
+  );
+  write(
+    dir,
+    "skills/foo/SKILL.md",
+    "---\nname: foo\ndescription: A model-invocable skill that does foo things across cases\n---\n# foo\n",
+  );
+  write(
+    dir,
+    "skills/baz/SKILL.md",
+    "---\nname: baz\ndescription: A model-invocable skill that does baz things across cases\n---\n# baz\n",
+  );
+  return dir;
+}
+
+// A stubbing probe whose runner NEVER fires a skill (recall collapses to 0).
+const silentRunner = (): Promise<{ code: number; stdout: string }> =>
+  Promise.resolve({
+    code: 0,
+    stdout: JSON.stringify({ type: "result", num_turns: 1 }),
+  });
+const silentStubProbe: HarnessProbe = {
+  evalDriver: { runner: silentRunner, parse: parseClaudeRun },
+  firedFor: (name) => (t) => skillResolved(t, `myplugin:${name}`),
+  stub: true,
+  available: () => true,
+};
+
+test("selection: stubbed 0% on a SessionStart-hooked plugin is labeled an artifact", async () => {
+  const dir = hookedPlugin();
+  const r = await measurePluginSelectionWith(
+    dir,
+    {
+      foo: { prompts: ["a foo", "b foo"] },
+      baz: { prompts: ["a baz", "b baz"] },
+    },
+    silentStubProbe,
+  );
+  assert.ok(r.perSkill.every((s) => s.recall === 0)); // nothing fired
+  assert.match(r.note ?? "", /hook-primed/); // not presented as a clean 0%
+  assert.match(formatSelectionReport(r), /hook-primed/);
+  cleanupTmpDir(dir);
+});
+
+test("selection: stubbed 0% on a NON-hooked plugin stays a real result (no false label)", async () => {
+  const dir = plugin(); // no SessionStart hook
+  const r = await measurePluginSelectionWith(
+    dir,
+    {
+      foo: { prompts: ["a foo", "b foo"] },
+      baz: { prompts: ["a baz", "b baz"] },
+    },
+    silentStubProbe,
+  );
+  assert.ok(r.perSkill.every((s) => s.recall === 0));
+  assert.equal(r.note, undefined); // genuine 0%, not masked by the hook label
+  cleanupTmpDir(dir);
+});
+
+test("trigger: stubbed all-zero on a hooked plugin relabels as unmeasured", async () => {
+  const dir = hookedPlugin();
+  const rep = await probePluginTriggersWith(
+    dir,
+    { foo: { prompts: ["a foo", "b foo"] } }, // baz → no prompts (unmeasured)
+    silentStubProbe,
+    { minPrompts: 1, minDistance: 0 },
+  );
+  const foo = rep.results.find((r) => r.skill === "foo");
+  assert.equal(foo?.measured, false); // 0% recall artifact → not a real measurement
+  assert.match(foo?.note ?? "", /hook-primed/);
+  cleanupTmpDir(dir);
+});
+
 test("measurePluginSelectionWith needs ≥2 model-invocable skills", async () => {
   const dir = makeTmpDir("scan-selection-one");
   write(dir, ".claude-plugin/plugin.json", JSON.stringify({ name: "p" }));
