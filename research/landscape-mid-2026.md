@@ -270,7 +270,10 @@ Not competitors (different market), but their mechanics are worth stealing:
   `vigiles:ok/err` block (`agent-result.ts`). A **Zod-based `result()`** would unify ONE
   schema into (a) the compile-time type, (b) the runtime validator (`assertAgentOk`), and
   (c) the JSON Schema `generate-schema` already emits — one source, three artifacts.
-  Strong candidate; record as a feature idea.
+  Strong candidate; record as a feature idea. **Full poach→typed-CLAUDE.md→moat
+  synthesis (web-verified 2026-06-22): [`typed-claude-md-poach.md`](typed-claude-md-poach.md)**
+  — the whole-harness registry is unique to vigiles; cross-agent handoff checking is
+  universally weak even in Pydantic/LangGraph/Mastra.
 - **promptfoo's named deterministic assertions** (`is-json`, `is-valid-openai-tools-call`,
   json-schema): a menu to expand vigiles's `check` vocabulary with.
 - **riftmap's distribution model** — "one read-only token → queryable graph + ship the
