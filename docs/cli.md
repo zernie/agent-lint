@@ -9,6 +9,8 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md
+npx vigiles compile-hook <file>     # Compile a typed vigiles/hook program → a hooks block + stamp
+npx vigiles run-hook-program <file> # Runtime a compiled hooks block points at (reads the event on stdin)
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
@@ -103,6 +105,27 @@ Two multi-harness behaviours:
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
 one dialect) and `scan` (reports harness-specific structure). See
 [research/multi-harness-compile.md](../research/multi-harness-compile.md).
+
+### `compile-hook <file>` / `run-hook-program <file>`
+
+Compile a **compiled hook** — a hook authored as a pure typed function against
+the closed `vigiles/hook` vocabulary — into a harness hooks block. This makes
+whole classes of hook bugs unrepresentable (false confidence, matcher bypass,
+capability creep); see the [compiled-hooks guide](compiled-hooks.md) for the why.
+
+- `compile-hook <file>` runs the capability check (an import outside
+  `vigiles/hook` **fails the build**, exit 1), prints the settings block to paste
+  into `.claude/settings.json`, and writes a tamper-evident stamp to
+  `.vigiles/hooks/<file>.json`.
+- `run-hook-program <file>` is the runtime that block points at: it reads the
+  live event on stdin, **verifies the stamp** (a hand-edited artifact is refused —
+  exit 2, fail closed), and dispatches by role — a gate exits 2 + reason on
+  `deny`, an inject prints `additionalContext`, a react runs its classified
+  command. Exit codes: `0` allow, `2` deny/refuse.
+
+Honest scope: this fixes the hook's authoring + logic, not the harness's
+delivery — a subagent's tool calls still bypass any PreToolUse hook
+([#34692](https://github.com/anthropics/claude-code/issues/34692)).
 
 ### `scan [dir]`
 
