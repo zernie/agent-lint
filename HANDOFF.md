@@ -53,8 +53,20 @@ threads the resolved adapter. Gate runtime SHARED (exit-2). Tests in
 **Deferred (small):** the inject/ask OUTPUT JSON is still CC-shaped in
 `run-hook-program` — gate/`deny` (exit-2) is cross-harness now, but inject's
 `additionalContext` / ask's `permissionDecision` need Codex's field names
-confirmed against the real binary before routing through `HookProtocol`. See
+confirmed against the real binary before routing through `HookProtocol`. The gap
+is LOUD: `compile-hook --harness=codex` warns on an inject/react hook. See
 `research/compiled-hooks-codex.md` (§Deferred).
+
+### STEP 5 — in-process hook testing (shipped)
+
+`runHookProgram(hook, event)` (`vigiles/hook`) — one in-process role-dispatcher →
+normalized `HookProgramOutcome` (decision|injection|reaction), no subprocess/model;
+`assertHookDenies`/`assertHookAllows` (`vigiles/unit`+`testing`, in harness-assert)
+= the throwing asserts over a compiled hook DIRECTLY (sibling of assertHookBlocked/
+Allowed which take a `runHook` subprocess result). Docs: docs/compiled-hooks.md
+§"Testing a compiled hook" (3 tiers by cost) + testing-api.md entry. Behavior
+tier deliberately NOT added (a hook isn't model-selected; "does it fire" =
+runHarnessTest).
 
 ### Prior shipped (earlier sessions, don't rebuild)
 
