@@ -123,34 +123,103 @@ export function decidePreToolUse(
 }
 
 // ---------------------------------------------------------------------------
-// Active-agent tracking (mirrors .vigiles/active-skill.json)
+// Active-agent tracking — a depth-aware STACK (mirrors .vigiles/active-skill.json)
 // ---------------------------------------------------------------------------
+//
+// Claude Code v2.1.172 added nested subagents (a subagent with the spawn tool can
+// dispatch its own, up to depth 5). A single active-agent slot is NOT nesting-safe:
+// when an inner subagent returns, clearing the whole slot drops the OUTER agent's
+// contract while it is still running, so the PreToolUse gate then allows a tool the
+// outer subagent forbids — a CONTRACT ESCAPE. The fix (certified in TLC, see
+// research/prototypes/typed-spec-formal-verification/AgentWindowStack.tla) is a
+// STACK: push on dispatch, pop on SubagentStop (back to the parent), gate on the
+// stack TOP. Counterexample the flat model fails and the stack model passes:
+// Open(writer); Open(writer); Stop; Call(Bash).
 
 const ACTIVE_PATH = ".vigiles/active-agent.json";
 
-/** Record the subagent currently dispatched, so PreToolUse enforces its contract. */
-export function setActiveAgent(cwd: string, agentPath: string): void {
+/**
+ * Read the active-agent stack (oldest → newest; the dispatched subagent chain).
+ * Back-compat: a legacy single-slot `{ agent: string }` marker reads as a one-frame
+ * stack; a malformed file or non-string entries → an empty stack (fail-open).
+ */
+export function readActiveStack(cwd: string): string[] {
   const p = resolve(cwd, ACTIVE_PATH);
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, JSON.stringify({ agent: agentPath }) + "\n");
+  if (!existsSync(p)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(p, "utf-8")) as {
+      stack?: unknown;
+      agent?: unknown;
+    };
+    if (Array.isArray(parsed.stack)) {
+      return parsed.stack.filter((x): x is string => typeof x === "string");
+    }
+    // legacy single-slot format
+    if (typeof parsed.agent === "string") return [parsed.agent];
+    return [];
+  } catch {
+    return [];
+  }
 }
 
-/** Clear the active-agent marker (the subagent finished). */
+function writeActiveStack(cwd: string, stack: readonly string[]): void {
+  const p = resolve(cwd, ACTIVE_PATH);
+  if (stack.length === 0) {
+    if (existsSync(p)) rmSync(p);
+    return;
+  }
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify({ stack }) + "\n");
+}
+
+/**
+ * Push a dispatched subagent onto the active stack (a `PreToolUse` spawn). The
+ * PreToolUse gate then enforces this subagent's contract until it returns. Under
+ * nesting each dispatch pushes a frame, so the chain is tracked, not overwritten.
+ */
+export function pushActiveAgent(cwd: string, agentPath: string): void {
+  writeActiveStack(cwd, [...readActiveStack(cwd), agentPath]);
+}
+
+/**
+ * Pop the top frame — the subagent returned (`SubagentStop`), so control returns
+ * to its PARENT (the next frame down), whose contract the gate enforces again.
+ * This is the nesting-safe close, distinct from {@link clearActiveAgent} (which
+ * drops the whole stack). Popping an empty stack is a no-op.
+ */
+export function popActiveAgent(cwd: string): void {
+  const stack = readActiveStack(cwd);
+  stack.pop();
+  writeActiveStack(cwd, stack);
+}
+
+/**
+ * Push a subagent frame (the manual `agent-start` fallback + the deterministic
+ * spawn open-signal both use this). A single call is equivalent to a one-frame
+ * stack, so the top — what the gate reads — is this agent. Alias of
+ * {@link pushActiveAgent} kept under the historical name.
+ */
+export function setActiveAgent(cwd: string, agentPath: string): void {
+  pushActiveAgent(cwd, agentPath);
+}
+
+/**
+ * Clear the WHOLE stack (a hard reset / session end). Distinct from
+ * {@link popActiveAgent}, which returns to the parent frame. Idempotent.
+ */
 export function clearActiveAgent(cwd: string): void {
   const p = resolve(cwd, ACTIVE_PATH);
   if (existsSync(p)) rmSync(p);
 }
 
-/** The path of the active agent's compiled `.md`, or null when none is active. */
+/**
+ * The active agent's compiled `.md` — the STACK TOP — or null when none is active.
+ * The gate reads the top, so a returned nested subagent reveals its parent's
+ * contract again (the contract-escape fix).
+ */
 export function readActiveAgent(cwd: string): string | null {
-  const p = resolve(cwd, ACTIVE_PATH);
-  if (!existsSync(p)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(p, "utf-8")) as { agent?: unknown };
-    return typeof parsed.agent === "string" ? parsed.agent : null;
-  } catch {
-    return null;
-  }
+  const stack = readActiveStack(cwd);
+  return stack.length > 0 ? stack[stack.length - 1] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,14 +227,18 @@ export function readActiveAgent(cwd: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * EXPERIMENTAL — parked (P3), flat-only, do NOT auto-wire. This deterministic
- * subagent-window tracking assumes FLAT dispatch (one active subagent at a time);
- * it is NOT nesting-safe — Claude Code v2.1.172 added depth-5 nested subagents, so
- * correct tracking needs a depth-aware STACK (push on dispatch, pop on SubagentStop)
- * + verifying the spawn tool name (`Agent` vs `Task`). See
- * research/effect-boundary-design.md ("Why dropped").
+ * EXPERIMENTAL — parked (P3), do NOT auto-wire. The subagent-window tracking is
+ * now nesting-safe: a depth-aware STACK (push on dispatch, pop on SubagentStop —
+ * see {@link pushActiveAgent}/{@link popActiveAgent}) closes the contract-escape
+ * the flat single-slot model allowed under Claude Code v2.1.172 depth-5 nesting
+ * (certified in research/prototypes/.../AgentWindowStack.tla). The open signal
+ * recognizes BOTH spawn tool names (`Task` and the nested-spawn `Agent`), gated on
+ * a resolvable `subagent_type` so a non-spawn call never opens a frame. Still
+ * parked because the `effect()` sub-region goal it served was dropped (see
+ * research/effect-boundary-design.md, "Why dropped") — the stack is shipped for
+ * when active-agent contract enforcement under nesting is wanted on its own.
  *
- * Resolve a `Task` tool's `subagent_type` to the compiled agent `.md` to
+ * Resolve a spawn tool's `subagent_type` to the compiled agent `.md` to
  * activate, or null when none is found. The DETERMINISTIC open signal that
  * replaces the model-invoked `agent-start`: Claude Code fires `PreToolUse` for
  * the parent's `Task` dispatch (and `SubagentStop` when it returns), so the

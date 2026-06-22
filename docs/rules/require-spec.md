@@ -38,6 +38,18 @@ If the markdown file has a `<!-- vigiles:sha256:... compiled from ... -->` heade
 ...
 ```
 
+## Exclude paths (vendored / benchmark fixtures)
+
+For files the repo's own lint shouldn't police at all — a vendored third-party
+`CLAUDE.md`, a benchmark fixture injected verbatim — add a glob to `exclude` in
+`.vigilesrc.json` instead of editing the file (so it stays byte-faithful). Excluded
+paths are dropped from `lint` discovery entirely (not just `require-spec`);
+`node_modules`/`dist`/`.git` are always excluded.
+
+```jsonc
+{ "rules": { "require-spec": "error" }, "exclude": ["bench/**"] }
+```
+
 ## Why
 
 Hand-written instruction files rot silently. Specs catch stale references at compile time. This rule nudges projects toward spec-driven instruction files without blocking adoption — start with `"warn"`, escalate to `"error"` once specs are in place.

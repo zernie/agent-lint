@@ -29,3 +29,17 @@ export type {
 // `hookFired` check supersedes the legacy boolean predicate of the same name.
 export * from "./check.js";
 export { hookFired } from "./check.js";
+// Guardrail verification — "prove your safety hook actually blocks" (over runHook).
+export {
+  DISASTER_CATALOG,
+  verifyGuardrail,
+  unblockedDisasters,
+  assertBlocksDisasters,
+  formatGuardrailReport,
+} from "./guardrail-check.js";
+export type {
+  DisasterEvent,
+  DisasterCategory,
+  GuardrailResult,
+  VerifyGuardrailOptions,
+} from "./guardrail-check.js";

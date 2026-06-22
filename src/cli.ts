@@ -23,9 +23,14 @@ import { generateTypes } from "./core/generate-types.js";
 import {
   loadHarnessModel,
   generateHarness,
+  computeHarnessCapabilities,
   labelFor,
   HARNESS_GEN_FILENAME,
 } from "./core/generate-harness.js";
+import {
+  diffCapabilities,
+  formatCapabilityDiff,
+} from "./core/capability-diff.js";
 import { validate, loadConfig } from "./core/validate.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
@@ -55,7 +60,13 @@ import {
   type ContractField,
 } from "./scaffold-test.js";
 import { effectSurface } from "./core/effects.js";
-import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
+import {
+  scanPlugin,
+  formatScanReport,
+  inspectMarketplace,
+  verifyLiveMcpTools,
+  formatMcpContractReport,
+} from "./scan.js";
 import type { ScanReport } from "./scan.js";
 import {
   explainScore,
@@ -65,6 +76,8 @@ import {
 import {
   probePluginTriggers,
   formatBehavioralReport,
+  measurePluginSelection,
+  formatSelectionReport,
   type TriggerPromptSet,
   type ProbeHarness,
 } from "./scan-behavioral.js";
@@ -80,7 +93,11 @@ import {
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
-import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
+import {
+  rankPlugins,
+  formatLeaderboard,
+  formatLeaderboardMarkdown,
+} from "./leaderboard.js";
 import { optimize, formatOptimize } from "./optimize.js";
 
 import {
@@ -107,10 +124,29 @@ import {
 import type { InstructionMirror } from "./core/compose.js";
 import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
+import { runGuardHook } from "./core/guards.js";
+import {
+  compileHookProgram,
+  checkHookImports,
+  verifyHookStamp,
+  HookCompileError,
+  decideProgram,
+  decideFileGate,
+  runInject,
+  runReact,
+  dispatchKind,
+  type AnyHook,
+  type FileGateHook,
+  type InjectHook,
+  type ReactHook,
+  type HookProgram,
+  type Decision,
+} from "./core/hook-program.js";
+import type { SHA256Hash } from "./core/hash.js";
 import {
   evaluatePreToolUse,
-  setActiveAgent,
-  clearActiveAgent,
+  pushActiveAgent,
+  popActiveAgent,
   decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
 import {
@@ -1207,7 +1243,7 @@ async function runLint(
   const json = flags.includes("--json");
   const silent = summary || json;
 
-  const files = findInstructionFiles(restArgs);
+  const files = findInstructionFiles(restArgs, config?.exclude);
 
   // Resolve the active harness ONCE so the harness-specific checks below run
   // against the right adapter's dialect (tool/event catalogs) and surfaces —
@@ -3182,13 +3218,22 @@ async function countGuidanceRules(silent = false): Promise<number> {
 // Command handlers for main()
 // ---------------------------------------------------------------------------
 
-function findInstructionFiles(restArgs: string[]): string[] {
+function findInstructionFiles(
+  restArgs: string[],
+  exclude: readonly string[] = [],
+): string[] {
   if (restArgs.length > 0) return restArgs;
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
   const files: string[] = [];
   for (const pattern of patterns) {
     files.push(
-      ...globSync(pattern, { ignore: IGNORE_NODE_MODULES, cwd: process.cwd() }),
+      ...globSync(pattern, {
+        // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the
+        // repo's own lint shouldn't police — a third-party CLAUDE.md isn't held
+        // to require-spec. node_modules/dist/.git stay always-excluded.
+        ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude],
+        cwd: process.cwd(),
+      }),
     );
   }
   return files;
@@ -3200,20 +3245,32 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * The `scan --trigger` behavioral column: load the author-supplied per-skill
- * prompt sets, probe the plugin's model-invocable skills, print the column.
- * Model-gated and opt-in — the structural scan above stays deterministic.
+ * `vigiles measure <dir>` — the MODEL-GATED behavioral report on a plugin (the paid
+ * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
+ * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
+ * skill actually FIRE — recall + precision) and the selection-collision matrix (does
+ * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
+ * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
+ * degrades honestly ("unavailable") when absent. The OSS-testing front door:
+ * `vigiles measure ./plugin --prompts=p.json`.
  */
-async function handleScanTrigger(
-  root: string,
+async function handleMeasure(
+  restArgs: string[],
   args: string[],
-  json: boolean,
-  harness: ProbeHarness,
 ): Promise<void> {
+  const dir = resolve(restArgs[0] ?? ".");
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const harness: ProbeHarness =
+    adapter.name === "codex" ? "codex" : "claude-code";
+
   const promptsPath = flagValue(args, "--prompts");
   if (!promptsPath) {
     console.error(
-      "scan --trigger needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
+      "measure needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
     );
     process.exitCode = 2;
     return;
@@ -3225,24 +3282,38 @@ async function handleScanTrigger(
     ) as TriggerPromptSet;
   } catch (e) {
     console.error(
-      `scan --trigger: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
+      `measure: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
     );
     process.exitCode = 2;
     return;
   }
-  const concurrencyRaw = flagValue(args, "--concurrency");
-  const minPromptsRaw = flagValue(args, "--min-prompts");
-  const report = await probePluginTriggers(root, promptSet, {
-    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
-    minPrompts: minPromptsRaw ? Number(minPromptsRaw) : undefined,
-    model: flagValue(args, "--model"),
+  const num = (f: string): number | undefined => {
+    const v = flagValue(args, f);
+    return v ? Number(v) : undefined;
+  };
+  const model = flagValue(args, "--model");
+  const concurrency = num("--concurrency");
+  // Trigger-rate (recall + precision) AND the selection-collision matrix — the two
+  // behavioral columns, one report. Collisions report n/a where they don't apply
+  // (a single skill, or Codex — no skill-selection event), never a false pass.
+  const trigger = await probePluginTriggers(dir, promptSet, {
+    concurrency,
+    minPrompts: num("--min-prompts"),
+    model,
     harness,
   });
-  console.log(
-    json
-      ? JSON.stringify(report, null, 2)
-      : `\n${formatBehavioralReport(report)}`,
-  );
+  const collisions = await measurePluginSelection(dir, promptSet, {
+    concurrency,
+    trials: num("--trials"),
+    model,
+    harness,
+  });
+  if (json) {
+    console.log(JSON.stringify({ trigger, collisions }, null, 2));
+    return;
+  }
+  console.log(`\n${formatBehavioralReport(trigger)}`);
+  console.log(`\n${formatSelectionReport(collisions)}`);
 }
 
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
@@ -3567,6 +3638,23 @@ function handleExplain(restArgs: string[], args: string[]): void {
 }
 
 /**
+ * Whole-harness capability lattice from a scanned plugin's agents (no `tools:` line →
+ * inherits-all). The substrate `scan --capability-diff` diffs. Reused for both the
+ * already-scanned "after" report and the freshly-scanned "before" dir.
+ */
+function capabilitiesOfReport(
+  report: ScanReport,
+  dialect: Parameters<typeof computeHarnessCapabilities>[1],
+): ReturnType<typeof computeHarnessCapabilities> {
+  const agents = report.agents.map((a) => ({
+    name: a.name,
+    tools: a.tools ?? undefined,
+    file: a.path,
+  }));
+  return computeHarnessCapabilities(agents, dialect);
+}
+
+/**
  * The plugin's declared name for the namespaced skill id, read from the layout's
  * manifest (adapter-aware path, not a hardcoded `.claude-plugin/`), falling back to
  * the dir basename. JSON manifests only for now (a TOML/Codex manifest → basename).
@@ -3718,6 +3806,12 @@ function printUsage(command: string | undefined): void {
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
+  );
+  console.log(
+    "  vigiles scan [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
+  );
+  console.log(
+    "  vigiles measure <dir>          Model-gated: does each skill FIRE / COLLIDE? (--prompts=, real model)",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -3942,31 +4036,34 @@ function agentHookCommand(): void {
 
   const cwd = process.cwd();
 
-  // EXPERIMENTAL (parked P3, flat-only — do NOT auto-wire): the Task/SubagentStop
-  // bracketing below assumes one active subagent at a time and is NOT nesting-safe
-  // (CC v2.1.172 depth-5 nesting needs a stack + spawn-tool-name check). See
-  // research/effect-boundary-design.md.
-  // SubagentStop → CLOSE the window deterministically (no model `agent-done`):
-  // the subagent returned, so its contract/purity no longer apply.
+  // EXPERIMENTAL (parked P3 — do NOT auto-wire). The spawn/SubagentStop bracketing
+  // is now nesting-safe: a depth-aware STACK (push on dispatch, POP on SubagentStop)
+  // closes the contract-escape the flat single-slot model allowed under CC v2.1.172
+  // depth-5 nesting. See research/effect-boundary-design.md + AgentWindowStack.tla.
+  //
+  // SubagentStop → CLOSE the window deterministically (no model `agent-done`): the
+  // subagent returned, so POP its frame — control returns to its PARENT, whose
+  // contract the gate enforces again (NOT a full clear, which would drop the parent).
   if (event === "SubagentStop") {
-    clearActiveAgent(cwd);
+    popActiveAgent(cwd);
     clearEffectActive(cwd);
     return;
   }
 
-  // PreToolUse(Task) → OPEN the window deterministically (no model `agent-start`
-  // / `effect-enter`): the parent is dispatching a subagent, so activate that
-  // subagent's compiled contract for the tool calls it is about to make. The
-  // Task dispatch itself is the PARENT's action — don't gate it against the
-  // subagent's contract; just open the window and allow.
-  if (tool === "Task") {
+  // PreToolUse(spawn) → OPEN the window deterministically (no model `agent-start` /
+  // `effect-enter`): the parent is dispatching a subagent, so PUSH that subagent's
+  // compiled contract for the tool calls it is about to make. Recognize both spawn
+  // tool names — `Task` (top-level dispatch) and `Agent` (nested-spawn, CC v2.1.172)
+  // — gated on a resolvable `subagent_type` so a non-spawn call never opens a frame.
+  // The dispatch itself is the PARENT's action — don't gate it; just open + allow.
+  if (tool === "Task" || tool === "Agent") {
     const agentPath = decideTaskDispatch(
       toolInput,
       cwd,
       process.env.CLAUDE_PLUGIN_ROOT,
     );
     if (agentPath) {
-      setActiveAgent(cwd, agentPath);
+      pushActiveAgent(cwd, agentPath);
       setEffectActive(cwd);
     }
     return;
@@ -4004,13 +4101,35 @@ function interceptToolHookCommand(): void {
   }
 }
 
+/**
+ * `vigiles guard-hook` — the PreToolUse gate for typed safe-by-construction guards
+ * (EXPERIMENTAL). Reads the live event on stdin, runs the declared guard set
+ * (`.vigiles/guards.json`) against the session ledger (`.vigiles/guard-ledger.json`),
+ * and blocks (exit 2 + reason) or records the allowed call. The command in the
+ * generated hooks block IS this gate — not user shell — so the enforcement is
+ * safe-by-construction. See src/core/guards.ts.
+ */
+function guardHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  const { decision } = runGuardHook(process.cwd(), raw);
+  if (!decision.allow) {
+    console.error(decision.reason ?? "Blocked by a vigiles guard.");
+    process.exit(2);
+  }
+}
+
 /** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
 function agentStartCommand(target: string | undefined): void {
   if (!target) {
     console.error("Usage: vigiles agent-start <agents/<name>.md>");
     process.exit(2);
   }
-  setActiveAgent(process.cwd(), target);
+  pushActiveAgent(process.cwd(), target);
   console.log(`Active agent: ${target}`);
 }
 
@@ -4036,13 +4155,16 @@ function handleSkillCommand(command: string, restArgs: string[]): boolean {
       agentStartCommand(restArgs[0]);
       return true;
     case "agent-done":
-      clearActiveAgent(process.cwd());
+      popActiveAgent(process.cwd());
       return true;
     case "agent-hook":
       agentHookCommand();
       return true;
     case "intercept-tool-hook":
       interceptToolHookCommand();
+      return true;
+    case "guard-hook":
+      guardHookCommand();
       return true;
     case "action-hook":
       actionHookCommand();
@@ -4205,6 +4327,259 @@ function refsHookCommand(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Compiled hooks (`vigiles/hook`) — author a hook as a pure typed program,
+// compile it to a harness block, run it as the hooks-block command.
+// ---------------------------------------------------------------------------
+
+/**
+ * Load a compiled-hook program's default export. JS module formats
+ * (`.mjs`/`.cjs`/`.js`) load via dynamic import directly; a TypeScript hook
+ * loads only under a TS-capable runtime (tsx / Node >= 23.6) — otherwise an
+ * actionable error points at authoring it as `.mjs`.
+ */
+async function loadHookProgram(file: string): Promise<AnyHook> {
+  const abs = resolve(process.cwd(), file);
+  const { pathToFileURL } = require("node:url") as typeof import("node:url");
+  let mod: { default?: unknown };
+  try {
+    mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
+  } catch (e) {
+    if (/\.(?:m|c)?ts$/.test(file)) {
+      throw new HookCompileError(
+        `Cannot load TypeScript hook "${file}" in this Node runtime. Run under ` +
+          `tsx (npx tsx …) / Node >= 23.6, or author the hook as a .mjs file.`,
+      );
+    }
+    throw new HookCompileError(
+      `Cannot load hook "${file}": ${(e as Error).message}`,
+    );
+  }
+  // Unwrap the ESM/CJS double-default that `export default` can produce.
+  const program =
+    (mod.default as { default?: unknown } | undefined)?.default ?? mod.default;
+  if (!program || typeof program !== "object") {
+    throw new HookCompileError(
+      `${file} has no default-exported hook program ` +
+        `(use \`export default defineHook({…})\`).`,
+    );
+  }
+  return program as AnyHook;
+}
+
+/** Path of the tamper-evident stamp sidecar for a hook file. */
+function hookStampPath(file: string): string {
+  return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
+}
+
+/**
+ * `vigiles compile-hook <file>` — compile a typed hook program (authored
+ * against `vigiles/hook`) into a harness hooks block. An import outside the
+ * sanctioned API does NOT compile (capability = API surface); the emitted block
+ * routes the live event to `run-hook-program`, and a tamper-evident stamp
+ * sidecar lets the runtime refuse a hand-edited artifact.
+ */
+async function compileHookCommand(
+  file: string | undefined,
+  args: string[],
+): Promise<void> {
+  if (!file) {
+    console.error("Usage: vigiles compile-hook <hook-file>");
+    process.exit(2);
+  }
+  const abs = resolve(process.cwd(), file);
+  let source: string;
+  try {
+    source = readFileSync(abs, "utf-8");
+  } catch {
+    console.error(`Cannot read ${file}`);
+    process.exit(2);
+    return;
+  }
+  // Resolve the target harness so the emit matches it (CC JSON / Codex TOML +
+  // regex matcher) — same selection the rest of the CLI uses.
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(process.cwd(), harnessFlag)
+    : detectAdapterResult(process.cwd()).adapter;
+  let program: AnyHook;
+  let compiled;
+  try {
+    program = await loadHookProgram(file);
+    compiled = compileHookProgram(source, program, {
+      gateCommand: `npx vigiles run-hook-program ${file}`,
+      dialect: adapter.dialect,
+      hookProtocol: adapter.hookProtocol,
+      settingsFormat: adapter.layout.settingsFormat,
+    });
+  } catch (e) {
+    if (e instanceof HookCompileError) {
+      console.error(`✗ ${e.message}`);
+      if (checkHookImports(source).length > 0) {
+        console.error(
+          "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
+            "entire capability surface.",
+        );
+      }
+      process.exit(1);
+    }
+    throw e;
+  }
+  mkdirSync(dirname(hookStampPath(file)), { recursive: true });
+  writeFileSync(
+    hookStampPath(file),
+    JSON.stringify({ file, stamp: compiled.stamp }, null, 2) + "\n",
+  );
+  const target =
+    adapter.layout.settingsFormat === "toml"
+      ? `${adapter.name}'s config.toml`
+      : `your hooks settings (e.g. ${adapter.layout.settingsPath})`;
+  console.log(
+    `✓ ${file} compiled (role: ${dispatchKind(program)}, harness: ${adapter.name}).`,
+  );
+  // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
+  // but an inject/react hook's OUTPUT shape is only confirmed for Claude Code. On
+  // another harness it would emit CC-shaped output that may not be read — exactly
+  // the silent-failure this feature exists to prevent. Say so, loudly.
+  const role = dispatchKind(program);
+  if (
+    adapter.name !== "claude-code" &&
+    (role === "inject" || role === "react")
+  ) {
+    console.warn(
+      `\n⚠ ${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
+        `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
+        `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
+        `${adapter.name} for now, or confirm the ${role} output against the real ` +
+        `binary first (research/compiled-hooks-codex.md §Deferred).`,
+    );
+  }
+  console.log(`\nAdd this to ${target}:\n`);
+  console.log(compiled.settingsBlock);
+  console.log(
+    `\nStamp written to ${relative(process.cwd(), hookStampPath(file))}.`,
+  );
+}
+
+/** Emit a gate Decision in the harness protocol — the author never writes it. */
+function emitGateDecision(decision: Decision, on: string): void {
+  if (decision.kind === "deny") {
+    console.error(decision.reason);
+    process.exit(2);
+  }
+  if (decision.kind === "ask") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: on,
+          permissionDecision: "ask",
+          permissionDecisionReason: decision.reason,
+        },
+      }) + "\n",
+    );
+  }
+  // allow → emit nothing, exit 0.
+}
+
+/**
+ * Fail closed if a stamp sidecar exists and the on-disk source no longer
+ * matches it — a hand-edit that smuggles in a capability breaks the stamp.
+ * No sidecar → run uncompiled (e.g. a test fixture or a not-yet-compiled hook).
+ */
+function verifyStampOrRefuse(file: string): void {
+  const stampPath = hookStampPath(file);
+  if (!existsSync(stampPath)) return;
+  try {
+    const { stamp } = JSON.parse(readFileSync(stampPath, "utf-8")) as {
+      stamp?: string;
+    };
+    const source = readFileSync(resolve(process.cwd(), file), "utf-8");
+    if (stamp && !verifyHookStamp(source, stamp as SHA256Hash)) {
+      console.error(
+        `vigiles: hook ${file} does not match its compiled stamp (tampered).`,
+      );
+      process.exit(2);
+    }
+  } catch {
+    /* unreadable sidecar → don't block a live session on it */
+  }
+}
+
+/**
+ * `vigiles run-hook-program <file>` — the runtime the compiled hooks block
+ * points at. Reads the live event on stdin, loads the typed program, verifies
+ * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
+ * inject prints `additionalContext`; a react runs its effect-classified
+ * command. A hook that won't load fails CLOSED (exit 2), never silent-allow.
+ */
+async function runHookProgramCommand(file: string | undefined): Promise<void> {
+  if (!file) {
+    console.error("Usage: vigiles run-hook-program <hook-file>");
+    process.exit(2);
+    return;
+  }
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let event: {
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+    source?: string;
+  } = {};
+  try {
+    event = JSON.parse(raw) as typeof event;
+  } catch {
+    /* malformed → empty event */
+  }
+
+  let program: AnyHook;
+  try {
+    program = await loadHookProgram(file);
+  } catch {
+    console.error(`vigiles: cannot load hook program ${file}`);
+    process.exit(2);
+    return;
+  }
+  verifyStampOrRefuse(file);
+
+  switch (dispatchKind(program)) {
+    case "inject": {
+      const out = runInject(program as InjectHook, { source: event.source });
+      process.stdout.write(JSON.stringify(out) + "\n");
+      return;
+    }
+    case "react": {
+      const reaction = runReact(program as ReactHook, event);
+      if (reaction.kind === "run") {
+        const { spawnSync } =
+          require("node:child_process") as typeof import("node:child_process");
+        const res = spawnSync(reaction.command, {
+          shell: true,
+          stdio: "inherit",
+        });
+        process.exit(res.status ?? 0);
+      }
+      if (reaction.kind === "notice") console.error(reaction.message);
+      return;
+    }
+    case "file-gate":
+      emitGateDecision(
+        decideFileGate(program as FileGateHook, event),
+        program.on,
+      );
+      return;
+    case "bash-gate":
+      emitGateDecision(
+        decideProgram(program as HookProgram, event),
+        program.on,
+      );
+      return;
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -4286,7 +4661,6 @@ async function main(): Promise<void> {
         dirs.length === 1 ? inspectMarketplace(resolve(dirs[0])) : null;
       const targets =
         market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
-      const wantTrigger = args.includes("--trigger");
       if (market && market.onDisk.length === 0 && market.total > 0) {
         // A CURATED marketplace — every member is an external git/url plugin, so
         // there's nothing on disk to scan. Say so honestly instead of falling
@@ -4303,16 +4677,13 @@ async function main(): Promise<void> {
           );
         }
       } else if (targets.length > 1) {
-        // Multiple targets → rank them (the leaderboard engine).
+        // Multiple targets → rank them (the leaderboard engine). `--md` emits the
+        // publishable Markdown table (a README / gist / the leaderboard site).
         const scores = rankPlugins(targets);
-        console.log(
-          json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
-        );
-        if (wantTrigger) {
-          console.log(
-            "\n⚠ --trigger (behavioral column) runs per single plugin; not yet wired into the leaderboard. Scan one plugin dir to probe it.",
-          );
-        }
+        const text = args.includes("--md")
+          ? formatLeaderboardMarkdown(scores)
+          : formatLeaderboard(scores);
+        console.log(json ? JSON.stringify(scores, null, 2) : text);
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);
@@ -4342,10 +4713,42 @@ async function main(): Promise<void> {
             json ? JSON.stringify(report, null, 2) : formatScanReport(report),
           );
         }
-        if (wantTrigger) {
-          const harness: ProbeHarness =
-            adapter.name === "codex" ? "codex" : "claude-code";
-          await handleScanTrigger(root, args, json, harness);
+        if (args.includes("--verify-mcp")) {
+          // Opt-in LIVE MCP tool resolution: starts each declared server and checks
+          // the agent's mcp__server__tool refs actually exist (the dynamic check no
+          // static linter can do). Side-effecting (spawns servers) → opt-in only.
+          const mcpErrs = await verifyLiveMcpTools(
+            report,
+            adapter.layout,
+            adapter.dialect,
+          );
+          console.log(
+            json
+              ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
+              : "\n" + formatMcpContractReport(mcpErrs),
+          );
+        }
+        const capBase = flagValue(args, "--capability-diff");
+        if (capBase) {
+          // Did this version WIDEN the agent's blast radius vs <before>? Diffs the
+          // two whole-harness capability lattices (moat #2). Informational by
+          // default; `--fail-on-widen` exits non-zero (the opt-in CI gate).
+          const beforeReport = scanPlugin(
+            resolve(capBase),
+            adapter.layout,
+            adapter.dialect,
+          );
+          const diff = diffCapabilities(
+            capabilitiesOfReport(beforeReport, adapter.dialect),
+            capabilitiesOfReport(report, adapter.dialect),
+          );
+          console.log(
+            json
+              ? JSON.stringify({ capabilityDiff: diff }, null, 2)
+              : "\n" + formatCapabilityDiff(diff),
+          );
+          if (args.includes("--fail-on-widen") && diff.widened)
+            process.exitCode = 1;
         }
       }
       break;
@@ -4356,6 +4759,10 @@ async function main(): Promise<void> {
       break;
     case "scaffold-test":
       handleScaffoldTest(restArgs, args);
+      break;
+
+    case "measure":
+      await handleMeasure(restArgs, args);
       break;
 
     // --- Plumbing ---
@@ -4370,6 +4777,14 @@ async function main(): Promise<void> {
 
     case "generate-harness":
       await handleGenerateHarness(args, restArgs);
+      break;
+
+    case "compile-hook":
+      await compileHookCommand(restArgs[0], args);
+      break;
+
+    case "run-hook-program":
+      await runHookProgramCommand(restArgs[0]);
       break;
 
     default:

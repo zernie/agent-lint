@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inlineSpans } from "./refs.js";
 import { assertNever } from "./hash.js";
+import { mcpToolParts } from "./mcp-tool.js";
 
 export interface McpServerConfig {
   readonly command: string;
@@ -291,6 +292,125 @@ export async function verifyMcpRefs(
     all.push(...(await verifyOneServer(group, mcpServers[server], timeoutMs)));
   }
   return all;
+}
+
+// --- LIVE resolution of real `mcp__server__tool` CONTRACT references ----------
+//
+// `verifyMcpRefs` above handles the explicit `vigiles:mcp server#tool` MARK. This
+// is the contract-side analogue: it live-verifies the agent's REAL
+// `mcp__server__tool` references (a subagent's `tools:` list, or such tokens in a
+// body) — the references that actually drive the harness. The static
+// `verifyMcpToolServers` (mcp-tool.ts) only checks the SERVER is declared; this
+// starts the declared server and checks the TOOL exists (catching the
+// `create_issue`→`issue_write` rename rot). Starts processes → opt-in, not a free
+// CI default. Tools whose server is undeclared / a built-in / plugin-namespaced are
+// SKIPPED — we have no config to start them, and that's the static check's job.
+
+export type McpContractToolReason = "server-unreachable" | "tool-missing";
+
+export interface McpContractToolError {
+  /** The full `mcp__server__tool` reference (restriction suffix stripped). */
+  readonly tool: string;
+  readonly server: string;
+  /** The tool segment (what's looked up on the server). */
+  readonly toolName: string;
+  readonly reason: McpContractToolReason;
+  readonly suggestions: string[];
+}
+
+/**
+ * Live-verify `mcp__server__tool` contract references against the declared MCP
+ * servers. Each referenced+declared server is started once; a tool absent from its
+ * live `tools/list` is a `tool-missing` error (with a closest-match suggestion), and
+ * a server that won't start is `server-unreachable`. References whose server isn't
+ * in `servers` are skipped (the static `verifyMcpToolServers` owns those).
+ */
+interface ContractRef {
+  readonly full: string;
+  readonly toolName: string;
+}
+
+/** Group the direct, declared-server `mcp__server__tool` refs by server (de-duped). */
+function groupContractTools(
+  tools: readonly string[],
+  servers: Record<string, McpServerConfig>,
+  dialect: import("./dialect.js").HarnessDialect,
+): Map<string, ContractRef[]> {
+  const byServer = new Map<string, ContractRef[]>();
+  const seen = new Set<string>();
+  for (const raw of tools) {
+    const parts = mcpToolParts(raw, dialect);
+    if (!parts || !(parts.server in servers)) continue; // skip non-MCP/undeclared
+    const full = raw.split("(")[0].trim();
+    if (seen.has(full)) continue;
+    seen.add(full);
+    const arr = byServer.get(parts.server) ?? [];
+    arr.push({ full, toolName: parts.tool });
+    byServer.set(parts.server, arr);
+  }
+  return byServer;
+}
+
+/** Start one server and check its group of referenced tools against the live list. */
+async function checkServerGroup(
+  server: string,
+  group: readonly ContractRef[],
+  cfg: McpServerConfig,
+  timeoutMs: number,
+): Promise<McpContractToolError[]> {
+  let available: string[];
+  try {
+    available = (await listMcpTools(cfg, timeoutMs)).map((t) => t.name);
+  } catch {
+    return group.map((g) => ({
+      tool: g.full,
+      server,
+      toolName: g.toolName,
+      reason: "server-unreachable" as const,
+      suggestions: [],
+    }));
+  }
+  return group
+    .filter((g) => !available.includes(g.toolName))
+    .map((g) => ({
+      tool: g.full,
+      server,
+      toolName: g.toolName,
+      reason: "tool-missing" as const,
+      suggestions: closest(g.toolName, available),
+    }));
+}
+
+export async function verifyMcpContractTools(
+  tools: readonly string[],
+  servers: Record<string, McpServerConfig>,
+  dialect: import("./dialect.js").HarnessDialect,
+  timeoutMs = 10000,
+): Promise<McpContractToolError[]> {
+  const byServer = groupContractTools(tools, servers, dialect);
+  const errors: McpContractToolError[] = [];
+  for (const [server, group] of byServer) {
+    errors.push(
+      ...(await checkServerGroup(server, group, servers[server], timeoutMs)),
+    );
+  }
+  return errors;
+}
+
+/** Human-readable message for a contract-tool error (with "did you mean"). */
+export function mcpContractToolMessage(e: McpContractToolError): string {
+  switch (e.reason) {
+    case "server-unreachable":
+      return `MCP tool "${e.tool}" — server "${e.server}" failed to start`;
+    case "tool-missing":
+      return `MCP tool "${e.tool}" not found on server "${e.server}"${
+        e.suggestions.length > 0
+          ? ` — did you mean ${e.suggestions.map((s) => `"${s}"`).join(", ")}?`
+          : ""
+      }`;
+    default:
+      return assertNever(e.reason);
+  }
 }
 
 /** Human-readable message for an MCP reference error (with "did you mean"). */

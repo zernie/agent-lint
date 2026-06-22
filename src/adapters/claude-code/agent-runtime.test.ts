@@ -16,6 +16,9 @@ import {
   parseAgentPurity,
   decidePreToolUse,
   setActiveAgent,
+  pushActiveAgent,
+  popActiveAgent,
+  readActiveStack,
   readActiveAgent,
   clearActiveAgent,
   evaluatePreToolUse,
@@ -168,6 +171,89 @@ test("readActiveAgent returns null when the marker lacks a string agent field", 
       JSON.stringify({ agent: 42 }),
     );
     assert.equal(readActiveAgent(dir), null);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Depth-aware STACK (the nesting-safety fix; AgentWindowStack.tla)
+// ---------------------------------------------------------------------------
+
+test("push/pop is a stack: readActiveAgent is the TOP, pop returns to the parent", () => {
+  const dir = makeTmpDir("agent-stack");
+  try {
+    assert.deepEqual(readActiveStack(dir), []);
+    pushActiveAgent(dir, "agents/outer.md");
+    pushActiveAgent(dir, "agents/inner.md");
+    assert.deepEqual(readActiveStack(dir), [
+      "agents/outer.md",
+      "agents/inner.md",
+    ]);
+    assert.equal(readActiveAgent(dir), "agents/inner.md"); // top
+    popActiveAgent(dir); // inner returns
+    assert.equal(readActiveAgent(dir), "agents/outer.md"); // back to parent, NOT cleared
+    popActiveAgent(dir); // outer returns
+    assert.equal(readActiveAgent(dir), null);
+    popActiveAgent(dir); // popping empty is a no-op
+    assert.equal(readActiveAgent(dir), null);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("readActiveStack back-compat: a legacy { agent } marker reads as a one-frame stack", () => {
+  const dir = makeTmpDir("agent-stack-legacy");
+  try {
+    mkdirSync(join(dir, ".vigiles"), { recursive: true });
+    writeFileSync(
+      join(dir, ".vigiles", "active-agent.json"),
+      JSON.stringify({ agent: "agents/legacy.md" }),
+    );
+    assert.deepEqual(readActiveStack(dir), ["agents/legacy.md"]);
+    assert.equal(readActiveAgent(dir), "agents/legacy.md");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("NESTING CONTRACT-ESCAPE regression (AgentWindowStack.tla counterexample): Open;Open;Stop;Call(Bash) is DENIED", () => {
+  // The TLC-certified counterexample the FLAT single-slot model failed: a writer
+  // agent (tools: Read/Write/Edit, no Bash) dispatches a nested writer; the inner
+  // returns (Stop). With a flat slot, Stop cleared everything → the gate saw "no
+  // active agent" → it ALLOWED Bash while still inside the outer writer = a
+  // contract escape. With the stack, Stop pops back to the outer writer, so Bash
+  // is correctly DENIED.
+  const dir = makeTmpDir("agent-nesting-escape");
+  try {
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    const { markdown } = compileAgent(
+      agent({
+        name: "writer",
+        description: "writes files",
+        tools: ["Read", "Write", "Edit"],
+        body: instructions`Write the file.`,
+      }),
+      { dialect: claudeCodeDialect },
+    );
+    writeFileSync(join(dir, "agents", "writer.md"), markdown);
+
+    pushActiveAgent(dir, "agents/writer.md"); // Open(writer)
+    pushActiveAgent(dir, "agents/writer.md"); // Open(writer) — nested
+    popActiveAgent(dir); // Stop — inner returns
+
+    // Still inside the OUTER writer → Bash (not in its contract) must be blocked.
+    const bash = evaluatePreToolUse(dir, "Bash", "echo hi");
+    assert.equal(
+      bash.allow,
+      false,
+      "Bash must be DENIED — outer writer forbids it",
+    );
+    // A tool the contract DOES list still passes.
+    assert.equal(evaluatePreToolUse(dir, "Write").allow, true);
+
+    popActiveAgent(dir); // outer returns → no active agent → unrestricted again
+    assert.equal(evaluatePreToolUse(dir, "Bash", "echo hi").allow, true);
   } finally {
     cleanupTmpDir(dir);
   }
@@ -808,6 +894,43 @@ test("agent-hook CLI: PreToolUse(Task) opens the window; SubagentStop closes it"
     assert.equal(close.blocked, false);
     assert.equal(readActiveAgent(dir), null);
     assert.equal(readEffectActive(dir), false);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("agent-hook CLI: NESTED dispatch — SubagentStop POPS to the parent, doesn't clear (nesting-safe)", () => {
+  const dir = makeTmpDir("dispatch-nested");
+  try {
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    // Two real agents so the open signal resolves each by name.
+    writeFileSync(join(dir, "agents", "outer.md"), "x");
+    writeFileSync(join(dir, "agents", "inner.md"), "x");
+
+    const dispatch = (name: string) =>
+      runHook(
+        `node ${CLI} agent-hook`,
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Task",
+          tool_input: { subagent_type: name, prompt: "go" },
+        },
+        { cwd: dir },
+      );
+    const stop = () =>
+      runHook(
+        `node ${CLI} agent-hook`,
+        { hook_event_name: "SubagentStop" },
+        { cwd: dir },
+      );
+
+    dispatch("outer");
+    dispatch("inner"); // nested
+    assert.equal(readActiveAgent(dir), join("agents", "inner.md")); // top
+    stop(); // inner returns → POP back to outer, NOT a full clear
+    assert.equal(readActiveAgent(dir), join("agents", "outer.md"));
+    stop(); // outer returns → now empty
+    assert.equal(readActiveAgent(dir), null);
   } finally {
     cleanupTmpDir(dir);
   }

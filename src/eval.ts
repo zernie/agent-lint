@@ -890,6 +890,71 @@ function makeContext(
   };
 }
 
+/**
+ * The set of skills that RESOLVED (the `Skill` tool fired without error) in a run,
+ * by their namespaced id (e.g. `superpowers:test-driven-development`). The
+ * multi-skill generalization of {@link skillResolved}: where a trigger-rate run
+ * asks "did skill X fire?", a SELECTION-collision run asks "which skills fired?" —
+ * so a single pass over the plugin's prompts reveals whether one skill's prompt
+ * wrongly activates a SIBLING (the behavioral confirmation of the deterministic
+ * `description-overlap` proxy). Errored Skill calls are excluded, like
+ * `skillResolved`.
+ */
+export function whichSkillsFired(trace: Trace): string[] {
+  const ids = new Set<string>();
+  for (const c of trace.toolCalls) {
+    if (c.name !== "Skill" || c.isError) continue;
+    const id = (c.input as { skill?: string } | undefined)?.skill;
+    if (typeof id === "string" && id.length > 0) ids.add(id);
+  }
+  return [...ids];
+}
+
+/** One selection-trial outcome: which skills fired (namespaced ids), or errored. */
+export interface SelectionTrialResult {
+  readonly fired: readonly string[];
+  readonly errored: boolean;
+}
+
+/**
+ * Run ONE prompt against an installed plugin and report WHICH of its skills fired
+ * — the per-run primitive behind the plugin selection-collision matrix
+ * (`measurePluginSelection` in `scan-behavioral.ts`). Mirrors the trigger-rate
+ * trial (throwaway cwd, fixture seeded, errored turn excluded) but returns the
+ * fired-skill SET instead of a single boolean, so the whole N×N collision matrix
+ * falls out of one pass over the prompts (N× cheaper than re-running per pair).
+ */
+export async function runSkillSelectionTrial(args: {
+  readonly prompt: string;
+  readonly pluginDir: string;
+  readonly runner: AgentRunner;
+  readonly parse?: ModelOutputParser;
+  readonly model: string;
+  readonly tools?: readonly string[];
+  readonly timeoutMs?: number;
+  readonly fixture?: Record<string, string>;
+  readonly runError?: (out: RunOut) => string | null;
+}): Promise<SelectionTrialResult> {
+  const cwd = mkdtempSync(join(tmpdir(), "vigiles-selection-"));
+  try {
+    if (args.fixture) writeFiles(cwd, args.fixture);
+    const out = await args.runner({
+      task: args.prompt,
+      cwd,
+      model: args.model,
+      tools: args.tools ?? ["Read", "Edit", "Write", "Bash", "Skill"],
+      hasSettings: false,
+      pluginDir: args.pluginDir,
+      timeoutMs: args.timeoutMs ?? 240000,
+    });
+    if (args.runError?.(out)) return { fired: [], errored: true };
+    const trace = makeContext(cwd, out, args.parse ?? parseClaudeRun);
+    return { fired: whichSkillsFired(trace), errored: false };
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 /** Coerce a metric value to a number (booleans → 0/1), or null if absent. */
 function numeric(v: number | boolean | undefined): number | null {
   if (typeof v === "number") return v;

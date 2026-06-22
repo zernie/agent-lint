@@ -1,0 +1,4 @@
+{
+  "description": "v0 plugin-health-leaderboard corpus — public Claude Code plugin sources whose repos carry on-disk `.claude-plugin/plugin.json` roots. We publish SCORES only; no plugin code is vendored. Reproduce with `node bench/leaderboard/run.mjs` (needs network + a built dist/).",
+  "repos": ["obra/superpowers", "wshobson/agents"]
+}
