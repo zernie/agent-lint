@@ -40,6 +40,12 @@ import {
   type DescriptionOverlap,
 } from "./core/description-overlap.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
+import {
+  verifyMcpContractTools,
+  mcpContractToolMessage,
+  type McpContractToolError,
+  type McpServerConfig,
+} from "./core/mcp.js";
 import { verifyMcpHookTargets, type McpHookIssue } from "./core/mcp-hook.js";
 import {
   parseAgentTools,
@@ -800,6 +806,45 @@ export function scanPlugin(
       .length,
     puritySummary,
   };
+}
+
+/**
+ * LIVE MCP tool resolution for a scanned plugin — the opt-in (`scan --verify-mcp`)
+ * dynamic check no static linter can do: it STARTS each declared MCP server and
+ * checks every `mcp__server__tool` the plugin's agents reference actually exists on
+ * it (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the
+ * already-computed `report` (its agents' tool lists) + the declared server configs;
+ * returns `[]` when the plugin declares no MCP servers (nothing to start). Async +
+ * side-effecting (spawns servers) — which is exactly why it's opt-in, not a default
+ * lint rule. See `verifyMcpContractTools` (core/mcp.ts).
+ */
+export async function verifyLiveMcpTools(
+  report: ScanReport,
+  layout: PluginLayout,
+  dialect: HarnessDialect,
+  timeoutMs = 10000,
+): Promise<McpContractToolError[]> {
+  // collectMcpServers yields the raw JSON server entries; a malformed one (no
+  // command) just fails to start → server-unreachable (handled), so the cast is safe.
+  const servers = collectMcpServers(resolve(report.dir), layout) as Record<
+    string,
+    McpServerConfig
+  >;
+  if (Object.keys(servers).length === 0) return [];
+  const tools = report.agents.flatMap((a) => a.tools ?? []);
+  return verifyMcpContractTools(tools, servers, dialect, timeoutMs);
+}
+
+/** Render the live MCP tool-check result (human-readable). */
+export function formatMcpContractReport(
+  errors: readonly McpContractToolError[],
+): string {
+  if (errors.length === 0) {
+    return "Live MCP tool check: every referenced mcp__server__tool resolves ✓";
+  }
+  const lines = [`Live MCP tool check — ${String(errors.length)} issue(s):`];
+  for (const e of errors) lines.push("  ✗ " + mcpContractToolMessage(e));
+  return lines.join("\n");
 }
 
 /**

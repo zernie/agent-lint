@@ -55,7 +55,13 @@ import {
   type ContractField,
 } from "./scaffold-test.js";
 import { effectSurface } from "./core/effects.js";
-import { scanPlugin, formatScanReport, inspectMarketplace } from "./scan.js";
+import {
+  scanPlugin,
+  formatScanReport,
+  inspectMarketplace,
+  verifyLiveMcpTools,
+  formatMcpContractReport,
+} from "./scan.js";
 import type { ScanReport } from "./scan.js";
 import {
   explainScore,
@@ -4343,6 +4349,21 @@ async function main(): Promise<void> {
         } else {
           console.log(
             json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+          );
+        }
+        if (args.includes("--verify-mcp")) {
+          // Opt-in LIVE MCP tool resolution: starts each declared server and checks
+          // the agent's mcp__server__tool refs actually exist (the dynamic check no
+          // static linter can do). Side-effecting (spawns servers) → opt-in only.
+          const mcpErrs = await verifyLiveMcpTools(
+            report,
+            adapter.layout,
+            adapter.dialect,
+          );
+          console.log(
+            json
+              ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
+              : "\n" + formatMcpContractReport(mcpErrs),
           );
         }
         if (wantTrigger) {
