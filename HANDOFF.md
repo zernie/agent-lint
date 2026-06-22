@@ -81,8 +81,7 @@ slice can't fire (missing gateway skill). Detection proven by CI fake-driver tes
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
   markdown: capability axis, two-oracle, leg-grading, require-\*-spec defaults); the
   full **market-segmented competitive matrix** + agnix find + poach list in
-  `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`; bsuh
-  control-flow article; per-file note in `adoption-strategy.md`. See COMPETITIVE READ above.
+  `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`. See above.
 - **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge
   (lint→test→eval growth loop); viral debunk articles (method-first, caveman SATURATED);
   PUBLIC plugin leaderboard (the open slice); open-core + AI-lab-acquisition posture;
