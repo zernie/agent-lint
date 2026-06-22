@@ -68,19 +68,17 @@ test("assertBlocksDisasters passes the real guard, throws on the fake with the m
     const fake = writeGuard(dir, "fake-guard.sh", 1);
 
     // Real guard over the push subset → no throw.
-    assert.doesNotThrow(() =>
-      assertBlocksDisasters(real, { events: PUSH_EVENTS }),
-    );
+    assert.doesNotThrow(() => {
+      assertBlocksDisasters(real, { events: PUSH_EVENTS });
+    });
 
     // Fake guard → throws, naming the missed actions.
-    assert.throws(
-      () => assertBlocksDisasters(fake, { events: PUSH_EVENTS }),
-      /did NOT block/,
-    );
-    assert.throws(
-      () => assertBlocksDisasters(fake, { events: PUSH_EVENTS }),
-      /false confidence/,
-    );
+    assert.throws(() => {
+      assertBlocksDisasters(fake, { events: PUSH_EVENTS });
+    }, /did NOT block/);
+    assert.throws(() => {
+      assertBlocksDisasters(fake, { events: PUSH_EVENTS });
+    }, /false confidence/);
   } finally {
     cleanupTmpDir(dir);
   }

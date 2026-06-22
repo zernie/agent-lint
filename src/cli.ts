@@ -4370,7 +4370,10 @@ function hookStampPath(file: string): string {
  * routes the live event to `run-hook-program`, and a tamper-evident stamp
  * sidecar lets the runtime refuse a hand-edited artifact.
  */
-async function compileHookCommand(file: string | undefined): Promise<void> {
+async function compileHookCommand(
+  file: string | undefined,
+  args: string[],
+): Promise<void> {
   if (!file) {
     console.error("Usage: vigiles compile-hook <hook-file>");
     process.exit(2);
@@ -4384,15 +4387,22 @@ async function compileHookCommand(file: string | undefined): Promise<void> {
     process.exit(2);
     return;
   }
+  // Resolve the target harness so the emit matches it (CC JSON / Codex TOML +
+  // regex matcher) — same selection the rest of the CLI uses.
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(process.cwd(), harnessFlag)
+    : detectAdapterResult(process.cwd()).adapter;
   let program: AnyHook;
   let compiled;
   try {
     program = await loadHookProgram(file);
-    compiled = compileHookProgram(
-      source,
-      program,
-      `npx vigiles run-hook-program ${file}`,
-    );
+    compiled = compileHookProgram(source, program, {
+      gateCommand: `npx vigiles run-hook-program ${file}`,
+      dialect: adapter.dialect,
+      hookProtocol: adapter.hookProtocol,
+      settingsFormat: adapter.layout.settingsFormat,
+    });
   } catch (e) {
     if (e instanceof HookCompileError) {
       console.error(`✗ ${e.message}`);
@@ -4411,11 +4421,15 @@ async function compileHookCommand(file: string | undefined): Promise<void> {
     hookStampPath(file),
     JSON.stringify({ file, stamp: compiled.stamp }, null, 2) + "\n",
   );
-  console.log(`✓ ${file} compiled (role: ${dispatchKind(program)}).`);
+  const target =
+    adapter.layout.settingsFormat === "toml"
+      ? `${adapter.name}'s config.toml`
+      : `your hooks settings (e.g. ${adapter.layout.settingsPath})`;
   console.log(
-    "\nAdd this to your hooks settings (e.g. .claude/settings.json):\n",
+    `✓ ${file} compiled (role: ${dispatchKind(program)}, harness: ${adapter.name}).`,
   );
-  console.log(JSON.stringify({ hooks: compiled.hooks }, null, 2));
+  console.log(`\nAdd this to ${target}:\n`);
+  console.log(compiled.settingsBlock);
   console.log(
     `\nStamp written to ${relative(process.cwd(), hookStampPath(file))}.`,
   );
@@ -4740,7 +4754,7 @@ async function main(): Promise<void> {
       break;
 
     case "compile-hook":
-      await compileHookCommand(restArgs[0]);
+      await compileHookCommand(restArgs[0], args);
       break;
 
     case "run-hook-program":

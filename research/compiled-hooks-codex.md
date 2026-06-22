@@ -1,11 +1,12 @@
-# Compiled hooks — the Codex adapter (design)
+# Compiled hooks — the Codex adapter
 
-Status: **design, not yet built.** The compiled-hooks feature
-([`docs/compiled-hooks.md`](../docs/compiled-hooks.md), core in
-`src/core/hook-program.ts`, public `vigiles/hook`) ships for Claude Code. This is
-the plan to make a single typed hook program compile to **Codex** too, through
-the existing adapter ports — no core changes, mirroring how `compile`/`scan`/the
-test tiers already dispatch per harness.
+Status: **BUILT (2026-06-22).** A single typed `vigiles/hook` program now compiles
+to **Codex** as well as Claude Code, through the existing adapter ports — no core
+changes to the harness boundary. `vigiles compile-hook --harness=codex` emits a
+TOML `[[hooks.<event>]]` block with an anchored-regex matcher; the default stays
+Claude Code JSON. The gate runtime (`run-hook-program`) is shared unchanged
+(Codex's veto is exit-2-identical). This doc records the design that landed; the
+one deferred half (the inject/ask OUTPUT JSON shape) is noted in §4.
 
 ## The thesis: one program, the emit is the only harness-specific part
 
@@ -61,25 +62,39 @@ only the _wiring artifact_ (`compile-hook`'s output) is per-harness.
    `denyDecisionValues`). **To confirm against the real `codex` binary** before
    building — gate, like the rest of the Codex transport work.
 
-## The build (small, port-shaped — no core edits)
+## The build (what landed — small, port-shaped, no harness-boundary edits)
 
-- **Generalize the emit** `compileHookProgram(source, hook, gateCommand)` →
-  `compileHookProgram(source, hook, { dialect, layout, hookProtocol,
-gateCommand })`. Keep the current signature working (default to the CC ports)
-  so it's strictly additive. Internally:
-  - validate `hook.on` via `verifyHookEvents` against `dialect`;
-  - format the matcher (raw for CC, `^…$` regex for Codex) — a `formatMatcher`
-    on the protocol/dialect;
-  - serialize via `layout.settingsFormat` — JSON object (today) or a TOML
-    `[[hooks.<event>]]` block (`@iarna/toml`, already a dep).
-- **CLI:** `compile-hook` already resolves the adapter path the rest of the CLI
-  uses (`resolveHarnessSelection` — `--harness=` / `.vigilesrc.json` / detect);
-  thread `adapter.{dialect,layout,hookProtocol}` into the generalized emit. The
-  printed block becomes "add to `config.toml`" for Codex.
-- **`run-hook-program`:** unchanged for the gate path (exit 2). Only the
-  inject/ask output formatter routes through `hookProtocol` once Codex's shape is
-  confirmed.
-- **The stamp** is harness-neutral — keep it.
+- **Generalized the emit:** `compileHookProgram(source, hook, gateCommand?)` →
+  `compileHookProgram(source, hook, opts?: CompileHookOptions)` where
+  `CompileHookOptions = { gateCommand?, dialect?, hookProtocol?, settingsFormat? }`
+  — all optional, defaulting to the Claude Code block (back-compatible; only the
+  two internal callers moved off the old positional `gateCommand`). Internally it:
+  - validates `hook.on` via `verifyHookEvents` against the `dialect` (a typo'd /
+    unsupported event throws `HookCompileError` — won't compile);
+  - styles the matcher via `hookProtocol.matcherStyle` — `"exact"` (CC, the raw
+    `A|B` join) or `"regex"` (Codex, `^(A|B)$`);
+  - renders `settingsBlock` per `settingsFormat` — JSON (CC nested
+    `{event:[{matcher,hooks:[{type,command}]}]}`) or TOML `[[hooks.<event>]]`
+    with a flat `command` (`@iarna/toml`, already a dep).
+- **The new port field:** `HookProtocol.matcherStyle?: "exact" | "regex"`
+  (optional, additive). `codexHookProtocol` sets `"regex"`; CC omits it (exact).
+- **CLI:** `compile-hook` resolves the adapter the same way the rest of the CLI
+  does (`--harness=` / detect) and threads `adapter.{dialect,hookProtocol,
+layout.settingsFormat}` into the emit. The printed target line becomes "add to
+  Codex's config.toml" for Codex.
+- **`run-hook-program`:** unchanged — the gate path is exit-2 and the decision
+  reads the event's `tool_name` from stdin JSON, both harness-neutral.
+- **The stamp** is harness-neutral — unchanged.
+
+## Deferred (the one honest gap)
+
+The **inject/ask OUTPUT JSON shape** (§4) is still CC-shaped in the runtime: a
+gate's `deny` is exit-2 (shared, works on Codex today), but an `inject` hook
+prints CC's `hookSpecificOutput.additionalContext` and `ask` prints CC's
+`permissionDecision`. If Codex's field names differ, that formatting moves behind
+`HookProtocol` — to confirm against the real `codex` binary first, like the rest
+of the Codex transport work. Gate/`deny` hooks (the safety case) are fully
+cross-harness now; inject/ask on Codex is the remaining item.
 
 ## Boundary + dogfood
 

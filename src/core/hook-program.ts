@@ -35,6 +35,10 @@ import {
   type BashEffect,
 } from "./bash-effects.js";
 import { sha256short, type SHA256Hash } from "./hash.js";
+import { stringify as stringifyToml } from "@iarna/toml";
+import type { HarnessDialect } from "./dialect.js";
+import type { HookProtocol } from "./hook-protocol.js";
+import { verifyHookEvents } from "./hook-events.js";
 
 // ---------------------------------------------------------------------------
 // The closed vocabulary (this is the entire surface a hook author may touch)
@@ -204,8 +208,31 @@ export interface CompiledHookProgram {
       }[];
     }[]
   >;
+  /**
+   * The rendered settings block to add to the harness's hooks config — JSON for
+   * Claude Code (`.claude/settings.json`), TOML `[[hooks.<event>]]` for Codex
+   * (`config.toml`). The CLI prints this; the structured `hooks` above is the
+   * Claude-Code-shaped intermediate.
+   */
+  readonly settingsBlock: string;
   /** SHA-256 of the sanctioned source — the runtime refuses an artifact whose stamp differs. */
   readonly stamp: SHA256Hash;
+}
+
+/**
+ * Per-harness emit inputs (all optional, default to Claude Code) — the ports the
+ * CLI threads in from the resolved adapter. Keeps the core harness-agnostic:
+ * core depends only on these interfaces, never an adapter (core ⊄ adapter).
+ */
+export interface CompileHookOptions {
+  /** The command the emitted block routes the event to. */
+  readonly gateCommand?: string;
+  /** Validate `hook.on` against this harness's hook-event catalog (a typo won't compile). */
+  readonly dialect?: HarnessDialect;
+  /** Matcher style (exact vs anchored regex). Defaults to Claude Code's `"exact"`. */
+  readonly hookProtocol?: HookProtocol;
+  /** Settings encoding — `"json"` (Claude Code) or `"toml"` (Codex). From `PluginLayout.settingsFormat`. */
+  readonly settingsFormat?: "json" | "toml";
 }
 
 /**
@@ -239,17 +266,57 @@ export function hookRouting(hook: AnyHook): {
   return { on: hook.on, matcher: hook.match.tool };
 }
 
+/** Apply a harness's matcher style to the neutral `A|B` matcher join. */
+function styleMatcher(
+  matcher: string | undefined,
+  protocol: HookProtocol | undefined,
+): string | undefined {
+  if (matcher === undefined) return undefined;
+  return protocol?.matcherStyle === "regex" ? `^(${matcher})$` : matcher;
+}
+
+/**
+ * Render the settings block a user pastes into their hooks config. JSON for
+ * Claude Code (the nested `{event:[{matcher,hooks:[{type,command}]}]}` shape);
+ * TOML `[[hooks.<event>]]` with a flat `command` for Codex.
+ */
+function renderSettingsBlock(
+  on: string,
+  matcher: string | undefined,
+  gateCommand: string,
+  format: "json" | "toml",
+): string {
+  if (format === "toml") {
+    const entry: Record<string, string> =
+      matcher === undefined
+        ? { command: gateCommand }
+        : { matcher, command: gateCommand };
+    return stringifyToml({ hooks: { [on]: [entry] } }).trim();
+  }
+  const entry =
+    matcher === undefined
+      ? { hooks: [{ type: "command", command: gateCommand }] }
+      : { matcher, hooks: [{ type: "command", command: gateCommand }] };
+  return JSON.stringify({ hooks: { [on]: [entry] } }, null, 2);
+}
+
 /**
  * Compile a hook program from its source. Runs the capability check FIRST (an
- * out-of-API import does NOT compile), then stamps the source so the shipped
- * artifact is tamper-evident. The hook supplies the routing (event + matcher),
- * which differs per role — a tool gate matches its tool, a react matches its
- * tools, an inject (SessionStart) has no tool matcher at all.
+ * out-of-API import does NOT compile), validates the event against the target
+ * harness (a typo won't compile), then stamps the source so the shipped artifact
+ * is tamper-evident. The hook supplies the routing (event + matcher), which
+ * differs per role — a tool gate matches its tool, a react matches its tools, an
+ * inject (SessionStart) has no tool matcher at all.
+ *
+ * Harness-agnostic by injection: with no `opts` it emits the Claude Code block
+ * (back-compatible); pass `{ dialect, hookProtocol, settingsFormat }` from a
+ * resolved adapter and it emits that harness's block (e.g. Codex TOML + regex
+ * matcher). Core never imports an adapter — only the port interfaces.
  */
 export function compileHookProgram(
   source: string,
   hook: AnyHook,
-  gateCommand = "npx vigiles run-hook-program",
+  opts: CompileHookOptions = {},
 ): CompiledHookProgram {
   const violations = checkHookImports(source);
   if (violations.length > 0) {
@@ -259,7 +326,16 @@ export function compileHookProgram(
       )} — only the sanctioned API is allowed (capability = API surface).`,
     );
   }
-  const { on, matcher } = hookRouting(hook);
+  const { on, matcher: rawMatcher } = hookRouting(hook);
+  // A hook registered under an event the harness never fires is dead — reject it.
+  if (opts.dialect) {
+    const issues = verifyHookEvents([on], opts.dialect);
+    if (issues.length > 0) {
+      throw new HookCompileError(issues[0].message);
+    }
+  }
+  const gateCommand = opts.gateCommand ?? "npx vigiles run-hook-program";
+  const matcher = styleMatcher(rawMatcher, opts.hookProtocol);
   const entry =
     matcher === undefined
       ? { hooks: [{ type: "command" as const, command: gateCommand }] }
@@ -269,6 +345,12 @@ export function compileHookProgram(
         };
   return {
     hooks: { [on]: [entry] },
+    settingsBlock: renderSettingsBlock(
+      on,
+      matcher,
+      gateCommand,
+      opts.settingsFormat ?? "json",
+    ),
     stamp: stampHook(source),
   };
 }

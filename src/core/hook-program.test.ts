@@ -35,6 +35,8 @@ import {
   notice,
   runReact,
 } from "./hook-program.js";
+import { codexDialect } from "../adapters/codex/dialect.js";
+import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
 
 // The hook an author writes — a pure function against the closed API. No exit
 // code, no JSON, no stdin, no regex.
@@ -160,6 +162,59 @@ test("commandView.touches/pipesToShell: high-signal secret-read + curl|sh matche
   // A shell WITH a script file is a normal invocation — NOT flagged.
   assert.equal(commandView("sh deploy.sh").pipesToShell(), false);
   assert.equal(commandView("git status").pipesToShell(), false);
+});
+
+// ---------------------------------------------------------------------------
+// MULTI-HARNESS EMIT — one typed program, the settings block is per-harness.
+// The dogfood is NON-CC-shaped (TOML + regex matcher) so it can't pass by
+// accident on a Claude-Code-hardcoded path (the adapter-aware-lint discipline).
+// ---------------------------------------------------------------------------
+
+test("compile (Codex): emits TOML `[[hooks.<event>]]` with a regex matcher", () => {
+  const out = compileHookProgram(
+    `import { defineHook, tool, deny, allow } from "vigiles/hook";`,
+    forcePushGuard,
+    {
+      dialect: codexDialect,
+      hookProtocol: codexHookProtocol,
+      settingsFormat: "toml",
+      gateCommand: "npx vigiles run-hook-program guard.mjs",
+    },
+  );
+  assert.match(out.settingsBlock, /\[\[hooks\.PreToolUse\]\]/);
+  // Codex matcher is an anchored regex, not CC's exact tool name.
+  assert.match(out.settingsBlock, /matcher = "\^\(Bash\)\$"/);
+  assert.match(
+    out.settingsBlock,
+    /command = "npx vigiles run-hook-program guard\.mjs"/,
+  );
+});
+
+test("compile (CC default): still emits the JSON block + exact matcher (back-compat)", () => {
+  const out = compileHookProgram(
+    `import { defineHook, tool, deny, allow } from "vigiles/hook";`,
+    forcePushGuard,
+  );
+  assert.equal(out.hooks.PreToolUse[0].matcher, "Bash");
+  assert.match(out.settingsBlock, /"hooks"/);
+  assert.match(out.settingsBlock, /"matcher": "Bash"/);
+});
+
+test("compile: an event the target harness never fires does NOT compile", () => {
+  const typo = defineHook({
+    on: "PreToolUSe", // a typo — never fires
+    match: tool("Bash"),
+    decide: () => allow(),
+  });
+  assert.throws(
+    () =>
+      compileHookProgram(
+        `import { defineHook, tool, allow } from "vigiles/hook";`,
+        typo,
+        { dialect: codexDialect },
+      ),
+    HookCompileError,
+  );
 });
 
 // ---------------------------------------------------------------------------

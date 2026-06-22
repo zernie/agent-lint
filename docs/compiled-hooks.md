@@ -122,6 +122,13 @@ protocol.
 Hooks can be authored in JavaScript (`.mjs`) or TypeScript (run under `tsx` /
 Node ≥ 23.6). `vigiles/hook` is the **only** import a compiled hook may use.
 
+**Multi-harness.** The typed program is harness-neutral; only the emitted block
+differs. `compile-hook --harness=codex` writes a Codex `config.toml`
+`[[hooks.<event>]]` block (an anchored-regex matcher) instead of Claude Code's
+`settings.json` JSON — and the gate runtime is shared, since Codex vetoes a tool
+call via `exit 2` exactly as Claude Code does. (Inject/ask output on Codex is the
+one deferred piece — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).)
+
 ## Proof: the OSS dogfood
 
 We pointed the [`DISASTER_CATALOG`](../README.md#-test--does-your-harness-do-its-job)
