@@ -22,6 +22,12 @@ import {
 } from "./harness-test.js";
 import type { EvalReport, TriggerRateReport } from "./eval.js";
 import type { HookRunResult, EgressAttempt } from "./run-hook.js";
+import { runHookProgram } from "./core/hook-program.js";
+import type {
+  AnyHook,
+  RawHookEvent,
+  HookProgramOutcome,
+} from "./core/hook-program.js";
 import { evalChecks, type Check } from "./check.js";
 import type { OutputContract } from "./core/spec.js";
 import {
@@ -129,6 +135,34 @@ export function assertHookAllowed(r: HookRunResult): void {
     fail(
       `expected the hook to allow, but it blocked (exit ${String(r.exitCode)}, decision ${String(r.decision)})`,
     );
+  }
+}
+
+/** Render a {@link HookProgramOutcome} for an assertion message. */
+function describeOutcome(o: HookProgramOutcome): string {
+  if (o.kind === "decision") return `${o.decision.kind} (a gate decision)`;
+  if (o.kind === "injection") return `an injection`;
+  return `${o.reaction.kind} (a reaction)`;
+}
+
+/**
+ * Assert a COMPILED hook (a `vigiles/hook` program) denies an event — evaluated
+ * in-process, no subprocess, no model. The cheapest way to test a gate's logic:
+ * pass the hook's default export and a raw event. (For the wired-into-the-real-CLI
+ * check, use {@link assertHookBlocked} over `runHook`.)
+ */
+export function assertHookDenies(hook: AnyHook, event: RawHookEvent): void {
+  const o = runHookProgram(hook, event);
+  if (o.kind !== "decision" || o.decision.kind !== "deny") {
+    fail(`expected the hook to deny, got ${describeOutcome(o)}`);
+  }
+}
+
+/** Assert a COMPILED hook allows an event (in-process). The twin of {@link assertHookDenies}. */
+export function assertHookAllows(hook: AnyHook, event: RawHookEvent): void {
+  const o = runHookProgram(hook, event);
+  if (o.kind !== "decision" || o.decision.kind !== "allow") {
+    fail(`expected the hook to allow, got ${describeOutcome(o)}`);
   }
 }
 

@@ -17,6 +17,7 @@ express it.
 - [The three roles](#the-three-roles)
 - [The vocabulary](#the-vocabulary)
 - [Compile and run](#compile-and-run)
+- [Testing a compiled hook](#testing-a-compiled-hook)
 - [Proof: the OSS dogfood](#proof-the-oss-dogfood)
 - [Limitations & trade-offs (the cons)](#limitations--trade-offs-the-cons)
 - [See also](#see-also)
@@ -131,6 +132,47 @@ call via `exit 2` exactly as Claude Code does. Inject/ask **output** on Codex is
 the one deferred piece (its field shape is CC-confirmed only); `compile-hook
 --harness=codex` warns loudly on an inject/react hook rather than ship a
 maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).
+
+## Testing a compiled hook
+
+Because the decision is a **pure function**, you test it deterministically — no
+model, and (cheapest) no subprocess. Three levels, by cost:
+
+**1. In-process (cheapest).** Pass the hook and a raw event to `assertHookDenies`
+/ `assertHookAllows` — no `node` spawn, no CLI, milliseconds:
+
+```ts
+import { it } from "vitest";
+import { assertHookDenies, assertHookAllows } from "vigiles/unit";
+import guard from "./safe-bash-guard.mjs"; // the hook's default export
+
+it("blocks a force-push, even hidden in a compound command", () => {
+  assertHookDenies(guard, {
+    tool_name: "Bash",
+    tool_input: { command: "cd x && git push -f" },
+  });
+  assertHookAllows(guard, {
+    tool_name: "Bash",
+    tool_input: { command: "git status" },
+  });
+});
+```
+
+`runHookProgram(hook, event)` is the underlying primitive — it returns a
+normalized outcome (`{ kind: "decision" | "injection" | "reaction", … }`)
+dispatched by role, so an inject or react hook is just as testable as a gate.
+
+**2. Through the real runtime.** `runHook("node … run-hook-program guard.mjs",
+event)` drives the actual compiled CLI (stamp check + dispatch) — proves the
+wired artifact behaves, still no model. Pair it with the disaster battery:
+`assertBlocksDisasters("node … run-hook-program guard.mjs")` proves the gate
+blocks every textbook disaster.
+
+**3. Does it fire in the assembled harness?** `runHarnessTest` (a scripted mock
+model emits the tool call; assert the hook blocked) — the delivery question,
+key-free, and capped by the [delivery floor](#limitations--trade-offs-the-cons).
+
+See [Testing your harness](harness-testing.md) for the tiers in full.
 
 ## Proof: the OSS dogfood
 

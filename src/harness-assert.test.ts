@@ -20,6 +20,8 @@ import {
   assertServedTurns,
   assertHookBlocked,
   assertHookAllowed,
+  assertHookDenies,
+  assertHookAllows,
   assertNoEgress,
   assertEgressOnly,
   egressHosts,
@@ -49,6 +51,7 @@ import {
   vigilesMatchers,
 } from "./harness-assert.js";
 import { result } from "./core/spec.js";
+import { defineHook, tool, deny, allow } from "./core/hook-program.js";
 import type { Check } from "./check.js";
 import type { EvalReport } from "./eval.js";
 import type { HarnessTestResult, HookFire } from "./harness-test.js";
@@ -722,4 +725,31 @@ test("assertNoRegression gates on a significant drop vs baseline", () => {
   assert.doesNotThrow(() => {
     assertNoRegression([mk(0.9)], baseline);
   });
+});
+
+test("assertHookDenies / assertHookAllows test a compiled hook in-process (no subprocess)", () => {
+  const guard = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    decide: (e) =>
+      e.command.runs("git push", { force: true })
+        ? deny("no force-push")
+        : allow(),
+  });
+  const ev = (command: string) => ({
+    tool_name: "Bash",
+    tool_input: { command },
+  });
+
+  // No throw on the matching decision …
+  assert.doesNotThrow(() => {
+    assertHookDenies(guard, ev("git push --force origin main"));
+  });
+  assert.doesNotThrow(() => {
+    assertHookAllows(guard, ev("git status"));
+  });
+  // … and a loud throw on the wrong one (the message names what it got).
+  assert.throws(() => {
+    assertHookDenies(guard, ev("git status"));
+  }, /expected the hook to deny, got allow \(a gate decision\)/);
 });

@@ -34,6 +34,7 @@ import {
   run,
   notice,
   runReact,
+  runHookProgram,
 } from "./hook-program.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
@@ -333,4 +334,42 @@ test("probe3: a react hook CANNOT block — 'block on PostToolUse' is a type err
     react: () => deny("too late to block"),
   });
   assert.ok(bad.role === "react");
+});
+
+// ---------------------------------------------------------------------------
+// runHookProgram + the deterministic asserts — the cheapest test tier for a
+// compiled hook (pure, no subprocess, no model). One dispatcher over all roles.
+// ---------------------------------------------------------------------------
+
+test("runHookProgram dispatches every role to a normalized outcome", () => {
+  // bash-gate → a Decision.
+  const denied = runHookProgram(forcePushGuard, ev("git push -f origin main"));
+  assert.equal(denied.kind, "decision");
+  if (denied.kind === "decision") assert.equal(denied.decision.kind, "deny");
+  assert.equal(
+    runHookProgram(forcePushGuard, ev("git status")).kind,
+    "decision",
+  );
+
+  // file-gate → a Decision (reads file_path).
+  const blockedWrite = runHookProgram(
+    confineGuard,
+    fileEv("Write", "/etc/passwd"),
+  );
+  assert.equal(blockedWrite.kind, "decision");
+  if (blockedWrite.kind === "decision")
+    assert.equal(blockedWrite.decision.kind, "deny");
+
+  // inject → the injected context text.
+  const inj = runHookProgram(briefing, { source: "startup" });
+  assert.equal(inj.kind, "injection");
+  if (inj.kind === "injection") assert.match(inj.context, /session started/);
+
+  // react → the (classified) Reaction.
+  const reaction = runHookProgram(formatOnWrite, {
+    tool_name: "Write",
+    tool_input: { file_path: "src/x.ts" },
+  });
+  assert.equal(reaction.kind, "reaction");
+  if (reaction.kind === "reaction") assert.equal(reaction.reaction.kind, "run");
 });
