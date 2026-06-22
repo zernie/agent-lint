@@ -29,28 +29,29 @@ NO cross-ref/typed/eval); field WIDE OPEN (biggest = agnix 296★, no cross-ref/
 **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markdown) + test/eval. The
 valuable cross-check is HARNESS-NATIVE (tools/MCP `server#tool`/events/paths/delegates), NOT
 more linter catalogs. Full record: `typed-spec-moat.md` + `landscape-mid-2026.md`.
-**SHIPPED live MCP tool resolution** (`6edd6a0` `verifyMcpContractTools` + `2982510`
-`scan --verify-mcp`) — starts the declared server, checks each `mcp__server__tool` exists
-w/ did-you-mean. DOGFOOD found a REAL bug (`d813d82`): MadAppGang tester.md lists 3 dead
-chrome-devtools tools, invisible to every static linter (plugin-structural-findings.md).
+**SHIPPED live MCP tool resolution** (`scan --verify-mcp`, `2982510`) — starts the declared
+server, checks each `mcp__server__tool` exists; dogfood found a real MadAppGang dead-tools bug.
 
-**SHIPPED: plugin SELECTION-COLLISION matrix** (now `vigiles measure`) — behavioral
-CONFIRMATION of the deterministic `description-overlap` rule. Each skill's prompts run
-against the WHOLE installed plugin → N×N matrix (diagonal=recall, off-diagonal=a sibling
-HIJACKING the prompt); cross-skill precision per-skill trigger-rate can't see. CC-only,
-bodies stubbed. DOGFOOD: vigiles's own 3 skills collision-FREE; **Layer-1 honesty** (`852a05d`)
-relabels a stubbed all-zero run on a SessionStart-hooked plugin "hook-primed — likely an
-artifact" (superpowers' gateway hook is dropped by stubbing). Layer 2 (`--no-stub` faithful
-path) deferred. Full: `plugin-selection-collision.md`.
+**SHIPPED: SELECTION-COLLISION matrix** (now `vigiles measure`) + Layer-1 hook-primed-artifact
+honesty (`852a05d`); full in `plugin-selection-collision.md`. **CLI CONSOLIDATED (`2aedc5b`):**
+scan 14→6 flags; NEW `vigiles measure <dir>` = model-gated behavioral front door; capability-diff
+folded to `scan <after> --capability-diff=<before>`. OPEN (user floated): fold `scan` into `lint`
+(directionally right, deferred — don't thrash).
 
-**CLI CONSOLIDATED (`2aedc5b`) — bad-DX cleanup.** scan had ~14 flags; re-grounded on
-"a verb per JOB/LAYER, flags for modifiers." NEW `vigiles measure <dir> --prompts=` =
-the model-gated behavioral front door (trigger-rate + collisions in one report),
-replacing `scan --trigger`/`--collisions`. capability-diff folded from a command into
-the free scan flag `scan <after> --capability-diff=<before>`. scan back to ~6
-deterministic flags. OPEN (user floated, NOT done): fold `scan` into `lint` (one free
-verb, gate-or-report) — directionally right but a big separate refactor; banked the
-measure win first, don't thrash.
+🚀 **BIG-MOAT DIRECTION (2026-06-22, user steer "huge moat, way more reliable harness — not
+small linter improvements").** Deep FP pass + web-verified failure corpus →
+`research/harness-protocol-flow-moat.md`. Thesis: existing moats type the static capability
+SET; the prize is typing the harness's DYNAMIC structure — the 3 things a set discards:
+**ORDER** (typestate: destructive action unreachable until its guard step ran — kills
+destroy-without-backup), **FLOW** (info-flow/noninterference: untrusted input can't reach a
+sink — the trifecta as a real path), **REPLAY** (linear/idempotent: exactly-once side effects
+— the unsolved duplicate-on-replay hole, ACRFence). Reframed as a CATEGORY: a deterministic
+**reliability RUNTIME** (spec→PreToolUse gate, enforced OUTSIDE the context window so it
+survives compaction), NOT a lint rule — "make the harness measurably more reliable," provable
+via the eval layer (the face-wipe A/B). Grounded: prose-doesn't-bind (#32163 "@enforce"),
+declared≠enforced (SDK #172/#162/#189), METR <10%@4h, trifecta 98% of prod agents. Companions
+poached: `typed-claude-md-poach.md` (Mastra/Pydantic/Effect-TS). NEXT: turn this into a build
+plan (which axis ships first as a runtime gate + the measured-reliability demo).
 
 ## Next move (pick)
 
@@ -84,8 +85,7 @@ measure win first, don't thrash.
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
   markdown: capability axis, two-oracle, leg-grading); the **market-segmented competitive
   matrix** + poach list in `landscape-mid-2026.md`; reality-check in `typed-spec-moat.md`.
-- **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge;
-  viral debunk articles (caveman SATURATED); PUBLIC plugin leaderboard; open-core posture.
+- **Ideas captured (roadmap §Explore):** tiered README badge; PUBLIC leaderboard; open-core.
 
 ## In flight
 
