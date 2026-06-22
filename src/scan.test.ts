@@ -16,6 +16,8 @@ import {
   expandMarketplace,
   inspectMarketplace,
   unexpectedScript,
+  verifyLiveMcpTools,
+  formatMcpContractReport,
 } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -954,5 +956,60 @@ test("effect surface: puritySummary is in the JSON shape (ScanReport)", () => {
   // effectBuckets is on each agent.
   assert.ok("effectBuckets" in r.agents[0]);
   assert.ok("purity" in r.agents[0]);
+  cleanupTmpDir(dir);
+});
+
+// __dirname is dist/ at runtime; the fixture server lives at the repo root.
+const FIXTURE = join(__dirname, "../examples/harness/fixture-mcp-server.mjs");
+
+test("verifyLiveMcpTools: flags a tool absent from the live server (with a did-you-mean)", async () => {
+  const dir = makeTmpDir("scan-verify-mcp");
+  // Declare the fixture server (exposes echo, add) and an agent that references a
+  // real tool (echo) plus a typo (ekho) — the static check passes the server, only
+  // a live tools/list catches the missing tool.
+  write(
+    dir,
+    ".mcp.json",
+    JSON.stringify({
+      mcpServers: { fixture: { command: process.execPath, args: [FIXTURE] } },
+    }),
+  );
+  write(
+    dir,
+    "agents/probe.md",
+    "---\nname: probe\ndescription: Probes the server\ntools: Read, mcp__fixture__echo, mcp__fixture__ekho\n---\nbody\n",
+  );
+  const report = scanPlugin(dir);
+  const errs = await verifyLiveMcpTools(
+    report,
+    claudeCodeLayout,
+    claudeCodeDialect,
+  );
+  assert.equal(errs.length, 1);
+  assert.equal(errs[0].reason, "tool-missing");
+  assert.equal(errs[0].toolName, "ekho");
+  assert.ok(errs[0].suggestions.includes("echo"));
+  // The human-readable report names the issue.
+  assert.match(formatMcpContractReport(errs), /1 issue/);
+  cleanupTmpDir(dir);
+});
+
+test("verifyLiveMcpTools: no declared servers → nothing started, no errors", async () => {
+  const dir = makeTmpDir("scan-verify-mcp-none");
+  // An agent references an undeclared server — the live check has no config to
+  // start it, so it's the static verifyMcpToolServers' job, not this tier's.
+  write(
+    dir,
+    "agents/probe.md",
+    "---\nname: probe\ndescription: Probes a ghost\ntools: mcp__ghost__whatever\n---\nbody\n",
+  );
+  const report = scanPlugin(dir);
+  const errs = await verifyLiveMcpTools(
+    report,
+    claudeCodeLayout,
+    claudeCodeDialect,
+  );
+  assert.deepEqual(errs, []);
+  assert.match(formatMcpContractReport(errs), /resolves/);
   cleanupTmpDir(dir);
 });

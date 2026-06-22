@@ -15,6 +15,7 @@ npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harne
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
+npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
 npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
@@ -188,6 +189,38 @@ surfaced per-skill (`unmeasured`), never crashing the scan. See
 `measureTriggerRate` and [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md)
 for what it catches. (The remaining behavioural columns — observed egress,
 safety — build on the same footing.)
+
+#### Live MCP tool resolution — `scan --verify-mcp`
+
+The static scan checks an `mcp__server__tool` reference's **server** is _declared_
+(`mcp-tool-resolves`). **`--verify-mcp`** goes further: it **starts each declared MCP
+server and checks the tool itself actually exists** on it — catching the silent
+"rename rot" where a server consolidates or removes a tool (e.g. chrome-devtools-mcp
+collapsing `emulate_cpu` + `emulate_network` into a single `emulate`), which leaves a
+dead reference no static linter can see.
+
+```bash
+npx vigiles scan ./some-plugin --verify-mcp          # human-readable; did-you-mean on a miss
+npx vigiles scan ./some-plugin --verify-mcp --json   # { "mcpContractTools": [...] }
+```
+
+Three things to know:
+
+- **It's not an eval** — no model, no tokens, fully deterministic _given the server_.
+  But it is the **only** way to catch a renamed/removed tool, because an MCP server's
+  tool list lives in its code and is only knowable by **running** it (`tools/list`) —
+  there is no static manifest. That's why it's a separate, **opt-in** flag (it spawns
+  the real server, needs it installed) and **not** a default lint rule: `lint`/`scan`
+  stay free + offline; `--verify-mcp` opts into execution, like the sandbox/egress tiers.
+- **`server-unreachable` is informational, never a hard failure** — if a declared
+  server can't start in this environment, that's "couldn't verify," not a bug. Only a
+  **`tool-missing`** (the server started and the tool genuinely isn't there) is a real
+  finding.
+- **Scope:** it only fires on plugins whose agents pin specific `mcp__server__tool`
+  names in a `tools:` contract _and_ declare the server — a sharp but minority pattern.
+  Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
+  (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
+  in a real plugin): [`research/plugin-structural-findings.md`](../research/plugin-structural-findings.md).
 
 ### `explain [dir] [name]`
 
@@ -383,6 +416,7 @@ deterministic + every-commit).
 | Untested surface                                            |  ✓ gate  |  ✓ count  |        –         |
 | Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |        –         |
 | Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |        –         |
+| MCP tool exists on **live** server (`--verify-mcp`)         |    –     |  opt-in²  |        –         |
 | Leaderboard (rank a marketplace)                            |    –     |     ✓     |        –         |
 | Trigger recall/precision (does a skill fire?)               |    –     |     –     |        ✓         |
 | Config severities + CI exit codes                           |    ✓     | read-only |    read-only     |
@@ -401,6 +435,10 @@ deterministic + every-commit).
 `AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
 _verification_ of that file is `lint`'s job (and needs marks — inline,
 frontmatter, or a spec; plain prose isn't auto-parsed).
+
+² `--verify-mcp` is **opt-in and side-effecting** (it starts the declared MCP server
+to list its tools) — deterministic but not free/offline, so it's a flag, never a
+default `scan`/`lint` check. See the `scan --verify-mcp` section above.
 
 ## GitHub Action
 
