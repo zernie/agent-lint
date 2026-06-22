@@ -52,6 +52,13 @@ import {
 } from "./harness-assert.js";
 import { result } from "./core/spec.js";
 import { defineHook, tool, deny, allow } from "./core/hook-program.js";
+import {
+  defineInject,
+  inject,
+  defineReact,
+  run,
+  tools,
+} from "./core/hook-program.js";
 import type { Check } from "./check.js";
 import type { EvalReport } from "./eval.js";
 import type { HarnessTestResult, HookFire } from "./harness-test.js";
@@ -752,4 +759,30 @@ test("assertHookDenies / assertHookAllows test a compiled hook in-process (no su
   assert.throws(() => {
     assertHookDenies(guard, ev("git status"));
   }, /expected the hook to deny, got allow \(a gate decision\)/);
+  // assertHookAllows throws on a deny (the other fail path + message).
+  assert.throws(() => {
+    assertHookAllows(guard, ev("git push -f"));
+  }, /expected the hook to allow, got deny \(a gate decision\)/);
+
+  // A non-gate hook isn't a decision at all — the message names the role, so a
+  // gate assert against an inject/react hook fails loudly (not silently passes).
+  const briefing = defineInject({
+    on: "SessionStart",
+    produce: () => inject("hi"),
+  });
+  assert.throws(() => {
+    assertHookDenies(briefing, { source: "startup" });
+  }, /got an injection/);
+
+  const formatOnWrite = defineReact({
+    on: "PostToolUse",
+    match: tools("Write"),
+    react: () => run("prettier --write x"),
+  });
+  assert.throws(() => {
+    assertHookDenies(formatOnWrite, {
+      tool_name: "Write",
+      tool_input: { file_path: "x.ts" },
+    });
+  }, /got run \(a reaction\)/);
 });
