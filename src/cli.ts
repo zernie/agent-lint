@@ -88,7 +88,11 @@ import {
 import type { HarnessDialect } from "./core/dialect.js";
 import type { HarnessAdapter } from "./core/adapter.js";
 import { skillFrontmatterDropWarnings } from "./skill-harness.js";
-import { rankPlugins, formatLeaderboard } from "./leaderboard.js";
+import {
+  rankPlugins,
+  formatLeaderboard,
+  formatLeaderboardMarkdown,
+} from "./leaderboard.js";
 import { optimize, formatOptimize } from "./optimize.js";
 
 import {
@@ -4361,11 +4365,13 @@ async function main(): Promise<void> {
           );
         }
       } else if (targets.length > 1) {
-        // Multiple targets → rank them (the leaderboard engine).
+        // Multiple targets → rank them (the leaderboard engine). `--md` emits the
+        // publishable Markdown table (a README / gist / the leaderboard site).
         const scores = rankPlugins(targets);
-        console.log(
-          json ? JSON.stringify(scores, null, 2) : formatLeaderboard(scores),
-        );
+        const text = args.includes("--md")
+          ? formatLeaderboardMarkdown(scores)
+          : formatLeaderboard(scores);
+        console.log(json ? JSON.stringify(scores, null, 2) : text);
         if (wantTrigger) {
           console.log(
             "\n⚠ --trigger (behavioral column) runs per single plugin; not yet wired into the leaderboard. Scan one plugin dir to probe it.",

@@ -11,9 +11,26 @@
  * model and stack on top later; this part runs anywhere in CI for free.
  */
 
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 import { scanPlugin, type ScanReport } from "./scan.js";
+
+/** The plugin's declared name (`.claude-plugin/plugin.json`), for a real label in
+ * the ranking instead of a SHA-pinned dir basename. Falls back to the basename. */
+function pluginLabel(dir: string): string {
+  const p = join(dir, ".claude-plugin", "plugin.json");
+  if (existsSync(p)) {
+    try {
+      const name = (JSON.parse(readFileSync(p, "utf-8")) as { name?: string })
+        .name;
+      if (typeof name === "string" && name.length > 0) return name;
+    } catch {
+      // fall through to the basename
+    }
+  }
+  return basename(dir) || dir;
+}
 
 export interface PluginScore {
   readonly dir: string;
@@ -155,7 +172,7 @@ export function rankPlugins(dirs: readonly string[]): PluginScore[] {
     const { score, issues } = scoreReport(report);
     return {
       dir,
-      name: basename(dir) || dir,
+      name: pluginLabel(dir),
       score,
       grade: gradeFor(score),
       issues,
@@ -187,4 +204,35 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
     "untested surface -3.",
   );
   return out.join("\n");
+}
+
+const LEADERBOARD_METHOD =
+  "_Structural health only (deterministic, no model): missing hook −15, " +
+  "no-description skill −10, broken intra-plugin ref −8, " +
+  "agent-without-tool-contract −5, untested surface −3. " +
+  "Behavioural columns (trigger-rate, collisions, egress) stack on top._";
+
+/**
+ * Format a ranked leaderboard as a Markdown table — the PUBLISHABLE form (a README,
+ * a gist, the leaderboard site). Shows the top 2 deductions per plugin; the full
+ * breakdown is in `--json`. Sibling of the plain-text {@link formatLeaderboard}.
+ */
+export function formatLeaderboardMarkdown(
+  scores: readonly PluginScore[],
+): string {
+  const lines = [
+    `### Plugin health leaderboard (${String(scores.length)} scanned)`,
+    "",
+    "| # | grade | score | plugin | top issues |",
+    "| --: | :--: | --: | :-- | :-- |",
+  ];
+  scores.forEach((s, i) => {
+    const issues =
+      s.issues.length > 0 ? s.issues.slice(0, 2).join("; ") : "— clean";
+    lines.push(
+      `| ${String(i + 1)} | ${s.grade} | ${String(s.score)} | \`${s.name}\` | ${issues} |`,
+    );
+  });
+  lines.push("", LEADERBOARD_METHOD);
+  return lines.join("\n");
 }

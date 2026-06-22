@@ -128,6 +128,7 @@ harness-agnostic.)
 npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
 npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles scan ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
 npx vigiles scan ./marketplace-repo     # a marketplace.json root → ranks every member
 npx vigiles scan ./repo --harness=codex # override harness detection
 ```
@@ -143,7 +144,10 @@ everything), an untested surface −3. Scoring deliberately ignores the loader's
 free-text warnings (they include doc-mention false positives), so the ranking
 stays defensible. A **command-only** plugin (`commands/*.md`, no skills/agents/hooks)
 or an **MCP-only** plugin (`.mcp.json`) is a real, valid surface and scores on its
-own health — only a directory with _no_ surface at all scores 0.
+own health — only a directory with _no_ surface at all scores 0. Add **`--md`** to
+emit the ranking as a **Markdown table** (the publishable form for a README/gist/site;
+`--json` gives the full per-plugin breakdown). A worked at-scale run over real public
+plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
 harness-aware supply-chain audit (see `research/divergent-bets.md`,
