@@ -24,6 +24,12 @@ import {
   HookCompileError,
   stampHook,
   verifyHookStamp,
+  defineFileGate,
+  tools,
+  decideFileGate,
+  defineInject,
+  inject,
+  runInject,
 } from "./hook-program.js";
 
 // The hook an author writes — a pure function against the closed API. No exit
@@ -131,4 +137,71 @@ export default defineHook({ on: "PreToolUse", match: tool("Bash"), decide: () =>
   assert.equal(verifyHookStamp(tampered, stamp), false);
   // (And the tampered source wouldn't have compiled in the first place.)
   assert.notEqual(stampHook(tampered), stamp);
+});
+
+// ---------------------------------------------------------------------------
+// PROBE 2 — the vocabulary across two genuinely different shapes
+// ---------------------------------------------------------------------------
+
+// A second GATE shape: confine Edit/Write to src/** (different tool, field, matcher).
+const confineGuard = defineFileGate({
+  on: "PreToolUse",
+  match: tools("Edit", "Write"),
+  decide: (e) =>
+    e.path.under(["src", "test"])
+      ? allow()
+      : deny(`writes are confined to src/ and test/, not ${e.path.raw}`),
+});
+
+const fileEv = (tool_name: string, file_path: string) => ({
+  tool_name,
+  tool_input: { file_path },
+});
+
+test("probe2: a path-confine gate extends the gate vocabulary to Edit/Write cleanly", () => {
+  assert.equal(
+    decideFileGate(confineGuard, fileEv("Write", "src/x.ts")).kind,
+    "allow",
+  );
+  assert.equal(
+    decideFileGate(
+      confineGuard,
+      fileEv("Write", "/home/user/.ssh/authorized_keys"),
+    ).kind,
+    "deny",
+  );
+  // A tool it doesn't match (Read) → allow (out of scope).
+  assert.equal(
+    decideFileGate(confineGuard, fileEv("Read", "/etc/passwd")).kind,
+    "allow",
+  );
+});
+
+// A NON-gate shape: SessionStart context injection — a different OUTPUT entirely.
+const briefing = defineInject({
+  on: "SessionStart",
+  produce: (e) =>
+    inject(`vigiles: session started (${e.source}); rules in CLAUDE.md apply.`),
+});
+
+test("probe2: an inject hook produces additionalContext (the RIGHT field), not a decision", () => {
+  const out = runInject(briefing, { source: "startup" });
+  // The compiler targets `additionalContext` — the author never picks the JSON field,
+  // so the wrong-field pain can't occur.
+  assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.match(
+    out.hookSpecificOutput.additionalContext,
+    /session started \(startup\)/,
+  );
+});
+
+test("probe2: an inject hook CANNOT express a block — correct-by-construction (tsc)", () => {
+  const bad = defineInject({
+    on: "SessionStart",
+    // @ts-expect-error — `deny` returns a Decision, not an Injection; "block on a
+    // no-decision event" (a documented mistake) is a TYPE error, not a silent no-op.
+    produce: () => deny("you shall not pass"),
+  });
+  // Runtime backstop: even if forced, there's no block to emit — just context.
+  assert.ok(bad.role === "inject");
 });

@@ -206,3 +206,124 @@ export function stampHook(source: string): SHA256Hash {
 export function verifyHookStamp(source: string, stamp: SHA256Hash): boolean {
   return stampHook(source) === stamp;
 }
+
+// ===========================================================================
+// PROBE 2 — does the closed vocabulary HOLD for two genuinely different shapes?
+//
+// Finding: it holds, but the vocabulary is a small FAMILY keyed by hook ROLE,
+// and the per-role OUTPUT TYPE makes two more verified pains UNREPRESENTABLE:
+//   - a context-injection hook can't return a block (no `deny` in `Injection`) —
+//     so "block on a SessionStart/PostToolUse hook" (a documented mistake) is a
+//     TYPE error, not a silent no-op;
+//   - the compiler emits the RIGHT JSON field per role (`additionalContext` for
+//     inject vs the exit-2/`permissionDecision` for a gate) — the wrong-field pain
+//     vanishes because the author never picks the field.
+// ===========================================================================
+
+// --- A second GATE shape: Edit/Write path confinement (a different tool/field/matcher) ---
+
+/** An AST-free view of a file path — the matching primitive for file tools. */
+export interface PathView {
+  readonly raw: string;
+  /** True iff the path sits under at least one allowed prefix (e.g. "src/**"). */
+  under(prefixes: readonly string[]): boolean;
+}
+
+export function pathView(raw: string): PathView {
+  const norm = raw.replace(/^\.\//, "");
+  return {
+    raw,
+    under: (prefixes) =>
+      prefixes.some((p) => {
+        const base = p.replace(/\/?\*+$/, "").replace(/\/$/, "");
+        return base === "" || norm === base || norm.startsWith(base + "/");
+      }),
+  };
+}
+
+/** The event a file-tool gate decides over (Edit/Write/Read carry `file_path`). */
+export interface FileToolEvent {
+  readonly event: string;
+  readonly tool: string;
+  readonly path: PathView;
+}
+
+export interface FileGateHook {
+  readonly role: "gate";
+  readonly on: string;
+  readonly match: { readonly tools: readonly string[] };
+  readonly decide: (e: FileToolEvent) => Decision;
+}
+
+export const tools = (...names: string[]): { tools: string[] } => ({
+  tools: names,
+});
+export const defineFileGate = (
+  p: Omit<FileGateHook, "role">,
+): FileGateHook => ({
+  role: "gate",
+  ...p,
+});
+
+/** Run a file-tool gate against a raw PreToolUse event (reads `file_path`). */
+export function decideFileGate(
+  hook: FileGateHook,
+  raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+): Decision {
+  const t = raw.tool_name ?? "";
+  if (!hook.match.tools.includes(t)) return allow();
+  const fp =
+    typeof raw.tool_input?.file_path === "string"
+      ? raw.tool_input.file_path
+      : "";
+  return hook.decide({ event: hook.on, tool: t, path: pathView(fp) });
+}
+
+// --- A non-gate shape: context INJECTION (SessionStart) — a different OUTPUT ---
+
+/** The output of an inject hook — text to add to context. NO allow/deny exists here. */
+export interface Injection {
+  readonly kind: "inject";
+  readonly context: string;
+}
+export const inject = (context: string): Injection => ({
+  kind: "inject",
+  context,
+});
+
+/** The event an inject hook produces from (no tool — SessionStart/UserPromptSubmit). */
+export interface SessionEvent {
+  readonly event: string;
+  readonly source: string;
+}
+
+export interface InjectHook {
+  readonly role: "inject";
+  readonly on: string;
+  /** Produces context to add. Its return type (Injection) has no `deny` — by design. */
+  readonly produce: (e: SessionEvent) => Injection;
+}
+export const defineInject = (p: Omit<InjectHook, "role">): InjectHook => ({
+  role: "inject",
+  ...p,
+});
+
+/**
+ * Run an inject hook → the CC JSON the author never hand-writes. The compiler
+ * targets `additionalContext` (the RIGHT field for this event), so the
+ * wrong-JSON-field pain can't occur.
+ */
+export function runInject(
+  hook: InjectHook,
+  raw: { source?: string },
+): {
+  hookSpecificOutput: { hookEventName: string; additionalContext: string };
+} {
+  const out = hook.produce({ event: hook.on, source: raw.source ?? "startup" });
+  return {
+    hookSpecificOutput: {
+      hookEventName: hook.on,
+      additionalContext: out.context,
+    },
+  };
+}
