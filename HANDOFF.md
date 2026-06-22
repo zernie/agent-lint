@@ -59,11 +59,12 @@ faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selecti
    wshobson/agents) → A:16 B:28 C:17 D:9 F:13, real outliers (dead tool, uncontracted/
    untested F-tier). NEXT: (a) broaden the corpus beyond 2 authors (wshobson-heavy);
    (b) add the BEHAVIORAL columns (trigger-rate/collisions) on top; (c) publish externally.
-1. **A1 ecosystem benchmark** — the claim-vs-measured (compression debunks) half; engine
-   ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
-2. **capability-diff (#2, P1, the bridge)** — needs the UNBUILT **effect-row (M1) +
-   cross-step accumulation** engine (compute the capability surface), then the v1→v2
-   diff (already prototyped, fp-theory T2). Carry a loud sign-off hatch (don't cry wolf).
+1. **A1 ecosystem benchmark** — claim-vs-measured (compression debunks); engine ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
+2. **capability-diff (#2) — v0 SHIPPED (`e9cad95`).** `vigiles capability-diff <before>
+   <after>` (src/core/capability-diff.ts + CLI): diffs the two whole-harness capability
+   lattices → WIDENED verdict (new side-effecting/unknown tool or loosened purity),
+   informational + `--fail-on-widen` gate. v0 = tool-bucket lattice; the RICHER per-step
+   effect-row + cross-step accumulation (M1; "gained Bash" → "opened an exfil path") = next.
 3. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
