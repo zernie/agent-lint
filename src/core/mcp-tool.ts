@@ -58,6 +58,27 @@ export function mcpToolServer(
 }
 
 /**
+ * Split a direct `mcp__<server>__<tool>` reference into its `{ server, tool }`
+ * parts, or null when {@link mcpToolServer} declines it (non-MCP, plugin-namespaced,
+ * malformed). The tool segment is everything after `mcp__<server>__` (MCP tool
+ * names may themselves contain `__`). A `Tool(restriction)` suffix is stripped.
+ * Used by the LIVE contract-tool resolution (`verifyMcpContractTools` in mcp.ts) to
+ * check the tool actually exists on the server, not just that the server resolves.
+ */
+export function mcpToolParts(
+  raw: string,
+  dialect: HarnessDialect,
+): { server: string; tool: string } | null {
+  const clean = raw.split("(")[0].trim();
+  const server = mcpToolServer(clean, dialect);
+  if (server === null) return null;
+  const prefix = `mcp__${server}__`;
+  if (!clean.startsWith(prefix)) return null;
+  const tool = clean.slice(prefix.length);
+  return tool ? { server, tool } : null;
+}
+
+/**
  * Verify the MCP tool references in a contract against the plugin's declared MCP
  * servers. Returns one {@link McpToolIssue} per direct `mcp__<server>__<tool>`
  * whose server is neither declared nor a known built-in. Returns `[]` when no
