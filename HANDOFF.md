@@ -44,8 +44,11 @@ prompt). The cross-skill precision per-skill trigger-rate CAN'T see; the leaderb
 blast-radius column; nobody else has it. CC-only (needs a discrete skill-selection event).
 Bodies stubbed (stops at selection, cheap). DOGFOODED on the sub: vigiles's own 3 skills
 collision-FREE (clean bill); bonus signal edit-spec under-fired (recall 33%). superpowers
-slice can't fire (missing gateway skill). Detection proven by CI fake-driver test (foo↔baz
-50%). See `research/plugin-selection-collision.md`.
+slice can't fire (root-caused: superpowers primes selection via a SessionStart hook that
+the STUBBED run drops). **Layer-1 honesty SHIPPED (`852a05d`):** a stubbed run on a
+SessionStart-hooked plugin with all-zero recall is relabeled "hook-primed — likely an
+artifact" (both columns; all-zero gate keeps genuine misses real). Layer 2 (`--no-stub`
+faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selection-collision.md`.
 
 ## Next move (pick — none started)
 
@@ -82,10 +85,8 @@ slice can't fire (missing gateway skill). Detection proven by CI fake-driver tes
   markdown: capability axis, two-oracle, leg-grading, require-\*-spec defaults); the
   full **market-segmented competitive matrix** + agnix find + poach list in
   `landscape-mid-2026.md`; corrected reality-check in `typed-spec-moat.md`. See above.
-- **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge
-  (lint→test→eval growth loop); viral debunk articles (method-first, caveman SATURATED);
-  PUBLIC plugin leaderboard (the open slice); open-core + AI-lab-acquisition posture;
-  Zod-schema'd `result()` (feature-ideas §14b); benchmark prior-art + moat ranking.
+- **Ideas captured (roadmap §Explore + distribution-strategy):** tiered README badge;
+  viral debunk articles (caveman SATURATED); PUBLIC plugin leaderboard; open-core posture.
 
 ## In flight
 
