@@ -34,21 +34,23 @@ more linter catalogs. Full record: `typed-spec-moat.md` + `landscape-mid-2026.md
 w/ did-you-mean. DOGFOOD found a REAL bug (`d813d82`): MadAppGang tester.md lists 3 dead
 chrome-devtools tools, invisible to every static linter (plugin-structural-findings.md).
 
-**SHIPPED (`adeec45`): plugin SELECTION-COLLISION matrix** (`scan --collisions`) — the
-behavioral CONFIRMATION of the deterministic `description-overlap` rule, and the eval
-improvement chosen from the OSS gap analysis. Runs each model-invocable skill's prompts
-against the WHOLE installed plugin, records WHICH skills fired (`whichSkillsFired` +
-`runSkillSelectionTrial` in eval.ts; pure `buildSelectionReport` + `measurePluginSelection`
-in scan-behavioral.ts) → N×N matrix (diagonal=recall, off-diagonal=a sibling HIJACKING the
-prompt). The cross-skill precision per-skill trigger-rate CAN'T see; the leaderboard's
-blast-radius column; nobody else has it. CC-only (needs a discrete skill-selection event).
-Bodies stubbed (stops at selection, cheap). DOGFOODED on the sub: vigiles's own 3 skills
-collision-FREE (clean bill); bonus signal edit-spec under-fired (recall 33%). superpowers
-slice can't fire (root-caused: superpowers primes selection via a SessionStart hook that
-the STUBBED run drops). **Layer-1 honesty SHIPPED (`852a05d`):** a stubbed run on a
-SessionStart-hooked plugin with all-zero recall is relabeled "hook-primed — likely an
-artifact" (both columns; all-zero gate keeps genuine misses real). Layer 2 (`--no-stub`
-faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selection-collision.md`.
+**SHIPPED: plugin SELECTION-COLLISION matrix** (now `vigiles measure`) — behavioral
+CONFIRMATION of the deterministic `description-overlap` rule. Each skill's prompts run
+against the WHOLE installed plugin → N×N matrix (diagonal=recall, off-diagonal=a sibling
+HIJACKING the prompt); cross-skill precision per-skill trigger-rate can't see. CC-only,
+bodies stubbed. DOGFOOD: vigiles's own 3 skills collision-FREE; **Layer-1 honesty** (`852a05d`)
+relabels a stubbed all-zero run on a SessionStart-hooked plugin "hook-primed — likely an
+artifact" (superpowers' gateway hook is dropped by stubbing). Layer 2 (`--no-stub` faithful
+path) deferred. Full: `plugin-selection-collision.md`.
+
+**CLI CONSOLIDATED (`2aedc5b`) — bad-DX cleanup.** scan had ~14 flags; re-grounded on
+"a verb per JOB/LAYER, flags for modifiers." NEW `vigiles measure <dir> --prompts=` =
+the model-gated behavioral front door (trigger-rate + collisions in one report),
+replacing `scan --trigger`/`--collisions`. capability-diff folded from a command into
+the free scan flag `scan <after> --capability-diff=<before>`. scan back to ~6
+deterministic flags. OPEN (user floated, NOT done): fold `scan` into `lint` (one free
+verb, gate-or-report) — directionally right but a big separate refactor; banked the
+measure win first, don't thrash.
 
 ## Next move (pick)
 
@@ -60,11 +62,9 @@ faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selecti
    untested F-tier). NEXT: (a) broaden the corpus beyond 2 authors (wshobson-heavy);
    (b) add the BEHAVIORAL columns (trigger-rate/collisions) on top; (c) publish externally.
 1. **A1 ecosystem benchmark** — claim-vs-measured (compression debunks); engine ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
-2. **capability-diff (#2) — v0 SHIPPED (`e9cad95`).** `vigiles capability-diff <before>
-<after>` (src/core/capability-diff.ts + CLI): diffs the two whole-harness capability
-   lattices → WIDENED verdict (new side-effecting/unknown tool or loosened purity),
-   informational + `--fail-on-widen` gate. v0 = tool-bucket lattice; the RICHER per-step
-   effect-row + cross-step accumulation (M1; "gained Bash" → "opened an exfil path") = next.
+2. **capability-diff (#2) — v0 SHIPPED** (`scan <after> --capability-diff=<before>`,
+   src/core/capability-diff.ts): WIDENED verdict + `--fail-on-widen`. v0 = tool-bucket
+   lattice; RICHER per-step effect-row + cross-step accumulation (M1) = next.
 3. **Lethal trifecta as a TYPE (F1, P0 in roadmap)** — rides typed purity's machinery.
 
 ## Shipped (this session — pushed to `claude/what-now-umafgi`, tree clean, HEAD==origin)
