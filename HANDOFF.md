@@ -22,26 +22,30 @@ hype" + zero-friction `scan`/measure that needs NO typed spec), NOT more moat de
 Bridge bet = **capability-diff (#2)**. Full: `research/measurement-authority.md` § "Status & gaps".
 
 ⚠️ **COMPETITIVE READ (2026-06-21, web-verified + market-corrected).** "Typed-spec moats
-commoditizing" was a MARKET CONFLATION — the fancy capabilities live in ADJACENT markets
-(app-building: Mastra/promptfoo; infra: riftmap; MCP-security: AgentAuditKit), NOT
-vigiles's. In vigiles's ACTUAL market the only rivals are pure static surface linters
-(claudelint 114 rules, cclint ×2, `claude plugin validate`) — confirmed via docs to do NO
-cross-ref / typed / test-eval / capability-diff. So in-market vigiles UNIQUELY owns
-cross-ref + typed + test/eval; NOT differentiated on surface linting. **Field is WIDE OPEN
-— no incumbent, near-zero mindshare** (biggest = agnix 296★/1-HN-pt, 414 rules + LSP but no
-cross-ref/eval; rest 6–41★; none in awesome-claude-code 47k★). So: don't out-rule-count or
-match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markdown = zero
-adoption barrier) + test/eval. **REFINEMENT (2026-06-21): the valuable cross-check is
-HARNESS-NATIVE** (tools/MCP `server#tool`/hook-events/paths/delegates — fail silently,
-agent-era), NOT the linter-catalog leg (legacy/supporting; don't add more catalogs).
-**SHIPPED (`6edd6a0`): live MCP tool resolution** (`verifyMcpContractTools`, src/core/mcp.ts
-— starts the declared server, checks each `mcp__server__tool` exists w/ did-you-mean;
-5 CI-safe tests vs fixture server). **DOGFOODED (`d813d82`): found a REAL bug** — MadAppGang
-tester.md lists 3 dead chrome-devtools tools (emulate_cpu/emulate_network→`emulate`,
-navigate_page_history removed) vs the live server; invisible to every static linter
-(see plugin-structural-findings.md). **WIRED (`2982510`): `scan --verify-mcp`** — opt-in,
-side-effecting CLI surface (`verifyLiveMcpTools`/`formatMcpContractReport` in src/scan.ts,
-`--verify-mcp` block in cli.ts, 2 CI-safe scan tests, docs/cli.md matrix row). Done.
+commoditizing" was a MARKET CONFLATION — fancy capabilities live in ADJACENT markets
+(app-building Mastra/promptfoo; infra riftmap; MCP-security AgentAuditKit), NOT vigiles's.
+In-market rivals are pure static surface linters (claudelint/cclint/`claude plugin validate`,
+NO cross-ref/typed/eval); field WIDE OPEN (biggest = agnix 296★, no cross-ref/eval). So:
+**LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markdown) + test/eval. The
+valuable cross-check is HARNESS-NATIVE (tools/MCP `server#tool`/events/paths/delegates), NOT
+more linter catalogs. Full record: `typed-spec-moat.md` + `landscape-mid-2026.md`.
+**SHIPPED live MCP tool resolution** (`6edd6a0` `verifyMcpContractTools` + `2982510`
+`scan --verify-mcp`) — starts the declared server, checks each `mcp__server__tool` exists
+w/ did-you-mean. DOGFOOD found a REAL bug (`d813d82`): MadAppGang tester.md lists 3 dead
+chrome-devtools tools, invisible to every static linter (plugin-structural-findings.md).
+
+**SHIPPED (`adeec45`): plugin SELECTION-COLLISION matrix** (`scan --collisions`) — the
+behavioral CONFIRMATION of the deterministic `description-overlap` rule, and the eval
+improvement chosen from the OSS gap analysis. Runs each model-invocable skill's prompts
+against the WHOLE installed plugin, records WHICH skills fired (`whichSkillsFired` +
+`runSkillSelectionTrial` in eval.ts; pure `buildSelectionReport` + `measurePluginSelection`
+in scan-behavioral.ts) → N×N matrix (diagonal=recall, off-diagonal=a sibling HIJACKING the
+prompt). The cross-skill precision per-skill trigger-rate CAN'T see; the leaderboard's
+blast-radius column; nobody else has it. CC-only (needs a discrete skill-selection event).
+Bodies stubbed (stops at selection, cheap). DOGFOODED on the sub: vigiles's own 3 skills
+collision-FREE (clean bill); bonus signal edit-spec under-fired (recall 33%). superpowers
+slice can't fire (missing gateway skill). Detection proven by CI fake-driver test (foo↔baz
+50%). See `research/plugin-selection-collision.md`.
 
 ## Next move (pick — none started)
 
@@ -73,10 +77,8 @@ side-effecting CLI surface (`verifyLiveMcpTools`/`formatMcpContractReport` in sr
   skills" listicles already exist, so position on claim-gap/reproducibility/correctness,
   honest "sort real from hyped" not blanket-debunk). Expand manifest w/ under-measured hyped
   skills (e.g. MindStudio "5 skills 70%" list). Benchmark prior-art in landscape-mid-2026.md.
-- **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK
-  (push/pop/gate-on-top, SubagentStop POPS to parent; both Task/Agent spawn tools);
-  TLC counterexample Open;Open;Stop;Call(Bash) is a regression test. Suite green (1426).
-  Still EXPERIMENTAL/not auto-wired.
+- **V1 nesting bug FIXED (`c50b826`):** active-agent now a depth-aware STACK (push/pop/
+  gate-on-top); TLC counterexample is a regression test. Still EXPERIMENTAL/not auto-wired.
 - **Strategy docs (this session's main output):** `spec-value-model.md` (NEW — spec vs
   markdown: capability axis, two-oracle, leg-grading, require-\*-spec defaults); the
   full **market-segmented competitive matrix** + agnix find + poach list in
