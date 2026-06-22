@@ -48,6 +48,7 @@ import {
   isDatedModel,
   modelTier,
   belowModelFloor,
+  runSkillSelectionTrial,
   harnessVersionKey,
   ephemeralRunEnv,
   seedEphemeralHome,
@@ -2609,4 +2610,75 @@ test("resolveSpawnEnv: a REAL subprocess honours the scrub (secret gone, HOME re
     rmSync(realHome, { recursive: true, force: true });
     rmSync(throwaway, { recursive: true, force: true });
   }
+});
+
+// runSkillSelectionTrial — the per-run primitive behind the selection-collision
+// matrix (added in adeec45). It calls whichSkillsFired internally, so these two
+// fake-runner trials cover both: the success path with a deliberate tool-call mix
+// (dedup + exclude errored/no-id/non-Skill) and the errored-run exclusion.
+const NO_USAGE_RUN = {
+  costUsd: 0,
+  durationMs: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheCreationTokens: 0,
+  cacheReadTokens: 0,
+} as const;
+
+test("runSkillSelectionTrial reports which skills fired — deduped, excluding errored/no-id/non-Skill", async () => {
+  const runner = (a: AgentRunArgs): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: a.task });
+  const parse: ModelOutputParser = (): ParsedModelRun => ({
+    turns: 1,
+    output: "",
+    toolCalls: [
+      {
+        name: "Skill",
+        input: { skill: "p:a" },
+        resultText: "",
+        isError: false,
+      },
+      {
+        name: "Skill",
+        input: { skill: "p:a" },
+        resultText: "",
+        isError: false,
+      }, // dup
+      { name: "Skill", input: { skill: "p:b" }, resultText: "", isError: true }, // errored → excluded
+      { name: "Read", input: {}, resultText: "", isError: false }, // non-Skill → skip
+      { name: "Skill", input: {}, resultText: "", isError: false }, // no id → skip
+    ],
+    hooks: [],
+    subagents: [],
+    usage: NO_USAGE_RUN,
+  });
+  const r = await runSkillSelectionTrial({
+    prompt: "go",
+    pluginDir: "/p",
+    runner,
+    parse,
+    model: "sonnet",
+    fixture: { "seed.txt": "x" }, // also exercises the fixture-seeding branch
+  });
+  assert.equal(r.errored, false);
+  assert.deepEqual(r.fired.sort(), ["p:a"]);
+});
+
+test("runSkillSelectionTrial flags an errored run (excluded, not a clean miss)", async () => {
+  const r = await runSkillSelectionTrial({
+    prompt: "x",
+    pluginDir: "/p",
+    runner: () => Promise.resolve({ code: 0, stdout: "BOOM" }),
+    parse: (): ParsedModelRun => ({
+      turns: 0,
+      output: "",
+      toolCalls: [],
+      hooks: [],
+      subagents: [],
+      usage: NO_USAGE_RUN,
+    }),
+    model: "sonnet",
+    runError: (o) => (o.stdout.includes("BOOM") ? "rate limited" : null),
+  });
+  assert.deepEqual(r, { fired: [], errored: true });
 });
