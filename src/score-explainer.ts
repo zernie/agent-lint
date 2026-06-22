@@ -204,7 +204,7 @@ export function explainSurface(
 /** Render explanations for a CLI/report — grouped under the symptom, fix called out. */
 export function formatExplanations(exps: readonly ScoreExplanation[]): string {
   if (exps.length === 0) {
-    return "No deterministic cause found — the cause is likely behavioral (measure with `scan --trigger` / an eval).";
+    return "No deterministic cause found — the cause is likely behavioral (measure with `vigiles measure` / an eval).";
   }
   const lines: string[] = [];
   for (const e of exps) {

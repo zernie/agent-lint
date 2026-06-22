@@ -3217,67 +3217,32 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * The `scan --trigger` behavioral column: load the author-supplied per-skill
- * prompt sets, probe the plugin's model-invocable skills, print the column.
- * Model-gated and opt-in — the structural scan above stays deterministic.
+ * `vigiles measure <dir>` — the MODEL-GATED behavioral report on a plugin (the paid
+ * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
+ * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
+ * skill actually FIRE — recall + precision) and the selection-collision matrix (does
+ * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
+ * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
+ * degrades honestly ("unavailable") when absent. The OSS-testing front door:
+ * `vigiles measure ./plugin --prompts=p.json`.
  */
-async function handleScanTrigger(
-  root: string,
+async function handleMeasure(
+  restArgs: string[],
   args: string[],
-  json: boolean,
-  harness: ProbeHarness,
 ): Promise<void> {
-  const promptsPath = flagValue(args, "--prompts");
-  if (!promptsPath) {
-    console.error(
-      "scan --trigger needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
-    );
-    process.exitCode = 2;
-    return;
-  }
-  let promptSet: TriggerPromptSet;
-  try {
-    promptSet = JSON.parse(
-      readFileSync(resolve(promptsPath), "utf-8"),
-    ) as TriggerPromptSet;
-  } catch (e) {
-    console.error(
-      `scan --trigger: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
-    );
-    process.exitCode = 2;
-    return;
-  }
-  const concurrencyRaw = flagValue(args, "--concurrency");
-  const minPromptsRaw = flagValue(args, "--min-prompts");
-  const report = await probePluginTriggers(root, promptSet, {
-    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
-    minPrompts: minPromptsRaw ? Number(minPromptsRaw) : undefined,
-    model: flagValue(args, "--model"),
-    harness,
-  });
-  console.log(
-    json
-      ? JSON.stringify(report, null, 2)
-      : `\n${formatBehavioralReport(report)}`,
-  );
-}
+  const dir = resolve(restArgs[0] ?? ".");
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const harness: ProbeHarness =
+    adapter.name === "codex" ? "codex" : "claude-code";
 
-/**
- * The `scan --collisions` selection-collision column: reuse the `--prompts` file
- * (each skill's `prompts` array; `irrelevant` is ignored here) to measure whether
- * one skill's prompt wrongly fires a SIBLING — the behavioral confirmation of the
- * deterministic `description-overlap` finding. Claude Code only; model-gated.
- */
-async function handleScanCollisions(
-  root: string,
-  args: string[],
-  json: boolean,
-  harness: ProbeHarness,
-): Promise<void> {
   const promptsPath = flagValue(args, "--prompts");
   if (!promptsPath) {
     console.error(
-      "scan --collisions needs --prompts=<file.json> (a map of skill name → { prompts }).",
+      "measure needs --prompts=<file.json> (a map of skill name → { prompts, irrelevant }).",
     );
     process.exitCode = 2;
     return;
@@ -3289,24 +3254,38 @@ async function handleScanCollisions(
     ) as TriggerPromptSet;
   } catch (e) {
     console.error(
-      `scan --collisions: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
+      `measure: could not read --prompts file "${promptsPath}": ${e instanceof Error ? e.message : String(e)}`,
     );
     process.exitCode = 2;
     return;
   }
-  const concurrencyRaw = flagValue(args, "--concurrency");
-  const trialsRaw = flagValue(args, "--trials");
-  const report = await measurePluginSelection(root, promptSet, {
-    concurrency: concurrencyRaw ? Number(concurrencyRaw) : undefined,
-    trials: trialsRaw ? Number(trialsRaw) : undefined,
-    model: flagValue(args, "--model"),
+  const num = (f: string): number | undefined => {
+    const v = flagValue(args, f);
+    return v ? Number(v) : undefined;
+  };
+  const model = flagValue(args, "--model");
+  const concurrency = num("--concurrency");
+  // Trigger-rate (recall + precision) AND the selection-collision matrix — the two
+  // behavioral columns, one report. Collisions report n/a where they don't apply
+  // (a single skill, or Codex — no skill-selection event), never a false pass.
+  const trigger = await probePluginTriggers(dir, promptSet, {
+    concurrency,
+    minPrompts: num("--min-prompts"),
+    model,
     harness,
   });
-  console.log(
-    json
-      ? JSON.stringify(report, null, 2)
-      : `\n${formatSelectionReport(report)}`,
-  );
+  const collisions = await measurePluginSelection(dir, promptSet, {
+    concurrency,
+    trials: num("--trials"),
+    model,
+    harness,
+  });
+  if (json) {
+    console.log(JSON.stringify({ trigger, collisions }, null, 2));
+    return;
+  }
+  console.log(`\n${formatBehavioralReport(trigger)}`);
+  console.log(`\n${formatSelectionReport(collisions)}`);
 }
 
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
@@ -3631,41 +3610,20 @@ function handleExplain(restArgs: string[], args: string[]): void {
 }
 
 /**
- * `vigiles capability-diff <before> <after>` — does this change WIDEN the agent's
- * blast radius? Computes each version's whole-harness capability lattice from its
- * scanned agents (read-only / side-effecting / unknown tools + the loosest purity)
- * and diffs them. Deterministic, no model. Informational by default (a PR comment);
- * `--fail-on-widen` exits non-zero on a widening (the opt-in CI gate, don't cry wolf).
+ * Whole-harness capability lattice from a scanned plugin's agents (no `tools:` line →
+ * inherits-all). The substrate `scan --capability-diff` diffs. Reused for both the
+ * already-scanned "after" report and the freshly-scanned "before" dir.
  */
-function handleCapabilityDiff(restArgs: string[], args: string[]): void {
-  if (restArgs.length < 2) {
-    console.error(
-      "capability-diff needs two dirs: capability-diff <before> <after> [--fail-on-widen]",
-    );
-    process.exitCode = 2;
-    return;
-  }
-  const json = args.includes("--json");
-  const harnessFlag = harnessFlagFrom(args);
-  const capsOf = (dir: string) => {
-    const resolved = resolve(dir);
-    const adapter = harnessFlag
-      ? resolveAdapter(resolved, harnessFlag)
-      : detectAdapterResult(resolved).adapter;
-    const report = scanPlugin(resolved, adapter.layout, adapter.dialect);
-    // Map each scanned agent to a capability entry (no `tools:` → inherits-all).
-    const agents = report.agents.map((a) => ({
-      name: a.name,
-      tools: a.tools ?? undefined,
-      file: a.path,
-    }));
-    return computeHarnessCapabilities(agents, adapter.dialect);
-  };
-  const diff = diffCapabilities(capsOf(restArgs[0]), capsOf(restArgs[1]));
-  console.log(
-    json ? JSON.stringify(diff, null, 2) : formatCapabilityDiff(diff),
-  );
-  if (args.includes("--fail-on-widen") && diff.widened) process.exitCode = 1;
+function capabilitiesOfReport(
+  report: ScanReport,
+  dialect: Parameters<typeof computeHarnessCapabilities>[1],
+): ReturnType<typeof computeHarnessCapabilities> {
+  const agents = report.agents.map((a) => ({
+    name: a.name,
+    tools: a.tools ?? undefined,
+    file: a.path,
+  }));
+  return computeHarnessCapabilities(agents, dialect);
 }
 
 /**
@@ -3820,6 +3778,12 @@ function printUsage(command: string | undefined): void {
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
+  );
+  console.log(
+    "  vigiles scan [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
+  );
+  console.log(
+    "  vigiles measure <dir>          Model-gated: does each skill FIRE / COLLIDE? (--prompts=, real model)",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -4391,7 +4355,6 @@ async function main(): Promise<void> {
         dirs.length === 1 ? inspectMarketplace(resolve(dirs[0])) : null;
       const targets =
         market && market.onDisk.length > 0 ? [...market.onDisk] : dirs;
-      const wantTrigger = args.includes("--trigger");
       if (market && market.onDisk.length === 0 && market.total > 0) {
         // A CURATED marketplace — every member is an external git/url plugin, so
         // there's nothing on disk to scan. Say so honestly instead of falling
@@ -4415,11 +4378,6 @@ async function main(): Promise<void> {
           ? formatLeaderboardMarkdown(scores)
           : formatLeaderboard(scores);
         console.log(json ? JSON.stringify(scores, null, 2) : text);
-        if (wantTrigger) {
-          console.log(
-            "\n⚠ --trigger (behavioral column) runs per single plugin; not yet wired into the leaderboard. Scan one plugin dir to probe it.",
-          );
-        }
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);
@@ -4464,29 +4422,41 @@ async function main(): Promise<void> {
               : "\n" + formatMcpContractReport(mcpErrs),
           );
         }
-        if (wantTrigger) {
-          const harness: ProbeHarness =
-            adapter.name === "codex" ? "codex" : "claude-code";
-          await handleScanTrigger(root, args, json, harness);
-        }
-        if (args.includes("--collisions")) {
-          const harness: ProbeHarness =
-            adapter.name === "codex" ? "codex" : "claude-code";
-          await handleScanCollisions(root, args, json, harness);
+        const capBase = flagValue(args, "--capability-diff");
+        if (capBase) {
+          // Did this version WIDEN the agent's blast radius vs <before>? Diffs the
+          // two whole-harness capability lattices (moat #2). Informational by
+          // default; `--fail-on-widen` exits non-zero (the opt-in CI gate).
+          const beforeReport = scanPlugin(
+            resolve(capBase),
+            adapter.layout,
+            adapter.dialect,
+          );
+          const diff = diffCapabilities(
+            capabilitiesOfReport(beforeReport, adapter.dialect),
+            capabilitiesOfReport(report, adapter.dialect),
+          );
+          console.log(
+            json
+              ? JSON.stringify({ capabilityDiff: diff }, null, 2)
+              : "\n" + formatCapabilityDiff(diff),
+          );
+          if (args.includes("--fail-on-widen") && diff.widened)
+            process.exitCode = 1;
         }
       }
       break;
     }
-
-    case "capability-diff":
-      handleCapabilityDiff(restArgs, args);
-      break;
 
     case "explain":
       handleExplain(restArgs, args);
       break;
     case "scaffold-test":
       handleScaffoldTest(restArgs, args);
+      break;
+
+    case "measure":
+      await handleMeasure(restArgs, args);
       break;
 
     // --- Plumbing ---

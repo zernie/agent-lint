@@ -1097,7 +1097,7 @@ export function formatScanReport(r: ScanReport): string {
   const mismatched = r.skills.filter((s) => s.descriptionScript);
   if (mismatched.length > 0) {
     out.push(
-      `⚠ ${String(mismatched.length)} skill(s) have descriptions in an unexpected script (cross-language trigger risk) — measure with \`scan --trigger\``,
+      `⚠ ${String(mismatched.length)} skill(s) have descriptions in an unexpected script (cross-language trigger risk) — measure with \`vigiles measure\``,
       "",
     );
   }

@@ -61,7 +61,7 @@ faithful path + auto-fallback) = deferred roadmap follow-up. See `plugin-selecti
    (b) add the BEHAVIORAL columns (trigger-rate/collisions) on top; (c) publish externally.
 1. **A1 ecosystem benchmark** — claim-vs-measured (compression debunks); engine ready, sonnet pass done. Feeds the leaderboard's claim-gap column. (real-model spend.)
 2. **capability-diff (#2) — v0 SHIPPED (`e9cad95`).** `vigiles capability-diff <before>
-   <after>` (src/core/capability-diff.ts + CLI): diffs the two whole-harness capability
+<after>` (src/core/capability-diff.ts + CLI): diffs the two whole-harness capability
    lattices → WIDENED verdict (new side-effecting/unknown tool or loosened purity),
    informational + `--fail-on-widen` gate. v0 = tool-bucket lattice; the RICHER per-step
    effect-row + cross-step accumulation (M1; "gained Bash" → "opened an exfil path") = next.
