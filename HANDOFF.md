@@ -35,11 +35,12 @@ match LSP; **LEAD WITH CROSS-REFERENCING** ("valid≠true", unique + plain-markd
 adoption barrier) + test/eval. **REFINEMENT (2026-06-21): the valuable cross-check is
 HARNESS-NATIVE** (tools/MCP `server#tool`/hook-events/paths/delegates — fail silently,
 agent-era), NOT the linter-catalog leg (legacy/supporting; don't add more catalogs).
-**SHIPPED (`6edd6a0`): live MCP tool resolution** of real `mcp__server__tool` refs
-(`verifyMcpContractTools` in src/core/mcp.ts — starts the declared server, checks the
-tool exists w/ did-you-mean; catches the rename rot the static check misses; 5 tests vs
-the real fixture server). NEXT: wire it into scan/CLI as opt-in `--verify-mcp`. Full:
-`landscape-mid-2026.md` §"Market-segmented matrix" (REFINEMENT) + roadmap §Now.
+**SHIPPED (`6edd6a0`): live MCP tool resolution** (`verifyMcpContractTools`, src/core/mcp.ts
+— starts the declared server, checks each `mcp__server__tool` exists w/ did-you-mean;
+5 CI-safe tests vs fixture server). **DOGFOODED (`d813d82`): found a REAL bug** — MadAppGang
+tester.md lists 3 dead chrome-devtools tools (emulate_cpu/emulate_network→`emulate`,
+navigate_page_history removed) vs the live server; invisible to every static linter
+(see plugin-structural-findings.md). NEXT: wire into scan/CLI as opt-in `--verify-mcp`.
 
 ## Next move (pick — none started)
 
