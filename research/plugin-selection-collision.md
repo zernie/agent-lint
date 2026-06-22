@@ -71,17 +71,43 @@ SelectionReport {
 
 ## Dogfood (live, on the subscription, 2026-06-22)
 
-### Attempt 1 — superpowers (obra): a vendoring artifact, not a result
+### Attempt 1 — superpowers (obra): a measurement artifact (root cause verified)
 
 `superpowers@6fd4507` ships `test-driven-development` ("…any feature or **bugfix**…")
 and `systematic-debugging` ("…any **bug**, test failure…") — selectors that overlap
 on a bugfix prompt (the textbook collision; prompt set
 `examples/harness/dogfood/superpowers-collision.prompts.json`). But the live run
-showed **recall 0% for BOTH skills** (12 runs, nothing fired) — because the vendored
-SLICE is missing the gateway skill (`scan` flags `skills/using-superpowers/SKILL.md
-referenced but MISSING`); superpowers routes activation through it. You can't measure
-collision when nothing fires. Lesson: the matrix needs a plugin whose skills actually
-fire — and `scan`'s broken-ref column tells you up front when they won't.
+showed **recall 0% for BOTH skills** — 0 fires across 12 `--collisions` runs AND 6
+`--trigger` runs (so it's not collision-specific). You can't measure collision when
+nothing fires.
+
+**Root cause (verified from source, not guessed):** superpowers does NOT rely on the
+model spotting a skill description. It activates skills via a **SessionStart hook**
+(`hooks/session-start` + `hooks/hooks.json`) that reads `skills/using-superpowers/
+SKILL.md` and injects it as `<EXTREMELY_IMPORTANT> You have superpowers … for all
+other skills, use the 'Skill' tool`. That injection is what PRIMES the model to
+proactively invoke skills; the terse descriptions alone don't pull the model to the
+`Skill` tool (it just does the coding task directly). The priming never reaches the
+model in our harness for **two compounding reasons**:
+
+1. Our vendored SLICE is missing `skills/using-superpowers/SKILL.md` (the hook would
+   `cat … || echo "Error reading…"` → inject an error string). `scan` flags it:
+   `skills/using-superpowers/SKILL.md referenced but MISSING`.
+2. **More fundamentally — a measurement limitation we own:** the trigger/collision
+   tier STUBS the plugin to skills-only via `packageSkillsDir` (src/eval.ts), which
+   writes a fresh skills-only `plugin.json` and **drops the `hooks/` dir entirely**.
+   So the SessionStart gateway hook never runs _regardless of #1_.
+
+So the 0% is a **measurement artifact, not evidence superpowers is broken.** vigiles's
+own skills (Attempt 2) fire because their descriptions map directly to the request;
+superpowers' process-skills ("use TDD when implementing") need the hook's nudge.
+
+**Limitation surfaced (follow-up):** our trigger/collision tier can't faithfully
+measure a **hook-primed plugin** — it strips the very SessionStart hook that drives
+selection. Fix options: carry the plugin's `hooks/` into the stubbed plugin, or run
+the whole-plugin install (unstubbed) when a SessionStart hook is present. Recorded in
+`research/roadmap.md`. The discipline holds: `scan`'s broken-ref column flags the
+missing gateway up front, so the null result is explainable, not mysterious.
 
 ### Attempt 2 — vigiles's OWN plugin: clean, + a recall signal
 

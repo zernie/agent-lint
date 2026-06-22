@@ -490,6 +490,12 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   hijacking the prompt). The cross-skill precision question per-skill trigger-rate
   can't see; the leaderboard's blast-radius column. Claude Code only (needs a discrete
   skill-selection event). [plugin-selection-collision](plugin-selection-collision.md) · **DONE**
+- **Trigger/collision: carry plugin hooks (hook-primed plugins)** — the trigger/collision
+  tier stubs a plugin to skills-only (`packageSkillsDir`), DROPPING `hooks/` — so a plugin
+  that primes proactive skill use via a SessionStart hook (e.g. superpowers' `using-superpowers`
+  gateway injection) shows artificially 0% recall. Fix: carry `hooks/` into the stubbed plugin,
+  or run the whole-plugin install (unstubbed) when a SessionStart hook is present.
+  [plugin-selection-collision](plugin-selection-collision.md) · **P3 (MED)**
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
