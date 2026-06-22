@@ -1,19 +1,21 @@
 /**
- * SPIKE — a hook as a CONSTRAINED TYPED PROGRAM, not arbitrary shell.
+ * Compiled hooks — a hook as a CONSTRAINED TYPED PROGRAM, not arbitrary shell.
  *
- * The probe behind research/hook-pain-points.md's "compiled hooks" thread. A hook
- * today is opaque shell (`bash guard.sh`) — un-analyzable (Rice), and the author
- * hand-writes the fragile parts (exit code, JSON field, a `grep` matcher) that the
- * verified #1 pains come from. Invert it: the author writes a PURE typed function
- * `(event) => Decision` against a CLOSED API; vigiles compiles it. The constraint is
- * what buys testability / safety / evaluation / portability:
+ * The pure core behind the public `vigiles/hook` surface (re-exported in
+ * `src/hook.ts`; compiled by `vigiles compile-hook`, run by `vigiles
+ * run-hook-program`). A hook today is opaque shell (`bash guard.sh`) —
+ * un-analyzable (Rice), and the author hand-writes the fragile parts (exit code,
+ * JSON field, a `grep` matcher) that the verified #1 pains come from. Invert it:
+ * the author writes a PURE typed function `(event) => Decision` against a CLOSED
+ * API; vigiles compiles it. The constraint ELIMINATES whole bug classes by
+ * construction and buys testability / safety / matching / portability:
  *
  *  - TESTABILITY: `decide` is a pure fn — unit-test in-process, no subprocess, no
  *    exit-code/JSON plumbing. The false-confidence bug class (exit 1≠2, wrong field)
  *    is UNREPRESENTABLE — the author never writes the protocol; `compile` emits it.
  *  - SAFETY: capability = API surface. `checkHookImports` rejects any import outside
  *    `vigiles/hook` at compile (so the hook can't reach `child_process`/`net`), and
- *    `stampHook`/`verifyHookStamp` make the compiled artifact TAMPER-EVENT (the
+ *    `stampHook`/`verifyHookStamp` make the compiled artifact TAMPER-EVIDENT (the
  *    integrity.ts pattern) — a hand-edit that smuggles a capability breaks the stamp.
  *  - MATCHING: `command.runs("git push", { force })` is AST-backed (leafCommands),
  *    so it catches `cd x && git push -f` that the native `Bash(git:*)` glob (#30519)
@@ -21,9 +23,11 @@
  *  - PORTABILITY: one program → each harness's protocol (CC exit-2 here; Codex /
  *    OpenCode via the HookProtocol port later — OpenCode hooks ARE in-process TS).
  *
- * Pure core, harness-neutral. NOT wired to the CLI/public API — a probe. Honest
- * limits in the research doc: buy-in cost, node-startup latency, and CC delivery
- * bugs (subagent-bypass #34692) still apply — compile fixes AUTHORING, not delivery.
+ * Pure core, harness-neutral. HONEST SCOPE (kept in every doc): compile/verify fix
+ * the hook's AUTHORING + LOGIC, not DELIVERY — CC's subagent-bypass (#34692) means
+ * a PreToolUse hook does not fire for a subagent's tool calls, so a gate is a strong
+ * default, never an unbypassable wall. Limits (buy-in, node-startup latency) +
+ * full record in research/hook-pain-points.md.
  */
 import {
   leafCommands,
@@ -52,11 +56,26 @@ export interface CommandView {
   runs(program: string, opts?: { readonly force?: boolean }): boolean;
   /** True iff the command is provably side-effecting (bash-effects classifier). */
   isSideEffecting(): boolean;
+  /**
+   * True iff a leaf command references a path under one of the prefixes (e.g.
+   * `~/.ssh`, `.env`) — the secret-read / sensitive-path matcher. Sees the path
+   * however the command is wrapped (`cd x && cat ~/.ssh/id_rsa`).
+   */
+  touches(prefixes: readonly string[]): boolean;
+  /**
+   * True iff the command pipes into a BARE shell interpreter (`curl … | sh`,
+   * `… | bash -s`) — the remote-code-execution shape. High-signal: a shell leaf
+   * WITH a script-file argument (`sh deploy.sh`) is NOT flagged; only a shell
+   * reading from stdin is, which only happens downstream of a pipe.
+   */
+  pipesToShell(): boolean;
 }
 
 const FORCE_FLAG = /^-(?:-force$|[a-z]*f[a-z]*$)/;
 const hasForce = (argv: readonly string[]): boolean =>
   argv.some((a) => FORCE_FLAG.test(a));
+
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 
 /** Does `argv` run `tokens` in order (head exact, rest present after it)? */
 function runsSeq(argv: readonly string[], tokens: readonly string[]): boolean {
@@ -66,6 +85,19 @@ function runsSeq(argv: readonly string[], tokens: readonly string[]): boolean {
     if (argv[j] === tokens[i]) i++;
   }
   return i === tokens.length;
+}
+
+/** Does a single token name a path at/under `prefix` (boundary-aware)? */
+function tokenUnder(token: string, prefix: string): boolean {
+  const t = token.replace(/^\.\//, "");
+  return t === prefix || t.startsWith(prefix + "/") || t.endsWith("/" + prefix);
+}
+
+/** A leaf whose head is a shell reading stdin (no script-file argument). */
+function isBareShellLeaf(argv: readonly string[]): boolean {
+  return (
+    SHELLS.has(argv[0] ?? "") && argv.slice(1).every((a) => a.startsWith("-"))
+  );
 }
 
 export function commandView(raw: string): CommandView {
@@ -80,6 +112,11 @@ export function commandView(raw: string): CommandView {
       );
     },
     isSideEffecting: () => classifyBashCommand(raw) === "side-effecting",
+    touches: (prefixes) =>
+      leaves.some((argv) =>
+        argv.slice(1).some((tok) => prefixes.some((p) => tokenUnder(tok, p))),
+      ),
+    pipesToShell: () => leaves.some(isBareShellLeaf),
   };
 }
 
@@ -159,7 +196,8 @@ export interface CompiledHookProgram {
   readonly hooks: Record<
     string,
     readonly {
-      readonly matcher: string;
+      /** Tool matcher — omitted for tool-less events (SessionStart/UserPromptSubmit). */
+      readonly matcher?: string;
       readonly hooks: readonly {
         readonly type: "command";
         readonly command: string;
@@ -171,13 +209,46 @@ export interface CompiledHookProgram {
 }
 
 /**
+ * Every hook shape the closed vocabulary can express. `compileHookProgram`
+ * (emit) and the runtime dispatch both range over this union.
+ */
+export type AnyHook = HookProgram | FileGateHook | InjectHook | ReactHook;
+
+/**
+ * The four runtime dispatch shapes. A bare {@link HookProgram} (no `role`) is a
+ * Bash command gate; the role-keyed hooks carry their own shape. The runtime
+ * uses this to pick the right decode + output (a gate exits 2, an inject prints
+ * `additionalContext`, a react runs its classified command).
+ */
+export type DispatchKind = "bash-gate" | "file-gate" | "inject" | "react";
+
+export function dispatchKind(hook: AnyHook): DispatchKind {
+  if ("role" in hook) return hook.role === "gate" ? "file-gate" : hook.role;
+  return "bash-gate";
+}
+
+/** Where a hook fires + its tool matcher (undefined for tool-less events). */
+export function hookRouting(hook: AnyHook): {
+  on: string;
+  matcher?: string;
+} {
+  if ("role" in hook) {
+    if (hook.role === "inject") return { on: hook.on };
+    return { on: hook.on, matcher: hook.match.tools.join("|") };
+  }
+  return { on: hook.on, matcher: hook.match.tool };
+}
+
+/**
  * Compile a hook program from its source. Runs the capability check FIRST (an
  * out-of-API import does NOT compile), then stamps the source so the shipped
- * artifact is tamper-evident. `program` supplies the routing (event + tool).
+ * artifact is tamper-evident. The hook supplies the routing (event + matcher),
+ * which differs per role — a tool gate matches its tool, a react matches its
+ * tools, an inject (SessionStart) has no tool matcher at all.
  */
 export function compileHookProgram(
   source: string,
-  program: HookProgram,
+  hook: AnyHook,
   gateCommand = "npx vigiles run-hook-program",
 ): CompiledHookProgram {
   const violations = checkHookImports(source);
@@ -188,15 +259,16 @@ export function compileHookProgram(
       )} — only the sanctioned API is allowed (capability = API surface).`,
     );
   }
+  const { on, matcher } = hookRouting(hook);
+  const entry =
+    matcher === undefined
+      ? { hooks: [{ type: "command" as const, command: gateCommand }] }
+      : {
+          matcher,
+          hooks: [{ type: "command" as const, command: gateCommand }],
+        };
   return {
-    hooks: {
-      [program.on]: [
-        {
-          matcher: program.match.tool,
-          hooks: [{ type: "command", command: gateCommand }],
-        },
-      ],
-    },
+    hooks: { [on]: [entry] },
     stamp: stampHook(source),
   };
 }

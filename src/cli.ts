@@ -126,6 +126,24 @@ import { compileGeneratorSkill } from "./core/compile-generator.js";
 import { evaluateAction, loadActionGates } from "./action-gate.js";
 import { runGuardHook } from "./core/guards.js";
 import {
+  compileHookProgram,
+  checkHookImports,
+  verifyHookStamp,
+  HookCompileError,
+  decideProgram,
+  decideFileGate,
+  runInject,
+  runReact,
+  dispatchKind,
+  type AnyHook,
+  type FileGateHook,
+  type InjectHook,
+  type ReactHook,
+  type HookProgram,
+  type Decision,
+} from "./core/hook-program.js";
+import type { SHA256Hash } from "./core/hash.js";
+import {
   evaluatePreToolUse,
   pushActiveAgent,
   popActiveAgent,
@@ -4300,6 +4318,228 @@ function refsHookCommand(): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Compiled hooks (`vigiles/hook`) — author a hook as a pure typed program,
+// compile it to a harness block, run it as the hooks-block command.
+// ---------------------------------------------------------------------------
+
+/**
+ * Load a compiled-hook program's default export. JS module formats
+ * (`.mjs`/`.cjs`/`.js`) load via dynamic import directly; a TypeScript hook
+ * loads only under a TS-capable runtime (tsx / Node >= 23.6) — otherwise an
+ * actionable error points at authoring it as `.mjs`.
+ */
+async function loadHookProgram(file: string): Promise<AnyHook> {
+  const abs = resolve(process.cwd(), file);
+  const { pathToFileURL } = require("node:url") as typeof import("node:url");
+  let mod: { default?: unknown };
+  try {
+    mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
+  } catch (e) {
+    if (/\.(?:m|c)?ts$/.test(file)) {
+      throw new HookCompileError(
+        `Cannot load TypeScript hook "${file}" in this Node runtime. Run under ` +
+          `tsx (npx tsx …) / Node >= 23.6, or author the hook as a .mjs file.`,
+      );
+    }
+    throw new HookCompileError(
+      `Cannot load hook "${file}": ${(e as Error).message}`,
+    );
+  }
+  // Unwrap the ESM/CJS double-default that `export default` can produce.
+  const program =
+    (mod.default as { default?: unknown } | undefined)?.default ?? mod.default;
+  if (!program || typeof program !== "object") {
+    throw new HookCompileError(
+      `${file} has no default-exported hook program ` +
+        `(use \`export default defineHook({…})\`).`,
+    );
+  }
+  return program as AnyHook;
+}
+
+/** Path of the tamper-evident stamp sidecar for a hook file. */
+function hookStampPath(file: string): string {
+  return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
+}
+
+/**
+ * `vigiles compile-hook <file>` — compile a typed hook program (authored
+ * against `vigiles/hook`) into a harness hooks block. An import outside the
+ * sanctioned API does NOT compile (capability = API surface); the emitted block
+ * routes the live event to `run-hook-program`, and a tamper-evident stamp
+ * sidecar lets the runtime refuse a hand-edited artifact.
+ */
+async function compileHookCommand(file: string | undefined): Promise<void> {
+  if (!file) {
+    console.error("Usage: vigiles compile-hook <hook-file>");
+    process.exit(2);
+  }
+  const abs = resolve(process.cwd(), file);
+  let source: string;
+  try {
+    source = readFileSync(abs, "utf-8");
+  } catch {
+    console.error(`Cannot read ${file}`);
+    process.exit(2);
+    return;
+  }
+  let program: AnyHook;
+  let compiled;
+  try {
+    program = await loadHookProgram(file);
+    compiled = compileHookProgram(
+      source,
+      program,
+      `npx vigiles run-hook-program ${file}`,
+    );
+  } catch (e) {
+    if (e instanceof HookCompileError) {
+      console.error(`✗ ${e.message}`);
+      if (checkHookImports(source).length > 0) {
+        console.error(
+          "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
+            "entire capability surface.",
+        );
+      }
+      process.exit(1);
+    }
+    throw e;
+  }
+  mkdirSync(dirname(hookStampPath(file)), { recursive: true });
+  writeFileSync(
+    hookStampPath(file),
+    JSON.stringify({ file, stamp: compiled.stamp }, null, 2) + "\n",
+  );
+  console.log(`✓ ${file} compiled (role: ${dispatchKind(program)}).`);
+  console.log(
+    "\nAdd this to your hooks settings (e.g. .claude/settings.json):\n",
+  );
+  console.log(JSON.stringify({ hooks: compiled.hooks }, null, 2));
+  console.log(
+    `\nStamp written to ${relative(process.cwd(), hookStampPath(file))}.`,
+  );
+}
+
+/** Emit a gate Decision in the harness protocol — the author never writes it. */
+function emitGateDecision(decision: Decision, on: string): void {
+  if (decision.kind === "deny") {
+    console.error(decision.reason);
+    process.exit(2);
+  }
+  if (decision.kind === "ask") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: on,
+          permissionDecision: "ask",
+          permissionDecisionReason: decision.reason,
+        },
+      }) + "\n",
+    );
+  }
+  // allow → emit nothing, exit 0.
+}
+
+/**
+ * Fail closed if a stamp sidecar exists and the on-disk source no longer
+ * matches it — a hand-edit that smuggles in a capability breaks the stamp.
+ * No sidecar → run uncompiled (e.g. a test fixture or a not-yet-compiled hook).
+ */
+function verifyStampOrRefuse(file: string): void {
+  const stampPath = hookStampPath(file);
+  if (!existsSync(stampPath)) return;
+  try {
+    const { stamp } = JSON.parse(readFileSync(stampPath, "utf-8")) as {
+      stamp?: string;
+    };
+    const source = readFileSync(resolve(process.cwd(), file), "utf-8");
+    if (stamp && !verifyHookStamp(source, stamp as SHA256Hash)) {
+      console.error(
+        `vigiles: hook ${file} does not match its compiled stamp (tampered).`,
+      );
+      process.exit(2);
+    }
+  } catch {
+    /* unreadable sidecar → don't block a live session on it */
+  }
+}
+
+/**
+ * `vigiles run-hook-program <file>` — the runtime the compiled hooks block
+ * points at. Reads the live event on stdin, loads the typed program, verifies
+ * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
+ * inject prints `additionalContext`; a react runs its effect-classified
+ * command. A hook that won't load fails CLOSED (exit 2), never silent-allow.
+ */
+async function runHookProgramCommand(file: string | undefined): Promise<void> {
+  if (!file) {
+    console.error("Usage: vigiles run-hook-program <hook-file>");
+    process.exit(2);
+    return;
+  }
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin */
+  }
+  let event: {
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+    source?: string;
+  } = {};
+  try {
+    event = JSON.parse(raw) as typeof event;
+  } catch {
+    /* malformed → empty event */
+  }
+
+  let program: AnyHook;
+  try {
+    program = await loadHookProgram(file);
+  } catch {
+    console.error(`vigiles: cannot load hook program ${file}`);
+    process.exit(2);
+    return;
+  }
+  verifyStampOrRefuse(file);
+
+  switch (dispatchKind(program)) {
+    case "inject": {
+      const out = runInject(program as InjectHook, { source: event.source });
+      process.stdout.write(JSON.stringify(out) + "\n");
+      return;
+    }
+    case "react": {
+      const reaction = runReact(program as ReactHook, event);
+      if (reaction.kind === "run") {
+        const { spawnSync } =
+          require("node:child_process") as typeof import("node:child_process");
+        const res = spawnSync(reaction.command, {
+          shell: true,
+          stdio: "inherit",
+        });
+        process.exit(res.status ?? 0);
+      }
+      if (reaction.kind === "notice") console.error(reaction.message);
+      return;
+    }
+    case "file-gate":
+      emitGateDecision(
+        decideFileGate(program as FileGateHook, event),
+        program.on,
+      );
+      return;
+    case "bash-gate":
+      emitGateDecision(
+        decideProgram(program as HookProgram, event),
+        program.on,
+      );
+      return;
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -4497,6 +4737,14 @@ async function main(): Promise<void> {
 
     case "generate-harness":
       await handleGenerateHarness(args, restArgs);
+      break;
+
+    case "compile-hook":
+      await compileHookCommand(restArgs[0]);
+      break;
+
+    case "run-hook-program":
+      await runHookProgramCommand(restArgs[0]);
       break;
 
     default:

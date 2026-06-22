@@ -38,6 +38,7 @@
     "./linting": "./dist/linting.js",
     "./testing": "./dist/testing.js",
     "./unit": "./dist/unit.js",
+    "./hook": "./dist/hook.js",
     "./integration": "./dist/integration.js",
     "./e2e": "./dist/e2e.js",
     "./claude-code": "./dist/claude-code.js",

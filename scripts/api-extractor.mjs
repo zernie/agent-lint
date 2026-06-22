@@ -30,6 +30,7 @@ const ENTRIES = [
   { name: "vigiles-linting", dts: "dist/linting.d.ts" },
   { name: "vigiles-testing", dts: "dist/testing.d.ts" },
   { name: "vigiles-unit", dts: "dist/unit.d.ts" },
+  { name: "vigiles-hook", dts: "dist/hook.d.ts" },
   { name: "vigiles-integration", dts: "dist/integration.d.ts" },
   { name: "vigiles-e2e", dts: "dist/e2e.d.ts" },
   { name: "vigiles-claude-code", dts: "dist/claude-code.d.ts" },
