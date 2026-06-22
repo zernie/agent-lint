@@ -109,22 +109,30 @@
       N+1's `needs` — a missing field / wrong type / out-of-order handoff **won't compile**.
       The headline non-replicable typed-spec win. Additive over the string-based `delegate()`
       path; shallow `Supplies<>` encoding (TS2589-safe). → `typed-spec-power.md`, `typed-spec-moat.md`
-- [ ] **Semantic capability-diff at PR time (Moat #2) — the bridge bet.** A
-      permissions-diff for your agent: on a PR, compute the harness's capability surface
-      before/after and tell the reviewer what the agent can now **DO** that it couldn't —
-      "this PR gives `summarizer` network access / removes the review gate / opens a
-      cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
-      gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
-      BOTH moat and adoption** (a free PR comment — partial on plain plugins via `scan`,
-      richer on specs — so value without authoring a typed spec). Built on: the
-      whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
-      `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
-      (unbuilt — the surface to diff); the v1→v2 diff itself was **prototyped** as an
-      abstract-interpreter (fp-theory T2). MUST carry a loud sign-off hatch
-      (`vigiles:allow-net` / `allowTrifecta`) so an intentional widening doesn't cry wolf.
-      A **Snyk/Dependabot-for-harnesses** trajectory bet — early to the market, but the one
-      moat feature that also pulls adoption. → `typed-spec-moat.md` (Moat #2),
-      `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
+- [~] **Semantic capability-diff at PR time (Moat #2) — the bridge bet. v0 SHIPPED.**
+  `vigiles capability-diff <before> <after>` (src/core/capability-diff.ts +
+  the CLI handler): diffs the two whole-harness capability lattices and reports the
+  WIDENED verdict (new side-effecting/unknown tool, or loosened purity), informational
+  by default + `--fail-on-widen` for the opt-in CI gate (don't cry wolf). Pure core +
+  CLI e2e (exit-code contract). v0 reads the **tool-bucket** lattice
+  (`computeHarnessCapabilities`); the RICHER surface (per-step effect-row + cross-step
+  accumulation, M1 below) is the deferred follow-up that turns "gained Bash" into
+  "opened a cross-step exfil path". Original framing:
+  A permissions-diff for your agent: on a PR, compute the harness's capability surface
+  before/after and tell the reviewer what the agent can now **DO** that it couldn't —
+  "this PR gives `summarizer` network access / removes the review gate / opens a
+  cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
+  gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
+  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `scan`,
+  richer on specs — so value without authoring a typed spec). Built on: the
+  whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
+  `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
+  (unbuilt — the surface to diff); the v1→v2 diff itself was **prototyped** as an
+  abstract-interpreter (fp-theory T2). MUST carry a loud sign-off hatch
+  (`vigiles:allow-net` / `allowTrifecta`) so an intentional widening doesn't cry wolf.
+  A **Snyk/Dependabot-for-harnesses** trajectory bet — early to the market, but the one
+  moat feature that also pulls adoption. → `typed-spec-moat.md` (Moat #2),
+  `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
 - [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
       unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
       `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler

@@ -537,3 +537,64 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
     }
   });
 });
+
+// --- capability-diff e2e (the moat #2 PR-comment surface) ----------------------
+
+describe("capability-diff e2e", () => {
+  // before: a read-only worker; after: the same worker GAINS Bash (blast radius up).
+  function versions(): { before: string; after: string; root: string } {
+    const root = mkdtempSync(join(tmpdir(), "vigiles-capdiff-"));
+    const mk = (sub: string, tools: string) => {
+      const dir = join(root, sub);
+      mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+      writeFileSync(
+        join(dir, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "demo" }),
+      );
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      writeFileSync(
+        join(dir, "agents", "worker.md"),
+        `---\nname: worker\ndescription: A worker agent\ntools: ${tools}\n---\nbody\n`,
+      );
+      return dir;
+    };
+    return {
+      before: mk("before", "Read, Grep"),
+      after: mk("after", "Read, Grep, Bash"),
+      root,
+    };
+  }
+
+  it("flags a widened blast radius and exits 0 by default (informational)", () => {
+    const { before, after, root } = versions();
+    try {
+      const r = run(`capability-diff ${before} ${after}`);
+      assert.equal(r.exitCode, 0, "widening is informational by default");
+      assert.match(r.stdout, /WIDENED/);
+      assert.match(r.stdout, /side-effecting: Bash/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 1 on a widening with --fail-on-widen (the opt-in CI gate)", () => {
+    const { before, after, root } = versions();
+    try {
+      const r = run(`capability-diff ${before} ${after} --fail-on-widen`);
+      assert.equal(r.exitCode, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports no change when the surface is identical", () => {
+    const { after, root } = versions();
+    try {
+      const r = run(`capability-diff ${after} ${after} --fail-on-widen`);
+      assert.equal(r.exitCode, 0, "no widening → no gate trip");
+      assert.match(r.stdout, /unchanged/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

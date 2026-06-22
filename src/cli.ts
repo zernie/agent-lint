@@ -23,9 +23,14 @@ import { generateTypes } from "./core/generate-types.js";
 import {
   loadHarnessModel,
   generateHarness,
+  computeHarnessCapabilities,
   labelFor,
   HARNESS_GEN_FILENAME,
 } from "./core/generate-harness.js";
+import {
+  diffCapabilities,
+  formatCapabilityDiff,
+} from "./core/capability-diff.js";
 import { validate, loadConfig } from "./core/validate.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
@@ -3626,6 +3631,44 @@ function handleExplain(restArgs: string[], args: string[]): void {
 }
 
 /**
+ * `vigiles capability-diff <before> <after>` — does this change WIDEN the agent's
+ * blast radius? Computes each version's whole-harness capability lattice from its
+ * scanned agents (read-only / side-effecting / unknown tools + the loosest purity)
+ * and diffs them. Deterministic, no model. Informational by default (a PR comment);
+ * `--fail-on-widen` exits non-zero on a widening (the opt-in CI gate, don't cry wolf).
+ */
+function handleCapabilityDiff(restArgs: string[], args: string[]): void {
+  if (restArgs.length < 2) {
+    console.error(
+      "capability-diff needs two dirs: capability-diff <before> <after> [--fail-on-widen]",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const json = args.includes("--json");
+  const harnessFlag = harnessFlagFrom(args);
+  const capsOf = (dir: string) => {
+    const resolved = resolve(dir);
+    const adapter = harnessFlag
+      ? resolveAdapter(resolved, harnessFlag)
+      : detectAdapterResult(resolved).adapter;
+    const report = scanPlugin(resolved, adapter.layout, adapter.dialect);
+    // Map each scanned agent to a capability entry (no `tools:` → inherits-all).
+    const agents = report.agents.map((a) => ({
+      name: a.name,
+      tools: a.tools ?? undefined,
+      file: a.path,
+    }));
+    return computeHarnessCapabilities(agents, adapter.dialect);
+  };
+  const diff = diffCapabilities(capsOf(restArgs[0]), capsOf(restArgs[1]));
+  console.log(
+    json ? JSON.stringify(diff, null, 2) : formatCapabilityDiff(diff),
+  );
+  if (args.includes("--fail-on-widen") && diff.widened) process.exitCode = 1;
+}
+
+/**
  * The plugin's declared name for the namespaced skill id, read from the layout's
  * manifest (adapter-aware path, not a hardcoded `.claude-plugin/`), falling back to
  * the dir basename. JSON manifests only for now (a TOML/Codex manifest → basename).
@@ -4434,6 +4477,10 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "capability-diff":
+      handleCapabilityDiff(restArgs, args);
+      break;
 
     case "explain":
       handleExplain(restArgs, args);
