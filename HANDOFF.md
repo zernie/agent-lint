@@ -87,10 +87,14 @@ catalog + `scan` coverage column; dogfood on a real OSS safety hook to find a se
   updated (VERIFY = HIGH, GATE = MED). The evidence base for everything above.
 - **hook-spec spike (`d3471c0`):** typed/effect-classified hooks (`src/core/hook-spec.ts`) —
   wrong-field & mutating-observe-hook = compile errors. EXPERIMENTAL, parked (correctness win).
-- **guard-hook GATE (`959e88c`/`4336f4a`):** typed guards + runnable PreToolUse gate + ledger;
-  ORDER axis live. EXPERIMENTAL; demoted MED (CC bugs undercut any gate). Don't build more.
-- **Prior session (don't rebuild):** A1 sonnet pass (caveman −18%, token-efficient −10%, both
-  debunked — SATURATED, don't lead with caveman); V1 nesting STACK fix (`c50b826`); leaderboard v0.
+- **COMPILED-HOOKS probe (`bd33aa4`):** `src/core/hook-program.ts` — hook = pure typed
+  `(event)=>Decision` vs a closed `vigiles/hook` API. 5 claims proven (pure/testable, AST match
+  via new `bash-effects.leafCommands` beats glob #30519+grep, compiles to CC, capability=API
+  surface, tamper-evident STAMP). The real compiled-hooks moat; open Q = keep the API minimal.
+- **guard-hook GATE (`959e88c`/`4336f4a`):** typed guards + runnable gate + ledger; ORDER axis
+  live. EXPERIMENTAL; demoted MED (CC bugs undercut any gate). Don't build more.
+- **Prior (don't rebuild):** A1 sonnet (caveman −18% / token-efficient −10%, both debunked —
+  SATURATED); V1 nesting STACK fix (`c50b826`); leaderboard v0.
 
 ## Gotchas (carry forward)
 

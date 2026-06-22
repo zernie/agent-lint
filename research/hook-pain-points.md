@@ -106,6 +106,31 @@ So: **test-first (works on everyone's hooks today), compile-optional (derives th
 from declared intent for typed-spec users).** The compile layer makes intent explicit
 and the proof automatic; it is never a prerequisite.
 
+### Compiled-hooks PROBE — DONE (2026-06-22, `bd33aa4`)
+
+`src/core/hook-program.ts` + a 5-claim test prove the **constrained-API** model (a hook =
+a pure typed `(event)=>Decision` against a closed `vigiles/hook` vocabulary, vigiles
+compiles it). All five hold in-process, no subprocess, no model:
+
+1. **Testability** — `decide` is pure, unit-tested directly; the false-confidence protocol
+   (exit 1≠2, JSON field) is UNREPRESENTABLE (compiler emits exit-2).
+2. **AST matching** — `command.runs("git push",{force})` via new `bash-effects.leafCommands`
+   (AST leaf extraction) catches the compound bypass `cd x && git push -f` the native glob
+   (#30519) misses AND avoids a `grep` false-positive on `echo "...git push..."`.
+3. **Compiles** to a real CC hooks block.
+4. **Capability = API surface** — `checkHookImports` rejects any import outside `vigiles/hook`
+   (+ eval/Function/dynamic-import); an out-of-API hook does NOT compile.
+5. **Stamping** (the "fix #4" idea, integrity.ts pattern) — `stampHook`/`verifyHookStamp` make
+   the artifact tamper-evident: a hand-edit smuggling `child_process` breaks the stamp.
+
+So claim #4 has TWO layers: static import-boundary at compile + a tamper-evident stamp at
+runtime. Honest limits unchanged: buy-in (rewrite as a typed program), node-startup latency,
+and CC delivery bugs (#34692) still bypass any compiled hook — compile fixes AUTHORING +
+ANALYSIS, not delivery. Verdict: the model is real and coherent ("a hook becomes a formal
+object"); the open question is whether the `vigiles/hook` API stays minimal-but-sufficient
+for real hook shapes. NEXT (if pursued): widen the API past the Bash/PreToolUse probe shape
+(other tools/events, context-injection, action-runner) and decide buy-in vs. the latency cost.
+
 ## Honest boundary — the CC delivery bugs we CANNOT fix
 
 Verifying decision logic does not fix CC's runtime _delivery_ holes. Flag them by
