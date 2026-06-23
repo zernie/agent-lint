@@ -22,10 +22,8 @@
 
 `Agent = Model + Harness`. The model gets the headlines; the **harness** — the
 instruction files, hooks, and skills you actually control — is the half that
-fails silently. vigiles[^name] is the **deterministic reliability layer** for it:
-the harness becomes a compilable, analyzable, testable object instead of vibes —
-and it's the only one that can **A/B-test what moves the needle on your Claude
-subscription**, not metered API. Four instruments, adopt any:
+fails silently. vigiles[^name] turns that harness into a compilable, analyzable,
+testable object instead of vibes. Four instruments, adopt any:
 
 |                |                                                                                                                                                                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
