@@ -740,7 +740,7 @@ test("measureWith interceptTools: auto-wires the PreToolUse hook + env round-tri
   assert.equal(settings.hooks.PreToolUse[0].matcher, "Write"); // existing, untouched
   const entry = settings.hooks.PreToolUse[1];
   assert.equal(entry.matcher, "Bash");
-  assert.match(entry.hooks[0].command, /intercept-tool-hook/);
+  assert.match(entry.hooks[0].command, /intercept-tool/);
 
   // the intercept list rides VIGILES_INTERCEPT_TOOLS, RegExp matcher preserved.
   const parsed = parseIntercepts(seenEnv?.VIGILES_INTERCEPT_TOOLS ?? "");

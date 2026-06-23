@@ -4134,56 +4134,72 @@ function agentStartCommand(target: string | undefined): void {
 }
 
 /** Dispatch the skill-runtime subcommands. Returns false if unrecognized. */
-function handleSkillCommand(command: string, restArgs: string[]): boolean {
-  switch (command) {
-    case "run-skill":
-      runSkillCommand(restArgs[0]);
-      return true;
-    case "skill-start":
-      skillStartCommand(restArgs[0]);
-      return true;
-    case "skill-done":
-      clearActiveSkill(process.cwd());
-      return true;
-    case "skill-hook":
-      skillHookCommand();
-      return true;
-    case "skill-tool-hook":
-      skillToolHookCommand();
-      return true;
+/**
+ * `vigiles hook-runtime <kind> [args]` — the hidden umbrella for RUNTIME
+ * entrypoints: the executables the harness invokes via a block `vigiles compile`
+ * emits into your hooks config, NEVER typed by a human. They stay off the help
+ * surface by design — verbs are typed, runtime entrypoints are emitted (the
+ * cohesive-cli-surface rule). Renaming a `<kind>` breaks every already-emitted
+ * block, so it is a breaking change.
+ */
+async function handleHookRuntime(
+  kind: string | undefined,
+  restArgs: string[],
+): Promise<void> {
+  switch (kind) {
+    case "run-program":
+      await runHookProgramCommand(restArgs[0]);
+      return;
+    case "agent":
+      agentHookCommand();
+      return;
     case "agent-start":
       agentStartCommand(restArgs[0]);
-      return true;
+      return;
     case "agent-done":
       popActiveAgent(process.cwd());
-      return true;
-    case "agent-hook":
-      agentHookCommand();
-      return true;
-    case "intercept-tool-hook":
+      return;
+    case "skill":
+      skillHookCommand();
+      return;
+    case "skill-tool":
+      skillToolHookCommand();
+      return;
+    case "skill-start":
+      skillStartCommand(restArgs[0]);
+      return;
+    case "skill-done":
+      clearActiveSkill(process.cwd());
+      return;
+    case "run-skill":
+      runSkillCommand(restArgs[0]);
+      return;
+    case "intercept-tool":
       interceptToolHookCommand();
-      return true;
-    case "guard-hook":
+      return;
+    case "guard":
       guardHookCommand();
-      return true;
-    case "action-hook":
+      return;
+    case "action":
       actionHookCommand();
-      return true;
+      return;
     case "refs":
-      refsCommand(restArgs[0]);
-      return true;
-    case "refs-hook":
       refsHookCommand();
-      return true;
+      return;
     case "effect-enter":
       setEffectActive(process.cwd());
       console.log("Effect boundary entered.");
-      return true;
+      return;
     case "effect-exit":
       clearEffectActive(process.cwd());
-      return true;
+      return;
     default:
-      return false;
+      console.error(
+        `vigiles hook-runtime: unknown runtime entrypoint "${kind ?? ""}". ` +
+          `These are emitted into your hooks config by \`vigiles compile\` — ` +
+          `you don't run them by hand.`,
+      );
+      process.exit(2);
   }
 }
 
@@ -4407,7 +4423,7 @@ async function compileHookCommand(
   try {
     program = await loadHookProgram(file);
     compiled = compileHookProgram(source, program, {
-      gateCommand: `npx vigiles run-hook-program ${file}`,
+      gateCommand: `npx vigiles hook-runtime run-program ${file}`,
       dialect: adapter.dialect,
       hookProtocol: adapter.hookProtocol,
       settingsFormat: adapter.layout.settingsFormat,
@@ -4783,12 +4799,18 @@ async function main(): Promise<void> {
       await compileHookCommand(restArgs[0], args);
       break;
 
-    case "run-hook-program":
-      await runHookProgramCommand(restArgs[0]);
+    case "refs":
+      refsCommand(restArgs[0]);
+      break;
+
+    // Hidden umbrella for runtime entrypoints emitted into hooks configs — never
+    // typed by a human. See handleHookRuntime / the cohesive-cli-surface rule.
+    case "hook-runtime":
+      await handleHookRuntime(restArgs[0], restArgs.slice(1));
       break;
 
     default:
-      if (!handleSkillCommand(command, restArgs)) printUsage(command);
+      printUsage(command);
       break;
   }
 }

@@ -13,7 +13,7 @@ INPUT=$(cat)
 command -v npx >/dev/null 2>&1 || exit 0
 [ -f package.json ] || exit 0
 
-printf '%s' "$INPUT" | npx vigiles refs-hook
+printf '%s' "$INPUT" | npx vigiles hook-runtime refs
 status=${PIPESTATUS[1]}
 
 # Propagate ONLY an explicit block (exit 2). Swallow tool/setup errors so a

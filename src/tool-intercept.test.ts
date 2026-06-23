@@ -116,7 +116,10 @@ test("buildInterceptSettings(): a PreToolUse hook matching the union of intercep
     hooks: { type: string; command: string }[];
   };
   assert.equal(entry.matcher, "Bash|WebFetch");
-  assert.equal(entry.hooks[0].command, "npx vigiles intercept-tool-hook");
+  assert.equal(
+    entry.hooks[0].command,
+    "npx vigiles hook-runtime intercept-tool",
+  );
   assert.equal(entry.hooks[0].type, "command");
 
   // mcp tool names carry regex metachars → escaped so the matcher is literal
@@ -192,7 +195,7 @@ interceptHookTest(
         },
       ]),
     };
-    const cmd = `node ${CLI} intercept-tool-hook`;
+    const cmd = `node ${CLI} hook-runtime intercept-tool`;
     // A matched call (Bash `git push`) is PREVENTED — the hook blocks it.
     const blocked = runHook(
       cmd,

@@ -344,7 +344,7 @@ test("skill-tool-hook CLI allows (exit 0) a read-only Bash command for a bounded
   const dir = projectWithBoundedSkill();
   try {
     const r = runHook(
-      `node ${CLI} skill-tool-hook`,
+      `node ${CLI} hook-runtime skill-tool`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -363,7 +363,7 @@ test("skill-tool-hook CLI blocks (exit 2) a mutating Bash command for a bounded 
   const dir = projectWithBoundedSkill();
   try {
     const r = runHook(
-      `node ${CLI} skill-tool-hook`,
+      `node ${CLI} hook-runtime skill-tool`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -383,7 +383,7 @@ test("skill-tool-hook CLI allows when no skill is active", () => {
   const dir = makeTmpDir("skill-hook-none");
   try {
     const r = runHook(
-      `node ${CLI} skill-tool-hook`,
+      `node ${CLI} hook-runtime skill-tool`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -400,7 +400,7 @@ test("skill-tool-hook CLI allows when no skill is active", () => {
 test("skill-tool-hook CLI allows on a malformed/empty event (no tool name)", () => {
   const dir = projectWithBoundedSkill();
   try {
-    const r = runHook(`node ${CLI} skill-tool-hook`, {}, { cwd: dir });
+    const r = runHook(`node ${CLI} hook-runtime skill-tool`, {}, { cwd: dir });
     assert.equal(r.blocked, false);
     assert.equal(r.exitCode, 0);
   } finally {

@@ -14,7 +14,7 @@ import { runHook } from "../../run-hook.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
 const CLI = resolve(process.cwd(), "dist", "cli.js");
-const REFS_HOOK = `node ${CLI} refs-hook`;
+const REFS_HOOK = `node ${CLI} hook-runtime refs`;
 const EDIT = (file: string) => ({
   hook_event_name: "PostToolUse" as const,
   tool_name: "Edit",

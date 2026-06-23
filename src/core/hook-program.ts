@@ -334,7 +334,8 @@ export function compileHookProgram(
       throw new HookCompileError(issues[0].message);
     }
   }
-  const gateCommand = opts.gateCommand ?? "npx vigiles run-hook-program";
+  const gateCommand =
+    opts.gateCommand ?? "npx vigiles hook-runtime run-program";
   const matcher = styleMatcher(rawMatcher, opts.hookProtocol);
   const entry =
     matcher === undefined

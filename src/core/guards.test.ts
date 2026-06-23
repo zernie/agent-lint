@@ -112,7 +112,7 @@ test("compileGuards emits a valid CC hooks block pointing at vigiles's OWN gate"
   const entry = cfg.hooks.PreToolUse[0];
   assert.equal(entry.matcher, "Bash|Edit|Write");
   // The command is vigiles's audited gate — NOT user shell (safe-by-construction).
-  assert.equal(entry.hooks[0].command, "npx vigiles guard-hook");
+  assert.equal(entry.hooks[0].command, "npx vigiles hook-runtime guard");
   assert.equal(entry.hooks[0].type, "command");
 });
 
@@ -308,7 +308,7 @@ test("guard-hook CLI blocks destroy before plan (exit 2), allows after (ORDER, l
       tool_input: { command: "terraform destroy -auto-approve" },
     };
     // Before any plan → blocked with the reason.
-    const blocked = runHook(`node ${CLI} guard-hook`, destroyEvent, {
+    const blocked = runHook(`node ${CLI} hook-runtime guard`, destroyEvent, {
       cwd: dir,
     });
     assert.equal(blocked.blocked, true);
@@ -317,7 +317,7 @@ test("guard-hook CLI blocks destroy before plan (exit 2), allows after (ORDER, l
 
     // Run the plan (the gate records it).
     const plan = runHook(
-      `node ${CLI} guard-hook`,
+      `node ${CLI} hook-runtime guard`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -329,7 +329,9 @@ test("guard-hook CLI blocks destroy before plan (exit 2), allows after (ORDER, l
     assert.ok(existsSync(join(dir, ".vigiles/guard-ledger.json")));
 
     // Now destroy is allowed — the ledger persisted the plan across hook invocations.
-    const after = runHook(`node ${CLI} guard-hook`, destroyEvent, { cwd: dir });
+    const after = runHook(`node ${CLI} hook-runtime guard`, destroyEvent, {
+      cwd: dir,
+    });
     assert.equal(after.blocked, false);
     assert.equal(after.exitCode, 0);
   } finally {
