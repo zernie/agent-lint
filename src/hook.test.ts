@@ -58,7 +58,7 @@ test("run-hook-program: a gate denies force-push (exit 2) and allows benign", ()
   try {
     const f = fixture(dir, "guard.mjs", GATE);
     const denied = runHook(
-      `node ${CLI} run-hook-program ${f}`,
+      `node ${CLI} hook-runtime run-program ${f}`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -71,7 +71,7 @@ test("run-hook-program: a gate denies force-push (exit 2) and allows benign", ()
     assert.match(denied.stderr, /force-push/);
 
     const allowed = runHook(
-      `node ${CLI} run-hook-program ${f}`,
+      `node ${CLI} hook-runtime run-program ${f}`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -91,7 +91,7 @@ test("run-hook-program: the AST matcher catches a compound-command bypass", () =
   try {
     const f = fixture(dir, "guard.mjs", GATE);
     const r = runHook(
-      `node ${CLI} run-hook-program ${f}`,
+      `node ${CLI} hook-runtime run-program ${f}`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -118,7 +118,7 @@ export default defineInject({
 });`,
     );
     const r = runHook(
-      `node ${CLI} run-hook-program ${f}`,
+      `node ${CLI} hook-runtime run-program ${f}`,
       { hook_event_name: "SessionStart", source: "startup" },
       { cwd: dir },
     );
@@ -178,11 +178,11 @@ test("compile-hook then run: a clean hook compiles, stamps, and the stamp gates 
     });
     assert.equal(c.status, 0, c.stderr);
     assert.match(c.stdout, /role: bash-gate/);
-    assert.match(c.stdout, /run-hook-program guard\.mjs/);
+    assert.match(c.stdout, /hook-runtime run-program guard\.mjs/);
 
     // The compiled hook still enforces.
     const ok = runHook(
-      `node ${CLI} run-hook-program guard.mjs`,
+      `node ${CLI} hook-runtime run-program guard.mjs`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -200,7 +200,7 @@ test("compile-hook then run: a clean hook compiles, stamps, and the stamp gates 
     );
     writeFileSync(resolve(dir, "guard.mjs"), edited);
     const tampered = runHook(
-      `node ${CLI} run-hook-program guard.mjs`,
+      `node ${CLI} hook-runtime run-program guard.mjs`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",

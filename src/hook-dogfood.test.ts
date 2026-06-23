@@ -77,7 +77,10 @@ test("a hand-written substring guard has the documented blind spots (the bug cla
 test("the COMPILED hook blocks all 7 disasters by construction (closes the gaps)", () => {
   // cwd = repo root so the example's `../../dist/hook.js` import resolves.
   // No throw ⇒ every disaster in the battery is denied (exit 2).
-  assertBlocksDisasters(`node ${CLI} run-hook-program ${COMPILED_GUARD}`, {
-    cwd: REPO_ROOT,
-  });
+  assertBlocksDisasters(
+    `node ${CLI} hook-runtime run-program ${COMPILED_GUARD}`,
+    {
+      cwd: REPO_ROOT,
+    },
+  );
 });

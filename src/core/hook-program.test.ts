@@ -102,7 +102,7 @@ export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   assert.equal(out.hooks.PreToolUse[0].matcher, "Bash");
   assert.equal(
     out.hooks.PreToolUse[0].hooks[0].command,
-    "npx vigiles run-hook-program",
+    "npx vigiles hook-runtime run-program",
   );
   assert.ok(out.stamp.length > 0);
 });
@@ -179,7 +179,7 @@ test("compile (Codex): emits TOML `[[hooks.<event>]]` with a regex matcher", () 
       dialect: codexDialect,
       hookProtocol: codexHookProtocol,
       settingsFormat: "toml",
-      gateCommand: "npx vigiles run-hook-program guard.mjs",
+      gateCommand: "npx vigiles hook-runtime run-program guard.mjs",
     },
   );
   assert.match(out.settingsBlock, /\[\[hooks\.PreToolUse\]\]/);
@@ -187,7 +187,7 @@ test("compile (Codex): emits TOML `[[hooks.<event>]]` with a regex matcher", () 
   assert.match(out.settingsBlock, /matcher = "\^\(Bash\)\$"/);
   assert.match(
     out.settingsBlock,
-    /command = "npx vigiles run-hook-program guard\.mjs"/,
+    /command = "npx vigiles hook-runtime run-program guard\.mjs"/,
   );
 });
 

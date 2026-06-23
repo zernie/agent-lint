@@ -182,13 +182,13 @@ export interface HooksConfig {
 
 /**
  * Generate the hooks block for a guard set. The command is vigiles's OWN gate
- * (default `npx vigiles guard-hook`), NOT user shell — so the generated enforcement
- * is safe-by-construction and a repo can't smuggle an arbitrary RCE hook. The gate
- * reads the same guard set + the live event and runs `decideGuards`.
+ * (default `npx vigiles hook-runtime guard`), NOT user shell — so the generated
+ * enforcement is safe-by-construction and a repo can't smuggle an arbitrary RCE
+ * hook. The gate reads the same guard set + the live event and runs `decideGuards`.
  */
 export function compileGuards(
   guards: readonly Guard[],
-  gateCommand = "npx vigiles guard-hook",
+  gateCommand = "npx vigiles hook-runtime guard",
 ): HooksConfig {
   const matcher = guardedTools(guards).join("|");
   return {

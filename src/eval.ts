@@ -1080,7 +1080,7 @@ const INTERCEPT_TOOL_HOOK_CLI =
   [join(__dirname, "cli.js"), join(__dirname, "..", "dist", "cli.js")].find(
     (p) => existsSync(p),
   ) ?? join(__dirname, "cli.js");
-const INTERCEPT_TOOL_HOOK_CMD = `"${process.execPath}" "${INTERCEPT_TOOL_HOOK_CLI}" intercept-tool-hook`;
+const INTERCEPT_TOOL_HOOK_CMD = `"${process.execPath}" "${INTERCEPT_TOOL_HOOK_CLI}" hook-runtime intercept-tool`;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object";

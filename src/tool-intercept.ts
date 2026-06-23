@@ -128,7 +128,7 @@ function uniqueToolNames(intercepts: readonly ToolIntercept[]): string[] {
 
 /**
  * Build the PreToolUse hook fragment that routes every intercepted tool through
- * `vigiles intercept-tool-hook`. The `matcher` is a CC tool-name regex over the
+ * `vigiles hook-runtime intercept-tool`. The `matcher` is a CC tool-name regex over the
  * union of intercepted tool names (each escaped), so unrelated tools are never
  * intercepted. Merge the result into an arm's `settings`; the intercept list
  * itself travels in the {@link INTERCEPT_TOOLS_ENV} env var (see
@@ -138,7 +138,7 @@ export function buildInterceptSettings(
   intercepts: readonly ToolIntercept[],
   opts: { command?: string } = {},
 ): InterceptSettings {
-  const command = opts.command ?? "npx vigiles intercept-tool-hook";
+  const command = opts.command ?? "npx vigiles hook-runtime intercept-tool";
   const matcher = uniqueToolNames(intercepts).map(escapeRegex).join("|");
   return {
     hooks: {
