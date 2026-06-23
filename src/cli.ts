@@ -68,6 +68,7 @@ import {
   formatMcpContractReport,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
+import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
   explainScore,
   explainSurface,
@@ -4767,6 +4768,12 @@ async function main(): Promise<void> {
             console.log(
               `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
             );
+          }
+          // Freshness: warn if our hand-maintained CC catalog drifted from the
+          // user's INSTALLED claude-code (read-local, best-effort, never throws).
+          if (adapter.name === "claude-code") {
+            const drift = formatDialectDrift(checkDialectDrift());
+            if (drift) console.log(drift);
           }
           console.log("");
         }

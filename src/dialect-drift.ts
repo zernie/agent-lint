@@ -10,12 +10,17 @@
  * user's own `claude` CLI) to ALARM when CC's surface drifts from our catalog. We
  * never ship or vendor their types — only diff against them at test/runtime.
  *
- * Pure parsers (testable with fixtures) + a local-install locator. The gated test
- * in `dialect-drift.test.ts` wires them; a runtime warn in compile/scan can reuse them.
+ * Pure parsers (testable with fixtures) + a local-install locator. TWO consumers:
+ * the gated CI test in `dialect-drift.test.ts` (fails loud on tool/event drift), and
+ * `vigiles scan` at runtime via `checkDialectDrift`/`formatDialectDrift` (a best-effort,
+ * read-local freshness WARN when the installed CC's tool surface drifts from ours).
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+
+/** The Claude Code version `ACKNOWLEDGED_TOOL_INPUT_TYPES` + the dialect were last validated against. */
+export const VALIDATED_CC_VERSION = "2.1.42";
 
 /**
  * The `<X>Input` interface names we've ACKNOWLEDGED from `sdk-tools.d.ts` (Claude
@@ -94,4 +99,69 @@ export function findClaudeCodePackage(): string | null {
     }
   }
   return null;
+}
+
+/** A runtime drift report: how the INSTALLED CC's tool surface compares to ours. */
+export interface DialectDriftReport {
+  readonly installedVersion: string;
+  readonly validatedVersion: string;
+  /** Tool-input types present in the install but not in ACKNOWLEDGED (CC added). */
+  readonly newToolTypes: string[];
+  /** Acknowledged types absent from the install (CC removed/renamed). */
+  readonly removedToolTypes: string[];
+}
+
+/**
+ * Best-effort, read-local drift check for `scan` (and other runtime callers). Reads
+ * only the small `sdk-tools.d.ts` (fast — no `cli.js` bundle scan; events are the
+ * CI test's job). Returns null when CC isn't installed or anything is unreadable —
+ * NEVER throws, so it can't break the command. ToS-clean: reads the user's own
+ * install, ships nothing.
+ */
+export function checkDialectDrift(): DialectDriftReport | null {
+  const pkg = findClaudeCodePackage();
+  if (!pkg) return null;
+  try {
+    const installed = new Set(
+      parseToolInputTypes(readFileSync(join(pkg, "sdk-tools.d.ts"), "utf-8")),
+    );
+    const ack = new Set(ACKNOWLEDGED_TOOL_INPUT_TYPES);
+    let installedVersion = "unknown";
+    try {
+      installedVersion =
+        (
+          JSON.parse(readFileSync(join(pkg, "package.json"), "utf-8")) as {
+            version?: string;
+          }
+        ).version ?? "unknown";
+    } catch {
+      /* version optional */
+    }
+    return {
+      installedVersion,
+      validatedVersion: VALIDATED_CC_VERSION,
+      newToolTypes: [...installed].filter((t) => !ack.has(t)).sort(),
+      removedToolTypes: [...ack].filter((t) => !installed.has(t)).sort(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** A one-line freshness warning if the dialect drifted from the install, else null. */
+export function formatDialectDrift(
+  r: DialectDriftReport | null,
+): string | null {
+  if (!r || (r.newToolTypes.length === 0 && r.removedToolTypes.length === 0))
+    return null;
+  const parts: string[] = [];
+  if (r.newToolTypes.length > 0)
+    parts.push(`CC added tool type(s): ${r.newToolTypes.join(", ")}`);
+  if (r.removedToolTypes.length > 0)
+    parts.push(`removed: ${r.removedToolTypes.join(", ")}`);
+  return (
+    `⚠ dialect freshness: vigiles's tool catalog was validated against ` +
+    `claude-code ${r.validatedVersion}, you have ${r.installedVersion} — ` +
+    `${parts.join("; ")}. Tool/contract checks may be stale; a vigiles update may be needed.`
+  );
 }
