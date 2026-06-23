@@ -140,6 +140,7 @@ import {
   runReact,
   dispatchKind,
   hookMode,
+  hookNeeds,
   gateAction,
   type DispatchKind,
   type HookMode,
@@ -158,6 +159,7 @@ import {
   mergeHooksToml,
   serializeConfig,
 } from "./hook-install.js";
+import { gatherContext, type ProviderResults } from "./core/hook-providers.js";
 import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
@@ -4526,6 +4528,27 @@ async function installHooks(
   return ok;
 }
 
+/**
+ * Gather a gate's DECLARED context providers (the trusted-host I/O step). Runs
+ * each declared read-only command via execSync in the hook's cwd; a provider
+ * that can't resolve yields its default (never throws). The pure registry +
+ * decision logic live in core/hook-providers.ts — this only injects the real IO.
+ */
+function gatherHookContext(program: AnyHook): Partial<ProviderResults> {
+  const needs = hookNeeds(program);
+  if (needs.length === 0) return {};
+  const { execSync } =
+    require("node:child_process") as typeof import("node:child_process");
+  return gatherContext(needs, {
+    exec: (command) =>
+      execSync(command, {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    cwd: process.cwd(),
+  });
+}
+
 /** Append an observe-mode record to `.vigiles/hook-observations.jsonl` (best-effort). */
 function recordObservation(
   file: string,
@@ -4677,38 +4700,46 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       if (reaction.kind === "notice") console.error(reaction.message);
       return;
     }
-    case "file-gate":
+    case "file-gate": {
+      const ctx = gatherHookContext(program);
       emitGate(
-        decideFileGate(program as FileGateHook, event),
+        decideFileGate(program as FileGateHook, event, ctx),
         program.on,
         hookMode(program),
         file,
       );
       return;
-    case "bash-gate":
+    }
+    case "bash-gate": {
+      const ctx = gatherHookContext(program);
       emitGate(
-        decideProgram(program as HookProgram, event),
+        decideProgram(program as HookProgram, event, ctx),
         program.on,
         hookMode(program),
         file,
       );
       return;
-    case "prompt-gate":
+    }
+    case "prompt-gate": {
+      const ctx = gatherHookContext(program);
       emitGate(
-        decidePromptGate(program as PromptGateHook, event),
+        decidePromptGate(program as PromptGateHook, event, ctx),
         program.on,
         hookMode(program),
         file,
       );
       return;
-    case "stop-gate":
+    }
+    case "stop-gate": {
+      const ctx = gatherHookContext(program);
       emitGate(
-        decideStopGate(program as StopGateHook, event),
+        decideStopGate(program as StopGateHook, event, ctx),
         program.on,
         hookMode(program),
         file,
       );
       return;
+    }
   }
 }
 

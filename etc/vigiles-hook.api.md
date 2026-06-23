@@ -14,9 +14,10 @@ export type AnyHook = HookProgram | FileGateHook | PromptGateHook | StopGateHook
 export const ask: (reason: string) => Decision;
 
 // @public
-export interface BashToolEvent {
+export interface BashToolEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
     // (undocumented)
     readonly command: CommandView;
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     // (undocumented)
@@ -72,7 +73,7 @@ export function decideFileGate(hook: FileGateHook, raw: {
     tool_input?: {
         file_path?: unknown;
     };
-}): Decision;
+}, ctx?: Partial<ProviderResults>): Decision;
 
 // @public
 export function decideProgram(program: HookProgram, rawEvent: {
@@ -80,17 +81,17 @@ export function decideProgram(program: HookProgram, rawEvent: {
     tool_input?: {
         command?: unknown;
     };
-}): Decision;
+}, ctx?: Partial<ProviderResults>): Decision;
 
 // @public
 export function decidePromptGate(hook: PromptGateHook, raw: {
     prompt?: unknown;
-}): Decision;
+}, ctx?: Partial<ProviderResults>): Decision;
 
 // @public
 export function decideStopGate(hook: StopGateHook, raw: {
     stop_hook_active?: unknown;
-}): Decision;
+}, ctx?: Partial<ProviderResults>): Decision;
 
 // @public (undocumented)
 export type Decision = {
@@ -107,22 +108,22 @@ export type Decision = {
 export function decisionExitCode(d: Decision): number;
 
 // @public (undocumented)
-export const defineFileGate: (p: Omit<FileGateHook, "role">) => FileGateHook;
+export function defineFileGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N>;
 
 // @public (undocumented)
-export const defineHook: (p: HookProgram) => HookProgram;
+export function defineHook<const N extends readonly ProviderName[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
 
 // @public (undocumented)
 export const defineInject: (p: Omit<InjectHook, "role">) => InjectHook;
 
 // @public (undocumented)
-export const definePromptGate: (p: Omit<PromptGateHook, "role">) => PromptGateHook;
+export function definePromptGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
 
 // @public (undocumented)
 export const defineReact: (p: Omit<ReactHook, "role">) => ReactHook;
 
 // @public (undocumented)
-export const defineStopGate: (p: Omit<StopGateHook, "role">) => StopGateHook;
+export function defineStopGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
 
 // @public (undocumented)
 export const deny: (reason: string) => Decision;
@@ -134,14 +135,15 @@ export type DispatchKind = "bash-gate" | "file-gate" | "prompt-gate" | "stop-gat
 export function dispatchKind(hook: AnyHook): DispatchKind;
 
 // @public (undocumented)
-export interface FileGateHook {
+export interface FileGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
     // (undocumented)
-    readonly decide: (e: FileToolEvent) => Decision;
+    readonly decide: (e: FileToolEvent<N>) => Decision;
     // (undocumented)
     readonly match: {
         readonly tools: readonly string[];
     };
     readonly mode?: HookMode;
+    readonly needs?: N;
     // (undocumented)
     readonly on: string;
     // (undocumented)
@@ -149,7 +151,8 @@ export interface FileGateHook {
 }
 
 // @public
-export interface FileToolEvent {
+export interface FileToolEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     // (undocumented)
@@ -181,20 +184,29 @@ export class HookCompileError extends Error {
 }
 
 // @public
+export type HookCtx<N extends readonly ProviderName[] = readonly ProviderName[]> = {
+    readonly [K in N[number]]: ProviderResults[K];
+};
+
+// @public
 export type HookMode = "enforce" | "observe";
 
 // @public
 export function hookMode(hook: AnyHook): HookMode;
 
 // @public
-export interface HookProgram {
+export function hookNeeds(hook: AnyHook): readonly ProviderName[];
+
+// @public
+export interface HookProgram<N extends readonly ProviderName[] = readonly ProviderName[]> {
     // (undocumented)
-    readonly decide: (e: BashToolEvent) => Decision;
+    readonly decide: (e: BashToolEvent<N>) => Decision;
     // (undocumented)
     readonly match: {
         readonly tool: string;
     };
     readonly mode?: HookMode;
+    readonly needs?: N;
     // (undocumented)
     readonly on: string;
 }
@@ -254,19 +266,31 @@ export interface PathView {
 export function pathView(raw: string): PathView;
 
 // @public
-export interface PromptEvent {
+export interface PromptEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     readonly prompt: string;
 }
 
 // @public (undocumented)
-export interface PromptGateHook {
-    readonly decide: (e: PromptEvent) => Decision;
+export interface PromptGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
+    readonly decide: (e: PromptEvent<N>) => Decision;
     readonly mode?: HookMode;
+    readonly needs?: N;
     readonly on: string;
     // (undocumented)
     readonly role: "prompt-gate";
+}
+
+// @public
+export type ProviderName = keyof ProviderResults;
+
+// @public
+export interface ProviderResults {
+    readonly "git.branch": string;
+    readonly "git.isDirty": boolean;
+    readonly cwd: string;
 }
 
 // @public
@@ -330,7 +354,7 @@ export function responseView(raw: unknown): ResponseView;
 export const run: (command: string) => RunReaction;
 
 // @public
-export function runHookProgram(hook: AnyHook, event: RawHookEvent): HookProgramOutcome;
+export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Partial<ProviderResults>): HookProgramOutcome;
 
 // @public
 export function runInject(hook: InjectHook, raw: {
@@ -373,16 +397,18 @@ export interface SessionEvent {
 export function stampHook(source: string): SHA256Hash;
 
 // @public
-export interface StopEvent {
+export interface StopEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+    readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
     readonly stopHookActive: boolean;
 }
 
 // @public (undocumented)
-export interface StopGateHook {
-    readonly decide: (e: StopEvent) => Decision;
+export interface StopGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
+    readonly decide: (e: StopEvent<N>) => Decision;
     readonly mode?: HookMode;
+    readonly needs?: N;
     readonly on: string;
     // (undocumented)
     readonly role: "stop-gate";

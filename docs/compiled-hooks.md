@@ -17,6 +17,7 @@ express it.
 - [The roles](#the-roles)
 - [The vocabulary](#the-vocabulary)
 - [Observe mode (shadow rollout)](#observe-mode-shadow-rollout)
+- [Deciding on external state (context providers)](#deciding-on-external-state-context-providers)
 - [Compile and wire](#compile-and-wire)
 - [Where things live](#where-things-live)
 - [Testing a compiled hook](#testing-a-compiled-hook)
@@ -160,6 +161,49 @@ In observe mode the runtime exits `0` (never blocks) and appends a record to
 a one-line `⚠ [vigiles observe]` note. It's **harness-neutral** — exit 0 + a
 local record behaves identically on Claude Code and Codex, no harness-specific
 field names involved.
+
+## Deciding on external state (context providers)
+
+A pure gate can only see the command/path/prompt/response. But a real guard often
+needs **external state** to decide — "is this a push to `main`?", "is the tree
+dirty?". A hand-written hook would shell out (`$(git branch --show-current)`); a
+compiled hook **can't do I/O** (that's the capability guarantee). The fix, the
+same one Cedar/OPA/Gatekeeper use: **the hook never fetches — it declares what it
+needs, and the trusted runtime gathers those read-only facts and hands them in**
+as `e.ctx`.
+
+```ts
+import { defineHook, tool, deny, allow } from "vigiles/hook";
+
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: ["git.branch"], //                ← declared; gathered by the runtime
+  decide: (e) =>
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
+      ? deny("no direct pushes to main")
+      : allow(),
+});
+```
+
+The guarantee is intact and **stronger**: the hook still does zero I/O; the
+runtime runs `git branch --show-current` (provably read-only) and injects the
+result. `needs` is **typed** — reading an undeclared fact (`e.ctx["cwd"]` here) is
+a `tsc` error, and an unknown provider name **won't compile** — so the
+capability surface stays explicit and auditable.
+
+**Built-in providers (v1):** `git.branch`, `git.isDirty`, `cwd` — zero-arg,
+read-only. (A provider that can't resolve — e.g. not a git repo — yields its
+default, never an error.)
+
+**The long tail — opt-out ladder.** A curated set can't cover every project. The
+model is a graduated ladder (the same shape as the purity escape hatch), so you
+are **never trapped**: built-in providers → **user-declared providers** (a named
+provider you register for an obscure/project-specific fact — _design stage, v2_)
+→ the **shell lane** (a hand-written `.sh` for arbitrary in-decision logic,
+verified with the disaster battery). You always know which rung you're on; the
+capability-diff says so. Full design + the "every real-world hook maps to a tier"
+coverage proof: [`research/hook-context-providers.md`](../research/hook-context-providers.md).
 
 ## Compile and wire
 

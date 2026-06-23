@@ -5,8 +5,9 @@
 > `capability = API surface` guarantee — and how the opt-out ladder covers EVERY
 > real-world hook, so the typed lane is never a dead end. Companion to
 > `research/hook-modes-and-testing.md` (the modes/coverage analysis) and
-> `research/hook-pain-points.md` (the failure corpus + ship record). Design only —
-> no code yet; build order at the end.
+> `research/hook-pain-points.md` (the failure corpus + ship record). **v1 (built-in
+> providers — `git.branch`/`git.isDirty`/`cwd`) is SHIPPED**; v2 (user-declared
+> providers) + the rest of the ladder are designed below. Build order at the end.
 
 ## The problem
 
@@ -162,11 +163,15 @@ capability-diff says so.
 
 ## Build order
 
-1. **v1 — built-in providers (Tier 1).** A closed `needs` / `e.ctx` set:
-   `git.branch`, `git.isDirty`, `cwd`. Typed so undeclared access is a `tsc`
-   error. Gathered by `hook-runtime` (reuse `bash-effects` to assert each is
-   read-only), cached per invocation. Tests on CC + Codex (the gather is
-   harness-neutral; the decision rides the shared exit-2 runtime).
+1. **v1 — built-in providers (Tier 1). ✅ SHIPPED (2026-06-23).** A closed
+   `needs` / `e.ctx` set: `git.branch`, `git.isDirty`, `cwd`. Typed so undeclared
+   access is a `tsc` error (the gate generics in `src/core/hook-program.ts`); an
+   unknown provider name won't compile. Registry + the injected-IO gatherer in
+   `src/core/hook-providers.ts` (a SOUNDNESS test asserts every built-in command
+   is read-only via `bash-effects`); the runtime gathers via `execSync` in
+   `cli.ts` (`gatherHookContext`). Tested pure (`hook-providers.test.ts`,
+   `hook-program.test.ts`) + E2E in a real git repo (`hook.test.ts` — deny push on
+   `main`, allow on a branch). Harness-neutral (gather + the exit-2 decision).
 2. **v2 — user-declared providers (Tier 2).** `defineProvider` registered under
    `.vigiles/providers/`, stamped like a hook; effect-classified; `dangerously`
    opt-out for a side-effecting one. Capability-diff lists declared providers.
