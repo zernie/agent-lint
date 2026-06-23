@@ -176,7 +176,7 @@ test("parseIntercepts(): tolerant of junk", () => {
 });
 
 // End-to-end PREVENTION proof: the pure decision is covered above, but the rail's
-// value is that the real `vigiles intercept-tool-hook` CLI, wired as a PreToolUse
+// value is that the real `vigiles hook-runtime intercept-tool` CLI, wired as a PreToolUse
 // hook, actually BLOCKS a matched call before it can run. Drive the real built CLI
 // through runHook (no model) and assert the block/allow outcome — a regression in
 // the subcommand's env-read or deny format (which the pure tests can't see) fails
@@ -184,7 +184,7 @@ test("parseIntercepts(): tolerant of junk", () => {
 const CLI = resolve("dist/cli.js");
 const interceptHookTest = existsSync(CLI) ? test : test.skip;
 interceptHookTest(
-  "intercept-tool-hook (real CLI): BLOCKS a matched call, ALLOWS the rest",
+  "hook-runtime intercept-tool (real CLI): BLOCKS a matched call, ALLOWS the rest",
   () => {
     const env = {
       [INTERCEPT_TOOLS_ENV]: serializeIntercepts([
