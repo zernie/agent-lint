@@ -3907,7 +3907,7 @@ function annotateLintForGitHub(report: LintReport, flags: string[]): void {
  */
 function runSkillCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles run-skill <SKILL.md>");
+    console.error("Usage: vigiles hook-runtime run-skill <SKILL.md>");
     process.exit(2);
   }
   const path = resolve(process.cwd(), target);
@@ -3965,7 +3965,7 @@ function skillHookCommand(): void {
 /** Mark a skill active so the Stop hook enforces its result gate. */
 function skillStartCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles skill-start <SKILL.md>");
+    console.error("Usage: vigiles hook-runtime skill-start <SKILL.md>");
     process.exit(2);
   }
   setActiveSkill(process.cwd(), target);
@@ -4134,7 +4134,7 @@ function guardHookCommand(): void {
 /** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
 function agentStartCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles agent-start <agents/<name>.md>");
+    console.error("Usage: vigiles hook-runtime agent-start <agents/<name>.md>");
     process.exit(2);
   }
   pushActiveAgent(process.cwd(), target);

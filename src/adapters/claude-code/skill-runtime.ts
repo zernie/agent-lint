@@ -17,7 +17,7 @@
  *
  * Safety: this executes the gate commands the skill author declared (e.g.
  * `npm test`, `validate.py`) via an explicit, user-invoked command
- * (`vigiles run-skill`). It is not a silent hook and runs nothing the spec
+ * (`vigiles hook-runtime run-skill`). It is not a silent hook and runs nothing the spec
  * didn't declare as a gate.
  */
 
