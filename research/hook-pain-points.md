@@ -264,6 +264,40 @@ stayed high-signal (a shell _with_ a script file is not flagged).
 **Honest scope (unchanged):** compile fixes AUTHORING + LOGIC, not DELIVERY — #34692 still
 bypasses any PreToolUse hook. A gate is a strong default, never an unbypassable wall.
 
+### Compiled-hook dogfood coverage matrix (per capability)
+
+Every public `vigiles/hook` capability and how it's proven. **E2E** = drives the real
+built CLI runtime (`node dist/cli.js hook-runtime run-program <fixture>`) over `runHook`,
+no model; **unit** = pure in-process (`hook-program.test.ts`); **OSS** = grounded in a real
+external artifact. The deterministic tiers are the floor; the apex (does a hook FIRE in an
+assembled session) is the runHarnessTest tier, capped by #34692.
+
+| Capability                                                             | Tier          | Where                                                                                                                              |
+| ---------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Bash **gate** (`defineHook`) + `runs`/force, `touches`, `pipesToShell` | E2E + **OSS** | `hook.test.ts`, `hook-dogfood.test.ts` (disaster battery; 7/7 vs the disler shape's 2/7)                                           |
+| **file-gate** (`defineFileGate` + `PathView.under`)                    | **E2E**       | `hook.test.ts` — deny a Write under `dist`/`.vigiles`, allow elsewhere                                                             |
+| **inject** (`defineInject`)                                            | **E2E**       | `hook.test.ts` — emits `additionalContext` (the right field)                                                                       |
+| **react** (`defineReact` → `notice`/`run`/`nothing`)                   | **E2E**       | `hook.test.ts` — a notice reaches stderr + can't block (exit 0); `run()` executes its effect-classified command                    |
+| **capability check** (import outside `vigiles/hook` won't compile)     | E2E           | `hook.test.ts` — `compile <evil.mjs>` exits 1                                                                                      |
+| **tamper stamp** (hand-edit → runtime refuses)                         | E2E           | `hook.test.ts` — fail-closed exit 2                                                                                                |
+| **compile → merge** into native config                                 | **OSS**       | `hook.test.ts` — merges into the real superpowers `hooks.json`, non-destructive + idempotent; pure merge in `hook-install.test.ts` |
+| **multi-harness emit** (Codex TOML `[[hooks.<event>]]`)                | E2E           | `hook.test.ts` — `compile --harness=codex` + the inject/react deferred-output warning                                              |
+| category mistakes (inject/react can't `deny`)                          | unit (tsc)    | `hook-program.test.ts` — two `@ts-expect-error`                                                                                    |
+
+**Deliberate non-coverage, with reasons (not backlog):**
+
+- **Gate "golden before" stays a faithful RECONSTRUCTION, not a vendored file.** The canonical
+  disler `pre_tool_use.py` is UNLICENSED — vendoring it would violate its (absent) licence, so
+  the committed regression reproduces its shape (`NAIVE_GUARD`) while the real 2/7 measurement
+  is recorded above. An MIT alternative exists (`alexknowshtml/claude-code-safety-hooks`) but
+  pulls a `jq` + `/tmp` token-system runtime dependency that would make a committed CI test
+  flaky — a bad trade by the don't-cry-wolf bar. Revisit only if a self-contained MIT guard
+  with no runtime deps surfaces.
+- **inject/react have no deterministic "prove worth" ORACLE** like the gate's disaster battery
+  (there's no catalog of "context a good inject must add"), so they're proven STRUCTURALLY
+  (the role does its side, the wrong output can't type-check) — not scored. A model-graded
+  judgment of inject/react QUALITY is the eval tier's job, not a dogfood's.
+
 **NEXT — multi-harness:** the model is harness-neutral; only the EMIT differs (CC JSON settings
 vs Codex TOML `[hooks]`, glob vs regex matcher), and Codex's veto is exit-2-identical so the
 runtime is shared. Design: [`compiled-hooks-codex.md`](compiled-hooks-codex.md).

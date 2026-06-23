@@ -13,7 +13,13 @@
  */
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { writeFileSync, readFileSync, mkdirSync, symlinkSync } from "node:fs";
+import {
+  writeFileSync,
+  readFileSync,
+  mkdirSync,
+  symlinkSync,
+  existsSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -262,6 +268,114 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
 // just the synthetic unit fixtures in hook-install.test.ts. The seed is the
 // REAL superpowers hooks.json (a SessionStart hook), vendored under
 // examples/harness/vendor/ (MIT, SHA-pinned).
+// E2E dogfood — the FILE-GATE role (defineFileGate + PathView.under): block a
+// Write/Edit under a protected path, allow elsewhere. Mirrors the bash-gate
+// E2E; closes the file-gate dogfood gap (was unit-only in hook-program.test.ts).
+test("hook-runtime run-program: a file-gate denies a Write under a protected path, allows elsewhere", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "no-build-edits.mjs",
+      `import { defineFileGate, tools, deny, allow } from "__HOOK__";
+export default defineFileGate({
+  on: "PreToolUse",
+  match: tools("Write", "Edit"),
+  decide: (e) =>
+    e.path.under(["dist", ".vigiles"])
+      ? deny("no edits to build artifacts")
+      : allow(),
+});`,
+    );
+    const blocked = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "dist/cli.js" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.exitCode, 2);
+    assert.match(blocked.stderr, /build artifacts/);
+
+    const allowed = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Edit",
+        tool_input: { file_path: "src/cli.ts" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(allowed.blocked, false);
+    assert.equal(allowed.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — the REACT role (defineReact): a PostToolUse reaction CANNOT
+// block (always exit 0) but DOES its side — a `notice` reaches stderr, a `run`
+// executes its (effect-classified) command. Closes the react dogfood gap (was
+// unit-only, no E2E at all).
+test("hook-runtime run-program: a react emits a notice (can't block) and run() executes its command", () => {
+  const dir = makeTmpDir();
+  try {
+    const noticeHook = fixture(
+      dir,
+      "notice.mjs",
+      `import { defineReact, tools, notice, nothing } from "__HOOK__";
+export default defineReact({
+  on: "PostToolUse",
+  match: tools("Write"),
+  react: (e) =>
+    e.path.under(["src"]) ? notice("vigiles: recompile the spec") : nothing(),
+});`,
+    );
+    const noticed = runHook(
+      `node ${CLI} hook-runtime run-program ${noticeHook}`,
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "src/x.ts" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(noticed.blocked, false); // a react can never block
+    assert.equal(noticed.exitCode, 0);
+    assert.match(noticed.stderr, /recompile the spec/);
+
+    const runReactHook = fixture(
+      dir,
+      "react-run.mjs",
+      `import { defineReact, tools, run } from "__HOOK__";
+export default defineReact({
+  on: "PostToolUse",
+  match: tools("Write"),
+  react: () => run("touch reacted.marker"),
+});`,
+    );
+    const ran = runHook(
+      `node ${CLI} hook-runtime run-program ${runReactHook}`,
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: "Write",
+        tool_input: { file_path: "src/x.ts" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(ran.exitCode, 0);
+    assert.ok(
+      existsSync(resolve(dir, "reacted.marker")),
+      "react run() executed its command",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("compile (hook): MERGE preserves a real plugin's existing hooks (superpowers) + is idempotent", () => {
   const dir = makeTmpDir();
   try {
