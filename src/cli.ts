@@ -12,6 +12,7 @@
 
 import {
   writeFileSync,
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -133,12 +134,19 @@ import {
   HookCompileError,
   decideProgram,
   decideFileGate,
+  decidePromptGate,
+  decideStopGate,
   runInject,
   runReact,
   dispatchKind,
+  hookMode,
+  gateAction,
   type DispatchKind,
+  type HookMode,
   type AnyHook,
   type FileGateHook,
+  type PromptGateHook,
+  type StopGateHook,
   type InjectHook,
   type ReactHook,
   type HookProgram,
@@ -4518,24 +4526,68 @@ async function installHooks(
   return ok;
 }
 
-/** Emit a gate Decision in the harness protocol — the author never writes it. */
-function emitGateDecision(decision: Decision, on: string): void {
-  if (decision.kind === "deny") {
-    console.error(decision.reason);
-    process.exit(2);
-  }
-  if (decision.kind === "ask") {
-    process.stdout.write(
+/** Append an observe-mode record to `.vigiles/hook-observations.jsonl` (best-effort). */
+function recordObservation(
+  file: string,
+  on: string,
+  would: "deny" | "ask",
+  reason: string,
+): void {
+  try {
+    const dir = resolve(process.cwd(), ".vigiles");
+    mkdirSync(dir, { recursive: true });
+    const line =
       JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: on,
-          permissionDecision: "ask",
-          permissionDecisionReason: decision.reason,
-        },
-      }) + "\n",
-    );
+        ts: new Date().toISOString(),
+        hook: file,
+        event: on,
+        would,
+        reason,
+      }) + "\n";
+    appendFileSync(resolve(dir, "hook-observations.jsonl"), line);
+  } catch {
+    /* recording is best-effort — never let it break a live session */
   }
-  // allow → emit nothing, exit 0.
+}
+
+/**
+ * Emit a gate Decision in the harness protocol — the author never writes it.
+ * `observe` mode turns a would-be block/ask into a recorded no-op (exit 0): the
+ * shadow/rollout path. Harness-neutral — exit 2 / exit 0 are identical on Claude
+ * Code and Codex; the record is vigiles-local.
+ */
+function emitGate(
+  decision: Decision,
+  on: string,
+  mode: HookMode,
+  file: string,
+): void {
+  const action = gateAction(decision, mode);
+  switch (action.kind) {
+    case "block":
+      console.error(action.reason);
+      process.exit(2);
+      return;
+    case "ask":
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: on,
+            permissionDecision: "ask",
+            permissionDecisionReason: action.reason,
+          },
+        }) + "\n",
+      );
+      return;
+    case "observe":
+      recordObservation(file, on, action.would, action.reason);
+      console.error(
+        `⚠ [vigiles observe] ${on}: would ${action.would} — ${action.reason}`,
+      );
+      return; // exit 0 — observe never blocks
+    case "allow":
+      return; // emit nothing, exit 0
+  }
 }
 
 /**
@@ -4584,7 +4636,10 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   let event: {
     tool_name?: string;
     tool_input?: Record<string, unknown>;
+    tool_response?: unknown;
     source?: string;
+    prompt?: string;
+    stop_hook_active?: boolean;
   } = {};
   try {
     event = JSON.parse(raw) as typeof event;
@@ -4623,15 +4678,35 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "file-gate":
-      emitGateDecision(
+      emitGate(
         decideFileGate(program as FileGateHook, event),
         program.on,
+        hookMode(program),
+        file,
       );
       return;
     case "bash-gate":
-      emitGateDecision(
+      emitGate(
         decideProgram(program as HookProgram, event),
         program.on,
+        hookMode(program),
+        file,
+      );
+      return;
+    case "prompt-gate":
+      emitGate(
+        decidePromptGate(program as PromptGateHook, event),
+        program.on,
+        hookMode(program),
+        file,
+      );
+      return;
+    case "stop-gate":
+      emitGate(
+        decideStopGate(program as StopGateHook, event),
+        program.on,
+        hookMode(program),
+        file,
       );
       return;
   }

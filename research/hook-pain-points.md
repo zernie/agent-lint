@@ -247,7 +247,7 @@ licence-clean slice as a golden regression fixture; publish the finding as the a
 
 Beyond verifying a hook's logic, vigiles now lets you AUTHOR a hook that can't be wrong.
 `vigiles/hook` (core `src/core/hook-program.ts`, public `src/hook.ts`) + the CLI
-(`compile-hook` / `run-hook-program`) ship the constrained-typed-program model the earlier
+(`compile` / `hook-runtime run-program`) ship the constrained-typed-program model the earlier
 probe validated: a pure `(event) => Decision` against a closed vocabulary, compiled to the
 harness protocol. The role FAMILY (gate/inject/react) + the AST matcher
 (`command.runs`/`touches`/`pipesToShell`) + capability-check + tamper-evident stamp make whole
@@ -272,17 +272,20 @@ no model; **unit** = pure in-process (`hook-program.test.ts`); **OSS** = grounde
 external artifact. The deterministic tiers are the floor; the apex (does a hook FIRE in an
 assembled session) is the runHarnessTest tier, capped by #34692.
 
-| Capability                                                             | Tier          | Where                                                                                                                              |
-| ---------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Bash **gate** (`defineHook`) + `runs`/force, `touches`, `pipesToShell` | E2E + **OSS** | `hook.test.ts`, `hook-dogfood.test.ts` (disaster battery; 7/7 vs the disler shape's 2/7)                                           |
-| **file-gate** (`defineFileGate` + `PathView.under`)                    | **E2E**       | `hook.test.ts` — deny a Write under `dist`/`.vigiles`, allow elsewhere                                                             |
-| **inject** (`defineInject`)                                            | **E2E**       | `hook.test.ts` — emits `additionalContext` (the right field)                                                                       |
-| **react** (`defineReact` → `notice`/`run`/`nothing`)                   | **E2E**       | `hook.test.ts` — a notice reaches stderr + can't block (exit 0); `run()` executes its effect-classified command                    |
-| **capability check** (import outside `vigiles/hook` won't compile)     | E2E           | `hook.test.ts` — `compile <evil.mjs>` exits 1                                                                                      |
-| **tamper stamp** (hand-edit → runtime refuses)                         | E2E           | `hook.test.ts` — fail-closed exit 2                                                                                                |
-| **compile → merge** into native config                                 | **OSS**       | `hook.test.ts` — merges into the real superpowers `hooks.json`, non-destructive + idempotent; pure merge in `hook-install.test.ts` |
-| **multi-harness emit** (Codex TOML `[[hooks.<event>]]`)                | E2E           | `hook.test.ts` — `compile --harness=codex` + the inject/react deferred-output warning                                              |
-| category mistakes (inject/react can't `deny`)                          | unit (tsc)    | `hook-program.test.ts` — two `@ts-expect-error`                                                                                    |
+| Capability                                                             | Tier          | Where                                                                                                                                                             |
+| ---------------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bash **gate** (`defineHook`) + `runs`/force, `touches`, `pipesToShell` | E2E + **OSS** | `hook.test.ts`, `hook-dogfood.test.ts` (disaster battery; 7/7 vs the disler shape's 2/7)                                                                          |
+| **file-gate** (`defineFileGate` + `PathView.under`)                    | **E2E**       | `hook.test.ts` — deny a Write under `dist`/`.vigiles`, allow elsewhere                                                                                            |
+| **prompt-gate** (`definePromptGate` + `e.prompt`)                      | **E2E**       | `hook.test.ts` — deny a secret-bearing UserPromptSubmit (exit 2), allow clean                                                                                     |
+| **stop-gate** (`defineStopGate` + `e.stopHookActive` loop guard)       | **E2E**       | `hook.test.ts` — `deny` blocks stopping (exit 2), then `allow` under the loop guard                                                                               |
+| **observe mode** (`mode:"observe"` on any gate)                        | **E2E**       | `hook.test.ts` — a would-be deny records-not-blocks (exit 0 + `.vigiles/hook-observations.jsonl`); pure `gateAction` in `hook-program.test.ts`                    |
+| **inject** (`defineInject`)                                            | **E2E**       | `hook.test.ts` — emits `additionalContext` (the right field)                                                                                                      |
+| **react** (`defineReact` → `notice`/`run`/`nothing`, `e.response`)     | **E2E**       | `hook.test.ts` — a notice reaches stderr + can't block (exit 0); `run()` executes its effect-classified command; `e.response.isError()` in `hook-program.test.ts` |
+| **capability check** (import outside `vigiles/hook` won't compile)     | E2E           | `hook.test.ts` — `compile <evil.mjs>` exits 1                                                                                                                     |
+| **tamper stamp** (hand-edit → runtime refuses)                         | E2E           | `hook.test.ts` — fail-closed exit 2                                                                                                                               |
+| **compile → merge** into native config                                 | **OSS**       | `hook.test.ts` — merges into the real superpowers `hooks.json`, non-destructive + idempotent; pure merge in `hook-install.test.ts`                                |
+| **multi-harness emit** (Codex TOML `[[hooks.<event>]]`)                | E2E           | `hook.test.ts` — `compile --harness=codex` + the inject/react deferred-output warning                                                                             |
+| category mistakes (inject/react can't `deny`)                          | unit (tsc)    | `hook-program.test.ts` — two `@ts-expect-error`                                                                                                                   |
 
 **Deliberate non-coverage, with reasons (not backlog):**
 

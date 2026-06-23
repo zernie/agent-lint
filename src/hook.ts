@@ -9,15 +9,23 @@
  * compile` emits the harness protocol for you. The whole false-confidence
  * class becomes UNREPRESENTABLE — you never write the exit code or the field.
  *
- * Three roles, each with its own output type so a category mistake is a `tsc`
+ * The roles, each with its own output type so a category mistake is a `tsc`
  * error, not a silent no-op:
  *   - `defineHook` / `defineFileGate` — a **gate** returns a `Decision`
  *     (`allow`/`deny`/`ask`); `deny` is the only thing that blocks.
+ *   - `definePromptGate` — a **prompt gate** (UserPromptSubmit) sees the prompt
+ *     TEXT and may `deny` to block it (a security filter).
+ *   - `defineStopGate` — a **stop gate** (Stop/SubagentStop) may `deny` to keep
+ *     the agent going (gate-until-tests-pass).
  *   - `defineInject` — an **inject** returns an `Injection` (context text); it
  *     has no `deny`, so "block on a SessionStart hook" won't compile.
- *   - `defineReact` — a **react** (PostToolUse) returns a `Reaction`; its
- *     `run(cmd)` is effect-classified at construction, and it can't block
- *     (the tool already ran).
+ *   - `defineReact` — a **react** (PostToolUse) returns a `Reaction`; it sees the
+ *     tool RESPONSE, its `run(cmd)` is effect-classified at construction, and it
+ *     can't block (the tool already ran).
+ *
+ * Every gate takes a `mode`: `enforce` (default, blocks) or `observe` (the
+ * shadow/rollout mode — records what it WOULD block, never blocks). `observe` is
+ * harness-neutral (it just exits 0 + writes a local record).
  *
  * Matching is AST-backed (`command.runs("git push", { force })`), so it catches
  * `cd x && git push -f` that the native `Bash(git:*)` glob misses.
@@ -32,6 +40,8 @@ export {
   // gate vocabulary
   defineHook,
   defineFileGate,
+  definePromptGate,
+  defineStopGate,
   tool,
   tools,
   allow,
@@ -39,6 +49,8 @@ export {
   ask,
   commandView,
   pathView,
+  gateAction,
+  hookMode,
   // inject vocabulary
   defineInject,
   inject,
@@ -47,9 +59,12 @@ export {
   run,
   notice,
   nothing,
+  responseView,
   // runtime + decode (used by the `vigiles hook-runtime run-program` runtime and tests)
   decideProgram,
   decideFileGate,
+  decidePromptGate,
+  decideStopGate,
   runInject,
   runReact,
   runHookProgram,
@@ -66,13 +81,21 @@ export {
 
 export type {
   Decision,
+  HookMode,
+  GateAction,
   CommandView,
   PathView,
+  ResponseView,
   BashToolEvent,
   FileToolEvent,
+  PromptEvent,
+  StopEvent,
+  ReactEvent,
   SessionEvent,
   HookProgram,
   FileGateHook,
+  PromptGateHook,
+  StopGateHook,
   InjectHook,
   ReactHook,
   AnyHook,

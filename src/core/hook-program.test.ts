@@ -16,6 +16,7 @@ import {
   tool,
   allow,
   deny,
+  ask,
   commandView,
   decideProgram,
   decisionExitCode,
@@ -33,8 +34,16 @@ import {
   defineReact,
   run,
   notice,
+  nothing,
   runReact,
   runHookProgram,
+  gateAction,
+  hookMode,
+  definePromptGate,
+  decidePromptGate,
+  defineStopGate,
+  decideStopGate,
+  responseView,
 } from "./hook-program.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
@@ -372,4 +381,166 @@ test("runHookProgram dispatches every role to a normalized outcome", () => {
   });
   assert.equal(reaction.kind, "reaction");
   if (reaction.kind === "reaction") assert.equal(reaction.reaction.kind, "run");
+});
+
+// ---------------------------------------------------------------------------
+// OBSERVE mode — the shadow/rollout primitive. `gateAction` is the pure mapping
+// the runtime + a test both read, so "in observe mode this deny does NOT block"
+// is asserted with no process. Harness-NEUTRAL (exit 0 + a local record), so it
+// is covered once here, not per-harness.
+// ---------------------------------------------------------------------------
+
+test("observe: gateAction enforces by default, records-not-blocks under observe", () => {
+  // enforce (default): deny → block (exit 2), ask → ask, allow → allow.
+  assert.deepEqual(gateAction(deny("no")), { kind: "block", reason: "no" });
+  assert.deepEqual(gateAction(ask("maybe")), { kind: "ask", reason: "maybe" });
+  assert.deepEqual(gateAction(allow()), { kind: "allow" });
+
+  // observe: a would-be deny/ask becomes a recorded no-op; allow stays allow.
+  assert.deepEqual(gateAction(deny("no"), "observe"), {
+    kind: "observe",
+    would: "deny",
+    reason: "no",
+  });
+  assert.deepEqual(gateAction(ask("maybe"), "observe"), {
+    kind: "observe",
+    would: "ask",
+    reason: "maybe",
+  });
+  assert.deepEqual(gateAction(allow(), "observe"), { kind: "allow" });
+
+  // hookMode reads the gate's mode (enforce default).
+  assert.equal(hookMode(forcePushGuard), "enforce");
+  const shadow = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    mode: "observe",
+    decide: (e) => (e.command.runs("git push") ? deny("x") : allow()),
+  });
+  assert.equal(hookMode(shadow), "observe");
+  // The DECISION the gate computes is unchanged by the mode — only the action is.
+  assert.equal(decideProgram(shadow, ev("git push")).kind, "deny");
+});
+
+// ---------------------------------------------------------------------------
+// PROBE 4 — gate-capable non-tool events (UserPromptSubmit + Stop). A typed
+// Decision over the prompt text / stop signal, riding the same exit-2 runtime.
+// ---------------------------------------------------------------------------
+
+const promptFilter = definePromptGate({
+  on: "UserPromptSubmit",
+  decide: (e) =>
+    /sk-[a-z0-9]{20}/i.test(e.prompt)
+      ? deny("your prompt contains what looks like a secret key")
+      : allow(),
+});
+
+test("probe4: a prompt gate sees the prompt TEXT and can deny it", () => {
+  assert.equal(
+    decidePromptGate(promptFilter, { prompt: "refactor the auth module" }).kind,
+    "allow",
+  );
+  assert.equal(
+    decidePromptGate(promptFilter, {
+      prompt: "use this key sk-abcdef0123456789abcd",
+    }).kind,
+    "deny",
+  );
+  // A missing prompt → empty string, not a crash.
+  assert.equal(decidePromptGate(promptFilter, {}).kind, "allow");
+  // It dispatches through runHookProgram as a decision.
+  const out = runHookProgram(promptFilter, {
+    prompt: "use this key sk-abcdef0123456789abcd",
+  });
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+const testsGreenGate = defineStopGate({
+  on: "Stop",
+  decide: (e) =>
+    e.stopHookActive
+      ? allow() // loop guard: a prior block already fired — let it stop now
+      : deny("tests are red — keep going until `npm test` passes"),
+});
+
+test("probe4: a stop gate can BLOCK stopping, and respects the loop guard", () => {
+  // First Stop: block (deny) so the agent keeps going.
+  assert.equal(decideStopGate(testsGreenGate, {}).kind, "deny");
+  assert.equal(
+    decideStopGate(testsGreenGate, { stop_hook_active: false }).kind,
+    "deny",
+  );
+  // A Stop that is itself the result of a prior block: allow (no infinite loop).
+  assert.equal(
+    decideStopGate(testsGreenGate, { stop_hook_active: true }).kind,
+    "allow",
+  );
+  const out = runHookProgram(testsGreenGate, {});
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+// Both new gates fire on a whole EVENT (no tool matcher), and compile on BOTH
+// harnesses (the gate runtime is the shared exit-2 path) — test-both-harnesses.
+test("probe4: prompt/stop gates compile (no matcher) on Claude Code AND Codex", () => {
+  const src = `import { definePromptGate, deny, allow } from "vigiles/hook";`;
+  // Claude Code (default): JSON block, event-level, no matcher.
+  const cc = compileHookProgram(src, promptFilter);
+  assert.ok(cc.hooks.UserPromptSubmit);
+  assert.equal(cc.hooks.UserPromptSubmit[0].matcher, undefined);
+  assert.match(cc.settingsBlock, /"UserPromptSubmit"/);
+
+  // Codex: TOML `[[hooks.Stop]]`, also event-level.
+  const codex = compileHookProgram(
+    `import { defineStopGate, deny, allow } from "vigiles/hook";`,
+    testsGreenGate,
+    {
+      dialect: codexDialect,
+      hookProtocol: codexHookProtocol,
+      settingsFormat: "toml",
+    },
+  );
+  assert.match(codex.settingsBlock, /\[\[hooks\.Stop\]\]/);
+  // Event-level gate → no `matcher =` line in the TOML.
+  assert.doesNotMatch(codex.settingsBlock, /matcher = /);
+});
+
+// ---------------------------------------------------------------------------
+// Richer react event — the tool RESPONSE (PostToolUse). A react can now reason
+// over whether the tool FAILED, not just the file path.
+// ---------------------------------------------------------------------------
+
+test("react: responseView exposes the tool response (isError / contains)", () => {
+  // A structured error payload is flagged.
+  assert.equal(responseView({ error: "boom" }).isError(), true);
+  assert.equal(responseView({ is_error: true }).isError(), true);
+  // A text payload with a leading Error line is flagged; a clean one is not.
+  assert.equal(responseView("Error: command failed").isError(), true);
+  assert.equal(responseView("ok, 3 files written").isError(), false);
+  // contains matches the stringified body either way.
+  assert.equal(responseView("ENOENT: no such file").contains("ENOENT"), true);
+  assert.equal(responseView({ stderr: "ENOENT" }).contains("ENOENT"), true);
+
+  // A react hook can branch on the response — capture only on failure.
+  const captureFailures = defineReact({
+    on: "PostToolUse",
+    match: tools("Bash"),
+    react: (e) =>
+      e.response.isError()
+        ? notice(`tool failed: ${e.response.raw}`)
+        : nothing(),
+  });
+  const failed = runReact(captureFailures, {
+    tool_name: "Bash",
+    tool_input: {},
+    tool_response: { error: "exit 1" },
+  });
+  assert.equal(failed.kind, "notice");
+  const ok = runReact(captureFailures, {
+    tool_name: "Bash",
+    tool_input: {},
+    tool_response: "done",
+  });
+  assert.equal(ok.kind, "none");
 });

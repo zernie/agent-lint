@@ -53,6 +53,54 @@ export const allow = (): Decision => ({ kind: "allow" });
 export const deny = (reason: string): Decision => ({ kind: "deny", reason });
 export const ask = (reason: string): Decision => ({ kind: "ask", reason });
 
+/**
+ * Whether a gate BLOCKS on a `deny` (`enforce`, the default) or only RECORDS what
+ * it WOULD block while letting everything through (`observe` — the shadow / rollout
+ * mode: trust a new gate by watching it first, then promote to `enforce`). This is
+ * the WAF "shadow mode" pattern, the one essential mode (block vs don't-block-but-
+ * record) — not a vocabulary of on-fail actions. HARNESS-NEUTRAL by construction:
+ * observe just exits 0 and writes a local record, so it behaves identically on
+ * Claude Code and Codex (no harness-specific field names involved).
+ */
+export type HookMode = "enforce" | "observe";
+
+/** A gate's runtime ACTION after applying its {@link HookMode} to its {@link Decision}. Pure. */
+export type GateAction =
+  | { readonly kind: "block"; readonly reason: string }
+  | { readonly kind: "ask"; readonly reason: string }
+  | {
+      readonly kind: "observe";
+      readonly would: "deny" | "ask";
+      readonly reason: string;
+    }
+  | { readonly kind: "allow" };
+
+/**
+ * Map a gate's {@link Decision} + {@link HookMode} to what the runtime actually does.
+ * `enforce`: deny→block (exit 2), ask→ask, allow→allow. `observe`: a deny/ask is
+ * recorded as a no-op `observe` (would-have-blocked) and allowed; allow stays allow.
+ * Pure, so a test asserts "in observe mode this deny does NOT block" with no process.
+ */
+export function gateAction(
+  decision: Decision,
+  mode: HookMode = "enforce",
+): GateAction {
+  if (mode === "observe")
+    return decision.kind === "allow"
+      ? { kind: "allow" }
+      : { kind: "observe", would: decision.kind, reason: decision.reason };
+  switch (decision.kind) {
+    case "deny":
+      return { kind: "block", reason: decision.reason };
+    case "ask":
+      return { kind: "ask", reason: decision.reason };
+    case "allow":
+      return { kind: "allow" };
+    default:
+      return assertNever(decision);
+  }
+}
+
 /** An AST-backed view of a Bash command — the author never writes a regex. */
 export interface CommandView {
   readonly raw: string;
@@ -135,6 +183,8 @@ export interface BashToolEvent {
 export interface HookProgram {
   readonly on: string;
   readonly match: { readonly tool: string };
+  /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
+  readonly mode?: HookMode;
   readonly decide: (e: BashToolEvent) => Decision;
 }
 
@@ -239,19 +289,38 @@ export interface CompileHookOptions {
  * Every hook shape the closed vocabulary can express. `compileHookProgram`
  * (emit) and the runtime dispatch both range over this union.
  */
-export type AnyHook = HookProgram | FileGateHook | InjectHook | ReactHook;
+export type AnyHook =
+  | HookProgram
+  | FileGateHook
+  | PromptGateHook
+  | StopGateHook
+  | InjectHook
+  | ReactHook;
 
 /**
- * The four runtime dispatch shapes. A bare {@link HookProgram} (no `role`) is a
- * Bash command gate; the role-keyed hooks carry their own shape. The runtime
- * uses this to pick the right decode + output (a gate exits 2, an inject prints
- * `additionalContext`, a react runs its classified command).
+ * The runtime dispatch shapes. A bare {@link HookProgram} (no `role`) is a Bash
+ * command gate; the role-keyed hooks carry their own shape. The runtime uses this
+ * to pick the right decode + output (a gate exits 2, an inject prints
+ * `additionalContext`, a react runs its classified command). `prompt-gate` and
+ * `stop-gate` are gates on non-tool events — they decode the prompt / stop signal
+ * and emit a `Decision` like the tool gates.
  */
-export type DispatchKind = "bash-gate" | "file-gate" | "inject" | "react";
+export type DispatchKind =
+  | "bash-gate"
+  | "file-gate"
+  | "prompt-gate"
+  | "stop-gate"
+  | "inject"
+  | "react";
 
 export function dispatchKind(hook: AnyHook): DispatchKind {
   if ("role" in hook) return hook.role === "gate" ? "file-gate" : hook.role;
   return "bash-gate";
+}
+
+/** A gate's {@link HookMode} (`enforce` default); non-gate roles report `enforce` too. */
+export function hookMode(hook: AnyHook): HookMode {
+  return "mode" in hook && hook.mode ? hook.mode : "enforce";
 }
 
 /** Where a hook fires + its tool matcher (undefined for tool-less events). */
@@ -260,7 +329,13 @@ export function hookRouting(hook: AnyHook): {
   matcher?: string;
 } {
   if ("role" in hook) {
-    if (hook.role === "inject") return { on: hook.on };
+    // inject / prompt-gate / stop-gate fire on a whole EVENT — no tool matcher.
+    if (
+      hook.role === "inject" ||
+      hook.role === "prompt-gate" ||
+      hook.role === "stop-gate"
+    )
+      return { on: hook.on };
     return { on: hook.on, matcher: hook.match.tools.join("|") };
   }
   return { on: hook.on, matcher: hook.match.tool };
@@ -411,6 +486,8 @@ export interface FileGateHook {
   readonly role: "gate";
   readonly on: string;
   readonly match: { readonly tools: readonly string[] };
+  /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
+  readonly mode?: HookMode;
   readonly decide: (e: FileToolEvent) => Decision;
 }
 
@@ -436,6 +513,87 @@ export function decideFileGate(
       ? raw.tool_input.file_path
       : "";
   return hook.decide({ event: hook.on, tool: t, path: pathView(fp) });
+}
+
+// ===========================================================================
+// PROBE 4 — gate-capable NON-TOOL events: UserPromptSubmit + Stop.
+//
+// The flagship gate is PreToolUse (block a dangerous tool call). But two more
+// session events CAN block, and a typed DECISION fits them exactly:
+//   - UserPromptSubmit: see the prompt TEXT, deny to block/erase it (a security
+//     filter — refuse a prompt that leaks a secret or carries an injection);
+//   - Stop: deny to BLOCK the agent from stopping (gate-until-tests-pass; the
+//     reason is fed back to the agent telling it why to continue).
+// Both are DECISIONS (the typed lane's sweet spot) on events the vocab didn't
+// expose yet — they ride the SAME exit-2 gate runtime as PreToolUse, so they
+// work on every harness whose gate vetoes via exit 2 (Claude Code + Codex).
+// ===========================================================================
+
+/** The event a UserPromptSubmit gate decides over — it sees the prompt TEXT. */
+export interface PromptEvent {
+  readonly event: string;
+  /** The user's submitted prompt text (empty string if the event carried none). */
+  readonly prompt: string;
+}
+
+export interface PromptGateHook {
+  readonly role: "prompt-gate";
+  /** The event — `UserPromptSubmit`. */
+  readonly on: string;
+  /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
+  readonly mode?: HookMode;
+  /** Decide over the prompt. `deny` blocks/erases the prompt; `ask` defers to the user. */
+  readonly decide: (e: PromptEvent) => Decision;
+}
+export const definePromptGate = (
+  p: Omit<PromptGateHook, "role">,
+): PromptGateHook => ({ role: "prompt-gate", ...p });
+
+/** Run a prompt gate against a raw UserPromptSubmit event (reads `prompt`). */
+export function decidePromptGate(
+  hook: PromptGateHook,
+  raw: { prompt?: unknown },
+): Decision {
+  const prompt = typeof raw.prompt === "string" ? raw.prompt : "";
+  return hook.decide({ event: hook.on, prompt });
+}
+
+/**
+ * The event a Stop gate decides over. `deny` BLOCKS the agent from ending its
+ * turn (the reason is surfaced to the agent — e.g. "tests are red, keep going").
+ */
+export interface StopEvent {
+  readonly event: string;
+  /**
+   * True when this Stop is itself the consequence of a PRIOR Stop-block — the
+   * loop guard. A gate MUST return `allow` when this is set, or it can wedge the
+   * agent in an infinite stop→continue→stop cycle.
+   */
+  readonly stopHookActive: boolean;
+}
+
+export interface StopGateHook {
+  readonly role: "stop-gate";
+  /** The event — `Stop` or `SubagentStop`. */
+  readonly on: string;
+  /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
+  readonly mode?: HookMode;
+  /** Decide whether the agent may stop. `deny` keeps it going; `allow` lets it stop. */
+  readonly decide: (e: StopEvent) => Decision;
+}
+export const defineStopGate = (
+  p: Omit<StopGateHook, "role">,
+): StopGateHook => ({ role: "stop-gate", ...p });
+
+/** Run a Stop gate against a raw Stop/SubagentStop event (reads `stop_hook_active`). */
+export function decideStopGate(
+  hook: StopGateHook,
+  raw: { stop_hook_active?: unknown },
+): Decision {
+  return hook.decide({
+    event: hook.on,
+    stopHookActive: raw.stop_hook_active === true,
+  });
 }
 
 // --- A non-gate shape: context INJECTION (SessionStart) — a different OUTPUT ---
@@ -498,6 +656,53 @@ export function runInject(
 // react hook runs and its effect — and a react still CANNOT block (no `deny` in
 // Reaction), making "block on a PostToolUse hook" (a documented mistake) a type error.
 
+/**
+ * A view of a tool's RESPONSE (PostToolUse) — the matching primitive a react hook
+ * reasons over (e.g. capture/notify only when a command FAILED). The author never
+ * parses the raw payload shape.
+ */
+export interface ResponseView {
+  /** The response as text (an object payload is JSON-stringified). */
+  readonly raw: string;
+  /**
+   * True iff the tool reported a failure — a truthy `error`/`is_error` field on a
+   * structured payload, or a leading `Error`/`error:` line on a text one.
+   */
+  isError(): boolean;
+  /** True iff the response text contains `needle`. */
+  contains(needle: string): boolean;
+}
+
+/** Normalize an arbitrary tool_response payload to text (object → JSON). */
+function responseText(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (raw == null) return "";
+  return JSON.stringify(raw);
+}
+
+export function responseView(raw: unknown): ResponseView {
+  const text = responseText(raw);
+  const flagged =
+    typeof raw === "object" &&
+    raw !== null &&
+    (Boolean((raw as { error?: unknown }).error) ||
+      (raw as { is_error?: unknown }).is_error === true);
+  return {
+    raw: text,
+    isError: () => flagged || /^\s*error[:\s]/i.test(text),
+    contains: (needle) => text.includes(needle),
+  };
+}
+
+/** The event a react hook reacts over — the tool, the file path, AND its response. */
+export interface ReactEvent {
+  readonly event: string;
+  readonly tool: string;
+  readonly path: PathView;
+  /** The tool's response (PostToolUse) — react only on an error, capture output, … */
+  readonly response: ResponseView;
+}
+
 export interface RunReaction {
   readonly kind: "run";
   readonly command: string;
@@ -527,7 +732,7 @@ export interface ReactHook {
   readonly on: string;
   readonly match: { readonly tools: readonly string[] };
   /** Reacts to a tool that already ran. Returns a Reaction — NO `deny` exists here. */
-  readonly react: (e: FileToolEvent) => Reaction;
+  readonly react: (e: ReactEvent) => Reaction;
 }
 export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
   role: "react",
@@ -537,7 +742,11 @@ export const defineReact = (p: Omit<ReactHook, "role">): ReactHook => ({
 /** Run a react hook against a raw PostToolUse event → the (classified) Reaction. */
 export function runReact(
   hook: ReactHook,
-  raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+  raw: {
+    tool_name?: string;
+    tool_input?: { file_path?: unknown };
+    tool_response?: unknown;
+  },
 ): Reaction {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return nothing();
@@ -545,7 +754,12 @@ export function runReact(
     typeof raw.tool_input?.file_path === "string"
       ? raw.tool_input.file_path
       : "";
-  return hook.react({ event: hook.on, tool: t, path: pathView(fp) });
+  return hook.react({
+    event: hook.on,
+    tool: t,
+    path: pathView(fp),
+    response: responseView(raw.tool_response),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -564,8 +778,14 @@ export interface RawHookEvent {
     readonly command?: unknown;
     readonly file_path?: unknown;
   };
+  /** PostToolUse response (react). */
+  readonly tool_response?: unknown;
   /** SessionStart / UserPromptSubmit (inject). */
   readonly source?: string;
+  /** UserPromptSubmit (prompt-gate). */
+  readonly prompt?: string;
+  /** Stop / SubagentStop (stop-gate) — the prior-block loop guard. */
+  readonly stop_hook_active?: boolean;
 }
 
 /** The normalized outcome of running a hook program — discriminated by role. */
@@ -595,6 +815,16 @@ export function runHookProgram(
       return {
         kind: "decision",
         decision: decideFileGate(hook as FileGateHook, event),
+      };
+    case "prompt-gate":
+      return {
+        kind: "decision",
+        decision: decidePromptGate(hook as PromptGateHook, event),
+      };
+    case "stop-gate":
+      return {
+        kind: "decision",
+        decision: decideStopGate(hook as StopGateHook, event),
       };
     case "inject":
       return {

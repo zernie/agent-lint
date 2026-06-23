@@ -14,7 +14,7 @@
 | **Authoring/compile**      | `vigiles/hook` closed vocab, role family (gate/inject/react), AST `CommandView` (`runs`/`touches`/`pipesToShell`), tamper stamp                                                                                                    |
 | **Runtime**                | `hook-runtime run-program` (typed program: load → verify stamp → dispatch by role); hand-written shell hooks run by the harness directly                                                                                           |
 | **Testing**                | `runHook` (subprocess), `runHookProgram` (in-process, cheapest), `propertyHook` (property-based), `assertHookDenies/Allows/Blocked/Allowed`, disaster battery, `scaffold-test` (generates a hook test), the adapter contract suite |
-| **Modes**                  | **none** — no enforce/observe; no purity-style effect ceiling on hooks                                                                                                                                                             |
+| **Modes**                  | `enforce` (default) + `observe` (shadow/rollout — records, never blocks), per gate. No purity-style `react` effect ceiling yet (open #5)                                                                                           |
 
 ## Landscape — what comparable tools provide
 
@@ -101,15 +101,32 @@ verification** thesis (which vigiles already embodies as `vigiles/hook`).
 
 ## Ranked: what to deliver
 
-1. **`observe` (shadow) mode** — deterministic, high adoption value (trust a new gate by
-   observing first), reuses the `Decision` path. The clear #1. (One mode, not four.)
-2. **Hook-test coverage report** — OPA-style; extend `formatGuardrailReport`'s neutral
-   coverage map to "tests exercise N of M events/disasters".
-3. **Document the two-lane decision** (don't force TS-only; shell stays first-class,
+1. **`observe` (shadow) mode** — ✅ **SHIPPED (2026-06-23).** Every gate
+   (`defineHook`/`defineFileGate`/`definePromptGate`/`defineStopGate`) takes
+   `mode: "enforce" | "observe"`. `gateAction(decision, mode)` is the pure mapping
+   the runtime + tests share; in observe the runtime exits 0 and appends a record
+   to `.vigiles/hook-observations.jsonl`. Harness-NEUTRAL (exit 0 + a local
+   record), so it's covered once. (One mode, not four — the deny/ask "warn vs
+   shadow" split collapsed to a rendering detail of one `observe` action.)
+2. **Gate-capable `UserPromptSubmit` + `Stop` + richer event shapes** — ✅
+   **SHIPPED (2026-06-23).** `definePromptGate` (sees `e.prompt`, can `deny` to
+   block a prompt) and `defineStopGate` (sees `e.stopHookActive`, `deny` keeps the
+   agent going — gate-until-tests-pass) ride the same exit-2 gate runtime, so they
+   work on CC AND Codex (compile-emit tested for both). React gained `e.response`
+   (a `ResponseView` with `isError()`/`contains()`) so a PostToolUse reaction can
+   branch on whether the tool FAILED. This RE-RANKED above the original #2
+   (coverage report) per the "DECISIONS over any event" refinement below.
+3. **Hook-test coverage report** — OPA-style; extend `formatGuardrailReport`'s neutral
+   coverage map to "tests exercise N of M events/disasters". Still open.
+4. **Document the two-lane decision** (don't force TS-only; shell stays first-class,
    sandbox-confinable) as an explicit non-goal — already captured here.
-4. **`react` effect ceiling** (the purity analogy; reuse the effect classifier). Medium.
-5. **Explore: verify + judged-test the new `prompt`/`agent` LLM hook types** (new
+5. **`react` effect ceiling** (the purity analogy; reuse the effect classifier). Medium.
+6. **Explore: verify + judged-test the new `prompt`/`agent` LLM hook types** (new
    harness surface; model-gated). Forward-looking.
+7. **Generic `tool_input` accessors** (WebFetch URL, Task `subagent_type`, MCP
+   args) for the tool gates — the remaining "richer event shape" piece, deliberately
+   deferred to avoid a stringly-typed input bag; add per-field matchers as needed
+   (the `touches`/`pipesToShell` precedent). Open.
 
 Per `prefer-existing-solutions`: #1/#2 are _build_ (they dogfood the existing
 Decision/guardrail machinery — no external fit for "shadow a harness hook"); the run-tier
@@ -125,24 +142,24 @@ disler/claude-code-hooks-mastery (the full event spectrum), alexknowshtml/claude
 TTS/notify hooks (Notification/Stop/SubagentStop), gmickel/flow-next, and the guide patterns
 (auto-format, test-on-stop gate, cost/observability).
 
-| Real use case (source)                                                           | `vigiles/hook`                                                               | Verdict                                                     |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Block dangerous bash — rm -rf / force-push (disler, dcg)                         | gate `command.runs`/`touches`                                                | ✅                                                          |
-| Block secret read — `.env`, `~/.ssh` (disler, dcg, CC docs)                      | gate `command.touches`                                                       | ✅                                                          |
-| Block `curl \| sh` (CC ecosystem)                                                | gate `command.pipesToShell`                                                  | ✅                                                          |
-| Block edit to a protected path                                                   | file-gate `path.under`                                                       | ✅                                                          |
-| Auto-format / lint on write (ruff/ty validators)                                 | react `run()`                                                                | ✅ (run); block-on-lint is n/a — CC PostToolUse can't block |
-| Inject STATIC context at SessionStart                                            | `inject(text)`                                                               | ✅                                                          |
-| **Inject DYNAMIC context — git status, open issues (disler, superpowers, omcc)** | `inject` — but the closed vocab bans fs/exec, so `produce()` can't gather it | ❌ **GAP**                                                  |
-| **Prompt-aware inject — read the prompt then inject (disler UserPromptSubmit)**  | `SessionEvent` carries `{event, source}`, not the prompt text                | ❌ **GAP**                                                  |
-| **Validate / block / rewrite a user prompt — security filter (disler)**          | `inject` has no `deny`; no UserPromptSubmit gate role                        | ❌ **GAP**                                                  |
-| **Stop-gate — block stop until tests pass (guides)**                             | no Stop gate role (Stop CAN block, but react can't)                          | ❌ **GAP**                                                  |
-| **TTS / desktop notify on Notification/Stop/SubagentStop (disler)**              | react `run()` only, on a non-file event                                      | ➖ partial (event shape carries no context)                 |
-| **React to tool RESPONSE — error capture (disler post_tool_use_failure)**        | react event is `path` only — no `tool_response`/`tool_input`                 | ❌ **GAP**                                                  |
-| Log tool calls to a file (disler post_tool_use)                                  | react `run()`                                                                | ➖ (no structured event access)                             |
-| **PermissionRequest auto-allow read-only (disler)**                              | no role/event for it                                                         | ❌ **GAP**                                                  |
-| Stateful — token approval / rate-limit / ordering (dcg)                          | pure vocab, no cross-call state                                              | ❌ **deliberate** (guards.ts prototype)                     |
-| Arbitrary I/O to decide (call a service)                                         | capability = API surface bans it                                             | ❌ **deliberate**                                           |
+| Real use case (source)                                                           | `vigiles/hook`                                                                 | Verdict                                                     |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Block dangerous bash — rm -rf / force-push (disler, dcg)                         | gate `command.runs`/`touches`                                                  | ✅                                                          |
+| Block secret read — `.env`, `~/.ssh` (disler, dcg, CC docs)                      | gate `command.touches`                                                         | ✅                                                          |
+| Block `curl \| sh` (CC ecosystem)                                                | gate `command.pipesToShell`                                                    | ✅                                                          |
+| Block edit to a protected path                                                   | file-gate `path.under`                                                         | ✅                                                          |
+| Auto-format / lint on write (ruff/ty validators)                                 | react `run()`                                                                  | ✅ (run); block-on-lint is n/a — CC PostToolUse can't block |
+| Inject STATIC context at SessionStart                                            | `inject(text)`                                                                 | ✅                                                          |
+| **Inject DYNAMIC context — git status, open issues (disler, superpowers, omcc)** | `inject` — but the closed vocab bans fs/exec, so `produce()` can't gather it   | ❌ **GAP**                                                  |
+| **Prompt-aware inject — read the prompt then inject (disler UserPromptSubmit)**  | inject still carries no prompt text, but a prompt GATE sees `e.prompt`         | ➖ partial (gate yes; prompt-aware _inject_ open)           |
+| **Validate / block a user prompt — security filter (disler)**                    | `definePromptGate` — sees `e.prompt`, `deny` blocks it — ✅ **SHIPPED**        | ✅ (block/validate; rewrite still out)                      |
+| **Stop-gate — block stop until tests pass (guides)**                             | `defineStopGate` — `deny` keeps the agent going, loop-guarded — ✅ **SHIPPED** | ✅                                                          |
+| **TTS / desktop notify on Notification/Stop/SubagentStop (disler)**              | react `run()` only, on a non-file event                                        | ➖ partial (event shape carries no context)                 |
+| **React to tool RESPONSE — error capture (disler post_tool_use_failure)**        | react event carries `e.response` (`isError()`/`contains()`) — ✅ **SHIPPED**   | ✅                                                          |
+| Log tool calls to a file (disler post_tool_use)                                  | react `run()`                                                                  | ➖ (no structured event access)                             |
+| **PermissionRequest auto-allow read-only (disler)**                              | no role/event for it                                                           | ❌ **GAP**                                                  |
+| Stateful — token approval / rate-limit / ordering (dcg)                          | pure vocab, no cross-call state                                                | ❌ **deliberate** (guards.ts prototype)                     |
+| Arbitrary I/O to decide (call a service)                                         | capability = API surface bans it                                               | ❌ **deliberate**                                           |
 
 **Verdict: NO, it does not cover all use cases — and that's the two-lane decision working
 as designed.** The typed lane nails the **SAFETY-GATE slice** (PreToolUse block: dangerous
@@ -155,18 +172,20 @@ false-confidence-prone use cases — plus simple react/inject. The gaps cluster 
   vocab would break the capability guarantee that's the whole point. **Don't close these in
   typed; they're the shell lane's job.**
 - **Caused by MISSING roles/shapes (closeable, and worth it):** (1) gate-capable
-  `UserPromptSubmit` (validate/block a prompt) and `Stop` (gate-until-tests-pass); (2)
-  richer event shapes so more DECISIONS are expressible — `tool_response` in react, the
-  prompt text in a UserPromptSubmit decision, `tool_input` beyond Bash/path (WebFetch URL,
-  Task `subagent_type`, MCP args). These are DECISIONS (the typed lane's sweet spot), just
-  on events/fields the vocab doesn't expose yet.
+  `UserPromptSubmit` (validate/block a prompt) and `Stop` (gate-until-tests-pass) —
+  ✅ **SHIPPED 2026-06-23** (`definePromptGate`/`defineStopGate`); (2) richer event
+  shapes so more DECISIONS are expressible — `tool_response` in react ✅ **SHIPPED**
+  (`e.response`), the prompt text in a UserPromptSubmit decision ✅ **SHIPPED**
+  (`e.prompt`), `tool_input` beyond Bash/path (WebFetch URL, Task `subagent_type`,
+  MCP args) — STILL OPEN (deliverable #7). These are DECISIONS (the typed lane's
+  sweet spot), just on events/fields the vocab didn't expose yet.
 
 So the refined scope: **typed lane = DECISIONS over any event; shell lane = I/O & lifecycle
 side-effects.** The flagship (PreToolUse gate) is solid; the highest-leverage typed-lane
-EXPANSION is gate-capable UserPromptSubmit/Stop + richer event shapes — NOT chasing the
-I/O-bound lifecycle hooks, which stay shell. This RE-RANKS the deliverables: event/shape
-coverage for decisions rises above the `observe` mode for breadth, though `observe` stays
-the cheapest single win for the gates that already work.
+EXPANSION — gate-capable UserPromptSubmit/Stop + richer event shapes — is now LARGELY
+SHIPPED (prompt/stop gates + `e.response`); the lone remaining shape is the generic
+`tool_input` accessors (WebFetch/Task/MCP), deliberately deferred to avoid a stringly-typed
+bag. The I/O-bound lifecycle hooks stay shell, by design.
 
 ## See also
 
