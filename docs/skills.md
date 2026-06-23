@@ -134,14 +134,14 @@ keeping big scripts out of the body (token budget + progressive disclosure).
 
 ## Running and enforcing a skill
 
-- **`vigiles run-skill <SKILL.md>`** parses the `vigiles:gate`/`vigiles:result`
+- **`vigiles hook-runtime run-skill <SKILL.md>`** parses the `vigiles:gate`/`vigiles:result`
   markers and **runs the gate ladder**: each gate in order, short-circuiting on
   the first failure (Railway), then the result gate. Exit 0 = all passed, exit 2
   = blocked. (`src/skill-runtime.ts`)
 - **Stop-hook enforcement** makes the result gate enforce in a live session:
-  `vigiles skill-start <SKILL.md>` marks a skill active; the `Stop` hook
-  (`vigiles skill-hook`) runs its result gate and **blocks completion until it
-  passes** (exit 2 feeds the reason back to the model); `vigiles skill-done`
+  `vigiles hook-runtime skill-start <SKILL.md>` marks a skill active; the `Stop` hook
+  (`vigiles hook-runtime skill`) runs its result gate and **blocks completion until it
+  passes** (exit 2 feeds the reason back to the model); `vigiles hook-runtime skill-done`
   clears it. Proven end-to-end against real Claude Code in `test/e2e`.
 - **Edit protection**: the Claude Code plugin (installed via the marketplace —
   `/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`,

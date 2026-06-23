@@ -8,9 +8,7 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
-npx vigiles compile [files...]      # Compile .spec.ts → .md
-npx vigiles compile-hook <file>     # Compile a typed vigiles/hook program → a hooks block + stamp
-npx vigiles run-hook-program <file> # Runtime a compiled hooks block points at (reads the event on stdin)
+npx vigiles compile [files...]      # Compile .spec.ts → .md AND .vigiles/hooks/* → merged hooks config + stamp
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
 npx vigiles refs <file.md>          # Check the symbol references in an instruction file
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
@@ -106,32 +104,49 @@ already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
 one dialect) and `scan` (reports harness-specific structure). See
 [research/multi-harness-compile.md](../research/multi-harness-compile.md).
 
-### `compile-hook <file>` / `run-hook-program <file>`
+### Compiled hooks — folded into `compile`
 
-Compile a **compiled hook** — a hook authored as a pure typed function against
-the closed `vigiles/hook` vocabulary — into a harness hooks block. This makes
-whole classes of hook bugs unrepresentable (false confidence, matcher bypass,
-capability creep); see the [compiled-hooks guide](compiled-hooks.md) for the why.
+A **compiled hook** is a hook authored as a pure typed function against the
+closed `vigiles/hook` vocabulary, which makes whole classes of hook bugs
+unrepresentable (false confidence, matcher bypass, capability creep); see the
+[compiled-hooks guide](compiled-hooks.md) for the why.
 
-- `compile-hook <file>` runs the capability check (an import outside
-  `vigiles/hook` **fails the build**, exit 1), prints the settings block to paste
-  into `.claude/settings.json`, and writes a tamper-evident stamp to
-  `.vigiles/hooks/<file>.json`.
-- `run-hook-program <file>` is the runtime that block points at: it reads the
-  live event on stdin, **verifies the stamp** (a hand-edited artifact is refused —
-  exit 2, fail closed), and dispatches by role — a gate exits 2 + reason on
-  `deny`, an inject prints `additionalContext`, a react runs its classified
-  command. Exit codes: `0` allow, `2` deny/refuse.
+There is **no `compile-hook` verb** — hook compilation is folded into `compile`
+(the cohesive-cli-surface principle: one verb compiles every
+typed authoring artifact). Put the hook source in **`.vigiles/hooks/`** (it's
+harness-neutral, so it lives in vigiles's own dir, not `.claude/`), then:
 
-`compile-hook` is **multi-harness**: it emits for the detected harness, or pass
-`--harness=codex` to emit a Codex `config.toml` `[[hooks.<event>]]` block (an
-anchored-regex matcher) instead of the Claude Code `settings.json` JSON. The same
-typed program compiles to either; the gate runtime is shared (Codex vetoes via
-`exit 2` identically).
+- `vigiles compile` discovers `.vigiles/hooks/*` (or take one: `vigiles compile
+.vigiles/hooks/x.mjs`), runs the capability check (an import outside
+  `vigiles/hook` **fails the build**, exit 1), **merges** the block into the
+  active harness's config (`.claude/settings.json` / `.codex/config.toml`)
+  idempotently, and writes a tamper-evident stamp to `.vigiles/hooks/<file>.json`.
+- `--harness=codex` merges a Codex `config.toml` `[[hooks.<event>]]` block (an
+  anchored-regex matcher) instead of the Claude Code JSON. The same typed program
+  compiles to either; the gate runtime is shared (Codex vetoes via `exit 2`).
+
+The merged block points at the `hook-runtime run-program` entrypoint (below).
 
 Honest scope: this fixes the hook's authoring + logic, not the harness's
 delivery — a subagent's tool calls still bypass any PreToolUse hook
 ([#34692](https://github.com/anthropics/claude-code/issues/34692)).
+
+### `hook-runtime <kind>` — runtime entrypoints (not typed by hand)
+
+The harness invokes these on every matching event, via a block `vigiles compile`
+emits — they are **not verbs**, so they live under one hidden umbrella, off the
+help surface (verbs are typed; runtime entrypoints are emitted). You should never
+type one yourself; `compile` wires them for you.
+
+- `vigiles hook-runtime run-program <file>` — the compiled-hook runtime: reads
+  the live event on stdin, **verifies the stamp** (a hand-edited artifact is
+  refused — exit 2, fail closed), and dispatches by role — a gate exits 2 +
+  reason on `deny`, an inject prints `additionalContext`, a react runs its
+  classified command. Exit codes: `0` allow, `2` deny/refuse.
+- Other kinds (`agent`, `skill`, `skill-tool`, `refs`, `guard`, `intercept-tool`,
+  `effect-enter`/`effect-exit`, …) back the subagent/skill rails and other
+  emitted gates. Renaming a `<kind>` breaks every already-emitted block, so it's
+  a breaking change.
 
 ### `scan [dir]`
 

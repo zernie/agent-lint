@@ -83,7 +83,7 @@ if [ "$TP" = "1" ]; then ok "passing result gate → claude stops (1 turn)"; els
 if [ "$TF" -gt "$TP" ] 2>/dev/null; then ok "failing result gate → Stop blocked, claude forced to continue ($TF turns)"; else bad "failing gate should block (turns=$TF)"; fi
 
 # ---------------------------------------------------------------------------
-# Note: the subagent PreToolUse tool-contract rail (`vigiles agent-hook`) is a
+# Note: the subagent PreToolUse tool-contract rail (`vigiles hook-runtime agent`) is a
 # *tool-event* hook. Driving a tool call deterministically needs the model to
 # actually invoke the tool, which is flaky against a scripted mock — so the rail
 # is proven at the cheap, deterministic unit tier instead: a real synthesized

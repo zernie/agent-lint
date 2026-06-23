@@ -3,7 +3,7 @@
 # vigiles benchmark — gated skill (Stop-hook result gate) vs vanilla skill.
 #
 # Both arms get an identical task and an identical SKILL.md. The ONLY difference
-# is the gated arm wires a Stop hook (`vigiles skill-hook`) that runs the skill's
+# is the gated arm wires a Stop hook (`vigiles hook-runtime skill`) that runs the skill's
 # result gate (`npm test`) and blocks "done" until it passes. The metric is the
 # END STATE: after the agent stops, does `npm test` actually pass?
 #

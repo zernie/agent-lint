@@ -134,7 +134,7 @@ per-section event, no CC hook for region entry/exit. Mechanisms, assessed honest
 ### (a) Explicit enter/exit signals via a state file ← RECOMMENDED
 
 The agent emits an explicit "region enter" signal — a dedicated CLI command like
-`vigiles effect-enter` / `vigiles effect-exit` — which toggles a state file
+`vigiles hook-runtime effect-enter` / `vigiles hook-runtime effect-exit` — which toggles a state file
 `.vigiles/effect-active.json`, mirroring the exact pattern vigiles already uses for
 active-unit tracking (`.vigiles/active-agent.json`, `.vigiles/active-skill.json`).
 
@@ -143,8 +143,8 @@ The compiled SKILL.md instructs the agent:
 ```text
 <!-- vigiles:effect -->
 
-Before using any side-effecting tool, call: `vigiles effect-enter`
-After the last side-effecting tool, call: `vigiles effect-exit`
+Before using any side-effecting tool, call: `vigiles hook-runtime effect-enter`
+After the last side-effecting tool, call: `vigiles hook-runtime effect-exit`
 
 Side effects are allowed ONLY inside this block:
 ...
@@ -154,21 +154,21 @@ Side effects are allowed ONLY inside this block:
 
 The PreToolUse hook reads `.vigiles/effect-active.json`; if a unit declares a boundary
 and the file is absent (or `false`), it denies side-effecting tools with: _"This tool
-is not allowed outside an `effect` boundary. Call `vigiles effect-enter` to enter the
+is not allowed outside an `effect` boundary. Call `vigiles hook-runtime effect-enter` to enter the
 effect region first."_
 
 **Assessment:**
 
 | Property           | Verdict                                                                      |
 | ------------------ | ---------------------------------------------------------------------------- |
-| Works in CC today? | Yes — `vigiles effect-enter` is a bash command the model calls               |
+| Works in CC today? | Yes — `vigiles hook-runtime effect-enter` is a bash command the model calls  |
 | Fail direction     | Fail-CLOSED: a mis-mark can only over-block, never allow unsafely            |
 | Determinism        | Full — the state file is written/read by deterministic processes             |
 | Precedent          | Exact same pattern as `setActiveAgent` / `setActiveSkill` (already ships)    |
 | UX cost            | Model must call two extra commands; the compiled prose instructs it to do so |
 | Forgeable?         | Model could call `effect-enter` outside the boundary — addressed below       |
 
-The "forgeable" risk: a model that calls `vigiles effect-enter` outside the intended
+The "forgeable" risk: a model that calls `vigiles hook-runtime effect-enter` outside the intended
 boundary widens the allowed window. This is acceptable because: (1) the model calls
 `effect-enter` only because the compiled prose instructs it to — if the model
 disregards the prose it will also disregard the gate, so the threat model is the same;
@@ -211,14 +211,14 @@ fail-closed. The implementation is deterministic and testable via `runHook`.
 
 ## 4. Sequencing / verdict
 
-| Layer                                                          | Status           | What ships                                              |
-| -------------------------------------------------------------- | ---------------- | ------------------------------------------------------- |
-| `effect()` fragment + `InstructionFragment` union              | New (small)      | spec.ts + renderFragment branch in compile.ts           |
-| `<!-- vigiles:effect -->` … `<!-- /vigiles:effect -->` markers | New (trivial)    | compile output, integrity hash covers them              |
-| `vigiles effect-enter` / `effect-exit` CLI commands            | New (small)      | write `.vigiles/effect-active.json`                     |
-| PreToolUse gate reads `effect-active.json`                     | New (small)      | extend `evaluatePreToolUse` + `evaluateSkillPreToolUse` |
-| Test seam: `outsideEffect` predicate for `notTool`             | New (small)      | check.ts / harness-assert                               |
-| `doc()` tagged-template                                        | Separate P1 item | NOT a dependency                                        |
+| Layer                                                            | Status           | What ships                                              |
+| ---------------------------------------------------------------- | ---------------- | ------------------------------------------------------- |
+| `effect()` fragment + `InstructionFragment` union                | New (small)      | spec.ts + renderFragment branch in compile.ts           |
+| `<!-- vigiles:effect -->` … `<!-- /vigiles:effect -->` markers   | New (trivial)    | compile output, integrity hash covers them              |
+| `vigiles hook-runtime effect-enter` / `effect-exit` CLI commands | New (small)      | write `.vigiles/effect-active.json`                     |
+| PreToolUse gate reads `effect-active.json`                       | New (small)      | extend `evaluatePreToolUse` + `evaluateSkillPreToolUse` |
+| Test seam: `outsideEffect` predicate for `notTool`               | New (small)      | check.ts / harness-assert                               |
+| `doc()` tagged-template                                          | Separate P1 item | NOT a dependency                                        |
 
 **Shippable now, honestly labeled:**
 
@@ -230,7 +230,7 @@ fail-closed. The implementation is deterministic and testable via `runHook`.
 
 1. `EffectRegion` fragment + `effect()` builder in `src/core/spec.ts` (30 min)
 2. `renderFragment` branch for `"effect"` in `src/core/compile.ts` (10 min)
-3. `vigiles effect-enter` / `effect-exit` CLI commands + `.vigiles/effect-active.json`
+3. `vigiles hook-runtime effect-enter` / `effect-exit` CLI commands + `.vigiles/effect-active.json`
    state helpers (30 min, mirrors `setActiveAgent`)
 4. Extend `evaluatePreToolUse` + `evaluateSkillPreToolUse` to deny side-effecting tools
    when a boundary is declared but `effect-active.json` is absent (20 min)

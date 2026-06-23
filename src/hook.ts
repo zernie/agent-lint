@@ -6,7 +6,7 @@
  * cause the #1 verified hook pain — FALSE CONFIDENCE (a guardrail that looks
  * like it blocks but silently doesn't). Invert it: author a **pure typed
  * function** `(event) => Decision` against THIS surface, and `vigiles
- * compile-hook` emits the harness protocol for you. The whole false-confidence
+ * compile` emits the harness protocol for you. The whole false-confidence
  * class becomes UNREPRESENTABLE — you never write the exit code or the field.
  *
  * Three roles, each with its own output type so a category mistake is a `tsc`
@@ -47,7 +47,7 @@ export {
   run,
   notice,
   nothing,
-  // runtime + decode (used by the `vigiles run-hook-program` runtime and tests)
+  // runtime + decode (used by the `vigiles hook-runtime run-program` runtime and tests)
   decideProgram,
   decideFileGate,
   runInject,

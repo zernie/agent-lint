@@ -1070,7 +1070,7 @@ async function runWithCache(
 }
 
 /**
- * The `vigiles intercept-tool-hook` command, as an absolute `node <cli> …`
+ * The `vigiles hook-runtime intercept-tool` command, as an absolute `node <cli> …`
  * invocation — the eval runs in a throwaway cwd where `npx vigiles` wouldn't
  * resolve, so the auto-wired PreToolUse hook must point at this CLI's own `cli.js`
  * (resolved from `__dirname`, the same way `run-hook.ts`/`sandbox.ts` locate their

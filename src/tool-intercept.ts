@@ -15,7 +15,7 @@
  *
  * - `decideIntercept` — does this call get intercepted, and with what deny reason;
  * - `buildInterceptSettings` — the PreToolUse hook fragment routing matched tools
- *   through `vigiles intercept-tool-hook`;
+ *   through `vigiles hook-runtime intercept-tool`;
  * - `serializeIntercepts` / `parseIntercepts` — the env round-trip (incl. RegExp
  *   matchers) the hook subprocess reads back.
  *
@@ -33,7 +33,7 @@
  */
 import { type ArgMatcher, matchesArgs } from "./arg-match.js";
 
-/** Env var the spawned `vigiles intercept-tool-hook` reads its intercept list from. */
+/** Env var the spawned `vigiles hook-runtime intercept-tool` reads its intercept list from. */
 export const INTERCEPT_TOOLS_ENV = "VIGILES_INTERCEPT_TOOLS";
 
 /** Declare a tool to intercept: deny its real execution with a block message. */
@@ -67,7 +67,7 @@ export type InterceptDecision =
 /**
  * Decide whether a tool call should be intercepted. Returns the first matching
  * intercept's denial reason (preventing real execution), or `{ intercept: false }`
- * to let the call run for real. Pure — the same logic `vigiles intercept-tool-hook`
+ * to let the call run for real. Pure — the same logic `vigiles hook-runtime intercept-tool`
  * runs.
  */
 export function decideIntercept(

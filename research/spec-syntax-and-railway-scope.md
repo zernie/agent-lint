@@ -155,7 +155,7 @@ independent walls, all hit on these three skills:
    Bash; their core command IS mutating (`vigiles generate-types` / `compile`,
    `npm i`), so the gate blocks it. `dangerously-unrestricted` is honest but a no-op.
 2. **`effect()` is fail-closed + probabilistic.** Read-only-outside-the-region needs
-   the _model_ to call `vigiles effect-enter/exit` around its own mutation; a miss
+   the _model_ to call `vigiles hook-runtime effect-enter/exit` around its own mutation; a miss
    blocks the command. A deterministic gate that depends on probabilistic model
    compliance isn't a deterministic guarantee for a model-invocable skill.
 3. **Backtick-heavy bodies fight the spec.** The verified-refs payoff needs the

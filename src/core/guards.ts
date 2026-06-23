@@ -7,7 +7,7 @@
  * (CVE-2025-59536: a malicious repo's hook runs before the trust dialog). Arbitrary
  * hook safety is UNDECIDABLE (Rice). So this prototype inverts it: you don't WRITE a
  * hook, you DECLARE a guard from a closed, audited vocabulary, and vigiles GENERATES
- * the hooks block — whose command is vigiles's OWN gate (`vigiles guard-hook`), never
+ * the hooks block — whose command is vigiles's OWN gate (`vigiles hook-runtime guard`), never
  * user shell. Safe-by-construction, not safe-by-analysis.
  *
  * Covers the real PreToolUse patterns + the new ORDER axis:
@@ -17,7 +17,7 @@
  *   - confine:      deny a path-taking tool whose path escapes an allowlist (rm -rf /)
  *
  * EXPERIMENTAL — not on the public API. But the gate now RUNS end-to-end: the
- * `vigiles guard-hook` CLI subcommand reads the live PreToolUse event, loads the
+ * `vigiles hook-runtime guard` CLI subcommand reads the live PreToolUse event, loads the
  * guard set (`.vigiles/guards.json`) + the session ledger (`.vigiles/guard-ledger.json`,
  * the reconstructed prior-call list `requireBefore` needs), runs `decideGuards`, and
  * blocks (exit 2 + reason) or records-the-allowed-call (so the next call sees it). The

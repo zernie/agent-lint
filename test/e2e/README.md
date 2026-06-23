@@ -22,7 +22,7 @@ network, no nondeterminism.
 1. **simple** — the mock returns scripted text; assert claude relays it.
 2. **tool-use loop** — the mock scripts a `tool_use`; assert claude runs the
    tool, sends `tool_result`, and the mock sees the follow-up (the loop closed).
-3. **Stop-hook enforcement** — a project with a `vigiles skill-hook` Stop hook
+3. **Stop-hook enforcement** — a project with a `vigiles hook-runtime skill` Stop hook
    and an active skill whose result gate is `true` (pass) vs `false` (block).
    Assert: passing gate → claude stops in 1 turn; failing gate → the hook
    blocks completion and claude is forced to keep going (hits `--max-turns`).

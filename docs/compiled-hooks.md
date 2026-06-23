@@ -16,7 +16,8 @@ express it.
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
 - [The three roles](#the-three-roles)
 - [The vocabulary](#the-vocabulary)
-- [Compile and run](#compile-and-run)
+- [Compile and wire](#compile-and-wire)
+- [Where things live](#where-things-live)
 - [Testing a compiled hook](#testing-a-compiled-hook)
 - [Proof: the OSS dogfood](#proof-the-oss-dogfood)
 - [Limitations & trade-offs (the cons)](#limitations--trade-offs-the-cons)
@@ -86,18 +87,32 @@ export default defineHook({
 - **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision.
 - **`inject(text)`** — inject output. **`run(cmd)` / `notice(msg)` / `nothing()`** — react output.
 
-## Compile and run
+## Compile and wire
+
+Put your hook source in **`.vigiles/hooks/`**. The typed program is
+harness-neutral — it imports `vigiles/hook` and compiles to _whichever_ harness
+you target — so it lives in vigiles's own dir, not a harness's `.claude/`. Then:
 
 ```bash
-npx vigiles compile-hook my-guard.mjs
+npx vigiles compile                                  # discovers .vigiles/hooks/* (and your specs)
+npx vigiles compile .vigiles/hooks/safe-bash-guard.mjs   # …or target one file
 ```
 
-`compile-hook` runs the capability check (an out-of-vocabulary import fails the
-build), prints the **settings block** to paste into your hooks config, and writes
-a **tamper-evident stamp** sidecar:
+There is **no separate `compile-hook` verb** — compiling a typed authoring
+artifact into the harness's native format is _one_ verb, whatever the artifact (a
+`.spec.ts` → markdown, a hook → a wired config). `compile`:
+
+1. runs the **capability check** (an out-of-vocabulary import fails the build);
+2. **merges** the hook block into the active harness's config —
+   `.claude/settings.json` (JSON) or `.codex/config.toml` (TOML) — **idempotently**,
+   keyed by the hook path, so recompiling updates in place and never clobbers
+   your own hand-written hooks;
+3. writes a **tamper-evident stamp** beside the source.
+
+The merged block routes the live event to **`vigiles hook-runtime run-program <file>`**:
 
 ```jsonc
-// .claude/settings.json — the emitted block routes the live event to the runtime
+// .claude/settings.json — written (not pasted) by `vigiles compile`
 {
   "hooks": {
     "PreToolUse": [
@@ -106,7 +121,7 @@ a **tamper-evident stamp** sidecar:
         "hooks": [
           {
             "type": "command",
-            "command": "npx vigiles run-hook-program my-guard.mjs",
+            "command": "npx vigiles hook-runtime run-program .vigiles/hooks/safe-bash-guard.mjs",
           },
         ],
       },
@@ -115,23 +130,41 @@ a **tamper-evident stamp** sidecar:
 }
 ```
 
-`run-hook-program` is the runtime the block points at: it loads your typed
-program, **verifies the stamp** (a hand-edited artifact is refused — fail closed),
-and dispatches by role — a gate `exit 2`s on `deny`, an inject prints
+`hook-runtime run-program` is a **hidden runtime entrypoint** — invoked by the
+harness on every matching event, never typed by hand. It loads your typed
+program, **verifies the stamp** (a hand-edited artifact is refused — fail
+closed), and dispatches by role: a gate `exit 2`s on `deny`, an inject prints
 `additionalContext`, a react runs its classified command. You wrote none of that
-protocol.
+protocol. (`compile` is the one-time _wiring_ step; `hook-runtime` is the
+per-event _executor_ the wiring points at — see the
+[CLI surface](cli.md) for why they're distinct.)
 
 Hooks can be authored in JavaScript (`.mjs`) or TypeScript (run under `tsx` /
 Node ≥ 23.6). `vigiles/hook` is the **only** import a compiled hook may use.
 
-**Multi-harness.** The typed program is harness-neutral; only the emitted block
-differs. `compile-hook --harness=codex` writes a Codex `config.toml`
+**Multi-harness.** The typed program is harness-neutral; only the merged config
+differs. `vigiles compile --harness=codex` merges a Codex `config.toml`
 `[[hooks.<event>]]` block (an anchored-regex matcher) instead of Claude Code's
 `settings.json` JSON — and the gate runtime is shared, since Codex vetoes a tool
 call via `exit 2` exactly as Claude Code does. Inject/ask **output** on Codex is
-the one deferred piece (its field shape is CC-confirmed only); `compile-hook
+the one deferred piece (its field shape is CC-confirmed only); `compile
 --harness=codex` warns loudly on an inject/react hook rather than ship a
 maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).
+
+## Where things live
+
+Everything is committed, and the source is **adapter-agnostic** — one hook
+compiles to any harness you target:
+
+| Artifact         | Location                                       | Why                                                                 |
+| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
+| **Hook source**  | `.vigiles/hooks/*.{mjs,ts}`                    | harness-neutral — one source, fans out to any harness               |
+| **Tamper stamp** | `.vigiles/hooks/<name>.json`                   | the runtime verifies it before running the hook                     |
+| **Wiring**       | `.claude/settings.json` / `.codex/config.toml` | `compile` merges it in per harness (a multi-harness repo gets both) |
+
+Hooks are **not** auto-discovered by sitting just anywhere — they must be under
+`.vigiles/hooks/` (or named explicitly to `compile`). Because they share one
+dir, basenames are unique, so the stamp keys safely on the basename.
 
 ## Testing a compiled hook
 
@@ -162,10 +195,10 @@ it("blocks a force-push, even hidden in a compound command", () => {
 normalized outcome (`{ kind: "decision" | "injection" | "reaction", … }`)
 dispatched by role, so an inject or react hook is just as testable as a gate.
 
-**2. Through the real runtime.** `runHook("node … run-hook-program guard.mjs",
+**2. Through the real runtime.** `runHook("node … hook-runtime run-program guard.mjs",
 event)` drives the actual compiled CLI (stamp check + dispatch) — proves the
 wired artifact behaves, still no model. Pair it with the disaster battery:
-`assertBlocksDisasters("node … run-hook-program guard.mjs")` proves the gate
+`assertBlocksDisasters("node … hook-runtime run-program guard.mjs")` proves the gate
 blocks every textbook disaster.
 
 **3. Does it fire in the assembled harness?** `runHarnessTest` (a scripted mock
@@ -228,7 +261,7 @@ Compiled hooks are neither free nor magic. The honest downsides:
   [guardrail verification](harness-testing.md).
 - **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is
   cross-harness today; an inject/react hook's _output_ shape is Claude-Code-confirmed
-  only, so `compile-hook --harness=codex` **warns loudly** on those rather than
+  only, so `compile --harness=codex` **warns loudly** on those rather than
   ship a maybe-no-op (see [Compile and run](#compile-and-run) and
   [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md)).
 
@@ -236,5 +269,5 @@ Compiled hooks are neither free nor magic. The honest downsides:
 
 - [Testing your harness](harness-testing.md) — the test tiers; `runHook` unit-tests a hook's decision, and `assertBlocksDisasters` proves a guardrail blocks.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer (references are _true_); compiled hooks are the **gate** instrument beside it.
-- [CLI & GitHub Action](cli.md) — `compile-hook` / `run-hook-program` reference.
+- [CLI & GitHub Action](cli.md) — `compile` / `hook-runtime` reference.
 - [`research/hook-pain-points.md`](../research/hook-pain-points.md) — the verified failure corpus + the design record.

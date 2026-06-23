@@ -10,19 +10,20 @@
  *
  * What you do NOT write here — and therefore cannot get wrong — is the protocol:
  * no `exit 2` vs `exit 1`, no `permissionDecision` JSON field, no `jq` path.
- * `vigiles compile-hook` emits it; `vigiles run-hook-program` runs it. The whole
+ * `vigiles compile` emits it (merged into your hooks config); the
+ * `vigiles hook-runtime run-program` entrypoint runs it. The whole
  * FALSE-CONFIDENCE bug class (a guard that looks like it blocks but silently
  * doesn't) is unrepresentable.
  *
- * External users author the import as `from "vigiles/hook"` and compile it:
+ * External users put the source in `.vigiles/hooks/` and compile it:
  *
  *   import { defineHook, tool, deny, allow } from "vigiles/hook";
- *   npx vigiles compile-hook my-guard.mjs   # emits the settings block + a stamp
+ *   npx vigiles compile   # discovers .vigiles/hooks/*, merges the block + a stamp
  *
  * `vigiles/hook` is the ONLY import a compiled hook may use (capability = API
- * surface), so `compile-hook` accepts that form. This in-repo copy imports the
- * built `dist/` instead so it runs without installing the package; the dogfood
- * (src/hook-dogfood.test.ts) drives it through `vigiles run-hook-program`.
+ * surface). This in-repo copy imports the built `dist/` instead so it runs
+ * without installing the package; the dogfood (src/hook-dogfood.test.ts) drives
+ * it through `vigiles hook-runtime run-program`.
  */
 import { defineHook, tool, deny, allow } from "../../dist/hook.js";
 
