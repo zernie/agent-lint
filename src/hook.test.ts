@@ -380,6 +380,21 @@ export default defineReact({
   }
 });
 
+/** Minimal shape of a CC settings.json for the merge dogfood (avoids `any`). */
+interface SettingsShape {
+  hooks: Record<
+    string,
+    {
+      matcher?: string;
+      hooks: { type: string; command: string; async?: boolean }[];
+    }[]
+  >;
+}
+const readSettings = (dir: string): SettingsShape =>
+  JSON.parse(
+    readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+  ) as SettingsShape;
+
 test("compile (hook): MERGE preserves a real plugin's existing hooks (superpowers) + is idempotent", () => {
   const dir = makeTmpDir();
   try {
@@ -401,9 +416,7 @@ test("compile (hook): MERGE preserves a real plugin's existing hooks (superpower
     const c = compile();
     assert.equal(c.status, 0, c.stderr);
 
-    const merged = JSON.parse(
-      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
-    );
+    const merged = readSettings(dir);
     // The plugin's own SessionStart hook is preserved untouched (incl. async).
     assert.equal(merged.hooks.SessionStart.length, 1);
     assert.match(
@@ -420,9 +433,7 @@ test("compile (hook): MERGE preserves a real plugin's existing hooks (superpower
 
     // Recompiling is idempotent — no duplicate PreToolUse entry, plugin hook intact.
     assert.equal(compile().status, 0);
-    const again = JSON.parse(
-      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
-    );
+    const again = readSettings(dir);
     assert.equal(again.hooks.PreToolUse.length, 1, "no duplicate on recompile");
     assert.equal(again.hooks.SessionStart.length, 1);
   } finally {
