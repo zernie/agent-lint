@@ -215,6 +215,44 @@ not materialized — a non-goal, above.)
 pillar-2-testable + MCP-detected, with no cross-adapter coupling. Subagent compilation
 is a deliberate non-goal (model mismatch), not a TODO.
 
+## Sourcing the dialect facts: hand-maintain + read-local, never import their types
+
+The `HarnessDialect` catalogs (tool names, hook events, side-effecting set, MCP servers)
+and the hook event SHAPES (`BashToolEvent`/`FileToolEvent`/…) are **hand-maintained**,
+because Claude Code is effectively a **black box**: the only OFFICIAL machine-readable
+artifact is the `settings.json` JSON Schema (json.schemastore.org); event names, the
+~35 tool names, per-event payload fields, and the decision envelope are **prose-only**
+(`docs/hooks.md`, `docs/tools.md`). The Agent SDK exports only SOME hook input types.
+This is WHY the detectors are conservative ("never-available + close-typo only, never a
+bare-unknown") — the catalog is known-incomplete, so it never assumes completeness.
+
+There IS a semi-machine source: the **installed** `@anthropic-ai/claude-code` ships
+`sdk-tools.d.ts` (the `ToolInputSchemas` union + every tool's input shape) and the event
+names + decision fields are string literals in `cli.js`. Use it as a **read-local
+freshness/drift check** (validate our catalog + pin `harnessVersion`, warn on
+divergence), NOT as a dependency.
+
+**Licensing line (informational, not legal advice).** The package is
+"© Anthropic PBC. All rights reserved." — not OSS. So:
+
+- ❌ **Don't vendor or inline their `.d.ts`** into vigiles's published artifact. Copying
+  the file (vendoring) OR letting **api-extractor inline** their referenced type into our
+  rolled-up `vigiles.d.ts` both put a COPY of their declarations in what we ship =
+  redistribution of an all-rights-reserved work. (Import ≠ distribution by itself — but a
+  TS lib's dts-bundling inlines by default, which crosses into it; watch `etc/*.api.md`.)
+- ✅ **Hand-write our own types matching the FACTS** (tool/event/field names — `command`,
+  `file_path`). Names + short identifiers aren't copyrightable (37 CFR §202.1), merger /
+  scènes à faire cover interop-dictated fields, and this is the universal **DefinitelyTyped**
+  norm — empirically the dominant pattern (a GitHub `PreToolUseHookInput` search shows the
+  whole ecosystem hand-redeclaring the shape; verbatim `sdk-tools.d.ts` copies cluster in
+  reverse-engineering/rebuild repos, the risky cohort).
+- ✅ **Read the user's local install at runtime** to validate/warn — no copying, no
+  redistribution; same ToS-clean posture as driving the user's own `claude` CLI.
+
+So: hand-maintained catalog is the stable source of truth; the local install is the
+freshness alarm; their types are never shipped. Full landscape +
+case-law (Google v. Oracle, Sega/Connectix, substantial-similarity) is the chat record.
+
 ## See also
 
 - `research/adapter-api-design.md` — the **API-shape** companion to this port
