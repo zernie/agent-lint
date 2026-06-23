@@ -271,6 +271,8 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
 // E2E dogfood — the FILE-GATE role (defineFileGate + PathView.under): block a
 // Write/Edit under a protected path, allow elsewhere. Mirrors the bash-gate
 // E2E; closes the file-gate dogfood gap (was unit-only in hook-program.test.ts).
+// Harness scope (test-both-harnesses): the deny→exit 2 path is byte-identical on
+// Codex, so one run covers both; Codex's EMIT is tested via `compile --harness=codex`.
 test("hook-runtime run-program: a file-gate denies a Write under a protected path, allows elsewhere", () => {
   const dir = makeTmpDir();
   try {
@@ -319,7 +321,9 @@ export default defineFileGate({
 // E2E dogfood — the REACT role (defineReact): a PostToolUse reaction CANNOT
 // block (always exit 0) but DOES its side — a `notice` reaches stderr, a `run`
 // executes its (effect-classified) command. Closes the react dogfood gap (was
-// unit-only, no E2E at all).
+// unit-only, no E2E at all). Harness scope (test-both-harnesses): run()→spawn and
+// the can't-block guarantee are harness-neutral (one run covers both); the Codex
+// notice/react OUTPUT shape is CC-confirmed-only and deferred (flagged at compile).
 test("hook-runtime run-program: a react emits a notice (can't block) and run() executes its command", () => {
   const dir = makeTmpDir();
   try {
