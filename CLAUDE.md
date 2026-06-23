@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:4d3774ee865fe321 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:be2c5ddee6ad4a42 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -384,6 +384,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Dont Reimplement Linters
 
 **Guidance only** — Architectural linting belongs in ast-grep/Dependency Cruiser/Steiger. Per-file code rules belong in ESLint/Ruff/Clippy. vigiles owns: spec compilation, linter cross-referencing, type generation, stale reference detection, and proof-based spec evolution.
+
+### Prefer Existing Solutions
+
+**Guidance only** — Before building any non-trivial capability — a tool, a check, a runtime, a parser — LOOK FOR EXISTING SOLUTIONS FIRST and PREFER adopting/composing/delegating over reinventing. This is a process step, not a vibe: actually search the landscape (the web, the ecosystem, the stdlib) and write down what you found. The decision order is ADOPT > COMPOSE > BUILD. BUILD is justified ONLY when one of these holds, and you SAY WHICH: (1) no existing solution fits the exact need (after a real look); (2) building DOGFOODS or reinforces the core moat (e.g. self-command-refs reuses the reference-verification engine vigiles already ships, so it's ~120 lines, not a new dependency); (3) every existing option's cost — a heavy dependency, a runtime/env requirement, lock-in, lost narrative control — outweighs a small purpose-built piece. When you DO build, the prior-art comparison IS part of the justification: name the existing solutions and why each was rejected (as the self-command-refs decision did — doctest runs everything/needs a build, doc-generators kill hand-written prose, link-checkers don't cover command names, so a small deterministic cross-ref check that dogfoods the moat won). Never present a home-grown thing as novel without having checked; 'is there an existing solution?' is a question to answer with research, before writing code, not after. This generalizes the project's existing don't-reinvent stance — dont-reimplement-linters (delegate architectural/per-file linting to ast-grep/ESLint/Ruff) and compose-with-sync-tools (compose with Ruler/rulesync, don't absorb their job) — into the default reflex for ALL new work.
 
 ### One Detector No Drift
 
