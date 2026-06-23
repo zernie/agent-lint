@@ -5,6 +5,9 @@
  *   - a Bash GATE denies `git push -f` (exit 2 + reason) and allows benign;
  *   - the AST matcher catches a compound bypass `cd x && git push -f`;
  *   - an INJECT hook emits `additionalContext` (the right field, never written);
+ *   - a PROMPT-GATE denies a secret-bearing prompt; a STOP-GATE blocks stopping
+ *     (and respects the loop guard);
+ *   - an OBSERVE-mode gate records-not-blocks (exit 0 + a jsonl record);
  *   - `compile` REJECTS an out-of-vocabulary import (capability = API);
  *   - a stamped artifact that is then hand-edited is REFUSED at runtime (exit 2).
  *
@@ -375,6 +378,140 @@ export default defineReact({
       existsSync(resolve(dir, "reacted.marker")),
       "react run() executed its command",
     );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — the PROMPT-GATE role (definePromptGate): a UserPromptSubmit gate
+// reads the prompt TEXT and denies (exit 2) a prompt that leaks a secret, allows
+// a clean one. Harness scope (test-both-harnesses): the deny→exit 2 runtime is
+// the shared gate path (byte-identical on Codex), so one run covers both; the
+// Codex EMIT is covered by the compile test in hook-program.test.ts.
+test("hook-runtime run-program: a prompt-gate denies a secret-bearing prompt (exit 2), allows clean", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "prompt-filter.mjs",
+      `import { definePromptGate, deny, allow } from "__HOOK__";
+export default definePromptGate({
+  on: "UserPromptSubmit",
+  decide: (e) =>
+    /sk-[a-z0-9]{20}/i.test(e.prompt)
+      ? deny("your prompt looks like it contains a secret key")
+      : allow(),
+});`,
+    );
+    const denied = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "UserPromptSubmit",
+        prompt: "deploy with key sk-abcdef0123456789abcd please",
+      },
+      { cwd: dir },
+    );
+    assert.equal(denied.blocked, true);
+    assert.equal(denied.exitCode, 2);
+    assert.match(denied.stderr, /secret key/);
+
+    const allowed = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      { hook_event_name: "UserPromptSubmit", prompt: "refactor the parser" },
+      { cwd: dir },
+    );
+    assert.equal(allowed.blocked, false);
+    assert.equal(allowed.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — the STOP-GATE role (defineStopGate): a Stop gate denies (exit 2)
+// to keep the agent going, and respects the stop_hook_active loop guard. Same
+// shared exit-2 runtime (one run covers both harnesses).
+test("hook-runtime run-program: a stop-gate blocks stopping, then allows under the loop guard", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "tests-green.mjs",
+      `import { defineStopGate, deny, allow } from "__HOOK__";
+export default defineStopGate({
+  on: "Stop",
+  decide: (e) =>
+    e.stopHookActive ? allow() : deny("keep going until the tests pass"),
+});`,
+    );
+    const blocked = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      { hook_event_name: "Stop", stop_hook_active: false },
+      { cwd: dir },
+    );
+    assert.equal(blocked.blocked, true);
+    assert.equal(blocked.exitCode, 2);
+    assert.match(blocked.stderr, /keep going/);
+
+    // The loop guard: a Stop that is itself the result of a prior block → allow.
+    const allowed = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      { hook_event_name: "Stop", stop_hook_active: true },
+      { cwd: dir },
+    );
+    assert.equal(allowed.blocked, false);
+    assert.equal(allowed.exitCode, 0);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — OBSERVE mode (the shadow/rollout primitive): a gate authored with
+// `mode: "observe"` computes the SAME deny, but does NOT block (exit 0) — it
+// records what it WOULD have blocked to .vigiles/hook-observations.jsonl.
+// Harness-neutral (exit 0 + a local record), so one run covers both harnesses.
+test("hook-runtime run-program: an observe-mode gate records-not-blocks (exit 0 + a jsonl record)", () => {
+  const dir = makeTmpDir();
+  try {
+    const f = fixture(
+      dir,
+      "shadow-guard.mjs",
+      `import { defineHook, tool, deny, allow } from "__HOOK__";
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  mode: "observe",
+  decide: (e) =>
+    e.command.runs("git push", { force: true })
+      ? deny("would block a force-push (observing)")
+      : allow(),
+});`,
+    );
+    const observed = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push -f origin main" },
+      },
+      { cwd: dir },
+    );
+    // It did NOT block — observe never blocks — but it noted what it would do.
+    assert.equal(observed.blocked, false);
+    assert.equal(observed.exitCode, 0);
+    assert.match(observed.stderr, /\[vigiles observe\].*would deny/);
+    // And it wrote a structured record for later review.
+    const log = readFileSync(
+      resolve(dir, ".vigiles/hook-observations.jsonl"),
+      "utf-8",
+    );
+    const rec = JSON.parse(log.trim().split("\n")[0]) as {
+      event: string;
+      would: string;
+      reason: string;
+    };
+    assert.equal(rec.event, "PreToolUse");
+    assert.equal(rec.would, "deny");
+    assert.match(rec.reason, /force-push/);
   } finally {
     cleanupTmpDir(dir);
   }

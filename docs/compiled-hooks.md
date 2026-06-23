@@ -14,8 +14,9 @@ express it.
 ## Contents
 
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
-- [The three roles](#the-three-roles)
+- [The roles](#the-roles)
 - [The vocabulary](#the-vocabulary)
+- [Observe mode (shadow rollout)](#observe-mode-shadow-rollout)
 - [Compile and wire](#compile-and-wire)
 - [Where things live](#where-things-live)
 - [Testing a compiled hook](#testing-a-compiled-hook)
@@ -42,21 +43,34 @@ shrinks its state space until the bad states are simply not expressible. (The
 [analogical-transfer thesis](../research/harness-state-space.md): make invalid
 harness states unreachable.)
 
-## The three roles
+## The roles
 
 A hook's _output_ depends on _when_ it fires. vigiles gives each its own builder
 and its own return type, so the wrong output for an event won't type-check:
 
-- **`defineHook` / `defineFileGate`** — a **gate** (`PreToolUse`). Returns a
+- **`defineHook` / `defineFileGate`** — a **tool gate** (`PreToolUse`). Returns a
   `Decision`: `allow()`, `deny(reason)`, or `ask(reason)`. `deny` is the only
-  thing that blocks; the compiler maps it to `exit 2`.
+  thing that blocks; the compiler maps it to `exit 2`. `defineHook` sees the Bash
+  command (`e.command`); `defineFileGate` sees the file path (`e.path`).
+- **`definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt
+  **text** (`e.prompt`) and returns a `Decision` — `deny` blocks/erases the
+  prompt (a security filter that refuses a prompt leaking a secret or carrying an
+  injection).
+- **`defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a
+  `Decision` — `deny` keeps the agent **going** (gate-until-tests-pass; the reason
+  is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow`
+  when it's set, or you can wedge the agent in a stop→continue loop.
 - **`defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`).
   Returns an `Injection` (`inject(text)`) — context added to the model. It has
   **no `deny`**: a no-decision event can't block.
 - **`defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` —
   `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't
-  block**; and `run(cmd)`'s effect is **classified at construction** (read-only /
+  block**; it sees the tool's **response** (`e.response`, e.g. react only on a
+  failure), and `run(cmd)`'s effect is **classified at construction** (read-only /
   side-effecting), so every reaction is auditable without running it.
+
+Every **gate** (tool / prompt / stop) takes an optional `mode` — see
+[Observe mode](#observe-mode-shadow-rollout).
 
 ## The vocabulary
 
@@ -84,8 +98,68 @@ export default defineHook({
   - `pipesToShell()` — pipes into a bare shell (`curl … | sh`) — remote-code execution. A shell _with_ a script file (`sh deploy.sh`) is **not** flagged.
   - `isSideEffecting()` — the deterministic Bash-effect classifier's verdict.
 - **`e.path`** (Edit/Write) — a `PathView` with `under(prefixes)` for path confinement.
-- **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision.
+- **`e.prompt`** (UserPromptSubmit) — the user's prompt text (a plain string).
+- **`e.stopHookActive`** (Stop) — the loop guard; `allow()` when it's `true`.
+- **`e.response`** (PostToolUse react) — a `ResponseView`: `isError()` (the tool failed) and `contains(needle)`.
+- **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision (every gate role).
 - **`inject(text)`** — inject output. **`run(cmd)` / `notice(msg)` / `nothing()`** — react output.
+
+A prompt gate and a stop gate read like any other gate — they just decide over a
+different event:
+
+```ts
+import { definePromptGate, deny, allow } from "vigiles/hook";
+
+// Refuse a prompt that looks like it's pasting a secret key.
+export default definePromptGate({
+  on: "UserPromptSubmit",
+  decide: (e) =>
+    /sk-[a-z0-9]{20}/i.test(e.prompt)
+      ? deny("your prompt looks like it contains a secret key")
+      : allow(),
+});
+```
+
+```ts
+import { defineStopGate, deny, allow } from "vigiles/hook";
+
+// Don't let the agent stop while the tests are red.
+export default defineStopGate({
+  on: "Stop",
+  decide: (e) =>
+    e.stopHookActive // a prior block already fired — let it stop now (loop guard)
+      ? allow()
+      : deny("keep going until `npm test` passes"),
+});
+```
+
+## Observe mode (shadow rollout)
+
+A brand-new gate is risky to switch straight to blocking — what if it's too
+aggressive and stops work you wanted? Every gate takes a `mode`:
+
+- **`enforce`** (default) — block on `deny`.
+- **`observe`** — the **shadow / rollout** mode: compute the same decision,
+  **record** what it _would_ have blocked, and **let everything through**. Watch
+  the log, confirm it only flags the bad stuff, then promote to `enforce`.
+
+```ts
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  mode: "observe", // ← shadow: record, don't block
+  decide: (e) =>
+    e.command.runs("git push", { force: true })
+      ? deny("force-push to a protected branch")
+      : allow(),
+});
+```
+
+In observe mode the runtime exits `0` (never blocks) and appends a record to
+**`.vigiles/hook-observations.jsonl`** (`{ ts, hook, event, would, reason }`) plus
+a one-line `⚠ [vigiles observe]` note. It's **harness-neutral** — exit 0 + a
+local record behaves identically on Claude Code and Codex, no harness-specific
+field names involved.
 
 ## Compile and wire
 
@@ -262,7 +336,7 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is
   cross-harness today; an inject/react hook's _output_ shape is Claude-Code-confirmed
   only, so `compile --harness=codex` **warns loudly** on those rather than
-  ship a maybe-no-op (see [Compile and run](#compile-and-run) and
+  ship a maybe-no-op (see [Compile and wire](#compile-and-wire) and
   [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md)).
 
 ## See also

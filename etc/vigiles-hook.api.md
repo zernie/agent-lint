@@ -8,7 +8,7 @@
 export const allow: () => Decision;
 
 // @public
-export type AnyHook = HookProgram | FileGateHook | InjectHook | ReactHook;
+export type AnyHook = HookProgram | FileGateHook | PromptGateHook | StopGateHook | InjectHook | ReactHook;
 
 // @public (undocumented)
 export const ask: (reason: string) => Decision;
@@ -82,6 +82,16 @@ export function decideProgram(program: HookProgram, rawEvent: {
     };
 }): Decision;
 
+// @public
+export function decidePromptGate(hook: PromptGateHook, raw: {
+    prompt?: unknown;
+}): Decision;
+
+// @public
+export function decideStopGate(hook: StopGateHook, raw: {
+    stop_hook_active?: unknown;
+}): Decision;
+
 // @public (undocumented)
 export type Decision = {
     readonly kind: "allow";
@@ -106,13 +116,19 @@ export const defineHook: (p: HookProgram) => HookProgram;
 export const defineInject: (p: Omit<InjectHook, "role">) => InjectHook;
 
 // @public (undocumented)
+export const definePromptGate: (p: Omit<PromptGateHook, "role">) => PromptGateHook;
+
+// @public (undocumented)
 export const defineReact: (p: Omit<ReactHook, "role">) => ReactHook;
+
+// @public (undocumented)
+export const defineStopGate: (p: Omit<StopGateHook, "role">) => StopGateHook;
 
 // @public (undocumented)
 export const deny: (reason: string) => Decision;
 
 // @public
-export type DispatchKind = "bash-gate" | "file-gate" | "inject" | "react";
+export type DispatchKind = "bash-gate" | "file-gate" | "prompt-gate" | "stop-gate" | "inject" | "react";
 
 // @public (undocumented)
 export function dispatchKind(hook: AnyHook): DispatchKind;
@@ -125,6 +141,7 @@ export interface FileGateHook {
     readonly match: {
         readonly tools: readonly string[];
     };
+    readonly mode?: HookMode;
     // (undocumented)
     readonly on: string;
     // (undocumented)
@@ -141,9 +158,33 @@ export interface FileToolEvent {
     readonly tool: string;
 }
 
+// @public
+export type GateAction = {
+    readonly kind: "block";
+    readonly reason: string;
+} | {
+    readonly kind: "ask";
+    readonly reason: string;
+} | {
+    readonly kind: "observe";
+    readonly would: "deny" | "ask";
+    readonly reason: string;
+} | {
+    readonly kind: "allow";
+};
+
+// @public
+export function gateAction(decision: Decision, mode?: HookMode): GateAction;
+
 // @public (undocumented)
 export class HookCompileError extends Error {
 }
+
+// @public
+export type HookMode = "enforce" | "observe";
+
+// @public
+export function hookMode(hook: AnyHook): HookMode;
 
 // @public
 export interface HookProgram {
@@ -153,6 +194,7 @@ export interface HookProgram {
     readonly match: {
         readonly tool: string;
     };
+    readonly mode?: HookMode;
     // (undocumented)
     readonly on: string;
 }
@@ -212,8 +254,26 @@ export interface PathView {
 export function pathView(raw: string): PathView;
 
 // @public
+export interface PromptEvent {
+    // (undocumented)
+    readonly event: string;
+    readonly prompt: string;
+}
+
+// @public (undocumented)
+export interface PromptGateHook {
+    readonly decide: (e: PromptEvent) => Decision;
+    readonly mode?: HookMode;
+    readonly on: string;
+    // (undocumented)
+    readonly role: "prompt-gate";
+}
+
+// @public
 export interface RawHookEvent {
+    readonly prompt?: string;
     readonly source?: string;
+    readonly stop_hook_active?: boolean;
     // (undocumented)
     readonly tool_input?: {
         readonly command?: unknown;
@@ -221,6 +281,18 @@ export interface RawHookEvent {
     };
     // (undocumented)
     readonly tool_name?: string;
+    readonly tool_response?: unknown;
+}
+
+// @public
+export interface ReactEvent {
+    // (undocumented)
+    readonly event: string;
+    // (undocumented)
+    readonly path: PathView;
+    readonly response: ResponseView;
+    // (undocumented)
+    readonly tool: string;
 }
 
 // @public (undocumented)
@@ -231,7 +303,7 @@ export interface ReactHook {
     };
     // (undocumented)
     readonly on: string;
-    readonly react: (e: FileToolEvent) => Reaction;
+    readonly react: (e: ReactEvent) => Reaction;
     // (undocumented)
     readonly role: "react";
 }
@@ -243,6 +315,16 @@ export type Reaction = RunReaction | {
 } | {
     readonly kind: "none";
 };
+
+// @public
+export interface ResponseView {
+    contains(needle: string): boolean;
+    isError(): boolean;
+    readonly raw: string;
+}
+
+// @public (undocumented)
+export function responseView(raw: unknown): ResponseView;
 
 // @public
 export const run: (command: string) => RunReaction;
@@ -266,6 +348,7 @@ export function runReact(hook: ReactHook, raw: {
     tool_input?: {
         file_path?: unknown;
     };
+    tool_response?: unknown;
 }): Reaction;
 
 // @public (undocumented)
@@ -288,6 +371,22 @@ export interface SessionEvent {
 
 // @public
 export function stampHook(source: string): SHA256Hash;
+
+// @public
+export interface StopEvent {
+    // (undocumented)
+    readonly event: string;
+    readonly stopHookActive: boolean;
+}
+
+// @public (undocumented)
+export interface StopGateHook {
+    readonly decide: (e: StopEvent) => Decision;
+    readonly mode?: HookMode;
+    readonly on: string;
+    // (undocumented)
+    readonly role: "stop-gate";
+}
 
 // @public (undocumented)
 export const tool: (name: string) => {
