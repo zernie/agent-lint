@@ -134,7 +134,7 @@ export default defineInject({
   }
 });
 
-test("compile-hook: an out-of-vocabulary import does NOT compile (exit 1)", () => {
+test("compile (hook): an out-of-vocabulary import does NOT compile (exit 1)", () => {
   const dir = makeTmpDir();
   try {
     const f = fixture(
@@ -145,7 +145,7 @@ import { defineHook, tool, allow } from "__HOOK__";
 export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   decide: () => { cp.execSync("id"); return allow(); } });`,
     );
-    const r = spawnSync("node", [CLI, "compile-hook", f], {
+    const r = spawnSync("node", [CLI, "compile", f], {
       cwd: dir,
       encoding: "utf-8",
     });
@@ -166,19 +166,25 @@ export default defineHook({
       : allow(),
 });`;
 
-test("compile-hook then run: a clean hook compiles, stamps, and the stamp gates a hand-edit", () => {
+test("compile (hook): a clean hook compiles, MERGES into settings.json, stamps, and the stamp gates a hand-edit", () => {
   const dir = makeTmpDir();
   try {
     linkVigiles(dir);
     writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
-    // Compile → writes the stamp sidecar + prints the settings block.
-    const c = spawnSync("node", [CLI, "compile-hook", "guard.mjs"], {
+    // `compile <hookfile>` folds hook compilation into the one verb: it writes
+    // the stamp sidecar AND merges the block into the harness config.
+    const c = spawnSync("node", [CLI, "compile", "guard.mjs"], {
       cwd: dir,
       encoding: "utf-8",
     });
     assert.equal(c.status, 0, c.stderr);
     assert.match(c.stdout, /role: bash-gate/);
-    assert.match(c.stdout, /hook-runtime run-program guard\.mjs/);
+    // The wiring is written, not printed: it lands in .claude/settings.json.
+    const settings = readFileSync(
+      resolve(dir, ".claude/settings.json"),
+      "utf-8",
+    );
+    assert.match(settings, /hook-runtime run-program guard\.mjs/);
 
     // The compiled hook still enforces.
     const ok = runHook(
@@ -215,7 +221,7 @@ test("compile-hook then run: a clean hook compiles, stamps, and the stamp gates 
   }
 });
 
-test("compile-hook --harness=codex: emits TOML for a gate, warns LOUDLY on inject (the honest gap)", () => {
+test("compile --harness=codex (hook): merges TOML for a gate, warns LOUDLY on inject (the honest gap)", () => {
   const dir = makeTmpDir();
   try {
     linkVigiles(dir);
@@ -225,22 +231,23 @@ test("compile-hook --harness=codex: emits TOML for a gate, warns LOUDLY on injec
       `import { defineInject, inject } from "vigiles/hook";
 export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " + e.source) });`,
     );
-    // A gate compiles to a Codex TOML block with a regex matcher — no warning
+    // A gate merges into the Codex TOML config with a regex matcher — no warning
     // (deny→exit 2 is cross-harness).
     const gate = spawnSync(
       "node",
-      [CLI, "compile-hook", "guard.mjs", "--harness=codex"],
+      [CLI, "compile", "guard.mjs", "--harness=codex"],
       { cwd: dir, encoding: "utf-8" },
     );
     assert.equal(gate.status, 0, gate.stderr);
-    assert.match(gate.stdout, /\[\[hooks\.PreToolUse\]\]/);
+    const config = readFileSync(resolve(dir, ".codex/config.toml"), "utf-8");
+    assert.match(config, /\[\[hooks\.PreToolUse\]\]/);
     assert.doesNotMatch(gate.stderr, /only confirmed for Claude Code/);
 
-    // An inject hook still compiles, but the inject OUTPUT shape is unconfirmed
+    // An inject hook still merges, but the inject OUTPUT shape is unconfirmed
     // on Codex — so it warns loudly instead of silently shipping a maybe-no-op.
     const inj = spawnSync(
       "node",
-      [CLI, "compile-hook", "brief.mjs", "--harness=codex"],
+      [CLI, "compile", "brief.mjs", "--harness=codex"],
       { cwd: dir, encoding: "utf-8" },
     );
     assert.equal(inj.status, 0, inj.stderr);

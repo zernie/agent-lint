@@ -122,7 +122,9 @@ describe("CLI: vigiles compile", () => {
   it("should report when no specs are found", () => {
     const { stdout, exitCode } = run("compile", tmpDir);
     assert.equal(exitCode, 0);
-    assert.ok(stdout.includes("No .spec.ts files found"));
+    assert.ok(
+      stdout.includes("No .spec.ts or .vigiles/hooks/ hook files found"),
+    );
   });
 
   it("should compile a spec", () => {

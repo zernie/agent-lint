@@ -135,6 +135,7 @@ import {
   runInject,
   runReact,
   dispatchKind,
+  type DispatchKind,
   type AnyHook,
   type FileGateHook,
   type InjectHook,
@@ -142,6 +143,13 @@ import {
   type HookProgram,
   type Decision,
 } from "./core/hook-program.js";
+import {
+  discoverHookFiles,
+  mergeHooksJson,
+  mergeHooksToml,
+  serializeConfig,
+} from "./hook-install.js";
+import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
   evaluatePreToolUse,
@@ -4388,93 +4396,125 @@ function hookStampPath(file: string): string {
   return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
 }
 
+/** What installing one hook did — for the `compile` summary line. */
+interface HookInstallResult {
+  readonly role: DispatchKind;
+  readonly settingsPath: string;
+  /** Loud, non-CC inject/react caveat (the no-silent-skips gap). */
+  readonly warning?: string;
+}
+
 /**
- * `vigiles compile-hook <file>` — compile a typed hook program (authored
- * against `vigiles/hook`) into a harness hooks block. An import outside the
- * sanctioned API does NOT compile (capability = API surface); the emitted block
- * routes the live event to `run-hook-program`, and a tamper-evident stamp
- * sidecar lets the runtime refuse a hand-edited artifact.
+ * Compile ONE typed hook program (authored against `vigiles/hook`) and MERGE it
+ * into the active harness's native config — the hook half of `vigiles compile`
+ * (there is no `compile-hook` verb; the cohesive-cli-surface rule). An import
+ * outside the sanctioned API does NOT compile (capability = API surface). The
+ * emitted block routes the live event to `hook-runtime run-program`; a
+ * tamper-evident stamp sidecar lets the runtime refuse a hand-edited artifact.
+ * The merge is idempotent (keyed by the hook PATH), so recompiling updates in
+ * place and never clobbers the user's own hooks.
  */
-async function compileHookCommand(
-  file: string | undefined,
-  args: string[],
-): Promise<void> {
-  if (!file) {
-    console.error("Usage: vigiles compile-hook <hook-file>");
-    process.exit(2);
-  }
-  const abs = resolve(process.cwd(), file);
-  let source: string;
-  try {
-    source = readFileSync(abs, "utf-8");
-  } catch {
-    console.error(`Cannot read ${file}`);
-    process.exit(2);
-    return;
-  }
-  // Resolve the target harness so the emit matches it (CC JSON / Codex TOML +
-  // regex matcher) — same selection the rest of the CLI uses.
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(process.cwd(), harnessFlag)
-    : detectAdapterResult(process.cwd()).adapter;
-  let program: AnyHook;
-  let compiled;
-  try {
-    program = await loadHookProgram(file);
-    compiled = compileHookProgram(source, program, {
-      gateCommand: `npx vigiles hook-runtime run-program ${file}`,
-      dialect: adapter.dialect,
-      hookProtocol: adapter.hookProtocol,
-      settingsFormat: adapter.layout.settingsFormat,
-    });
-  } catch (e) {
-    if (e instanceof HookCompileError) {
-      console.error(`✗ ${e.message}`);
-      if (checkHookImports(source).length > 0) {
-        console.error(
-          "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
-            "entire capability surface.",
-        );
-      }
-      process.exit(1);
-    }
-    throw e;
-  }
+async function installHookFile(
+  file: string,
+  adapter: HarnessAdapter,
+): Promise<HookInstallResult> {
+  const source = readFileSync(resolve(process.cwd(), file), "utf-8");
+  const program = await loadHookProgram(file);
+  const compiled = compileHookProgram(source, program, {
+    gateCommand: `npx vigiles hook-runtime run-program ${file}`,
+    dialect: adapter.dialect,
+    hookProtocol: adapter.hookProtocol,
+    settingsFormat: adapter.layout.settingsFormat,
+  });
+
+  // Tamper-evident stamp beside the source (one dir → basename is unique).
   mkdirSync(dirname(hookStampPath(file)), { recursive: true });
   writeFileSync(
     hookStampPath(file),
     JSON.stringify({ file, stamp: compiled.stamp }, null, 2) + "\n",
   );
-  const target =
-    adapter.layout.settingsFormat === "toml"
-      ? `${adapter.name}'s config.toml`
-      : `your hooks settings (e.g. ${adapter.layout.settingsPath})`;
-  console.log(
-    `✓ ${file} compiled (role: ${dispatchKind(program)}, harness: ${adapter.name}).`,
-  );
+
+  // Merge into the harness's native config, idempotently.
+  const format = adapter.layout.settingsFormat;
+  const settingsAbs = resolve(process.cwd(), adapter.layout.settingsPath);
+  const existing: Record<string, unknown> = existsSync(settingsAbs)
+    ? format === "toml"
+      ? (parseToml(readFileSync(settingsAbs, "utf-8")) as Record<
+          string,
+          unknown
+        >)
+      : (JSON.parse(readFileSync(settingsAbs, "utf-8")) as Record<
+          string,
+          unknown
+        >)
+    : {};
+  const merged =
+    format === "toml"
+      ? mergeHooksToml(existing, compiled.hooks, file)
+      : mergeHooksJson(existing, compiled.hooks, file);
+  mkdirSync(dirname(settingsAbs), { recursive: true });
+  writeFileSync(settingsAbs, serializeConfig(merged, format));
+
   // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
-  // but an inject/react hook's OUTPUT shape is only confirmed for Claude Code. On
+  // but an inject/react hook's OUTPUT shape is confirmed only for Claude Code. On
   // another harness it would emit CC-shaped output that may not be read — exactly
-  // the silent-failure this feature exists to prevent. Say so, loudly.
+  // the silent failure this feature exists to prevent. Flag it, loudly.
   const role = dispatchKind(program);
-  if (
-    adapter.name !== "claude-code" &&
-    (role === "inject" || role === "react")
-  ) {
-    console.warn(
-      `\n⚠ ${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
+  const warning =
+    adapter.name !== "claude-code" && (role === "inject" || role === "react")
+      ? `${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
         `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
         `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
-        `${adapter.name} for now, or confirm the ${role} output against the real ` +
-        `binary first (research/compiled-hooks-codex.md §Deferred).`,
-    );
+        `${adapter.name} for now, or confirm against the real binary first ` +
+        `(research/compiled-hooks-codex.md §Deferred).`
+      : undefined;
+  return { role, settingsPath: adapter.layout.settingsPath, warning };
+}
+
+/**
+ * Compile + install every hook (explicit paths, else discovered under
+ * `.vigiles/hooks/`) into the active harness's config. Returns false if any
+ * hook failed to compile.
+ */
+async function installHooks(
+  hookFiles: string[],
+  harnessFlag: string | undefined,
+): Promise<boolean> {
+  if (hookFiles.length === 0) return true;
+  const adapter = harnessFlag
+    ? resolveAdapter(process.cwd(), harnessFlag)
+    : detectAdapterResult(process.cwd()).adapter;
+  let ok = true;
+  for (const file of hookFiles) {
+    try {
+      const r = await installHookFile(file, adapter);
+      console.log(
+        `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
+      );
+      if (r.warning) console.warn(`⚠ ${r.warning}`);
+    } catch (e) {
+      if (e instanceof HookCompileError) {
+        console.error(`✗ ${file} — ${e.message}`);
+        const src = (() => {
+          try {
+            return readFileSync(resolve(process.cwd(), file), "utf-8");
+          } catch {
+            return "";
+          }
+        })();
+        if (checkHookImports(src).length > 0) {
+          console.error(
+            "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
+              "entire capability surface.",
+          );
+        }
+        ok = false;
+      } else {
+        throw e;
+      }
+    }
   }
-  console.log(`\nAdd this to ${target}:\n`);
-  console.log(compiled.settingsBlock);
-  console.log(
-    `\nStamp written to ${relative(process.cwd(), hookStampPath(file))}.`,
-  );
+  return ok;
 }
 
 /** Emit a gate Decision in the harness protocol — the author never writes it. */
@@ -4630,14 +4670,27 @@ async function main(): Promise<void> {
     }
 
     case "compile": {
-      const specs = restArgs.length > 0 ? restArgs : findSpecs();
-      if (specs.length === 0) {
-        console.log("No .spec.ts files found.");
+      const harnessFlag = harnessFlagFrom(args);
+      // One verb compiles every typed authoring artifact: a .spec.ts → markdown,
+      // a hook program → its harness config + stamp (cohesive-cli-surface). With
+      // explicit args, partition by extension; bare, discover both.
+      const specs =
+        restArgs.length > 0
+          ? restArgs.filter((f) => f.endsWith(".spec.ts"))
+          : findSpecs();
+      const hooks =
+        restArgs.length > 0
+          ? restArgs.filter((f) => !f.endsWith(".spec.ts"))
+          : discoverHookFiles(process.cwd());
+      if (specs.length === 0 && hooks.length === 0) {
+        console.log("No .spec.ts or .vigiles/hooks/ hook files found.");
         console.log("Run `vigiles init` to create one.");
         process.exit(0);
       }
-      const harnessFlag = harnessFlagFrom(args);
-      const valid = await compile(specs, config, { harnessFlag });
+      let valid = true;
+      if (specs.length > 0)
+        valid = (await compile(specs, config, { harnessFlag })) && valid;
+      valid = (await installHooks(hooks, harnessFlag)) && valid;
       console.log("");
       if (valid) {
         console.log("Compilation complete.");
@@ -4793,10 +4846,6 @@ async function main(): Promise<void> {
 
     case "generate-harness":
       await handleGenerateHarness(args, restArgs);
-      break;
-
-    case "compile-hook":
-      await compileHookCommand(restArgs[0], args);
       break;
 
     case "refs":
