@@ -169,6 +169,14 @@ matches several — and takes `--harness=<name>` to override. (`compile` is
 harness-aware for the same reason; `lint` isn't — reference verification is
 harness-agnostic.)
 
+**Dialect freshness (Claude Code).** Because vigiles's tool/event catalog is
+hand-maintained against a specific Claude Code version, `scan` does a best-effort,
+**read-local** check of your _installed_ `@anthropic-ai/claude-code` and prints a
+one-line `⚠` only when its tool surface has drifted (a new/removed tool type) from
+the catalog — a nudge that tool/contract checks may be stale and a vigiles update
+may be due. It reads only your own install (nothing is sent or vendored), never
+throws, and stays silent on a mere version bump with no surface change.
+
 ```bash
 npx vigiles scan ./some-plugin          # human-readable report for one plugin
 npx vigiles scan ./some-plugin --json   # structured, for pipelines
