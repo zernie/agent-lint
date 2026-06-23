@@ -384,6 +384,59 @@ test("runHookProgram dispatches every role to a normalized outcome", () => {
 });
 
 // ---------------------------------------------------------------------------
+// CONTEXT PROVIDERS — a gate decides on host-gathered external state (e.ctx),
+// declared via `needs`. The decision stays a pure fn of (event + ctx); the
+// runtime gathers ctx and passes it in. Reading an undeclared fact is a tsc
+// error (typed via `needs`); an unknown provider name won't compile.
+// ---------------------------------------------------------------------------
+
+const noPushToMain = defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: ["git.branch"],
+  decide: (e) =>
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
+      ? deny("no direct pushes to main")
+      : allow(),
+});
+
+test("context: a gate decides on e.ctx (declared facts), passed in by the runtime", () => {
+  // On main → a push is denied.
+  assert.equal(
+    decideProgram(noPushToMain, ev("git push origin main"), {
+      "git.branch": "main",
+    }).kind,
+    "deny",
+  );
+  // On a feature branch → the same push is allowed.
+  assert.equal(
+    decideProgram(noPushToMain, ev("git push origin feature"), {
+      "git.branch": "feature",
+    }).kind,
+    "allow",
+  );
+  // runHookProgram threads ctx the same way (the in-process test tier).
+  const out = runHookProgram(noPushToMain, ev("git push"), {
+    "git.branch": "main",
+  });
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+test("context: an unknown provider in `needs` does NOT compile", () => {
+  const bad = {
+    on: "PreToolUse",
+    match: { tool: "Bash" },
+    needs: ["git.brnch"], // typo — not a built-in provider
+    decide: () => allow(),
+  } as unknown as Parameters<typeof compileHookProgram>[1];
+  assert.throws(
+    () => compileHookProgram(`import { defineHook } from "vigiles/hook";`, bad),
+    /unknown context provider/,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // OBSERVE mode — the shadow/rollout primitive. `gateAction` is the pure mapping
 // the runtime + a test both read, so "in observe mode this deny does NOT block"
 // is asserted with no process. Harness-NEUTRAL (exit 0 + a local record), so it

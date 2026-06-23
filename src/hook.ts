@@ -30,6 +30,11 @@
  * Matching is AST-backed (`command.runs("git push", { force })`), so it catches
  * `cd x && git push -f` that the native `Bash(git:*)` glob misses.
  *
+ * A gate may also decide on EXTERNAL STATE by declaring `needs` (e.g.
+ * `needs: ["git.branch"]`): the trusted runtime gathers those read-only facts and
+ * hands them in as `e.ctx` — the hook still does zero I/O, and reading an
+ * undeclared fact is a `tsc` error. See `research/hook-context-providers.md`.
+ *
  * ⚠️ Honest scope: compile/verify fix the hook's AUTHORING + LOGIC. They do NOT
  * change DELIVERY — Claude Code's own subagent-bypass (#34692) means a
  * PreToolUse hook (compiled or hand-written) does not fire for a subagent's
@@ -71,6 +76,7 @@ export {
   decisionExitCode,
   dispatchKind,
   hookRouting,
+  hookNeeds,
   // compile + integrity
   compileHookProgram,
   checkHookImports,
@@ -108,3 +114,9 @@ export type {
   RawHookEvent,
   HookProgramOutcome,
 } from "./core/hook-program.js";
+
+export type {
+  ProviderName,
+  ProviderResults,
+  HookCtx,
+} from "./core/hook-providers.js";

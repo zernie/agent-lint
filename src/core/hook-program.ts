@@ -39,6 +39,13 @@ import { stringify as stringifyToml } from "@iarna/toml";
 import type { HarnessDialect } from "./dialect.js";
 import type { HookProtocol } from "./hook-protocol.js";
 import { verifyHookEvents } from "./hook-events.js";
+import {
+  unknownProviders,
+  BUILTIN_PROVIDERS,
+  type ProviderName,
+  type ProviderResults,
+  type HookCtx,
+} from "./hook-providers.js";
 
 // ---------------------------------------------------------------------------
 // The closed vocabulary (this is the entire surface a hook author may touch)
@@ -172,24 +179,41 @@ export function commandView(raw: string): CommandView {
   };
 }
 
-/** The typed event a hook decides over (the probe covers the Bash PreToolUse shape). */
-export interface BashToolEvent {
+/**
+ * The typed event a Bash gate decides over. Generic over the declared context
+ * `needs` (`N`) so `e.ctx` exposes ONLY the facts the hook declared — reading an
+ * undeclared one is a `tsc` error. The default is the erased (all-providers)
+ * shape used by the runtime/`AnyHook`.
+ */
+export interface BashToolEvent<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly event: string;
   readonly tool: "Bash";
   readonly command: CommandView;
+  /** Host-gathered, DECLARED read-only facts (git branch, …) — see `needs`. */
+  readonly ctx: HookCtx<N>;
 }
 
 /** A hook program: where it fires + the pure decision. */
-export interface HookProgram {
+export interface HookProgram<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly on: string;
   readonly match: { readonly tool: string };
   /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
   readonly mode?: HookMode;
-  readonly decide: (e: BashToolEvent) => Decision;
+  /** Declared context providers the trusted runtime gathers into `e.ctx`. */
+  readonly needs?: N;
+  readonly decide: (e: BashToolEvent<N>) => Decision;
 }
 
 export const tool = (name: string): { tool: string } => ({ tool: name });
-export const defineHook = (p: HookProgram): HookProgram => p;
+export function defineHook<
+  const N extends readonly ProviderName[] = readonly [],
+>(p: HookProgram<N>): HookProgram<N> {
+  return p;
+}
 
 // ---------------------------------------------------------------------------
 // Run the program against a raw PreToolUse event (the runtime half)
@@ -199,6 +223,7 @@ export const defineHook = (p: HookProgram): HookProgram => p;
 export function decideProgram(
   program: HookProgram,
   rawEvent: { tool_name?: string; tool_input?: { command?: unknown } },
+  ctx: Partial<ProviderResults> = {},
 ): Decision {
   if (rawEvent.tool_name !== program.match.tool) return allow();
   const command =
@@ -209,6 +234,7 @@ export function decideProgram(
     event: program.on,
     tool: "Bash",
     command: commandView(command),
+    ctx: ctx as HookCtx,
   });
 }
 
@@ -323,6 +349,13 @@ export function hookMode(hook: AnyHook): HookMode {
   return "mode" in hook && hook.mode ? hook.mode : "enforce";
 }
 
+/** The context providers a hook declared via `needs` ([] if none / not a gate). */
+export function hookNeeds(hook: AnyHook): readonly ProviderName[] {
+  return "needs" in hook && Array.isArray(hook.needs)
+    ? (hook.needs as readonly ProviderName[])
+    : [];
+}
+
 /** Where a hook fires + its tool matcher (undefined for tool-less events). */
 export function hookRouting(hook: AnyHook): {
   on: string;
@@ -409,6 +442,16 @@ export function compileHookProgram(
       throw new HookCompileError(issues[0].message);
     }
   }
+  // A `needs` entry that isn't a built-in provider never resolves — reject it
+  // (the typo-won't-compile guarantee, for JS authors the type can't reach).
+  const unknownNeeds = unknownProviders(hookNeeds(hook) as readonly string[]);
+  if (unknownNeeds.length > 0) {
+    throw new HookCompileError(
+      `unknown context provider(s): ${unknownNeeds.join(", ")} — built-ins are ${Object.keys(
+        BUILTIN_PROVIDERS,
+      ).join(", ")} (see research/hook-context-providers.md).`,
+    );
+  }
   const gateCommand =
     opts.gateCommand ?? "npx vigiles hook-runtime run-program";
   const matcher = styleMatcher(rawMatcher, opts.hookProtocol);
@@ -476,35 +519,43 @@ export function pathView(raw: string): PathView {
 }
 
 /** The event a file-tool gate decides over (Edit/Write/Read carry `file_path`). */
-export interface FileToolEvent {
+export interface FileToolEvent<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly event: string;
   readonly tool: string;
   readonly path: PathView;
+  /** Host-gathered, DECLARED read-only facts — see `needs`. */
+  readonly ctx: HookCtx<N>;
 }
 
-export interface FileGateHook {
+export interface FileGateHook<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly role: "gate";
   readonly on: string;
   readonly match: { readonly tools: readonly string[] };
   /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
   readonly mode?: HookMode;
-  readonly decide: (e: FileToolEvent) => Decision;
+  /** Declared context providers the trusted runtime gathers into `e.ctx`. */
+  readonly needs?: N;
+  readonly decide: (e: FileToolEvent<N>) => Decision;
 }
 
 export const tools = (...names: string[]): { tools: string[] } => ({
   tools: names,
 });
-export const defineFileGate = (
-  p: Omit<FileGateHook, "role">,
-): FileGateHook => ({
-  role: "gate",
-  ...p,
-});
+export function defineFileGate<
+  const N extends readonly ProviderName[] = readonly [],
+>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N> {
+  return { role: "gate", ...p };
+}
 
 /** Run a file-tool gate against a raw PreToolUse event (reads `file_path`). */
 export function decideFileGate(
   hook: FileGateHook,
   raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
+  ctx: Partial<ProviderResults> = {},
 ): Decision {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return allow();
@@ -512,7 +563,12 @@ export function decideFileGate(
     typeof raw.tool_input?.file_path === "string"
       ? raw.tool_input.file_path
       : "";
-  return hook.decide({ event: hook.on, tool: t, path: pathView(fp) });
+  return hook.decide({
+    event: hook.on,
+    tool: t,
+    path: pathView(fp),
+    ctx: ctx as HookCtx,
+  });
 }
 
 // ===========================================================================
@@ -530,39 +586,52 @@ export function decideFileGate(
 // ===========================================================================
 
 /** The event a UserPromptSubmit gate decides over — it sees the prompt TEXT. */
-export interface PromptEvent {
+export interface PromptEvent<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly event: string;
   /** The user's submitted prompt text (empty string if the event carried none). */
   readonly prompt: string;
+  /** Host-gathered, DECLARED read-only facts — see `needs`. */
+  readonly ctx: HookCtx<N>;
 }
 
-export interface PromptGateHook {
+export interface PromptGateHook<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly role: "prompt-gate";
   /** The event — `UserPromptSubmit`. */
   readonly on: string;
   /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
   readonly mode?: HookMode;
+  /** Declared context providers the trusted runtime gathers into `e.ctx`. */
+  readonly needs?: N;
   /** Decide over the prompt. `deny` blocks/erases the prompt; `ask` defers to the user. */
-  readonly decide: (e: PromptEvent) => Decision;
+  readonly decide: (e: PromptEvent<N>) => Decision;
 }
-export const definePromptGate = (
-  p: Omit<PromptGateHook, "role">,
-): PromptGateHook => ({ role: "prompt-gate", ...p });
+export function definePromptGate<
+  const N extends readonly ProviderName[] = readonly [],
+>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N> {
+  return { role: "prompt-gate", ...p };
+}
 
 /** Run a prompt gate against a raw UserPromptSubmit event (reads `prompt`). */
 export function decidePromptGate(
   hook: PromptGateHook,
   raw: { prompt?: unknown },
+  ctx: Partial<ProviderResults> = {},
 ): Decision {
   const prompt = typeof raw.prompt === "string" ? raw.prompt : "";
-  return hook.decide({ event: hook.on, prompt });
+  return hook.decide({ event: hook.on, prompt, ctx: ctx as HookCtx });
 }
 
 /**
  * The event a Stop gate decides over. `deny` BLOCKS the agent from ending its
  * turn (the reason is surfaced to the agent — e.g. "tests are red, keep going").
  */
-export interface StopEvent {
+export interface StopEvent<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly event: string;
   /**
    * True when this Stop is itself the consequence of a PRIOR Stop-block — the
@@ -570,29 +639,39 @@ export interface StopEvent {
    * agent in an infinite stop→continue→stop cycle.
    */
   readonly stopHookActive: boolean;
+  /** Host-gathered, DECLARED read-only facts — see `needs`. */
+  readonly ctx: HookCtx<N>;
 }
 
-export interface StopGateHook {
+export interface StopGateHook<
+  N extends readonly ProviderName[] = readonly ProviderName[],
+> {
   readonly role: "stop-gate";
   /** The event — `Stop` or `SubagentStop`. */
   readonly on: string;
   /** `enforce` (default) blocks on a `deny`; `observe` records + allows. */
   readonly mode?: HookMode;
+  /** Declared context providers the trusted runtime gathers into `e.ctx`. */
+  readonly needs?: N;
   /** Decide whether the agent may stop. `deny` keeps it going; `allow` lets it stop. */
-  readonly decide: (e: StopEvent) => Decision;
+  readonly decide: (e: StopEvent<N>) => Decision;
 }
-export const defineStopGate = (
-  p: Omit<StopGateHook, "role">,
-): StopGateHook => ({ role: "stop-gate", ...p });
+export function defineStopGate<
+  const N extends readonly ProviderName[] = readonly [],
+>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N> {
+  return { role: "stop-gate", ...p };
+}
 
 /** Run a Stop gate against a raw Stop/SubagentStop event (reads `stop_hook_active`). */
 export function decideStopGate(
   hook: StopGateHook,
   raw: { stop_hook_active?: unknown },
+  ctx: Partial<ProviderResults> = {},
 ): Decision {
   return hook.decide({
     event: hook.on,
     stopHookActive: raw.stop_hook_active === true,
+    ctx: ctx as HookCtx,
   });
 }
 
@@ -803,28 +882,29 @@ export type HookProgramOutcome =
 export function runHookProgram(
   hook: AnyHook,
   event: RawHookEvent,
+  ctx: Partial<ProviderResults> = {},
 ): HookProgramOutcome {
   const kind = dispatchKind(hook);
   switch (kind) {
     case "bash-gate":
       return {
         kind: "decision",
-        decision: decideProgram(hook as HookProgram, event),
+        decision: decideProgram(hook as HookProgram, event, ctx),
       };
     case "file-gate":
       return {
         kind: "decision",
-        decision: decideFileGate(hook as FileGateHook, event),
+        decision: decideFileGate(hook as FileGateHook, event, ctx),
       };
     case "prompt-gate":
       return {
         kind: "decision",
-        decision: decidePromptGate(hook as PromptGateHook, event),
+        decision: decidePromptGate(hook as PromptGateHook, event, ctx),
       };
     case "stop-gate":
       return {
         kind: "decision",
-        decision: decideStopGate(hook as StopGateHook, event),
+        decision: decideStopGate(hook as StopGateHook, event, ctx),
       };
     case "inject":
       return {

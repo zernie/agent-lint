@@ -8,6 +8,7 @@
  *   - a PROMPT-GATE denies a secret-bearing prompt; a STOP-GATE blocks stopping
  *     (and respects the loop guard);
  *   - an OBSERVE-mode gate records-not-blocks (exit 0 + a jsonl record);
+ *   - a `needs:['git.branch']` gate decides on the real branch the runtime gathers;
  *   - `compile` REJECTS an out-of-vocabulary import (capability = API);
  *   - a stamped artifact that is then hand-edited is REFUSED at runtime (exit 2).
  *
@@ -28,7 +29,7 @@ import { pathToFileURL } from "node:url";
 
 import { runHook } from "./run-hook.js";
 import { spawnSync } from "node:child_process";
-import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
+import { makeTmpDir, cleanupTmpDir, initGitRepo } from "./core/test-utils.js";
 
 const REPO_ROOT = resolve(__dirname, "..");
 const CLI = resolve(REPO_ROOT, "dist", "cli.js");
@@ -512,6 +513,61 @@ export default defineHook({
     assert.equal(rec.event, "PreToolUse");
     assert.equal(rec.would, "deny");
     assert.match(rec.reason, /force-push/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// E2E dogfood — CONTEXT PROVIDERS (`needs` + `e.ctx`): a gate decides on EXTERNAL
+// state (the git branch) that the trusted runtime GATHERS and hands in — the hook
+// itself does zero I/O. Proves the gatherer works end-to-end in a real git repo:
+// deny a push on `main`, allow it on a feature branch. Harness scope
+// (test-both-harnesses): gathering + the exit-2 decision are harness-neutral, so
+// one run covers both; the gather runs in the spawned CLI's cwd.
+test("hook-runtime run-program: a `needs:['git.branch']` gate decides on the real branch", () => {
+  const dir = makeTmpDir();
+  try {
+    initGitRepo(dir);
+    const git = (args: string) =>
+      spawnSync("git", args.split(" "), { cwd: dir, encoding: "utf-8" });
+    git("branch -M main");
+
+    const f = fixture(
+      dir,
+      "no-push-main.mjs",
+      `import { defineHook, tool, deny, allow } from "__HOOK__";
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: ["git.branch"],
+  decide: (e) =>
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
+      ? deny("no direct pushes to main")
+      : allow(),
+});`,
+    );
+    const push = (cwd: string) =>
+      runHook(
+        `node ${CLI} hook-runtime run-program ${f}`,
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "git push origin HEAD" },
+        },
+        { cwd },
+      );
+
+    // On main → the runtime gathers branch="main" → the push is denied.
+    const onMain = push(dir);
+    assert.equal(onMain.blocked, true);
+    assert.equal(onMain.exitCode, 2);
+    assert.match(onMain.stderr, /pushes to main/);
+
+    // Switch to a feature branch → the SAME hook now allows the push.
+    git("checkout -b feature");
+    const onFeature = push(dir);
+    assert.equal(onFeature.blocked, false);
+    assert.equal(onFeature.exitCode, 0);
   } finally {
     cleanupTmpDir(dir);
   }
