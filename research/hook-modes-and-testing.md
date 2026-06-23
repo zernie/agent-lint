@@ -123,10 +123,13 @@ verification** thesis (which vigiles already embodies as `vigiles/hook`).
 5. **`react` effect ceiling** (the purity analogy; reuse the effect classifier). Medium.
 6. **Explore: verify + judged-test the new `prompt`/`agent` LLM hook types** (new
    harness surface; model-gated). Forward-looking.
-7. **Generic `tool_input` accessors** (WebFetch URL, Task `subagent_type`, MCP
-   args) for the tool gates — the remaining "richer event shape" piece, deliberately
-   deferred to avoid a stringly-typed input bag; add per-field matchers as needed
-   (the `touches`/`pipesToShell` precedent). Open.
+7. **Generic `tool_input` accessors + I/O-dependent decisions** — the remaining
+   "richer event shape" + external-state piece: WebFetch URL / Task `subagent_type`
+   / MCP args for the tool gates, AND letting a decision read external state (git
+   branch, project-specific facts) WITHOUT arbitrary I/O. Designed in
+   `research/hook-context-providers.md` (pure decision + host-gathered, declared
+   context providers + a graceful-degradation opt-out ladder that covers every
+   real-world hook). Open.
 
 Per `prefer-existing-solutions`: #1/#2 are _build_ (they dogfood the existing
 Decision/guardrail machinery — no external fit for "shadow a harness hook"); the run-tier
@@ -189,6 +192,7 @@ bag. The I/O-bound lifecycle hooks stay shell, by design.
 
 ## See also
 
+- `research/hook-context-providers.md` — I/O-dependent decisions via pure-decision + declared context providers + the graceful-degradation opt-out ladder (deliverable #7's external-state half).
 - `research/hook-pain-points.md` — the failure corpus + the compiled-hooks/verify ship record + the per-capability dogfood matrix.
 - `research/harness-state-space.md` — the four-instrument (construct/verify/gate/test) framing this rolls up into.
 - `docs/compiled-hooks.md` — the public compiled-hooks guide.
