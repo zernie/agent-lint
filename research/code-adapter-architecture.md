@@ -228,9 +228,27 @@ bare-unknown") — the catalog is known-incomplete, so it never assumes complete
 
 There IS a semi-machine source: the **installed** `@anthropic-ai/claude-code` ships
 `sdk-tools.d.ts` (the `ToolInputSchemas` union + every tool's input shape) and the event
-names + decision fields are string literals in `cli.js`. Use it as a **read-local
-freshness/drift check** (validate our catalog + pin `harnessVersion`, warn on
-divergence), NOT as a dependency.
+names + decision fields are string literals in `cli.js`. We use it as a **read-local
+freshness/drift check**, NOT a dependency.
+
+**SHIPPED (`src/dialect-drift.ts`).** Pure parsers `parseToolInputTypes` (over
+`sdk-tools.d.ts`) + `eventsMissingFromBundle` (over `cli.js`), a `findClaudeCodePackage`
+locator (`npm root -g` → the `claude` binary's real path; null if absent), and
+`ACKNOWLEDGED_TOOL_INPUT_TYPES` + `VALIDATED_CC_VERSION` (the hand-authored baseline,
+currently `2.1.42` / 19 tool types / 9 events). Two consumers:
+
+1. **CI alarm** (`src/dialect-drift.test.ts`, gated): fails LOUD when the installed
+   `sdk-tools.d.ts` tool-input set differs from `ACKNOWLEDGED_TOOL_INPUT_TYPES` or a
+   `claudeCodeDialect.hookEvents` entry vanished from `cli.js`; skips loud when CC absent.
+2. **Runtime WARN** (`vigiles scan`, claude-code only): `checkDialectDrift()` reads only
+   the small `sdk-tools.d.ts` (fast — no `cli.js` scan on the runtime path; events stay
+   the CI test's job), and `formatDialectDrift` prints a one-line `⚠` ONLY on real tool-
+   surface drift (a version bump with no new/removed tool emits nothing — no noise).
+   Best-effort: never throws, never blocks scan. Not wired into `compile` (hot
+   recompile-on-save path) by design.
+
+Read-local only — `findClaudeCodePackage` reads files the user already installed under
+their own CC licence; vigiles ships nothing of theirs.
 
 **Licensing line (informational, not legal advice).** The package is
 "© Anthropic PBC. All rights reserved." — not OSS. So:

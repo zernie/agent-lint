@@ -13,6 +13,7 @@ import {
   parseToolInputTypes,
   eventsMissingFromBundle,
   findClaudeCodePackage,
+  formatDialectDrift,
 } from "./dialect-drift.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
 
@@ -36,6 +37,31 @@ describe("dialect-drift parsers (pure)", () => {
     ).toEqual([
       "PostToolUse", // only appears inside PostToolUseX → not a whole word
     ]);
+  });
+
+  it("formatDialectDrift: null when no drift (or no report)", () => {
+    expect(formatDialectDrift(null)).toBeNull();
+    expect(
+      formatDialectDrift({
+        installedVersion: "2.1.99",
+        validatedVersion: "2.1.42",
+        newToolTypes: [],
+        removedToolTypes: [],
+      }),
+    ).toBeNull(); // version differs but tool surface unchanged → no noise
+  });
+
+  it("formatDialectDrift: warns with added/removed tools + both versions", () => {
+    const msg = formatDialectDrift({
+      installedVersion: "2.2.0",
+      validatedVersion: "2.1.42",
+      newToolTypes: ["NewTool"],
+      removedToolTypes: ["Bash"],
+    });
+    expect(msg).toMatch(/2\.1\.42/);
+    expect(msg).toMatch(/2\.2\.0/);
+    expect(msg).toMatch(/NewTool/);
+    expect(msg).toMatch(/removed: Bash/);
   });
 });
 
