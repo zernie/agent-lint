@@ -10,7 +10,7 @@
  * doesn't list.
  *
  * This is the same emit-a-hook pattern the skill runtime already ships
- * (`src/skill-runtime.ts`): there a `Stop` hook reads the active skill's
+ * (`src/adapters/claude-code/skill-runtime.ts`): there a `Stop` hook reads the active skill's
  * compiled SKILL.md and runs its result gate; here a `PreToolUse` hook reads
  * the active agent's compiled `.md`, parses its `tools:` allowlist, and
  * allows/denies the tool call. The compiled markdown's frontmatter is the

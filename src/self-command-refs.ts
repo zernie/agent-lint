@@ -15,6 +15,18 @@
  * renamed vigiles command is — `compile-hook`, `run-skill`) or in an explicit
  * invocation; `hook-runtime <kind>` is checked in any command context. Source of
  * truth: {@link VERBS} / {@link HOOK_RUNTIME_KINDS}.
+ *
+ * KNOWN LIMITATION (measured, deliberately not "fixed"): this catches the
+ * `vigiles <cmd>` / `cli.js <cmd>` INVOCATION form. It does NOT flag a BARE
+ * command name (`agent-hook` without the `vigiles ` prefix) nor a bare file path
+ * (`src/foo.ts`), because both collide with legitimate non-references: bare
+ * command names double as CONCEPT names (`the refs-hook nudge` appears as a
+ * feature name in ~10 files; `agent-hook` as a rail name + in test labels +
+ * `makeTmpDir("agent-hook-cli")`), and bare paths collide with ILLUSTRATIVE
+ * examples (the README's `src/auth/login.ts`, `docs/foo.md`) and test fixtures
+ * (`session.test.ts` builds fake `src/compile.ts` diffs). A denylist over either
+ * would cry wolf on dozens of valid usages — so terminology/path-accuracy stays
+ * the JUDGMENT half the `doc-consistency` rule assigns to discipline, not a check.
  */
 import { VERBS, HOOK_RUNTIME_KINDS } from "./cli-commands.js";
 

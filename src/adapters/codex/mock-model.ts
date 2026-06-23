@@ -7,7 +7,7 @@
  * with the proven `response.created → … → response.completed` SSE sequence that
  * makes codex emit one assistant text message. There is no count-tokens
  * endpoint. This is the Codex-side analogue of the Anthropic Messages mock in
- * `src/adapters/claude-code/mock-model.ts` (`startMock`).
+ * `src/mock-model.ts` (`startMock`).
  *
  * The wire format here is NOT guessed — it is PROVEN end-to-end against real
  * `codex` (codex-cli 0.139.0) via the `-c model_providers.mock.*` recipe in

@@ -137,7 +137,7 @@ keeping big scripts out of the body (token budget + progressive disclosure).
 - **`vigiles hook-runtime run-skill <SKILL.md>`** parses the `vigiles:gate`/`vigiles:result`
   markers and **runs the gate ladder**: each gate in order, short-circuiting on
   the first failure (Railway), then the result gate. Exit 0 = all passed, exit 2
-  = blocked. (`src/skill-runtime.ts`)
+  = blocked. (`src/adapters/claude-code/skill-runtime.ts`)
 - **Stop-hook enforcement** makes the result gate enforce in a live session:
   `vigiles hook-runtime skill-start <SKILL.md>` marks a skill active; the `Stop` hook
   (`vigiles hook-runtime skill`) runs its result gate and **blocks completion until it
