@@ -264,7 +264,7 @@ the plugin ships a **PostToolUse hook that nudges the agent to mark references,
 in the loop**, the moment it edits an instruction file. The flow, from save:
 
 1. **The agent edits** `CLAUDE.md` / `AGENTS.md` / `SKILL.md`.
-2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles refs-hook`) and scans the
+2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles hook-runtime refs`) and scans the
    saved file for **unmarked linter-rule references** — a slash-scoped name with
    no file extension, like `` `eslint/no-console` `` — and for `vigiles:symbol`
    marks whose target is missing. (It's deliberately narrow: bare identifiers like

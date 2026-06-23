@@ -189,7 +189,7 @@ model at all** and runs the rest on **your Claude Pro/Max subscription — $0 ex
 ## More
 
 - **[Plugin health leaderboard →](docs/cli.md#scan-dir)** — point `scan` at a marketplace (e.g. `wshobson/agents`) and it ranks every plugin by structural health (0–100, A–F), worst issues first — **no key**. Add `--trigger` for the model-gated column: do the skills actually fire?
-- **[CLI & GitHub Action →](docs/cli.md)** — every command (incl. `compile-hook`), the Action, and the plugin. The full **[lint rules matrix →](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)** lives with the linting guide.
+- **[CLI & GitHub Action →](docs/cli.md)** — every command (incl. compiled hooks via `compile`), the Action, and the plugin. The full **[lint rules matrix →](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)** lives with the linting guide.
 - **[Skills →](docs/skills.md)** — consumer skills installed as a Claude Code plugin. The model-invocable ones (`test-harness`, `strengthen`, `edit-spec`) fire on their own — ask _"test my skills"_ and the agent reaches for them.
 - **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
 - Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).

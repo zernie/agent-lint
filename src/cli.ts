@@ -4086,7 +4086,7 @@ function agentHookCommand(): void {
 }
 
 /**
- * `vigiles intercept-tool-hook` — the PreToolUse interception hook for the
+ * `vigiles hook-runtime intercept-tool` — the PreToolUse interception hook for the
  * tool-call spy. Reads the intercept list from `VIGILES_INTERCEPT_TOOLS`, decides
  * whether the called tool should be intercepted, and if so denies the real
  * execution (exit 2) with a block message — the call is intercepted (prevented),
@@ -4110,7 +4110,7 @@ function interceptToolHookCommand(): void {
 }
 
 /**
- * `vigiles guard-hook` — the PreToolUse gate for typed safe-by-construction guards
+ * `vigiles hook-runtime guard` — the PreToolUse gate for typed safe-by-construction guards
  * (EXPERIMENTAL). Reads the live event on stdin, runs the declared guard set
  * (`.vigiles/guards.json`) against the session ledger (`.vigiles/guard-ledger.json`),
  * and blocks (exit 2 + reason) or records the allowed call. The command in the
@@ -4562,7 +4562,7 @@ function verifyStampOrRefuse(file: string): void {
 }
 
 /**
- * `vigiles run-hook-program <file>` — the runtime the compiled hooks block
+ * `vigiles hook-runtime run-program <file>` — the runtime the compiled hooks block
  * points at. Reads the live event on stdin, loads the typed program, verifies
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
  * inject prints `additionalContext`; a react runs its effect-classified
@@ -4570,7 +4570,7 @@ function verifyStampOrRefuse(file: string): void {
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
-    console.error("Usage: vigiles run-hook-program <hook-file>");
+    console.error("Usage: vigiles hook-runtime run-program <hook-file>");
     process.exit(2);
     return;
   }

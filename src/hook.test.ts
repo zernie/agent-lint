@@ -1,11 +1,11 @@
 /**
  * Compiled-hooks E2E (vitest) — drives the REAL built CLI runtime the compiled
- * hooks block points at (`node dist/cli.js run-hook-program <file>`) over
+ * hooks block points at (`node dist/cli.js hook-runtime run-program <file>`) over
  * `runHook`, proving the whole loop works end to end with no model:
  *   - a Bash GATE denies `git push -f` (exit 2 + reason) and allows benign;
  *   - the AST matcher catches a compound bypass `cd x && git push -f`;
  *   - an INJECT hook emits `additionalContext` (the right field, never written);
- *   - `compile-hook` REJECTS an out-of-vocabulary import (capability = API);
+ *   - `compile` REJECTS an out-of-vocabulary import (capability = API);
  *   - a stamped artifact that is then hand-edited is REFUSED at runtime (exit 2).
  *
  * The fixtures import the built `dist/hook.js` by absolute path, so this runs
@@ -53,7 +53,7 @@ export default defineHook({
       : allow(),
 });`;
 
-test("run-hook-program: a gate denies force-push (exit 2) and allows benign", () => {
+test("hook-runtime run-program: a gate denies force-push (exit 2) and allows benign", () => {
   const dir = makeTmpDir();
   try {
     const f = fixture(dir, "guard.mjs", GATE);
@@ -86,7 +86,7 @@ test("run-hook-program: a gate denies force-push (exit 2) and allows benign", ()
   }
 });
 
-test("run-hook-program: the AST matcher catches a compound-command bypass", () => {
+test("hook-runtime run-program: the AST matcher catches a compound-command bypass", () => {
   const dir = makeTmpDir();
   try {
     const f = fixture(dir, "guard.mjs", GATE);
@@ -105,7 +105,7 @@ test("run-hook-program: the AST matcher catches a compound-command bypass", () =
   }
 });
 
-test("run-hook-program: an inject hook emits additionalContext (the right field)", () => {
+test("hook-runtime run-program: an inject hook emits additionalContext (the right field)", () => {
   const dir = makeTmpDir();
   try {
     const f = fixture(

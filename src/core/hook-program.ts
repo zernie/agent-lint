@@ -2,8 +2,8 @@
  * Compiled hooks — a hook as a CONSTRAINED TYPED PROGRAM, not arbitrary shell.
  *
  * The pure core behind the public `vigiles/hook` surface (re-exported in
- * `src/hook.ts`; compiled by `vigiles compile-hook`, run by `vigiles
- * run-hook-program`). A hook today is opaque shell (`bash guard.sh`) —
+ * `src/hook.ts`; compiled by `vigiles compile`, run by `vigiles hook-runtime
+ * run-program`). A hook today is opaque shell (`bash guard.sh`) —
  * un-analyzable (Rice), and the author hand-writes the fragile parts (exit code,
  * JSON field, a `grep` matcher) that the verified #1 pains come from. Invert it:
  * the author writes a PURE typed function `(event) => Decision` against a CLOSED
@@ -554,7 +554,7 @@ export function runReact(
 // so this evaluates it with NO subprocess and NO model (vs `runHook`, which
 // spawns the real CLI runtime). Dispatches by role so a test never has to pick
 // `decideProgram` vs `decideFileGate` vs `runReact`/`runInject` by hand — the
-// in-process twin of the `vigiles run-hook-program` CLI.
+// in-process twin of the `vigiles hook-runtime run-program` CLI.
 // ---------------------------------------------------------------------------
 
 /** The raw event fields the decode functions read (the union across roles). */
