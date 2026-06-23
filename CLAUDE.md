@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:72578229079de052 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:4d3774ee865fe321 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -444,6 +444,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Public Vs Internal Docs
 
 **Guidance only** — Match the detail to the AUDIENCE — don't overload public readers. INTERNAL docs (`research/*.md`, `CLAUDE.md`) hold the full record: confirmed wire schemas, parsing mechanics (dedup rules, field maps), version regressions, spike narratives, env-validation checklists, the why-behind-the-why. PUBLIC docs (`docs/*.md`, `README.md`) state only what a USER needs to ACT — the status, the one or two genuinely useful insights, and how to use the feature — then LINK to the internal doc for the rest ('the confirmed schema + full findings are in research/X.md'). Do NOT paste a JSONL/event schema, an internal dedup/parse detail, a dependency's internal version quirk, or a spike story into a user-facing guide unless a user genuinely needs it to USE the feature. The test: would a user reading this to ACCOMPLISH a task be helped by this line, or just made to scroll? When in doubt, put it in `research/` and link. (Complements doc-per-rule + docs-quality + readme-brevity: those govern polish and where rule docs live; this governs which TIER a given fact belongs in.)
+
+### Doc Consistency
+
+**Guidance only** — Docs MUST stay consistent with the code. When you ship, rename, or remove a CAPABILITY (a command, flag, exported symbol, key file, config key, or behaviour), update its docs in the SAME change, across BOTH tiers: the PUBLIC docs (`docs/`, `README.md`) AND the internal record (`research/`, this file's keyFiles + positioning). Never let one tier describe a reality the other contradicts, and never leave a renamed command/path/example rotting in either. SPLIT THE WORK BY WHAT'S MECHANIZABLE — the lesson from the `hook-runtime` rename: a manual sweep leaked 8 stale `vigiles <cmd>` references EVEN WITH the cohesive-cli-surface rule freshly written, so guidance alone is not enough. The CHECKABLE half is ENFORCED by deterministic CI gates, never trusted to discipline: self-command-refs (every command reference in docs/comments resolves to a real verb or `hook-runtime` kind — `src/self-command-refs.test.ts`), orphan-docs (no `docs/`/`research/` file goes unreferenced), the markdown doc-refs validator (enforce/file/cmd/ref marks in fenced TS blocks resolve), and integrity (a compiled `CLAUDE.md`/`AGENTS.md` matches its spec). Where a doc-consistency fact CAN become a deterministic check, MAKE it one (analogical-transfer + don't-cry-wolf) rather than adding another guidance rule — the check is the moat, dogfooded on vigiles itself. The JUDGMENT half this rule names is what no check can verify: prose accuracy, which TIER a fact belongs in, cross-links, and keeping framing aligned with the front door — governed in detail by public-vs-internal-docs (tier), docs-quality (polish + 'no stale/renamed commands or dead example paths'), readme-brevity (front door), and rules-docs-in-sync (the rule set ↔ matrix). The deterministic check is the FLOOR; updating both tiers together, every time, is the ceiling.
 
 ### Ts Essentials
 

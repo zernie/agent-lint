@@ -278,7 +278,7 @@ test("compile (hook): MERGE preserves a real plugin's existing hooks (superpower
     mkdirSync(resolve(dir, ".vigiles/hooks"), { recursive: true });
     writeFileSync(resolve(dir, ".vigiles/hooks/guard.mjs"), GATE_PKG);
 
-    const compile = (): ReturnType<typeof spawnSync> =>
+    const compile = () =>
       spawnSync("node", [CLI, "compile"], { cwd: dir, encoding: "utf-8" });
     const c = compile();
     assert.equal(c.status, 0, c.stderr);
