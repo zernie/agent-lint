@@ -256,3 +256,58 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
     cleanupTmpDir(dir);
   }
 });
+
+// OSS merge dogfood: compile a vigiles hook INTO a real plugin's existing
+// settings — proving the merge is non-destructive on a real-world config, not
+// just the synthetic unit fixtures in hook-install.test.ts. The seed is the
+// REAL superpowers hooks.json (a SessionStart hook), vendored under
+// examples/harness/vendor/ (MIT, SHA-pinned).
+test("compile (hook): MERGE preserves a real plugin's existing hooks (superpowers) + is idempotent", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    const seed = readFileSync(
+      resolve(
+        REPO_ROOT,
+        "examples/harness/vendor/superpowers@6fd4507/hooks/hooks.json",
+      ),
+      "utf-8",
+    );
+    mkdirSync(resolve(dir, ".claude"), { recursive: true });
+    writeFileSync(resolve(dir, ".claude/settings.json"), seed);
+    mkdirSync(resolve(dir, ".vigiles/hooks"), { recursive: true });
+    writeFileSync(resolve(dir, ".vigiles/hooks/guard.mjs"), GATE_PKG);
+
+    const compile = (): ReturnType<typeof spawnSync> =>
+      spawnSync("node", [CLI, "compile"], { cwd: dir, encoding: "utf-8" });
+    const c = compile();
+    assert.equal(c.status, 0, c.stderr);
+
+    const merged = JSON.parse(
+      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+    );
+    // The plugin's own SessionStart hook is preserved untouched (incl. async).
+    assert.equal(merged.hooks.SessionStart.length, 1);
+    assert.match(
+      merged.hooks.SessionStart[0].hooks[0].command,
+      /run-hook\.cmd/,
+    );
+    assert.equal(merged.hooks.SessionStart[0].hooks[0].async, false);
+    // vigiles's gate was added under PreToolUse.
+    assert.equal(merged.hooks.PreToolUse.length, 1);
+    assert.match(
+      merged.hooks.PreToolUse[0].hooks[0].command,
+      /hook-runtime run-program .*guard\.mjs/,
+    );
+
+    // Recompiling is idempotent — no duplicate PreToolUse entry, plugin hook intact.
+    assert.equal(compile().status, 0);
+    const again = JSON.parse(
+      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+    );
+    assert.equal(again.hooks.PreToolUse.length, 1, "no duplicate on recompile");
+    assert.equal(again.hooks.SessionStart.length, 1);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
