@@ -232,14 +232,22 @@ names + decision fields are string literals in `cli.js`. We use it as a **read-l
 freshness/drift check**, NOT a dependency.
 
 **SHIPPED (`src/dialect-drift.ts`).** Pure parsers `parseToolInputTypes` (over
-`sdk-tools.d.ts`) + `eventsMissingFromBundle` (over `cli.js`), a `findClaudeCodePackage`
-locator (`npm root -g` → the `claude` binary's real path; null if absent), and
+`sdk-tools.d.ts`) + `eventsMissingFromBundle` (over a readable JS bundle), a
+`findClaudeCodePackage` locator (`npm root -g` → the `claude` binary's real path; null
+if absent) + `findClaudeCodeBundle` (the readable `cli.js`, or null), and
 `ACKNOWLEDGED_TOOL_INPUT_TYPES` + `VALIDATED_CC_VERSION` (the hand-authored baseline,
-currently `2.1.42` / 19 tool types / 9 events). Two consumers:
+currently `2.1.187` / 38 tool types / 9 events). NB CC ≥ ~`2.1.18x` ships a NATIVE
+BINARY (`bin/claude.exe` from a platform `optionalDependencies` package) with NO
+readable `cli.js`, so the event-literal scan degrades to a loud skip; `sdk-tools.d.ts`
+is still shipped, so the tool-type alarm keeps working. (We deliberately do NOT
+`import type` the SDK's `ToolInputSchemas` union — `@anthropic-ai/claude-code` and
+`@anthropic-ai/claude-agent-sdk` are both "© Anthropic PBC. All rights reserved.",
+proprietary; an MIT, multi-harness tool reads the local file instead.) Two consumers:
 
 1. **CI alarm** (`src/dialect-drift.test.ts`, gated): fails LOUD when the installed
    `sdk-tools.d.ts` tool-input set differs from `ACKNOWLEDGED_TOOL_INPUT_TYPES` or a
-   `claudeCodeDialect.hookEvents` entry vanished from `cli.js`; skips loud when CC absent.
+   `claudeCodeDialect.hookEvents` entry vanished from the bundle; skips loud when CC
+   absent OR ships a native binary (no readable `cli.js` to scan).
 2. **Runtime WARN** (`vigiles scan`, claude-code only): `checkDialectDrift()` reads only
    the small `sdk-tools.d.ts` (fast — no `cli.js` scan on the runtime path; events stay
    the CI test's job), and `formatDialectDrift` prints a one-line `⚠` ONLY on real tool-

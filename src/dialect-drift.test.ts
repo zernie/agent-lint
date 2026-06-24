@@ -13,6 +13,7 @@ import {
   parseToolInputTypes,
   eventsMissingFromBundle,
   findClaudeCodePackage,
+  findClaudeCodeBundle,
   formatDialectDrift,
 } from "./dialect-drift.js";
 import { claudeCodeDialect } from "./adapters/claude-code/dialect.js";
@@ -89,18 +90,26 @@ describe("dialect freshness vs the INSTALLED claude-code (read-local, ToS-clean)
     },
   );
 
-  gate("our hook events still exist in the installed cli.js", () => {
-    if (!pkg) return; // narrows (gated)
-    const bundle = readFileSync(join(pkg, "cli.js"), "utf-8");
-    const missing = eventsMissingFromBundle(
-      bundle,
-      claudeCodeDialect.hookEvents,
-    );
-    expect(
-      missing,
-      "hook event(s) in claudeCodeDialect no longer appear in cli.js — renamed/removed in CC?",
-    ).toEqual([]);
-  });
+  // The hook-event check needs a READABLE JS bundle (old `cli.js`). CC ≥ ~2.1.18x
+  // ships a native binary with none, so gate on the bundle and SKIP LOUDLY (one
+  // self-explaining test, per no-silent-skips) instead of crashing on a missing file.
+  const bundle = pkg ? findClaudeCodeBundle(pkg) : null;
+  const eventsGate = bundle ? it : it.skip;
+
+  eventsGate(
+    "our hook events still exist in the installed JS bundle (skipped when CC ships a native binary, no readable cli.js)",
+    () => {
+      if (!bundle) return; // narrows (gated on a readable bundle)
+      const missing = eventsMissingFromBundle(
+        readFileSync(bundle, "utf-8"),
+        claudeCodeDialect.hookEvents,
+      );
+      expect(
+        missing,
+        "hook event(s) in claudeCodeDialect no longer appear in the bundle — renamed/removed in CC?",
+      ).toEqual([]);
+    },
+  );
 
   gate("reports the validated CC version (visibility, not asserted)", () => {
     if (!pkg) return; // narrows (gated)
