@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, nothing stops them entering a <em>bad state</em>, nothing tests they <em>work</em>, and nothing measures whether they actually <em>help</em>. vigiles does all four — deterministically, mostly with no API key.
+  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, nothing stops them entering a <em>bad state</em>, nothing tests they <em>work</em>, and nothing measures whether they actually <em>help</em>. vigiles does all four — most of it deterministic and key-free; the real-model checks run on your <strong>Claude Pro/Max subscription, not metered tokens</strong>.
 </p>
 
 <p align="center">
