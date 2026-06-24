@@ -38,9 +38,24 @@ function skillsCliAvailable(): boolean {
 
 const skillsOk = skillsCliAvailable();
 
+/** A failure of the real `skills add` that's the NETWORK's fault, not a bug. */
+function isNetworkFailure(e: unknown): boolean {
+  const err = e as { message?: unknown; stderr?: unknown; stdout?: unknown };
+  const str = (p: unknown): string => {
+    if (typeof p === "string") return p;
+    if (Buffer.isBuffer(p)) return p.toString("utf-8");
+    return p == null ? "" : JSON.stringify(p);
+  };
+  // execSync puts the command in `.message` and the real reason in `.stderr`.
+  const text = [err.message, err.stderr, err.stdout].map(str).join("\n");
+  return /ENOTFOUND|EAI_AGAIN|getaddrinfo|Could not resolve|unable to access|ETIMEDOUT|ECONNREFUSED|ECONNRESET|network|proxy|self.signed|certificate|TLS|SSL|fatal:|git clone|403|404|429|ENETUNREACH|registry|fetch failed/i.test(
+    text,
+  );
+}
+
 test.skipIf(!skillsOk)(
   "codex install: the planned `skills add … -a codex -g -y` installs globally, not into the repo",
-  () => {
+  (ctx) => {
     // The command we assert is exactly the one `vigiles init` would run.
     const [plan] = planPluginInstall(["codex"], { hasClaude: false });
     const cmd = plan.commands[0];
@@ -51,12 +66,27 @@ test.skipIf(!skillsOk)(
     const home = mkdtempSync(join(tmpdir(), "vigiles-codex-home-"));
     const work = mkdtempSync(join(tmpdir(), "vigiles-codex-work-"));
     try {
-      execSync(cmd, {
-        cwd: work,
-        env: { ...process.env, HOME: home },
-        stdio: "pipe",
-        timeout: 240000,
-      });
+      try {
+        execSync(cmd, {
+          cwd: work,
+          env: { ...process.env, HOME: home },
+          stdio: "pipe",
+          timeout: 240000,
+        });
+      } catch (e) {
+        // `skills --help` was reachable but the real `add` (a GitHub fetch)
+        // wasn't — a partial-network sandbox. Skip LOUDLY, don't fail red (the
+        // documented contract); a real install bug still throws.
+        if (isNetworkFailure(e)) {
+          ctx.skip(
+            `skills add could not reach the network (sandbox): ${String(
+              (e as { message?: unknown }).message ?? e,
+            ).slice(0, 200)}`,
+          );
+          return;
+        }
+        throw e;
+      }
 
       // It installs to the global agents store (~/.agents/skills/) — verified
       // location, NOT the documented ~/.codex/skills/, and NOT the repo/cwd.
