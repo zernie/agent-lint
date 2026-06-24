@@ -180,6 +180,12 @@ const r = await measureArms({
 - **The target** — whatever the skill claims to move (output tokens, latency, tool calls), verified on its own terms.
 - **The blast radius** — correctness, a deterministic 1/0. A token win that breaks the code is **not a win**.
 
+**Safe to repeat.** A real-model run executes the agent, so each one is sandboxed —
+ephemeral working dir, network blocked or allow-listed — and `interceptTools`
+catches an irreversible external (a push, a paid API) as an _attempt_, never
+running it. Side effects that reach past the sandbox (a real DB, redis, the
+network) have their own answer. **[Safety, sandboxing & FAQ →](docs/safety.md)**
+
 The kicker: every run is **your own `claude` CLI on your Pro/Max subscription**,
 so you can measure on every change — and the same engine powers the **ecosystem
 benchmark** ("what works vs hype"). **[Eval a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**

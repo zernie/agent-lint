@@ -1,8 +1,9 @@
 # Research & design docs — index
 
 The thinking behind vigiles: design docs, landscape analyses, benchmark findings,
-and parked ideas. Grouped by theme; each is one click away. (User-facing
-how-to docs live in [`../docs/`](../docs/README.md).)
+and parked ideas — the project's **internal record, not user-facing** (those
+how-to docs live in [`../docs/`](../docs/README.md)). Grouped by theme; each is
+one click away.
 
 > **Building something? Start at [`roadmap.md`](roadmap.md)** — the single
 > consolidated, ranked view of what ships next (Now / Next / Later / Backlog /
