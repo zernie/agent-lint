@@ -179,6 +179,10 @@ binding (observed-≟-declared), both robust across all four.
   [ai-native-linting](ai-native-linting.md) — the four researches.
 - [distribution-strategy](distribution-strategy.md) — the funnel the Tier-1 rides
   must clear.
+- [eval-startups-positioning](eval-startups-positioning.md) — an external "why eval
+  startups fail" critique that independently validates the Tier-2
+  conformance/attestation play over a public eval/benchmark (which it deems
+  Goodhart-gameable and moat-less).
 - [reference-verification-limits](reference-verification-limits.md) — the
   proxy-vs-judgment boundary the measured-judge idea must respect.
 - [landscape-mid-2026](landscape-mid-2026.md) — Cedar / AgentCore / Compiled-AI
