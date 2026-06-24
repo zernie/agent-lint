@@ -175,8 +175,7 @@ suite, gated/skipped loudly when the binary isn't on PATH.)
 ## What's not a descriptor (yet)
 
 Three seams still carry harness-specific _behaviour_, not just facts, and are
-extracted opportunistically as a second real implementation lands (see
-`research/code-adapter-architecture.md`): the instruction-file/skill **renderers**
+extracted opportunistically as a second real implementation lands: the instruction-file/skill **renderers**
 in the compiler, the hook **decision-decode** beyond exit-code/values, and the
 model-mock **HTTP server** (the `ModelMock` descriptor names the wire format; the
 SSE renderer is per-harness). For a harness whose model can't be pointed at a

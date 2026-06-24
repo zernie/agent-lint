@@ -1,7 +1,7 @@
 # subagent-tool-contract
 
 Cross-reference every **subagent's `tools:` rail** (`agents/*.md`) against the
-harness tool catalog — the "valid is not true" moat applied to a tool contract.
+harness tool catalog — the "valid is not true" cross-reference applied to a tool contract.
 A subagent may only run a built-in tool or an MCP tool; anything else is a typo
 or a tool the platform will never hand it, so the declared rail is silently wrong.
 
@@ -23,7 +23,7 @@ A **bare unrecognized** tool with no close match (e.g. a plugin-/MCP-provided
 `TaskCreate`, `TeamCreate`, or a newer platform tool) is **NOT** flagged — it's
 more likely a tool vigiles doesn't know than a defect. (Sweeping real plugins
 found a 280★ plugin using `TaskCreate/TaskGet/…` consistently; flagging those
-would be a false-positive flood. See `research/plugin-structural-findings.md`.)
+would be a false-positive flood.)
 
 An inline array form (`tools: [Read, "Bash", Edit]`) and a `Tool(restriction)`
 suffix (`Bash(git:*)`) are parsed/normalized before checking.

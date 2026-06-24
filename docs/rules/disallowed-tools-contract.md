@@ -56,7 +56,7 @@ inline-array forms.
 
 A deny-list that silently denies nothing is worse than no deny-list — the author
 believes a dangerous tool is blocked when it isn't. This is the security-relevant
-half of the tool moat, and it's a check no other validator does.
+half of the tool cross-reference, and it's a check no other validator does.
 
 ## See also
 

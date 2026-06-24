@@ -213,8 +213,7 @@ emit the ranking as a **Markdown table** (the publishable form for a README/gist
 plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
-harness-aware supply-chain audit (see `research/divergent-bets.md`,
-`research/agent-supply-chain-security.md`).
+harness-aware supply-chain audit.
 
 Behavioral measurement (does a skill actually fire / collide?) is the model-gated
 **`scan --trigger`** flag (documented below) — the paid tier; plain `scan` stays
@@ -271,7 +270,7 @@ npx vigiles scan ./head --capability-diff=./base --fail-on-widen  # exit 1 if wi
 npx vigiles scan ./head --capability-diff=./base --json           # structured diff
 ```
 
-This is moat #2 (`research/typed-spec-moat.md`): the capability surface is the typed
+This is the **capability-diff** check: the capability surface is the typed
 effect lattice `generate-harness` already computes; the diff reads it.
 
 ### `scan <dir> --trigger` — does each skill FIRE / COLLIDE?

@@ -234,9 +234,9 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Docs hygiene
 
-| Rule                                  | Default | What it checks                                                                   |
-| ------------------------------------- | ------- | -------------------------------------------------------------------------------- |
-| [`orphan-docs`](rules/orphan-docs.md) | (on)    | A `docs/` / `research/` doc no other `.md` references (instruction files exempt) |
+| Rule                                  | Default | What it checks                                                                            |
+| ------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| [`orphan-docs`](rules/orphan-docs.md) | (on)    | A doc in a configured directory that no other `.md` references (instruction files exempt) |
 
 ### Configure
 

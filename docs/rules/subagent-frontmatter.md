@@ -34,8 +34,7 @@ validate` + cclint.
 
 This is the rule that catches the real bug the plugin sweep found: a marketplace
 shipping subagents (`changelog-generator`, `content-creator`, …) with **no
-frontmatter at all** — they never register. See
-`research/plugin-structural-findings.md`.
+frontmatter at all** — they never register.
 
 ## Configuration
 

@@ -22,7 +22,7 @@ commitment, maximum incrementalism.
 
 If you already have a real TypeScript project and you want the strongest
 guarantees (editor-time type safety, programmatic rule composition, the
-`generate-types` moat), use spec mode instead — see the main README.
+`generate-types` type generation), use spec mode instead — see the main README.
 
 ## Format
 

@@ -46,7 +46,7 @@ session: a real eval ran with `apiKeySource:"none"`, i.e. on the OAuth sub.)
 
 ### Pros (why this is defensible)
 
-- **Cost** — the structural moat. Free deterministic tiers + sub-priced real-model
+- **Cost** — the structural advantage. Free deterministic tiers + sub-priced real-model
   tier vs competitors' per-token-every-run. This is the only reason a small team
   will _actually_ eval their harness.
 - **Fidelity** — the unit under test is the harness **loaded as it ships**
@@ -162,7 +162,7 @@ a `CLAUDE.md` rule, a subagent, an MCP server) into two parts:
 **Most of a feature is the deterministic part, and that's where
 protection-per-dollar is highest.** Only the irreducibly-stochastic slice runs a
 model. This mirrors the repo's existing "keep the real-model surface THIN"
-discipline (`research/eval-api-landscape.md`): of all harness questions, only two
+discipline: of all harness questions, only two
 are _irreducibly_ real-model — _does a description fire_ and _does behavior move_.
 
 Practical corollary, and a prerequisite for the dogfood work below: **most
@@ -253,7 +253,7 @@ Read this before proposing to build anything — much of the design is shipped.
 | Capability                                              | Module                                                    | Notes                                                                                                                                           |
 | ------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Run behavioral scripts (`*.eval.mjs`)                   | `vigiles eval` (`cli.ts` → `run-scripts.ts`)              | aggregates pass/skip/fail by exit code; `--trials=N`. **Not wired into CI yet.**                                                                |
-| A/B harness arms + Welch significance                   | `eval.ts` (`runEval`, `measureArms`), `stats.ts`          | the moat — harness loaded _as it ships_                                                                                                         |
+| A/B harness arms + Welch significance                   | `eval.ts` (`runEval`, `measureArms`), `stats.ts`          | the differentiator — harness loaded _as it ships_                                                                                               |
 | Declarative check vocabulary (data, not asserts)        | `check.ts`                                                | `tool`/`skill`/`output`/`hookFired`/`received`/`turns`/`wrote`/`subagent`/`mcp`/`judged`/`cost`/`latency`/`tokens` — one vocab, strict + scored |
 | Scored eval + threshold gate                            | `eval.ts` (`measure`, `assertRates`), `harness-assert.ts` | rate ± se, pass^k                                                                                                                               |
 | Record/replay cache                                     | `eval-cache.ts`                                           | input-keyed (excludes `measure`), restores post-run filesystem                                                                                  |

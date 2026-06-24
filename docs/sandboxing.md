@@ -158,7 +158,7 @@ const r = runHook(installHookCmd, event, {
 // r.egressDropped → { packets: 0, bytes: 0 }   // nothing reached off the allowlist
 ```
 
-How it works (proven in `research/spikes/sandbox-network-allowlist.sh`):
+How it works:
 [`slirp4netns`](https://github.com/rootless-containers/slirp4netns) `--configure`
 attaches a tap to the bwrap netns (rootless egress via a userspace TCP/IP stack);
 an `nft` ruleset **inside** the netns is a `policy drop` output chain that accepts
