@@ -124,6 +124,15 @@ harness-neutral, so it lives in vigiles's own dir, not `.claude/`), then:
 - `--harness=codex` merges a Codex `config.toml` `[[hooks.<event>]]` block (an
   anchored-regex matcher) instead of the Claude Code JSON. The same typed program
   compiles to either; the gate runtime is shared (Codex vetoes via `exit 2`).
+- **Context providers.** A gate can decide on external state by declaring
+  `needs: ["git.branch"]` (built-ins: `git.branch`/`git.isDirty`/`git.root`/`cwd`/
+  `os.platform`/`env.isCI`), or an inline `provide(name, cmd)` / `dangerously(name,
+cmd)`, or a **registered** provider. `compile` also discovers
+  **`.vigiles/providers/*`** (`export default defineProvider({ name, run })`),
+  validates each is read-only (unless `dangerous: true`), and checks every
+  `provider()` ref resolves — a dangling ref or an unsafe provider **fails the
+  build**. The trusted runtime gathers the declared facts; the hook does zero I/O.
+  See the [compiled-hooks guide](compiled-hooks.md#deciding-on-external-state-context-providers).
 
 The merged block points at the `hook-runtime run-program` entrypoint (below).
 

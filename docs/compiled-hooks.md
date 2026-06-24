@@ -319,11 +319,12 @@ maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-ho
 Everything is committed, and the source is **adapter-agnostic** — one hook
 compiles to any harness you target:
 
-| Artifact         | Location                                       | Why                                                                 |
-| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
-| **Hook source**  | `.vigiles/hooks/*.{mjs,ts}`                    | harness-neutral — one source, fans out to any harness               |
-| **Tamper stamp** | `.vigiles/hooks/<name>.json`                   | the runtime verifies it before running the hook                     |
-| **Wiring**       | `.claude/settings.json` / `.codex/config.toml` | `compile` merges it in per harness (a multi-harness repo gets both) |
+| Artifact            | Location                                       | Why                                                                 |
+| ------------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
+| **Hook source**     | `.vigiles/hooks/*.{mjs,ts}`                    | harness-neutral — one source, fans out to any harness               |
+| **Provider source** | `.vigiles/providers/*.{mjs,ts}`                | registered context providers (`defineProvider`), referenced by name |
+| **Tamper stamp**    | `.vigiles/hooks/<name>.json`                   | the runtime verifies it before running the hook                     |
+| **Wiring**          | `.claude/settings.json` / `.codex/config.toml` | `compile` merges it in per harness (a multi-harness repo gets both) |
 
 Hooks are **not** auto-discovered by sitting just anywhere — they must be under
 `.vigiles/hooks/` (or named explicitly to `compile`). Because they share one
