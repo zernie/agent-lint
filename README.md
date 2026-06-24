@@ -83,8 +83,9 @@ CLAUDE.md:
   ✓ @typescript-eslint/no-floating-promises — exists and enabled in eslint config
 ```
 
-File paths, scripts, and code symbols — plus linter rules across **7 catalogs**
-(the rule exists **and is enabled**). Start with one inline comment, no new files;
+File paths, scripts, and code symbols — plus linter rules across **7 linters**
+(ESLint, Ruff, Clippy, and four more): the rule exists **and is enabled**. Start
+with one inline comment, no new files;
 step up to a typed `.spec.ts` (compiled to CLAUDE.md) when you want it.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
@@ -93,18 +94,13 @@ step up to a typed `.spec.ts` (compiled to CLAUDE.md) when you want it.
 > pipeline won't compile if the handoffs don't line up. Others lint prose; vigiles
 > is a **compiler for harnesses**, graduated like `strict`. **[The moat →](research/typed-spec-moat.md)**
 
-**Same cross-reference, any plugin.** `npx vigiles scan` checks a plugin's
-_contracts_ — every subagent tool, `mcp__server__tool`, `mcp_tool` hook, hook
-event, and script path actually **exists and resolves**, not just parses (valid
-YAML ≠ a real tool). A **superset of `claude plugin validate`**, no key. **[Audit any plugin →](docs/cli.md#scan-dir)**
-
 ## ② Guard — author a hook that can't be wrong
 
-A safety hook is the one place that can _stop_ the agent before something
-irreversible — yet hand-written hooks fail silently (`exit 1` not `2`, the wrong
-JSON field, a `grep` that misses `cd x && git push -f`): they look like a guard
-and block nothing. Write the hook as a pure typed function instead — vigiles
-compiles the protocol for you:
+A safety hook is your last stop before something irreversible — and hand-written
+ones **fail open**: `exit 1` where blocking needs `2`, the wrong JSON field, a
+`grep` that sails past `cd x && git push -f`. The hook looks like a guard, blocks
+nothing, and never tells you. Write it as a pure typed function instead — vigiles
+emits the exit code, the JSON, and an AST-backed matcher for you:
 
 ```typescript
 import { defineHook, tool, deny, allow } from "vigiles/hook";
