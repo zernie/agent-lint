@@ -37,9 +37,9 @@ this file is committed. All work pushed. **No PR opened yet** — open one when 
 - **Public-docs hygiene (`cd597c9`,`2303f26`,`c26f711`,`632e9e9`).** Stripped ALL
   research/ links + bare name-drops + the word "moat" + the "what works vs hype"
   benchmark banner from README+docs/. Added `no-internal-links-in-public-docs` rule
-  + a strategic-vocabulary clause in `public-vs-internal-docs`. New
-  `research/eval-startups-positioning.md` (benchmark = flywheel NOT moat; attestation
-  = the only defensible eval niche).
+  - a strategic-vocabulary clause in `public-vs-internal-docs`. New
+    `research/eval-startups-positioning.md` (benchmark = flywheel NOT moat; attestation
+    = the only defensible eval niche).
 - **README overhaul (`620c99c`,`3d2d8ed`,`c54aa0b`,`ea53d4a`).** Multi-persona review
   fixes; benefits-forward hero (concrete failure modes, keeps Agent=Model frame);
   condensed table cells; **"you don't hand-write specs — your agent does"** reframe;
