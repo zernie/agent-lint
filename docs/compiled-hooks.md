@@ -223,12 +223,29 @@ the **loud, greppable escape** for a command that isn't (the
 `dangerouslySetInnerHTML` / `unsafe` convention — a security review searches for
 that one word).
 
+**Reusable registered providers.** For a fact several hooks share, register it
+once in `.vigiles/providers/<name>.{mjs,ts}` and reference it by name:
+
+```ts
+// .vigiles/providers/k8sCtx.mjs
+import { defineProvider } from "vigiles/hook";
+export default defineProvider({
+  name: "k8sCtx",
+  run: "kubectl config current-context",
+});
+
+// any hook:  needs: [provider("k8sCtx")]  →  e.ctx.k8sCtx
+```
+
+`vigiles compile` validates each provider is read-only (or `dangerous: true`) and
+that every `provider()` ref resolves to a registered file.
+
 **The opt-out ladder** (you're **never trapped**): built-in providers → inline
-`provide` / `dangerously` → **user-declared providers** (a reusable named one —
-_v2, design stage_) → the **shell lane** (a hand-written `.sh` for arbitrary
-in-decision logic, verified with the disaster battery). You always know which
-rung you're on. Full design + the "every real-world hook maps to a tier" coverage
-proof: [`research/hook-context-providers.md`](../research/hook-context-providers.md).
+`provide` / `dangerously` → **registered `defineProvider`** (reusable, named) →
+the **shell lane** (a hand-written `.sh` for arbitrary in-decision logic, verified
+with the disaster battery). You always know which rung you're on. Full design +
+the "every real-world hook maps to a tier" coverage proof:
+[`research/hook-context-providers.md`](../research/hook-context-providers.md).
 
 ## Compile and wire
 
@@ -362,6 +379,16 @@ blocks **7 of 7** by construction — same intent, no blind spots, no protocol b
 The contrast is a runnable, model-free regression test
 ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)). Full finding:
 [`research/hook-pain-points.md`](../research/hook-pain-points.md).
+
+Beyond the headline number, the **structural** wins over hand-written guards —
+each isolated in CI ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts))
+so it's non-circular — are: **evasion** (the AST catches the compound `cd … && git
+push -f` a substring/glob misses), **precision** (no `grep` false-positive on a
+benign `echo`), and **protocol** (a mis-wired `exit 1` is false confidence; the
+compiled exit code can't be wrong). The honest other side — stateful guards, broad
+I/O, and delivery (#34692) are NOT compiled-hook wins — plus the full head-to-head
+table and provenance, are in
+[`research/hook-oss-comparison.md`](../research/hook-oss-comparison.md).
 
 ## Limitations & trade-offs (the cons)
 

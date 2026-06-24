@@ -12,11 +12,15 @@ import {
   gatherContext,
   unknownProviders,
   unsafeInlineProviders,
+  unsafeProvider,
   provide,
   dangerously,
+  defineProvider,
+  provider,
   BUILTIN_PROVIDERS,
   type ProviderIO,
   type NeedSpec,
+  type ProviderRegistry,
 } from "./hook-providers.js";
 import { isReadOnlyBash } from "./bash-effects.js";
 
@@ -110,6 +114,46 @@ test("unsafeInlineProviders flags a read-only-failing provide(), not dangerously
   assert.deepEqual(unsafeInlineProviders([provide("ok", "git branch")]), []);
   // Built-in names aren't inline → ignored here.
   assert.deepEqual(unsafeInlineProviders(["git.branch"]), []);
+});
+
+test("registered provider() ref resolves via the registry → its command's stdout", () => {
+  const registry: ProviderRegistry = {
+    k8sCtx: defineProvider({
+      name: "k8sCtx",
+      run: "kubectl config current-context",
+    }),
+  };
+  const io = fakeIO({ "kubectl config current-context": "prod\n" });
+  const ctx = gatherContext([provider("k8sCtx")], io, registry);
+  assert.equal(ctx.k8sCtx, "prod");
+  // A ref with no matching registered provider → default "", never throws.
+  assert.equal(gatherContext([provider("missing")], io, registry).missing, "");
+});
+
+test("unknownProviders flags a DANGLING provider() ref, not a registered one", () => {
+  assert.deepEqual(unknownProviders([provider("k8sCtx")], ["k8sCtx"]), []);
+  assert.deepEqual(unknownProviders([provider("ghost")], ["k8sCtx"]), [
+    "ghost",
+  ]);
+  // With no registered set, every ref is dangling.
+  assert.deepEqual(unknownProviders([provider("k8sCtx")]), ["k8sCtx"]);
+});
+
+test("unsafeProvider flags a non-read-only registered def unless dangerous", () => {
+  assert.equal(
+    unsafeProvider(defineProvider({ name: "x", run: "rm -rf /tmp/x" })),
+    true,
+  );
+  assert.equal(
+    unsafeProvider(
+      defineProvider({ name: "x", run: "rm -rf /tmp/x", dangerous: true }),
+    ),
+    false,
+  );
+  assert.equal(
+    unsafeProvider(defineProvider({ name: "x", run: "git branch" })),
+    false,
+  );
 });
 
 // SOUNDNESS — the whole guarantee rests on this: a provider may only OBSERVE.

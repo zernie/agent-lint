@@ -21,17 +21,30 @@ import { stringify as stringifyToml } from "@iarna/toml";
 /** The agnostic, committed home for hook SOURCE — one dir, cross-adapter. */
 export const HOOKS_DIR = ".vigiles/hooks";
 
+/** The committed home for registered context-provider SOURCE (v2). */
+export const PROVIDERS_DIR = ".vigiles/providers";
+
 /** A JS/TS hook source file (the `.json` stamp sidecar is never matched). */
 const HOOK_SOURCE_RE = /\.(?:mjs|cjs|js|mts|cts|ts)$/;
 
-/** Discover hook source files under {@link HOOKS_DIR} (stamps excluded). */
-export function discoverHookFiles(cwd: string): string[] {
-  const dir = join(cwd, HOOKS_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+/** List JS/TS source files under `dir` (relative to cwd), stamps excluded. */
+function discoverSources(cwd: string, dir: string): string[] {
+  const abs = join(cwd, dir);
+  if (!existsSync(abs)) return [];
+  return readdirSync(abs)
     .filter((f) => HOOK_SOURCE_RE.test(f) && !f.endsWith(".d.ts"))
     .sort()
-    .map((f) => join(HOOKS_DIR, f));
+    .map((f) => join(dir, f));
+}
+
+/** Discover hook source files under {@link HOOKS_DIR} (stamps excluded). */
+export function discoverHookFiles(cwd: string): string[] {
+  return discoverSources(cwd, HOOKS_DIR);
+}
+
+/** Discover registered-provider source files under {@link PROVIDERS_DIR}. */
+export function discoverProviderFiles(cwd: string): string[] {
+  return discoverSources(cwd, PROVIDERS_DIR);
 }
 
 interface CommandHook {

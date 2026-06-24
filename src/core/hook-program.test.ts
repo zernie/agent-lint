@@ -45,7 +45,7 @@ import {
   decideStopGate,
   responseView,
 } from "./hook-program.js";
-import { provide, dangerously } from "./hook-providers.js";
+import { provide, dangerously, provider } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
 
@@ -470,6 +470,30 @@ test("context: a provide() with a non-read-only command does NOT compile (use da
   });
   assert.ok(
     compileHookProgram(`import { defineHook } from "vigiles/hook";`, ack).stamp,
+  );
+});
+
+test("context: a registered provider() ref needs registeredProviders to compile", () => {
+  const refHook = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provider("k8sCtx")],
+    decide: (e) => (e.ctx.k8sCtx === "prod" ? deny("prod") : allow()),
+  });
+  const src = `import { defineHook } from "vigiles/hook";`;
+  // A dangling ref (no registered set) does NOT compile.
+  assert.throws(
+    () => compileHookProgram(src, refHook),
+    /unknown context provider/,
+  );
+  // With the provider registered, it compiles.
+  assert.ok(
+    compileHookProgram(src, refHook, { registeredProviders: ["k8sCtx"] }).stamp,
+  );
+  // The decision reads the ref's value from e.ctx like any other fact.
+  assert.equal(
+    decideProgram(refHook, ev("kubectl get pods"), { k8sCtx: "prod" }).kind,
+    "deny",
   );
 });
 

@@ -118,7 +118,12 @@ export type {
   HookProgramOutcome,
 } from "./core/hook-program.js";
 
-export { provide, dangerously } from "./core/hook-providers.js";
+export {
+  provide,
+  dangerously,
+  defineProvider,
+  provider,
+} from "./core/hook-providers.js";
 
 export type {
   ProviderName,
@@ -126,4 +131,7 @@ export type {
   HookCtx,
   NeedSpec,
   InlineProvider,
+  RegisteredProvider,
+  RegisteredRef,
+  ProviderRegistry,
 } from "./core/hook-providers.js";
