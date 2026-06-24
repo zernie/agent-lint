@@ -155,11 +155,17 @@ import {
 } from "./core/hook-program.js";
 import {
   discoverHookFiles,
+  discoverProviderFiles,
   mergeHooksJson,
   mergeHooksToml,
   serializeConfig,
 } from "./hook-install.js";
-import { gatherContext } from "./core/hook-providers.js";
+import {
+  gatherContext,
+  unsafeProvider,
+  type ProviderRegistry,
+  type RegisteredProvider,
+} from "./core/hook-providers.js";
 import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
@@ -4402,6 +4408,55 @@ async function loadHookProgram(file: string): Promise<AnyHook> {
   return program as AnyHook;
 }
 
+/** Load a registered provider (`.vigiles/providers/<name>`) → its definition. */
+async function loadProvider(file: string): Promise<RegisteredProvider> {
+  const abs = resolve(process.cwd(), file);
+  const { pathToFileURL } = require("node:url") as typeof import("node:url");
+  let mod: { default?: unknown };
+  try {
+    mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
+  } catch (e) {
+    throw new HookCompileError(
+      `Cannot load provider "${file}": ${(e as Error).message}`,
+    );
+  }
+  const def =
+    (mod.default as { default?: unknown } | undefined)?.default ?? mod.default;
+  if (
+    !def ||
+    typeof def !== "object" ||
+    (def as { kind?: unknown }).kind !== "provider-def"
+  ) {
+    throw new HookCompileError(
+      `${file} has no default-exported provider ` +
+        `(use \`export default defineProvider({…})\`).`,
+    );
+  }
+  return def as RegisteredProvider;
+}
+
+/**
+ * Compile (validate) the registered providers under `.vigiles/providers/`: each
+ * must load and be read-only unless it opted into `dangerous`. Returns the set of
+ * valid provider NAMES (so a hook's `provider()` ref can resolve at compile).
+ * Throws HookCompileError on an unsafe provider — the same fail-the-build contract
+ * as a hook.
+ */
+async function compileProviders(): Promise<string[]> {
+  const names: string[] = [];
+  for (const file of discoverProviderFiles(process.cwd())) {
+    const def = await loadProvider(file);
+    if (unsafeProvider(def)) {
+      throw new HookCompileError(
+        `provider ${file} ("${def.run}") is not provably read-only — ` +
+          `pass dangerous:true to defineProvider to acknowledge it.`,
+      );
+    }
+    names.push(def.name);
+  }
+  return names;
+}
+
 /** Path of the tamper-evident stamp sidecar for a hook file. */
 function hookStampPath(file: string): string {
   return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
@@ -4428,6 +4483,7 @@ interface HookInstallResult {
 async function installHookFile(
   file: string,
   adapter: HarnessAdapter,
+  registeredProviders: readonly string[] = [],
 ): Promise<HookInstallResult> {
   const source = readFileSync(resolve(process.cwd(), file), "utf-8");
   const program = await loadHookProgram(file);
@@ -4436,6 +4492,7 @@ async function installHookFile(
     dialect: adapter.dialect,
     hookProtocol: adapter.hookProtocol,
     settingsFormat: adapter.layout.settingsFormat,
+    registeredProviders,
   });
 
   // Tamper-evident stamp beside the source (one dir → basename is unique).
@@ -4495,10 +4552,22 @@ async function installHooks(
   const adapter = harnessFlag
     ? resolveAdapter(process.cwd(), harnessFlag)
     : detectAdapterResult(process.cwd()).adapter;
+  // Validate registered providers first → the names a hook's provider() ref may
+  // resolve to (an unsafe provider fails the whole compile, like a bad hook).
+  let registeredProviders: string[];
+  try {
+    registeredProviders = await compileProviders();
+  } catch (e) {
+    if (e instanceof HookCompileError) {
+      console.error(`✗ ${e.message}`);
+      return false;
+    }
+    throw e;
+  }
   let ok = true;
   for (const file of hookFiles) {
     try {
-      const r = await installHookFile(file, adapter);
+      const r = await installHookFile(file, adapter, registeredProviders);
       console.log(
         `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
       );
@@ -4534,20 +4603,49 @@ async function installHooks(
  * that can't resolve yields its default (never throws). The pure registry +
  * decision logic live in core/hook-providers.ts — this only injects the real IO.
  */
-function gatherHookContext(program: AnyHook): Record<string, string | boolean> {
+async function gatherHookContext(
+  program: AnyHook,
+): Promise<Record<string, string | boolean>> {
   const needs = hookNeeds(program);
   if (needs.length === 0) return {};
+  // Only load the registered-provider registry if a provider() ref is declared.
+  const hasRef = needs.some(
+    (n) => typeof n !== "string" && n.kind === "provider-ref",
+  );
+  const registry = hasRef ? await loadProviderRegistry() : {};
   const { execSync } =
     require("node:child_process") as typeof import("node:child_process");
-  return gatherContext(needs, {
-    exec: (command) =>
-      execSync(command, {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }),
-    cwd: process.cwd(),
-    platform: process.platform,
-  });
+  return gatherContext(
+    needs,
+    {
+      exec: (command) =>
+        execSync(command, {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      cwd: process.cwd(),
+      platform: process.platform,
+    },
+    registry,
+  );
+}
+
+/**
+ * Load the registered providers (`.vigiles/providers/`) into a name→def registry
+ * for `provider()` ref resolution. A bad/unloadable provider file is skipped (the
+ * ref then yields its default ""), never crashes a live session.
+ */
+async function loadProviderRegistry(): Promise<ProviderRegistry> {
+  const registry: ProviderRegistry = {};
+  for (const file of discoverProviderFiles(process.cwd())) {
+    try {
+      const def = await loadProvider(file);
+      registry[def.name] = def;
+    } catch {
+      /* skip an unloadable provider file */
+    }
+  }
+  return registry;
 }
 
 /** Append an observe-mode record to `.vigiles/hook-observations.jsonl` (best-effort). */
@@ -4702,7 +4800,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "file-gate": {
-      const ctx = gatherHookContext(program);
+      const ctx = await gatherHookContext(program);
       emitGate(
         decideFileGate(program as FileGateHook, event, ctx),
         program.on,
@@ -4712,7 +4810,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "bash-gate": {
-      const ctx = gatherHookContext(program);
+      const ctx = await gatherHookContext(program);
       emitGate(
         decideProgram(program as HookProgram, event, ctx),
         program.on,
@@ -4722,7 +4820,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "prompt-gate": {
-      const ctx = gatherHookContext(program);
+      const ctx = await gatherHookContext(program);
       emitGate(
         decidePromptGate(program as PromptGateHook, event, ctx),
         program.on,
@@ -4732,7 +4830,7 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       return;
     }
     case "stop-gate": {
-      const ctx = gatherHookContext(program);
+      const ctx = await gatherHookContext(program);
       emitGate(
         decideStopGate(program as StopGateHook, event, ctx),
         program.on,

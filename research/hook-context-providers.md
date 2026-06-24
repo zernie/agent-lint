@@ -305,12 +305,21 @@ capability-diff says so.
    runtime (decide stays pure), `provide` for read-only (compile-rejected if not),
    `dangerously` for the acknowledged escape. This is the higher-leverage next
    build than v2 — it covers the long tail with one line, no registration.
-4. **v2 — user-declared providers (Tier 2).** `defineProvider` registered under
-   `.vigiles/providers/`, stamped like a hook; effect-classified; the reusable,
-   named form for a fact several hooks share. Capability-diff lists them.
+4. **v2 — user-declared providers (Tier 2). ✅ SHIPPED (2026-06-24).**
+   `defineProvider({ name, run })` authored under `.vigiles/providers/`, referenced
+   from a hook by `provider("name")`; the reusable, named form for a fact several
+   hooks share. `vigiles compile` discovers + validates them (read-only unless
+   `dangerous`, via `unsafeProvider`) and resolves every `provider()` ref against
+   the registry (a dangling ref fails compile); the runtime loads the registry
+   (`loadProviderRegistry`) and resolves refs in `gatherContext`. Surface:
+   `defineProvider`/`provider` on `vigiles/hook`; tests pure + E2E
+   (`.vigiles/providers/` file + a `provider()` ref gathered by the real runtime).
+   Remaining hardening (deferred): per-provider tamper STAMP (hooks are stamped;
+   providers are validated + loaded but not yet stamped — note, not a gap in the
+   read-only guarantee, which is enforced at compile).
 5. **Defer:** parameterized built-ins (`file.exists(path)`), the stateful axis
-   (ledger providers), and any new typed role for PermissionRequest /
-   prompt-rewrite — until demand is proven.
+   (ledger providers), provider stamping, and any new typed role for
+   PermissionRequest / prompt-rewrite — until demand is proven.
 
 Per `prefer-existing-solutions`: ADOPT the pattern (pure policy + host-gathered
 context + closed-then-declared provider registry — the unanimous design); BUILD a

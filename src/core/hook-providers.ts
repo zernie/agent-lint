@@ -48,8 +48,8 @@ export interface InlineProvider<Name extends string = string> {
   readonly dangerous: boolean;
 }
 
-/** A `needs` entry — a built-in name OR an inline `provide`/`dangerously`. */
-export type NeedSpec = ProviderName | InlineProvider;
+/** A `needs` entry — a built-in name, an inline `provide`/`dangerously`, or a `provider()` ref. */
+export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
 
 /**
  * Declare an INLINE read-only fact: `provide("k8sCtx", "kubectl config current-context")`.
@@ -73,11 +73,53 @@ export const dangerously = <const Name extends string>(
   run: string,
 ): InlineProvider<Name> => ({ kind: "inline", name, run, dangerous: true });
 
+/**
+ * A REGISTERED provider — a reusable, named fact authored once in
+ * `.vigiles/providers/<name>.{mjs,ts}` (default-exported via {@link defineProvider})
+ * and referenced from many hooks by {@link provider} name. The reusable sibling of
+ * the one-off inline {@link provide}; same read-only-by-default rule.
+ */
+export interface RegisteredProvider<Name extends string = string> {
+  readonly kind: "provider-def";
+  readonly name: Name;
+  readonly run: string;
+  readonly dangerous: boolean;
+}
+
+/** Author a registered provider: `export default defineProvider({ name, run })`. */
+export const defineProvider = <const Name extends string>(p: {
+  readonly name: Name;
+  readonly run: string;
+  /** Acknowledge a command that isn't provably read-only (the loud escape). */
+  readonly dangerous?: boolean;
+}): RegisteredProvider<Name> => ({
+  kind: "provider-def",
+  name: p.name,
+  run: p.run,
+  dangerous: p.dangerous ?? false,
+});
+
+/** A reference to a registered provider, used in a hook's `needs`: `provider("myFact")`. */
+export interface RegisteredRef<Name extends string = string> {
+  readonly kind: "provider-ref";
+  readonly name: Name;
+}
+
+/** Reference a registered provider (from `.vigiles/providers/`) by name in `needs`. */
+export const provider = <const Name extends string>(
+  name: Name,
+): RegisteredRef<Name> => ({ kind: "provider-ref", name });
+
+/** name → its registered provider; the runtime resolves a `provider(name)` ref against this. */
+export type ProviderRegistry = Record<string, RegisteredProvider>;
+
 type NeedName<E extends NeedSpec> = E extends ProviderName
   ? E
   : E extends InlineProvider<infer Nm>
     ? Nm
-    : never;
+    : E extends RegisteredRef<infer Rn>
+      ? Rn
+      : never;
 type NeedValue<E extends NeedSpec> = E extends ProviderName
   ? ProviderResults[E]
   : string;
@@ -144,16 +186,34 @@ export const BUILTIN_PROVIDERS: {
   },
 };
 
-/** True iff a `needs` entry is an inline `provide`/`dangerously` (not a built-in name). */
+/** True iff a `needs` entry is an inline `provide`/`dangerously`. */
 function isInline(need: NeedSpec): need is InlineProvider {
-  return typeof need !== "string";
+  return typeof need !== "string" && need.kind === "inline";
 }
 
-/** Built-in `needs` names that aren't real providers (a typo → compile error). */
-export function unknownProviders(needs: readonly NeedSpec[]): string[] {
-  return needs
-    .filter((n): n is ProviderName => !isInline(n))
-    .filter((n) => !(n in BUILTIN_PROVIDERS));
+/** True iff a `needs` entry is a `provider()` reference to a registered provider. */
+function isRef(need: NeedSpec): need is RegisteredRef {
+  return typeof need !== "string" && need.kind === "provider-ref";
+}
+
+/**
+ * `needs` entries that don't resolve: a built-in NAME that isn't a built-in (a
+ * typo), or a `provider()` ref whose name isn't in `registeredNames` (a dangling
+ * ref). Inline `provide`/`dangerously` are always self-defined, so never flagged.
+ */
+export function unknownProviders(
+  needs: readonly NeedSpec[],
+  registeredNames: readonly string[] = [],
+): string[] {
+  const registered = new Set(registeredNames);
+  const out: string[] = [];
+  for (const n of needs) {
+    if (isInline(n)) continue;
+    if (isRef(n)) {
+      if (!registered.has(n.name)) out.push(n.name);
+    } else if (!(n in BUILTIN_PROVIDERS)) out.push(n);
+  }
+  return out;
 }
 
 /**
@@ -170,20 +230,32 @@ export function unsafeInlineProviders(
 }
 
 /**
+ * Is a REGISTERED provider's command unsafe (not read-only and not acknowledged
+ * `dangerous`)? Reused when compiling a `.vigiles/providers/` file.
+ */
+export function unsafeProvider(def: RegisteredProvider): boolean {
+  return !def.dangerous && !isReadOnlyBash(def.run);
+}
+
+/**
  * Gather the DECLARED facts into a context object (the trusted-host step). Only
- * the names in `needs` are gathered, each at most once; a built-in or inline
- * provider that can't resolve yields its default ("" / false), never throws. Pure
- * over the injected `io` — the CLI passes a real execSync-backed exec; tests pass
- * a fake.
+ * the names in `needs` are gathered, each at most once; a built-in, inline, or
+ * registered provider that can't resolve yields its default ("" / false), never
+ * throws. Pure over the injected `io` (CLI passes a real execSync; tests a fake)
+ * and the `registry` (the loaded `.vigiles/providers/`, for `provider()` refs).
  */
 export function gatherContext(
   needs: readonly NeedSpec[],
   io: ProviderIO,
+  registry: ProviderRegistry = {},
 ): Record<string, string | boolean> {
   const ctx: Record<string, string | boolean> = {};
   for (const need of needs) {
     if (isInline(need)) ctx[need.name] = tryExec(io, need.run);
-    else ctx[need] = BUILTIN_PROVIDERS[need].gather(io);
+    else if (isRef(need)) {
+      const def = registry[need.name];
+      ctx[need.name] = def ? tryExec(io, def.run) : "";
+    } else ctx[need] = BUILTIN_PROVIDERS[need].gather(io);
   }
   return ctx;
 }

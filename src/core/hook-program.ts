@@ -310,6 +310,8 @@ export interface CompileHookOptions {
   readonly hookProtocol?: HookProtocol;
   /** Settings encoding — `"json"` (Claude Code) or `"toml"` (Codex). From `PluginLayout.settingsFormat`. */
   readonly settingsFormat?: "json" | "toml";
+  /** Names of registered providers (`.vigiles/providers/`) a `provider()` ref may resolve to. */
+  readonly registeredProviders?: readonly string[];
 }
 
 /**
@@ -463,14 +465,14 @@ export function compileHookProgram(
   // A `needs` entry that isn't a built-in provider never resolves — reject it
   // (the typo-won't-compile guarantee, for JS authors the type can't reach).
   const needs = hookNeeds(hook);
-  const unknownNeeds = unknownProviders(needs);
+  const unknownNeeds = unknownProviders(needs, opts.registeredProviders);
   if (unknownNeeds.length > 0) {
     throw new HookCompileError(
       `unknown context provider(s): ${unknownNeeds.join(", ")} — built-ins are ${Object.keys(
         BUILTIN_PROVIDERS,
       ).join(
         ", ",
-      )} (or use provide()/dangerously() for an inline one; see research/hook-context-providers.md).`,
+      )}; a provider() ref must resolve to a .vigiles/providers/ file, or use provide()/dangerously() inline (see research/hook-context-providers.md).`,
     );
   }
   // An inline provide() whose command isn't provably read-only must be acknowledged.

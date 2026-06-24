@@ -61,6 +61,7 @@ export interface CompileHookOptions {
     readonly dialect?: HarnessDialect;
     readonly gateCommand?: string;
     readonly hookProtocol?: HookProtocol;
+    readonly registeredProviders?: readonly string[];
     readonly settingsFormat?: "json" | "toml";
 }
 
@@ -121,6 +122,13 @@ export const defineInject: (p: Omit<InjectHook, "role">) => InjectHook;
 
 // @public (undocumented)
 export function definePromptGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
+
+// @public
+export const defineProvider: <const Name extends string>(p: {
+    readonly name: Name;
+    readonly run: string;
+    readonly dangerous?: boolean;
+}) => RegisteredProvider<Name>;
 
 // @public (undocumented)
 export const defineReact: (p: Omit<ReactHook, "role">) => ReactHook;
@@ -265,7 +273,7 @@ export interface InlineProvider<Name extends string = string> {
 }
 
 // @public
-export type NeedSpec = ProviderName | InlineProvider;
+export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
 
 // @public
 export const nothing: () => Reaction;
@@ -305,7 +313,13 @@ export interface PromptGateHook<N extends readonly NeedSpec[] = readonly Provide
 export const provide: <const Name extends string>(name: Name, run: string) => InlineProvider<Name>;
 
 // @public
+export const provider: <const Name extends string>(name: Name) => RegisteredRef<Name>;
+
+// @public
 export type ProviderName = keyof ProviderResults;
+
+// @public
+export type ProviderRegistry = Record<string, RegisteredProvider>;
 
 // @public
 export interface ProviderResults {
@@ -361,6 +375,26 @@ export type Reaction = RunReaction | {
 } | {
     readonly kind: "none";
 };
+
+// @public
+export interface RegisteredProvider<Name extends string = string> {
+    // (undocumented)
+    readonly dangerous: boolean;
+    // (undocumented)
+    readonly kind: "provider-def";
+    // (undocumented)
+    readonly name: Name;
+    // (undocumented)
+    readonly run: string;
+}
+
+// @public
+export interface RegisteredRef<Name extends string = string> {
+    // (undocumented)
+    readonly kind: "provider-ref";
+    // (undocumented)
+    readonly name: Name;
+}
 
 // @public
 export interface ResponseView {

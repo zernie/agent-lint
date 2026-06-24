@@ -612,6 +612,52 @@ export default defineHook({
   }
 });
 
+// E2E dogfood — a REGISTERED provider (v2): a reusable named fact in
+// .vigiles/providers/, referenced by provider("name") in a hook. The real runtime
+// discovers the provider, runs its read-only command, and hands the value in.
+test("hook-runtime run-program: a registered provider() ref is resolved + drives the decision", () => {
+  const dir = makeTmpDir();
+  try {
+    initGitRepo(dir);
+    mkdirSync(resolve(dir, ".vigiles/providers"), { recursive: true });
+    mkdirSync(resolve(dir, ".vigiles/hooks"), { recursive: true });
+    fixture(
+      dir,
+      ".vigiles/providers/author.mjs",
+      `import { defineProvider } from "__HOOK__";
+export default defineProvider({ name: "author", run: "git config user.name" });`,
+    );
+    const f = fixture(
+      dir,
+      ".vigiles/hooks/by-author.mjs",
+      `import { defineHook, tool, deny, allow, provider } from "__HOOK__";
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: [provider("author")],
+  decide: (e) =>
+    e.ctx.author === "Test" && e.command.runs("git push")
+      ? deny("Test author may not push")
+      : allow(),
+});`,
+    );
+    const denied = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push origin HEAD" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(denied.blocked, true);
+    assert.equal(denied.exitCode, 2);
+    assert.match(denied.stderr, /may not push/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 /** Minimal shape of a CC settings.json for the merge dogfood (avoids `any`). */
 interface SettingsShape {
   hooks: Record<
