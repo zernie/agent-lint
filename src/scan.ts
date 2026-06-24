@@ -172,6 +172,13 @@ export interface ScanReport {
   readonly hooks: readonly ScanHook[];
   /** Hook entries with no script file (inline shell one-liners) — can't be path-checked. */
   readonly inlineHooks: number;
+  /**
+   * Hand-written hook commands that are NOT compiled `vigiles/hook` artifacts (a
+   * compiled hook's command invokes `vigiles hook-runtime run-program`). The basis
+   * for the `prefer-compiled-hooks` recommendation — a single nudge regardless of
+   * count. Zero when there are no hooks or every hook is vigiles-managed.
+   */
+  readonly manualHookCount: number;
   readonly commands: number;
   readonly mcp: boolean;
   /**
@@ -490,16 +497,42 @@ function resolveScript(
 const EXISTENCE_GUARD =
   /(?:\[\[?\s*!?\s*-[efsx]\s)|(?:\btest\s+!?\s*-[efsx]\s)/;
 
+/**
+ * A compiled `vigiles/hook` artifact runs through the `hook-runtime run-program`
+ * runtime entrypoint; any other hook command is hand-written (a shell script or
+ * an inline one-liner) the author maintains directly. The basis for the
+ * `prefer-compiled-hooks` nudge.
+ */
+export function isManagedHookCommand(command: string): boolean {
+  return /\bhook-runtime\b/.test(command);
+}
+
+/** The `prefer-compiled-hooks` recommendation message (shared by `lint` + `scan`). */
+export function preferCompiledHooksMessage(count: number): string {
+  return (
+    `${String(count)} hand-written hook command(s) — if any gate the agent ` +
+    `(a block/deny decision), compiled hooks (\`vigiles/hook\`) make whole hook ` +
+    `bug classes unrepresentable at authoring time, and \`guardrail-check\` proves ` +
+    `an existing one blocks. See docs/compiled-hooks.md.`
+  );
+}
+
 /** Pull script-file hook commands out of the resolved settings; count inline ones. */
 function scanHooks(
   settings: { hooks?: unknown },
   root: string,
   pluginRootToken: string,
-): { hooks: ScanHook[]; inline: number } {
+): { hooks: ScanHook[]; inline: number; manual: number } {
   const text = JSON.stringify(settings.hooks ?? {});
   const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
     (m) => m[1],
   );
+  // A hand-written hook is any non-empty command that isn't a vigiles-managed
+  // (compiled) hook-runtime invocation — the basis for the prefer-compiled-hooks nudge.
+  const manual = commands.filter((c) => {
+    const u = c.replace(/\\(.)/g, "$1").trim();
+    return u !== "" && !isManagedHookCommand(u);
+  }).length;
   const byScript = new Map<string, ScanHook>();
   let inline = 0;
   for (const cmd of commands) {
@@ -523,7 +556,7 @@ function scanHooks(
   const hooks = [...byScript.values()].sort((a, b) =>
     a.script.localeCompare(b.script),
   );
-  return { hooks, inline };
+  return { hooks, inline, manual };
 }
 
 // ---------------------------------------------------------------------------
@@ -739,7 +772,7 @@ export function scanPlugin(
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
   const loaded = loadPlugin(dir, lay);
-  const { hooks, inline } = scanHooks(
+  const { hooks, inline, manual } = scanHooks(
     loaded.settings,
     resolve(dir),
     lay.pluginRootToken,
@@ -786,6 +819,7 @@ export function scanPlugin(
     agents,
     hooks,
     inlineHooks: inline,
+    manualHookCount: manual,
     commands: Object.keys(loaded.files).filter(cls.isCommand).length,
     mcp: loaded.warnings.some((w) => w.includes("MCP server")),
     danglingRefs: danglingRefs(resolve(dir), lay),
@@ -1109,6 +1143,12 @@ export function formatScanReport(r: ScanReport): string {
       `ℹ ${String(r.skillMetaIssues.length)} skill(s) lack an explicit frontmatter name/description (recommended for a reliable trigger surface) — they still load via fallback`,
       "",
     );
+  }
+
+  // One discovery nudge toward compiled hooks (never per-hook); the hand-written
+  // shell lane stays first-class, so this is a recommendation, not a defect.
+  if (r.manualHookCount > 0) {
+    out.push(`ℹ ${preferCompiledHooksMessage(r.manualHookCount)}`, "");
   }
 
   // Malformed-YAML frontmatter is INFORMATIONAL, not a structural defect: js-yaml

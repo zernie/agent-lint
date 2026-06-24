@@ -177,7 +177,7 @@ the surface exists.
 | Instruction file &amp; docs | `require-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                    | all harnesses                             |
 | Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
 | MCP                         | `mcp-config`                                                                               | all with MCP                              |
-| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`                                       | Claude Code, Codex                        |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`              | Claude Code, Codex                        |
 | Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
 
 The per-family tables below give each rule's default severity and what it checks.
@@ -215,13 +215,14 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Hooks &amp; MCP
 
-| Rule                                                            | Default  | What it checks                                                         |
-| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)          |
-| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)    |
-| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)             |
-| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server |
-| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool               |
+| Rule                                                            | Default  | What it checks                                                            |
+| --------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)             |
+| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)       |
+| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)                |
+| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server    |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool                  |
+| [`prefer-compiled-hooks`](rules/prefer-compiled-hooks.md)       | `"warn"` | One nudge: hand-written hooks could be compiled (recommendation, opt-out) |
 
 ### Skill triggers
 

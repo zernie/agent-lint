@@ -67,6 +67,7 @@ import {
   inspectMarketplace,
   verifyLiveMcpTools,
   formatMcpContractReport,
+  preferCompiledHooksMessage,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
@@ -859,6 +860,8 @@ interface LintReport {
   frontmatterValidErrors: number;
   mcpHookIssues: number;
   mcpHookErrors: number;
+  preferCompiledHookIssues: number;
+  preferCompiledHookErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -963,6 +966,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.descriptionOverlapErrors > 0 ||
     report.frontmatterValidErrors > 0 ||
     report.mcpHookErrors > 0 ||
+    report.preferCompiledHookErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1399,6 +1403,10 @@ async function runLint(
   // targets an undeclared server (the moat applied to the hook surface).
   const mcpHookTargets = checkMcpHookTargets(config, silent, adapter);
 
+  // 7n. Prefer-compiled-hooks — ONE discovery nudge (not per-hook) toward
+  // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
+  const preferCompiledHooks = checkPreferCompiledHooks(config, silent, adapter);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1471,6 +1479,8 @@ async function runLint(
     frontmatterValidErrors: frontmatterValid.errors,
     mcpHookIssues: mcpHookTargets.issues,
     mcpHookErrors: mcpHookTargets.errors,
+    preferCompiledHookIssues: preferCompiledHooks.issues,
+    preferCompiledHookErrors: preferCompiledHooks.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2862,6 +2872,40 @@ function checkSkillFrontmatter(
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `prefer-compiled-hooks` rule: a SINGLE repo-level recommendation
+ * (one finding regardless of hook count) nudging hand-written hooks toward
+ * compiled `vigiles/hook` artifacts. A discovery nudge, not a defect — the shell
+ * lane stays first-class — so it fires once and the message links the guide.
+ * Reuses `scanPlugin`'s `manualHookCount` (one-detector-no-drift).
+ */
+function checkPreferCompiledHooks(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["prefer-compiled-hooks"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let count: number;
+  try {
+    count = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).manualHookCount;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (count === 0) return { issues: 0, errors: 0 };
+  const message = preferCompiledHooksMessage(count);
+  if (!silent) {
+    console.log("\nCompiled-hooks check:\n");
+    console.log(`  ${sev === "error" ? "✗" : "ℹ"} ${message}`);
+    ghAnnotate(sev === "error" ? "error" : "warning", message);
+  }
+  return { issues: 1, errors: sev === "error" ? 1 : 0 };
 }
 
 /**
