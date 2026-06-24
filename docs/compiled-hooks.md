@@ -192,18 +192,43 @@ result. `needs` is **typed** — reading an undeclared fact (`e.ctx["cwd"]` here
 a `tsc` error, and an unknown provider name **won't compile** — so the
 capability surface stays explicit and auditable.
 
-**Built-in providers (v1):** `git.branch`, `git.isDirty`, `cwd` — zero-arg,
-read-only. (A provider that can't resolve — e.g. not a git repo — yields its
-default, never an error.)
+**Built-in providers:** `git.branch`, `git.isDirty`, `cwd`, `os.platform` —
+zero-arg, read-only. (A provider that can't resolve — e.g. not a git repo —
+yields its default, never an error.) The set is deliberately small; a 20+ OSS
+survey found most facts a hook reads are already event data, and the long tail
+belongs in the opt-out, not a growing catalog.
 
-**The long tail — opt-out ladder.** A curated set can't cover every project. The
-model is a graduated ladder (the same shape as the purity escape hatch), so you
-are **never trapped**: built-in providers → **user-declared providers** (a named
-provider you register for an obscure/project-specific fact — _design stage, v2_)
-→ the **shell lane** (a hand-written `.sh` for arbitrary in-decision logic,
-verified with the disaster battery). You always know which rung you're on; the
-capability-diff says so. Full design + the "every real-world hook maps to a tier"
-coverage proof: [`research/hook-context-providers.md`](../research/hook-context-providers.md).
+**The lightweight opt-out — `provide` / `dangerously`.** For a one-off,
+off-catalog fact you don't want to register a whole provider for, declare an
+**inline** command right in `needs`:
+
+```ts
+import { defineHook, tool, deny, allow, provide } from "vigiles/hook";
+
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: [provide("k8sCtx", "kubectl config current-context")], // read-only, inline
+  decide: (e) =>
+    e.ctx.k8sCtx === "prod" && e.command.runs("kubectl delete")
+      ? deny("no kubectl delete against prod")
+      : allow(),
+});
+```
+
+The trusted runtime runs the command (so `decide` still does zero I/O) and hands
+its stdout in as `e.ctx[name]`. `provide(name, cmd)` requires a **provably
+read-only** command (compile rejects it otherwise); `dangerously(name, cmd)` is
+the **loud, greppable escape** for a command that isn't (the
+`dangerouslySetInnerHTML` / `unsafe` convention — a security review searches for
+that one word).
+
+**The opt-out ladder** (you're **never trapped**): built-in providers → inline
+`provide` / `dangerously` → **user-declared providers** (a reusable named one —
+_v2, design stage_) → the **shell lane** (a hand-written `.sh` for arbitrary
+in-decision logic, verified with the disaster battery). You always know which
+rung you're on. Full design + the "every real-world hook maps to a tier" coverage
+proof: [`research/hook-context-providers.md`](../research/hook-context-providers.md).
 
 ## Compile and wire
 

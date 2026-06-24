@@ -7,14 +7,14 @@
 // @public (undocumented)
 export const allow: () => Decision;
 
-// @public
-export type AnyHook = HookProgram | FileGateHook | PromptGateHook | StopGateHook | InjectHook | ReactHook;
+// @public (undocumented)
+export type AnyHook = HookProgram<ErasedNeeds> | FileGateHook<ErasedNeeds> | PromptGateHook<ErasedNeeds> | StopGateHook<ErasedNeeds> | InjectHook | ReactHook;
 
 // @public (undocumented)
 export const ask: (reason: string) => Decision;
 
 // @public
-export interface BashToolEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface BashToolEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     // (undocumented)
     readonly command: CommandView;
     readonly ctx: HookCtx<N>;
@@ -68,30 +68,33 @@ export interface CompileHookOptions {
 export function compileHookProgram(source: string, hook: AnyHook, opts?: CompileHookOptions): CompiledHookProgram;
 
 // @public
-export function decideFileGate(hook: FileGateHook, raw: {
+export const dangerously: <const Name extends string>(name: Name, run: string) => InlineProvider<Name>;
+
+// @public
+export function decideFileGate<N extends readonly NeedSpec[]>(hook: FileGateHook<N>, raw: {
     tool_name?: string;
     tool_input?: {
         file_path?: unknown;
     };
-}, ctx?: Partial<ProviderResults>): Decision;
+}, ctx?: Record<string, string | boolean>): Decision;
 
 // @public
-export function decideProgram(program: HookProgram, rawEvent: {
+export function decideProgram<N extends readonly NeedSpec[]>(program: HookProgram<N>, rawEvent: {
     tool_name?: string;
     tool_input?: {
         command?: unknown;
     };
-}, ctx?: Partial<ProviderResults>): Decision;
+}, ctx?: Record<string, string | boolean>): Decision;
 
 // @public
-export function decidePromptGate(hook: PromptGateHook, raw: {
+export function decidePromptGate<N extends readonly NeedSpec[]>(hook: PromptGateHook<N>, raw: {
     prompt?: unknown;
-}, ctx?: Partial<ProviderResults>): Decision;
+}, ctx?: Record<string, string | boolean>): Decision;
 
 // @public
-export function decideStopGate(hook: StopGateHook, raw: {
+export function decideStopGate<N extends readonly NeedSpec[]>(hook: StopGateHook<N>, raw: {
     stop_hook_active?: unknown;
-}, ctx?: Partial<ProviderResults>): Decision;
+}, ctx?: Record<string, string | boolean>): Decision;
 
 // @public (undocumented)
 export type Decision = {
@@ -108,22 +111,22 @@ export type Decision = {
 export function decisionExitCode(d: Decision): number;
 
 // @public (undocumented)
-export function defineFileGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N>;
+export function defineFileGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<FileGateHook<N>, "role">): FileGateHook<N>;
 
 // @public (undocumented)
-export function defineHook<const N extends readonly ProviderName[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
+export function defineHook<const N extends readonly NeedSpec[] = readonly []>(p: HookProgram<N>): HookProgram<N>;
 
 // @public (undocumented)
 export const defineInject: (p: Omit<InjectHook, "role">) => InjectHook;
 
 // @public (undocumented)
-export function definePromptGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
+export function definePromptGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N>;
 
 // @public (undocumented)
 export const defineReact: (p: Omit<ReactHook, "role">) => ReactHook;
 
 // @public (undocumented)
-export function defineStopGate<const N extends readonly ProviderName[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
+export function defineStopGate<const N extends readonly NeedSpec[] = readonly []>(p: Omit<StopGateHook<N>, "role">): StopGateHook<N>;
 
 // @public (undocumented)
 export const deny: (reason: string) => Decision;
@@ -135,7 +138,7 @@ export type DispatchKind = "bash-gate" | "file-gate" | "prompt-gate" | "stop-gat
 export function dispatchKind(hook: AnyHook): DispatchKind;
 
 // @public (undocumented)
-export interface FileGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface FileGateHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     // (undocumented)
     readonly decide: (e: FileToolEvent<N>) => Decision;
     // (undocumented)
@@ -151,7 +154,7 @@ export interface FileGateHook<N extends readonly ProviderName[] = readonly Provi
 }
 
 // @public
-export interface FileToolEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface FileToolEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
@@ -184,8 +187,8 @@ export class HookCompileError extends Error {
 }
 
 // @public
-export type HookCtx<N extends readonly ProviderName[] = readonly ProviderName[]> = {
-    readonly [K in N[number]]: ProviderResults[K];
+export type HookCtx<N extends readonly NeedSpec[] = readonly ProviderName[]> = {
+    readonly [E in N[number] as NeedName<E>]: NeedValue<E>;
 };
 
 // @public
@@ -195,10 +198,10 @@ export type HookMode = "enforce" | "observe";
 export function hookMode(hook: AnyHook): HookMode;
 
 // @public
-export function hookNeeds(hook: AnyHook): readonly ProviderName[];
+export function hookNeeds(hook: AnyHook): readonly NeedSpec[];
 
 // @public
-export interface HookProgram<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface HookProgram<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     // (undocumented)
     readonly decide: (e: BashToolEvent<N>) => Decision;
     // (undocumented)
@@ -250,6 +253,21 @@ export interface Injection {
 }
 
 // @public
+export interface InlineProvider<Name extends string = string> {
+    // (undocumented)
+    readonly dangerous: boolean;
+    // (undocumented)
+    readonly kind: "inline";
+    // (undocumented)
+    readonly name: Name;
+    // (undocumented)
+    readonly run: string;
+}
+
+// @public
+export type NeedSpec = ProviderName | InlineProvider;
+
+// @public
 export const nothing: () => Reaction;
 
 // @public
@@ -266,7 +284,7 @@ export interface PathView {
 export function pathView(raw: string): PathView;
 
 // @public
-export interface PromptEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface PromptEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
@@ -274,7 +292,7 @@ export interface PromptEvent<N extends readonly ProviderName[] = readonly Provid
 }
 
 // @public (undocumented)
-export interface PromptGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface PromptGateHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     readonly decide: (e: PromptEvent<N>) => Decision;
     readonly mode?: HookMode;
     readonly needs?: N;
@@ -284,12 +302,16 @@ export interface PromptGateHook<N extends readonly ProviderName[] = readonly Pro
 }
 
 // @public
+export const provide: <const Name extends string>(name: Name, run: string) => InlineProvider<Name>;
+
+// @public
 export type ProviderName = keyof ProviderResults;
 
 // @public
 export interface ProviderResults {
     readonly "git.branch": string;
     readonly "git.isDirty": boolean;
+    readonly "os.platform": NodeJS.Platform;
     readonly cwd: string;
 }
 
@@ -354,7 +376,7 @@ export function responseView(raw: unknown): ResponseView;
 export const run: (command: string) => RunReaction;
 
 // @public
-export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Partial<ProviderResults>): HookProgramOutcome;
+export function runHookProgram(hook: AnyHook, event: RawHookEvent, ctx?: Record<string, string | boolean>): HookProgramOutcome;
 
 // @public
 export function runInject(hook: InjectHook, raw: {
@@ -397,7 +419,7 @@ export interface SessionEvent {
 export function stampHook(source: string): SHA256Hash;
 
 // @public
-export interface StopEvent<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface StopEvent<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     readonly ctx: HookCtx<N>;
     // (undocumented)
     readonly event: string;
@@ -405,7 +427,7 @@ export interface StopEvent<N extends readonly ProviderName[] = readonly Provider
 }
 
 // @public (undocumented)
-export interface StopGateHook<N extends readonly ProviderName[] = readonly ProviderName[]> {
+export interface StopGateHook<N extends readonly NeedSpec[] = readonly ProviderName[]> {
     readonly decide: (e: StopEvent<N>) => Decision;
     readonly mode?: HookMode;
     readonly needs?: N;

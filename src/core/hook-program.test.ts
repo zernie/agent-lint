@@ -45,6 +45,7 @@ import {
   decideStopGate,
   responseView,
 } from "./hook-program.js";
+import { provide, dangerously } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
 
@@ -421,6 +422,55 @@ test("context: a gate decides on e.ctx (declared facts), passed in by the runtim
   });
   assert.equal(out.kind, "decision");
   if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+test("context: an inline provide() fact is read from e.ctx by name", () => {
+  const noDeleteProd = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provide("k8sCtx", "kubectl config current-context")],
+    decide: (e) =>
+      e.ctx.k8sCtx === "prod" && e.command.runs("kubectl delete")
+        ? deny("no kubectl delete against prod")
+        : allow(),
+  });
+  assert.equal(
+    decideProgram(noDeleteProd, ev("kubectl delete pod x"), { k8sCtx: "prod" })
+      .kind,
+    "deny",
+  );
+  assert.equal(
+    decideProgram(noDeleteProd, ev("kubectl delete pod x"), { k8sCtx: "dev" })
+      .kind,
+    "allow",
+  );
+});
+
+test("context: a provide() with a non-read-only command does NOT compile (use dangerously)", () => {
+  const mutating = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provide("x", "rm -rf /tmp/x")], // not read-only
+    decide: () => allow(),
+  });
+  assert.throws(
+    () =>
+      compileHookProgram(
+        `import { defineHook } from "vigiles/hook";`,
+        mutating,
+      ),
+    /not provably read-only/,
+  );
+  // The same command via dangerously() compiles (acknowledged escape).
+  const ack = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [dangerously("x", "rm -rf /tmp/x")],
+    decide: () => allow(),
+  });
+  assert.ok(
+    compileHookProgram(`import { defineHook } from "vigiles/hook";`, ack).stamp,
+  );
 });
 
 test("context: an unknown provider in `needs` does NOT compile", () => {
