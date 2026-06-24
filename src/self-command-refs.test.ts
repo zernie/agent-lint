@@ -40,7 +40,7 @@ describe("findStaleCommandRefs", () => {
           path: "a.ts",
           content: '  console.error("Usage: vigiles run-skill x");',
         },
-        { path: "b.ts", content: "  `node ${CLI} cli.js hook-runtime bogus`" },
+        { path: "b.ts", content: "  `node ${CLI} hook-runtime bogus`" },
       ],
       KNOWN,
     );
@@ -48,6 +48,28 @@ describe("findStaleCommandRefs", () => {
       expect.stringMatching(/unknown\/removed command "run-skill"/),
       expect.stringMatching(/unknown hook-runtime kind "bogus"/),
     ]);
+  });
+
+  it("flags a stale runtime ref behind the ${CLI} harness convention", () => {
+    // The class that slipped past until now: a `.harness.mjs` calling the
+    // pre-rename `refs-hook` via `node ${CLI} <cmd>` (the literal isn't
+    // `vigiles`/`cli.js`). A correct `node ${CLI} hook-runtime <known-kind>` is clean.
+    const issues = findStaleCommandRefs(
+      [
+        {
+          path: "stale.harness.mjs",
+          content: "  command: `node ${CLI} refs-hook`,",
+        },
+        {
+          path: "ok.harness.mjs",
+          content: "  command: `node ${CLI} hook-runtime guard`,",
+        },
+      ],
+      KNOWN,
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].ref).toBe("${CLI} refs-hook");
+    expect(issues[0].reason).toMatch(/unknown\/removed command "refs-hook"/);
   });
 
   it("does NOT flag prose (no command context)", () => {
