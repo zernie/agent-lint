@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, nothing stops them entering a <em>bad state</em>, nothing tests they <em>work</em>, and nothing measures whether they actually <em>help</em>. vigiles does all four — most of it deterministic and key-free; the real-model checks run on your <strong>Claude Pro/Max subscription, not metered tokens</strong>.
+  Your CLAUDE.md, hooks, and skills steer the agent — but nothing checks they're <em>true</em>, nothing stops them entering a <em>bad state</em>, nothing tests they <em>work</em>, and nothing measures whether they actually <em>help</em>. vigiles does all four — most of it deterministic and key-free (so it runs free in CI); the real-model checks run on your <strong>Claude Pro/Max subscription, not metered tokens</strong>.
 </p>
 
 <p align="center">
@@ -32,9 +32,11 @@ testable object instead of vibes. Four instruments, adopt any:
 | **🧪 Test**  | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)**                                          |
 | **📊 Eval**  | Does that skill or plugin actually help — or just add cost? **A/B it on real tasks** and read the bill + correctness, not the vendor's headline — the eval you can afford. **[→](docs/measuring-skills.md)**                                                                              |
 
-Pick the one that hurts today. **Works with Claude Code and Codex**
-([`vigiles/codex`](docs/harnesses.md)), and you can
-[teach it your own harness](docs/authoring-an-adapter.md).
+Pick the one that hurts today. **No TypeScript needed** — `vigiles lint` and inline
+`<!-- vigiles:enforce -->` comments work on any CLAUDE.md (the typed `.spec.ts` is
+opt-in). **Ship plugins to others?** `vigiles scan` ranks a whole marketplace by
+structural health, no key. **Works with Claude Code and Codex**
+([`vigiles/codex`](docs/harnesses.md)), or [teach it your own harness](docs/authoring-an-adapter.md).
 
 ## Quick start
 
@@ -95,10 +97,10 @@ with one inline comment, no new files;
 step up to a typed `.spec.ts` (compiled to CLAUDE.md) when you want it.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
-> **Markdown is prose; a typed spec is a _program_.** Opt in and an agent that
-> leaks or hands off mismatched data is a **type error** — your multi-agent
-> pipeline won't compile if the handoffs don't line up. Others lint prose; vigiles
-> is a **compiler for harnesses**, graduated like `strict`.
+> **Markdown is prose; a typed spec is a _program_.** Opt in and a mismatched
+> hand-off between agents is a **type error** — `pipe(producer, pipeStep(consumer, needs({…})))`
+> won't compile if step N's output doesn't supply step N+1's needs. Others lint
+> prose; vigiles is a **compiler for harnesses**, graduated like `strict`.
 
 ## ② Guard — author a hook that can't be wrong
 
@@ -126,7 +128,8 @@ field (false confidence), the matcher is **AST-backed** (catches the compound
 bypass a glob misses), the only import allowed is `vigiles/hook` (capability = API
 surface), and the artifact is **stamped** (a later hand-edit is refused). A real,
 widely-copied OSS safety hook blocks **2/7** of the disaster battery; the compiled
-rewrite blocks **7/7**. Honest about the cons: this fixes a hook's _logic_, not
+rewrite blocks **7/7** — **measured** by vigiles's own disaster battery, not
+asserted. Honest about the cons: this fixes a hook's _logic_, not
 the harness's _delivery_ — a subagent's tool calls still bypass any PreToolUse
 hook ([#34692](https://github.com/anthropics/claude-code/issues/34692)), so it's a
 strong default, not an unbypassable wall. **[Compiled hooks — bug classes + trade-offs →](docs/compiled-hooks.md)**
@@ -180,18 +183,15 @@ const r = await measureArms({
 - **The target** — whatever the skill claims to move (output tokens, latency, tool calls), verified on its own terms.
 - **The blast radius** — correctness, a deterministic 1/0. A token win that breaks the code is **not a win**.
 
-**Safe to repeat.** A real-model run executes the agent, so each one is sandboxed —
-ephemeral working dir, network blocked or allow-listed — and `interceptTools`
-catches an irreversible external (a push, a paid API) as an _attempt_, never
-running it. Side effects that reach past the sandbox (a real DB, redis, the
-network) have their own answer. **[Safety, sandboxing & FAQ →](docs/safety.md)**
-
-The kicker: every run is **your own `claude` CLI on your Pro/Max subscription**,
-so you can measure on every change. **[Eval a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**
+**Safe to repeat.** Each real-model run is sandboxed (ephemeral dir, egress blocked
+or allow-listed), and `interceptTools` catches an irreversible external — a push, a
+paid API — as an _attempt_, never running it. **[Safety, sandboxing & FAQ →](docs/safety.md)**
 
 **The eval you can actually afford.** promptfoo / DeepEval / … hit a metered API
-SDK and bill **per token, every run**; vigiles answers most questions with **no
-model at all** and runs the rest on **your Claude Pro/Max subscription — $0 extra**.
+SDK and bill **per token, every run**. vigiles answers most questions with **no
+model at all** (free in CI, no key), and runs the real-model rest on an
+**individual dev's Claude Pro/Max subscription — $0 extra, never a CI token** — so
+you can measure on every change. **[Eval a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**
 
 ## More
 
