@@ -26,7 +26,8 @@ How-to and reference docs for using vigiles. New here? Start with the
   - `vigiles/spec` — the authoring surface (the spec builders; also the module-augmentation target for generated types).
   - Per-tier barrels `vigiles/unit` / `vigiles/integration` / `vigiles/e2e` make a test's capability legible from its import.
 - **[API reference (generated) →](https://zernie.github.io/vigiles/)** — every exported symbol across all entry points, generated from the source by API Documenter and published to GitHub Pages. The hand-written guides here are the human-facing layer; this is the exhaustive symbol-level reference.
-- [`cli.md`](cli.md) — the full CLI, the GitHub Action, the Claude Code plugin, and the `lint` validation rules.
+- [`cli.md`](cli.md) — the full CLI, the Claude Code plugin, and the `lint` validation rules.
+- [`github-action.md`](github-action.md) — run vigiles in CI: the composite Action, every input, the sticky PR comment, versioning.
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
