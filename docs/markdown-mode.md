@@ -84,7 +84,7 @@ The reason to move from Level 0 to Level 1 is tooling. Generate a JSON
 Schema from your project's _actual_ enabled rules:
 
 ```bash
-npx vigiles generate-schema
+npx vigiles generate schema
 ```
 
 This writes `.vigiles/schema.json` with the `rule` field populated as an

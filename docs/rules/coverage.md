@@ -42,7 +42,7 @@ Script coverage: 4/5 (80%) (threshold: 50%)
 
 ### Linter rule coverage
 
-Compares enabled linter rules (detected via `vigiles generate-types`) against `enforce()` declarations in specs. A rule is "covered" when the spec explicitly references it.
+Compares enabled linter rules (detected via `vigiles generate types`) against `enforce()` declarations in specs. A rule is "covered" when the spec explicitly references it.
 
 ```
 Linter rule coverage: 3/64 (5%) (threshold: 5%)
