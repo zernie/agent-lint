@@ -107,8 +107,7 @@ Two multi-harness behaviours:
 
 `lint` takes **no** `--harness`: reference verification is harness-agnostic (it
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
-one dialect) and `scan` (reports harness-specific structure). See
-[research/multi-harness-compile.md](../research/multi-harness-compile.md).
+one dialect) and `scan` (reports harness-specific structure).
 
 ### Compiled hooks — folded into `compile`
 
@@ -255,7 +254,6 @@ Three things to know:
   names in a `tools:` contract _and_ declare the server — a sharp but minority pattern.
   Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
   (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
-  in a real plugin): [`research/plugin-structural-findings.md`](../research/plugin-structural-findings.md).
 
 #### Capability diff — `scan <after> --capability-diff=<before>`
 
@@ -317,9 +315,7 @@ Flags: `--prompts=`, `--concurrency=`, `--model=`, `--min-prompts=`, `--trials=`
 `--harness=`. A diversity gate requires **≥10 prompts per set** before spending a
 token (lower with `--min-prompts=` for a narrow skill). `--harness=codex` routes the
 trigger probe through the native Codex driver. See
-[`docs/harness-testing.md`](harness-testing.md),
-[`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md),
-and [`research/plugin-selection-collision.md`](../research/plugin-selection-collision.md).
+[`docs/harness-testing.md`](harness-testing.md).
 
 ### `explain [dir] [name]`
 
@@ -350,9 +346,7 @@ npx vigiles explain ./repo --harness=codex # override harness detection
 behavioural tier (the cause is likely in the prose, measured by an eval). It's
 the diagnostic the per-repo optimizer prints beside each drop/swap
 recommendation — _"underperforms **because** its description overlaps X"_, not
-just _"drop it"_. The pairing is the strategy in
-[`research/measurement-authority.md`](../research/measurement-authority.md)
-(measurement = the _what_; linting = the deterministic _why_).
+just _"drop it"_.
 
 ### `scaffold-test [dir]`
 
@@ -406,8 +400,6 @@ delta** — does dropping/swapping a skill actually move success or cost? — is
 next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
 flag rather than its own `optimize` verb until that measured half lands (an
 optimizer that only re-prints scan's findings hasn't earned a separate command).
-See [`research/measurement-authority.md`](../research/measurement-authority.md)
-(A2) and the [roadmap](../research/roadmap.md).
 
 ### `generate-harness [dir] [out]`
 
@@ -486,8 +478,7 @@ railway({
 ```
 
 See [`docs/railway-subagents.md`](railway-subagents.md) for the typed-composition
-guide and [`research/whole-harness-codegen.md`](../research/whole-harness-codegen.md)
-for the design, the measured TS-scaling verdict, and the encoding rule.
+guide.
 
 ## Lint vs scan — gate vs report
 

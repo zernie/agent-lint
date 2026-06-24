@@ -6,7 +6,6 @@
 > `Result<ok, err>`, so the orchestrator's control flow is **deterministic** and a
 > test **asserts** the outcome instead of paying an LLM to judge prose.
 >
-> Internal design rationale: [`research/railway-subagents.md`](../research/railway-subagents.md).
 > Where this fits the testing tiers: [`harness-testing.md`](harness-testing.md).
 
 ## Contents
@@ -317,16 +316,9 @@ export default skill({
 });
 ```
 
-The reasoning and citations:
-[`research/spec-syntax-and-railway-scope.md`](../research/spec-syntax-and-railway-scope.md).
-
 ## See also
 
 - [`harness-testing.md`](harness-testing.md) — the testing tiers; the
   "assert a subagent's typed outcome" section sits in the same family.
 - [`spec-format.md`](spec-format.md) — the spec format reference (targets,
   sections, rules, reference helpers).
-- [`research/railway-subagents.md`](../research/railway-subagents.md) — the design
-  exploration (the Temporal analogy, why sub-Turing).
-- [`research/subagent-compilation.md`](../research/subagent-compilation.md) — how
-  `agent()` compiles to a Claude Code subagent + the declared-vs-enforced rail.

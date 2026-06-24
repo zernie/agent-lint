@@ -258,4 +258,3 @@ const plugin = loadPlugin("./my-project", myHarnessAdapter.layout);
 
 - [`docs/authoring-an-adapter.md`](authoring-an-adapter.md) — the guided tutorial.
 - [`docs/harnesses.md`](harnesses.md) — how a consumer _selects_ a harness.
-- [`research/harness-landscape.md`](../research/harness-landscape.md) — concrete port values for Codex and 14 other harnesses.
