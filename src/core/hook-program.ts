@@ -41,9 +41,10 @@ import type { HookProtocol } from "./hook-protocol.js";
 import { verifyHookEvents } from "./hook-events.js";
 import {
   unknownProviders,
+  unsafeInlineProviders,
   BUILTIN_PROVIDERS,
   type ProviderName,
-  type ProviderResults,
+  type NeedSpec,
   type HookCtx,
 } from "./hook-providers.js";
 
@@ -186,7 +187,7 @@ export function commandView(raw: string): CommandView {
  * shape used by the runtime/`AnyHook`.
  */
 export interface BashToolEvent<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly event: string;
   readonly tool: "Bash";
@@ -197,7 +198,7 @@ export interface BashToolEvent<
 
 /** A hook program: where it fires + the pure decision. */
 export interface HookProgram<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly on: string;
   readonly match: { readonly tool: string };
@@ -209,9 +210,9 @@ export interface HookProgram<
 }
 
 export const tool = (name: string): { tool: string } => ({ tool: name });
-export function defineHook<
-  const N extends readonly ProviderName[] = readonly [],
->(p: HookProgram<N>): HookProgram<N> {
+export function defineHook<const N extends readonly NeedSpec[] = readonly []>(
+  p: HookProgram<N>,
+): HookProgram<N> {
   return p;
 }
 
@@ -220,10 +221,10 @@ export function defineHook<
 // ---------------------------------------------------------------------------
 
 /** Build the typed event from a raw PreToolUse event, then decide. */
-export function decideProgram(
-  program: HookProgram,
+export function decideProgram<N extends readonly NeedSpec[]>(
+  program: HookProgram<N>,
   rawEvent: { tool_name?: string; tool_input?: { command?: unknown } },
-  ctx: Partial<ProviderResults> = {},
+  ctx: Record<string, string | boolean> = {},
 ): Decision {
   if (rawEvent.tool_name !== program.match.tool) return allow();
   const command =
@@ -234,7 +235,7 @@ export function decideProgram(
     event: program.on,
     tool: "Bash",
     command: commandView(command),
-    ctx: ctx as HookCtx,
+    ctx: ctx as unknown as HookCtx<N>,
   });
 }
 
@@ -315,13 +316,30 @@ export interface CompileHookOptions {
  * Every hook shape the closed vocabulary can express. `compileHookProgram`
  * (emit) and the runtime dispatch both range over this union.
  */
+/**
+ * The ERASED needs-generic for the {@link AnyHook} union. A gate's `decide`
+ * carries `N` contravariantly (in the event param), so no single concrete
+ * instantiation is a supertype of every authored hook (a built-in-needs hook and
+ * an inline-needs hook have no common `HookProgram<N>`). `any` erases the context
+ * generic for the runtime/union view; the decode functions re-narrow + cast `ctx`
+ * (they never trust this type). Author-facing types keep the precise `N`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ErasedNeeds = readonly any[];
+
+/* eslint-disable @typescript-eslint/no-unnecessary-type-arguments -- ErasedNeeds
+   (readonly any[]) is deliberate, NOT the default: the union must accept EVERY
+   authored `N`, which the default (`readonly ProviderName[]`) cannot, because a
+   gate's `decide` is contravariant in `N`. `any` makes the instantiation
+   bivariant so a built-in-needs and an inline-needs hook both assign. */
 export type AnyHook =
-  | HookProgram
-  | FileGateHook
-  | PromptGateHook
-  | StopGateHook
+  | HookProgram<ErasedNeeds>
+  | FileGateHook<ErasedNeeds>
+  | PromptGateHook<ErasedNeeds>
+  | StopGateHook<ErasedNeeds>
   | InjectHook
   | ReactHook;
+/* eslint-enable @typescript-eslint/no-unnecessary-type-arguments */
 
 /**
  * The runtime dispatch shapes. A bare {@link HookProgram} (no `role`) is a Bash
@@ -350,9 +368,9 @@ export function hookMode(hook: AnyHook): HookMode {
 }
 
 /** The context providers a hook declared via `needs` ([] if none / not a gate). */
-export function hookNeeds(hook: AnyHook): readonly ProviderName[] {
+export function hookNeeds(hook: AnyHook): readonly NeedSpec[] {
   return "needs" in hook && Array.isArray(hook.needs)
-    ? (hook.needs as readonly ProviderName[])
+    ? (hook.needs as readonly NeedSpec[])
     : [];
 }
 
@@ -444,12 +462,26 @@ export function compileHookProgram(
   }
   // A `needs` entry that isn't a built-in provider never resolves — reject it
   // (the typo-won't-compile guarantee, for JS authors the type can't reach).
-  const unknownNeeds = unknownProviders(hookNeeds(hook) as readonly string[]);
+  const needs = hookNeeds(hook);
+  const unknownNeeds = unknownProviders(needs);
   if (unknownNeeds.length > 0) {
     throw new HookCompileError(
       `unknown context provider(s): ${unknownNeeds.join(", ")} — built-ins are ${Object.keys(
         BUILTIN_PROVIDERS,
-      ).join(", ")} (see research/hook-context-providers.md).`,
+      ).join(
+        ", ",
+      )} (or use provide()/dangerously() for an inline one; see research/hook-context-providers.md).`,
+    );
+  }
+  // An inline provide() whose command isn't provably read-only must be acknowledged.
+  const unsafe = unsafeInlineProviders(needs);
+  if (unsafe.length > 0) {
+    throw new HookCompileError(
+      `inline provider(s) not provably read-only: ${unsafe
+        .map((u) => `${u.name} ("${u.run}")`)
+        .join(
+          ", ",
+        )} — use dangerously(name, cmd) to acknowledge a side-effecting/undecidable command, or keep provide() only for a read-only one.`,
     );
   }
   const gateCommand =
@@ -520,7 +552,7 @@ export function pathView(raw: string): PathView {
 
 /** The event a file-tool gate decides over (Edit/Write/Read carry `file_path`). */
 export interface FileToolEvent<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly event: string;
   readonly tool: string;
@@ -530,7 +562,7 @@ export interface FileToolEvent<
 }
 
 export interface FileGateHook<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly role: "gate";
   readonly on: string;
@@ -546,16 +578,16 @@ export const tools = (...names: string[]): { tools: string[] } => ({
   tools: names,
 });
 export function defineFileGate<
-  const N extends readonly ProviderName[] = readonly [],
+  const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<FileGateHook<N>, "role">): FileGateHook<N> {
   return { role: "gate", ...p };
 }
 
 /** Run a file-tool gate against a raw PreToolUse event (reads `file_path`). */
-export function decideFileGate(
-  hook: FileGateHook,
+export function decideFileGate<N extends readonly NeedSpec[]>(
+  hook: FileGateHook<N>,
   raw: { tool_name?: string; tool_input?: { file_path?: unknown } },
-  ctx: Partial<ProviderResults> = {},
+  ctx: Record<string, string | boolean> = {},
 ): Decision {
   const t = raw.tool_name ?? "";
   if (!hook.match.tools.includes(t)) return allow();
@@ -567,7 +599,7 @@ export function decideFileGate(
     event: hook.on,
     tool: t,
     path: pathView(fp),
-    ctx: ctx as HookCtx,
+    ctx: ctx as unknown as HookCtx<N>,
   });
 }
 
@@ -587,7 +619,7 @@ export function decideFileGate(
 
 /** The event a UserPromptSubmit gate decides over — it sees the prompt TEXT. */
 export interface PromptEvent<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly event: string;
   /** The user's submitted prompt text (empty string if the event carried none). */
@@ -597,7 +629,7 @@ export interface PromptEvent<
 }
 
 export interface PromptGateHook<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly role: "prompt-gate";
   /** The event — `UserPromptSubmit`. */
@@ -610,19 +642,23 @@ export interface PromptGateHook<
   readonly decide: (e: PromptEvent<N>) => Decision;
 }
 export function definePromptGate<
-  const N extends readonly ProviderName[] = readonly [],
+  const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<PromptGateHook<N>, "role">): PromptGateHook<N> {
   return { role: "prompt-gate", ...p };
 }
 
 /** Run a prompt gate against a raw UserPromptSubmit event (reads `prompt`). */
-export function decidePromptGate(
-  hook: PromptGateHook,
+export function decidePromptGate<N extends readonly NeedSpec[]>(
+  hook: PromptGateHook<N>,
   raw: { prompt?: unknown },
-  ctx: Partial<ProviderResults> = {},
+  ctx: Record<string, string | boolean> = {},
 ): Decision {
   const prompt = typeof raw.prompt === "string" ? raw.prompt : "";
-  return hook.decide({ event: hook.on, prompt, ctx: ctx as HookCtx });
+  return hook.decide({
+    event: hook.on,
+    prompt,
+    ctx: ctx as unknown as HookCtx<N>,
+  });
 }
 
 /**
@@ -630,7 +666,7 @@ export function decidePromptGate(
  * turn (the reason is surfaced to the agent — e.g. "tests are red, keep going").
  */
 export interface StopEvent<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly event: string;
   /**
@@ -644,7 +680,7 @@ export interface StopEvent<
 }
 
 export interface StopGateHook<
-  N extends readonly ProviderName[] = readonly ProviderName[],
+  N extends readonly NeedSpec[] = readonly ProviderName[],
 > {
   readonly role: "stop-gate";
   /** The event — `Stop` or `SubagentStop`. */
@@ -657,21 +693,21 @@ export interface StopGateHook<
   readonly decide: (e: StopEvent<N>) => Decision;
 }
 export function defineStopGate<
-  const N extends readonly ProviderName[] = readonly [],
+  const N extends readonly NeedSpec[] = readonly [],
 >(p: Omit<StopGateHook<N>, "role">): StopGateHook<N> {
   return { role: "stop-gate", ...p };
 }
 
 /** Run a Stop gate against a raw Stop/SubagentStop event (reads `stop_hook_active`). */
-export function decideStopGate(
-  hook: StopGateHook,
+export function decideStopGate<N extends readonly NeedSpec[]>(
+  hook: StopGateHook<N>,
   raw: { stop_hook_active?: unknown },
-  ctx: Partial<ProviderResults> = {},
+  ctx: Record<string, string | boolean> = {},
 ): Decision {
   return hook.decide({
     event: hook.on,
     stopHookActive: raw.stop_hook_active === true,
-    ctx: ctx as HookCtx,
+    ctx: ctx as unknown as HookCtx<N>,
   });
 }
 
@@ -882,7 +918,7 @@ export type HookProgramOutcome =
 export function runHookProgram(
   hook: AnyHook,
   event: RawHookEvent,
-  ctx: Partial<ProviderResults> = {},
+  ctx: Record<string, string | boolean> = {},
 ): HookProgramOutcome {
   const kind = dispatchKind(hook);
   switch (kind) {

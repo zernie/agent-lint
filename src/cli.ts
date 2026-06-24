@@ -159,7 +159,7 @@ import {
   mergeHooksToml,
   serializeConfig,
 } from "./hook-install.js";
-import { gatherContext, type ProviderResults } from "./core/hook-providers.js";
+import { gatherContext } from "./core/hook-providers.js";
 import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
@@ -4534,7 +4534,7 @@ async function installHooks(
  * that can't resolve yields its default (never throws). The pure registry +
  * decision logic live in core/hook-providers.ts — this only injects the real IO.
  */
-function gatherHookContext(program: AnyHook): Partial<ProviderResults> {
+function gatherHookContext(program: AnyHook): Record<string, string | boolean> {
   const needs = hookNeeds(program);
   if (needs.length === 0) return {};
   const { execSync } =
@@ -4546,6 +4546,7 @@ function gatherHookContext(program: AnyHook): Partial<ProviderResults> {
         stdio: ["ignore", "pipe", "ignore"],
       }),
     cwd: process.cwd(),
+    platform: process.platform,
   });
 }
 

@@ -573,6 +573,45 @@ export default defineHook({
   }
 });
 
+// E2E dogfood — the INLINE opt-out (`provide(name, cmd)`): a one-off off-catalog
+// fact, no registered provider. The runtime runs the declared read-only command
+// and hands its stdout in as e.ctx[name]; decide stays pure. Uses git config
+// (initGitRepo sets user.name=Test) as a stand-in for an arbitrary project fact.
+test("hook-runtime run-program: an inline provide() fact is gathered + drives the decision", () => {
+  const dir = makeTmpDir();
+  try {
+    initGitRepo(dir);
+    const f = fixture(
+      dir,
+      "by-author.mjs",
+      `import { defineHook, tool, deny, allow, provide } from "__HOOK__";
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: [provide("author", "git config user.name")],
+  decide: (e) =>
+    e.ctx.author === "Test" && e.command.runs("git push")
+      ? deny("Test author may not push")
+      : allow(),
+});`,
+    );
+    const denied = runHook(
+      `node ${CLI} hook-runtime run-program ${f}`,
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git push origin HEAD" },
+      },
+      { cwd: dir },
+    );
+    assert.equal(denied.blocked, true);
+    assert.equal(denied.exitCode, 2);
+    assert.match(denied.stderr, /may not push/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 /** Minimal shape of a CC settings.json for the merge dogfood (avoids `any`). */
 interface SettingsShape {
   hooks: Record<
