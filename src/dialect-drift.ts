@@ -4,11 +4,30 @@
  * Claude Code is a black box (only `settings.json` has an official schema), so
  * `claudeCodeDialect` is hand-maintained — see the licensing decision in
  * research/code-adapter-architecture.md. But the installed `@anthropic-ai/claude-code`
- * package ships a semi-machine source: `sdk-tools.d.ts` (the tool-input type set) and
- * the hook-event names as string literals in `cli.js`. We READ THE USER'S LOCAL
- * INSTALL (ToS-clean — no copying, no redistribution; same posture as driving the
- * user's own `claude` CLI) to ALARM when CC's surface drifts from our catalog. We
- * never ship or vendor their types — only diff against them at test/runtime.
+ * package ships a semi-machine source: `sdk-tools.d.ts` (the tool-input type set). We
+ * READ THE USER'S LOCAL INSTALL (ToS-clean — no copying, no redistribution; same
+ * posture as driving the user's own `claude` CLI) to ALARM when CC's surface drifts
+ * from our catalog. We never ship or vendor their types — only diff against them at
+ * test/runtime.
+ *
+ * Why not `import type` from the SDK? `@anthropic-ai/claude-code` and
+ * `@anthropic-ai/claude-agent-sdk` DO ship a clean `ToolInputSchemas` union (on a
+ * types-only `./sdk-tools` subpath), but both are "© Anthropic PBC. All rights
+ * reserved." — proprietary. vigiles is MIT and multi-harness, so taking a hard dep
+ * and re-exporting their types into our published `.d.ts` would (a) bake a
+ * proprietary package into an MIT dep tree, (b) couple the harness-agnostic core to
+ * a Claude-Code-only package, and (c) not even give us `builtinAgentTools` (the SDK
+ * union is input-SCHEMA names like `FileReadInput`/`CronCreateInput` — a superset in
+ * a different vocabulary than the subagent `tools:` catalog). Reading the local file
+ * + a hand-authored list of bare identifiers (facts) is the deliberate ToS-clean
+ * design; this drift alarm is what keeps the hand-list honest.
+ *
+ * NOTE (CC ≥ ~2.1.18x): CC switched to a NATIVE-BINARY distribution — the npm
+ * package ships `bin/claude.exe` (from a platform `optionalDependencies` package),
+ * NOT a readable `cli.js` JS bundle. So the old "grep hook-event string literals out
+ * of cli.js" check has no bundle to read and degrades to a LOUD SKIP (see
+ * `findClaudeCodeBundle`); `sdk-tools.d.ts` is still shipped, so the tool-type drift
+ * alarm keeps working.
  *
  * Pure parsers (testable with fixtures) + a local-install locator. TWO consumers:
  * the gated CI test in `dialect-drift.test.ts` (fails loud on tool/event drift), and
@@ -20,20 +39,34 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 
 /** The Claude Code version `ACKNOWLEDGED_TOOL_INPUT_TYPES` + the dialect were last validated against. */
-export const VALIDATED_CC_VERSION = "2.1.42";
+export const VALIDATED_CC_VERSION = "2.1.187";
 
 /**
  * The `<X>Input` interface names we've ACKNOWLEDGED from `sdk-tools.d.ts` (Claude
- * Code 2.1.42). The drift test fails when the installed set differs — a loud nudge
+ * Code 2.1.187). The drift test fails when the installed set differs — a loud nudge
  * to re-check `claudeCodeDialect` (and update this set) when CC adds/removes a tool.
  * NOT a redistribution of their file: a list of bare identifiers (facts), authored here.
+ *
+ * 2.1.187 added the agent-PLATFORM surface (cron/scheduling/worktrees/web-app):
+ * Artifact, Cron{Create,Delete,List}, Enter/ExitWorktree, EnterPlanMode, Monitor,
+ * Projects, PushNotification, REPL, ReadMcpResourceDir, RemoteTrigger,
+ * ScheduleWakeup, ShowOnboardingRolePicker, Task{Create,Get,List,Update}, Workflow;
+ * and removed Config. These are HOST/platform tools, NOT subagent-grantable, so
+ * `claudeCodeDialect.builtinAgentTools` (the `tools:` frontmatter catalog) is
+ * intentionally unchanged — they're acknowledged here as facts, nothing more.
  */
 export const ACKNOWLEDGED_TOOL_INPUT_TYPES: readonly string[] = [
   "Agent",
+  "Artifact",
   "AskUserQuestion",
   "Bash",
-  "Config",
+  "CronCreate",
+  "CronDelete",
+  "CronList",
+  "EnterPlanMode",
+  "EnterWorktree",
   "ExitPlanMode",
+  "ExitWorktree",
   "FileEdit",
   "FileRead",
   "FileWrite",
@@ -41,13 +74,26 @@ export const ACKNOWLEDGED_TOOL_INPUT_TYPES: readonly string[] = [
   "Grep",
   "ListMcpResources",
   "Mcp",
+  "Monitor",
   "NotebookEdit",
+  "Projects",
+  "PushNotification",
+  "REPL",
   "ReadMcpResource",
+  "ReadMcpResourceDir",
+  "RemoteTrigger",
+  "ScheduleWakeup",
+  "ShowOnboardingRolePicker",
+  "TaskCreate",
+  "TaskGet",
+  "TaskList",
   "TaskOutput",
   "TaskStop",
+  "TaskUpdate",
   "TodoWrite",
   "WebFetch",
   "WebSearch",
+  "Workflow",
 ];
 
 /** Parse `export interface <X>Input {` names from sdk-tools.d.ts → sorted [<X>]. Pure. */
@@ -56,6 +102,20 @@ export function parseToolInputTypes(dts: string): string[] {
   for (const m of dts.matchAll(/export\s+interface\s+(\w+)Input\b/g))
     out.add(m[1]);
   return [...out].sort();
+}
+
+/**
+ * Locate a READABLE JavaScript bundle inside the installed CC package, or null.
+ * Older CC shipped `cli.js` — a readable JS bundle whose hook-event names appear as
+ * string literals, greppable by `eventsMissingFromBundle`. CC ≥ ~2.1.18x switched to
+ * a NATIVE-BINARY distribution (`bin/claude.exe` copied from a platform
+ * `optionalDependencies` package) with NO readable JS bundle, so there is nothing to
+ * text-scan. Returns the bundle path when present, else null — callers then SKIP the
+ * event-drift check loudly rather than crash on a missing `cli.js`.
+ */
+export function findClaudeCodeBundle(pkg: string): string | null {
+  const cli = join(pkg, "cli.js");
+  return existsSync(cli) ? cli : null;
 }
 
 /** Which of `events` do NOT appear as a whole-word literal in the bundle. Pure. */
