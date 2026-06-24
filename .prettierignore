@@ -28,3 +28,7 @@ bench/leaderboard/RESULTS.md
 # re-escape markdown (e.g. `skills/*` → `skills/\*`) and desync that hash, so the
 # two gates would fight forever. The spec (CLAUDE.md.spec.ts) IS prettier-checked.
 /CLAUDE.md
+
+# The startup/ vault is git-crypt-encrypted: when locked its files are binary
+# ciphertext prettier can't (and must not) parse. Always ignore it.
+startup/
