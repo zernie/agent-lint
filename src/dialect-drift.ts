@@ -38,7 +38,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
-/** The Claude Code version `ACKNOWLEDGED_TOOL_INPUT_TYPES` + the dialect were last validated against. */
+/**
+ * The Claude Code version `ACKNOWLEDGED_TOOL_INPUT_TYPES` + the dialect were last
+ * validated against. SINGLE SOURCE OF TRUTH for the pin: CI installs
+ * `@anthropic-ai/claude-code@<this>` (grepped from this line) in every job that
+ * drives the real binary, so the dialect-drift alarm fires only on a DELIBERATE
+ * bump — not on every unpinned CC release landing on an unrelated PR — and the
+ * real-`claude` harness/eval tests stay reproducible. Bump this together with
+ * `ACKNOWLEDGED_TOOL_INPUT_TYPES` (the gated test cross-checks them).
+ */
 export const VALIDATED_CC_VERSION = "2.1.187";
 
 /**

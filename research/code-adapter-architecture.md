@@ -247,7 +247,13 @@ proprietary; an MIT, multi-harness tool reads the local file instead.) Two consu
 1. **CI alarm** (`src/dialect-drift.test.ts`, gated): fails LOUD when the installed
    `sdk-tools.d.ts` tool-input set differs from `ACKNOWLEDGED_TOOL_INPUT_TYPES` or a
    `claudeCodeDialect.hookEvents` entry vanished from the bundle; skips loud when CC
-   absent OR ships a native binary (no readable `cli.js` to scan).
+   absent OR ships a native binary (no readable `cli.js` to scan). CI PINS
+   `@anthropic-ai/claude-code@<VALIDATED_CC_VERSION>` (grepped from the source — one
+   knob) in every job that drives the real binary, so the alarm fires only on a
+   DELIBERATE bump, not on every unpinned CC release landing on an unrelated PR (the
+   noise that prompted the pin), and the real-`claude` harness/eval tiers stay
+   reproducible. Bump `VALIDATED_CC_VERSION` + `ACKNOWLEDGED_TOOL_INPUT_TYPES`
+   together; the gated test cross-checks them.
 2. **Runtime WARN** (`vigiles scan`, claude-code only): `checkDialectDrift()` reads only
    the small `sdk-tools.d.ts` (fast — no `cli.js` scan on the runtime path; events stay
    the CI test's job), and `formatDialectDrift` prints a one-line `⚠` ONLY on real tool-
