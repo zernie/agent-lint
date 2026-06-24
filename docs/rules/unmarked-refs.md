@@ -69,8 +69,7 @@ For the edited instruction file, two things (both via `collectRefIssues` in
 
 Reference verification only works on references that are _marked_. Nothing can
 deterministically force a _plaintext_ reference to become a mark — that judgment
-is undecidable (see
-[`research/reference-verification-limits.md`](../../research/reference-verification-limits.md)).
+is undecidable.
 This rule closes the reachable part of that gap: when the agent _does_ write a
 code-shaped reference, it gets nudged to mark it so it becomes verifiable. The
 full flow, from file save, is in

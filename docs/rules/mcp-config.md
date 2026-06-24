@@ -43,4 +43,4 @@ documented gap — the JSON Claude Code shape is the common case).
 
 An MCP server is how a plugin extends the agent's tools; a misconfigured one is a
 silent capability gap. Catching an unstartable server deterministically, before
-it ships, is the moat applied to the MCP surface.
+it ships, is the same verification applied to the MCP surface.

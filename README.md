@@ -30,7 +30,7 @@ testable object instead of vibes. Four instruments, adopt any:
 | **🔎 Lint**  | Every file path, script, code symbol, and linter rule your CLAUDE.md cites is checked against reality — a lint that asks _is this **true**_, not just _well-formed_ — so a renamed file or a disabled rule can't silently mislead the agent. **[→](docs/verifying-instruction-files.md)** |
 | **🛡 Guard** | Author a hook as a pure typed function and vigiles compiles it — making **whole classes of hook bugs unrepresentable** (the guard that silently doesn't block). **[→](docs/compiled-hooks.md)**                                                                                           |
 | **🧪 Test**  | Hooks, skills, and subagents are code. vigiles tests they _do their job_ — and almost all of it is **deterministic, no API key**; the real-model evals run on your **Claude subscription**, not metered tokens. **[→](docs/harness-testing.md)**                                          |
-| **📊 Eval**  | Does that skill or plugin actually help — or just add cost? **A/B it on real tasks** and read the bill + correctness, not the vendor's headline — the eval you can afford. The same engine ranks the hyped ecosystem: **what works vs hype**. **[→](docs/measuring-skills.md)**           |
+| **📊 Eval**  | Does that skill or plugin actually help — or just add cost? **A/B it on real tasks** and read the bill + correctness, not the vendor's headline — the eval you can afford. **[→](docs/measuring-skills.md)**                                                                              |
 
 Pick the one that hurts today. **Works with Claude Code and Codex**
 ([`vigiles/codex`](docs/harnesses.md)), and you can
@@ -187,8 +187,7 @@ running it. Side effects that reach past the sandbox (a real DB, redis, the
 network) have their own answer. **[Safety, sandboxing & FAQ →](docs/safety.md)**
 
 The kicker: every run is **your own `claude` CLI on your Pro/Max subscription**,
-so you can measure on every change — and the same engine powers the **ecosystem
-benchmark** ("what works vs hype"). **[Eval a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**
+so you can measure on every change. **[Eval a skill →](docs/measuring-skills.md)** · **[Why it's affordable →](docs/eval-architecture.md)**
 
 **The eval you can actually afford.** promptfoo / DeepEval / … hit a metered API
 SDK and bill **per token, every run**; vigiles answers most questions with **no

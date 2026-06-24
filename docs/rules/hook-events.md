@@ -49,4 +49,4 @@ in a different catalog — the check runs against the resolved harness dialect.
 
 `hooks` is the deterministic-constraints layer of the harness; a hook on a typo'd
 event is enforcement that silently does nothing. Catching it at authoring time,
-deterministically and for free, is the moat applied to the hook surface.
+deterministically and for free, is the same cross-reference applied to the hook surface.

@@ -251,7 +251,7 @@ const plugin = loadPlugin("./my-project", myHarnessAdapter.layout);
 - **CLI auto-detection — partial.** `ADAPTERS` is vigiles's internal registry;
   the `vigiles` CLI binary only auto-detects adapters compiled into it. A config-
   based mechanism for the CLI to load an _external_ adapter package is planned
-  (see `research/code-adapter-architecture.md`). Until then: use the programmatic
+  Until then: use the programmatic
   path, or contribute the adapter upstream so it joins `ADAPTERS`.
 
 ## See also

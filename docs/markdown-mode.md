@@ -158,5 +158,5 @@ valid `vigiles.enforce` frontmatter rule is treated as spec-equivalent. No
   TypeScript build — the sweet spot for non-TS projects.
 - **Level 2** when you want the strongest guarantees: full type checking at
   authoring time, programmatic rule composition, NCD duplicate detection,
-  and the `generate-types` moat. Scaffold with
+  and `generate-types` type generation. Scaffold with
   `npx vigiles init --target=CLAUDE.md`, then copy your rules in.
