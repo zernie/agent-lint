@@ -194,7 +194,7 @@ export interface EvalSpec<M extends Metrics> {
   /**
    * **Opt-in, default OFF.** Run each trial in an *ephemeral run environment* — a
    * throwaway `$HOME` + scrubbed env, re-injecting only the harness's own auth (see
-   * {@link ephemeralRunEnv}). Running a model-driven skill/agent is itself a side
+   * `ephemeralRunEnv`). Running a model-driven skill/agent is itself a side
    * effect (the *model*, not the author, chose the actions), so a `git push` /
    * write to `~` should land in a disposable HOME, not the real `~/.gitconfig` /
    * `~/.ssh` / `~/.aws`. This is the cross-platform STATE-protection floor (no
@@ -305,7 +305,7 @@ export interface AgentRunArgs {
   readonly env?: Record<string, string>;
   /**
    * When true, `env` is the COMPLETE spawn environment (an ephemeral run env from
-   * {@link ephemeralRunEnv}) — the runner does NOT prepend `process.env`, so the
+   * `ephemeralRunEnv`) — the runner does NOT prepend `process.env`, so the
    * real `$HOME` / secrets are scrubbed. Default false: `env` is an overlay over
    * `process.env` (the byte-identical-to-today path). Set only by `ephemeralEnv`.
    */
@@ -313,7 +313,7 @@ export interface AgentRunArgs {
 }
 
 /**
- * Runs one trial and returns its raw output. The default ({@link spawnAgent})
+ * Runs one trial and returns its raw output. The default (`spawnAgent`)
  * drives the real `claude` CLI; `runEvalWith` takes one explicitly, so the eval
  * orchestration is testable without a model (pass a fake returning canned
  * stream-json) and a custom runtime can be plugged in.
@@ -385,7 +385,7 @@ export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
  * Run the eval: every arm × every trial against the real `claude` CLI, with the
  * metric computed per run and aggregated per arm. Requires `claude` on PATH and
  * working model auth (e.g. `ANTHROPIC_API_KEY`). Thin wrapper over
- * {@link runEvalWith} with the real agent runner.
+ * `runEvalWith` with the real agent runner.
  */
 export async function runEval<M extends Metrics>(
   spec: EvalSpec<M>,
@@ -1201,7 +1201,7 @@ function withInterceptToolHook(
 }
 
 /**
- * The default allowlist {@link ephemeralRunEnv} passes through from the real
+ * The default allowlist `ephemeralRunEnv` passes through from the real
  * environment. Two groups, both load-bearing for a real-model `claude` run:
  *
  * - **Auth** — the harness's OWN credentials. The eval drives the real `claude`
@@ -1316,7 +1316,7 @@ export const EPHEMERAL_HOME_KEEP: readonly string[] = [
 /**
  * Seed the throwaway HOME with the harness's own auth FILE(s) — best-effort;
  * covers local file-based OAuth; the env-var/host-brokered path is covered by the
- * allowlist in {@link ephemeralRunEnv}.
+ * allowlist in `ephemeralRunEnv`.
  *
  * COPIES (never symlinks) each {@link EPHEMERAL_HOME_KEEP} path from `realHome`
  * into `throwawayHome`, creating parent dirs as needed; a symlink would let the
