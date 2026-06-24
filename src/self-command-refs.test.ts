@@ -131,7 +131,7 @@ const ROOT = resolve(__dirname, "..");
 // wired scripts. research/ is the internal historical record (superseded
 // proposals like the never-shipped `vigiles setup`) per the public-vs-internal
 // rule, so it is deliberately not held to "every command currently exists".
-const SCAN_DIRS = ["docs", "src", "examples", "hooks"];
+const SCAN_DIRS = ["docs", "src", "examples", "hooks", ".github"];
 const SCAN_EXT = /\.(md|ts|mjs|cjs|js|sh|yml|yaml)$/;
 // The detector's own source + suite legitimately quote removed commands as
 // examples/fixtures — excluded so they don't flag themselves.
