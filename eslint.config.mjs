@@ -58,7 +58,17 @@ const CC_LITERAL_MSG =
 
 export default [
   {
-    ignores: ["dist/", "node_modules/", "examples/harness/vendor/"],
+    // `src/*.md.spec.ts` (nested instruction-file specs) are excluded from
+    // tsconfig to avoid a dist-path collision with the root spec, so the
+    // type-aware project service can't resolve them — eslint-ignore to match
+    // (they're tsx-loaded build inputs, like the root CLAUDE.md.spec.ts, not
+    // part of the typed source).
+    ignores: [
+      "dist/",
+      "node_modules/",
+      "examples/harness/vendor/",
+      "src/*.md.spec.ts",
+    ],
   },
   eslint.configs.recommended,
   {
