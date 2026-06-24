@@ -36,6 +36,11 @@ Zero install commitment, zero new files.
 
 ### Typed spec — compiler-grade guarantees
 
+**You rarely hand-write one.** It's TypeScript for your harness — opt-in and
+gradual: the `edit-spec` / `strengthen` skills write and update the spec from a
+plain-English ask, and a hook recompiles it on save. So the typed spec is the
+auto-enforced next step, not a chore — here's what it buys you.
+
 **Markdown mode is not a lesser tier for verification.** It squiggles rule typos
 at edit time (the YAML schema `init` generates), and its inline marks —
 `vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file
