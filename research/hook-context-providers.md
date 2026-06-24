@@ -206,25 +206,36 @@ This makes the ladder: Tier 0 matchers → Tier 1 built-ins → **Tier 1.5 inlin
 lane. The opt-out is _clearly named_ and _graduated_, and `decide` never loses
 purity at any rung.
 
-## Event naming — native + dialect-validated, NOT a generic alias layer (yet)
+## One hook source → many harnesses (and the event-naming decision)
+
+**A single hook source already targets CC + Codex today.** You author once in
+`.vigiles/hooks/`; `compile` emits each target's NATIVE config (`.claude/settings.json`
+JSON, `.codex/config.toml` TOML — a multi-harness repo gets both). Everything
+INSIDE the hook is harness-neutral: the typed program, the context gather, and the
+gate runtime (`deny` → exit 2, byte-identical on both). What's portable in one
+source: gates (bash/file/prompt/stop) + context providers + observe mode — all
+shared. The one caveat: an inject/react hook's OUTPUT shape is CC-confirmed, so
+`compile --harness=codex` WARNS on it (the gate/deny path is fully cross-harness).
 
 A gate's `on:` uses the harness's NATIVE event name (`PreToolUse`, `Stop`, …).
 This is **not hardcoded to Claude Code**: the value comes from `hook.on` and is
 validated against the INJECTED dialect (`verifyHookEvents`), and the Codex dialect
 declares the SAME names (CC and Codex hook events are ~1:1 — a de-facto shared
 vocabulary, like AGENTS.md, not CC's private one). A typo or an event the target
-harness doesn't fire won't compile.
+harness doesn't fire won't compile. So write-once across CC + Codex is the native
+names already working, not something that needs an abstraction.
 
-Should we instead define GENERIC neutral names (`before-tool`, `on-prompt`) mapped
-per adapter? **Not yet** — the rule-of-three for abstraction: introduce the alias
-layer only when a harness with genuinely DIVERGENT event names is added (none
-exists today; CC = Codex). A premature neutral vocabulary is a leaky abstraction
-(cf. Terraform choosing per-provider resource names over a forced cloud-neutral
-one; OTel's neutral conventions pay off only across truly divergent backends). It
-also matches vigiles's own rule (`adapter-aware-lint-rules`): name by the neutral
-CONCEPT, but a `harness/`-style prefix/alias is reserved for a capability only one
-harness has — and the dialect is the ready seam to add the alias map when that day
-comes. Until then: native names, dialect-validated.
+**DECISION (2026-06-23): native names, dialect-validated — NO generic alias layer
+yet.** A neutral vocabulary (`beforeTool`/`onStop` mapped per adapter) would only
+earn its keep for a FUTURE harness whose event names genuinely DIVERGE from
+CC/Codex — none exists today (CC = Codex), so it'd be a premature, leaky
+abstraction (cf. Terraform choosing per-provider resource names over a forced
+cloud-neutral one; OTel's neutral conventions pay off only across truly divergent
+backends). It also matches `adapter-aware-lint-rules`: name by the neutral
+CONCEPT, but a `harness/`-style alias is reserved for a capability only one harness
+has. When a divergent harness lands, the alias is a small per-dialect map added at
+the ready seam (the dialect), accepted ALONGSIDE native names — additive, not a
+now-or-never call. Until then: native, dialect-validated.
 
 ## Coverage: every real-world hook maps to a tier (the "all use cases" proof)
 
