@@ -359,7 +359,7 @@ rules: {
   "regen-types-on-config-change": guard(
     {
       watch: ["eslint.config.*", "package.json", "pyproject.toml"],
-      run: "npx vigiles generate-types",
+      run: "npx vigiles generate types",
     },
     "Regenerate types when linter configs or package.json change.",
   ),

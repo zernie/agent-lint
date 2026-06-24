@@ -283,7 +283,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("names the deterministic cause, the symptom, and the one-line fix", () => {
-    const r = run(`explain ${join(root, "demo")}`);
+    const r = run(`scan ${join(root, "demo")} --explain`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /the subagent loses a declared tool/);
     assert.match(r.stdout, /\[subagent-tool-contract\]/);
@@ -291,14 +291,14 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a surface name filters to that one underperformer", () => {
-    const r = run(`explain ${join(root, "demo")} rev`);
+    const r = run(`scan ${join(root, "demo")} --explain rev`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Explaining "rev":/);
     assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
   it("--json emits the structured explanation array", () => {
-    const r = run(`explain ${join(root, "demo")} --json`);
+    const r = run(`scan ${join(root, "demo")} --explain --json`);
     assert.equal(r.exitCode, 0);
     const exps = JSON.parse(r.stdout) as {
       surface: string;
@@ -315,7 +315,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
-    const r = run(`explain ${join(root, "demo")} absent`);
+    const r = run(`scan ${join(root, "demo")} --explain absent`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /No deterministic cause found/);
   });
@@ -503,7 +503,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
 `,
     );
     const out = join(dir, "harness.gen.ts");
-    const r = run(`generate-harness ${dir} ${out}`, REPO);
+    const r = run(`generate harness ${dir} ${out}`, REPO);
     assert.equal(r.exitCode, 0, r.stdout);
     assert.ok(existsSync(out));
     const gen = readFileSync(out, "utf-8");
@@ -512,7 +512,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
     assert.match(gen, /_edge_0: KnownAgentName<"planner", AgentName, "ship">/);
     assert.match(gen, /export const harnessCapabilities =/);
     // --check on the just-written file is a no-op (up to date)
-    const chk = run(`generate-harness ${dir} ${out} --check`, REPO);
+    const chk = run(`generate harness ${dir} ${out} --check`, REPO);
     assert.equal(chk.exitCode, 0);
     assert.match(chk.stdout, /up to date/);
   });
@@ -526,7 +526,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
         PLANNER.replace("Break the request", "A second planner colliding"),
       );
       const r = run(
-        `generate-harness ${dupDir} ${join(dupDir, "harness.gen.ts")}`,
+        `generate harness ${dupDir} ${join(dupDir, "harness.gen.ts")}`,
         REPO,
       );
       assert.notEqual(r.exitCode, 0);

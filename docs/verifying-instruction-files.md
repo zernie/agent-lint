@@ -151,7 +151,7 @@ reference to its real source:
   a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP
   server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
-**Typo-safe at authoring time, too.** `vigiles generate-types` emits a
+**Typo-safe at authoring time, too.** `vigiles generate types` emits a
 `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your
 editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
 language server. Both have `--check` CI freshness modes.

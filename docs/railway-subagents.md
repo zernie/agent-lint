@@ -214,7 +214,7 @@ The type-level proof (a correct pipeline + the three `@ts-expect-error` failures
 `pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
 When each agent lives in its **own** `*.spec.ts` and a `railway()` composes them by
 **name**, the same check is lifted to the **whole-harness registry** that
-[`vigiles generate-harness`](cli.md#generate-harness-dir-out) emits — so a
+[`vigiles generate harness`](cli.md#generate-harness-dir-out) emits — so a
 **cross-file** handoff mismatch is a `tsc` error too.
 
 Declare the handoff with the optional 3rd argument of `delegate()` — the same
@@ -236,7 +236,7 @@ export default railway({
 });
 ```
 
-Run `vigiles generate-harness` over the agents directory; the generated
+Run `vigiles generate harness` over the agents directory; the generated
 `harness.gen.ts` carries one shallow per-pair assertion
 (`Handoff<OkOf<typeof registry["planner"]>, { steps: "string[]" }>`). If the
 producer's `ok` is missing the field or has the wrong type, `tsc` rejects the gen

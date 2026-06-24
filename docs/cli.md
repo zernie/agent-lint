@@ -9,23 +9,19 @@ Full command-line surface, the GitHub Action, the Claude Code plugin, and the
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md AND .vigiles/hooks/* → merged hooks config + stamp
-npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
-npx vigiles refs <file.md>          # Check the symbol references in an instruction file
+npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
+npx vigiles scan <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
+npx vigiles scan <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
 npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
 npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
-npx vigiles measure <dir> --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
-npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
-npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
-npx vigiles generate-types --check  # Verify .d.ts is up to date
-npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
-npx vigiles generate-schema --check # Verify schema.json is up to date
-npx vigiles generate-harness [dir]  # Emit harness.gen.ts — one typed registry over every spec
-npx vigiles generate-harness --check # Verify harness.gen.ts is up to date
+npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
+npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (Level 1; --check to verify)
+npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
 ```
 
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
@@ -220,8 +216,8 @@ This is the deterministic substrate for the plugin/skill leaderboard and the
 harness-aware supply-chain audit (see `research/divergent-bets.md`,
 `research/agent-supply-chain-security.md`).
 
-Behavioral measurement (does a skill actually fire / collide?) is **not** a scan
-flag — it's the paid tier, **`vigiles measure`** (documented below). `scan` stays
+Behavioral measurement (does a skill actually fire / collide?) is the model-gated
+**`scan --trigger`** flag (documented below) — the paid tier; plain `scan` stays
 free/deterministic.
 
 #### Live MCP tool resolution — `scan --verify-mcp`
@@ -278,9 +274,9 @@ npx vigiles scan ./head --capability-diff=./base --json           # structured d
 This is moat #2 (`research/typed-spec-moat.md`): the capability surface is the typed
 effect lattice `generate-harness` already computes; the diff reads it.
 
-### `measure <dir>` — does each skill FIRE / COLLIDE?
+### `scan <dir> --trigger` — does each skill FIRE / COLLIDE?
 
-The **model-gated** behavioral report (the paid tier; `scan` stays free). Loads the
+The **model-gated** behavioral column on `scan` (the paid tier; plain `scan` stays free). Loads the
 author-supplied per-skill prompts (`--prompts`) and reports both columns:
 
 - **Trigger-rate** — how reliably each model-invocable skill's description actually
@@ -297,8 +293,8 @@ Prompts are **author-supplied** (a path in prose is undecidable): a JSON map of 
 name → `{ prompts, irrelevant }`.
 
 ```bash
-npx vigiles measure ./some-plugin --prompts=./probes.json
-npx vigiles measure ./some-plugin --prompts=./probes.json --concurrency=5 --model=sonnet
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
 ```
 
 ```jsonc
@@ -317,10 +313,10 @@ token (lower with `--min-prompts=` for a narrow skill). `--harness=codex` routes
 trigger probe through the native Codex driver. See
 [`docs/harness-testing.md`](harness-testing.md).
 
-### `explain [dir] [name]`
+### `scan <dir> --explain [name]`
 
 The deterministic **WHY** behind a low score. A measurement (a trigger-rate
-eval, a benchmark) tells you a skill _underperforms_ — `explain` tells you the
+eval, a benchmark) tells you a skill _underperforms_ — `--explain` tells you the
 structural **cause** and the one-line **fix**, reading the same `ScanReport`
 `scan` computes (no model, free, every commit). It maps each cross-reference
 finding to the behavioural symptom it accounts for:
@@ -334,10 +330,10 @@ finding to the behavioural symptom it accounts for:
 | the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
 
 ```bash
-npx vigiles explain ./some-plugin          # every cause found, likely-first
-npx vigiles explain ./some-plugin caveman  # narrow to one underperformer
-npx vigiles explain ./some-plugin --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
-npx vigiles explain ./repo --harness=codex # override harness detection
+npx vigiles scan ./some-plugin --explain          # every cause found, likely-first
+npx vigiles scan ./some-plugin --explain caveman  # narrow to one underperformer
+npx vigiles scan ./some-plugin --explain --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
+npx vigiles scan ./repo --explain --harness=codex # override harness detection
 ```
 
 `confidence` is `likely` (a hard dead-end — a missing script can't run) or
@@ -401,13 +397,13 @@ next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
 flag rather than its own `optimize` verb until that measured half lands (an
 optimizer that only re-prints scan's findings hasn't earned a separate command).
 
-### `generate-harness [dir] [out]`
+### `generate harness [dir] [out]`
 
 Emit **one typed registry** — `harness.gen.ts` — over every `*.spec.ts` under
 `dir`, so a single `tsc --noEmit` cross-checks the **whole harness as one
 program** (think TanStack Router's `routeTree.gen.ts` or the Prisma client). It's
-the third generated artifact beside `generate-types` (`.d.ts`) and
-`generate-schema` (JSON Schema).
+the third generated artifact beside `generate types` (`.d.ts`) and
+`generate schema` (JSON Schema).
 
 > **You rarely run this by hand.** Like all three `generate-*` artifacts, it's
 > dev-toolchain output (read by `tsc`/your editor, never by the agent). Once the
@@ -445,10 +441,10 @@ It ships four cross-spec checks:
   capability-diff reads.
 
 ```bash
-npx vigiles generate-harness ./agents               # → ./agents/harness.gen.ts
-npx vigiles generate-harness ./agents out.gen.ts    # custom out path
-npx vigiles generate-harness ./agents --check        # CI: assert the gen file is up to date (exit 1 if stale)
-npx vigiles generate-harness ./agents --harness=codex
+npx vigiles generate harness ./agents               # → ./agents/harness.gen.ts
+npx vigiles generate harness ./agents out.gen.ts    # custom out path
+npx vigiles generate harness ./agents --check        # CI: assert the gen file is up to date (exit 1 if stale)
+npx vigiles generate harness ./agents --harness=codex
 ```
 
 **tsconfig need:** the gen file imports sibling `*.spec.ts` directly, so the
@@ -459,7 +455,7 @@ enforce the cross-checks. Wire regeneration to a spec guard (the same mechanism
 as `recompile-on-spec-change`):
 
 ```ts
-guard({ watch: "*.spec.ts", run: "npx vigiles generate-harness" });
+guard({ watch: "*.spec.ts", run: "npx vigiles generate harness" });
 ```
 
 Declare a handoff with the optional 3rd argument of `delegate()` — the same
@@ -645,7 +641,7 @@ mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: 
 To verify generated types are fresh in CI:
 
 ```yaml
-- run: npx vigiles generate-types --check
+- run: npx vigiles generate types --check
 ```
 
 ## Claude Code plugin
