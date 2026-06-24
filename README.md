@@ -77,13 +77,13 @@ npx vigiles init   # sets up lint + test: spec + harness test + CI + plugin
 
 Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
 
-**You don't hand-write specs — your agent does.** `init` installs model-invocable
-skills, so a plain-English ask does the work. The typed spec is **TypeScript for
-your harness** — opt-in, gradual, auto-compiled on save, never a chore:
+**You don't hand-write any of this — your agent does.** `init` installs
+model-invocable skills, so a plain-English ask does the work (it edits the source
+and recompiles on save; you never touch it by hand):
 
 - _"test my skills"_ → scaffolds **and runs** a trigger/behaviour test (`test-harness`)
 - _"harden my rules"_ → upgrades prose guidance into enforced linter rules (`strengthen`)
-- _"add a rule to my CLAUDE.md"_ → edits the typed spec and recompiles (`edit-spec`)
+- _"add a rule to my CLAUDE.md"_ → edits the source and recompiles (`edit-spec`)
 
 <details>
 <summary>What <code>init</code> sets up</summary>
@@ -117,10 +117,10 @@ with one inline comment, no new files;
 step up to a typed `.spec.ts` (compiled to CLAUDE.md) when you want it.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
-> **Markdown is prose; a typed spec is a _program_.** Opt in and a mismatched
-> hand-off between agents is a **type error** — `pipe(producer, pipeStep(consumer, needs({…})))`
-> won't compile if step N's output doesn't supply step N+1's needs. Others lint
-> prose; vigiles is a **compiler for harnesses**, graduated like `strict`.
+> **Bad states stop compiling.** Opt in deeper and a mismatched hand-off between
+> agents — one that leaks, or passes the next step the wrong shape — becomes a
+> build error, not a runtime surprise. Others lint prose; vigiles is a **compiler
+> for harnesses**, graduated like `strict` — turn it up only when you want it.
 
 ## ② Guard — author a hook that can't be wrong
 
