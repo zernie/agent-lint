@@ -184,6 +184,57 @@ export default [
       ],
     },
   },
+  // No barrel imports: internal modules must import the LEAF that defines a
+  // symbol, never the package's own public barrel entry points (the
+  // `vigiles/<x>` surfaces — src/{linting,testing,unit,integration,e2e,hook,
+  // claude-code,codex,adapter}.ts). Importing a barrel pulls its whole
+  // re-export graph (slow in the test runner / any non-treeshaking consumer,
+  // and a circular-import risk), and re-leaks the internal seams the curated
+  // barrels deliberately drop. The canonical eslint-plugin-barrel-files is
+  // unusable here — its `avoid-importing-barrel-files` calls the
+  // ESLint-9-removed `context.getFilename()` and crashes on ESLint 10 — so we
+  // express the same intent with the built-in rule (prefer-existing-solutions:
+  // a working core rule over a broken dependency). The barrels themselves are
+  // exempt below (they legitimately compose each other — the e2e→integration→
+  // unit tier ladder), and tests may exercise the public surface.
+  //
+  // `**/<name>.js` matches the relative specifier at every depth
+  // (`./x.js`, `../x.js`, `../../x.js`). The public `vigiles/adapter` barrel
+  // (src/adapter.ts) is intentionally NOT listed: its basename collides with two
+  // legitimate leaves — the `HarnessDialect`/`HarnessAdapter` port interface in
+  // src/core/adapter.ts and each harness's src/adapters/<h>/adapter.ts — so a
+  // basename glob can't target it without false-positiving the leaves. It's the
+  // smallest barrel and nothing internal imports it, so the omission is safe.
+  {
+    files: ["src/**/*.ts"],
+    ignores: [
+      "src/**/*.test.ts",
+      "src/{linting,testing,unit,integration,e2e,hook,claude-code,codex,adapter}.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/linting.js",
+                "**/testing.js",
+                "**/unit.js",
+                "**/integration.js",
+                "**/e2e.js",
+                "**/hook.js",
+                "**/claude-code.js",
+                "**/codex.js",
+              ],
+              message:
+                "No barrel imports: import the leaf module that defines this symbol (e.g. ./core/spec.js, ./run-hook.js), not the public barrel entry point (vigiles/<x>). Barrels pull their whole re-export graph and re-leak internal seams. The barrels themselves and tests are exempt.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Test files: relax promise, assertion, and complexity rules
   {
     files: ["src/**/*.test.ts"],
