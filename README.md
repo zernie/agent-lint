@@ -53,9 +53,15 @@ Or do it yourself:
 npx vigiles init   # sets up lint + test: spec + harness test + CI + plugin
 ```
 
-Interactive in a terminal, non-interactive for agents/CI (or `--yes`). It installs
-a model-invocable **`test-harness` skill** too, so you can then tell your agent
-_"test my skills"_ and it writes the test.
+Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
+
+**Then your agent writes the harness for you.** `init` installs model-invocable
+skills, so a plain-English ask in Claude Code or Codex does the work — no workflow
+change, the agent reaches for them on its own:
+
+- _"test my skills"_ → scaffolds **and runs** a trigger/behaviour test (`test-harness`)
+- _"harden my rules"_ → upgrades prose guidance into enforced linter rules (`strengthen`)
+- _"add a rule to my CLAUDE.md"_ → edits the typed spec and recompiles (`edit-spec`)
 
 <details>
 <summary>What <code>init</code> sets up</summary>
@@ -92,7 +98,7 @@ step up to a typed `.spec.ts` (compiled to CLAUDE.md) when you want it.
 > **Markdown is prose; a typed spec is a _program_.** Opt in and an agent that
 > leaks or hands off mismatched data is a **type error** — your multi-agent
 > pipeline won't compile if the handoffs don't line up. Others lint prose; vigiles
-> is a **compiler for harnesses**, graduated like `strict`. **[The moat →](research/typed-spec-moat.md)**
+> is a **compiler for harnesses**, graduated like `strict`.
 
 ## ② Guard — author a hook that can't be wrong
 
@@ -184,10 +190,10 @@ model at all** and runs the rest on **your Claude Pro/Max subscription — $0 ex
 
 ## More
 
-- **[Plugin health leaderboard →](docs/cli.md#scan-dir)** — point `scan` at a marketplace (e.g. `wshobson/agents`) and it ranks every plugin by structural health (0–100, A–F), worst issues first — **no key**. Add `--trigger` for the model-gated column: do the skills actually fire?
 - **[CLI & GitHub Action →](docs/cli.md)** — every command (incl. compiled hooks via `compile`), the Action, and the plugin. The full **[lint rules matrix →](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)** lives with the linting guide.
-- **[Skills →](docs/skills.md)** — consumer skills installed as a Claude Code plugin. The model-invocable ones (`test-harness`, `strengthen`, `edit-spec`) fire on their own — ask _"test my skills"_ and the agent reaches for them.
-- **[Docs index →](docs/README.md)** · **[Research →](research/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)** (generated) · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
+- **[Skills →](docs/skills.md)** — the skills `init` installs, and how the model-invocable ones trigger.
+- **[Plugin health leaderboard →](docs/cli.md#scan-dir)** — point `scan` at a marketplace (e.g. `wshobson/agents`) and it ranks every plugin by structural health (0–100, A–F), worst issues first — **no key**. Add `--trigger` for the model-gated column: do the skills actually fire?
+- **[Docs index →](docs/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)** (generated) · **[Related tools →](docs/related-tools.md)** (ast-grep, Dependency Cruiser, Ruler, rulesync).
 - Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## License
