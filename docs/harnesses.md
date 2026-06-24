@@ -11,8 +11,7 @@ and the harness-specific pieces live behind a swappable **adapter**.
 > harness tests against the real `codex` binary (keyless, OpenAI-Responses mock) via
 > `runHarnessTest({ adapter: codexAdapter })`. Subagents are a deliberate boundary
 > (a Codex subagent is concurrency config, not a tool-contract file — see the
-> matrix below). Adding a harness doesn't touch the core — see
-> [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md).
+> matrix below). Adding a harness doesn't touch the core.
 
 ## You pick the harness by which subpath you import
 
@@ -61,7 +60,6 @@ The precedence is `--harness=` → config `harness` → auto-detect, and a
 multi-harness or ambiguous pick prints a loud notice rather than silently
 guessing. A repo declaring several harnesses also gets a byte-identical
 `CLAUDE.md`⇄`AGENTS.md` mirror on compile when no sync tool already fans it out.
-See [research/multi-harness-compile.md](../research/multi-harness-compile.md).
 
 ## What's actually harness-specific (the two axes)
 
@@ -125,16 +123,11 @@ live traffic, not guessed). Lint is format-correct per ¹. `runEval` /
 trigger-rate for Codex is **in progress** (not usable through the public API yet):
 the Codex eval parser/runner/firing-predicate are built and validated against the
 real binary; what remains is wiring `{ adapter }` dispatch into
-`measureTriggerRate` / `runEval`. See
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
-for the confirmed schema + findings.
+`measureTriggerRate` / `runEval`.
 
 ³ OpenCode's mockable tier is **declared but not yet built**: it needs the
 openai-compat (Chat Completions) SSE renderer, and the `opencode` binary isn't
-wired here yet (see
-[`research/opencode-prototype-findings.md`](../research/opencode-prototype-findings.md)).
-The codex path is the proof the same work generalizes (see
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)).
+wired here yet. The codex path is the proof the same work generalizes.
 
 The takeaway: **everyone converges on Lint** (AGENTS.md is becoming universal),
 so the discriminator is Test — and there, _mockability_ is the gate. OpenCode
@@ -145,10 +138,7 @@ unit tier doesn't apply — `shellHooks:false`, no `hookProtocol`).
 **Full capability inventory.** This matrix is the brief version. The exhaustive
 record of every harness-specific capability (CC vs Codex) — and, per capability,
 whether vigiles _verifies_ it, _tests_ it, or **records-only** (acknowledged but
-deliberately not supported) — is in
-[`research/harness-capabilities.md`](../research/harness-capabilities.md). Testing
-every special capability is an explicit non-goal; that doc is the answer of record
-for "does vigiles do X for harness Y?".
+deliberately not supported). Testing every special capability is an explicit non-goal.
 
 ## How this is kept honest
 
@@ -167,6 +157,4 @@ not a comment.
 
 ## See also
 
-- [`research/code-adapter-architecture.md`](../research/code-adapter-architecture.md) — the design: the two axes, the ports to extract when adapter #2 lands, and the step-by-step Codex recipe.
 - [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic test tiers that ride on `vigiles/testing`. Per-harness specifics: [`harness-testing-claude-code.md`](harness-testing-claude-code.md) · [`harness-testing-codex.md`](harness-testing-codex.md).
-- [`research/sync-tool-compatibility.md`](../research/sync-tool-compatibility.md) — composing with _format-axis_ tools (Ruler, rulesync) that distribute the file vigiles authors.

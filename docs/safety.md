@@ -4,10 +4,9 @@
 > solid pieces are host **confinement** (bubblewrap + egress — see
 > [`sandboxing.md`](sandboxing.md)) and the eval-tier **`interceptTools`**
 > side-effect prevention. The deterministic _authoring-side_ safety model it ties
-> together (the `purity` floor + the **parked** `effect()` sub-region — see
-> [`../research/effect-boundary-design.md`](../research/effect-boundary-design.md))
+> together (the `purity` floor + the **parked** `effect()` sub-region)
 > is still settling, so this "safety model" front door isn't linked from the README
-> until it's coherent end-to-end. Read it as the design intent, not a finished guarantee.
+> until it's coherent end-to-end. Read it as design intent, not a finished guarantee.
 
 Testing a harness means **executing other people's code with your privileges**,
 and — at the eval tier — letting a **real model decide which tools to call**. Both
@@ -72,8 +71,7 @@ file-based OAuth (`~/.claude/.credentials.json`) copy path against a real local
 credential; the env-var/host-brokered auth path is already proven. The pure pieces
 (`ephemeralRunEnv` / `seedEphemeralHome`) and the scrubbed-env wiring are unit-tested
 (`eval.test.ts`). This needs **no kernel features**, so it lands on macOS immediately,
-independent of the Seatbelt backend. Tracked in
-[`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md).
+independent of the Seatbelt backend.
 
 ## The one rule: safe by default, never silently unconfined
 
@@ -122,7 +120,7 @@ Under `bwrap` a confined run gets a fresh user/net/pid/mount namespace,
   can't send. (A future `strictFs` minimal-rootfs mode closes this, at a
   compatibility cost.)
 - **DNS rotation** in the `egress` allowlist (IPs resolved at launch) — the
-  resolver-pinned layer is the next step ([`sandbox-network.md`](../research/sandbox-network.md)).
+  resolver-pinned layer is the next step.
 - **Not a kernel sandbox.** This defends against careless/malicious _plugin_ code,
   not a kernel or unprivileged-userns exploit — `bwrap` leans on the same userns
   primitive Docker-rootless does. Out of scope.
@@ -182,6 +180,43 @@ When that eval shows a prose gate can be talked out of, the deterministic
 
 ¹ via `decideSandbox` — `sandbox: false` is the explicit unconfined opt-out;
 `sandbox: "strict"` forces it on trusted code too.
+
+## FAQ
+
+**Is it safe to run an eval (or harness test) repeatedly?**
+Yes. Every run gets a fresh ephemeral working dir and a scrubbed environment
+(running is itself a side effect — see above), so a run can't see or corrupt your
+real tree and re-running is clean. Network is blocked by default, and the model's
+irreversible tool calls are caught by `interceptTools`.
+
+**What about side effects that reach _past_ the sandbox dir — a real DB, redis, or the network?**
+Three answers, by kind:
+
+- **Network** — blocked by default. If a hook or skill genuinely needs a host (a
+  package registry, an API), allow exactly that host with `egress: { allow }` (a
+  packet-layer allowlist, not a proxy); everything off-list is dropped. See
+  [`sandboxing.md`](sandboxing.md) for `egress: { allow }`.
+- **A real service the behaviour under test depends on** (a database, redis, a
+  headless browser) — run against a **disposable container you stand up** (e.g.
+  `docker compose`), never your real instance. vigiles **composes** with that
+  container rather than reinventing a sandbox. Honest status: the deterministic
+  tiers (nothing executes; or a real result **recorded once and replayed** by
+  shadowing the binary on `PATH`) need **no** container and cover the large
+  majority of plugin surface; the turnkey disposable-dependency provisioning is a
+  committed next step — today you point the run at a container you provision.
+- **An irreversible external** (a `git push`, a paid API, a paid subagent) — you
+  usually don't want it to run at all in a test; `interceptTools` catches the
+  _attempt_ and prevents it (see the section above).
+
+**Does any of this need Docker?**
+No for the deterministic tiers (nothing runs) and record-replay (a real result
+captured once, replayed without the real tool). Only a real service whose
+semantics _is_ what you're testing needs a container.
+
+**Can I just turn confinement off?**
+Yes — `sandbox: false` is the explicit, greppable opt-out for code you trust, and
+`sandbox: "strict"` forces confinement on even trusted code. It is never
+_silently_ unconfined (see "the one rule" above).
 
 ## See also
 

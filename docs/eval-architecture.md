@@ -4,10 +4,7 @@
 > the two testing verbs (`vigiles test` / `vigiles eval`), reconciles it with
 > what the codebase **already** ships, and ranks the genuine remaining gaps into
 > a build roadmap. Companion to [`harness-testing.md`](harness-testing.md) (the
-> user guide), [`research/eval-api-landscape.md`](../research/eval-api-landscape.md)
-> (the field + the B→A→C build log), and
-> [`research/testing-api-design.md`](../research/testing-api-design.md) (the
-> check-vocabulary shape).
+> user guide).
 
 ## The kicker
 
@@ -79,17 +76,7 @@ session: a real eval ran with `apiKeySource:"none"`, i.e. on the OAuth sub.)
 - **No dataset / red-team / scorer-library / web UI** — that's promptfoo's lane;
   we bridge or skip, not chase.
 
-The full competitor scorecard is in
-[`research/eval-api-landscape.md`](../research/eval-api-landscape.md); the
-caching-invalidation research in
-[`research/cache-invalidation.md`](../research/cache-invalidation.md); the
-isolation decision in
-[`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
-
 ## Coverage & scope — what we test, what we delegate
-
-> Source of truth: [`research/eval-coverage-and-isolation.md`](../research/eval-coverage-and-isolation.md)
-> (the full blend + the classifier prompt). This is the digest.
 
 What a test needs from the _outside world_ sorts onto **three rungs**, and you
 **pick the lowest rung that faithfully measures the thing**:
@@ -442,12 +429,7 @@ bridge** (when the prose gate caves under pressure, vigiles's deterministic
 hook/rail is the fix — layer 2 hands off to layer 1), but the broad behavioral
 tier — multiple surfaces firing together, real side effects against ephemeral
 deps, graded by the `Trace`/check vocabulary — is the flagship. Don't let the
-narrow check stand in for the umbrella. See
-[`research/skill-eval-landscape.md`](../research/skill-eval-landscape.md) (gap
-verdict + why behavioral single-skill eval is now table stakes, so the moat is the
-_assembled-harness_ + affordability + rigor intersection) and
-[`research/cross-platform-sandboxing.md`](../research/cross-platform-sandboxing.md)
-(the ephemeral run env that makes a side-effecting run safe to repeat).
+narrow check stand in for the umbrella.
 
 ### The adversarial-gate test — worked example and the eval→enforce bridge
 
@@ -600,7 +582,7 @@ when?, denyReason? }]` on a `measure` / `runEval` arm. `src/tool-intercept.ts` +
      invalidates, where a path-only key false-replayed), treats the tool list as a
      set, and salts a `CACHE_FORMAT_VERSION`; floating-alias model drift is warned.
      Full best-practice survey + the shipped/deferred decisions (eviction deferred
-     as disk hygiene) in [`research/cache-invalidation.md`](../research/cache-invalidation.md).
+     as disk hygiene) are captured in the design record.
 
 ## Dogfood targets
 
@@ -680,7 +662,6 @@ API). _Validates on:_ the **missing`writing-quality` trigger case\*\*.
    the skill alongside the user's real set as a **release gate**, plus a
    near-neighbor middle tier built on the existing `ncd`/`findSimilarRules` engine.
    This is a genuine wedge — **no existing eval tool populates the install set**.
-   Full decision + evidence in [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
 
 ## Where this design is wrong / open questions
 

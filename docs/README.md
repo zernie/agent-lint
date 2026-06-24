@@ -38,12 +38,12 @@ How-to and reference docs for using vigiles. New here? Start with the
   - [`testing-api.md`](testing-api.md) — the full API reference: every predicate, assertion, `check`, matcher, and option (`measureTriggerRate` / `runEval` / significance), plus imports & harness selection.
   - [`harness-testing-claude-code.md`](harness-testing-claude-code.md) — Claude Code specifics: the oh-my-claudecode walkthrough, `${CLAUDE_PLUGIN_ROOT}` / `pluginDir` / the `Skill` tool, `scriptModel`, the bubblewrap sandbox.
   - [`harness-testing-codex.md`](harness-testing-codex.md) — Codex specifics: `runHarnessTest({ adapter: codexAdapter })` against real `codex exec`, the OpenAI Responses mock, what maps and what doesn't.
-- [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file. (Coverage roadmap: [`../research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).)
+- [`testing-matrix.md`](testing-matrix.md) — every use case mapped to its test tier and file.
 - [`sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records (honestly): IO / `rm -rf`, the three network modes (deny-all / `recordEgress` / allowlisted `egress: { allow }`), tiers and limits.
 
 ## Measure what works (layer 3)
 
-- [`measuring-skills.md`](measuring-skills.md) — A/B a skill, plugin, model, or rule change on real coding tasks: the metric triple (bill / target / blast-radius correctness), the worked `measureArms` example, the ecosystem benchmark, and why it's affordable on your subscription. (Method: [`../research/benchmark-methodology.md`](../research/benchmark-methodology.md); strategy: [`../research/measurement-authority.md`](../research/measurement-authority.md).)
+- [`measuring-skills.md`](measuring-skills.md) — A/B a skill, plugin, model, or rule change on real coding tasks: the metric triple (bill / target / blast-radius correctness), the worked `measureArms` example, the ecosystem benchmark, and why it's affordable on your subscription.
 - [`eval-architecture.md`](eval-architecture.md) — the cost model + the two testing verbs reconciled with what ships.
 
 ## Skills & agents

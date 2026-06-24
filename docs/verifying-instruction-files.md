@@ -146,7 +146,6 @@ reference to its real source:
   [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and
   CSS**. Rename it and `lint` fails; in markdown mode the `refs-hook` **forces
   the mark**, blocking edits that leave a code reference bare.
-  [Details →](../research/symbol-verification.md)
 - `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its
   server. `lint` reads `.mcp.json`, starts the server, lists its tools, and flags
   a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP
@@ -283,8 +282,7 @@ in the loop**, the moment it edits an instruction file. The flow, from save:
 
 **What it deliberately does not do:** it can't force a _plaintext_ reference
 (no backticks, pure prose) to become a mark — distinguishing a load-bearing
-reference from ordinary prose is undecidable (see
-[`research/reference-verification-limits.md`](../research/reference-verification-limits.md)).
+reference from ordinary prose is undecidable.
 It catches the high-signal, low-noise case (a backticked linter-rule name); bare
 identifiers, paths, and prose are left to the shipped instructions, not the hook.
 
