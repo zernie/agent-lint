@@ -26,10 +26,14 @@ export interface ProviderResults {
   readonly "git.branch": string;
   /** True iff the working tree has uncommitted changes (false if not a repo). */
   readonly "git.isDirty": boolean;
+  /** The repo's top-level directory, or "" outside a git repo. */
+  readonly "git.root": string;
   /** The directory the hook runs in. */
   readonly cwd: string;
   /** The OS platform (`process.platform`: "darwin" | "linux" | "win32" | …). */
   readonly "os.platform": NodeJS.Platform;
+  /** True iff running on a CI server (detected via the `ci-info` library). */
+  readonly "env.isCI": boolean;
 }
 
 /** A declarable built-in provider name. */
@@ -145,6 +149,8 @@ export interface ProviderIO {
   readonly cwd: string;
   /** The OS platform (`process.platform`). */
   readonly platform: NodeJS.Platform;
+  /** Whether the process is on a CI server (the CLI injects `ci-info`'s verdict). */
+  readonly isCI: boolean;
 }
 
 interface ProviderDef<K extends ProviderName> {
@@ -178,11 +184,18 @@ export const BUILTIN_PROVIDERS: {
     run: "git status --porcelain",
     gather: (io) => tryExec(io, "git status --porcelain").length > 0,
   },
+  "git.root": {
+    run: "git rev-parse --show-toplevel",
+    gather: (io) => tryExec(io, "git rev-parse --show-toplevel"),
+  },
   cwd: {
     gather: (io) => io.cwd,
   },
   "os.platform": {
     gather: (io) => io.platform,
+  },
+  "env.isCI": {
+    gather: (io) => io.isCI,
   },
 };
 

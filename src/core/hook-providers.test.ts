@@ -29,10 +29,12 @@ function fakeIO(
   answers: Record<string, string>,
   cwd = "/repo",
   platform: NodeJS.Platform = "linux",
+  isCI = false,
 ): ProviderIO {
   return {
     cwd,
     platform,
+    isCI,
     exec: (command) => {
       if (command in answers) return answers[command];
       throw new Error(`fake exec: command failed: ${command}`);
@@ -72,6 +74,22 @@ test("a clean tree is not dirty; gathering NEVER throws (defaults on failure)", 
 test("os.platform is an ambient provider (from io.platform, no command)", () => {
   const ctx = gatherContext(["os.platform"], fakeIO({}, "/repo", "darwin"));
   assert.equal(ctx["os.platform"], "darwin");
+});
+
+test("git.root runs `git rev-parse --show-toplevel` (read-only); env.isCI is ambient", () => {
+  const root = gatherContext(
+    ["git.root"],
+    fakeIO({ "git rev-parse --show-toplevel": "/home/u/repo\n" }),
+  );
+  assert.equal(root["git.root"], "/home/u/repo"); // trimmed
+  // Outside a repo → default "" (rev-parse throws → tryExec returns "").
+  assert.equal(gatherContext(["git.root"], fakeIO({}))["git.root"], "");
+  // env.isCI is ambient (the CLI injects ci-info's verdict via io.isCI).
+  assert.equal(
+    gatherContext(["env.isCI"], fakeIO({}, "/repo", "linux", true))["env.isCI"],
+    true,
+  );
+  assert.equal(gatherContext(["env.isCI"], fakeIO({}))["env.isCI"], false);
 });
 
 test("inline provide()/dangerously() run their command → stdout becomes the fact", () => {

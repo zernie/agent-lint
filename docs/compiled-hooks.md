@@ -192,11 +192,14 @@ result. `needs` is **typed** — reading an undeclared fact (`e.ctx["cwd"]` here
 a `tsc` error, and an unknown provider name **won't compile** — so the
 capability surface stays explicit and auditable.
 
-**Built-in providers:** `git.branch`, `git.isDirty`, `cwd`, `os.platform` —
-zero-arg, read-only. (A provider that can't resolve — e.g. not a git repo —
-yields its default, never an error.) The set is deliberately small; a 20+ OSS
-survey found most facts a hook reads are already event data, and the long tail
-belongs in the opt-out, not a growing catalog.
+**Built-in providers:** `git.branch`, `git.isDirty`, `git.root`, `cwd`,
+`os.platform`, `env.isCI` — zero-arg, read-only. (A provider that can't resolve —
+e.g. not a git repo — yields its default, never an error.) The set is
+deliberately small; a 20+ OSS survey found most facts a hook reads are already
+event data, and the long tail belongs in the opt-out, not a growing catalog.
+(`env.isCI` uses the [`ci-info`](https://www.npmjs.com/package/ci-info) library —
+the one fact where a maintained lib beat hand-rolling; git facts stay read-only
+shell commands, platform is `process.platform`.)
 
 **The lightweight opt-out — `provide` / `dangerously`.** For a one-off,
 off-catalog fact you don't want to register a whole provider for, declare an

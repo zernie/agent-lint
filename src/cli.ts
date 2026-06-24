@@ -4615,6 +4615,7 @@ async function gatherHookContext(
   const registry = hasRef ? await loadProviderRegistry() : {};
   const { execSync } =
     require("node:child_process") as typeof import("node:child_process");
+  const { isCI } = require("ci-info") as { isCI: boolean };
   return gatherContext(
     needs,
     {
@@ -4625,6 +4626,7 @@ async function gatherHookContext(
         }),
       cwd: process.cwd(),
       platform: process.platform,
+      isCI,
     },
     registry,
   );
