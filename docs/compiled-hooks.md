@@ -444,4 +444,5 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - [Testing your harness](harness-testing.md) — the test tiers; `runHook` unit-tests a hook's decision, and `assertBlocksDisasters` proves a guardrail blocks.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer (references are _true_); compiled hooks are the **gate** instrument beside it.
 - [CLI & GitHub Action](cli.md) — `compile` / `hook-runtime` reference.
+- [API reference (generated)](https://zernie.github.io/vigiles/) — every `vigiles/hook` symbol (`defineHook`, `provide`/`dangerously`/`defineProvider`, the `Decision`/`Reaction` types, …).
 - [`research/hook-pain-points.md`](../research/hook-pain-points.md) — the verified failure corpus + the design record.
