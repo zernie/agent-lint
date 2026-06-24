@@ -190,6 +190,38 @@ SHIPPED (prompt/stop gates + `e.response`); the lone remaining shape is the gene
 `tool_input` accessors (WebFetch/Task/MCP), deliberately deferred to avoid a stringly-typed
 bag. The I/O-bound lifecycle hooks stay shell, by design.
 
+## Driving ADOPTION of compiled hooks — the nudge, not a requirement (decided 2026-06-24)
+
+If compiled hooks fix real bugs (the 2/7→7/7 dogfood), shouldn't lint PUSH people onto
+them? We walked three options and rejected the first two:
+
+- **`require-hook-spec` lint rule — REJECTED.** It's FORM-based (compiled vs not), so it
+  fires on a CORRECT hand-written hook exactly like a broken one — the "valid is not true"
+  sin vigiles criticizes in other linters. It repeats the deprecated `require-skill-spec`
+  mistake (requiring a _spec_ per artifact was the wrong axis; requiring a _test_ was right).
+  And it's POST-HOC — lint fires after the hook is written, the worst moment to say "should've
+  been typed." It also contradicts the two-lanes decision (hand-written `.sh` is a
+  first-class lane).
+- **`hook-false-confidence` static detector — REJECTED.** A static analyzer for the
+  anti-patterns (exit-1-not-2, wrong field, grep matcher) REIMPLEMENTS `guardrail-check`
+  (which already proves a hook blocks, dynamically, in EITHER lane) — a worse partial copy
+  of our own moat. Still post-hoc; doesn't help AUTHORING.
+- **`prefer-compiled-hooks` — SHIPPED.** A SINGLE repo-level recommendation (one finding
+  regardless of hook count; default `warn`/`ℹ`; opt-out) nudging hand-written hooks toward
+  compiled `vigiles/hook`; message links the guide. Volume-safe (the "few hooks" reframe:
+  most repos have 1–3 hooks, so a per-hook rule is both noisy AND low-leverage; one nudge is
+  neither). Precedent: `skill-frontmatter` is the same soft-recommendation shape. Honest
+  caveat in its doc: still form-based, so it stays a recommendation, never an error default.
+  Detector `manualHookCount` in `src/scan.ts`, shared by lint + scan (one-detector-no-drift).
+
+The real lesson: **lint is the wrong instrument for an authoring-time win.** The lever that
+actually produces good NEW hooks is the AUTHORING on-ramp — a model-invocable
+**`write-hook`/`harden-hook` skill** that writes a compiled `vigiles/hook` spec from a
+plain-English "block X" request (the great-agent-flow carrot the nudge points at). UNBUILT;
+it's the natural follow-up to `prefer-compiled-hooks`. For existing hooks, `guardrail-check`
+
+- `untested-hook` remain the verify backstop.
+
 ## See also
 
 - `research/hook-context-providers.md` — I/O-dependent decisions via pure-decision + declared context providers + the graceful-degradation opt-out ladder (deliverable #7's external-state half).

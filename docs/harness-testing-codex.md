@@ -110,9 +110,7 @@ try {
 
 The wire format is **not guessed** — `renderResponsesSSE` emits the exact 9-event
 sequence captured from live `codex` traffic (codex-cli 0.139.0), and a gated test
-drives real `codex exec` against it. See
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md)
-for how the recipe was proven.
+drives real `codex exec` against it.
 
 ## What maps, and what doesn't
 
@@ -149,8 +147,6 @@ reading the skill's `SKILL.md` (`codexSkillFired`) — best-effort, so pair it w
 a judged check. **Pin codex 0.139.0** (0.141 regressed the keyless mock), and real
 eval turns need auth + network egress.
 
-The confirmed `codex exec --json` schema and the full findings are in
-[`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md).
 (Matches the [`docs/harnesses.md`](harnesses.md) matrix footnote ².)
 
 ## Authenticating Codex (for the eval tier)
@@ -196,5 +192,3 @@ event schema can shift between releases; validated against `codex-cli` 0.141.0).
 - [`docs/harness-testing.md`](harness-testing.md) — the harness-agnostic core: levels, the `Trace` model, the runners, evals, vitest/jest, CLI, CI.
 - [`docs/harness-testing-claude-code.md`](harness-testing-claude-code.md) — the Claude Code parallel (`scriptModel` + the Anthropic mock, `${CLAUDE_PLUGIN_ROOT}`, the bubblewrap sandbox).
 - [`docs/harnesses.md`](harnesses.md) — the adapter/import model + the capability matrix (where Codex sits, with the subagent + `runEval` footnotes).
-- [`research/codex-prototype-findings.md`](../research/codex-prototype-findings.md) — how the keyless recipe + the Responses SSE renderer were proven against the real `codex` binary.
-- [`research/harness-landscape.md`](../research/harness-landscape.md) — the Codex extraction map and the full harness landscape.

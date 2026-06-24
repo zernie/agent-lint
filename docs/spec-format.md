@@ -359,7 +359,7 @@ rules: {
   "regen-types-on-config-change": guard(
     {
       watch: ["eslint.config.*", "package.json", "pyproject.toml"],
-      run: "npx vigiles generate-types",
+      run: "npx vigiles generate types",
     },
     "Regenerate types when linter configs or package.json change.",
   ),
@@ -406,7 +406,7 @@ export default defineConfig({
 
 ### Orphan-docs configuration
 
-The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files looking for ones that no other markdown references. By default it follows the vigiles-repo convention (`docs/` + `research/`), but each project sets its own scope via tsconfig-style globs in `.vigilesrc.json`:
+The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files looking for ones that no other markdown references. By default it follows the vigiles-repo convention (the `docs/` tree plus your project's internal notes directory), but each project sets its own scope via tsconfig-style globs in `.vigilesrc.json`:
 
 ```json
 {
@@ -417,7 +417,7 @@ The orphan-docs check (`enforce("vigiles/orphan-docs")`) scans markdown files lo
 }
 ```
 
-- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md", "research/**/*.md"]`. Set to `[]` to disable scanning.
+- `include` — glob patterns of `.md` files to scan. Defaults to `["docs/**/*.md"]` plus your project's internal notes directory. Set to `[]` to disable scanning.
 - `exclude` — glob patterns to skip within the include scope. Same shape as `tsconfig.json#exclude`.
 
 `node_modules/**`, `dist/**`, `.vigiles/**`, and `.git/**` are always excluded.

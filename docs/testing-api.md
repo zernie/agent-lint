@@ -213,9 +213,7 @@ regression baselines fall out for free.
 `measureArms({ arms, checks })` scores the same checks per arm (a hook/skill/rule
 **on vs off**); `compareCheck(report, baseline, arm, i)` returns a Welch verdict.
 It takes `stubSkillBodies` too. `propertyHook({ seed, mutate, decide, invariants })`
-fuzzes a hook's `(event) → decision` and shrinks any counterexample. See
-[`research/testing-api-design.md`](../research/testing-api-design.md) for the full
-design.
+fuzzes a hook's `(event) → decision` and shrinks any counterexample.
 
 ## vitest / jest matchers
 
@@ -291,13 +289,11 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
   under-selects — dogfooded 0.50 on haiku vs 0.90 on sonnet). The `minModel` floor
   fails a too-weak run up front. Model lives in the spec, not an env override.
 - **`fixture`** — each run defaults to an empty cwd (faithful for opening-move
-  skills); pass `fixture` to seed the repo state a skill claims to fire on. See
-  [`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md).
+  skills); pass `fixture` to seed the repo state a skill claims to fire on.
 - **`installSet`** — by default the skill competes against the other skills in the
   plugin you point at (honest — selection is competitive); `installSet` co-installs
   the rest of the user's harness for a release-gate measurement. `report.competitors`
-  is the pool size (`0` = isolated, an upper bound on recall). See
-  [`research/isolated-vs-whole-harness-eval.md`](../research/isolated-vs-whole-harness-eval.md).
+  is the pool size (`0` = isolated, an upper bound on recall).
 - **Comparing models** is a harness A/B — set a per-arm `model` in `measureArms` /
   `runEval`, no separate matrix runner.
 
@@ -452,4 +448,3 @@ adapter/import model and the capability matrix, see
 
 - [Testing your harness](harness-testing.md) — the task-first how-to guide.
 - [`docs/harnesses.md`](harnesses.md) — harness selection + the capability matrix.
-- [`research/testing-api-design.md`](../research/testing-api-design.md) — the design behind the check vocabulary.

@@ -36,6 +36,11 @@ Zero install commitment, zero new files.
 
 ### Typed spec — compiler-grade guarantees
 
+**You rarely hand-write one.** It's TypeScript for your harness — opt-in and
+gradual: the `edit-spec` / `strengthen` skills write and update the spec from a
+plain-English ask, and a hook recompiles it on save. So the typed spec is the
+auto-enforced next step, not a chore — here's what it buys you.
+
 **Markdown mode is not a lesser tier for verification.** It squiggles rule typos
 at edit time (the YAML schema `init` generates), and its inline marks —
 `vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file
@@ -146,13 +151,12 @@ reference to its real source:
   [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and
   CSS**. Rename it and `lint` fails; in markdown mode the `refs-hook` **forces
   the mark**, blocking edits that leave a code reference bare.
-  [Details →](../research/symbol-verification.md)
 - `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its
   server. `lint` reads `.mcp.json`, starts the server, lists its tools, and flags
   a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP
   server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
-**Typo-safe at authoring time, too.** `vigiles generate-types` emits a
+**Typo-safe at authoring time, too.** `vigiles generate types` emits a
 `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your
 editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
 language server. Both have `--check` CI freshness modes.
@@ -178,7 +182,7 @@ the surface exists.
 | Instruction file &amp; docs | `require-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                    | all harnesses                             |
 | Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
 | MCP                         | `mcp-config`                                                                               | all with MCP                              |
-| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`                                       | Claude Code, Codex                        |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`              | Claude Code, Codex                        |
 | Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
 
 The per-family tables below give each rule's default severity and what it checks.
@@ -216,13 +220,14 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Hooks &amp; MCP
 
-| Rule                                                            | Default  | What it checks                                                         |
-| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)          |
-| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)    |
-| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)             |
-| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server |
-| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool               |
+| Rule                                                            | Default  | What it checks                                                            |
+| --------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)             |
+| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)       |
+| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)                |
+| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server    |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool                  |
+| [`prefer-compiled-hooks`](rules/prefer-compiled-hooks.md)       | `"warn"` | One nudge: hand-written hooks could be compiled (recommendation, opt-out) |
 
 ### Skill triggers
 
@@ -234,9 +239,9 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Docs hygiene
 
-| Rule                                  | Default | What it checks                                                                   |
-| ------------------------------------- | ------- | -------------------------------------------------------------------------------- |
-| [`orphan-docs`](rules/orphan-docs.md) | (on)    | A `docs/` / `research/` doc no other `.md` references (instruction files exempt) |
+| Rule                                  | Default | What it checks                                                                            |
+| ------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| [`orphan-docs`](rules/orphan-docs.md) | (on)    | A doc in a configured directory that no other `.md` references (instruction files exempt) |
 
 ### Configure
 
@@ -283,8 +288,7 @@ in the loop**, the moment it edits an instruction file. The flow, from save:
 
 **What it deliberately does not do:** it can't force a _plaintext_ reference
 (no backticks, pure prose) to become a mark — distinguishing a load-bearing
-reference from ordinary prose is undecidable (see
-[`research/reference-verification-limits.md`](../research/reference-verification-limits.md)).
+reference from ordinary prose is undecidable.
 It catches the high-signal, low-noise case (a backticked linter-rule name); bare
 identifiers, paths, and prose are left to the shipped instructions, not the hook.
 

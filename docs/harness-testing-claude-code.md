@@ -372,4 +372,3 @@ records, the three network modes (deny-all / `recordEgress` / allowlisted
 - [`docs/harness-testing-codex.md`](harness-testing-codex.md) — the Codex parallel (`codexAdapter` + the Responses mock against real `codex exec`).
 - [`docs/harnesses.md`](harnesses.md) — the adapter/import model + the capability matrix.
 - [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records, the three network modes, tiers and limits.
-- [`research/harness-testing.md`](../research/harness-testing.md) — the deterministic + eval design rationale + real-plugin coverage.

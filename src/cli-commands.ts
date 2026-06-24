@@ -16,16 +16,11 @@ export const VERBS = [
   "init",
   "compile",
   "lint",
-  "refs",
   "test",
   "eval",
   "scan",
-  "measure",
-  "explain",
   "scaffold-test",
-  "generate-types",
-  "generate-schema",
-  "generate-harness",
+  "generate",
   "hook-runtime",
 ] as const;
 

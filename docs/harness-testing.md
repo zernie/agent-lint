@@ -330,8 +330,7 @@ How far each tier reaches, by surface (Claude Code, the reference adapter):
 | MCP servers                                           | ✅ tool refs (`vigiles:mcp`) | 🔴                          | 🔴                |
 | settings.json                                         | 🟡 assert merged             | ✅ applied                  | ✅                |
 
-✅ shipped · 🟡 partial · 🔴 gap · — n/a. Full detail + roadmap:
-[`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md).
+✅ shipped · 🟡 partial · 🔴 gap · — n/a.
 
 ## How vigiles compares
 
@@ -344,9 +343,7 @@ tools are real-model-only.
 The difference is **cost by construction**: every one of their runs is a real
 model call by design; vigiles answers most harness questions — does this hook
 block? is it wired in? does the skill resolve? — with no model and no key at all,
-paying for a real model only at the eval tier. Full scorecard:
-[`research/eval-api-landscape.md`](../research/eval-api-landscape.md) ·
-[`research/promptfoo-deep-dive.md`](../research/promptfoo-deep-dive.md).
+paying for a real model only at the eval tier.
 
 ## Runnable examples
 
@@ -378,6 +375,4 @@ sandbox) is per-harness. Pick yours:
 - [`docs/harnesses.md`](harnesses.md) — how you pick a harness (by import) + the capability matrix.
 - [`docs/sandboxing.md`](sandboxing.md) — what the sandbox isolates vs records.
 - [`docs/testing-matrix.md`](testing-matrix.md) — every use case mapped to its tier + file.
-- [`research/harness-testing.md`](../research/harness-testing.md) — the design rationale (two-layers model, why deterministic-first).
 - [`railway-subagents.md`](railway-subagents.md) — the railway/Result subagent contract end to end (typed outcome, compose flat workers, assert deterministically).
-- [`research/railway-subagents.md`](../research/railway-subagents.md) — railway-oriented orchestration over flat subagents (the `result()`/`railway()` design).

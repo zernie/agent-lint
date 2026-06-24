@@ -7,7 +7,7 @@ already-connected MCP server and **requires** a `server` + `tool` field. This ru
 flags two ways it silently never dispatches. Same detector `vigiles scan` uses
 (`verifyMcpHookTargets` in `src/core/mcp-hook.ts`).
 
-It extends the tool moat to the **hook** surface — sibling of
+It extends the tool cross-reference to the **hook** surface — sibling of
 [`mcp-tool-resolves`](mcp-tool-resolves.md) (a subagent's `mcp__server__tool`) and
 [`mcp-config`](mcp-config.md) (a server that can't start).
 

@@ -16,6 +16,13 @@
 > (haiku is the cheap v0 pass); the ~1% output-share is model-agnostic. Method:
 > [`benchmark-methodology.md`](benchmark-methodology.md).
 
+> **External challenge (read alongside this doc):**
+> [`eval-startups-positioning.md`](eval-startups-positioning.md) maps the "why eval
+> startups fail" critique onto this pivot. Verdict: the public ecosystem-benchmark
+> here is a public eval → Goodhart-gameable → **acquisition flywheel, not a moat**
+> (keep it thin); the defensible eval-shaped niche is **attestation/safety**
+> (capability-diff, guardrail proof), which the critique independently validates.
+
 ## Status & gaps (2026-06-21) — honest read of where the pivot stands
 
 A candid self-assessment after a heavy typed-spec research+build push (see

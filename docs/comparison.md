@@ -40,7 +40,7 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 | npm script exists                | Yes            | Parsed from `package.json`                                                           |
 | SHA-256 hash matches             | Yes            | Recompute and compare                                                                |
 | Duplicate rule detection         | Yes            | Normalized Compression Distance (NCD) with fixed threshold                           |
-| Orphan docs detection            | Yes            | Scan `docs/` and `research/` for `.md` files no other markdown references            |
+| Orphan docs detection            | Yes            | Scan configured doc directories for `.md` files no other markdown references         |
 | guidance → enforce suggestion    | **No**         | Agent reads linter docs, reasons about intent — `/strengthen` skill                  |
 | PR comment → lint rule           | **No**         | Agent generates custom rule code — `/pr-to-lint-rule` skill                          |
 | Spec content authoring           | **No**         | Agent or human writes the spec — vigiles verifies it                                 |

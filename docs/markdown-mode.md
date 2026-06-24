@@ -84,7 +84,7 @@ The reason to move from Level 0 to Level 1 is tooling. Generate a JSON
 Schema from your project's _actual_ enabled rules:
 
 ```bash
-npx vigiles generate-schema
+npx vigiles generate schema
 ```
 
 This writes `.vigiles/schema.json` with the `rule` field populated as an
@@ -158,5 +158,5 @@ valid `vigiles.enforce` frontmatter rule is treated as spec-equivalent. No
   TypeScript build — the sweet spot for non-TS projects.
 - **Level 2** when you want the strongest guarantees: full type checking at
   authoring time, programmatic rule composition, NCD duplicate detection,
-  and the `generate-types` moat. Scaffold with
+  and `generate-types` type generation. Scaffold with
   `npx vigiles init --target=CLAUDE.md`, then copy your rules in.

@@ -1,8 +1,9 @@
 # Research & design docs — index
 
 The thinking behind vigiles: design docs, landscape analyses, benchmark findings,
-and parked ideas. Grouped by theme; each is one click away. (User-facing
-how-to docs live in [`../docs/`](../docs/README.md).)
+and parked ideas — the project's **internal record, not user-facing** (those
+how-to docs live in [`../docs/`](../docs/README.md)). Grouped by theme; each is
+one click away.
 
 > **Building something? Start at [`roadmap.md`](roadmap.md)** — the single
 > consolidated, ranked view of what ships next (Now / Next / Later / Backlog /
@@ -77,6 +78,7 @@ divergent-bets triage, and the SDK probe. Ranked into action in [`roadmap.md`](r
 
 - [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) — **read first**: all four researches converge on extend-don't-pivot, with one unclaimed wedge (observed-≟-declared). Ranked Tier-1/2/3 bets + the positioning pivot.
 - [`divergent-bets.md`](divergent-bets.md) — bolder directions triaged with founder reactions (leaderboard + cost-optimizer = strong; SDK = no; compiler-not-linter = killed).
+- [`eval-startups-positioning.md`](eval-startups-positioning.md) — the "why eval startups fail" critique mapped onto vigiles: it dodges the trap (harness-eval, not model-eval; tooling not services), but it's a yellow flag on the benchmark-as-moat bet and validates the attestation/safety direction.
 - [`agent-supply-chain-security.md`](agent-supply-chain-security.md) — plugin/MCP supply-chain security; build a thin harness-aware `scan`, reject the security-vendor pivot.
 - [`standards-conformance.md`](standards-conformance.md) — AGENTS.md/SKILL.md/MCP standardization; extend pillar 1 to be format-neutral, reject the generic-linter pivot.
 - [`runtime-guardrails-observability.md`](runtime-guardrails-observability.md) — guardrails + OTel-GenAI; stay out of the request path, take the OTel-emit / verify-trace / Cedar-codegen bridges.

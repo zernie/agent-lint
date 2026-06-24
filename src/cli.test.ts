@@ -734,10 +734,10 @@ vigiles:
 });
 
 // ---------------------------------------------------------------------------
-// vigiles generate-schema
+// vigiles generate schema
 // ---------------------------------------------------------------------------
 
-describe("CLI: vigiles generate-schema", () => {
+describe("CLI: vigiles generate schema", () => {
   let schemaDir: string;
 
   before(() => {
@@ -763,7 +763,7 @@ describe("CLI: vigiles generate-schema", () => {
   });
 
   it("emits a valid JSON Schema with a populated rule enum", () => {
-    const { exitCode } = run("generate-schema", schemaDir);
+    const { exitCode } = run("generate schema", schemaDir);
     assert.equal(exitCode, 0);
     const schemaPath = join(schemaDir, ".vigiles", "schema.json");
     assert.ok(existsSync(schemaPath), "expected .vigiles/schema.json");
@@ -793,8 +793,8 @@ describe("CLI: vigiles generate-schema", () => {
   });
 
   it("--check passes after generation and is idempotent", () => {
-    run("generate-schema", schemaDir);
-    const { stdout, exitCode } = run("generate-schema --check", schemaDir);
+    run("generate schema", schemaDir);
+    const { stdout, exitCode } = run("generate schema --check", schemaDir);
     assert.equal(exitCode, 0, stdout);
     assert.ok(stdout.includes("up to date"));
   });
@@ -822,7 +822,7 @@ describe("CLI: vigiles generate-schema", () => {
       "module.exports = {};",
     );
 
-    const { exitCode } = run("generate-schema", customDir);
+    const { exitCode } = run("generate schema", customDir);
     assert.equal(exitCode, 0);
     const schema = JSON.parse(
       readFileSync(join(customDir, ".vigiles", "schema.json"), "utf-8"),
@@ -847,17 +847,17 @@ describe("CLI: vigiles generate-schema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// vigiles generate-types
+// vigiles generate types
 // ---------------------------------------------------------------------------
 
-describe("CLI: vigiles generate-types", () => {
+describe("CLI: vigiles generate types", () => {
   it("should generate types", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "vigiles-gen-"));
     writeFileSync(
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { build: "echo ok" } }),
     );
-    const { stdout, exitCode } = run("generate-types", tmpDir);
+    const { stdout, exitCode } = run("generate types", tmpDir);
     assert.equal(exitCode, 0);
     assert.ok(stdout.includes("Generated"));
     rmSync(tmpDir, { recursive: true, force: true });
@@ -871,9 +871,9 @@ describe("CLI: vigiles generate-types", () => {
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
     );
     // Generate types in temp dir
-    run("generate-types", tmpDir);
+    run("generate types", tmpDir);
     // Then check — should pass
-    const { exitCode } = run("generate-types --check", tmpDir);
+    const { exitCode } = run("generate types --check", tmpDir);
     assert.equal(exitCode, 0);
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -1180,7 +1180,7 @@ describe("CLI: vigiles init (full setup)", () => {
 
   before(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-setup-"));
-    // Need a package.json for generate-types
+    // Need a package.json for generate types
     writeFileSync(
       join(tmpDir, "package.json"),
       JSON.stringify({ name: "test", scripts: { test: "echo ok" } }),
@@ -1835,7 +1835,7 @@ describe("plugin hook: post-edit.sh", () => {
         tool_input: { file_path: `/tmp/${filename}` },
       });
       // The hook should match these files — we can't easily verify it runs
-      // generate-types without mocking npx, but we can verify it doesn't crash.
+      // generate types without mocking npx, but we can verify it doesn't crash.
       try {
         execSync(`echo '${input}' | bash ${hookPath}`, {
           cwd: process.cwd(),
@@ -1924,8 +1924,8 @@ describe("E2E: fixture project adoption", () => {
     );
   });
 
-  it("generate-types works in fixture project", () => {
-    const { exitCode } = run("generate-types", workDir);
+  it("generate types works in fixture project", () => {
+    const { exitCode } = run("generate types", workDir);
     assert.equal(exitCode, 0);
     assert.ok(existsSync(join(workDir, ".vigiles/generated.d.ts")));
   });

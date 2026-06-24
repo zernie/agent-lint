@@ -7,7 +7,7 @@
  *   vigiles init            — scaffold a spec from scratch
  *   vigiles compile         — compile .spec.ts → .md with linter verification
  *   vigiles lint            — verify hashes, report coverage, detect duplicates
- *   vigiles generate-types  — emit .d.ts with types from project state
+ *   vigiles generate types  — emit .d.ts with types from project state
  */
 
 import {
@@ -67,6 +67,7 @@ import {
   inspectMarketplace,
   verifyLiveMcpTools,
   formatMcpContractReport,
+  preferCompiledHooksMessage,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
@@ -859,6 +860,8 @@ interface LintReport {
   frontmatterValidErrors: number;
   mcpHookIssues: number;
   mcpHookErrors: number;
+  preferCompiledHookIssues: number;
+  preferCompiledHookErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -963,6 +966,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.descriptionOverlapErrors > 0 ||
     report.frontmatterValidErrors > 0 ||
     report.mcpHookErrors > 0 ||
+    report.preferCompiledHookErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1399,6 +1403,10 @@ async function runLint(
   // targets an undeclared server (the moat applied to the hook surface).
   const mcpHookTargets = checkMcpHookTargets(config, silent, adapter);
 
+  // 7n. Prefer-compiled-hooks — ONE discovery nudge (not per-hook) toward
+  // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
+  const preferCompiledHooks = checkPreferCompiledHooks(config, silent, adapter);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1471,6 +1479,8 @@ async function runLint(
     frontmatterValidErrors: frontmatterValid.errors,
     mcpHookIssues: mcpHookTargets.issues,
     mcpHookErrors: mcpHookTargets.errors,
+    preferCompiledHookIssues: preferCompiledHooks.issues,
+    preferCompiledHookErrors: preferCompiledHooks.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -2865,6 +2875,40 @@ function checkSkillFrontmatter(
 }
 
 /**
+ * Apply the `prefer-compiled-hooks` rule: a SINGLE repo-level recommendation
+ * (one finding regardless of hook count) nudging hand-written hooks toward
+ * compiled `vigiles/hook` artifacts. A discovery nudge, not a defect — the shell
+ * lane stays first-class — so it fires once and the message links the guide.
+ * Reuses `scanPlugin`'s `manualHookCount` (one-detector-no-drift).
+ */
+function checkPreferCompiledHooks(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["prefer-compiled-hooks"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let count: number;
+  try {
+    count = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).manualHookCount;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (count === 0) return { issues: 0, errors: 0 };
+  const message = preferCompiledHooksMessage(count);
+  if (!silent) {
+    console.log("\nCompiled-hooks check:\n");
+    console.log(`  ${sev === "error" ? "✗" : "ℹ"} ${message}`);
+    ghAnnotate(sev === "error" ? "error" : "warning", message);
+  }
+  return { issues: 1, errors: sev === "error" ? 1 : 0 };
+}
+
+/**
  * Apply the `mcp-config` rule: a declared MCP server with neither a `command`
  * (stdio) nor a `url` (http/sse) can't start. Reuses `scanPlugin`'s `mcpIssues`.
  * Warning by default; "error" gates CI.
@@ -3270,14 +3314,14 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * `vigiles measure <dir>` — the MODEL-GATED behavioral report on a plugin (the paid
+ * `vigiles scan <dir> --trigger` — the MODEL-GATED behavioral report on a plugin (the paid
  * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
  * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
  * skill actually FIRE — recall + precision) and the selection-collision matrix (does
  * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles measure ./plugin --prompts=p.json`.
+ * `vigiles scan ./plugin --trigger --prompts=p.json`.
  */
 async function handleMeasure(
   restArgs: string[],
@@ -3341,6 +3385,37 @@ async function handleMeasure(
   console.log(`\n${formatSelectionReport(collisions)}`);
 }
 
+/**
+ * `vigiles generate <kind>` — one verb over the three dev-toolchain generators
+ * (types/schema/harness). Each emits a file YOUR editor/tsc reads, not the agent
+ * — grouped under one verb instead of N hyphenated siblings (cohesive-cli-surface,
+ * high-bar-for-new-commands). The kind is the first positional; the rest passes
+ * through to the per-kind handler (out path / dir).
+ */
+async function handleGenerate(
+  restArgs: string[],
+  args: string[],
+): Promise<void> {
+  const kind = restArgs[0];
+  const rest = restArgs.slice(1);
+  switch (kind) {
+    case "types":
+      handleGenerateTypes(args, rest);
+      break;
+    case "schema":
+      handleGenerateSchema(args, rest);
+      break;
+    case "harness":
+      await handleGenerateHarness(args, rest);
+      break;
+    default:
+      console.error(
+        "Usage: vigiles generate <types|schema|harness> [out] [--check]",
+      );
+      process.exit(2);
+  }
+}
+
 function handleGenerateTypes(args: string[], restArgs: string[]): void {
   const checkOnly = args.includes("--check");
   const outPath = restArgs[0] ?? ".vigiles/generated.d.ts";
@@ -3371,7 +3446,7 @@ function handleGenerateTypes(args: string[], restArgs: string[]): void {
     // --check: compare against existing file, exit 1 if stale
     if (!existsSync(fullOut)) {
       console.log(
-        `\n✗ ${outPath} does not exist. Run \`vigiles generate-types\` to create it.`,
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate types\` to create it.`,
       );
       process.exit(1);
     }
@@ -3388,7 +3463,7 @@ function handleGenerateTypes(args: string[], restArgs: string[]): void {
       console.log(`\n✓ ${outPath} is up to date`);
     } else {
       console.log(
-        `\n✗ ${outPath} is stale. Run \`vigiles generate-types\` to update.`,
+        `\n✗ ${outPath} is stale. Run \`vigiles generate types\` to update.`,
       );
       process.exit(1);
     }
@@ -3423,7 +3498,7 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
   if (checkOnly) {
     if (!existsSync(fullOut)) {
       console.log(
-        `\n✗ ${outPath} does not exist. Run \`vigiles generate-schema\` to create it.`,
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate schema\` to create it.`,
       );
       process.exit(1);
     }
@@ -3432,7 +3507,7 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
       console.log(`\n✓ ${outPath} is up to date`);
     } else {
       console.log(
-        `\n✗ ${outPath} is stale. Run \`vigiles generate-schema\` to update.`,
+        `\n✗ ${outPath} is stale. Run \`vigiles generate schema\` to update.`,
       );
       process.exit(1);
     }
@@ -3452,13 +3527,59 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
 }
 
 /**
- * `vigiles generate-harness [dir] [out]` — emit one typed registry over every
+ * `vigiles generate harness [dir] [out]` — emit one typed registry over every
  * `*.spec.ts` under `dir`, so a single `tsc --noEmit` cross-checks the whole
  * harness (dangling delegates → a tsc error; duplicate names → this command
  * exits non-zero; the capability lattice → a computed export). The third
  * generated artifact beside `generate-types` / `generate-schema`. See
  * docs/cli.md and research/whole-harness-codegen.md.
  */
+/**
+ * Keep an EXISTING `harness.gen.ts` fresh as a side effect of `compile`, so the
+ * whole-harness registry tracks the specs without a separate manual
+ * `generate-harness` run (the user almost never calls that verb by hand). Gated
+ * on the file already existing: compile keeps a registry the user opted into
+ * (committed like a lockfile) up to date — it never imposes one on a repo that
+ * didn't ask for it. Cheap by construction: `generate-harness` only PARSES specs
+ * (no linter spawning), unlike `generate-types`/`generate-schema` (which spawn
+ * every linter and so stay on the config-change guard, off the hot compile path).
+ * Returns false on a duplicate-name collision so it fails the compile.
+ */
+async function refreshHarnessGenIfPresent(
+  harnessFlag: string | undefined,
+): Promise<boolean> {
+  const dir = process.cwd();
+  const fullOut = resolve(dir, HARNESS_GEN_FILENAME);
+  if (!existsSync(fullOut)) return true; // opt-in: nothing to refresh
+
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const model = await loadHarnessModel(
+    dir,
+    (abs) =>
+      loadSpec(abs) as Promise<{
+        _specType?: string;
+        name?: string;
+        tools?: readonly string[];
+      } | null>,
+  );
+  const result = generateHarness(model, {
+    dialect: adapter.dialect,
+    outDir: dirname(fullOut),
+  });
+  if (result.duplicate) {
+    console.log(`\n✗ ${result.duplicate.message}`);
+    console.log(`::error::${result.duplicate.message}`);
+    return false;
+  }
+  writeFileSync(fullOut, result.gen);
+  console.log(
+    `  ↻ refreshed ${HARNESS_GEN_FILENAME} (${String(result.agentCount)} agent(s))`,
+  );
+  return true;
+}
+
 async function handleGenerateHarness(
   args: string[],
   restArgs: string[],
@@ -3521,7 +3642,7 @@ async function handleGenerateHarness(
   if (checkOnly) {
     if (!existsSync(fullOut)) {
       console.log(
-        `\n✗ ${outPath} does not exist. Run \`vigiles generate-harness\` to create it.`,
+        `\n✗ ${outPath} does not exist. Run \`vigiles generate harness\` to create it.`,
       );
       process.exit(1);
     }
@@ -3537,7 +3658,7 @@ async function handleGenerateHarness(
       console.log(`\n✓ ${outPath} is up to date`);
     } else {
       console.log(
-        `\n✗ ${outPath} is stale. Run \`vigiles generate-harness\` to update.`,
+        `\n✗ ${outPath} is stale. Run \`vigiles generate harness\` to update.`,
       );
       process.exit(1);
     }
@@ -3637,7 +3758,7 @@ function harnessFlagFrom(argv: string[]): string | undefined {
 }
 
 /**
- * `vigiles explain <dir> [name]` — the deterministic WHY behind a low score (C4):
+ * `vigiles scan <dir> --explain [name]` — the deterministic WHY behind a low score (C4):
  * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
  * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
  * optional surface name narrows to one underperforming skill/agent (the
@@ -3836,16 +3957,13 @@ function printUsage(command: string | undefined): void {
     "  vigiles scan [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
   );
   console.log(
-    "  vigiles measure <dir>          Model-gated: does each skill FIRE / COLLIDE? (--prompts=, real model)",
+    "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
     "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
-  );
-  console.log(
-    "  vigiles explain <dir> [name]   Deterministic WHY a skill/agent underperforms + the fix (--json, --harness=)",
   );
   console.log(
     "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",
@@ -3861,19 +3979,11 @@ function printUsage(command: string | undefined): void {
   );
   console.log("");
   console.log("Plumbing:");
-  console.log("  vigiles generate-types [out]  Emit .d.ts from project state");
-  console.log("  vigiles generate-types --check  Verify .d.ts is up to date");
   console.log(
-    "  vigiles generate-schema [out] Emit JSON Schema for vigiles: frontmatter",
+    "  vigiles generate <kind>       Emit a dev-toolchain artifact: types (.d.ts) · schema (JSON Schema) · harness (harness.gen.ts)",
   );
   console.log(
-    "  vigiles generate-schema --check Verify schema.json is up to date",
-  );
-  console.log(
-    "  vigiles generate-harness [dir] Emit harness.gen.ts — one typed registry",
-  );
-  console.log(
-    "  vigiles generate-harness --check Verify harness.gen.ts is up to date",
+    "  vigiles generate <kind> --check  Verify the generated file is up to date",
   );
   console.log("  vigiles --version             Print the version number");
   if (command && command !== "--help") {
@@ -4266,43 +4376,6 @@ const INSTRUCTION_FILE = /^(SKILL|CLAUDE|AGENTS)\.md$/;
 
 function isInstructionFile(file: string): boolean {
   return INSTRUCTION_FILE.test(basename(file));
-}
-
-/**
- * Inspect an instruction file's symbol references: broken file-qualified refs
- * (`path.ext#symbol` whose file/symbol is wrong) and code-shaped references not
- * yet marked. Emits one line per finding via `log`; returns whether any issue
- * was found. `basePath` is the file's own directory (where paths resolve).
- */
-function reportRefIssues(
-  markdown: string,
-  basePath: string,
-  log: (m: string) => void,
-): boolean {
-  const issues = collectRefIssues(markdown, basePath);
-  for (const m of issues) log(`  ✗ ${m}`);
-  return issues.length > 0;
-}
-
-/** `vigiles refs <file>` — check a file's symbol references (exit 2 on issues). */
-function refsCommand(target: string | undefined): void {
-  if (!target) {
-    console.error("Usage: vigiles refs <instruction-file.md>");
-    process.exit(2);
-  }
-  const cwd = process.cwd();
-  let markdown: string;
-  try {
-    markdown = readFileSync(resolve(cwd, target), "utf-8");
-  } catch {
-    console.error(`Cannot read ${target}`);
-    process.exit(2);
-  }
-  const bad = reportRefIssues(markdown, dirname(resolve(cwd, target)), (m) => {
-    console.log(m);
-  });
-  if (bad) process.exit(2);
-  console.log(`✓ ${target}: all code references are marked and resolve.`);
 }
 
 /**
@@ -4899,6 +4972,10 @@ async function main(): Promise<void> {
       if (specs.length > 0)
         valid = (await compile(specs, config, { harnessFlag })) && valid;
       valid = (await installHooks(hooks, harnessFlag)) && valid;
+      // Keep an existing whole-harness registry in sync (cheap, opt-in) so the
+      // user never hand-runs `generate-harness`. Skipped when no harness.gen.ts.
+      if (specs.length > 0)
+        valid = (await refreshHarnessGenIfPresent(harnessFlag)) && valid;
       console.log("");
       if (valid) {
         console.log("Compilation complete.");
@@ -4930,6 +5007,18 @@ async function main(): Promise<void> {
       break;
 
     case "scan": {
+      // Model-gated behavioral column + the deterministic diagnostic, folded into
+      // scan (formerly the `measure` / `explain` verbs): `--trigger` measures
+      // whether each skill FIRES / COLLIDES (real model), `--explain` is the
+      // free WHY-a-surface-underperforms + the fix.
+      if (args.includes("--trigger")) {
+        await handleMeasure(restArgs, args);
+        break;
+      }
+      if (args.includes("--explain")) {
+        handleExplain(restArgs, args);
+        break;
+      }
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5037,33 +5126,14 @@ async function main(): Promise<void> {
       break;
     }
 
-    case "explain":
-      handleExplain(restArgs, args);
-      break;
     case "scaffold-test":
       handleScaffoldTest(restArgs, args);
       break;
 
-    case "measure":
-      await handleMeasure(restArgs, args);
-      break;
-
     // --- Plumbing ---
 
-    case "generate-types":
-      handleGenerateTypes(args, restArgs);
-      break;
-
-    case "generate-schema":
-      handleGenerateSchema(args, restArgs);
-      break;
-
-    case "generate-harness":
-      await handleGenerateHarness(args, restArgs);
-      break;
-
-    case "refs":
-      refsCommand(restArgs[0]);
+    case "generate":
+      await handleGenerate(restArgs, args);
       break;
 
     // Hidden umbrella for runtime entrypoints emitted into hooks configs — never

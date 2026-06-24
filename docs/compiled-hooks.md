@@ -29,8 +29,7 @@ express it.
 
 A compiled hook **eliminates an entire class of bugs by construction** — not by
 catching them after the fact, but by making them impossible to write. Each row
-below is a _verified_, common failure of hand-written hooks (sources linked; full
-corpus: [`research/hook-pain-points.md`](../research/hook-pain-points.md)):
+below is a _verified_, common failure of hand-written hooks (sources linked):
 
 | Bug class                                                                                                                                                                                                                                                                                                                                          | Why it can't happen                                                                                                                                                                                                                       |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,9 +39,7 @@ corpus: [`research/hook-pain-points.md`](../research/hook-pain-points.md)):
 | **Category mistakes** — "block on a `SessionStart`/`PostToolUse` hook", whose decision is a documented no-op ([#4362](https://github.com/anthropics/claude-code/issues/4362)).                                                                                                                                                                     | Each role has its own return type. An inject/react hook has **no `deny`** in its vocabulary, so the mistake is a **`tsc` type error**, not a silent no-op.                                                                                |
 
 The unifying idea: a hook is a tiny program, and a closed, typed vocabulary
-shrinks its state space until the bad states are simply not expressible. (The
-[analogical-transfer thesis](../research/harness-state-space.md): make invalid
-harness states unreachable.)
+shrinks its state space until the bad states are simply not expressible.
 
 ## The roles
 
@@ -246,9 +243,7 @@ that every `provider()` ref resolves to a registered file.
 **The opt-out ladder** (you're **never trapped**): built-in providers → inline
 `provide` / `dangerously` → **registered `defineProvider`** (reusable, named) →
 the **shell lane** (a hand-written `.sh` for arbitrary in-decision logic, verified
-with the disaster battery). You always know which rung you're on. Full design +
-the "every real-world hook maps to a tier" coverage proof:
-[`research/hook-context-providers.md`](../research/hook-context-providers.md).
+with the disaster battery). You always know which rung you're on.
 
 ## Compile and wire
 
@@ -312,7 +307,7 @@ differs. `vigiles compile --harness=codex` merges a Codex `config.toml`
 call via `exit 2` exactly as Claude Code does. Inject/ask **output** on Codex is
 the one deferred piece (its field shape is CC-confirmed only); `compile
 --harness=codex` warns loudly on an inject/react hook rather than ship a
-maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).
+maybe-no-op — `compile --harness=codex` warns loudly on those hooks.
 
 ## Where things live
 
@@ -381,8 +376,7 @@ missing the other five. The compiled equivalent
 ([`examples/harness/safe-bash-guard.mjs`](../examples/harness/safe-bash-guard.mjs))
 blocks **7 of 7** by construction — same intent, no blind spots, no protocol bug.
 The contrast is a runnable, model-free regression test
-([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)). Full finding:
-[`research/hook-pain-points.md`](../research/hook-pain-points.md).
+([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)).
 
 Beyond the headline number, the **structural** wins over hand-written guards —
 each isolated in CI ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts))
@@ -390,9 +384,7 @@ so it's non-circular — are: **evasion** (the AST catches the compound `cd … 
 push -f` a substring/glob misses), **precision** (no `grep` false-positive on a
 benign `echo`), and **protocol** (a mis-wired `exit 1` is false confidence; the
 compiled exit code can't be wrong). The honest other side — stateful guards, broad
-I/O, and delivery (#34692) are NOT compiled-hook wins — plus the full head-to-head
-table and provenance, are in
-[`research/hook-oss-comparison.md`](../research/hook-oss-comparison.md).
+I/O, and delivery (#34692) are NOT compiled-hook wins.
 
 ## Limitations & trade-offs (the cons)
 
@@ -436,8 +428,7 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is
   cross-harness today; an inject/react hook's _output_ shape is Claude-Code-confirmed
   only, so `compile --harness=codex` **warns loudly** on those rather than
-  ship a maybe-no-op (see [Compile and wire](#compile-and-wire) and
-  [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md)).
+  ship a maybe-no-op (see [Compile and wire](#compile-and-wire)).
 
 ## See also
 
@@ -445,4 +436,3 @@ Compiled hooks are neither free nor magic. The honest downsides:
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer (references are _true_); compiled hooks are the **gate** instrument beside it.
 - [CLI & GitHub Action](cli.md) — `compile` / `hook-runtime` reference.
 - [API reference (generated)](https://zernie.github.io/vigiles/) — every `vigiles/hook` symbol (`defineHook`, `provide`/`dangerously`/`defineProvider`, the `Decision`/`Reaction` types, …).
-- [`research/hook-pain-points.md`](../research/hook-pain-points.md) — the verified failure corpus + the design record.
