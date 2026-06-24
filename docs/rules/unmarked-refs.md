@@ -61,7 +61,7 @@ For the edited instruction file, two things (both via `collectRefIssues` in
 ## Where it runs
 
 - **In the loop (Claude Code / Codex):** the `refs-nudge.sh` PostToolUse hook
-  shipped in the plugin runs `vigiles refs-hook` on every instruction-file edit.
+  shipped in the plugin runs `vigiles hook-runtime refs` on every instruction-file edit.
 - **At commit / in CI (any harness):** `vigiles refs <file>` runs the same check
   as the deterministic, unbypassable backstop.
 

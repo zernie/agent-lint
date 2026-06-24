@@ -142,6 +142,25 @@ test("my adapter conforms", () => {
 });
 ```
 
+### How the registry tests your adapter automatically
+
+You don't have to remember to write the calls above for an adapter you _ship_.
+Once it's in the registry (`ADAPTERS`), the **contract suite**
+(`src/adapter-contract.test.ts`) runs the whole conformance kit over **every**
+registered adapter in a loop — so registering a harness auto-subjects it to every
+contract, and you cannot leave a new harness untested. The suite is
+**capability-gated**: a contract for a capability your adapter declares it lacks
+(`shellHooks: false`, `harnessTesting: false`) becomes a **visible `it.skip(… n/a
+…)`**, never a silent pass. A companion meta-test asserts every
+`src/adapters/<dir>/` is either registered **or** a declared prototype — so an
+adapter directory that exists but was never wired in **fails the build**. This is
+the structural half of the [test-both-harnesses](harnesses.md) discipline: the
+gap is caught by the registry, not by reviewer memory.
+
+(Genuinely harness-_specific_ behaviour — your wire-format SSE renderer, a
+real-binary integration test — still lives in your `src/adapters/<harness>/`
+suite, gated/skipped loudly when the binary isn't on PATH.)
+
 ## Wire it up
 
 - **Library use:** import your adapter and pass its ports —

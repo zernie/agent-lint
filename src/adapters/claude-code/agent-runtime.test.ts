@@ -490,7 +490,7 @@ test("agent-hook CLI blocks (exit 2) an out-of-contract tool", () => {
   const dir = projectWithActiveAgent(["Read", "Grep"]);
   try {
     const r = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Write",
@@ -510,7 +510,7 @@ test("agent-hook CLI allows (exit 0) an in-contract tool", () => {
   const dir = projectWithActiveAgent(["Read", "Grep"]);
   try {
     const r = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Read",
@@ -545,7 +545,7 @@ test("agent-hook CLI command-gates Bash for a bounded agent (read-only allowed, 
   setActiveAgent(dir, "editor.md");
   try {
     const ok = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -557,7 +557,7 @@ test("agent-hook CLI command-gates Bash for a bounded agent (read-only allowed, 
     assert.equal(ok.exitCode, 0);
 
     const blocked = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -577,7 +577,7 @@ test("agent-hook CLI allows when no agent is active", () => {
   const dir = makeTmpDir("agent-hook-none");
   try {
     const r = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
@@ -594,7 +594,7 @@ test("agent-hook CLI allows when no agent is active", () => {
 test("agent-hook CLI allows on a malformed/empty event (no tool name)", () => {
   const dir = projectWithActiveAgent(["Read"]);
   try {
-    const r = runHook(`node ${CLI} agent-hook`, {}, { cwd: dir });
+    const r = runHook(`node ${CLI} hook-runtime agent`, {}, { cwd: dir });
     assert.equal(r.blocked, false);
     assert.equal(r.exitCode, 0);
   } finally {
@@ -764,7 +764,7 @@ test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again"
   try {
     // Outside the boundary → Write blocked
     const outsideBlocked = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Write",
@@ -779,7 +779,7 @@ test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again"
 
     // Inside the boundary → Write allowed
     const insideAllowed = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Write",
@@ -794,7 +794,7 @@ test("agent-hook CLI: effect-enter allows Write; effect-exit blocks Write again"
 
     // Outside again → Write blocked
     const afterExit = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Write",
@@ -873,7 +873,7 @@ test("agent-hook CLI: PreToolUse(Task) opens the window; SubagentStop closes it"
     // effect window deterministically (no model agent-start), and is itself
     // allowed (exit 0 — the Task dispatch is the parent's action).
     const open = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Task",
@@ -887,7 +887,7 @@ test("agent-hook CLI: PreToolUse(Task) opens the window; SubagentStop closes it"
 
     // Subagent returns → SubagentStop clears both (no model agent-done).
     const close = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       { hook_event_name: "SubagentStop" },
       { cwd: dir },
     );
@@ -909,7 +909,7 @@ test("agent-hook CLI: NESTED dispatch — SubagentStop POPS to the parent, doesn
 
     const dispatch = (name: string) =>
       runHook(
-        `node ${CLI} agent-hook`,
+        `node ${CLI} hook-runtime agent`,
         {
           hook_event_name: "PreToolUse",
           tool_name: "Task",
@@ -919,7 +919,7 @@ test("agent-hook CLI: NESTED dispatch — SubagentStop POPS to the parent, doesn
       );
     const stop = () =>
       runHook(
-        `node ${CLI} agent-hook`,
+        `node ${CLI} hook-runtime agent`,
         { hook_event_name: "SubagentStop" },
         { cwd: dir },
       );
@@ -940,7 +940,7 @@ test("agent-hook CLI: PreToolUse(Task) with an unknown subagent activates nothin
   const dir = makeTmpDir("dispatch-unknown");
   try {
     const r = runHook(
-      `node ${CLI} agent-hook`,
+      `node ${CLI} hook-runtime agent`,
       {
         hook_event_name: "PreToolUse",
         tool_name: "Task",

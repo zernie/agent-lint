@@ -14,9 +14,12 @@ express it.
 ## Contents
 
 - [The bug classes it eliminates](#the-bug-classes-it-eliminates)
-- [The three roles](#the-three-roles)
+- [The roles](#the-roles)
 - [The vocabulary](#the-vocabulary)
-- [Compile and run](#compile-and-run)
+- [Observe mode (shadow rollout)](#observe-mode-shadow-rollout)
+- [Deciding on external state (context providers)](#deciding-on-external-state-context-providers)
+- [Compile and wire](#compile-and-wire)
+- [Where things live](#where-things-live)
 - [Testing a compiled hook](#testing-a-compiled-hook)
 - [Proof: the OSS dogfood](#proof-the-oss-dogfood)
 - [Limitations & trade-offs (the cons)](#limitations--trade-offs-the-cons)
@@ -41,21 +44,34 @@ shrinks its state space until the bad states are simply not expressible. (The
 [analogical-transfer thesis](../research/harness-state-space.md): make invalid
 harness states unreachable.)
 
-## The three roles
+## The roles
 
 A hook's _output_ depends on _when_ it fires. vigiles gives each its own builder
 and its own return type, so the wrong output for an event won't type-check:
 
-- **`defineHook` / `defineFileGate`** — a **gate** (`PreToolUse`). Returns a
+- **`defineHook` / `defineFileGate`** — a **tool gate** (`PreToolUse`). Returns a
   `Decision`: `allow()`, `deny(reason)`, or `ask(reason)`. `deny` is the only
-  thing that blocks; the compiler maps it to `exit 2`.
+  thing that blocks; the compiler maps it to `exit 2`. `defineHook` sees the Bash
+  command (`e.command`); `defineFileGate` sees the file path (`e.path`).
+- **`definePromptGate`** — a **prompt gate** (`UserPromptSubmit`). Sees the prompt
+  **text** (`e.prompt`) and returns a `Decision` — `deny` blocks/erases the
+  prompt (a security filter that refuses a prompt leaking a secret or carrying an
+  injection).
+- **`defineStopGate`** — a **stop gate** (`Stop` / `SubagentStop`). Returns a
+  `Decision` — `deny` keeps the agent **going** (gate-until-tests-pass; the reason
+  is fed back to the model). Honour `e.stopHookActive` (the loop guard): `allow`
+  when it's set, or you can wedge the agent in a stop→continue loop.
 - **`defineInject`** — an **inject** (`SessionStart` / `UserPromptSubmit`).
   Returns an `Injection` (`inject(text)`) — context added to the model. It has
   **no `deny`**: a no-decision event can't block.
 - **`defineReact`** — a **react** (`PostToolUse`). Returns a `Reaction` —
   `run(cmd)`, `notice(msg)`, or `nothing()`. The tool already ran, so it **can't
-  block**; and `run(cmd)`'s effect is **classified at construction** (read-only /
+  block**; it sees the tool's **response** (`e.response`, e.g. react only on a
+  failure), and `run(cmd)`'s effect is **classified at construction** (read-only /
   side-effecting), so every reaction is auditable without running it.
+
+Every **gate** (tool / prompt / stop) takes an optional `mode` — see
+[Observe mode](#observe-mode-shadow-rollout).
 
 ## The vocabulary
 
@@ -83,21 +99,183 @@ export default defineHook({
   - `pipesToShell()` — pipes into a bare shell (`curl … | sh`) — remote-code execution. A shell _with_ a script file (`sh deploy.sh`) is **not** flagged.
   - `isSideEffecting()` — the deterministic Bash-effect classifier's verdict.
 - **`e.path`** (Edit/Write) — a `PathView` with `under(prefixes)` for path confinement.
-- **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision.
+- **`e.prompt`** (UserPromptSubmit) — the user's prompt text (a plain string).
+- **`e.stopHookActive`** (Stop) — the loop guard; `allow()` when it's `true`.
+- **`e.response`** (PostToolUse react) — a `ResponseView`: `isError()` (the tool failed) and `contains(needle)`.
+- **`allow()` / `deny(reason)` / `ask(reason)`** — the gate decision (every gate role).
 - **`inject(text)`** — inject output. **`run(cmd)` / `notice(msg)` / `nothing()`** — react output.
 
-## Compile and run
+A prompt gate and a stop gate read like any other gate — they just decide over a
+different event:
 
-```bash
-npx vigiles compile-hook my-guard.mjs
+```ts
+import { definePromptGate, deny, allow } from "vigiles/hook";
+
+// Refuse a prompt that looks like it's pasting a secret key.
+export default definePromptGate({
+  on: "UserPromptSubmit",
+  decide: (e) =>
+    /sk-[a-z0-9]{20}/i.test(e.prompt)
+      ? deny("your prompt looks like it contains a secret key")
+      : allow(),
+});
 ```
 
-`compile-hook` runs the capability check (an out-of-vocabulary import fails the
-build), prints the **settings block** to paste into your hooks config, and writes
-a **tamper-evident stamp** sidecar:
+```ts
+import { defineStopGate, deny, allow } from "vigiles/hook";
+
+// Don't let the agent stop while the tests are red.
+export default defineStopGate({
+  on: "Stop",
+  decide: (e) =>
+    e.stopHookActive // a prior block already fired — let it stop now (loop guard)
+      ? allow()
+      : deny("keep going until `npm test` passes"),
+});
+```
+
+## Observe mode (shadow rollout)
+
+A brand-new gate is risky to switch straight to blocking — what if it's too
+aggressive and stops work you wanted? Every gate takes a `mode`:
+
+- **`enforce`** (default) — block on `deny`.
+- **`observe`** — the **shadow / rollout** mode: compute the same decision,
+  **record** what it _would_ have blocked, and **let everything through**. Watch
+  the log, confirm it only flags the bad stuff, then promote to `enforce`.
+
+```ts
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  mode: "observe", // ← shadow: record, don't block
+  decide: (e) =>
+    e.command.runs("git push", { force: true })
+      ? deny("force-push to a protected branch")
+      : allow(),
+});
+```
+
+In observe mode the runtime exits `0` (never blocks) and appends a record to
+**`.vigiles/hook-observations.jsonl`** (`{ ts, hook, event, would, reason }`) plus
+a one-line `⚠ [vigiles observe]` note. It's **harness-neutral** — exit 0 + a
+local record behaves identically on Claude Code and Codex, no harness-specific
+field names involved.
+
+## Deciding on external state (context providers)
+
+A pure gate can only see the command/path/prompt/response. But a real guard often
+needs **external state** to decide — "is this a push to `main`?", "is the tree
+dirty?". A hand-written hook would shell out (`$(git branch --show-current)`); a
+compiled hook **can't do I/O** (that's the capability guarantee). The fix, the
+same one Cedar/OPA/Gatekeeper use: **the hook never fetches — it declares what it
+needs, and the trusted runtime gathers those read-only facts and hands them in**
+as `e.ctx`.
+
+```ts
+import { defineHook, tool, deny, allow } from "vigiles/hook";
+
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: ["git.branch"], //                ← declared; gathered by the runtime
+  decide: (e) =>
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
+      ? deny("no direct pushes to main")
+      : allow(),
+});
+```
+
+The guarantee is intact and **stronger**: the hook still does zero I/O; the
+runtime runs `git branch --show-current` (provably read-only) and injects the
+result. `needs` is **typed** — reading an undeclared fact (`e.ctx["cwd"]` here) is
+a `tsc` error, and an unknown provider name **won't compile** — so the
+capability surface stays explicit and auditable.
+
+**Built-in providers:** `git.branch`, `git.isDirty`, `git.root`, `cwd`,
+`os.platform`, `env.isCI` — zero-arg, read-only. (A provider that can't resolve —
+e.g. not a git repo — yields its default, never an error.) The set is
+deliberately small; a 20+ OSS survey found most facts a hook reads are already
+event data, and the long tail belongs in the opt-out, not a growing catalog.
+(`env.isCI` uses the [`ci-info`](https://www.npmjs.com/package/ci-info) library —
+the one fact where a maintained lib beat hand-rolling; git facts stay read-only
+shell commands, platform is `process.platform`.)
+
+**The lightweight opt-out — `provide` / `dangerously`.** For a one-off,
+off-catalog fact you don't want to register a whole provider for, declare an
+**inline** command right in `needs`:
+
+```ts
+import { defineHook, tool, deny, allow, provide } from "vigiles/hook";
+
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: [provide("k8sCtx", "kubectl config current-context")], // read-only, inline
+  decide: (e) =>
+    e.ctx.k8sCtx === "prod" && e.command.runs("kubectl delete")
+      ? deny("no kubectl delete against prod")
+      : allow(),
+});
+```
+
+The trusted runtime runs the command (so `decide` still does zero I/O) and hands
+its stdout in as `e.ctx[name]`. `provide(name, cmd)` requires a **provably
+read-only** command (compile rejects it otherwise); `dangerously(name, cmd)` is
+the **loud, greppable escape** for a command that isn't (the
+`dangerouslySetInnerHTML` / `unsafe` convention — a security review searches for
+that one word).
+
+**Reusable registered providers.** For a fact several hooks share, register it
+once in `.vigiles/providers/<name>.{mjs,ts}` and reference it by name:
+
+```ts
+// .vigiles/providers/k8sCtx.mjs
+import { defineProvider } from "vigiles/hook";
+export default defineProvider({
+  name: "k8sCtx",
+  run: "kubectl config current-context",
+});
+
+// any hook:  needs: [provider("k8sCtx")]  →  e.ctx.k8sCtx
+```
+
+`vigiles compile` validates each provider is read-only (or `dangerous: true`) and
+that every `provider()` ref resolves to a registered file.
+
+**The opt-out ladder** (you're **never trapped**): built-in providers → inline
+`provide` / `dangerously` → **registered `defineProvider`** (reusable, named) →
+the **shell lane** (a hand-written `.sh` for arbitrary in-decision logic, verified
+with the disaster battery). You always know which rung you're on. Full design +
+the "every real-world hook maps to a tier" coverage proof:
+[`research/hook-context-providers.md`](../research/hook-context-providers.md).
+
+## Compile and wire
+
+Put your hook source in **`.vigiles/hooks/`**. The typed program is
+harness-neutral — it imports `vigiles/hook` and compiles to _whichever_ harness
+you target — so it lives in vigiles's own dir, not a harness's `.claude/`. Then:
+
+```bash
+npx vigiles compile                                  # discovers .vigiles/hooks/* (and your specs)
+npx vigiles compile .vigiles/hooks/safe-bash-guard.mjs   # …or target one file
+```
+
+There is **no separate `compile-hook` verb** — compiling a typed authoring
+artifact into the harness's native format is _one_ verb, whatever the artifact (a
+`.spec.ts` → markdown, a hook → a wired config). `compile`:
+
+1. runs the **capability check** (an out-of-vocabulary import fails the build);
+2. **merges** the hook block into the active harness's config —
+   `.claude/settings.json` (JSON) or `.codex/config.toml` (TOML) — **idempotently**,
+   keyed by the hook path, so recompiling updates in place and never clobbers
+   your own hand-written hooks;
+3. writes a **tamper-evident stamp** beside the source.
+
+The merged block routes the live event to **`vigiles hook-runtime run-program <file>`**:
 
 ```jsonc
-// .claude/settings.json — the emitted block routes the live event to the runtime
+// .claude/settings.json — written (not pasted) by `vigiles compile`
 {
   "hooks": {
     "PreToolUse": [
@@ -106,7 +284,7 @@ a **tamper-evident stamp** sidecar:
         "hooks": [
           {
             "type": "command",
-            "command": "npx vigiles run-hook-program my-guard.mjs",
+            "command": "npx vigiles hook-runtime run-program .vigiles/hooks/safe-bash-guard.mjs",
           },
         ],
       },
@@ -115,23 +293,42 @@ a **tamper-evident stamp** sidecar:
 }
 ```
 
-`run-hook-program` is the runtime the block points at: it loads your typed
-program, **verifies the stamp** (a hand-edited artifact is refused — fail closed),
-and dispatches by role — a gate `exit 2`s on `deny`, an inject prints
+`hook-runtime run-program` is a **hidden runtime entrypoint** — invoked by the
+harness on every matching event, never typed by hand. It loads your typed
+program, **verifies the stamp** (a hand-edited artifact is refused — fail
+closed), and dispatches by role: a gate `exit 2`s on `deny`, an inject prints
 `additionalContext`, a react runs its classified command. You wrote none of that
-protocol.
+protocol. (`compile` is the one-time _wiring_ step; `hook-runtime` is the
+per-event _executor_ the wiring points at — see the
+[CLI surface](cli.md) for why they're distinct.)
 
 Hooks can be authored in JavaScript (`.mjs`) or TypeScript (run under `tsx` /
 Node ≥ 23.6). `vigiles/hook` is the **only** import a compiled hook may use.
 
-**Multi-harness.** The typed program is harness-neutral; only the emitted block
-differs. `compile-hook --harness=codex` writes a Codex `config.toml`
+**Multi-harness.** The typed program is harness-neutral; only the merged config
+differs. `vigiles compile --harness=codex` merges a Codex `config.toml`
 `[[hooks.<event>]]` block (an anchored-regex matcher) instead of Claude Code's
 `settings.json` JSON — and the gate runtime is shared, since Codex vetoes a tool
 call via `exit 2` exactly as Claude Code does. Inject/ask **output** on Codex is
-the one deferred piece (its field shape is CC-confirmed only); `compile-hook
+the one deferred piece (its field shape is CC-confirmed only); `compile
 --harness=codex` warns loudly on an inject/react hook rather than ship a
 maybe-no-op — see [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md).
+
+## Where things live
+
+Everything is committed, and the source is **adapter-agnostic** — one hook
+compiles to any harness you target:
+
+| Artifact            | Location                                       | Why                                                                 |
+| ------------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
+| **Hook source**     | `.vigiles/hooks/*.{mjs,ts}`                    | harness-neutral — one source, fans out to any harness               |
+| **Provider source** | `.vigiles/providers/*.{mjs,ts}`                | registered context providers (`defineProvider`), referenced by name |
+| **Tamper stamp**    | `.vigiles/hooks/<name>.json`                   | the runtime verifies it before running the hook                     |
+| **Wiring**          | `.claude/settings.json` / `.codex/config.toml` | `compile` merges it in per harness (a multi-harness repo gets both) |
+
+Hooks are **not** auto-discovered by sitting just anywhere — they must be under
+`.vigiles/hooks/` (or named explicitly to `compile`). Because they share one
+dir, basenames are unique, so the stamp keys safely on the basename.
 
 ## Testing a compiled hook
 
@@ -162,10 +359,10 @@ it("blocks a force-push, even hidden in a compound command", () => {
 normalized outcome (`{ kind: "decision" | "injection" | "reaction", … }`)
 dispatched by role, so an inject or react hook is just as testable as a gate.
 
-**2. Through the real runtime.** `runHook("node … run-hook-program guard.mjs",
+**2. Through the real runtime.** `runHook("node … hook-runtime run-program guard.mjs",
 event)` drives the actual compiled CLI (stamp check + dispatch) — proves the
 wired artifact behaves, still no model. Pair it with the disaster battery:
-`assertBlocksDisasters("node … run-hook-program guard.mjs")` proves the gate
+`assertBlocksDisasters("node … hook-runtime run-program guard.mjs")` proves the gate
 blocks every textbook disaster.
 
 **3. Does it fire in the assembled harness?** `runHarnessTest` (a scripted mock
@@ -186,6 +383,16 @@ blocks **7 of 7** by construction — same intent, no blind spots, no protocol b
 The contrast is a runnable, model-free regression test
 ([`src/hook-dogfood.test.ts`](../src/hook-dogfood.test.ts)). Full finding:
 [`research/hook-pain-points.md`](../research/hook-pain-points.md).
+
+Beyond the headline number, the **structural** wins over hand-written guards —
+each isolated in CI ([`src/hook-oss-comparison.test.ts`](../src/hook-oss-comparison.test.ts))
+so it's non-circular — are: **evasion** (the AST catches the compound `cd … && git
+push -f` a substring/glob misses), **precision** (no `grep` false-positive on a
+benign `echo`), and **protocol** (a mis-wired `exit 1` is false confidence; the
+compiled exit code can't be wrong). The honest other side — stateful guards, broad
+I/O, and delivery (#34692) are NOT compiled-hook wins — plus the full head-to-head
+table and provenance, are in
+[`research/hook-oss-comparison.md`](../research/hook-oss-comparison.md).
 
 ## Limitations & trade-offs (the cons)
 
@@ -228,13 +435,14 @@ Compiled hooks are neither free nor magic. The honest downsides:
   [guardrail verification](harness-testing.md).
 - **Codex inject/ask output is unconfirmed.** The gate (`deny` → exit 2) path is
   cross-harness today; an inject/react hook's _output_ shape is Claude-Code-confirmed
-  only, so `compile-hook --harness=codex` **warns loudly** on those rather than
-  ship a maybe-no-op (see [Compile and run](#compile-and-run) and
+  only, so `compile --harness=codex` **warns loudly** on those rather than
+  ship a maybe-no-op (see [Compile and wire](#compile-and-wire) and
   [`research/compiled-hooks-codex.md`](../research/compiled-hooks-codex.md)).
 
 ## See also
 
 - [Testing your harness](harness-testing.md) — the test tiers; `runHook` unit-tests a hook's decision, and `assertBlocksDisasters` proves a guardrail blocks.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer (references are _true_); compiled hooks are the **gate** instrument beside it.
-- [CLI & GitHub Action](cli.md) — `compile-hook` / `run-hook-program` reference.
+- [CLI & GitHub Action](cli.md) — `compile` / `hook-runtime` reference.
+- [API reference (generated)](https://zernie.github.io/vigiles/) — every `vigiles/hook` symbol (`defineHook`, `provide`/`dangerously`/`defineProvider`, the `Decision`/`Reaction` types, …).
 - [`research/hook-pain-points.md`](../research/hook-pain-points.md) — the verified failure corpus + the design record.

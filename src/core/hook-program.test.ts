@@ -16,6 +16,7 @@ import {
   tool,
   allow,
   deny,
+  ask,
   commandView,
   decideProgram,
   decisionExitCode,
@@ -33,9 +34,18 @@ import {
   defineReact,
   run,
   notice,
+  nothing,
   runReact,
   runHookProgram,
+  gateAction,
+  hookMode,
+  definePromptGate,
+  decidePromptGate,
+  defineStopGate,
+  decideStopGate,
+  responseView,
 } from "./hook-program.js";
+import { provide, dangerously, provider } from "./hook-providers.js";
 import { codexDialect } from "../adapters/codex/dialect.js";
 import { codexHookProtocol } from "../adapters/codex/hook-protocol.js";
 
@@ -102,7 +112,7 @@ export default defineHook({ on: "PreToolUse", match: tool("Bash"),
   assert.equal(out.hooks.PreToolUse[0].matcher, "Bash");
   assert.equal(
     out.hooks.PreToolUse[0].hooks[0].command,
-    "npx vigiles run-hook-program",
+    "npx vigiles hook-runtime run-program",
   );
   assert.ok(out.stamp.length > 0);
 });
@@ -179,7 +189,7 @@ test("compile (Codex): emits TOML `[[hooks.<event>]]` with a regex matcher", () 
       dialect: codexDialect,
       hookProtocol: codexHookProtocol,
       settingsFormat: "toml",
-      gateCommand: "npx vigiles run-hook-program guard.mjs",
+      gateCommand: "npx vigiles hook-runtime run-program guard.mjs",
     },
   );
   assert.match(out.settingsBlock, /\[\[hooks\.PreToolUse\]\]/);
@@ -187,7 +197,7 @@ test("compile (Codex): emits TOML `[[hooks.<event>]]` with a regex matcher", () 
   assert.match(out.settingsBlock, /matcher = "\^\(Bash\)\$"/);
   assert.match(
     out.settingsBlock,
-    /command = "npx vigiles run-hook-program guard\.mjs"/,
+    /command = "npx vigiles hook-runtime run-program guard\.mjs"/,
   );
 });
 
@@ -372,4 +382,292 @@ test("runHookProgram dispatches every role to a normalized outcome", () => {
   });
   assert.equal(reaction.kind, "reaction");
   if (reaction.kind === "reaction") assert.equal(reaction.reaction.kind, "run");
+});
+
+// ---------------------------------------------------------------------------
+// CONTEXT PROVIDERS — a gate decides on host-gathered external state (e.ctx),
+// declared via `needs`. The decision stays a pure fn of (event + ctx); the
+// runtime gathers ctx and passes it in. Reading an undeclared fact is a tsc
+// error (typed via `needs`); an unknown provider name won't compile.
+// ---------------------------------------------------------------------------
+
+const noPushToMain = defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: ["git.branch"],
+  decide: (e) =>
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
+      ? deny("no direct pushes to main")
+      : allow(),
+});
+
+test("context: a gate decides on e.ctx (declared facts), passed in by the runtime", () => {
+  // On main → a push is denied.
+  assert.equal(
+    decideProgram(noPushToMain, ev("git push origin main"), {
+      "git.branch": "main",
+    }).kind,
+    "deny",
+  );
+  // On a feature branch → the same push is allowed.
+  assert.equal(
+    decideProgram(noPushToMain, ev("git push origin feature"), {
+      "git.branch": "feature",
+    }).kind,
+    "allow",
+  );
+  // runHookProgram threads ctx the same way (the in-process test tier).
+  const out = runHookProgram(noPushToMain, ev("git push"), {
+    "git.branch": "main",
+  });
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+test("context: an inline provide() fact is read from e.ctx by name", () => {
+  const noDeleteProd = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provide("k8sCtx", "kubectl config current-context")],
+    decide: (e) =>
+      e.ctx.k8sCtx === "prod" && e.command.runs("kubectl delete")
+        ? deny("no kubectl delete against prod")
+        : allow(),
+  });
+  assert.equal(
+    decideProgram(noDeleteProd, ev("kubectl delete pod x"), { k8sCtx: "prod" })
+      .kind,
+    "deny",
+  );
+  assert.equal(
+    decideProgram(noDeleteProd, ev("kubectl delete pod x"), { k8sCtx: "dev" })
+      .kind,
+    "allow",
+  );
+});
+
+test("context: a provide() with a non-read-only command does NOT compile (use dangerously)", () => {
+  const mutating = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provide("x", "rm -rf /tmp/x")], // not read-only
+    decide: () => allow(),
+  });
+  assert.throws(
+    () =>
+      compileHookProgram(
+        `import { defineHook } from "vigiles/hook";`,
+        mutating,
+      ),
+    /not provably read-only/,
+  );
+  // The same command via dangerously() compiles (acknowledged escape).
+  const ack = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [dangerously("x", "rm -rf /tmp/x")],
+    decide: () => allow(),
+  });
+  assert.ok(
+    compileHookProgram(`import { defineHook } from "vigiles/hook";`, ack).stamp,
+  );
+});
+
+test("context: a registered provider() ref needs registeredProviders to compile", () => {
+  const refHook = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    needs: [provider("k8sCtx")],
+    decide: (e) => (e.ctx.k8sCtx === "prod" ? deny("prod") : allow()),
+  });
+  const src = `import { defineHook } from "vigiles/hook";`;
+  // A dangling ref (no registered set) does NOT compile.
+  assert.throws(
+    () => compileHookProgram(src, refHook),
+    /unknown context provider/,
+  );
+  // With the provider registered, it compiles.
+  assert.ok(
+    compileHookProgram(src, refHook, { registeredProviders: ["k8sCtx"] }).stamp,
+  );
+  // The decision reads the ref's value from e.ctx like any other fact.
+  assert.equal(
+    decideProgram(refHook, ev("kubectl get pods"), { k8sCtx: "prod" }).kind,
+    "deny",
+  );
+});
+
+test("context: an unknown provider in `needs` does NOT compile", () => {
+  const bad = {
+    on: "PreToolUse",
+    match: { tool: "Bash" },
+    needs: ["git.brnch"], // typo — not a built-in provider
+    decide: () => allow(),
+  } as unknown as Parameters<typeof compileHookProgram>[1];
+  assert.throws(
+    () => compileHookProgram(`import { defineHook } from "vigiles/hook";`, bad),
+    /unknown context provider/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// OBSERVE mode — the shadow/rollout primitive. `gateAction` is the pure mapping
+// the runtime + a test both read, so "in observe mode this deny does NOT block"
+// is asserted with no process. Harness-NEUTRAL (exit 0 + a local record), so it
+// is covered once here, not per-harness.
+// ---------------------------------------------------------------------------
+
+test("observe: gateAction enforces by default, records-not-blocks under observe", () => {
+  // enforce (default): deny → block (exit 2), ask → ask, allow → allow.
+  assert.deepEqual(gateAction(deny("no")), { kind: "block", reason: "no" });
+  assert.deepEqual(gateAction(ask("maybe")), { kind: "ask", reason: "maybe" });
+  assert.deepEqual(gateAction(allow()), { kind: "allow" });
+
+  // observe: a would-be deny/ask becomes a recorded no-op; allow stays allow.
+  assert.deepEqual(gateAction(deny("no"), "observe"), {
+    kind: "observe",
+    would: "deny",
+    reason: "no",
+  });
+  assert.deepEqual(gateAction(ask("maybe"), "observe"), {
+    kind: "observe",
+    would: "ask",
+    reason: "maybe",
+  });
+  assert.deepEqual(gateAction(allow(), "observe"), { kind: "allow" });
+
+  // hookMode reads the gate's mode (enforce default).
+  assert.equal(hookMode(forcePushGuard), "enforce");
+  const shadow = defineHook({
+    on: "PreToolUse",
+    match: tool("Bash"),
+    mode: "observe",
+    decide: (e) => (e.command.runs("git push") ? deny("x") : allow()),
+  });
+  assert.equal(hookMode(shadow), "observe");
+  // The DECISION the gate computes is unchanged by the mode — only the action is.
+  assert.equal(decideProgram(shadow, ev("git push")).kind, "deny");
+});
+
+// ---------------------------------------------------------------------------
+// PROBE 4 — gate-capable non-tool events (UserPromptSubmit + Stop). A typed
+// Decision over the prompt text / stop signal, riding the same exit-2 runtime.
+// ---------------------------------------------------------------------------
+
+const promptFilter = definePromptGate({
+  on: "UserPromptSubmit",
+  decide: (e) =>
+    /sk-[a-z0-9]{20}/i.test(e.prompt)
+      ? deny("your prompt contains what looks like a secret key")
+      : allow(),
+});
+
+test("probe4: a prompt gate sees the prompt TEXT and can deny it", () => {
+  assert.equal(
+    decidePromptGate(promptFilter, { prompt: "refactor the auth module" }).kind,
+    "allow",
+  );
+  assert.equal(
+    decidePromptGate(promptFilter, {
+      prompt: "use this key sk-abcdef0123456789abcd",
+    }).kind,
+    "deny",
+  );
+  // A missing prompt → empty string, not a crash.
+  assert.equal(decidePromptGate(promptFilter, {}).kind, "allow");
+  // It dispatches through runHookProgram as a decision.
+  const out = runHookProgram(promptFilter, {
+    prompt: "use this key sk-abcdef0123456789abcd",
+  });
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+const testsGreenGate = defineStopGate({
+  on: "Stop",
+  decide: (e) =>
+    e.stopHookActive
+      ? allow() // loop guard: a prior block already fired — let it stop now
+      : deny("tests are red — keep going until `npm test` passes"),
+});
+
+test("probe4: a stop gate can BLOCK stopping, and respects the loop guard", () => {
+  // First Stop: block (deny) so the agent keeps going.
+  assert.equal(decideStopGate(testsGreenGate, {}).kind, "deny");
+  assert.equal(
+    decideStopGate(testsGreenGate, { stop_hook_active: false }).kind,
+    "deny",
+  );
+  // A Stop that is itself the result of a prior block: allow (no infinite loop).
+  assert.equal(
+    decideStopGate(testsGreenGate, { stop_hook_active: true }).kind,
+    "allow",
+  );
+  const out = runHookProgram(testsGreenGate, {});
+  assert.equal(out.kind, "decision");
+  if (out.kind === "decision") assert.equal(out.decision.kind, "deny");
+});
+
+// Both new gates fire on a whole EVENT (no tool matcher), and compile on BOTH
+// harnesses (the gate runtime is the shared exit-2 path) — test-both-harnesses.
+test("probe4: prompt/stop gates compile (no matcher) on Claude Code AND Codex", () => {
+  const src = `import { definePromptGate, deny, allow } from "vigiles/hook";`;
+  // Claude Code (default): JSON block, event-level, no matcher.
+  const cc = compileHookProgram(src, promptFilter);
+  assert.ok(cc.hooks.UserPromptSubmit);
+  assert.equal(cc.hooks.UserPromptSubmit[0].matcher, undefined);
+  assert.match(cc.settingsBlock, /"UserPromptSubmit"/);
+
+  // Codex: TOML `[[hooks.Stop]]`, also event-level.
+  const codex = compileHookProgram(
+    `import { defineStopGate, deny, allow } from "vigiles/hook";`,
+    testsGreenGate,
+    {
+      dialect: codexDialect,
+      hookProtocol: codexHookProtocol,
+      settingsFormat: "toml",
+    },
+  );
+  assert.match(codex.settingsBlock, /\[\[hooks\.Stop\]\]/);
+  // Event-level gate → no `matcher =` line in the TOML.
+  assert.doesNotMatch(codex.settingsBlock, /matcher = /);
+});
+
+// ---------------------------------------------------------------------------
+// Richer react event — the tool RESPONSE (PostToolUse). A react can now reason
+// over whether the tool FAILED, not just the file path.
+// ---------------------------------------------------------------------------
+
+test("react: responseView exposes the tool response (isError / contains)", () => {
+  // A structured error payload is flagged.
+  assert.equal(responseView({ error: "boom" }).isError(), true);
+  assert.equal(responseView({ is_error: true }).isError(), true);
+  // A text payload with a leading Error line is flagged; a clean one is not.
+  assert.equal(responseView("Error: command failed").isError(), true);
+  assert.equal(responseView("ok, 3 files written").isError(), false);
+  // contains matches the stringified body either way.
+  assert.equal(responseView("ENOENT: no such file").contains("ENOENT"), true);
+  assert.equal(responseView({ stderr: "ENOENT" }).contains("ENOENT"), true);
+
+  // A react hook can branch on the response — capture only on failure.
+  const captureFailures = defineReact({
+    on: "PostToolUse",
+    match: tools("Bash"),
+    react: (e) =>
+      e.response.isError()
+        ? notice(`tool failed: ${e.response.raw}`)
+        : nothing(),
+  });
+  const failed = runReact(captureFailures, {
+    tool_name: "Bash",
+    tool_input: {},
+    tool_response: { error: "exit 1" },
+  });
+  assert.equal(failed.kind, "notice");
+  const ok = runReact(captureFailures, {
+    tool_name: "Bash",
+    tool_input: {},
+    tool_response: "done",
+  });
+  assert.equal(ok.kind, "none");
 });

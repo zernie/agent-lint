@@ -20,7 +20,7 @@ import type { HarnessRuntime } from "./runtime.js";
 /**
  * One scripted assistant turn: a final text answer, or a tool call. The common
  * shape both harness mocks consume — the Anthropic Messages mock
- * (`src/adapters/claude-code/mock-model.ts`) and the OpenAI Responses mock
+ * (`src/mock-model.ts`) and the OpenAI Responses mock
  * (`src/adapters/codex/mock-model.ts`, which uses only `text`).
  */
 export interface ModelTurn {

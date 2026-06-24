@@ -6,21 +6,38 @@
  * cause the #1 verified hook pain — FALSE CONFIDENCE (a guardrail that looks
  * like it blocks but silently doesn't). Invert it: author a **pure typed
  * function** `(event) => Decision` against THIS surface, and `vigiles
- * compile-hook` emits the harness protocol for you. The whole false-confidence
+ * compile` emits the harness protocol for you. The whole false-confidence
  * class becomes UNREPRESENTABLE — you never write the exit code or the field.
  *
- * Three roles, each with its own output type so a category mistake is a `tsc`
+ * The roles, each with its own output type so a category mistake is a `tsc`
  * error, not a silent no-op:
  *   - `defineHook` / `defineFileGate` — a **gate** returns a `Decision`
  *     (`allow`/`deny`/`ask`); `deny` is the only thing that blocks.
+ *   - `definePromptGate` — a **prompt gate** (UserPromptSubmit) sees the prompt
+ *     TEXT and may `deny` to block it (a security filter).
+ *   - `defineStopGate` — a **stop gate** (Stop/SubagentStop) may `deny` to keep
+ *     the agent going (gate-until-tests-pass).
  *   - `defineInject` — an **inject** returns an `Injection` (context text); it
  *     has no `deny`, so "block on a SessionStart hook" won't compile.
- *   - `defineReact` — a **react** (PostToolUse) returns a `Reaction`; its
- *     `run(cmd)` is effect-classified at construction, and it can't block
- *     (the tool already ran).
+ *   - `defineReact` — a **react** (PostToolUse) returns a `Reaction`; it sees the
+ *     tool RESPONSE, its `run(cmd)` is effect-classified at construction, and it
+ *     can't block (the tool already ran).
+ *
+ * Every gate takes a `mode`: `enforce` (default, blocks) or `observe` (the
+ * shadow/rollout mode — records what it WOULD block, never blocks). `observe` is
+ * harness-neutral (it just exits 0 + writes a local record).
  *
  * Matching is AST-backed (`command.runs("git push", { force })`), so it catches
  * `cd x && git push -f` that the native `Bash(git:*)` glob misses.
+ *
+ * A gate may also decide on EXTERNAL STATE by declaring `needs` (e.g.
+ * `needs: ["git.branch"]`): the trusted runtime gathers those read-only facts and
+ * hands them in as `e.ctx` — the hook still does zero I/O, and reading an
+ * undeclared fact is a `tsc` error. Built-ins:
+ * `git.branch`/`git.isDirty`/`git.root`/`cwd`/`os.platform`/`env.isCI`. For a
+ * one-off off-catalog fact, the lightweight opt-out is an
+ * inline `provide(name, cmd)` (read-only) or `dangerously(name, cmd)` (the loud
+ * escape) right in `needs`. See `research/hook-context-providers.md`.
  *
  * ⚠️ Honest scope: compile/verify fix the hook's AUTHORING + LOGIC. They do NOT
  * change DELIVERY — Claude Code's own subagent-bypass (#34692) means a
@@ -32,6 +49,8 @@ export {
   // gate vocabulary
   defineHook,
   defineFileGate,
+  definePromptGate,
+  defineStopGate,
   tool,
   tools,
   allow,
@@ -39,6 +58,8 @@ export {
   ask,
   commandView,
   pathView,
+  gateAction,
+  hookMode,
   // inject vocabulary
   defineInject,
   inject,
@@ -47,15 +68,19 @@ export {
   run,
   notice,
   nothing,
-  // runtime + decode (used by the `vigiles run-hook-program` runtime and tests)
+  responseView,
+  // runtime + decode (used by the `vigiles hook-runtime run-program` runtime and tests)
   decideProgram,
   decideFileGate,
+  decidePromptGate,
+  decideStopGate,
   runInject,
   runReact,
   runHookProgram,
   decisionExitCode,
   dispatchKind,
   hookRouting,
+  hookNeeds,
   // compile + integrity
   compileHookProgram,
   checkHookImports,
@@ -66,13 +91,21 @@ export {
 
 export type {
   Decision,
+  HookMode,
+  GateAction,
   CommandView,
   PathView,
+  ResponseView,
   BashToolEvent,
   FileToolEvent,
+  PromptEvent,
+  StopEvent,
+  ReactEvent,
   SessionEvent,
   HookProgram,
   FileGateHook,
+  PromptGateHook,
+  StopGateHook,
   InjectHook,
   ReactHook,
   AnyHook,
@@ -85,3 +118,21 @@ export type {
   RawHookEvent,
   HookProgramOutcome,
 } from "./core/hook-program.js";
+
+export {
+  provide,
+  dangerously,
+  defineProvider,
+  provider,
+} from "./core/hook-providers.js";
+
+export type {
+  ProviderName,
+  ProviderResults,
+  HookCtx,
+  NeedSpec,
+  InlineProvider,
+  RegisteredProvider,
+  RegisteredRef,
+  ProviderRegistry,
+} from "./core/hook-providers.js";

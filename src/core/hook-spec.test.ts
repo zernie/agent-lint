@@ -161,7 +161,7 @@ test("compileHook emits a block + typed extractions for a clean hook", () => {
   assert.equal(out.hooks.PreToolUse[0].matcher, "Edit|Write");
   assert.equal(
     out.hooks.PreToolUse[0].hooks[0].command,
-    "npx vigiles guard-hook",
+    "npx vigiles hook-runtime guard",
   );
   // The generated extraction reads the correct field — never a hand-typed jq string.
   assert.equal(out.extractions.file_path, ".tool_input.file_path");

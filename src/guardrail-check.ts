@@ -136,7 +136,7 @@ function selectEvents(opts: VerifyGuardrailOptions): readonly DisasterEvent[] {
 /**
  * Run a hook command against the disaster battery and report which events it blocks.
  * `hookCommand` is the exact shell the hook registers (e.g. `bash hooks/guard.sh` or
- * `npx vigiles guard-hook`); it receives each disaster as a PreToolUse event on stdin,
+ * `npx vigiles hook-runtime guard`); it receives each disaster as a PreToolUse event on stdin,
  * exactly as Claude Code would deliver it.
  */
 export function verifyGuardrail(

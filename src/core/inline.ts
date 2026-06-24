@@ -88,7 +88,7 @@ const KNOWN_NON_RULE_MARKERS = new Set([
   "disable",
   "ignore",
   "ignore-file",
-  "gate", // skill step gate (src/skill-runtime.ts)
+  "gate", // skill step gate (src/adapters/claude-code/skill-runtime.ts)
   "result", // skill result gate
   "symbol", // symbol reference mark (src/refs.ts)
 ]);

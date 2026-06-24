@@ -53,7 +53,15 @@ jobs:
         # bubblewrap lets the sandbox confinement test execute and prove egress is
         # blocked, instead of skipping.
         run: |
-          npm i -g @anthropic-ai/claude-code @openai/codex
+          # Pin claude-code to the dialect-validated version — SINGLE SOURCE OF
+          # TRUTH: VALIDATED_CC_VERSION in src/dialect-drift.ts. Keeps the
+          # dialect-drift alarm deterministic (fires only on a deliberate bump,
+          # not every unpinned CC release on an unrelated PR) and the real-claude
+          # harness/eval tests reproducible.
+          CC=$(grep -oP -m1 'VALIDATED_CC_VERSION = "\K[0-9.]+' src/dialect-drift.ts)
+          [ -n "$CC" ] || { echo "could not read VALIDATED_CC_VERSION"; exit 1; }
+          echo "Pinning @anthropic-ai/claude-code@$CC"
+          npm i -g "@anthropic-ai/claude-code@$CC" @openai/codex
           sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
@@ -145,13 +153,12 @@ jobs:
       - name: API surface gate
         run: node scripts/api-extractor.mjs
 
-      # Smoke-check the API reference GENERATOR (API Documenter) — it reuses the
-      # doc models the gate just wrote to temp/, so no extra extractor run. We
-      # don't publish the output (api-reference/ is gitignored; there's no docs
-      # site yet) — this only proves `npm run docs:api` still builds, so the
-      # generator can't silently rot. Upgrade to a Pages deploy when a site lands.
+      # Smoke-check the API reference GENERATOR (TypeDoc) on every PR — proves
+      # `npm run docs:api` / typedoc.json still build, so the api-docs.yml Pages
+      # deploy (push to main) can't silently rot. Output is gitignored, not
+      # published here.
       - name: API reference generates (smoke, no publish)
-        run: npx api-documenter markdown -i temp -o api-reference
+        run: npx typedoc
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic
@@ -169,8 +176,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Install claude CLI (no API key needed for the mock tier)
-        run: npm i -g @anthropic-ai/claude-code
+      - name: Install claude CLI (pinned to the dialect-validated version; no API key needed)
+        run: |
+          CC=$(grep -oP -m1 'VALIDATED_CC_VERSION = "\K[0-9.]+' src/dialect-drift.ts)
+          [ -n "$CC" ] || { echo "could not read VALIDATED_CC_VERSION"; exit 1; }
+          npm i -g "@anthropic-ai/claude-code@$CC"
 
       - name: Build
         run: npm run build

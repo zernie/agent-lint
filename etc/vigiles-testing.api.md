@@ -28,15 +28,6 @@ export interface AgentRunArgs {
 export type AgentRunner = (args: AgentRunArgs) => Promise<RunOut>;
 
 // @public
-export function aggregate(rows: readonly Metrics[]): Record<string, number>;
-
-// @public
-export function aggregateStats(rows: readonly Metrics[]): Record<string, MetricStat>;
-
-// @public
-export function aggregateUsage(usages: readonly EvalUsage[]): ArmUsage;
-
-// @public
 export function allowed(): Check<HookRunResult>;
 
 // @public
@@ -242,9 +233,6 @@ export interface BaselineFile {
 }
 
 // @public
-export function belowModelFloor(model: string, floor: string): boolean;
-
-// @public
 export function blocked(): Check<HookRunResult>;
 
 // @public
@@ -314,9 +302,6 @@ export const claudeEvalDriver: EvalDriver;
 export function compareArms(report: EvalReport, baseline: string, arm: string, metric: string, alpha?: number): Comparison | null;
 
 // @public
-export function compareCheck(report: ArmsCheckReport, baseline: string, arm: string, checkIndex: number): Comparison;
-
-// @public
 export interface Comparison {
     readonly delta: number;
     readonly df: number;
@@ -330,19 +315,6 @@ export interface Comparison {
 export function cost(opts: {
     maxUsd: number;
 }): Check<UsageTrace>;
-
-// @public
-export function decideHook(exitCode: number, json: HookOutput | null, protocol?: HookProtocol): {
-    blocked: boolean;
-    decision: HookRunResult["decision"];
-};
-
-// @public
-export function decideSandbox(opts: {
-    trusted: boolean;
-    mode: SandboxMode;
-    available: boolean;
-}): SandboxDecision;
 
 // @public
 export function didNotWrite(path: string): Check<Trace>;
@@ -363,31 +335,7 @@ export type DiffStatus = "regressed" | "improved" | "unchanged";
 export function diffToJUnit(diff: BaselineDiff): string;
 
 // @public
-export interface EgressAttempt {
-    readonly allowed?: boolean;
-    readonly bytes?: number;
-    // (undocumented)
-    readonly host: string;
-    readonly packets?: number;
-    // (undocumented)
-    readonly port: number;
-    readonly ts: number;
-}
-
-// @public
 export function egressHosts(r: HasEgress): string[];
-
-// @public (undocumented)
-export function egressRoutes(): boolean;
-
-// @public
-export const EPHEMERAL_HOME_KEEP: readonly string[];
-
-// @public
-export function ephemeralRunEnv(base: NodeJS.ProcessEnv | Record<string, string | undefined>, opts: {
-    home: string;
-    allow?: readonly string[];
-}): Record<string, string>;
 
 // @public
 export interface EvalArm {
@@ -506,9 +454,6 @@ export interface HarnessTestSpec {
 }
 
 // @public
-export function harnessVersionKey(raw: string): string;
-
-// @public
 export function hookBlocked(trace: Trace, name: string | RegExp): boolean;
 
 // @public
@@ -592,39 +537,12 @@ export interface HookRunResult {
 }
 
 // @public
-export type HookSpawner = (command: string, input: HookInput, opts: RunHookOptions) => HookSpawnResult;
-
-// @public
-export interface HookSpawnResult {
-    readonly egress?: readonly EgressAttempt[];
-    readonly egressDropped?: {
-        readonly packets: number;
-        readonly bytes: number;
-    };
-    readonly filesWritten?: readonly string[];
-    // (undocumented)
-    readonly signal: string | null;
-    // (undocumented)
-    readonly status: number | null;
-    // (undocumented)
-    readonly stderr: string;
-    // (undocumented)
-    readonly stdout: string;
-}
-
-// @public
 export function improvement(report: EvalReport, baseline: string, arm: string, metric: string): number;
 
 // @public
 export function inputTokens(opts: {
     max: number;
 }): Check<UsageTrace>;
-
-// @public
-export function isDatedModel(model: string): boolean;
-
-// @public
-export function isRateLimited(out: RunOut): boolean;
 
 // @public
 export function judge(opts: JudgeOptions): JudgeResult;
@@ -661,9 +579,6 @@ export function measure(spec: MeasureSpec): Promise<CheckReport>;
 export function measureArms(spec: ArmsMeasureSpec): Promise<ArmsCheckReport>;
 
 // @public
-export function measureArmsWith(spec: ArmsMeasureSpec, runner: AgentRunner): Promise<ArmsCheckReport>;
-
-// @public
 export interface MeasureSpec {
     readonly allowedTools?: readonly string[];
     readonly checks: readonly Check<RunContext>[];
@@ -684,12 +599,6 @@ export interface MeasureSpec {
 export function measureTriggerRate(spec: TriggerRateSpec, opts?: {
     evalDriver?: EvalDriver;
 }): Promise<TriggerRateReport>;
-
-// @public (undocumented)
-export function measureTriggerRateWith(spec: TriggerRateSpec, runner: AgentRunner, parse?: ModelOutputParser, runError?: (out: RunOut) => string | null): Promise<TriggerRateReport>;
-
-// @public
-export function measureWith(spec: MeasureSpec, runner: AgentRunner): Promise<CheckReport>;
 
 // @public
 export interface MetricDiff {
@@ -728,9 +637,6 @@ export interface ModelRequest {
 }
 
 // @public
-export function modelTier(id: string): number | null;
-
-// @public
 export interface ModelTurn {
     readonly input?: Record<string, unknown>;
     readonly text?: string;
@@ -750,23 +656,6 @@ export function outputContains(trace: Trace, needle: string | RegExp): boolean;
 export function outputTokens(opts: {
     max: number;
 }): Check<UsageTrace>;
-
-// @public
-export function packageInstallSet(opts: {
-    underTestSrc: string;
-    name: string;
-    installSet: readonly string[];
-    stub: boolean;
-}): {
-    dir: string;
-    added: number;
-};
-
-// @public
-export function packageSkillsDir(skillsDir: string, opts?: {
-    name?: string;
-    stub?: boolean;
-}): string;
 
 // @public
 export function parseBaselineFile(json: string): BaselineFile;
@@ -789,30 +678,6 @@ export interface ParsedModelRun {
     // (undocumented)
     readonly usage: EvalUsage;
 }
-
-// @public
-export function parseHookOutput(stdout: string): HookOutput | null;
-
-// @public (undocumented)
-export function parseHooks(stdout: string): HookFire[];
-
-// @public
-export function parseOutput(stdout: string): string;
-
-// @public
-export function parseResultEvent(stdout: string): Record<string, unknown> | null;
-
-// @public
-export function parseSubagents(streamJson: string): SubagentTrace[];
-
-// @public
-export function parseToolCalls(streamJson: string): ToolCall[];
-
-// @public
-export function parseUsage(stdout: string): EvalUsage;
-
-// @public
-export function promptDistance(a: string, b: string): number;
 
 // @public (undocumented)
 export interface PromptDiversityIssue {
@@ -858,9 +723,6 @@ export function renderToolStub(stub: ToolStub): string;
 export function requestContains(trace: Trace, needle: string | RegExp): boolean;
 
 // @public
-export function resolveSpawnEnv(a: Pick<AgentRunArgs, "env" | "replaceEnv">, base?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
-
-// @public
 export interface RunContext extends Trace {
     // (undocumented)
     readonly cwd: string;
@@ -878,9 +740,6 @@ export interface RunContext extends Trace {
 export function runEval<M extends Metrics>(spec: EvalSpec<M>): Promise<EvalReport>;
 
 // @public
-export function runEvalWith<M extends Metrics>(spec: EvalSpec<M>, runner: AgentRunner): Promise<EvalReport>;
-
-// @public
 export function runHarness(spec: HarnessTestSpec, opts?: RunHarnessTestOptions & {
     model?: "mock" | "real";
 }): Promise<HarnessTestResult>;
@@ -896,15 +755,6 @@ export interface RunHarnessTestOptions {
 // @public
 export function runHook(command: string, input: HookInput, opts?: RunHookOptions): HookRunResult;
 
-// @public
-export interface RunHookDeps {
-    readonly available: boolean;
-    readonly direct: HookSpawner;
-    readonly egress: HookSpawner;
-    readonly egressAvailable: boolean;
-    readonly sandboxed: HookSpawner;
-}
-
 // @public (undocumented)
 export interface RunHookOptions {
     readonly cwd?: string;
@@ -919,9 +769,6 @@ export interface RunHookOptions {
 }
 
 // @public
-export function runHookWith(command: string, input: HookInput, opts: RunHookOptions, deps: RunHookDeps): HookRunResult;
-
-// @public
 export interface RunOut {
     // (undocumented)
     code: number;
@@ -931,29 +778,7 @@ export interface RunOut {
 }
 
 // @public
-export function runPool<T, R>(items: readonly T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]>;
-
-// @public
-export function runSkillSelectionTrial(args: {
-    readonly prompt: string;
-    readonly pluginDir: string;
-    readonly runner: AgentRunner;
-    readonly parse?: ModelOutputParser;
-    readonly model: string;
-    readonly tools?: readonly string[];
-    readonly timeoutMs?: number;
-    readonly fixture?: Record<string, string>;
-    readonly runError?: (out: RunOut) => string | null;
-}): Promise<SelectionTrialResult>;
-
-// @public
-export function sandboxAvailable(): boolean;
-
-// @public
 export type SandboxMode = "auto" | "strict" | false;
-
-// @public
-export function seedEphemeralHome(throwawayHome: string, realHome: string, keep?: readonly string[]): void;
 
 // @public
 export interface SelectionTrialResult {
@@ -974,18 +799,6 @@ export function skillResolved(trace: Trace, skill: string): boolean;
 
 // @public
 export function skip(reason?: string): never;
-
-// @public
-export function spawnAgent(a: AgentRunArgs): Promise<RunOut>;
-
-// @public
-export function specTrusted(spec: {
-    plugin?: string;
-    pluginDir?: string;
-}): boolean;
-
-// @public
-export function stubbedPluginDir(pluginDir: string): string;
 
 // @public
 export function stubBinDir(stubs: readonly ToolStub[], parentDir: string): string;
@@ -1103,9 +916,6 @@ export const vigilesMatchers: {
     toPass<T>(received: T, check: Check<T>): MatcherOutput;
     toPassAll<T>(received: T, checks: readonly Check<T>[]): MatcherOutput;
 };
-
-// @public
-export function whichSkillsFired(trace: Trace): string[];
 
 // @public
 export function withHarness<T>(spec: HarnessTestSpec, fn: (r: HarnessTestResult) => T | Promise<T>): Promise<T>;
