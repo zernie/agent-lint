@@ -72,7 +72,7 @@ export default defineHook({
   match: tool("Bash"),
   needs: ["git.branch"], //            ← DECLARED: capability-diff/audit sees it
   decide: (e) =>
-    e.ctx.git.branch === "main" && e.command.runs("git push")
+    e.ctx["git.branch"] === "main" && e.command.runs("git push")
       ? deny("no direct pushes to main")
       : allow(),
 });
@@ -113,6 +113,119 @@ hook), referenced by name** — never an inline command string inside the pure
 surface, even for obscure long-tail tools. Many hooks can reuse one provider by
 name (Gatekeeper reuses a Provider across constraints).
 
+## Ecosystem survey — which facts to ship built-in (20+ OSS, 2026-06-23)
+
+Surveyed ~21 real hook examples (aiorg.dev's 20+ catalog, the CC hooks docs, the
+vendored superpowers / oh-my-claudecode / wshobson slices, disler/dcg from the
+10-OSS dogfood). Classified by the external fact each DECISION reads. The key
+finding: **most facts a hook reads are already EVENT data, not providers** — so
+the built-in provider set stays tiny.
+
+| Fact a hook reads                       | Frequency           | Where it lives                                                  |
+| --------------------------------------- | ------------------- | --------------------------------------------------------------- |
+| file path / extension / existence       | very high           | **event** (`e.path` / matchers) — not a provider                |
+| command string / tool name / tool input | very high           | **event** (`e.command`, the matcher) — not a provider           |
+| stop-hook-active loop flag              | med (Stop gates)    | **event** (`e.stopHookActive`) — not a provider                 |
+| session type (startup/resume/compact)   | med (SessionStart)  | **event** (inject `source`) — not a provider                    |
+| **git branch**                          | high                | **Tier-1 provider `git.branch`** ✅                             |
+| **working-tree dirty**                  | med                 | **Tier-1 provider `git.isDirty`** ✅                            |
+| **project dir / cwd**                   | high                | **Tier-1 provider `cwd`** ✅                                    |
+| **OS / platform**                       | med (per-OS notify) | **add `os.platform`** (ambient, zero-cost)                      |
+| env var (CI, NODE_ENV, offline)         | med                 | the **inline opt-out** (`env` is too open to enumerate)         |
+| test / typecheck / lint status          | med (Stop gates)    | EXPENSIVE + project-specific → opt-out / Tier-2 / stop-gate cmd |
+| recent tool-call frequency (rate-limit) | low                 | STATEFUL axis → deferred (guards.ts)                            |
+| online/offline                          | low                 | opt-out (rare, flaky)                                           |
+
+**Verdict on built-ins:** keep the set SMALL (the disaster-catalog discipline).
+Ship exactly **`git.branch`, `git.isDirty`, `cwd`** (v1) **+ `os.platform`** —
+that covers every _cheap, ambient, decision-relevant_ fact in the survey.
+Everything else is either already event data, or expensive / parameterized /
+project-specific / stateful — which belongs in the **opt-out**, not the built-in
+catalog. Growing the catalog to chase the tail is the wrong move; a good opt-out
+is the right one.
+
+## The lightweight opt-out — `provide()` / `dangerously()` (the "I don't want a whole provider" rung)
+
+A registered `defineProvider` (Tier 2) is right for a _reusable, named_ fact, but
+heavy for a one-off ("just read `kubectl config current-context` here"). So insert
+a **Tier 1.5: an INLINE declared provider** — a command written right in `needs`,
+run by the trusted runtime, no separate file:
+
+```ts
+import { defineHook, tool, deny, allow, provide } from "vigiles/hook";
+
+export default defineHook({
+  on: "PreToolUse",
+  match: tool("Bash"),
+  needs: [provide("k8sCtx", "kubectl config current-context")], // read-only, inline
+  decide: (e) =>
+    e.ctx.k8sCtx === "prod" && e.command.runs("kubectl delete")
+      ? deny("no kubectl delete against prod")
+      : allow(),
+});
+```
+
+**Why this shape (the design decision).** The three options floated, judged
+against the one invariant we must keep — `decide` stays a PURE `(event, ctx) =>
+Decision` (so the in-process test tier works, results cache, and the body can't
+hide a capability):
+
+- **A method inside `decide`** (`e.dangerouslyExec(cmd)`) — ❌ puts live I/O back
+  INSIDE the opaque body. Breaks purity (the in-process `runHookProgram` /
+  `assertHookDenies` tier can't run without real I/O), breaks determinism/caching,
+  and re-opens the exact hidden-capability hole the moat closes. The worst option.
+- **A documented `@ts-expect-error`** — ❌ category error. `@ts-expect-error`
+  suppresses a TYPE error; it grants no runtime capability and runs nothing, so it
+  can't make `e.ctx.x` _exist_. Wrong mechanism entirely.
+- **A whole-hook mode** (e.g. `purity:'dangerously-unrestricted'` letting `decide`
+  do I/O) — ❌ redundant. "decide may do arbitrary I/O" already has a name: the
+  **shell lane** (Tier 3). A typed hook that secretly does I/O is worse than an
+  honest `.sh` — false confidence.
+- **An inline DECLARED command in `needs`** — ✅ the I/O stays in the trusted
+  runtime (decide stays pure), but there's no registration ceremony. It's
+  **declared** (the command is right there → capability-diff/audit sees it),
+  **effect-classified** (`bash-effects`), and **named** for the reader.
+
+**Naming follows the loud-escape-hatch best practice** (React's
+`dangerouslySetInnerHTML`, Rust `unsafe`, OPA `http.send`, and vigiles's own
+`purity:'dangerously-unrestricted'`): the escape must be EXPLICIT, intentionally
+awkward, and GREPPABLE so a reviewer/audit finds every one. So two inline forms,
+mirroring the purity ladder:
+
+- **`provide(name, cmd)`** — the read-only inline read (≈ `bounded`). The runtime
+  REJECTS it at compile if `cmd` isn't provably read-only (`bash-effects`), so the
+  common case ("read a fact") needs no scary word but still can't smuggle a
+  mutation.
+- **`dangerously(name, cmd)`** — the acknowledged escape (≈
+  `dangerously-unrestricted`): an inline command that ISN'T provably read-only (or
+  that you accept may have effects). Loud, greppable, flagged in the
+  capability-diff. The single word a security review searches for.
+
+This makes the ladder: Tier 0 matchers → Tier 1 built-ins → **Tier 1.5 inline
+`provide` / `dangerously`** → Tier 2 registered `defineProvider` → Tier 3 shell
+lane. The opt-out is _clearly named_ and _graduated_, and `decide` never loses
+purity at any rung.
+
+## Event naming — native + dialect-validated, NOT a generic alias layer (yet)
+
+A gate's `on:` uses the harness's NATIVE event name (`PreToolUse`, `Stop`, …).
+This is **not hardcoded to Claude Code**: the value comes from `hook.on` and is
+validated against the INJECTED dialect (`verifyHookEvents`), and the Codex dialect
+declares the SAME names (CC and Codex hook events are ~1:1 — a de-facto shared
+vocabulary, like AGENTS.md, not CC's private one). A typo or an event the target
+harness doesn't fire won't compile.
+
+Should we instead define GENERIC neutral names (`before-tool`, `on-prompt`) mapped
+per adapter? **Not yet** — the rule-of-three for abstraction: introduce the alias
+layer only when a harness with genuinely DIVERGENT event names is added (none
+exists today; CC = Codex). A premature neutral vocabulary is a leaky abstraction
+(cf. Terraform choosing per-provider resource names over a forced cloud-neutral
+one; OTel's neutral conventions pay off only across truly divergent backends). It
+also matches vigiles's own rule (`adapter-aware-lint-rules`): name by the neutral
+CONCEPT, but a `harness/`-style prefix/alias is reserved for a capability only one
+harness has — and the dialect is the ready seam to add the alias map when that day
+comes. Until then: native names, dialect-validated.
+
 ## Coverage: every real-world hook maps to a tier (the "all use cases" proof)
 
 Grounded in the 10-OSS dogfood from `research/hook-modes-and-testing.md`. The
@@ -129,13 +242,13 @@ opt-out does.
 | Stop-gate until tests pass                                                           | Tier 0 (`defineStopGate`, shipped)                                                                                                        |
 | React on tool failure                                                                | Tier 0 (`e.response`, shipped)                                                                                                            |
 | **Block push to `main` / decide on git state**                                       | **Tier 1** (`git.branch`)                                                                                                                 |
-| **Decide on a project-specific tool (kubectl ctx, a custom CLI, an obscure linter)** | **Tier 2** (declared provider)                                                                                                            |
+| **Decide on a project-specific tool (kubectl ctx, a custom CLI, an obscure linter)** | **Tier 1.5** inline `provide(name, cmd)` (one-off) or **Tier 2** `defineProvider` (reusable)                                              |
 | Auto-format / lint on write; structured logging; TTS/notify                          | react `run("./script.sh")` — call OUT to a script file (thin + analyzable)                                                                |
 | **Inject DYNAMIC context (git status, open issues)**                                 | **Tier 2** (a read-only provider feeds an inject)                                                                                         |
 | **Rewrite / transform a prompt** (not just block)                                    | **Tier 3** — a gate denies, it doesn't transform; a hand-written UserPromptSubmit hook emits the rewrite                                  |
 | **PermissionRequest auto-allow read-only**                                           | **Tier 3** today (no typed role/event yet — candidate future role)                                                                        |
 | **Stateful — rate-limit / token-approval / ordering**                                | a read-only provider over a `.vigiles/state` ledger to DECIDE + a react to WRITE it; or the `guards.ts` ordering prototype; or **Tier 3** |
-| Arbitrary I/O to decide (call a live service)                                        | **Tier 2** (declared, `dangerously`) or **Tier 3**                                                                                        |
+| Arbitrary I/O to decide (call a live service)                                        | **Tier 1.5** inline `dangerously(name, cmd)` or **Tier 3** shell lane                                                                     |
 
 **Thesis: total coverage with graceful degradation.** Because Tier 3 is
 Turing-complete and always available, there is no real-world hook vigiles cannot
@@ -172,12 +285,21 @@ capability-diff says so.
    `cli.ts` (`gatherHookContext`). Tested pure (`hook-providers.test.ts`,
    `hook-program.test.ts`) + E2E in a real git repo (`hook.test.ts` — deny push on
    `main`, allow on a branch). Harness-neutral (gather + the exit-2 decision).
-2. **v2 — user-declared providers (Tier 2).** `defineProvider` registered under
-   `.vigiles/providers/`, stamped like a hook; effect-classified; `dangerously`
-   opt-out for a side-effecting one. Capability-diff lists declared providers.
-3. **Defer:** parameterized providers (`file.exists(path)`, `file.contains(…)`),
-   the stateful axis (ledger providers), and any new typed role for
-   PermissionRequest / prompt-rewrite — all Tier 3 until demand is proven.
+2. **v1.1 — `os.platform` built-in.** The one extra fact the 20-OSS survey
+   justifies (per-OS hooks); ambient (`process.platform`), zero-cost, no extra
+   surface. The built-in set then closes at `git.branch`/`git.isDirty`/`cwd`/
+   `os.platform` — small by design.
+3. **v1.5 — the inline opt-out (`provide` / `dangerously`).** The "I don't want a
+   whole provider" rung: an inline declared command in `needs`, run by the trusted
+   runtime (decide stays pure), `provide` for read-only (compile-rejected if not),
+   `dangerously` for the acknowledged escape. This is the higher-leverage next
+   build than v2 — it covers the long tail with one line, no registration.
+4. **v2 — user-declared providers (Tier 2).** `defineProvider` registered under
+   `.vigiles/providers/`, stamped like a hook; effect-classified; the reusable,
+   named form for a fact several hooks share. Capability-diff lists them.
+5. **Defer:** parameterized built-ins (`file.exists(path)`), the stateful axis
+   (ledger providers), and any new typed role for PermissionRequest /
+   prompt-rewrite — until demand is proven.
 
 Per `prefer-existing-solutions`: ADOPT the pattern (pure policy + host-gathered
 context + closed-then-declared provider registry — the unanimous design); BUILD a
