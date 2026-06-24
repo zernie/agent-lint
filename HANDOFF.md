@@ -5,88 +5,97 @@
 > The SessionStart hook injects this file as context so a new session starts
 > oriented — **read it first.** It is git-TRACKED and the container is EPHEMERAL
 > (repo re-cloned each session), so an update persists ONLY if you **commit + push**
-> it. Refresh it on a "handoff" request or at end of session.
+> it. **REFRESH IT before you end the session** (and on any "handoff" request):
+> rewrite the RESUME-HERE task + decisions, then commit. A **Stop hook**
+> (`.claude/hooks/session-handoff-check.sh`) nudges you when commits pile up without a
+> refresh, so a stale handoff can't silently ship.
 
-## RESUME HERE — CLI verb consolidation + docs/README overhaul (2026-06-24)
+## RESUME HERE — execute the pre-release SURFACE FREEZE + markdown cut (2026-06-24)
 
-Branch `claude/hook-typing-guard-bugs-xa0g4h`, latest `ea53d4a`, tree clean once
-this file is committed. All work pushed. **No PR opened yet** — open one when ready
-(see the BREAKING note below). Local test baseline: ~1590 pass / ~11 skip / **1 fail
-= `dialect-drift.test.ts` ONLY** (environmental: container CC is newer than
-`VALIDATED_CC_VERSION` 2.1.187; CI pins it → green there). Everything else green.
+Branch **`claude/readme-review-formatting-k8108k`**, latest commit is this handoff,
+tree clean once committed. All work pushed. This session was mostly docs/research
+PLUS one infra hook (the stale-HANDOFF Stop hook + its test, `4ce443a`). Test baseline
+otherwise unchanged (only `dialect-drift.test.ts` fails locally = environmental,
+container CC newer than pinned `VALIDATED_CC_VERSION`; CI pins it → green; the new
+`session-handoff-check.test.ts` passes 5/5). Continue on this SAME branch/PR after compaction.
+
+**THE TASK (user wants it next session, same PR):** execute the surface-freeze +
+markdown-ladder cut from **`research/pre-release-focus.md`** (read it first — it's the
+full plan). Concretely:
+
+1. **Un-export / `@internal` the experimental cluster** so a later breaking change
+   burns nobody: `guards.ts`, `hook-spec.ts` (imported nowhere), `effect()`/
+   effect-region, `evolve.ts`, and the deep experimental typed-spec builders. Keep the
+   code; remove from the PUBLIC exports.
+2. **Audit the public surface via `api-extractor`** (`etc/*.api.md`). PUBLIC/frozen =
+   the 8 CLI verbs + exit codes + `vigiles/{spec,testing,unit,claude-code,codex,adapter}`
+   (`vigiles/hook` stays exported but un-headlined — parked, not removed).
+3. **Markdown-ladder cut:** KEEP the inline `<!-- vigiles:enforce -->` on-ramp (the
+   README depends on it); CUT the redundant **frontmatter mode (Level 1 `vigiles:`
+   block)**; collapse the ladder to 2 (plain markdown → typed spec). Stop marketing
+   "Level 0/1/2."
+4. **Ship a `STABILITY` statement** (README section + short doc): "0.x — CLI stable;
+   library API 0.x, evolving; experimental surfaces marked."
+
+**This makes the PR BREAKING** (removed public exports + the frontmatter cut) → the PR
+title needs `!` (e.g. `refactor!: freeze pre-release public surface`).
 
 ### SHIPPED this session (don't rebuild)
 
-- **CLI verb consolidation — BREAKING (`c9aac5b`).** 13 → 8 human verbs. `measure`→
-  `scan --trigger`, `explain`→`scan --explain`, `refs`→folded into `lint`,
-  `generate-types|schema|harness`→`generate <kind>`. Final surface:
-  init/compile/lint/test/eval/scan/scaffold-test/generate (+ hidden `hook-runtime`).
-  scan reuses handleMeasure/handleExplain behind the flags. Drove the ~73-ref sweep
-  off the self-command-refs dogfood.
-- **cli.md GHA split (`80ab875`).** GitHub Action section → `docs/github-action.md`;
-  cli.md 718→619.
-- **`compile` auto-refreshes an existing `harness.gen.ts` (`09be8ae`)** + **fixed the
-  dist collision (`3eba1c5`)**: `src/CLAUDE.md.spec.ts` compiled to the same dist path
-  as the root spec and clobbered CLAUDE.md → tsconfig now excludes `src/*.md.spec.ts`
-  (nested specs load via the tsx fallback).
-- **Nested `src/CLAUDE.md` + `high-bar-for-new-commands` rule (`069bc81`).**
-- **`prefer-compiled-hooks` lint rule (`76ea52d`).** ONE repo-level recommendation
-  (default warn, ℹ) nudging hand-written hooks → compiled `vigiles/hook`; message
-  links docs/compiled-hooks.md. Detector `manualHookCount` in scan.ts (shared by
-  lint+scan). NOT per-hook; opt-out; honest "form-based" caveat in its doc.
-- **Public-docs hygiene (`cd597c9`,`2303f26`,`c26f711`,`632e9e9`).** Stripped ALL
-  research/ links + bare name-drops + the word "moat" + the "what works vs hype"
-  benchmark banner from README+docs/. Added `no-internal-links-in-public-docs` rule
-  - a strategic-vocabulary clause in `public-vs-internal-docs`. New
-    `research/eval-startups-positioning.md` (benchmark = flywheel NOT moat; attestation
-    = the only defensible eval niche).
-- **README overhaul (`620c99c`,`3d2d8ed`,`c54aa0b`,`ea53d4a`).** Multi-persona review
-  fixes; benefits-forward hero (concrete failure modes, keeps Agent=Model frame);
-  condensed table cells; **"you don't hand-write specs — your agent does"** reframe;
-  downplayed typed-spec in callouts (benefit-first, not "a typed spec is a program");
-  cost de-dupe; "Not for you if…" line. A **README DIRECTION comment block** is at the
-  top of README.md — read it before editing the README.
+- **Stale-HANDOFF Stop hook (`4ce443a`)** — `.claude/hooks/session-handoff-check.sh`
+  (wired in `.claude/settings.json`) blocks the stop + nudges to refresh HANDOFF.md once
+  ≥ `VIGILES_HANDOFF_THRESHOLD` (default 5) commits land since it was last committed.
+  Loop-guarded, fail-open, silent while the handoff is being edited. Tested
+  (`src/session-handoff-check.test.ts`, 5 cases). The "stop forgetting the handoff" fix.
+
+#### Docs/research
+
+- **README overhaul (committed `8ebc51c`→`f46d93b`,`038c297`).** Pain-first hero
+  ("100x coder, 1x verifier", keeps Agent=Model); fixed the scare-off "No TypeScript?"
+  line → "Start in plain markdown"; broke up wall-of-text sections (each opens with a
+  bolded pain); audience router (own-repo dev vs plugin author); **Guard / compiled
+  hooks PARKED** (table row + ④ section commented out behind `PARKED FOR LAUNCH`
+  markers; three instruments now = Lint/Test/Eval); new `docs/for-plugin-authors.md`.
+  A **README DIRECTION comment** (incl. new rule 1b: never open with a negative) is at
+  the top of README.md — read before editing.
+- **Competitor/VC/funding research → moved to the private `startup/` vault** (git-crypt
+  encrypted; see `startup/README.md` once unlocked). Plus **`research/pre-release-focus.md`**
+  (public, sanitized — the park/polish/add triage, THE plan for the resume task).
+- **Roadmap reprioritized:** added the `🚀 Launch readiness (pre-HN)` section (top of
+  `research/roadmap.md`) — article-led measurement launch, the YC-RFS callout, the
+  surface-freeze + park decisions + the markdown cut + launch-blocker checklist.
 
 ### Decisions of record (don't relitigate)
 
-- **Verb surface is 8 + hook-runtime.** Adding a verb must clear the
-  `high-bar-for-new-commands` bar (src/CLAUDE.md). A PR for this branch is BREAKING —
-  its title needs `!` (e.g. `refactor(cli)!: …`) so semantic-release bumps right.
-- **Rejected: `require-hook-spec` AND a `hook-false-confidence` detector** — form-based
-  / post-hoc / reimplements `guardrail-check`. The chosen shape is the single
-  `prefer-compiled-hooks` nudge + the existing `untested-hook`/`guardrail-check`.
-- **Benchmark = acquisition flywheel, NOT a moat** (eval-startups critique). Lead with
-  verification (Lint/Guard); weight attestation (capability-diff, guardrail proof).
-- **Public docs name the user BENEFIT** — no `moat`/`measurement-authority`/`flywheel`
-  vocabulary, no `research/` links/name-drops; downplay the typed spec (it's the
-  opt-in, auto-enforced next step, never a headline).
+- **Focus thesis = VERIFY + MEASURE.** One product story: "verify + measure your agent
+  harness — deterministic/free where it can be, on your sub where it can't." Everything
+  else parks (Guard, deep typed-spec moat, guards/hook-spec/effect/evolve, opencode).
+- **Launch = article-led MEASUREMENT at scale**, repo as destination. NOT a bare repo
+  drop, NOT caveman-as-headline (saturated; it's one validation row). Ecosystem-
+  benchmark v0 is the one real pre-launch BUILD.
+- **Positioning:** consumer hero "100x coder, 1x verifier"; analogy = "a test suite + CI
+  for your CLAUDE.md/hooks/skills" (lead), "`strict` mode for your harness" (depth hook).
+  The "deterministic shift-left guardrail + private on-your-sub measurement" framing +
+  the full investor angle live in the private `startup/` vault (git-crypt).
+- **Moratorium on net-new research + new instruments until after launch.** (Stop the
+  scatter — that's what this whole reprioritization is for.)
+- **Verb surface is 8 + hidden `hook-runtime`** (init/compile/lint/test/eval/scan/
+  scaffold-test/generate). Freezing these is part of the resume task.
+- Public docs name the USER BENEFIT — no `moat`/`measurement-authority`/`flywheel`
+  vocabulary, no `research/` links.
 
 ### Gotchas
 
-- CC-on-web remote env: GitHub via `mcp__github__*` (NO `gh` CLI). `claude` CLI in the
-  container is for harness tests (upgraded to match CI).
+- CC-on-web remote env: GitHub via `mcp__github__*` (NO `gh` CLI). No PR opened by me
+  this session — check/open one for this branch (BREAKING title once the freeze lands).
 - Before commit: `npm run build` + `npx vitest run` + `npm run fmt:check`; recompile
-  `CLAUDE.md` after editing `CLAUDE.md.spec.ts`; `self-command-refs` fails CI on a
-  stale `vigiles <cmd>` ref (it only catches the INVOCATION form, not bare names/paths).
+  `CLAUDE.md` after editing `CLAUDE.md.spec.ts`; `self-command-refs` fails CI on a stale
+  `vigiles <cmd>` ref. Coverage gate 100% lines/funcs/stmts, 90% branches.
 - Conventional commits + `!` on breaking. NO session links / model IDs in commits.
-- Coverage gate (`npm run coverage`) 100% lines/funcs/stmts, 90% branches (explicit
-  include list in vitest.config.mjs).
-
-### Open threads / next
-
-- **Open the PR** for this branch (BREAKING title). Then optionally subscribe to PR
-  activity for autofix.
-- **`write-hook`/`harden-hook` authoring skill** — the carrot `prefer-compiled-hooks`
-  points at; NOT built.
-- **P1 (roadmap):** deterministic `no-internal-links-in-public-docs` lint rule — the
-  bare `research/X.md` name-drop form the link-check can't catch (hand-held for now).
-- README optional follow-ups (user-judgment): a static/terminal-cast for Guard/Test
-  parity; a harder JS→TS / asm→C analogy if wanted.
 
 ## Don't re-read unless the task needs it
 
-- `research/roadmap.md` — the durable Now/Next/Later map.
-- `research/eval-startups-positioning.md` — the benchmark-vs-attestation positioning.
-- `research/measurement-authority.md` — the measurement pivot (now flagged: flywheel
-  not moat).
-- `docs/compiled-hooks.md` — compiled hooks (what prefer-compiled-hooks points at).
+- `research/pre-release-focus.md` — THE plan for the resume task (park/polish/add + freeze).
+- `research/roadmap.md` — `🚀 Launch readiness` is the front door; durable Now/Next/Later.
+- `startup/` — the git-crypt vault: investor/competitor/funding research (locked; unlock
+  with the saved key only when needed).
