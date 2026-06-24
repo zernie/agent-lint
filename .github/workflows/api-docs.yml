@@ -1,8 +1,9 @@
 name: API docs
 
-# Publish the generated API reference (API Documenter markdown → rendered HTML)
-# to GitHub Pages on every push to main. The browsable site complements the
-# hand-written guides in docs/ and the committed surface reports in etc/*.api.md.
+# Publish the generated API reference (TypeDoc → HTML) to GitHub Pages on every
+# push to main. Browsable site complementing the hand-written guides in docs/ and
+# the committed surface reports in etc/*.api.md. TypeDoc config: typedoc.json
+# (curated to the public authoring surfaces, public-only, members inline).
 #
 # REQUIRED ONE-TIME SETUP (repo admin, can't be done from code):
 #   Settings → Pages → Build and deployment → Source: "GitHub Actions".
@@ -13,13 +14,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least-privilege Pages deploy (the official actions/deploy-pages flow).
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# One in-flight Pages deploy at a time; don't cancel a running publish.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -39,45 +38,18 @@ jobs:
           cache: "npm"
 
       - run: npm ci
-      - run: npm run build
 
-      # API Extractor writes the doc model to temp/ (and the etc/ reports); then
-      # API Documenter renders the browsable markdown into api-reference/.
-      # `--local` regenerates rather than gating, so a docs publish is decoupled
-      # from the separate surface-gate job in ci.yml.
-      - name: Generate API reference (markdown)
-        run: |
-          node scripts/api-extractor.mjs --local
-          npx api-documenter markdown -i temp -o api-reference
-
-      # API Documenter emits plain markdown with NO front matter, which Jekyll
-      # serves as raw text. Inject empty front matter so each page is rendered to
-      # HTML, and a minimal config so a theme + jekyll-relative-links apply (the
-      # latter rewrites the generated `./foo.md` links to their `.html` URLs).
-      - name: Make the markdown Jekyll-renderable
-        run: |
-          cat > api-reference/_config.yml <<'YAML'
-          title: vigiles API reference
-          theme: jekyll-theme-minimal
-          plugins:
-            - jekyll-relative-links
-          relative_links:
-            enabled: true
-            collections: false
-          YAML
-          for f in api-reference/*.md; do
-            { printf -- '---\n---\n'; cat "$f"; } > "$f.tmp" && mv "$f.tmp" "$f"
-          done
+      # TypeDoc reads src/ + tsconfig directly (no dist build needed) and writes
+      # api-reference/ as a self-contained HTML site, incl. `.nojekyll` (from
+      # githubPages:true) so Pages serves it as-is — no Jekyll/front-matter step.
+      - name: Generate API reference (TypeDoc)
+        run: npx typedoc
 
       - uses: actions/configure-pages@v5
 
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./api-reference
-          destination: ./_site
-
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: api-reference
 
       - id: deploy
         uses: actions/deploy-pages@v4

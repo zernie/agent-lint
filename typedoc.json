@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "vigiles API reference",
+  "entryPoints": [
+    "src/core/spec.ts",
+    "src/linting.ts",
+    "src/testing.ts",
+    "src/hook.ts",
+    "src/adapter.ts",
+    "src/claude-code.ts",
+    "src/codex.ts"
+  ],
+  "out": "api-reference",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "readme": "none",
+  "skipErrorChecking": true,
+  "githubPages": true,
+  "navigationLinks": {
+    "Guides": "https://github.com/zernie/vigiles/tree/main/docs",
+    "GitHub": "https://github.com/zernie/vigiles"
+  }
+}
