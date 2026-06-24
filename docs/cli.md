@@ -98,6 +98,12 @@ Two multi-harness behaviours:
   (`disable-model-invocation`, `argument-hint`) in a repo that also declares a
   `minimal`-profile harness (Codex/OpenCode) gets a warning — those keys are
   dropped there, so the constraint won't apply.
+- **Auto-refreshes `harness.gen.ts`.** If the repo already has a whole-harness
+  registry (see [`generate-harness`](#generate-harness-dir-out)), `compile` keeps
+  it in sync as a side effect — so you never hand-run that generator. It's gated
+  on the file existing (compile maintains a registry you opted into, never imposes
+  one) and cheap (parsing specs, no linter spawn). A duplicate agent name fails
+  the compile.
 
 `lint` takes **no** `--harness`: reference verification is harness-agnostic (it
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
@@ -409,7 +415,15 @@ Emit **one typed registry** — `harness.gen.ts` — over every `*.spec.ts` unde
 `dir`, so a single `tsc --noEmit` cross-checks the **whole harness as one
 program** (think TanStack Router's `routeTree.gen.ts` or the Prisma client). It's
 the third generated artifact beside `generate-types` (`.d.ts`) and
-`generate-schema` (JSON Schema). It ships four cross-spec checks:
+`generate-schema` (JSON Schema).
+
+> **You rarely run this by hand.** Like all three `generate-*` artifacts, it's
+> dev-toolchain output (read by `tsc`/your editor, never by the agent). Once the
+> file exists, **`compile` keeps it fresh** — this verb is the explicit/CI
+> escape-hatch (e.g. `--check`). `generate-types`/`generate-schema` similarly run
+> off a guard on linter-config changes, not by hand.
+
+It ships four cross-spec checks:
 
 - **Dangling `delegate` → a `tsc` error at edit time.** Every `railway()`
   delegate target (`steps`, `recover.step`, `onError`) is checked against the

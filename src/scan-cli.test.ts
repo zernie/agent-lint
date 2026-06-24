@@ -538,6 +538,60 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
   });
 });
 
+// --- compile keeps an existing harness.gen.ts fresh ----------------------------
+//
+// The whole-harness registry tracks specs as a side effect of `compile`, so the
+// user never hand-runs `generate-harness`. Opt-in: compile refreshes a registry
+// that already exists (committed like a lockfile), never imposes one.
+describe("compile refreshes harness.gen.ts", () => {
+  const REPO = resolve(__dirname, "..");
+  const SPECS: Record<string, string> = {
+    "planner.md.spec.ts": `import { agent, result } from "vigiles/spec";
+export default agent({ name: "planner", description: "Break the request into an ordered plan. Dispatch first.", tools: ["Read", "Grep", "Glob"], output: result({ steps: "string[]" }, { reason: "string" }) });
+`,
+    "implementer.md.spec.ts": `import { agent } from "vigiles/spec";
+export default agent({ name: "implementer", description: "Implement the plan and prove the build passes.", tools: ["Read", "Edit", "Write", "Bash"] });
+`,
+    "ship.md.spec.ts": `import { railway, delegate } from "vigiles/spec";
+export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });
+`,
+  };
+
+  function seed(): string {
+    const dir = mkdtempSync(join(REPO, ".tmp-compile-genh-"));
+    for (const [name, src] of Object.entries(SPECS))
+      writeFileSync(join(dir, name), src);
+    return dir;
+  }
+
+  it("refreshes a STALE harness.gen.ts on compile", () => {
+    const dir = seed();
+    try {
+      const out = join(dir, "harness.gen.ts");
+      writeFileSync(out, "// stale\n");
+      const r = run("compile", dir);
+      assert.equal(r.exitCode, 0, r.stdout);
+      const gen = readFileSync(out, "utf-8");
+      assert.match(gen, /export const registry =/);
+      assert.match(gen, /KnownAgentName<"planner"/);
+      assert.match(r.stdout, /refreshed harness\.gen\.ts/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT create harness.gen.ts when absent (opt-in)", () => {
+    const dir = seed();
+    try {
+      const r = run("compile", dir);
+      assert.equal(r.exitCode, 0, r.stdout);
+      assert.ok(!existsSync(join(dir, "harness.gen.ts")));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // --- scan --capability-diff e2e (the moat #2 PR-comment surface) ---------------
 
 describe("scan --capability-diff e2e", () => {
