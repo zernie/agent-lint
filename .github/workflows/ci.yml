@@ -145,13 +145,12 @@ jobs:
       - name: API surface gate
         run: node scripts/api-extractor.mjs
 
-      # Smoke-check the API reference GENERATOR (API Documenter) — it reuses the
-      # doc models the gate just wrote to temp/, so no extra extractor run. We
-      # don't publish the output (api-reference/ is gitignored; there's no docs
-      # site yet) — this only proves `npm run docs:api` still builds, so the
-      # generator can't silently rot. Upgrade to a Pages deploy when a site lands.
+      # Smoke-check the API reference GENERATOR (TypeDoc) on every PR — proves
+      # `npm run docs:api` / typedoc.json still build, so the api-docs.yml Pages
+      # deploy (push to main) can't silently rot. Output is gitignored, not
+      # published here.
       - name: API reference generates (smoke, no publish)
-        run: npx api-documenter markdown -i temp -o api-reference
+        run: npx typedoc
 
   harness:
     # Dogfood the harness-testing pillar on the in-repo build: the deterministic
