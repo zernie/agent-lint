@@ -1,7 +1,13 @@
 # HANDOFF — volatile cross-session state
 
-> Overwrite each session; keep ≤120 lines. Durable map = `research/roadmap.md`.
-> The SessionStart hook injects this so a new session starts oriented. Read first.
+> **Overwrite each session; keep ≤120 lines.** The durable map is
+> `research/roadmap.md` — this is the orientation pointer, not the record.
+> The SessionStart hook injects this file as context so a new session starts
+> oriented — **read it first.** It is git-TRACKED and the container is EPHEMERAL
+> (repo re-cloned each session), so an update persists ONLY if you **commit + push**
+> it — a local overwrite is lost when the session ends. Refresh it on a "handoff"
+> request or at the end of a session: current branch + PR + latest commit, what
+> shipped (don't rebuild), decisions of record, gotchas.
 
 ## RESUME HERE — public-API curation + CC-2.1.187 dialect refresh + CI pin (2026-06-24)
 
@@ -21,7 +27,7 @@ No open code task; pick up a NEW direction (or just verify the PR + maybe merge)
 - **No-barrel-imports ESLint rule (`e63a5d2`).** Built-in `no-restricted-imports`
   bans internal imports of the public barrels (linting/testing/unit/integration/
   e2e/hook/claude-code/codex) — `${name}.js` at any depth; `adapter` omitted
-  (basename collides w/ core/adapter + adapters/*/adapter). NOT the
+  (basename collides w/ core/adapter + adapters/\*/adapter). NOT the
   `eslint-plugin-barrel-files` plugin: it calls ESLint-9-removed
   `context.getFilename()`, crashes on ESLint 10 (prefer-existing-solutions).
 - **CC dialect refresh → 2.1.187 (`135e9bd`).** The gated dialect-drift alarm fired
@@ -34,8 +40,8 @@ No open code task; pick up a NEW direction (or just verify the PR + maybe merge)
   New platform tools (Cron/Task-CRUD/Workflow/Monitor/Worktree/…) are HOST tools,
   NOT subagent-grantable → `builtinAgentTools` intentionally UNCHANGED.
 - **refs-nudge fix + self-command-refs `${CLI}` (`70124eb`).** `examples/harness/
-  refs-nudge.harness.mjs` called the pre-rename `refs-hook` (now `hook-runtime
-  refs`) → "Unknown command", nudge never delivered (the `harness` job's only red).
+refs-nudge.harness.mjs` called the pre-rename `refs-hook` (now `hook-runtime
+refs`) → "Unknown command", nudge never delivered (the `harness` job's only red).
   Fixed + taught `self-command-refs` the `node ${CLI} <cmd>` invocation form (it
   only knew `vigiles`/`cli.js` literals, so this class slipped through). Unit test
   added; repo dogfood + 46 real `${CLI}` usages stay clean.
@@ -48,7 +54,7 @@ No open code task; pick up a NEW direction (or just verify the PR + maybe merge)
 ### Decisions of record (don't relitigate)
 
 - **Do NOT `import type` the Claude SDK tool types.** Both `@anthropic-ai/
-  claude-code` AND `@anthropic-ai/claude-agent-sdk` are "© Anthropic PBC. All
+claude-code` AND `@anthropic-ai/claude-agent-sdk` are "© Anthropic PBC. All
   rights reserved." (proprietary). vigiles is MIT + multi-harness → read the
   user's LOCAL `sdk-tools.d.ts` (ToS-clean) + a hand-authored list of bare
   identifiers (facts). There IS a clean `ToolInputSchemas` union on `./sdk-tools`,
