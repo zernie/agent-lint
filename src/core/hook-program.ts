@@ -219,7 +219,7 @@ export function defineHook<
 // Run the program against a raw PreToolUse event (the runtime half)
 // ---------------------------------------------------------------------------
 
-/** Build the typed event from a raw CC PreToolUse event, then decide. */
+/** Build the typed event from a raw PreToolUse event, then decide. */
 export function decideProgram(
   program: HookProgram,
   rawEvent: { tool_name?: string; tool_input?: { command?: unknown } },
