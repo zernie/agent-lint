@@ -3459,6 +3459,52 @@ function handleGenerateSchema(args: string[], restArgs: string[]): void {
  * generated artifact beside `generate-types` / `generate-schema`. See
  * docs/cli.md and research/whole-harness-codegen.md.
  */
+/**
+ * Keep an EXISTING `harness.gen.ts` fresh as a side effect of `compile`, so the
+ * whole-harness registry tracks the specs without a separate manual
+ * `generate-harness` run (the user almost never calls that verb by hand). Gated
+ * on the file already existing: compile keeps a registry the user opted into
+ * (committed like a lockfile) up to date — it never imposes one on a repo that
+ * didn't ask for it. Cheap by construction: `generate-harness` only PARSES specs
+ * (no linter spawning), unlike `generate-types`/`generate-schema` (which spawn
+ * every linter and so stay on the config-change guard, off the hot compile path).
+ * Returns false on a duplicate-name collision so it fails the compile.
+ */
+async function refreshHarnessGenIfPresent(
+  harnessFlag: string | undefined,
+): Promise<boolean> {
+  const dir = process.cwd();
+  const fullOut = resolve(dir, HARNESS_GEN_FILENAME);
+  if (!existsSync(fullOut)) return true; // opt-in: nothing to refresh
+
+  const adapter = harnessFlag
+    ? resolveAdapter(dir, harnessFlag)
+    : detectAdapterResult(dir).adapter;
+  const model = await loadHarnessModel(
+    dir,
+    (abs) =>
+      loadSpec(abs) as Promise<{
+        _specType?: string;
+        name?: string;
+        tools?: readonly string[];
+      } | null>,
+  );
+  const result = generateHarness(model, {
+    dialect: adapter.dialect,
+    outDir: dirname(fullOut),
+  });
+  if (result.duplicate) {
+    console.log(`\n✗ ${result.duplicate.message}`);
+    console.log(`::error::${result.duplicate.message}`);
+    return false;
+  }
+  writeFileSync(fullOut, result.gen);
+  console.log(
+    `  ↻ refreshed ${HARNESS_GEN_FILENAME} (${String(result.agentCount)} agent(s))`,
+  );
+  return true;
+}
+
 async function handleGenerateHarness(
   args: string[],
   restArgs: string[],
@@ -4899,6 +4945,10 @@ async function main(): Promise<void> {
       if (specs.length > 0)
         valid = (await compile(specs, config, { harnessFlag })) && valid;
       valid = (await installHooks(hooks, harnessFlag)) && valid;
+      // Keep an existing whole-harness registry in sync (cheap, opt-in) so the
+      // user never hand-runs `generate-harness`. Skipped when no harness.gen.ts.
+      if (specs.length > 0)
+        valid = (await refreshHarnessGenIfPresent(harnessFlag)) && valid;
       console.log("");
       if (valid) {
         console.log("Compilation complete.");
