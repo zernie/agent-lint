@@ -371,7 +371,8 @@ sandbox) is per-harness. Pick yours:
 
 ## See also
 
-- [Testing API reference](testing-api.md) — every predicate, check, matcher, and option.
+- [Testing API reference](testing-api.md) — every predicate, check, matcher, and option (hand-written).
+- [API reference (generated)](https://zernie.github.io/vigiles/) — the exhaustive symbol-level reference for every entry point, incl. `vigiles/testing`.
 - [Compiled hooks](compiled-hooks.md) — author a hook that can't be wrong (a pure typed function vigiles compiles); the gate instrument beside these test tiers.
 - [Verifying your instruction files](verifying-instruction-files.md) — the linting layer.
 - [`docs/harnesses.md`](harnesses.md) — how you pick a harness (by import) + the capability matrix.

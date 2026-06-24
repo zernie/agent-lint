@@ -165,7 +165,7 @@ export function compileHook(
       `hook does not compile:\n  ${errors.map((e) => e.message).join("\n  ")}`,
     );
   }
-  const command = opts.gateCommand ?? "npx vigiles guard-hook";
+  const command = opts.gateCommand ?? "npx vigiles hook-runtime guard";
   const extractions: Record<string, string> = {};
   for (const field of spec.reads) extractions[field] = `.tool_input.${field}`;
   return {

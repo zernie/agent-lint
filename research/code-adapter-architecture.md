@@ -215,6 +215,76 @@ not materialized — a non-goal, above.)
 pillar-2-testable + MCP-detected, with no cross-adapter coupling. Subagent compilation
 is a deliberate non-goal (model mismatch), not a TODO.
 
+## Sourcing the dialect facts: hand-maintain + read-local, never import their types
+
+The `HarnessDialect` catalogs (tool names, hook events, side-effecting set, MCP servers)
+and the hook event SHAPES (`BashToolEvent`/`FileToolEvent`/…) are **hand-maintained**,
+because Claude Code is effectively a **black box**: the only OFFICIAL machine-readable
+artifact is the `settings.json` JSON Schema (json.schemastore.org); event names, the
+~35 tool names, per-event payload fields, and the decision envelope are **prose-only**
+(`docs/hooks.md`, `docs/tools.md`). The Agent SDK exports only SOME hook input types.
+This is WHY the detectors are conservative ("never-available + close-typo only, never a
+bare-unknown") — the catalog is known-incomplete, so it never assumes completeness.
+
+There IS a semi-machine source: the **installed** `@anthropic-ai/claude-code` ships
+`sdk-tools.d.ts` (the `ToolInputSchemas` union + every tool's input shape) and the event
+names + decision fields are string literals in `cli.js`. We use it as a **read-local
+freshness/drift check**, NOT a dependency.
+
+**SHIPPED (`src/dialect-drift.ts`).** Pure parsers `parseToolInputTypes` (over
+`sdk-tools.d.ts`) + `eventsMissingFromBundle` (over a readable JS bundle), a
+`findClaudeCodePackage` locator (`npm root -g` → the `claude` binary's real path; null
+if absent) + `findClaudeCodeBundle` (the readable `cli.js`, or null), and
+`ACKNOWLEDGED_TOOL_INPUT_TYPES` + `VALIDATED_CC_VERSION` (the hand-authored baseline,
+currently `2.1.187` / 38 tool types / 9 events). NB CC ≥ ~`2.1.18x` ships a NATIVE
+BINARY (`bin/claude.exe` from a platform `optionalDependencies` package) with NO
+readable `cli.js`, so the event-literal scan degrades to a loud skip; `sdk-tools.d.ts`
+is still shipped, so the tool-type alarm keeps working. (We deliberately do NOT
+`import type` the SDK's `ToolInputSchemas` union — `@anthropic-ai/claude-code` and
+`@anthropic-ai/claude-agent-sdk` are both "© Anthropic PBC. All rights reserved.",
+proprietary; an MIT, multi-harness tool reads the local file instead.) Two consumers:
+
+1. **CI alarm** (`src/dialect-drift.test.ts`, gated): fails LOUD when the installed
+   `sdk-tools.d.ts` tool-input set differs from `ACKNOWLEDGED_TOOL_INPUT_TYPES` or a
+   `claudeCodeDialect.hookEvents` entry vanished from the bundle; skips loud when CC
+   absent OR ships a native binary (no readable `cli.js` to scan). CI PINS
+   `@anthropic-ai/claude-code@<VALIDATED_CC_VERSION>` (grepped from the source — one
+   knob) in every job that drives the real binary, so the alarm fires only on a
+   DELIBERATE bump, not on every unpinned CC release landing on an unrelated PR (the
+   noise that prompted the pin), and the real-`claude` harness/eval tiers stay
+   reproducible. Bump `VALIDATED_CC_VERSION` + `ACKNOWLEDGED_TOOL_INPUT_TYPES`
+   together; the gated test cross-checks them.
+2. **Runtime WARN** (`vigiles scan`, claude-code only): `checkDialectDrift()` reads only
+   the small `sdk-tools.d.ts` (fast — no `cli.js` scan on the runtime path; events stay
+   the CI test's job), and `formatDialectDrift` prints a one-line `⚠` ONLY on real tool-
+   surface drift (a version bump with no new/removed tool emits nothing — no noise).
+   Best-effort: never throws, never blocks scan. Not wired into `compile` (hot
+   recompile-on-save path) by design.
+
+Read-local only — `findClaudeCodePackage` reads files the user already installed under
+their own CC licence; vigiles ships nothing of theirs.
+
+**Licensing line (informational, not legal advice).** The package is
+"© Anthropic PBC. All rights reserved." — not OSS. So:
+
+- ❌ **Don't vendor or inline their `.d.ts`** into vigiles's published artifact. Copying
+  the file (vendoring) OR letting **api-extractor inline** their referenced type into our
+  rolled-up `vigiles.d.ts` both put a COPY of their declarations in what we ship =
+  redistribution of an all-rights-reserved work. (Import ≠ distribution by itself — but a
+  TS lib's dts-bundling inlines by default, which crosses into it; watch `etc/*.api.md`.)
+- ✅ **Hand-write our own types matching the FACTS** (tool/event/field names — `command`,
+  `file_path`). Names + short identifiers aren't copyrightable (37 CFR §202.1), merger /
+  scènes à faire cover interop-dictated fields, and this is the universal **DefinitelyTyped**
+  norm — empirically the dominant pattern (a GitHub `PreToolUseHookInput` search shows the
+  whole ecosystem hand-redeclaring the shape; verbatim `sdk-tools.d.ts` copies cluster in
+  reverse-engineering/rebuild repos, the risky cohort).
+- ✅ **Read the user's local install at runtime** to validate/warn — no copying, no
+  redistribution; same ToS-clean posture as driving the user's own `claude` CLI.
+
+So: hand-maintained catalog is the stable source of truth; the local install is the
+freshness alarm; their types are never shipped. Full landscape +
+case-law (Google v. Oracle, Sega/Connectix, substantial-similarity) is the chat record.
+
 ## See also
 
 - `research/adapter-api-design.md` — the **API-shape** companion to this port

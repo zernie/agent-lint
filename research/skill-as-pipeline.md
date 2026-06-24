@@ -97,7 +97,7 @@ Passive gates are the weak end. There is a spectrum:
    sees step N+1 until step N's gate passes. The skill stops being "a document the model
    reads" and becomes "a program the harness interprets, calling the model as the per-step
    worker." Strongest — but needs a **runner that controls context** (a thin
-   `vigiles run-skill` / subagent loop). Beyond what hooks natively give. **Needs building.**
+   `vigiles hook-runtime run-skill` / subagent loop). Beyond what hooks natively give. **Needs building.**
 
 **Honest boundary:** enforcement handles **control flow** (no skip, no proceeding past a failed
 gate) — it does **not** guarantee a step was done _correctly_. The arbiter of correctness is
@@ -199,7 +199,7 @@ frontmatter; no TS required.
 2. **Step gates.** Per-step checkpoints + short-circuit (Railway, soft → medium enforcement).
    Reuses the `vigiles:gate` marker on top of the in-flight inline/frontmatter parser.
 3. **Graph + typed pipeline.** Branches/loops as structured data; typed `skill()` with Kleisli
-   composition and graph verification (reachability/termination); the `vigiles run-skill`
+   composition and graph verification (reachability/termination); the `vigiles hook-runtime run-skill`
    interpreter for hard driving. The strict optional tier.
 
 Orthogonal axis: the **effect contract** (`reads`/`writes`/`may` from `runtime-enforcement.md`
@@ -270,14 +270,14 @@ A phased order that occupies the empty quadrant with the least risk by reusing w
    `runtime-enforcement.md`) that runs the gates and blocks "done" until the result gate passes —
    medium enforcement on existing Claude Code hooks; borrow OpenHands' `exit 2` semantics.
 3. **Structured graph + hard driving.** Branching/loops as structured data + a soundness
-   pre-flight check; the `vigiles run-skill` interpreter for one-step-at-a-time driving; typed
+   pre-flight check; the `vigiles hook-runtime run-skill` interpreter for one-step-at-a-time driving; typed
    `skill()` with Kleisli composition and graph verification. The strict optional tier.
 
 ## Open questions
 
 1. `result`-gate-first MVP vs steps+gates first — which ships first?
 2. Marker syntax for gates/branches in markdown that stays a readable checklist.
-3. How much of the interpreter (`vigiles run-skill`) is worth building vs leaning on hooks?
+3. How much of the interpreter (`vigiles hook-runtime run-skill`) is worth building vs leaning on hooks?
 4. Does the headline become "verify (and drive) your skills"?
 5. Policy: `require-skill-spec` graduates a skill to structured form once it branches?
 

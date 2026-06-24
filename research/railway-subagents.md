@@ -135,7 +135,7 @@ deliverable (typed, verified plan-as-code — the direct, differentiated answer 
 ultra-plan); **(3) the deterministic driver** as the north star, built thin over
 the harness, only once (2) has users. The agent `PreToolUse` enforcement hook —
 the shared rail both (2) and (3) emit — is **already shipped**
-(`src/agent-runtime.ts`, `vigiles agent-hook`; see `research/subagent-compilation.md`),
+(`src/agent-runtime.ts`, `vigiles hook-runtime agent`; see `research/subagent-compilation.md`),
 so a `workflow()` only needs to point per-delegate rails at it.
 
 ## Status: prototype shipped (Option 2, the static half)

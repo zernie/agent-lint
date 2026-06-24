@@ -12,6 +12,7 @@
 
 import {
   writeFileSync,
+  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -68,6 +69,7 @@ import {
   formatMcpContractReport,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
+import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
   explainScore,
   explainSurface,
@@ -132,16 +134,39 @@ import {
   HookCompileError,
   decideProgram,
   decideFileGate,
+  decidePromptGate,
+  decideStopGate,
   runInject,
   runReact,
   dispatchKind,
+  hookMode,
+  hookNeeds,
+  gateAction,
+  type DispatchKind,
+  type HookMode,
   type AnyHook,
   type FileGateHook,
+  type PromptGateHook,
+  type StopGateHook,
   type InjectHook,
   type ReactHook,
   type HookProgram,
   type Decision,
 } from "./core/hook-program.js";
+import {
+  discoverHookFiles,
+  discoverProviderFiles,
+  mergeHooksJson,
+  mergeHooksToml,
+  serializeConfig,
+} from "./hook-install.js";
+import {
+  gatherContext,
+  unsafeProvider,
+  type ProviderRegistry,
+  type RegisteredProvider,
+} from "./core/hook-providers.js";
+import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
   evaluatePreToolUse,
@@ -3899,7 +3924,7 @@ function annotateLintForGitHub(report: LintReport, flags: string[]): void {
  */
 function runSkillCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles run-skill <SKILL.md>");
+    console.error("Usage: vigiles hook-runtime run-skill <SKILL.md>");
     process.exit(2);
   }
   const path = resolve(process.cwd(), target);
@@ -3957,7 +3982,7 @@ function skillHookCommand(): void {
 /** Mark a skill active so the Stop hook enforces its result gate. */
 function skillStartCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles skill-start <SKILL.md>");
+    console.error("Usage: vigiles hook-runtime skill-start <SKILL.md>");
     process.exit(2);
   }
   setActiveSkill(process.cwd(), target);
@@ -4078,7 +4103,7 @@ function agentHookCommand(): void {
 }
 
 /**
- * `vigiles intercept-tool-hook` — the PreToolUse interception hook for the
+ * `vigiles hook-runtime intercept-tool` — the PreToolUse interception hook for the
  * tool-call spy. Reads the intercept list from `VIGILES_INTERCEPT_TOOLS`, decides
  * whether the called tool should be intercepted, and if so denies the real
  * execution (exit 2) with a block message — the call is intercepted (prevented),
@@ -4102,7 +4127,7 @@ function interceptToolHookCommand(): void {
 }
 
 /**
- * `vigiles guard-hook` — the PreToolUse gate for typed safe-by-construction guards
+ * `vigiles hook-runtime guard` — the PreToolUse gate for typed safe-by-construction guards
  * (EXPERIMENTAL). Reads the live event on stdin, runs the declared guard set
  * (`.vigiles/guards.json`) against the session ledger (`.vigiles/guard-ledger.json`),
  * and blocks (exit 2 + reason) or records the allowed call. The command in the
@@ -4126,7 +4151,7 @@ function guardHookCommand(): void {
 /** Mark a subagent active so the PreToolUse hook enforces its tool contract. */
 function agentStartCommand(target: string | undefined): void {
   if (!target) {
-    console.error("Usage: vigiles agent-start <agents/<name>.md>");
+    console.error("Usage: vigiles hook-runtime agent-start <agents/<name>.md>");
     process.exit(2);
   }
   pushActiveAgent(process.cwd(), target);
@@ -4134,56 +4159,72 @@ function agentStartCommand(target: string | undefined): void {
 }
 
 /** Dispatch the skill-runtime subcommands. Returns false if unrecognized. */
-function handleSkillCommand(command: string, restArgs: string[]): boolean {
-  switch (command) {
-    case "run-skill":
-      runSkillCommand(restArgs[0]);
-      return true;
-    case "skill-start":
-      skillStartCommand(restArgs[0]);
-      return true;
-    case "skill-done":
-      clearActiveSkill(process.cwd());
-      return true;
-    case "skill-hook":
-      skillHookCommand();
-      return true;
-    case "skill-tool-hook":
-      skillToolHookCommand();
-      return true;
+/**
+ * `vigiles hook-runtime <kind> [args]` — the hidden umbrella for RUNTIME
+ * entrypoints: the executables the harness invokes via a block `vigiles compile`
+ * emits into your hooks config, NEVER typed by a human. They stay off the help
+ * surface by design — verbs are typed, runtime entrypoints are emitted (the
+ * cohesive-cli-surface rule). Renaming a `<kind>` breaks every already-emitted
+ * block, so it is a breaking change.
+ */
+async function handleHookRuntime(
+  kind: string | undefined,
+  restArgs: string[],
+): Promise<void> {
+  switch (kind) {
+    case "run-program":
+      await runHookProgramCommand(restArgs[0]);
+      return;
+    case "agent":
+      agentHookCommand();
+      return;
     case "agent-start":
       agentStartCommand(restArgs[0]);
-      return true;
+      return;
     case "agent-done":
       popActiveAgent(process.cwd());
-      return true;
-    case "agent-hook":
-      agentHookCommand();
-      return true;
-    case "intercept-tool-hook":
+      return;
+    case "skill":
+      skillHookCommand();
+      return;
+    case "skill-tool":
+      skillToolHookCommand();
+      return;
+    case "skill-start":
+      skillStartCommand(restArgs[0]);
+      return;
+    case "skill-done":
+      clearActiveSkill(process.cwd());
+      return;
+    case "run-skill":
+      runSkillCommand(restArgs[0]);
+      return;
+    case "intercept-tool":
       interceptToolHookCommand();
-      return true;
-    case "guard-hook":
+      return;
+    case "guard":
       guardHookCommand();
-      return true;
-    case "action-hook":
+      return;
+    case "action":
       actionHookCommand();
-      return true;
+      return;
     case "refs":
-      refsCommand(restArgs[0]);
-      return true;
-    case "refs-hook":
       refsHookCommand();
-      return true;
+      return;
     case "effect-enter":
       setEffectActive(process.cwd());
       console.log("Effect boundary entered.");
-      return true;
+      return;
     case "effect-exit":
       clearEffectActive(process.cwd());
-      return true;
+      return;
     default:
-      return false;
+      console.error(
+        `vigiles hook-runtime: unknown runtime entrypoint "${kind ?? ""}". ` +
+          `These are emitted into your hooks config by \`vigiles compile\` — ` +
+          `you don't run them by hand.`,
+      );
+      process.exit(2);
   }
 }
 
@@ -4367,118 +4408,310 @@ async function loadHookProgram(file: string): Promise<AnyHook> {
   return program as AnyHook;
 }
 
+/** Load a registered provider (`.vigiles/providers/<name>`) → its definition. */
+async function loadProvider(file: string): Promise<RegisteredProvider> {
+  const abs = resolve(process.cwd(), file);
+  const { pathToFileURL } = require("node:url") as typeof import("node:url");
+  let mod: { default?: unknown };
+  try {
+    mod = (await import(pathToFileURL(abs).href)) as { default?: unknown };
+  } catch (e) {
+    throw new HookCompileError(
+      `Cannot load provider "${file}": ${(e as Error).message}`,
+    );
+  }
+  const def =
+    (mod.default as { default?: unknown } | undefined)?.default ?? mod.default;
+  if (
+    !def ||
+    typeof def !== "object" ||
+    (def as { kind?: unknown }).kind !== "provider-def"
+  ) {
+    throw new HookCompileError(
+      `${file} has no default-exported provider ` +
+        `(use \`export default defineProvider({…})\`).`,
+    );
+  }
+  return def as RegisteredProvider;
+}
+
+/**
+ * Compile (validate) the registered providers under `.vigiles/providers/`: each
+ * must load and be read-only unless it opted into `dangerous`. Returns the set of
+ * valid provider NAMES (so a hook's `provider()` ref can resolve at compile).
+ * Throws HookCompileError on an unsafe provider — the same fail-the-build contract
+ * as a hook.
+ */
+async function compileProviders(): Promise<string[]> {
+  const names: string[] = [];
+  for (const file of discoverProviderFiles(process.cwd())) {
+    const def = await loadProvider(file);
+    if (unsafeProvider(def)) {
+      throw new HookCompileError(
+        `provider ${file} ("${def.run}") is not provably read-only — ` +
+          `pass dangerous:true to defineProvider to acknowledge it.`,
+      );
+    }
+    names.push(def.name);
+  }
+  return names;
+}
+
 /** Path of the tamper-evident stamp sidecar for a hook file. */
 function hookStampPath(file: string): string {
   return resolve(process.cwd(), ".vigiles/hooks", basename(file) + ".json");
 }
 
+/** What installing one hook did — for the `compile` summary line. */
+interface HookInstallResult {
+  readonly role: DispatchKind;
+  readonly settingsPath: string;
+  /** Loud, non-CC inject/react caveat (the no-silent-skips gap). */
+  readonly warning?: string;
+}
+
 /**
- * `vigiles compile-hook <file>` — compile a typed hook program (authored
- * against `vigiles/hook`) into a harness hooks block. An import outside the
- * sanctioned API does NOT compile (capability = API surface); the emitted block
- * routes the live event to `run-hook-program`, and a tamper-evident stamp
- * sidecar lets the runtime refuse a hand-edited artifact.
+ * Compile ONE typed hook program (authored against `vigiles/hook`) and MERGE it
+ * into the active harness's native config — the hook half of `vigiles compile`
+ * (there is no `compile-hook` verb; the cohesive-cli-surface rule). An import
+ * outside the sanctioned API does NOT compile (capability = API surface). The
+ * emitted block routes the live event to `hook-runtime run-program`; a
+ * tamper-evident stamp sidecar lets the runtime refuse a hand-edited artifact.
+ * The merge is idempotent (keyed by the hook PATH), so recompiling updates in
+ * place and never clobbers the user's own hooks.
  */
-async function compileHookCommand(
-  file: string | undefined,
-  args: string[],
-): Promise<void> {
-  if (!file) {
-    console.error("Usage: vigiles compile-hook <hook-file>");
-    process.exit(2);
-  }
-  const abs = resolve(process.cwd(), file);
-  let source: string;
-  try {
-    source = readFileSync(abs, "utf-8");
-  } catch {
-    console.error(`Cannot read ${file}`);
-    process.exit(2);
-    return;
-  }
-  // Resolve the target harness so the emit matches it (CC JSON / Codex TOML +
-  // regex matcher) — same selection the rest of the CLI uses.
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(process.cwd(), harnessFlag)
-    : detectAdapterResult(process.cwd()).adapter;
-  let program: AnyHook;
-  let compiled;
-  try {
-    program = await loadHookProgram(file);
-    compiled = compileHookProgram(source, program, {
-      gateCommand: `npx vigiles run-hook-program ${file}`,
-      dialect: adapter.dialect,
-      hookProtocol: adapter.hookProtocol,
-      settingsFormat: adapter.layout.settingsFormat,
-    });
-  } catch (e) {
-    if (e instanceof HookCompileError) {
-      console.error(`✗ ${e.message}`);
-      if (checkHookImports(source).length > 0) {
-        console.error(
-          "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
-            "entire capability surface.",
-        );
-      }
-      process.exit(1);
-    }
-    throw e;
-  }
+async function installHookFile(
+  file: string,
+  adapter: HarnessAdapter,
+  registeredProviders: readonly string[] = [],
+): Promise<HookInstallResult> {
+  const source = readFileSync(resolve(process.cwd(), file), "utf-8");
+  const program = await loadHookProgram(file);
+  const compiled = compileHookProgram(source, program, {
+    gateCommand: `npx vigiles hook-runtime run-program ${file}`,
+    dialect: adapter.dialect,
+    hookProtocol: adapter.hookProtocol,
+    settingsFormat: adapter.layout.settingsFormat,
+    registeredProviders,
+  });
+
+  // Tamper-evident stamp beside the source (one dir → basename is unique).
   mkdirSync(dirname(hookStampPath(file)), { recursive: true });
   writeFileSync(
     hookStampPath(file),
     JSON.stringify({ file, stamp: compiled.stamp }, null, 2) + "\n",
   );
-  const target =
-    adapter.layout.settingsFormat === "toml"
-      ? `${adapter.name}'s config.toml`
-      : `your hooks settings (e.g. ${adapter.layout.settingsPath})`;
-  console.log(
-    `✓ ${file} compiled (role: ${dispatchKind(program)}, harness: ${adapter.name}).`,
-  );
+
+  // Merge into the harness's native config, idempotently.
+  const format = adapter.layout.settingsFormat;
+  const settingsAbs = resolve(process.cwd(), adapter.layout.settingsPath);
+  const existing: Record<string, unknown> = existsSync(settingsAbs)
+    ? format === "toml"
+      ? (parseToml(readFileSync(settingsAbs, "utf-8")) as Record<
+          string,
+          unknown
+        >)
+      : (JSON.parse(readFileSync(settingsAbs, "utf-8")) as Record<
+          string,
+          unknown
+        >)
+    : {};
+  const merged =
+    format === "toml"
+      ? mergeHooksToml(existing, compiled.hooks, file)
+      : mergeHooksJson(existing, compiled.hooks, file);
+  mkdirSync(dirname(settingsAbs), { recursive: true });
+  writeFileSync(settingsAbs, serializeConfig(merged, format));
+
   // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
-  // but an inject/react hook's OUTPUT shape is only confirmed for Claude Code. On
+  // but an inject/react hook's OUTPUT shape is confirmed only for Claude Code. On
   // another harness it would emit CC-shaped output that may not be read — exactly
-  // the silent-failure this feature exists to prevent. Say so, loudly.
+  // the silent failure this feature exists to prevent. Flag it, loudly.
   const role = dispatchKind(program);
-  if (
-    adapter.name !== "claude-code" &&
-    (role === "inject" || role === "react")
-  ) {
-    console.warn(
-      `\n⚠ ${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
+  const warning =
+    adapter.name !== "claude-code" && (role === "inject" || role === "react")
+      ? `${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
         `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
         `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
-        `${adapter.name} for now, or confirm the ${role} output against the real ` +
-        `binary first (research/compiled-hooks-codex.md §Deferred).`,
-    );
+        `${adapter.name} for now, or confirm against the real binary first ` +
+        `(research/compiled-hooks-codex.md §Deferred).`
+      : undefined;
+  return { role, settingsPath: adapter.layout.settingsPath, warning };
+}
+
+/**
+ * Compile + install every hook (explicit paths, else discovered under
+ * `.vigiles/hooks/`) into the active harness's config. Returns false if any
+ * hook failed to compile.
+ */
+async function installHooks(
+  hookFiles: string[],
+  harnessFlag: string | undefined,
+): Promise<boolean> {
+  if (hookFiles.length === 0) return true;
+  const adapter = harnessFlag
+    ? resolveAdapter(process.cwd(), harnessFlag)
+    : detectAdapterResult(process.cwd()).adapter;
+  // Validate registered providers first → the names a hook's provider() ref may
+  // resolve to (an unsafe provider fails the whole compile, like a bad hook).
+  let registeredProviders: string[];
+  try {
+    registeredProviders = await compileProviders();
+  } catch (e) {
+    if (e instanceof HookCompileError) {
+      console.error(`✗ ${e.message}`);
+      return false;
+    }
+    throw e;
   }
-  console.log(`\nAdd this to ${target}:\n`);
-  console.log(compiled.settingsBlock);
-  console.log(
-    `\nStamp written to ${relative(process.cwd(), hookStampPath(file))}.`,
+  let ok = true;
+  for (const file of hookFiles) {
+    try {
+      const r = await installHookFile(file, adapter, registeredProviders);
+      console.log(
+        `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
+      );
+      if (r.warning) console.warn(`⚠ ${r.warning}`);
+    } catch (e) {
+      if (e instanceof HookCompileError) {
+        console.error(`✗ ${file} — ${e.message}`);
+        const src = (() => {
+          try {
+            return readFileSync(resolve(process.cwd(), file), "utf-8");
+          } catch {
+            return "";
+          }
+        })();
+        if (checkHookImports(src).length > 0) {
+          console.error(
+            "  A compiled hook may import ONLY `vigiles/hook` — that is its " +
+              "entire capability surface.",
+          );
+        }
+        ok = false;
+      } else {
+        throw e;
+      }
+    }
+  }
+  return ok;
+}
+
+/**
+ * Gather a gate's DECLARED context providers (the trusted-host I/O step). Runs
+ * each declared read-only command via execSync in the hook's cwd; a provider
+ * that can't resolve yields its default (never throws). The pure registry +
+ * decision logic live in core/hook-providers.ts — this only injects the real IO.
+ */
+async function gatherHookContext(
+  program: AnyHook,
+): Promise<Record<string, string | boolean>> {
+  const needs = hookNeeds(program);
+  if (needs.length === 0) return {};
+  // Only load the registered-provider registry if a provider() ref is declared.
+  const hasRef = needs.some(
+    (n) => typeof n !== "string" && n.kind === "provider-ref",
+  );
+  const registry = hasRef ? await loadProviderRegistry() : {};
+  const { execSync } =
+    require("node:child_process") as typeof import("node:child_process");
+  const { isCI } = require("ci-info") as { isCI: boolean };
+  return gatherContext(
+    needs,
+    {
+      exec: (command) =>
+        execSync(command, {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }),
+      cwd: process.cwd(),
+      platform: process.platform,
+      isCI,
+    },
+    registry,
   );
 }
 
-/** Emit a gate Decision in the harness protocol — the author never writes it. */
-function emitGateDecision(decision: Decision, on: string): void {
-  if (decision.kind === "deny") {
-    console.error(decision.reason);
-    process.exit(2);
+/**
+ * Load the registered providers (`.vigiles/providers/`) into a name→def registry
+ * for `provider()` ref resolution. A bad/unloadable provider file is skipped (the
+ * ref then yields its default ""), never crashes a live session.
+ */
+async function loadProviderRegistry(): Promise<ProviderRegistry> {
+  const registry: ProviderRegistry = {};
+  for (const file of discoverProviderFiles(process.cwd())) {
+    try {
+      const def = await loadProvider(file);
+      registry[def.name] = def;
+    } catch {
+      /* skip an unloadable provider file */
+    }
   }
-  if (decision.kind === "ask") {
-    process.stdout.write(
+  return registry;
+}
+
+/** Append an observe-mode record to `.vigiles/hook-observations.jsonl` (best-effort). */
+function recordObservation(
+  file: string,
+  on: string,
+  would: "deny" | "ask",
+  reason: string,
+): void {
+  try {
+    const dir = resolve(process.cwd(), ".vigiles");
+    mkdirSync(dir, { recursive: true });
+    const line =
       JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: on,
-          permissionDecision: "ask",
-          permissionDecisionReason: decision.reason,
-        },
-      }) + "\n",
-    );
+        ts: new Date().toISOString(),
+        hook: file,
+        event: on,
+        would,
+        reason,
+      }) + "\n";
+    appendFileSync(resolve(dir, "hook-observations.jsonl"), line);
+  } catch {
+    /* recording is best-effort — never let it break a live session */
   }
-  // allow → emit nothing, exit 0.
+}
+
+/**
+ * Emit a gate Decision in the harness protocol — the author never writes it.
+ * `observe` mode turns a would-be block/ask into a recorded no-op (exit 0): the
+ * shadow/rollout path. Harness-neutral — exit 2 / exit 0 are identical on Claude
+ * Code and Codex; the record is vigiles-local.
+ */
+function emitGate(
+  decision: Decision,
+  on: string,
+  mode: HookMode,
+  file: string,
+): void {
+  const action = gateAction(decision, mode);
+  switch (action.kind) {
+    case "block":
+      console.error(action.reason);
+      process.exit(2);
+      return;
+    case "ask":
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: on,
+            permissionDecision: "ask",
+            permissionDecisionReason: action.reason,
+          },
+        }) + "\n",
+      );
+      return;
+    case "observe":
+      recordObservation(file, on, action.would, action.reason);
+      console.error(
+        `⚠ [vigiles observe] ${on}: would ${action.would} — ${action.reason}`,
+      );
+      return; // exit 0 — observe never blocks
+    case "allow":
+      return; // emit nothing, exit 0
+  }
 }
 
 /**
@@ -4506,7 +4739,7 @@ function verifyStampOrRefuse(file: string): void {
 }
 
 /**
- * `vigiles run-hook-program <file>` — the runtime the compiled hooks block
+ * `vigiles hook-runtime run-program <file>` — the runtime the compiled hooks block
  * points at. Reads the live event on stdin, loads the typed program, verifies
  * its stamp, and dispatches by role: a gate exits 2 + reason on `deny`; an
  * inject prints `additionalContext`; a react runs its effect-classified
@@ -4514,7 +4747,7 @@ function verifyStampOrRefuse(file: string): void {
  */
 async function runHookProgramCommand(file: string | undefined): Promise<void> {
   if (!file) {
-    console.error("Usage: vigiles run-hook-program <hook-file>");
+    console.error("Usage: vigiles hook-runtime run-program <hook-file>");
     process.exit(2);
     return;
   }
@@ -4527,7 +4760,10 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   let event: {
     tool_name?: string;
     tool_input?: Record<string, unknown>;
+    tool_response?: unknown;
     source?: string;
+    prompt?: string;
+    stop_hook_active?: boolean;
   } = {};
   try {
     event = JSON.parse(raw) as typeof event;
@@ -4565,18 +4801,46 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
       if (reaction.kind === "notice") console.error(reaction.message);
       return;
     }
-    case "file-gate":
-      emitGateDecision(
-        decideFileGate(program as FileGateHook, event),
+    case "file-gate": {
+      const ctx = await gatherHookContext(program);
+      emitGate(
+        decideFileGate(program as FileGateHook, event, ctx),
         program.on,
+        hookMode(program),
+        file,
       );
       return;
-    case "bash-gate":
-      emitGateDecision(
-        decideProgram(program as HookProgram, event),
+    }
+    case "bash-gate": {
+      const ctx = await gatherHookContext(program);
+      emitGate(
+        decideProgram(program as HookProgram, event, ctx),
         program.on,
+        hookMode(program),
+        file,
       );
       return;
+    }
+    case "prompt-gate": {
+      const ctx = await gatherHookContext(program);
+      emitGate(
+        decidePromptGate(program as PromptGateHook, event, ctx),
+        program.on,
+        hookMode(program),
+        file,
+      );
+      return;
+    }
+    case "stop-gate": {
+      const ctx = await gatherHookContext(program);
+      emitGate(
+        decideStopGate(program as StopGateHook, event, ctx),
+        program.on,
+        hookMode(program),
+        file,
+      );
+      return;
+    }
   }
 }
 
@@ -4614,14 +4878,27 @@ async function main(): Promise<void> {
     }
 
     case "compile": {
-      const specs = restArgs.length > 0 ? restArgs : findSpecs();
-      if (specs.length === 0) {
-        console.log("No .spec.ts files found.");
+      const harnessFlag = harnessFlagFrom(args);
+      // One verb compiles every typed authoring artifact: a .spec.ts → markdown,
+      // a hook program → its harness config + stamp (cohesive-cli-surface). With
+      // explicit args, partition by extension; bare, discover both.
+      const specs =
+        restArgs.length > 0
+          ? restArgs.filter((f) => f.endsWith(".spec.ts"))
+          : findSpecs();
+      const hooks =
+        restArgs.length > 0
+          ? restArgs.filter((f) => !f.endsWith(".spec.ts"))
+          : discoverHookFiles(process.cwd());
+      if (specs.length === 0 && hooks.length === 0) {
+        console.log("No .spec.ts or .vigiles/hooks/ hook files found.");
         console.log("Run `vigiles init` to create one.");
         process.exit(0);
       }
-      const harnessFlag = harnessFlagFrom(args);
-      const valid = await compile(specs, config, { harnessFlag });
+      let valid = true;
+      if (specs.length > 0)
+        valid = (await compile(specs, config, { harnessFlag })) && valid;
+      valid = (await installHooks(hooks, harnessFlag)) && valid;
       console.log("");
       if (valid) {
         console.log("Compilation complete.");
@@ -4698,6 +4975,12 @@ async function main(): Promise<void> {
             console.log(
               `⚠ repo also matches: ${det.ambiguousWith.join(", ")} — override with --harness=<name>`,
             );
+          }
+          // Freshness: warn if our hand-maintained CC catalog drifted from the
+          // user's INSTALLED claude-code (read-local, best-effort, never throws).
+          if (adapter.name === "claude-code") {
+            const drift = formatDialectDrift(checkDialectDrift());
+            if (drift) console.log(drift);
           }
           console.log("");
         }
@@ -4779,16 +5062,18 @@ async function main(): Promise<void> {
       await handleGenerateHarness(args, restArgs);
       break;
 
-    case "compile-hook":
-      await compileHookCommand(restArgs[0], args);
+    case "refs":
+      refsCommand(restArgs[0]);
       break;
 
-    case "run-hook-program":
-      await runHookProgramCommand(restArgs[0]);
+    // Hidden umbrella for runtime entrypoints emitted into hooks configs — never
+    // typed by a human. See handleHookRuntime / the cohesive-cli-surface rule.
+    case "hook-runtime":
+      await handleHookRuntime(restArgs[0], restArgs.slice(1));
       break;
 
     default:
-      if (!handleSkillCommand(command, restArgs)) printUsage(command);
+      printUsage(command);
       break;
   }
 }

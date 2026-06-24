@@ -2,7 +2,7 @@
 
 Status: **BUILT (2026-06-22).** A single typed `vigiles/hook` program now compiles
 to **Codex** as well as Claude Code, through the existing adapter ports — no core
-changes to the harness boundary. `vigiles compile-hook --harness=codex` emits a
+changes to the harness boundary. `vigiles compile --harness=codex` emits a
 TOML `[[hooks.<event>]]` block with an anchored-regex matcher; the default stays
 Claude Code JSON. The gate runtime (`run-hook-program`) is shared unchanged
 (Codex's veto is exit-2-identical). This doc records the design that landed; the

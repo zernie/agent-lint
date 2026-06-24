@@ -9,7 +9,7 @@
  *
  * It is the same deterministic gate primitive (reuses `runGate` + the
  * author-time reference resolution), re-anchored from step → action. Delivered
- * as a PostToolUse hook (`vigiles action-hook`): exit 2 blocks the action and
+ * as a PostToolUse hook (`vigiles hook-runtime action`): exit 2 blocks the action and
  * feeds the reason back, exit 0 allows it.
  *
  * Config: `.vigiles/action-gates.json` → `{ "gates": [ { on, gate, when? } ] }`.

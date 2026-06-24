@@ -2,7 +2,7 @@
  * Effect-boundary position-aware state tracking.
  * Mirrors active-unit tracking (.vigiles/active-agent.json / .vigiles/active-skill.json).
  * The PreToolUse hook reads this file to decide whether the agent is inside an
- * effect boundary (set by `vigiles effect-enter`) or outside it.
+ * effect boundary (set by `vigiles hook-runtime effect-enter`) or outside it.
  */
 import {
   existsSync,

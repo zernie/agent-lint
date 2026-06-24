@@ -1,7 +1,7 @@
 /**
  * Dogfood the shipped SHELL WRAPPER `hooks/refs-nudge.sh` through the repo's OWN
  * unit tier (`runHook`). The sibling `refs-hook.test.ts` drives the CLI
- * (`vigiles refs-hook`) directly; this proves the wrapper's own logic — its
+ * (`vigiles hook-runtime refs`) directly; this proves the wrapper's own logic — its
  * not-a-node-project guard and its exit-2-only propagation (it swallows every
  * non-block status so a transient failure never disrupts an edit). The wrapper
  * calls `npx vigiles`, so each test points it at a local `node_modules/.bin`

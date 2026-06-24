@@ -455,7 +455,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   fixed by more prose (it decays under compaction). Fix: DECLARE a guard from a closed
   audited vocabulary; vigiles GENERATES the PreToolUse hooks block pointing at its own gate
   (no user shell → safe-by-construction; closes the CVE-2025-59536 hook-RCE class). v0
-  PROTOTYPED + the live gate RUNS (`src/core/guards.ts` + `vigiles guard-hook` CLI + session
+  PROTOTYPED + the live gate RUNS (`src/core/guards.ts` + `vigiles hook-runtime guard` CLI + session
   ledger, `959e88c`/`4336f4a`): `guard.block` / `requireBefore` (the ORDER axis:
   destroy-after-plan, enforced live across hook invocations) / `confine`. ⚠️ The 5-pass hook
   research (hook-pain-points.md) found GATE is undercut by CC bugs (subagent-bypass #34692,
@@ -463,7 +463,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   over GATE near-term. NEXT (if pursued): the measurable A/B (harness ± guards → fewer
   destructive actions). [harness-protocol-flow-moat](harness-protocol-flow-moat.md) · **MED (gate undercut by CC bugs)**
   - _Parked prototype files (linked in CLAUDE.md Key Files so they're not orphaned):_
-    `src/core/guards.ts` (+test, WIRED via `vigiles guard-hook` but EXPERIMENTAL) and
+    `src/core/guards.ts` (+test, WIRED via `vigiles hook-runtime guard` but EXPERIMENTAL) and
     `src/core/hook-spec.ts` (+test, a pure spike imported NOWHERE). The hook-spec
     "typed effect-classified hook" idea was **superseded** by the SHIPPED compiled
     hooks (`src/core/hook-program.ts` → `vigiles/hook`, `c4d4d85`), which took the

@@ -4,34 +4,6 @@
 
 ```ts
 
-// @internal
-export function addHash(content: string, specFile: string): string;
-
-// @public
-export function adoptDiff(filePath: string, spec: ClaudeSpec | SkillSpec | AgentSpec, basePath: string, dialect: HarnessDialect): AdoptResult;
-
-// @public (undocumented)
-export interface AdoptResult {
-    // (undocumented)
-    addedLines: string[];
-    // (undocumented)
-    changed: boolean;
-    // (undocumented)
-    compiledContent: string | null;
-    // (undocumented)
-    currentContent: string;
-    // (undocumented)
-    filePath: string;
-    // (undocumented)
-    hasHash: boolean;
-    // (undocumented)
-    removedLines: string[];
-    // (undocumented)
-    specFile: string | null;
-    // (undocumented)
-    valid: boolean;
-}
-
 // @public
 export function agent<const P extends AuthoredPurity | undefined = undefined, V extends ToolVocabulary = OpenToolVocabulary, Ok extends Shape = Shape, Err extends Shape = Shape>(spec: AgentSpecInput<P, V, Ok, Err>): TypedAgentSpec<Ok, Err>;
 
@@ -71,17 +43,6 @@ export function andThen<PriorOk extends Shape, PriorErr extends Shape, Needs ext
 export type AuthoredPurity = "pure" | "bounded" | "dangerously-unrestricted";
 
 // @public
-export function checkFileHash(filePath: string): HashCheckResult;
-
-// @public
-export function checkLinterRule(enforcedBy: string, basePath: string, options?: {
-    catalogOnly?: boolean;
-    linters?: Record<string, {
-        rulesDir?: string | string[];
-    }>;
-}): LinterCheckResult;
-
-// @public
 export function claude(spec: ClaudeSpecInput): ClaudeSpec;
 
 // @public (undocumented)
@@ -99,9 +60,6 @@ export interface ClaudeSpec {
 
 // @public (undocumented)
 export type ClaudeTool = "Read" | "Write" | "Edit" | "Bash" | "Grep" | "Glob" | "Agent" | "TodoWrite" | "WebSearch" | "WebFetch" | "NotebookEdit";
-
-// @internal (undocumented)
-export function clearCedarCache(): void;
 
 // @public
 export function cmd(command: NoInfer<StrictCmd>): CmdRef;
@@ -205,27 +163,11 @@ export interface CompileSkillResult {
     markdown: string;
 }
 
-// @internal
-export function computeHash(content: string): string;
-
-// @public
-export type ConfigEnabledStatus = "enabled" | "disabled" | "unknown";
-
 // @public (undocumented)
 export function defineConfig(config: VigilesV2Config): VigilesV2Config;
 
 // @public
 export function delegate(agent: string, task?: string, needsContract?: Shape): RailwayStep;
-
-// @public (undocumented)
-export interface DetectedLinter {
-    // (undocumented)
-    name: string;
-    // (undocumented)
-    ruleCount?: number;
-    // (undocumented)
-    via?: string;
-}
 
 // @public
 export function dir(path: string): DirRef;
@@ -237,9 +179,6 @@ export interface DirRef {
     // (undocumented)
     readonly _ref: "dir";
 }
-
-// @public
-export function editDistance(a: string, b: string): number;
 
 // @public
 export function effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
@@ -270,15 +209,6 @@ export interface EnforceRule {
     // (undocumented)
     readonly why: string;
 }
-
-// @internal (undocumented)
-export function estimateTokens(text: string): number;
-
-// @internal (undocumented)
-export function extractLinterName(enforcedBy: string): string;
-
-// @internal (undocumented)
-export function extractRuleName(enforcedBy: string): string | null;
 
 // @public
 export function file(path: NoInfer<StrictFile>): FileRef;
@@ -340,16 +270,6 @@ export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<P
 };
 
 // @public (undocumented)
-export interface HashCheckResult {
-    // (undocumented)
-    hasHash: boolean;
-    // (undocumented)
-    specFile: string | null;
-    // (undocumented)
-    valid: boolean;
-}
-
-// @public (undocumented)
 export type HookEvent = "PreToolUse" | "PostToolUse" | "PreSession" | "PostSession" | "Notification";
 
 // @public
@@ -382,20 +302,6 @@ export interface KnownNpmScripts {
 
 // @public
 export interface KnownProjectFiles {
-}
-
-// @public (undocumented)
-export interface LinterCheckResult {
-    // (undocumented)
-    enabled: ConfigEnabledStatus;
-    // (undocumented)
-    error?: string;
-    // (undocumented)
-    exists: boolean;
-    // (undocumented)
-    linter: string;
-    // (undocumented)
-    rule: string;
 }
 
 // @public
@@ -526,9 +432,6 @@ export interface RailwayStep {
 export type RawSpec<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
     readonly [__stage]: "raw";
 };
-
-// @public (undocumented)
-export function readPackageScripts(basePath: string): Record<string, string> | null;
 
 // @public
 export type ReadyToEmit<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T & {
@@ -680,24 +583,6 @@ export interface TypedOutcome<Ok extends Shape, Err extends Shape> {
 }
 
 // @public (undocumented)
-export function validateCommandRef(command: string, basePath: string): CompileError | null;
-
-// @public (undocumented)
-export function validateDirRef(dirPath: string, basePath: string): CompileError | null;
-
-// @public (undocumented)
-export function validateFileRef(filePath: string, basePath: string): CompileError | null;
-
-// @public (undocumented)
-export function validateGlobRef(pattern: string, basePath: string): CompileError | null;
-
-// @public
-export function validateRailway(rw: Railway, knownAgents?: readonly string[]): CompileError[];
-
-// @public (undocumented)
-export function validateSymbolRef(file: string, name: string, basePath: string): CompileError | null;
-
-// @public (undocumented)
 export type VerifiedCmd = string & {
     readonly [__brand]: "VerifiedCmd";
 };
@@ -721,12 +606,6 @@ export type VerifiedPath = string & {
 export type VerifiedRef = string & {
     readonly [__brand]: "VerifiedRef";
 };
-
-// @internal
-export function verifyHash(content: string): {
-    valid: boolean;
-    specFile: string;
-} | null;
 
 // @public
 export type VigilesRef = `vigiles/${string}`;

@@ -295,7 +295,7 @@ hash, tool-contract verification (built-in set + `mcp__server__tool` pattern +
 "did you mean", and an error for never-available tools), and `adoptDiff` support.
 
 **Shipped (the differentiator):** the **`PreToolUse` enforcement hook**
-(`src/agent-runtime.ts`, `vigiles agent-hook`). The compiled `.md` frontmatter
+(`src/agent-runtime.ts`, `vigiles hook-runtime agent`). The compiled `.md` frontmatter
 `tools:` is the single source of truth: `parseAgentTools` reads it back, the
 PreToolUse hook blocks (exit 2 + the contract fed to the model) any tool outside
 it for the active subagent, and `decidePreToolUse` is the pure allow/deny.

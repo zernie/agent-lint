@@ -122,7 +122,9 @@ describe("CLI: vigiles compile", () => {
   it("should report when no specs are found", () => {
     const { stdout, exitCode } = run("compile", tmpDir);
     assert.equal(exitCode, 0);
-    assert.ok(stdout.includes("No .spec.ts files found"));
+    assert.ok(
+      stdout.includes("No .spec.ts or .vigiles/hooks/ hook files found"),
+    );
   });
 
   it("should compile a spec", () => {
@@ -1392,11 +1394,11 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const wfDir = join(dir, ".github", "workflows");
       mkdirSync(wfDir, { recursive: true });
       // The v3→v4 trap: an Action reference (so the bare-API heuristic passes)
-      // PLUS a leftover `npx vigiles audit` step that v4 no longer has.
+      // PLUS a leftover `npx vigiles audit` step that v4 no longer has. (vigiles:ignore-cmd)
       const stale =
         "name: vigiles\njobs:\n  v:\n    steps:\n" +
         "      - uses: zernie/vigiles@v1\n" +
-        "      - run: npx vigiles audit\n";
+        "      - run: npx vigiles audit\n"; // vigiles:ignore-cmd (intentional stale fixture)
       writeFileSync(join(wfDir, "vigiles.yml"), stale);
       const { stdout } = run("init --no-plugin", dir);
       assert.match(stdout, /STALE/);
@@ -1421,7 +1423,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const stale =
         "name: vigiles\njobs:\n  v:\n    steps:\n" +
         "      - uses: actions/checkout@v4\n" +
-        "      - run: npx vigiles audit\n";
+        "      - run: npx vigiles audit\n"; // vigiles:ignore-cmd (intentional stale fixture)
       writeFileSync(join(wfDir, "vigiles.yml"), stale);
       const { stdout } = run("init --no-plugin --force", dir);
       assert.match(stdout, /Rewrote/);

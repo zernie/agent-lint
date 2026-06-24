@@ -536,7 +536,7 @@ args?)` in `src/check.ts` over a shared, serializable `ArgMatcher`
      the `Trace` the harness/eval tier already captures.
    - **Shipped (interception, end-to-end):** declare `interceptTools: [{ tool,
 when?, denyReason? }]` on a `measure` / `runEval` arm. `src/tool-intercept.ts` +
-     the `vigiles intercept-tool-hook` PreToolUse subcommand deny the real execution
+     the `vigiles hook-runtime intercept-tool` PreToolUse subcommand deny the real execution
      (exit 2), so a
      real-model run that _decides_ to hit a paid API / `git push` / spawn a paid
      subagent is **safe and side-effect-free** — yet its arguments still land in
