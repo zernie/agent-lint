@@ -397,6 +397,16 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   `frontmatter-valid`, `hook-matcher` — is in
   [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
   "valid is not true" cross-reference on a new surface, high-precision by design. · **P1**
+- **`no-internal-links-in-public-docs` lint rule — deterministic enforcement.**
+  Today it's a GUIDANCE rule only (root `CLAUDE.md` spec): a public doc
+  (`README.md` / `docs/*.md`) must never link an internal `research/*.md`. Make it
+  a real lint rule — scan public markdown for a `](…research/…)` link and fail
+  (high-precision: the pattern is unambiguous, near-zero FP). Pair it with the
+  orphan-docs invariant so stripping the last public link still leaves the
+  research doc referenced from `CLAUDE.md` keyFiles / `research/README.md`. Same
+  one-detector-no-drift shape (shared by `lint` + a `scan` note) as the other doc
+  rules. Add the `RulesConfig` key + `docs/rules/<name>.md` + the matrix row
+  (rules-docs-in-sync). · **P1**
 - **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook.** The lint
   consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
   findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
