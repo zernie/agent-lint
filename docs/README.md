@@ -1,8 +1,7 @@
 # Documentation — index
 
-How-to and reference docs for using vigiles. (The thinking _behind_ vigiles —
-design docs, benchmarks, landscape — lives in [`../research/`](../research/README.md).)
-New here? Start with the [README](../README.md).
+How-to and reference docs for using vigiles. New here? Start with the
+[README](../README.md).
 
 ## Verify your instruction files (layer 1)
 
