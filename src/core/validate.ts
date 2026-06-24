@@ -92,6 +92,8 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "mcp-tool-resolves": "warn",
   // A hook script referenced but missing never runs — on by default at warn.
   "hook-script-exists": "warn",
+  // Discovery nudge toward compiled hooks (one finding, opt-out) — warn.
+  "prefer-compiled-hooks": "warn",
   // High-precision (close-typo only) deny-list mirror of subagent-tool-contract.
   "disallowed-tools-contract": "warn",
   // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.

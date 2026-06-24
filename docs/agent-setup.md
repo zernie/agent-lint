@@ -7,7 +7,7 @@ How to set up vigiles when an AI agent is doing the installation (non-interactiv
 | Action                   | Agent can do it? | How                                                                                                                              |
 | ------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Create spec file         | Yes              | `npx vigiles init` (non-interactive wizard)                                                                                      |
-| Generate types           | Yes              | `npx vigiles generate-types`                                                                                                     |
+| Generate types           | Yes              | `npx vigiles generate types`                                                                                                     |
 | Compile specs            | Yes              | `npx vigiles compile`                                                                                                            |
 | Add the dev dependency   | Yes              | `npx vigiles init` adds `vigiles` to devDeps                                                                                     |
 | Add CI step              | Yes              | Edit `.github/workflows/*.yml` directly                                                                                          |
@@ -58,7 +58,7 @@ instead of (or alongside) the plugin, write them to `.claude/settings.json`:
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "FILE=$(cat | jq -r '.tool_input.file_path // empty') && case \"$(basename \"$FILE\")\" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate-types 2>&1 || true ;; esac && case \"$FILE\" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac"
+        "command": "FILE=$(cat | jq -r '.tool_input.file_path // empty') && case \"$(basename \"$FILE\")\" in eslint.config.*|.eslintrc*|package.json|pyproject.toml|Cargo.toml) npx vigiles generate types 2>&1 || true ;; esac && case \"$FILE\" in *.spec.ts) npx vigiles compile 2>&1 || true ;; esac"
       }
     ]
   }

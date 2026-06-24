@@ -101,7 +101,7 @@ scales from a linear list of `yield`s down to a deep state machine. Why a
 generator and not a declarative graph: a graph rich enough to express the deep
 skills has data-dependent routing, whose deep static analysis (reachability,
 soundness, termination) is _undecidable_ anyway — so a graph buys clunkier
-authoring with no analysis win. See `research/skill-as-pipeline.md`.
+authoring with no analysis win.
 
 **Compiling a generator → `SKILL.md`** (`src/compile-generator.ts`): the
 generator's _source_ is parsed with the TypeScript compiler API and rendered to
@@ -109,7 +109,7 @@ markdown — `act` → a prose step, `checkpoint`/`finish` → gate/result marke
 `if/else` → `### If <cond>` / `### Otherwise`, `for/while` → `### Repeat (…)`.
 The emitted `SKILL.md` is what the agent reads (branches flattened to prose);
 the harness drives the real generator at run time. Gate references with literal
-arguments are collected and verified, so the cross-referencing moat works on
+arguments are collected and verified, so the cross-referencing engine works on
 generators too.
 
 ## Gates and what is verified

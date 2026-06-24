@@ -22,7 +22,7 @@ vigiles:
 
   The frontmatter must be the very first thing in the file, and the
   yaml-language-server modeline must be the first line inside it. Run
-  `npx vigiles generate-schema` once and that modeline gives you rule-name
+  `npx vigiles generate schema` once and that modeline gives you rule-name
   autocomplete and red-squiggle-on-typo in VS Code / JetBrains / neovim —
   no TypeScript.
 

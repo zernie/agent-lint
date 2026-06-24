@@ -1,0 +1,18 @@
+<!-- vigiles:sha256:2e1acb212d8a2748 compiled from src/CLAUDE.md.spec.ts -->
+
+# CLAUDE.md
+
+## Scope
+
+Working in `src/`? The root `CLAUDE.md` holds the full positioning, architecture, and rule set — read it first. This file adds the discipline specific to the CLI surface (`src/cli.ts`, `src/cli-commands.ts`): keep the command set small and cohesive.
+
+## Key Files
+
+- `src/cli.ts` — CLI dispatch — the single source of truth for what each verb does
+- `src/cli-commands.ts` — The canonical VERBS + HOOK_RUNTIME_KINDS list (the self-command-refs moat)
+
+## Rules
+
+### High Bar For New Commands
+
+**Guidance only** — Adding a new CLI verb (or `hook-runtime` subcommand) is a LAST resort, not a reflex. vigiles is ONE cohesive organism with FEW human verbs (see the `cohesive-cli-surface` rule in the root spec): every new command widens the surface the CLI, the GitHub Action, and the docs must all track in lockstep. A new command must clear a HIGH BAR — (1) it is a genuinely NEW mental action no existing verb owns; if it is a variant of an action a verb already does, add a FLAG to that verb instead; (2) it does NOT overlap an existing command's job — two doors to one room is the smell; (3) related siblings collapse into ONE verb with a subcommand, not N hyphenated verbs; (4) a runtime entrypoint stays hidden under `hook-runtime`, never a public verb. DEFAULT to extending an existing verb with a flag; spawning a sibling verb is the exception you must justify out loud. When in doubt, don't add the verb — and prefer removing or merging an overlapping one.

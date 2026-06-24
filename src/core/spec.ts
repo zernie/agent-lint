@@ -38,7 +38,7 @@ export type EnforcementRef = LinterRule | VigilesRef;
 // ---------------------------------------------------------------------------
 // Type augmentation points for generate-types (#1 + #6)
 //
-// When `vigiles generate-types` runs, it emits a .d.ts that populates these
+// When `vigiles generate types` runs, it emits a .d.ts that populates these
 // interfaces via declaration merging. This narrows enforce(), file(), and
 // cmd() signatures from "any string" to "only known valid references."
 //
@@ -263,7 +263,7 @@ export function guidance(text: string): GuidanceRule {
  * Declare a reactive guard: runs a command when watched files change.
  *
  *   guard({ watch: "*.spec.ts", run: "npx vigiles compile" }, "Recompile on spec change")
- *   guard({ watch: ["eslint.config.*", "package.json"], run: "npx vigiles generate-types" }, "Regen types")
+ *   guard({ watch: ["eslint.config.*", "package.json"], run: "npx vigiles generate types" }, "Regen types")
  */
 export function guard(
   options: { watch: string | readonly string[]; run: string },

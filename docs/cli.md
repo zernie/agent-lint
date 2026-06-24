@@ -1,31 +1,27 @@
 # CLI & CI reference
 
-Full command-line surface, the GitHub Action, the Claude Code plugin, and the
-`vigiles lint` validation rules. For the pitch and quick start, see the
-[README](../README.md).
+Full command-line surface, the Claude Code plugin, and the `vigiles lint`
+validation rules. The GitHub Action has its own [reference](github-action.md).
+For the pitch and quick start, see the [README](../README.md).
 
 ## Commands
 
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md AND .vigiles/hooks/* → merged hooks config + stamp
-npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage
-npx vigiles refs <file.md>          # Check the symbol references in an instruction file
+npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
+npx vigiles scan <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
+npx vigiles scan <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
 npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
 npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
-npx vigiles measure <dir> --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
-npx vigiles explain <dir> [name]    # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
-npx vigiles generate-types          # Emit .d.ts from project state (for spec mode)
-npx vigiles generate-types --check  # Verify .d.ts is up to date
-npx vigiles generate-schema         # Emit JSON Schema for vigiles: frontmatter (Level 1)
-npx vigiles generate-schema --check # Verify schema.json is up to date
-npx vigiles generate-harness [dir]  # Emit harness.gen.ts — one typed registry over every spec
-npx vigiles generate-harness --check # Verify harness.gen.ts is up to date
+npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
+npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (Level 1; --check to verify)
+npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
 ```
 
 `vigiles test` / `vigiles eval` run scripts in JS **or** TS and report each as
@@ -98,11 +94,16 @@ Two multi-harness behaviours:
   (`disable-model-invocation`, `argument-hint`) in a repo that also declares a
   `minimal`-profile harness (Codex/OpenCode) gets a warning — those keys are
   dropped there, so the constraint won't apply.
+- **Auto-refreshes `harness.gen.ts`.** If the repo already has a whole-harness
+  registry (see [`generate-harness`](#generate-harness-dir-out)), `compile` keeps
+  it in sync as a side effect — so you never hand-run that generator. It's gated
+  on the file existing (compile maintains a registry you opted into, never imposes
+  one) and cheap (parsing specs, no linter spawn). A duplicate agent name fails
+  the compile.
 
 `lint` takes **no** `--harness`: reference verification is harness-agnostic (it
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
-one dialect) and `scan` (reports harness-specific structure). See
-[research/multi-harness-compile.md](../research/multi-harness-compile.md).
+one dialect) and `scan` (reports harness-specific structure).
 
 ### Compiled hooks — folded into `compile`
 
@@ -212,11 +213,10 @@ emit the ranking as a **Markdown table** (the publishable form for a README/gist
 plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 
 This is the deterministic substrate for the plugin/skill leaderboard and the
-harness-aware supply-chain audit (see `research/divergent-bets.md`,
-`research/agent-supply-chain-security.md`).
+harness-aware supply-chain audit.
 
-Behavioral measurement (does a skill actually fire / collide?) is **not** a scan
-flag — it's the paid tier, **`vigiles measure`** (documented below). `scan` stays
+Behavioral measurement (does a skill actually fire / collide?) is the model-gated
+**`scan --trigger`** flag (documented below) — the paid tier; plain `scan` stays
 free/deterministic.
 
 #### Live MCP tool resolution — `scan --verify-mcp`
@@ -249,7 +249,6 @@ Three things to know:
   names in a `tools:` contract _and_ declare the server — a sharp but minority pattern.
   Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
   (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
-  in a real plugin): [`research/plugin-structural-findings.md`](../research/plugin-structural-findings.md).
 
 #### Capability diff — `scan <after> --capability-diff=<before>`
 
@@ -271,12 +270,12 @@ npx vigiles scan ./head --capability-diff=./base --fail-on-widen  # exit 1 if wi
 npx vigiles scan ./head --capability-diff=./base --json           # structured diff
 ```
 
-This is moat #2 (`research/typed-spec-moat.md`): the capability surface is the typed
+This is the **capability-diff** check: the capability surface is the typed
 effect lattice `generate-harness` already computes; the diff reads it.
 
-### `measure <dir>` — does each skill FIRE / COLLIDE?
+### `scan <dir> --trigger` — does each skill FIRE / COLLIDE?
 
-The **model-gated** behavioral report (the paid tier; `scan` stays free). Loads the
+The **model-gated** behavioral column on `scan` (the paid tier; plain `scan` stays free). Loads the
 author-supplied per-skill prompts (`--prompts`) and reports both columns:
 
 - **Trigger-rate** — how reliably each model-invocable skill's description actually
@@ -293,8 +292,8 @@ Prompts are **author-supplied** (a path in prose is undecidable): a JSON map of 
 name → `{ prompts, irrelevant }`.
 
 ```bash
-npx vigiles measure ./some-plugin --prompts=./probes.json
-npx vigiles measure ./some-plugin --prompts=./probes.json --concurrency=5 --model=sonnet
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json
+npx vigiles scan ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
 ```
 
 ```jsonc
@@ -311,14 +310,12 @@ Flags: `--prompts=`, `--concurrency=`, `--model=`, `--min-prompts=`, `--trials=`
 `--harness=`. A diversity gate requires **≥10 prompts per set** before spending a
 token (lower with `--min-prompts=` for a narrow skill). `--harness=codex` routes the
 trigger probe through the native Codex driver. See
-[`docs/harness-testing.md`](harness-testing.md),
-[`research/plugin-behavioral-findings.md`](../research/plugin-behavioral-findings.md),
-and [`research/plugin-selection-collision.md`](../research/plugin-selection-collision.md).
+[`docs/harness-testing.md`](harness-testing.md).
 
-### `explain [dir] [name]`
+### `scan <dir> --explain [name]`
 
 The deterministic **WHY** behind a low score. A measurement (a trigger-rate
-eval, a benchmark) tells you a skill _underperforms_ — `explain` tells you the
+eval, a benchmark) tells you a skill _underperforms_ — `--explain` tells you the
 structural **cause** and the one-line **fix**, reading the same `ScanReport`
 `scan` computes (no model, free, every commit). It maps each cross-reference
 finding to the behavioural symptom it accounts for:
@@ -332,10 +329,10 @@ finding to the behavioural symptom it accounts for:
 | the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
 
 ```bash
-npx vigiles explain ./some-plugin          # every cause found, likely-first
-npx vigiles explain ./some-plugin caveman  # narrow to one underperformer
-npx vigiles explain ./some-plugin --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
-npx vigiles explain ./repo --harness=codex # override harness detection
+npx vigiles scan ./some-plugin --explain          # every cause found, likely-first
+npx vigiles scan ./some-plugin --explain caveman  # narrow to one underperformer
+npx vigiles scan ./some-plugin --explain --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
+npx vigiles scan ./repo --explain --harness=codex # override harness detection
 ```
 
 `confidence` is `likely` (a hard dead-end — a missing script can't run) or
@@ -344,9 +341,7 @@ npx vigiles explain ./repo --harness=codex # override harness detection
 behavioural tier (the cause is likely in the prose, measured by an eval). It's
 the diagnostic the per-repo optimizer prints beside each drop/swap
 recommendation — _"underperforms **because** its description overlaps X"_, not
-just _"drop it"_. The pairing is the strategy in
-[`research/measurement-authority.md`](../research/measurement-authority.md)
-(measurement = the _what_; linting = the deterministic _why_).
+just _"drop it"_.
 
 ### `scaffold-test [dir]`
 
@@ -400,16 +395,22 @@ delta** — does dropping/swapping a skill actually move success or cost? — is
 next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
 flag rather than its own `optimize` verb until that measured half lands (an
 optimizer that only re-prints scan's findings hasn't earned a separate command).
-See [`research/measurement-authority.md`](../research/measurement-authority.md)
-(A2) and the [roadmap](../research/roadmap.md).
 
-### `generate-harness [dir] [out]`
+### `generate harness [dir] [out]`
 
 Emit **one typed registry** — `harness.gen.ts` — over every `*.spec.ts` under
 `dir`, so a single `tsc --noEmit` cross-checks the **whole harness as one
 program** (think TanStack Router's `routeTree.gen.ts` or the Prisma client). It's
-the third generated artifact beside `generate-types` (`.d.ts`) and
-`generate-schema` (JSON Schema). It ships four cross-spec checks:
+the third generated artifact beside `generate types` (`.d.ts`) and
+`generate schema` (JSON Schema).
+
+> **You rarely run this by hand.** Like all three `generate-*` artifacts, it's
+> dev-toolchain output (read by `tsc`/your editor, never by the agent). Once the
+> file exists, **`compile` keeps it fresh** — this verb is the explicit/CI
+> escape-hatch (e.g. `--check`). `generate-types`/`generate-schema` similarly run
+> off a guard on linter-config changes, not by hand.
+
+It ships four cross-spec checks:
 
 - **Dangling `delegate` → a `tsc` error at edit time.** Every `railway()`
   delegate target (`steps`, `recover.step`, `onError`) is checked against the
@@ -439,10 +440,10 @@ the third generated artifact beside `generate-types` (`.d.ts`) and
   capability-diff reads.
 
 ```bash
-npx vigiles generate-harness ./agents               # → ./agents/harness.gen.ts
-npx vigiles generate-harness ./agents out.gen.ts    # custom out path
-npx vigiles generate-harness ./agents --check        # CI: assert the gen file is up to date (exit 1 if stale)
-npx vigiles generate-harness ./agents --harness=codex
+npx vigiles generate harness ./agents               # → ./agents/harness.gen.ts
+npx vigiles generate harness ./agents out.gen.ts    # custom out path
+npx vigiles generate harness ./agents --check        # CI: assert the gen file is up to date (exit 1 if stale)
+npx vigiles generate harness ./agents --harness=codex
 ```
 
 **tsconfig need:** the gen file imports sibling `*.spec.ts` directly, so the
@@ -453,7 +454,7 @@ enforce the cross-checks. Wire regeneration to a spec guard (the same mechanism
 as `recompile-on-spec-change`):
 
 ```ts
-guard({ watch: "*.spec.ts", run: "npx vigiles generate-harness" });
+guard({ watch: "*.spec.ts", run: "npx vigiles generate harness" });
 ```
 
 Declare a handoff with the optional 3rd argument of `delegate()` — the same
@@ -472,8 +473,7 @@ railway({
 ```
 
 See [`docs/railway-subagents.md`](railway-subagents.md) for the typed-composition
-guide and [`research/whole-harness-codegen.md`](../research/whole-harness-codegen.md)
-for the design, the measured TS-scaling verdict, and the encoding rule.
+guide.
 
 ## Lint vs scan — gate vs report
 
@@ -535,112 +535,13 @@ default `scan`/`lint` check. See the `scan --verify-mcp` section above.
 
 ## GitHub Action
 
-The Action is a **composite action over the published `npx vigiles` CLI** — it
-runs the exact artifact you'd run locally, so there's no separate bundle to drift.
-Every input maps to a real CLI flag.
-
-### Quick start
-
-```yaml
-name: vigiles
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read # all the Action needs; it only reads files and emits annotations
-
-jobs:
-  vigiles:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: zernie/vigiles@v1 # runs `lint` by default
-```
-
-That's the whole thing — `lint` verifies that every linter rule, file path,
-script, and symbol your `CLAUDE.md` / `AGENTS.md` cites is real and enabled, checks
-the integrity hashes, and reports coverage. Failures appear inline as GitHub
-annotations and fail the job.
-
-### Compile specs in CI
+Run vigiles in CI via a composite action over the published `npx vigiles` CLI.
+The full reference — quick start, every input, the three output channels (incl.
+the sticky PR comment), and the Action-tag-vs-CLI-version model — is in its own
+doc: **[github-action.md](github-action.md)**.
 
 ```yaml
-- uses: zernie/vigiles@v1
-  with:
-    command: compile # spec.ts → markdown; fails if a reference is stale
-    paths: CLAUDE.md.spec.ts # optional; auto-discovers when omitted
-```
-
-### Inputs
-
-| Input               | Default   | Description                                                                                 |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `command`           | `lint`    | `lint` (verify references + integrity + coverage) or `compile` (specs → markdown).          |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.   |
-| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
-| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
-| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
-| `working-directory` | `.`       | Directory to run vigiles in.                                                                |
-| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
-| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
-
-### Output channels
-
-Beyond the `valid` step output, the Action reports **three** ways:
-
-1. **Inline annotations** — failures appear on the diff (`::error`).
-2. **Job summary** — a markdown result block on the run page (`$GITHUB_STEP_SUMMARY`).
-3. **Sticky PR comment** — on `pull_request` events, one comment that is _updated in place_ each run (found by a hidden marker, never duplicated). Requires `pull-requests: write`; set `comment: false` to disable.
-
-```yaml
-permissions:
-  contents: read
-  pull-requests: write # needed for the sticky PR comment
-
-# ...
-- id: vigiles
-  uses: zernie/vigiles@v1
-- run: echo "passed=${{ steps.vigiles.outputs.valid }}"
-```
-
-The `valid` output is `'true'` if vigiles passed (exit 0), `'false'` otherwise.
-Exit codes (also reflected in `valid`): **0** clean · **1** warnings · **2** hard errors.
-On a fork PR (read-only token) the comment step degrades to a warning — the job still passes/fails on the result.
-
-### Versioning
-
-**The Action tag and the npm version are two separate version lines.** The Action
-is a thin composite that runs the published `npx vigiles@<version>` CLI, so:
-
-- **Action ref** (`uses: zernie/vigiles@v1`) — pin the **floating major tag**
-  `@v1` for automatic patch/minor updates to the _Action wrapper_ (the release
-  pipeline keeps `v1` pointed at the latest `1.x` of the action). Pin a full tag
-  (`@v1.2.3`) or a commit SHA for byte-for-byte reproducibility. `@main` tracks
-  unreleased `HEAD`.
-- **CLI version** (`version:` input, default `latest`) — selects which published
-  `vigiles` npm release the Action runs (currently `3.x`). Leave it `latest`, or
-  pin `version: '3'` / `version: '3.0.0'` to lock the CLI independently of the
-  Action tag.
-
-So `uses: zernie/vigiles@v1` with the default `version: latest` runs the newest
-`vigiles` CLI (3.x today) through the v1 action wrapper. The `@v1` does **not**
-mean "vigiles 1.x". To lock both: `uses: zernie/vigiles@v1` + `with: { version: '3' }`.
-
-```yaml
-- uses: zernie/vigiles@v1
-  with:
-    version: "3" # pin the CLI major; @v1 pins the action wrapper
-```
-
-To verify generated types are fresh in CI:
-
-```yaml
-- run: npx vigiles generate-types --check
+- uses: zernie/vigiles@v1 # runs `lint` by default; see github-action.md
 ```
 
 ## Claude Code plugin

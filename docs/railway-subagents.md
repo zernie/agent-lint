@@ -6,7 +6,6 @@
 > `Result<ok, err>`, so the orchestrator's control flow is **deterministic** and a
 > test **asserts** the outcome instead of paying an LLM to judge prose.
 >
-> Internal design rationale: [`research/railway-subagents.md`](../research/railway-subagents.md).
 > Where this fits the testing tiers: [`harness-testing.md`](harness-testing.md).
 
 ## Contents
@@ -215,7 +214,7 @@ The type-level proof (a correct pipeline + the three `@ts-expect-error` failures
 `pipe(...)` checks handoffs **within one file** (the agent objects are in scope).
 When each agent lives in its **own** `*.spec.ts` and a `railway()` composes them by
 **name**, the same check is lifted to the **whole-harness registry** that
-[`vigiles generate-harness`](cli.md#generate-harness-dir-out) emits — so a
+[`vigiles generate harness`](cli.md#generate-harness-dir-out) emits — so a
 **cross-file** handoff mismatch is a `tsc` error too.
 
 Declare the handoff with the optional 3rd argument of `delegate()` — the same
@@ -237,7 +236,7 @@ export default railway({
 });
 ```
 
-Run `vigiles generate-harness` over the agents directory; the generated
+Run `vigiles generate harness` over the agents directory; the generated
 `harness.gen.ts` carries one shallow per-pair assertion
 (`Handoff<OkOf<typeof registry["planner"]>, { steps: "string[]" }>`). If the
 producer's `ok` is missing the field or has the wrong type, `tsc` rejects the gen
@@ -317,16 +316,9 @@ export default skill({
 });
 ```
 
-The reasoning and citations:
-[`research/spec-syntax-and-railway-scope.md`](../research/spec-syntax-and-railway-scope.md).
-
 ## See also
 
 - [`harness-testing.md`](harness-testing.md) — the testing tiers; the
   "assert a subagent's typed outcome" section sits in the same family.
 - [`spec-format.md`](spec-format.md) — the spec format reference (targets,
   sections, rules, reference helpers).
-- [`research/railway-subagents.md`](../research/railway-subagents.md) — the design
-  exploration (the Temporal analogy, why sub-Turing).
-- [`research/subagent-compilation.md`](../research/subagent-compilation.md) — how
-  `agent()` compiles to a Claude Code subagent + the declared-vs-enforced rail.

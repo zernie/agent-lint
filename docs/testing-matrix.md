@@ -84,7 +84,7 @@ enforced rail are compiled from one source (proven by a round-trip test). The
 deterministic cell stays ⚠ for an honest reason — Claude Code doesn't surface the
 active subagent to hooks, so arming the rail in a live session
 (`.vigiles/active-agent.json`) is still unsolved; the logic is proven at the unit
-tier, not yet end-to-end in a real dispatch. See `research/subagent-compilation.md`.
+tier, not yet end-to-end in a real dispatch.
 
 ## What is intentionally _not_ unit-tested
 
@@ -164,7 +164,6 @@ script emits a skip with `skip(reason)` from `vigiles/testing`.
 
 ## See also
 
-- [`research/harness-testing-coverage-matrix.md`](../research/harness-testing-coverage-matrix.md) — the **whole potential surface** of harness testing (unit / integration / e2e + sandboxing), marking what's shipped vs. what we should build.
 - [`docs/harness-testing.md`](harness-testing.md) — the full guide (four layers:
   verify-refs / hook unit / deterministic / eval, runner-agnostic usage, plugin
   loader, variance, judge, CLI fallback).

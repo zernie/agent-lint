@@ -10,7 +10,7 @@
  * against the real agent specs in this directory at compile time.
  *
  * The two later steps also declare what they `needs()` from their predecessor's
- * result().ok — so `vigiles generate-harness` emits a CROSS-FILE handoff check:
+ * result().ok — so `vigiles generate harness` emits a CROSS-FILE handoff check:
  * planner.ok supplies the implementer's `steps`, and implementer.ok supplies the
  * reviewer's `summary`. A mismatch would be a `tsc` error naming the field.
  */

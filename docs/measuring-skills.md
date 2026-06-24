@@ -46,9 +46,7 @@ A single headline number is how vendors mislead. Measure **three**, always:
 The load-bearing fact: on real agentic coding, **output tokens are a single-digit
 % of the session** (the rest is input + cache from file reads and tool results). So
 an output-only "% saved" headline overstates the real bill impact by ~10–50×.
-Measuring the bill separately is mandatory — see
-[`research/benchmark-methodology.md`](../research/benchmark-methodology.md) for the
-full method.
+Measuring the bill separately is mandatory.
 
 ## Worked example
 
@@ -112,6 +110,4 @@ is. See [`docs/eval-architecture.md`](eval-architecture.md) for the cost model.
 ## See also
 
 - [Testing your harness](harness-testing.md) — the deterministic tiers (no model) under this one.
-- [`research/measurement-authority.md`](../research/measurement-authority.md) — the strategy: vigiles as the empirical authority on what makes agents work.
-- [`research/benchmark-methodology.md`](../research/benchmark-methodology.md) — the contestable method behind the numbers.
 - [Verifying instruction files](verifying-instruction-files.md) — the lint layer, the free pre-filter to measurement.

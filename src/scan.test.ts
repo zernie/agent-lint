@@ -18,6 +18,8 @@ import {
   unexpectedScript,
   verifyLiveMcpTools,
   formatMcpContractReport,
+  isManagedHookCommand,
+  preferCompiledHooksMessage,
 } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 import { claudeCodeLayout } from "./adapters/claude-code/layout.js";
@@ -228,6 +230,77 @@ test("scanPlugin treats an existence-guarded hook command as optional, not missi
     "a guarded optional hook must not be flagged missing",
   );
   assert.equal(r.inlineHooks, 1, "counted as a conditional one-liner");
+  cleanupTmpDir(dir);
+});
+
+test("isManagedHookCommand: only a hook-runtime invocation is vigiles-managed", () => {
+  assert.equal(
+    isManagedHookCommand(
+      "node dist/cli.js hook-runtime run-program .vigiles/hooks/guard.mjs",
+    ),
+    true,
+  );
+  assert.equal(isManagedHookCommand("npx vigiles hook-runtime refs"), true);
+  assert.equal(isManagedHookCommand("bash ./hooks/guard.sh"), false);
+  assert.equal(isManagedHookCommand("git status"), false);
+});
+
+test("scanPlugin counts hand-written hooks for prefer-compiled-hooks (managed ones excluded)", () => {
+  const dir = makeTmpDir("scan-prefer-compiled");
+  write(dir, "hooks/guard.sh", "#!/usr/bin/env bash\n");
+  write(
+    dir,
+    ".claude/settings.json",
+    JSON.stringify({
+      hooks: {
+        // two hand-written (a script + an inline one-liner)…
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: "bash ${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh",
+              },
+            ],
+          },
+        ],
+        Stop: [{ hooks: [{ type: "command", command: "npm test" }] }],
+        // …and one compiled, vigiles-managed hook (must NOT count)
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command:
+                  "node dist/cli.js hook-runtime run-program .vigiles/hooks/x.mjs",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const r = scanPlugin(dir);
+  assert.equal(
+    r.manualHookCount,
+    2,
+    "two hand-written, the compiled one excluded",
+  );
+  // The single nudge surfaces in the report, linking the guide.
+  const out = formatScanReport(r);
+  assert.match(out, /hand-written hook/);
+  assert.match(out, /docs\/compiled-hooks\.md/);
+  assert.match(preferCompiledHooksMessage(2), /docs\/compiled-hooks\.md/);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin reports manualHookCount 0 when there are no hand-written hooks", () => {
+  const dir = makeTmpDir("scan-no-manual-hooks");
+  write(dir, "CLAUDE.md", "# x\n");
+  const r = scanPlugin(dir);
+  assert.equal(r.manualHookCount, 0);
+  assert.doesNotMatch(formatScanReport(r), /hand-written hook/);
   cleanupTmpDir(dir);
 });
 

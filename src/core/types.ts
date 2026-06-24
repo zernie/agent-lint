@@ -176,6 +176,18 @@ export interface RulesConfig {
    */
   "hook-script-exists"?: RuleSeverity;
   /**
+   * A single repo-level RECOMMENDATION (one finding regardless of hook count):
+   * when a plugin/repo ships hand-written hook commands that aren't compiled
+   * `vigiles/hook` artifacts, nudge toward compiled hooks — they make whole hook
+   * bug classes (exit-1-not-2, wrong decision field, matcher bypass) UNREPRESENTABLE
+   * at authoring time, and `guardrail-check` proves an existing one blocks. A
+   * discovery nudge, not a defect: the hand-written shell lane stays first-class,
+   * so it's opt-out and fires ONCE (never per-hook). The message links
+   * `docs/compiled-hooks.md`. Default "warn"; set "off" to silence or "error" to
+   * enforce. Same detector as `scan` (manualHookCount).
+   */
+  "prefer-compiled-hooks"?: RuleSeverity;
+  /**
    * Cross-reference a subagent's `disallowedTools:` block-list against the
    * catalog — the deny-side mirror of `subagent-tool-contract`. A close typo there
    * blocks NOTHING (you meant to deny `Bash`, wrote `Bsh`), leaving the tool

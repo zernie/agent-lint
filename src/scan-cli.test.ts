@@ -283,7 +283,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("names the deterministic cause, the symptom, and the one-line fix", () => {
-    const r = run(`explain ${join(root, "demo")}`);
+    const r = run(`scan ${join(root, "demo")} --explain`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /the subagent loses a declared tool/);
     assert.match(r.stdout, /\[subagent-tool-contract\]/);
@@ -291,14 +291,14 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a surface name filters to that one underperformer", () => {
-    const r = run(`explain ${join(root, "demo")} rev`);
+    const r = run(`scan ${join(root, "demo")} --explain rev`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Explaining "rev":/);
     assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
   it("--json emits the structured explanation array", () => {
-    const r = run(`explain ${join(root, "demo")} --json`);
+    const r = run(`scan ${join(root, "demo")} --explain --json`);
     assert.equal(r.exitCode, 0);
     const exps = JSON.parse(r.stdout) as {
       surface: string;
@@ -315,7 +315,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
-    const r = run(`explain ${join(root, "demo")} absent`);
+    const r = run(`scan ${join(root, "demo")} --explain absent`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /No deterministic cause found/);
   });
@@ -503,7 +503,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
 `,
     );
     const out = join(dir, "harness.gen.ts");
-    const r = run(`generate-harness ${dir} ${out}`, REPO);
+    const r = run(`generate harness ${dir} ${out}`, REPO);
     assert.equal(r.exitCode, 0, r.stdout);
     assert.ok(existsSync(out));
     const gen = readFileSync(out, "utf-8");
@@ -512,7 +512,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
     assert.match(gen, /_edge_0: KnownAgentName<"planner", AgentName, "ship">/);
     assert.match(gen, /export const harnessCapabilities =/);
     // --check on the just-written file is a no-op (up to date)
-    const chk = run(`generate-harness ${dir} ${out} --check`, REPO);
+    const chk = run(`generate harness ${dir} ${out} --check`, REPO);
     assert.equal(chk.exitCode, 0);
     assert.match(chk.stdout, /up to date/);
   });
@@ -526,7 +526,7 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
         PLANNER.replace("Break the request", "A second planner colliding"),
       );
       const r = run(
-        `generate-harness ${dupDir} ${join(dupDir, "harness.gen.ts")}`,
+        `generate harness ${dupDir} ${join(dupDir, "harness.gen.ts")}`,
         REPO,
       );
       assert.notEqual(r.exitCode, 0);
@@ -534,6 +534,60 @@ export default railway({ name: "ship", steps: [delegate("planner"), delegate("im
       assert.ok(!existsSync(join(dupDir, "harness.gen.ts")));
     } finally {
       rmSync(dupDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// --- compile keeps an existing harness.gen.ts fresh ----------------------------
+//
+// The whole-harness registry tracks specs as a side effect of `compile`, so the
+// user never hand-runs `generate-harness`. Opt-in: compile refreshes a registry
+// that already exists (committed like a lockfile), never imposes one.
+describe("compile refreshes harness.gen.ts", () => {
+  const REPO = resolve(__dirname, "..");
+  const SPECS: Record<string, string> = {
+    "planner.md.spec.ts": `import { agent, result } from "vigiles/spec";
+export default agent({ name: "planner", description: "Break the request into an ordered plan. Dispatch first.", tools: ["Read", "Grep", "Glob"], output: result({ steps: "string[]" }, { reason: "string" }) });
+`,
+    "implementer.md.spec.ts": `import { agent } from "vigiles/spec";
+export default agent({ name: "implementer", description: "Implement the plan and prove the build passes.", tools: ["Read", "Edit", "Write", "Bash"] });
+`,
+    "ship.md.spec.ts": `import { railway, delegate } from "vigiles/spec";
+export default railway({ name: "ship", steps: [delegate("planner"), delegate("implementer")] });
+`,
+  };
+
+  function seed(): string {
+    const dir = mkdtempSync(join(REPO, ".tmp-compile-genh-"));
+    for (const [name, src] of Object.entries(SPECS))
+      writeFileSync(join(dir, name), src);
+    return dir;
+  }
+
+  it("refreshes a STALE harness.gen.ts on compile", () => {
+    const dir = seed();
+    try {
+      const out = join(dir, "harness.gen.ts");
+      writeFileSync(out, "// stale\n");
+      const r = run("compile", dir);
+      assert.equal(r.exitCode, 0, r.stdout);
+      const gen = readFileSync(out, "utf-8");
+      assert.match(gen, /export const registry =/);
+      assert.match(gen, /KnownAgentName<"planner"/);
+      assert.match(r.stdout, /refreshed harness\.gen\.ts/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT create harness.gen.ts when absent (opt-in)", () => {
+    const dir = seed();
+    try {
+      const r = run("compile", dir);
+      assert.equal(r.exitCode, 0, r.stdout);
+      assert.ok(!existsSync(join(dir, "harness.gen.ts")));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

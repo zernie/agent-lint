@@ -5,7 +5,7 @@ the plugin's **declared MCP servers**. If the plugin declares its own servers
 (`.mcp.json` / manifest `mcpServers`) and a contract names a server that isn't
 among them, the tool can't resolve — a dead contract entry.
 
-This is the **MCP half of the tool moat**:
+This is the **MCP half of the tool cross-reference**:
 [`subagent-tool-contract`](subagent-tool-contract.md) verifies a subagent's _built-in_
 tools but passes any `mcp__*` token through unchecked; this rule verifies the MCP
 half. Same detector `vigiles scan` uses (`verifyMcpToolServers` in
@@ -27,8 +27,7 @@ tools: Read, mcp__github__search, mcp__linear__create, mcp__ide__getDiagnostics
 ## High-precision calibration
 
 Auditing third-party plugins means flagging only high-confidence dead references.
-Three guards, each grounded in a real plugin from the mid-2026 sweep (see
-[plugin-structural-findings](../../research/plugin-structural-findings.md)):
+Three guards, each grounded in a real plugin from the mid-2026 sweep:
 
 1. **Gate on a declared set.** Only flags when the plugin _ships_ a `mcpServers`
    declaration. A plugin that declares no servers reaches user-global /
@@ -71,10 +70,10 @@ checked here, mirroring `subagent-tool-contract`.
 An `mcp__*` tool is how a subagent reaches an MCP server's capability. A contract
 naming a server the plugin forgot to declare (or typo'd) is a silent capability
 gap — the tool simply isn't there at runtime. Catching it deterministically,
-before it ships, completes the cross-referencing moat across the whole tool
+before it ships, completes the cross-referencing across the whole tool
 surface.
 
 ## See also
 
-- [subagent-tool-contract](subagent-tool-contract.md) — the built-in half of the moat.
+- [subagent-tool-contract](subagent-tool-contract.md) — the built-in half of the check.
 - [mcp-config](mcp-config.md) — a declared MCP server that can't _start_.

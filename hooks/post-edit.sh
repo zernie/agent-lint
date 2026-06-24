@@ -19,7 +19,7 @@ BASENAME=$(basename "$FILE")
 case "$BASENAME" in
   eslint.config.*|.eslintrc*|.stylelintrc*|.rubocop.yml|pyproject.toml|Cargo.toml|package.json)
     if command -v npx &>/dev/null && [ -f "package.json" ]; then
-      npx vigiles generate-types 2>&1 || true
+      npx vigiles generate types 2>&1 || true
     fi
     ;;
 esac
