@@ -1,3 +1,25 @@
+<!--
+  README DIRECTION — read before editing; keep changes aligned.
+  This file is the FRONT DOOR + a marketing asset for someone who already lives
+  in Claude Code / Codex. Optimize for a phone-skimmer.
+
+  1. LEAD WITH BENEFITS, not mechanics or vocabulary. Say what the user GETS
+     (a guard that can't silently fail; a CLAUDE.md that stops lying) before how.
+  2. COMPILED SPECS ARE EASY — reassure, never intimidate. You rarely hand-write
+     a .spec.ts: model-invocable skills (edit-spec / strengthen / test-harness)
+     author + edit it, and hooks auto-compile on save. Present the typed spec as
+     the SMOOTH, AUTO-ENFORCED next step you don't think about — the natural
+     evolution (JS→TS: gradual, strict opt-in), NEVER a wall. Markdown + inline
+     mode work with zero TS for anyone not there yet (progressive adoption).
+  3. ALL FOUR INSTRUMENTS stay first-class — including Eval (measuring whether a
+     skill actually helps is core, not optional).
+  4. SCANNABLE + SHORT — ~200-line cap; punchy table cells, bullets, runnable
+     blocks; benefits over jargon. Push depth into docs/ and LINK it.
+  5. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
+     research/ links — name the user benefit (see public-vs-internal-docs +
+     readme-brevity in CLAUDE.md).
+-->
+
 <p align="center">
   <img src="logo.png" width="140" alt="vigiles logo" />
 </p>
