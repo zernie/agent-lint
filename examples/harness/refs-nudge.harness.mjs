@@ -28,7 +28,9 @@ const r = await runHarnessTest({
       PostToolUse: [
         {
           matcher: "Edit|Write",
-          hooks: [{ type: "command", command: `node ${CLI} refs-hook` }],
+          hooks: [
+            { type: "command", command: `node ${CLI} hook-runtime refs` },
+          ],
         },
       ],
     },

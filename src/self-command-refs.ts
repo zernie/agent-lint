@@ -9,9 +9,9 @@
  * HIGH-PRECISION by construction (don't-cry-wolf). A reference is inspected only
  * when it's an unambiguous COMMAND — i.e. it sits inside an inline `` `span` ``,
  * inside a ```shell fence```, or is prefixed `npx vigiles` / `Usage: vigiles` /
- * is a `cli.js` invocation. Prose ("vigiles compiles the spec", "adds vigiles to
- * devDependencies") and non-shell fences (```text agent prompts, ```ts) are
- * never matched. A bare unknown VERB is flagged only when hyphenated (every
+ * is a `cli.js` or `${CLI}` invocation (the harness-test convention `node ${CLI}
+ * <cmd>`). Prose ("vigiles compiles the spec", "adds vigiles to devDependencies")
+ * and non-shell fences (```text agent prompts, ```ts) are never matched. A bare unknown VERB is flagged only when hyphenated (every
  * renamed vigiles command is — `compile-hook`, `run-skill`) or in an explicit
  * invocation; `hook-runtime <kind>` is checked in any command context. Source of
  * truth: {@link VERBS} / {@link HOOK_RUNTIME_KINDS}.
@@ -49,9 +49,14 @@ const DEFAULT_KNOWN: KnownCommands = {
 };
 
 const TOKEN = "[a-z][a-z0-9-]*";
-// `[npx ][vigiles|cli.js] <verb> [<kind>]` — capture the optional prefix + literal.
+// `[npx ][vigiles|cli.js|${CLI}] <verb> [<kind>]` — capture the optional prefix +
+// literal. `${CLI}` is the harness-test convention (`const CLI = new
+// URL("…/dist/cli.js")` → `node ${CLI} <cmd>`); without it a stale runtime ref in
+// a `.mjs`/`.test.ts` invocation slips through (it did: refs-nudge.harness.mjs kept
+// calling `refs-hook` after the hook-runtime rename). `\b` can't anchor `${CLI}`
+// (it starts with `$`, a non-word char), so each word literal carries its own `\b`.
 const INVOKE = new RegExp(
-  String.raw`(npx |Usage: )?\b(vigiles|cli\.js)\s+(${TOKEN})(?:\s+(${TOKEN}))?`,
+  String.raw`(npx |Usage: )?(\bvigiles|\bcli\.js|\$\{CLI\})\s+(${TOKEN})(?:\s+(${TOKEN}))?`,
   "g",
 );
 // A bare `hook-runtime <kind>` (e.g. `node ${CLI} hook-runtime agent` in a test).
@@ -87,7 +92,8 @@ function scanLine(
   };
 
   for (const m of line.matchAll(INVOKE)) {
-    const explicit = inShellFence || Boolean(m[1]) || m[2] === "cli.js";
+    const explicit =
+      inShellFence || Boolean(m[1]) || m[2] === "cli.js" || m[2] === "${CLI}";
     if (!explicit && !ctx(m.index)) continue;
     const verb = m[3];
     if (verb === "hook-runtime") {
