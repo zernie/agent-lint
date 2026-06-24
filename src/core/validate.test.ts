@@ -438,6 +438,7 @@ describe("loadConfig", () => {
       "skill-frontmatter": "warn",
       "mcp-tool-resolves": "warn",
       "hook-script-exists": "warn",
+      "prefer-compiled-hooks": "warn",
       "disallowed-tools-contract": "warn",
       "description-overlap": "warn",
       "frontmatter-valid": "warn",

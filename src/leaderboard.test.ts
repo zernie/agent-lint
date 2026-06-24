@@ -25,6 +25,7 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     agents: [],
     hooks: [],
     inlineHooks: 0,
+    manualHookCount: 0,
     commands: 0,
     mcp: false,
     danglingRefs: [],
