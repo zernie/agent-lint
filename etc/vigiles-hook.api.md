@@ -323,8 +323,10 @@ export type ProviderRegistry = Record<string, RegisteredProvider>;
 
 // @public
 export interface ProviderResults {
+    readonly "env.isCI": boolean;
     readonly "git.branch": string;
     readonly "git.isDirty": boolean;
+    readonly "git.root": string;
     readonly "os.platform": NodeJS.Platform;
     readonly cwd: string;
 }

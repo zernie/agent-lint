@@ -137,12 +137,22 @@ the built-in provider set stays tiny.
 | online/offline                          | low                 | opt-out (rare, flaky)                                           |
 
 **Verdict on built-ins:** keep the set SMALL (the disaster-catalog discipline).
-Ship exactly **`git.branch`, `git.isDirty`, `cwd`** (v1) **+ `os.platform`** —
-that covers every _cheap, ambient, decision-relevant_ fact in the survey.
-Everything else is either already event data, or expensive / parameterized /
-project-specific / stateful — which belongs in the **opt-out**, not the built-in
-catalog. Growing the catalog to chase the tail is the wrong move; a good opt-out
-is the right one.
+Shipped set: **`git.branch`, `git.isDirty`, `git.root`, `cwd`, `os.platform`,
+`env.isCI`** — every _cheap, ambient, decision-relevant_ fact the survey
+justifies, and the ceiling. Everything else is either already event data, or
+expensive / parameterized / project-specific / stateful — which belongs in the
+**opt-out**, not the built-in catalog. Growing the catalog to chase the tail is
+the wrong move; a good opt-out is the right one.
+
+**prefer-existing-solutions note (the `env.isCI` ADOPT).** The ONE built-in where
+a library beats hand-rolling is CI detection: `env.isCI` uses
+[`ci-info`](https://www.npmjs.com/package/ci-info) (the de-facto standard, ~30+ CI
+vendors) — injected via `ProviderIO.isCI` so core stays dep-free (the dep lives at
+the CLI composition root). The git facts stay read-only SHELL commands (a JS git
+lib would bypass the `bash-effects` read-only soundness check + add a dep for a
+one-liner — REJECTED: `git-rev-sync` stale, `isomorphic-git` heavy); `os.platform`
+is `process.platform` (stdlib). The provider-registry ARCHITECTURE has no
+embeddable TS lib — it's the OPA/Cedar/Gatekeeper pattern, built here.
 
 ## The lightweight opt-out — `provide()` / `dangerously()` (the "I don't want a whole provider" rung)
 
@@ -296,10 +306,11 @@ capability-diff says so.
    `cli.ts` (`gatherHookContext`). Tested pure (`hook-providers.test.ts`,
    `hook-program.test.ts`) + E2E in a real git repo (`hook.test.ts` — deny push on
    `main`, allow on a branch). Harness-neutral (gather + the exit-2 decision).
-2. **v1.1 — `os.platform` built-in.** The one extra fact the 20-OSS survey
-   justifies (per-OS hooks); ambient (`process.platform`), zero-cost, no extra
-   surface. The built-in set then closes at `git.branch`/`git.isDirty`/`cwd`/
-   `os.platform` — small by design.
+2. **v1.1 — `os.platform`/`git.root`/`env.isCI` built-ins. ✅ SHIPPED.** The extra
+   cheap-ambient facts the survey justifies: `os.platform` (per-OS hooks,
+   `process.platform`), `git.root` (read-only `git rev-parse --show-toplevel`,
+   pairs with path decisions), `env.isCI` (CI-vs-local gate, via the `ci-info`
+   ADOPT). The built-in set closes here — small by design.
 3. **v1.5 — the inline opt-out (`provide` / `dangerously`).** The "I don't want a
    whole provider" rung: an inline declared command in `needs`, run by the trusted
    runtime (decide stays pure), `provide` for read-only (compile-rejected if not),

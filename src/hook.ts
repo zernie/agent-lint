@@ -33,8 +33,9 @@
  * A gate may also decide on EXTERNAL STATE by declaring `needs` (e.g.
  * `needs: ["git.branch"]`): the trusted runtime gathers those read-only facts and
  * hands them in as `e.ctx` — the hook still does zero I/O, and reading an
- * undeclared fact is a `tsc` error. Built-ins: `git.branch`/`git.isDirty`/`cwd`/
- * `os.platform`. For a one-off off-catalog fact, the lightweight opt-out is an
+ * undeclared fact is a `tsc` error. Built-ins:
+ * `git.branch`/`git.isDirty`/`git.root`/`cwd`/`os.platform`/`env.isCI`. For a
+ * one-off off-catalog fact, the lightweight opt-out is an
  * inline `provide(name, cmd)` (read-only) or `dangerously(name, cmd)` (the loud
  * escape) right in `needs`. See `research/hook-context-providers.md`.
  *
