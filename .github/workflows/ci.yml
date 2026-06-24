@@ -93,7 +93,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Check generated types compile
-        run: node dist/cli.js generate-types && npx tsc --noEmit
+        run: node dist/cli.js generate types && npx tsc --noEmit
 
       - name: Lint
         run: npm run lint
