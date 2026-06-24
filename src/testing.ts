@@ -10,8 +10,66 @@
  * boundary forbids importing `src/adapters/*` from here. See
  * `research/adapter-api-design.md`.
  */
-export * from "./run-hook.js";
-export * from "./eval.js";
+// Curated public re-exports (named, not `export *`) so the internal seams —
+// the injectable `*With` runners, low-level `parse*`, pool/aggregate/model-tier
+// helpers — stay out of the public surface, the api reports, and the docs site.
+// (vigiles's own tests import those from the source modules directly.)
+
+// --- unit tier: runHook ---
+export { runHook, propertyHook } from "./run-hook.js";
+export type {
+  HookRunResult,
+  RunHookOptions,
+  HookInput,
+  HookOutput,
+  HookPropertyResult,
+} from "./run-hook.js";
+
+// --- eval tier: runEval / measure / trigger-rate ---
+export {
+  runEval,
+  measure,
+  measureArms,
+  measureTriggerRate,
+  assertRates,
+  assertPromptDiversity,
+  checkPromptDiversity,
+  checkReportToJUnit,
+  formatCheckReport,
+  formatEvalReport,
+  formatTriggerRateReport,
+  claudeEvalDriver,
+  parseClaudeRun,
+  stubSkillBody,
+} from "./eval.js";
+export type {
+  EvalArm,
+  EvalDriver,
+  EvalSpec,
+  EvalReport,
+  EvalUsage,
+  MeasureSpec,
+  ArmsMeasureSpec,
+  ArmReport,
+  ArmUsage,
+  ArmsCheckReport,
+  CheckRate,
+  CheckReport,
+  MetricStat,
+  Metrics,
+  ModelOutputParser,
+  ParsedModelRun,
+  PromptDiversityIssue,
+  PromptTriggerStat,
+  RunContext,
+  RunOut,
+  SelectionTrialResult,
+  TriggerRateReport,
+  TriggerRateSpec,
+  AgentRunArgs,
+  AgentRunner,
+} from "./eval.js";
+
 export * from "./harness-assert.js";
 // The declarative check vocabulary is now first-class at the front door. Its
 // `hookFired` (a `Check<Trace>`) supersedes the legacy boolean predicate of the
@@ -29,18 +87,7 @@ export * from "./tool-stub.js";
 // re-exported here, so `vigiles/testing` stays harness-agnostic — import those
 // from `vigiles/claude-code` (or your harness's package). See
 // `research/code-adapter-architecture.md`.
-export {
-  runHarnessTest,
-  runHarness,
-  parseToolCalls,
-  parseSubagents,
-  parseResultEvent,
-  parseOutput,
-  parseHooks,
-  decideSandbox,
-  specTrusted,
-  sandboxAvailable,
-} from "./harness-test.js";
+export { runHarnessTest, runHarness } from "./harness-test.js";
 export type {
   HarnessTestSpec,
   Trace,
