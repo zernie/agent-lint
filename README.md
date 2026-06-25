@@ -80,21 +80,25 @@ Three instruments, adopt any:
 | **🛡 Guard** | A safety hook that **can't silently fail open** — write a typed function, get a guard that blocks. **[→](docs/compiled-hooks.md)** |
 -->
 
+<!-- DEMO GIF SLOT (prime "see it work" spot). Record + embed:
+       asciinema rec --command "bash scripts/demo.sh" vigiles.cast
+       agg vigiles.cast vigiles-demo.gif   # then commit the gif
+     <p align="center"><img src="vigiles-demo.gif" width="640" alt="vigiles lint catching a stale reference" /></p>
+-->
+
 **Two ways in** — pick the pain that's yours:
 
 - **Run agents on your own repo?** Start with **Lint** below, or `npx vigiles init`.
 - **Ship plugins to a marketplace?** **[`vigiles scan`](docs/for-plugin-authors.md)**
   ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
-**Your agent writes the spec — and you can always eject.** A typed spec gives you
-compiler-grade guarantees, but you rarely hand-write one: model-invocable skills author
-and maintain it for you. **Already have a CLAUDE.md? `init` adopts it for you** —
-faithfully and **non-destructively** (your file is untouched until you choose to
-compile). Not ready for a spec at all? Plain markdown + inline
-`<!-- vigiles:enforce -->` comments work on any CLAUDE.md with zero TypeScript — and
-`vigiles eject` hands a managed file back as plain markdown you own, anytime.
-**Works with Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)), or
-[teach it your own harness](docs/authoring-an-adapter.md).
+**Your agent writes the spec — and you can always eject.** You rarely hand-write a
+`.spec.ts`: skills author it for you, **`init` adopts an existing CLAUDE.md
+non-destructively** (untouched until you compile), and plain markdown + inline
+`<!-- vigiles:enforce -->` comments work with zero TypeScript. **Claude Code and
+Codex** ([`vigiles/codex`](docs/harnesses.md)), or [your own
+harness](docs/authoring-an-adapter.md). _(New here? [the FAQ](docs/faq.md) covers the
+"do I write TypeScript / will it touch my files" questions.)_
 
 ## Quick start
 
