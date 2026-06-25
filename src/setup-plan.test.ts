@@ -9,7 +9,8 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
-  STRICT_ERROR_RULES,
+  DEFAULT_GATE_RULES,
+  STRICT_EXTRA_RULES,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -162,67 +163,80 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
 
 // --- mergeProjectConfig: what `vigiles init` writes to .vigilesrc.json ---
 
-test("mergeProjectConfig: empty config gets the harness", () => {
-  assert.deepEqual(
-    mergeProjectConfig({}, { harness: "claude-code", strict: false }),
-    {
-      harness: "claude-code",
-    },
+test("mergeProjectConfig: default init gates the FP-safe structural rules + harness", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
+  const expected = Object.fromEntries(
+    DEFAULT_GATE_RULES.map((r) => [r, "error"]),
   );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
 });
 
-test("mergeProjectConfig: array harness is recorded as-is", () => {
-  assert.deepEqual(
-    mergeProjectConfig(
-      {},
-      { harness: ["claude-code", "codex"], strict: false },
-    ),
-    { harness: ["claude-code", "codex"] },
-  );
-});
-
-test("mergeProjectConfig: never clobbers an existing harness (returns null)", () => {
-  assert.equal(
-    mergeProjectConfig(
-      { harness: "codex" },
-      { harness: "claude-code", strict: false },
-    ),
-    null,
-  );
-});
-
-test("mergeProjectConfig: preserves other existing keys while adding harness", () => {
-  assert.deepEqual(
-    mergeProjectConfig({ maxRules: 50 }, { harness: "codex", strict: false }),
-    { maxRules: 50, harness: "codex" },
-  );
-});
-
-test("mergeProjectConfig: strict promotes the whole high-precision gate set to error", () => {
-  const out = mergeProjectConfig({}, { harness: "claude-code", strict: true });
-  const expectedRules = Object.fromEntries(
-    STRICT_ERROR_RULES.map((r) => [r, "error"]),
-  );
-  assert.deepEqual(out, { harness: "claude-code", rules: expectedRules });
-});
-
-test("mergeProjectConfig: strict never clobbers a user-set severity, fills the rest", () => {
-  // require-spec already set by the user → kept as "warn"; the other strict rules
-  // are still added as "error" (so the merge DOES write).
-  const out = mergeProjectConfig(
-    { harness: "codex", rules: { "require-spec": "warn" } },
-    { harness: "codex", strict: true },
-  );
-  assert.ok(out, "writes because the other strict rules are undefined");
+test("mergeProjectConfig: default does NOT gate require-spec (stays opt-in)", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
   const rules = (out as { rules: Record<string, string> }).rules;
-  assert.equal(rules["require-spec"], "warn", "user severity preserved");
-  assert.equal(rules["subagent-tool-contract"], "error", "others gated");
-  assert.equal(rules["description-overlap"], "error");
+  assert.equal(
+    rules["require-spec"],
+    undefined,
+    "require-spec is --strict-only",
+  );
+  assert.equal(
+    rules["untested-skill"],
+    undefined,
+    "untested-* is --strict-only",
+  );
+});
+
+test("mergeProjectConfig: array harness is recorded as-is (with default gates)", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: ["claude-code", "codex"], strict: false },
+  );
+  assert.deepEqual((out as { harness: unknown }).harness, [
+    "claude-code",
+    "codex",
+  ]);
+});
+
+test("mergeProjectConfig: never clobbers an existing harness key", () => {
+  // harness already set, but the default gate rules are still added → writes.
+  const out = mergeProjectConfig(
+    { harness: "codex" },
+    { harness: "claude-code", strict: false },
+  );
+  assert.equal((out as { harness: string }).harness, "codex", "kept");
+});
+
+test("mergeProjectConfig: preserves other existing keys", () => {
+  const out = mergeProjectConfig(
+    { maxRules: 50 },
+    { harness: "codex", strict: false },
+  );
+  assert.equal((out as { maxRules: number }).maxRules, 50);
+  assert.equal((out as { harness: string }).harness, "codex");
+});
+
+test("mergeProjectConfig: --strict adds the workflow-forcing tier on top of the gates", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: true });
+  const expected = Object.fromEntries(
+    [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES].map((r) => [r, "error"]),
+  );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("mergeProjectConfig: never clobbers a user-set severity, fills the rest", () => {
+  const out = mergeProjectConfig(
+    { harness: "codex", rules: { "subagent-tool-contract": "warn" } },
+    { harness: "codex", strict: false },
+  );
+  const rules = (out as { rules: Record<string, string> }).rules;
+  assert.equal(rules["subagent-tool-contract"], "warn", "user severity kept");
+  assert.equal(rules["description-overlap"], "error", "others gated");
 });
 
 test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {
-  // Every strict rule already set → nothing to tighten → no write.
-  const rules = Object.fromEntries(STRICT_ERROR_RULES.map((r) => [r, "error"]));
+  const rules = Object.fromEntries(
+    [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES].map((r) => [r, "error"]),
+  );
   assert.equal(
     mergeProjectConfig(
       { harness: "codex", rules },
