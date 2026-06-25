@@ -22,8 +22,8 @@ the other:
 
 Plain markdown is the on-ramp; the [typed spec](spec-format.md) is the source
 of truth when you want full type checking, programmatic rule composition, and
-`generate-types`. Start in markdown, graduate when you want the stronger
-guarantees — like TypeScript's `any` → typed migration path.
+`generate types`. Your agent writes the spec, and `vigiles eject` hands it back
+to plain markdown anytime — so graduating to a spec is never a one-way door.
 
 ---
 

@@ -15,6 +15,7 @@
 export const VERBS = [
   "init",
   "compile",
+  "eject",
   "lint",
   "test",
   "eval",

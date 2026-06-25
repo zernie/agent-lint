@@ -86,9 +86,12 @@ Three instruments, adopt any:
 - **Ship plugins to a marketplace?** **[`vigiles scan`](docs/for-plugin-authors.md)**
   ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
-**Start in plain markdown** — `vigiles lint` + inline `<!-- vigiles:enforce -->`
-comments work on any CLAUDE.md, zero TypeScript. **Works with Claude Code and
-Codex** ([`vigiles/codex`](docs/harnesses.md)), or [teach it your own
+**Your agent writes the spec — and you can always eject.** A typed spec gives you
+compiler-grade guarantees, but you rarely hand-write one: model-invocable skills author
+and maintain it for you. Not ready? Plain markdown + inline `<!-- vigiles:enforce -->`
+comments work on any CLAUDE.md with zero TypeScript — and `vigiles eject` hands a managed
+file back as plain markdown you own, anytime. **Works with Claude Code and Codex**
+([`vigiles/codex`](docs/harnesses.md)), or [teach it your own
 harness](docs/authoring-an-adapter.md).
 
 ## Quick start
@@ -148,7 +151,8 @@ File paths, scripts, code symbols — plus linter rules across **7 linters**
 (ESLint, Ruff, Clippy + four more): each rule exists **and is enabled**.
 
 **Start with one inline comment — no new files.** Step up to a typed `.spec.ts`
-(it compiles to CLAUDE.md) only when you want to.
+(your agent writes it; it compiles to CLAUDE.md) when you want compiler-grade
+guarantees — and `vigiles eject` hands it back to plain markdown anytime.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
 > **Want more? Bad states can stop compiling.** Opt in deeper and a broken

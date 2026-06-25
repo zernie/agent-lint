@@ -20,7 +20,7 @@ Default to interactive if the user doesn't specify.
 
 ### Step 1: Discover What's Installed
 
-Run `npx vigiles generate-types` to get the full list of enabled linter rules in the project. Read `.vigiles/generated.d.ts` to see every rule available across all detected linters.
+Run `npx vigiles generate types` to get the full list of enabled linter rules in the project. Read `.vigiles/generated.d.ts` to see every rule available across all detected linters.
 
 Note which linter prefixes appear in the generated types (e.g., `EslintRule`, `RuffRule`). You'll only need reference docs for detected linters.
 
