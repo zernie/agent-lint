@@ -9,6 +9,7 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
+  STRICT_ERROR_RULES,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -197,34 +198,34 @@ test("mergeProjectConfig: preserves other existing keys while adding harness", (
   );
 });
 
-test("mergeProjectConfig: strict tightens require-spec alongside harness", () => {
-  // `require-skill-spec` is deprecated, so --strict tightens only `require-spec`.
-  assert.deepEqual(
-    mergeProjectConfig({}, { harness: "claude-code", strict: true }),
-    {
-      harness: "claude-code",
-      rules: { "require-spec": "error" },
-    },
+test("mergeProjectConfig: strict promotes the whole high-precision gate set to error", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: true });
+  const expectedRules = Object.fromEntries(
+    STRICT_ERROR_RULES.map((r) => [r, "error"]),
   );
+  assert.deepEqual(out, { harness: "claude-code", rules: expectedRules });
 });
 
-test("mergeProjectConfig: strict leaves an already-set require-spec alone", () => {
-  // require-spec already defined and the only rule --strict touches → nothing to
-  // tighten → no write.
+test("mergeProjectConfig: strict never clobbers a user-set severity, fills the rest", () => {
+  // require-spec already set by the user → kept as "warn"; the other strict rules
+  // are still added as "error" (so the merge DOES write).
   const out = mergeProjectConfig(
     { harness: "codex", rules: { "require-spec": "warn" } },
     { harness: "codex", strict: true },
   );
-  assert.equal(out, null);
+  assert.ok(out, "writes because the other strict rules are undefined");
+  const rules = (out as { rules: Record<string, string> }).rules;
+  assert.equal(rules["require-spec"], "warn", "user severity preserved");
+  assert.equal(rules["subagent-tool-contract"], "error", "others gated");
+  assert.equal(rules["description-overlap"], "error");
 });
 
 test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {
+  // Every strict rule already set → nothing to tighten → no write.
+  const rules = Object.fromEntries(STRICT_ERROR_RULES.map((r) => [r, "error"]));
   assert.equal(
     mergeProjectConfig(
-      {
-        harness: "codex",
-        rules: { "require-spec": "error", "require-skill-spec": "error" },
-      },
+      { harness: "codex", rules },
       { harness: "codex", strict: true },
     ),
     null,

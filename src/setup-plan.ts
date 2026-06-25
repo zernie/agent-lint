@@ -91,6 +91,36 @@ export function defaultPlan(strict = false): SetupPlan {
  * changed (so the IO layer skips the write). The IO (read/parse/write + the
  * malformed-file guard) stays in cli.ts.
  */
+/**
+ * The rules `--strict` promotes to `error` so a broken surface FAILS CI. It is
+ * `require-spec` PLUS the HIGH-PRECISION structural checks — every one documented
+ * FP-safe (never-available / close-typo / can't-start / can't-resolve only) — so
+ * a broken subagent tool contract, a dead hook script, a typo'd hook event, a
+ * misconfigured MCP server, or two skills that collide in the selector all turn
+ * CI red, WITHOUT crying wolf on a well-formed plugin.
+ *
+ * Deliberately EXCLUDED (they stay `warn`): the LENIENT or RECOMMENDATION rules
+ * — `frontmatter-valid` (js-yaml is stricter than CC's loader, so verify before
+ * enforcing), `skill-frontmatter` (a best-practice nudge; the skill still loads),
+ * `prefer-compiled-hooks` (a discovery nudge), and `untested-skill/subagent/hook`
+ * (gating "every surface ships a test" is a separate, bigger opt-in). The honest
+ * limit: Claude Code itself loads a name-less / first-paragraph skill, so vigiles
+ * cannot hard-gate skill content that still works — only collisions and the
+ * subagent / hook / MCP defects that genuinely break.
+ */
+export const STRICT_ERROR_RULES = [
+  "require-spec",
+  "subagent-tool-contract",
+  "subagent-frontmatter",
+  "hook-events",
+  "hook-script-exists",
+  "mcp-config",
+  "mcp-tool-resolves",
+  "mcp-hook-target-resolves",
+  "disallowed-tools-contract",
+  "description-overlap",
+] as const;
+
 export function mergeProjectConfig(
   existing: Record<string, unknown>,
   opts: { harness: string | string[]; strict: boolean },
@@ -103,9 +133,9 @@ export function mergeProjectConfig(
   }
   if (opts.strict) {
     const rules = { ...(config.rules as Record<string, unknown> | undefined) };
-    // `require-skill-spec` is deprecated (skills can be hand-written), so --strict
-    // no longer promotes it; it tightens only `require-spec` (instruction files).
-    for (const r of ["require-spec"]) {
+    // Promote the high-precision structural gate set to "error" — but never
+    // clobber a severity the user already set (only fill in the undefined ones).
+    for (const r of STRICT_ERROR_RULES) {
       if (rules[r] === undefined) {
         rules[r] = "error";
         changed = true;
