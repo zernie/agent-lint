@@ -185,7 +185,7 @@ export function assertBlocksDisasters(
 }
 
 /**
- * Render a coverage report (Level 0 — informational, NEUTRAL). It reports what the
+ * Render a coverage report (informational, NEUTRAL). It reports what the
  * hook blocks WITHOUT judging it: a hook that allows these may simply not be a
  * bash-safety guard (our own pre-edit.sh blocks .md edits, not `rm -rf`). The
  * "false confidence" verdict only applies once intent is DECLARED — see

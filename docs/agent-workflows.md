@@ -101,5 +101,5 @@ All agents share the same CI step:
 This catches:
 
 - Hash mismatches (someone edited the compiled `.md` directly)
-- Missing specs (`require-spec` rule — every `.md` should have a `.spec.ts`)
+- Missing specs (`require-instructions-spec` rule — every `.md` should have a `.spec.ts`)
 - Stale generated types (linter config changed but types weren't regenerated)

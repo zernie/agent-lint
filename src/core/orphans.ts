@@ -60,7 +60,7 @@ const DEFAULT_IGNORE = [
 
 /**
  * A doc carrying this marker opts out of orphan detection — the inline escape
- * hatch, mirroring `vigiles-disable require-spec` and `vigiles:ignore-test`.
+ * hatch, mirroring `vigiles-disable require-instructions-spec` and `vigiles:ignore-test`.
  * Use it for an intentionally-unreferenced doc (a changelog, a top-level index)
  * that nothing else links to but is not rot.
  */

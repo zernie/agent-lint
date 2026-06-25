@@ -15,11 +15,11 @@ How-to and reference docs for using vigiles. New here? Start with the
 
 - [`compiled-hooks.md`](compiled-hooks.md) — author a hook as a pure typed function against the closed `vigiles/hook` vocabulary and compile it, making whole classes of hook bugs unrepresentable (false confidence, matcher bypass, capability creep). The deterministic gate instrument beside verify + test.
 
-## Adoption ladder (pick your commitment level)
+## Two on-ramps — plain markdown → typed spec
 
-- [`markdown-mode.md`](markdown-mode.md) — Level 0/1: inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML frontmatter, no TypeScript.
+- [`markdown-mode.md`](markdown-mode.md) — verify rules in plain markdown with inline `<!-- vigiles:enforce -->` comments, no TypeScript (frontmatter is a kept, demoted advanced option).
 - [`inline-mode.md`](inline-mode.md) — inline-comment mode in depth.
-- [`spec-format.md`](spec-format.md) — Level 2: the typed `.spec.ts` format (target, sections, rules, verified references).
+- [`spec-format.md`](spec-format.md) — the typed `.spec.ts` format (target, sections, rules, verified references) — the source of truth.
 
 ## Reference
 
@@ -35,7 +35,7 @@ How-to and reference docs for using vigiles. New here? Start with the
 - [`linter-support.md`](linter-support.md) — the 7 linter catalogs + `generate-types` / `generate-schema`.
 - [`comparison.md`](comparison.md) — before/after tables, the determinism breakdown, the flow diagram.
 - [`related-tools.md`](related-tools.md) — what vigiles composes with rather than replaces.
-- **Validation rules:** [`require-spec`](rules/require-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-subagent`](rules/untested-subagent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
+- **Validation rules:** [`require-instructions-spec`](rules/require-instructions-spec.md) · [`require-skill-spec`](rules/require-skill-spec.md) · [`integrity`](rules/integrity.md) · [`coverage`](rules/coverage.md) · [`untested-skill`](rules/untested-skill.md) · [`untested-subagent`](rules/untested-subagent.md) · [`untested-hook`](rules/untested-hook.md) · [`unmarked-refs`](rules/unmarked-refs.md).
 
 ## Test your harness (layer 2)
 

@@ -29,6 +29,10 @@ export interface SetupPlan {
 export interface ParsedSetupArgs {
   target?: string;
   strict: boolean;
+  /** `--report-only` — write the gating rules at "warn" (nothing fails CI). The
+   * orthogonal severity dial; composes with `--strict` (which rules) by setting
+   * their severity. */
+  reportOnly: boolean;
   yes: boolean;
   /** `--force` — rewrite a stale CI workflow in place. */
   force: boolean;
@@ -62,6 +66,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
   return {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
+    reportOnly: args.includes("--report-only"),
     yes: args.includes("--yes") || args.includes("-y"),
     force: args.includes("--force"),
     lint: boolFlag(args, "lint"),
@@ -91,9 +96,78 @@ export function defaultPlan(strict = false): SetupPlan {
  * changed (so the IO layer skips the write). The IO (read/parse/write + the
  * malformed-file guard) stays in cli.ts.
  */
+/**
+ * The structural rules `init` gates BY DEFAULT (severity `error`, so a broken
+ * surface fails `vigiles lint`). Every one is HIGH-PRECISION / FP-safe — it fires
+ * only on a genuine defect (a never-available/typo'd tool, a subagent missing
+ * `name`/`description`, a typo'd hook event, a dead hook script, a broken MCP
+ * ref, two skills that collide in the selector) — so a well-formed plugin stays
+ * green and catching real breakage out of the box never cries wolf.
+ *
+ * Deliberately EXCLUDES `require-instructions-spec` and the workflow-forcing rules:
+ * those make a CLEAN repo fail (you simply haven't written the spec/test yet), so
+ * they stay opt-in under `--strict` (progressive adoption — see
+ * `STRICT_EXTRA_RULES`).
+ *
+ * This is the **`structural`** rule group (see research/install-enforcement-dx.md).
+ */
+export const STRUCTURAL_RULES = [
+  "subagent-tool-contract",
+  "subagent-frontmatter",
+  "hook-events",
+  "hook-script-exists",
+  "mcp-config",
+  "mcp-tool-resolves",
+  "mcp-hook-target-resolves",
+  "disallowed-tools-contract",
+  "description-overlap",
+] as const;
+
+/**
+ * The **`workflow`** group — the WORKFLOW-FORCING / opinionated tier `--strict`
+ * gates, which a clean repo can still fail because you haven't done the work yet:
+ * a spec per instruction file (`require-instructions-spec`), a test/eval per
+ * surface (`untested-*`). Opt-in by design (the smooth-adoption on-ramp). The
+ * Clippy-`pedantic` / TS-`strict` analog — ONE opinionated opt-in.
+ *
+ * NB `frontmatter-valid` / `skill-frontmatter` live in the `nudge` group, not
+ * here: they're acknowledged-noisy recommendations we never gate on (see
+ * research/install-enforcement-dx.md).
+ */
+export const WORKFLOW_RULES = [
+  "require-instructions-spec",
+  "untested-skill",
+  "untested-subagent",
+  "untested-hook",
+] as const;
+
+/**
+ * The **`nudge`** group — recommendations / acknowledged-noisy checks that NEVER
+ * gate (not even under `--strict`): `frontmatter-valid` (js-yaml is stricter than
+ * CC's loader), `skill-frontmatter` (skills load without it) and `unmarked-refs`
+ * (the undecidable-plaintext nudge) sit at `warn`; `prefer-compiled-hooks` defaults
+ * OFF (a recommendation that shouldn't fire unasked — the shell lane stays
+ * first-class). `init` does not write these — they keep their own default
+ * severities. Named for the group taxonomy (research/install-enforcement-dx.md).
+ */
+export const NUDGE_RULES = [
+  "frontmatter-valid",
+  "skill-frontmatter",
+  "prefer-compiled-hooks",
+  "unmarked-refs",
+] as const;
+
 export function mergeProjectConfig(
   existing: Record<string, unknown>,
-  opts: { harness: string | string[]; strict: boolean },
+  opts: {
+    harness: string | string[];
+    strict: boolean;
+    reportOnly?: boolean;
+    /** Whether the LINT pillar is on (default true). The rule gate is a lint-layer
+     * concern, so a test-only setup (`init --test` / `--no-lint`) records the
+     * harness but writes NO lint rules. */
+    lint?: boolean;
+  },
 ): Record<string, unknown> | null {
   const config = { ...existing };
   let changed = false;
@@ -101,13 +175,23 @@ export function mergeProjectConfig(
     config.harness = opts.harness;
     changed = true;
   }
-  if (opts.strict) {
+  // The rule gate belongs to the LINT layer — a test-only setup records the
+  // harness but writes no rules (honoring the positive-flag contract that
+  // `--test` selects only the test pillar).
+  if (opts.lint !== false) {
+    // Gate the FP-safe `structural` group by default; `--strict` adds the
+    // `workflow` group on top. `--report-only` is the orthogonal severity dial —
+    // it writes the SAME rule set at "warn" (nothing fails CI; the
+    // migration/observe mode). Never clobber a severity the user already set —
+    // only fill the undefined ones.
+    const severity = opts.reportOnly ? "warn" : "error";
+    const gate = opts.strict
+      ? [...STRUCTURAL_RULES, ...WORKFLOW_RULES]
+      : [...STRUCTURAL_RULES];
     const rules = { ...(config.rules as Record<string, unknown> | undefined) };
-    // `require-skill-spec` is deprecated (skills can be hand-written), so --strict
-    // no longer promotes it; it tightens only `require-spec` (instruction files).
-    for (const r of ["require-spec"]) {
+    for (const r of gate) {
       if (rules[r] === undefined) {
-        rules[r] = "error";
+        rules[r] = severity;
         changed = true;
       }
     }
@@ -131,8 +215,48 @@ export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin">
+  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin" | "strict">
 >;
+
+/** Ask one question with a default — injected so the interactive Q&A is pure +
+ *  unit-testable (a fake `ask` scripts answers; no TTY, no readline). */
+export type AskFn = (question: string, def: string) => Promise<string>;
+
+const isYesAnswer = (s: string): boolean => /^y(es)?$/i.test(s);
+
+/**
+ * The interactive setup Q&A as PURE logic over an injected `ask` — the prompts,
+ * their defaults, and the answer→`SetupAnswers` mapping. The IO shell (readline)
+ * lives in `cli.ts`'s `promptSetup`, which just supplies a real `ask`. Keeping
+ * this here means the fragile interactive path is unit-tested deterministically
+ * (the questions can't silently break) without a terminal.
+ */
+export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
+  const pillars = (
+    await ask("Set up which pillars? [both/lint/test] (both): ", "both")
+  ).toLowerCase();
+  const gha = isYesAnswer(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
+  const plugin = isYesAnswer(
+    await ask("Install the Claude Code plugin (hooks + skills)? [Y/n]: ", "y"),
+  );
+  // Structural gating (broken tools/hooks/MCP/collisions) is always on. This asks
+  // about the WORKFLOW tier — a spec per file + a test per surface — which a clean
+  // repo can fail just for not having done the work yet, so it's the recommended
+  // default a human opts OUT of (never forced on a silent run).
+  const strict = isYesAnswer(
+    await ask(
+      "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
+      "y",
+    ),
+  );
+  return {
+    lint: pillars !== "test",
+    test: pillars !== "lint" && pillars !== "verify",
+    gha,
+    plugin,
+    strict,
+  };
+}
 
 /**
  * Apply the pillar flags. A positive flag (`--lint` and/or `--test`) is an
@@ -154,6 +278,7 @@ function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
   if (answers.test !== undefined) plan.test = answers.test;
   if (answers.gha !== undefined) plan.gha = answers.gha;
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
+  if (answers.strict !== undefined) plan.strict = answers.strict;
 }
 
 /**

@@ -1,11 +1,11 @@
 /**
- * vigiles — YAML frontmatter rule mode (Level 1 adoption).
+ * vigiles — YAML frontmatter rule mode.
  *
  * Parses a `vigiles.enforce` block out of a markdown file's YAML
  * frontmatter, so a project can declare enforce rules in structured YAML
- * instead of `<!-- vigiles:enforce ... -->` HTML comments (Level 0) or a
- * typed `.spec.ts` (Level 2). Every frontmatter rule goes through the same
- * `checkLinterRule` verification as inline and spec rules.
+ * instead of `<!-- vigiles:enforce ... -->` inline HTML comments or a typed
+ * `.spec.ts`. Every frontmatter rule goes through the same `checkLinterRule`
+ * verification as inline and spec rules.
  *
  * Shape (verbose — chosen so a JSON Schema can give `rule` an enum that
  * YAML LSP autocompletes and squiggles on typo):
@@ -334,9 +334,10 @@ export function parseFrontmatterRules(content: string): FrontmatterParseResult {
 
 /**
  * True if the content has at least one parseable `vigiles` reference in its
- * frontmatter — an `enforce` rule, a `files` entry, or a `commands` entry.
- * Used by `require-spec` validation to treat frontmatter mode as
- * spec-equivalent, mirroring `hasInlineRules`.
+ * frontmatter — an `enforce` rule, a `files` entry, or a `commands` entry. A
+ * utility for detecting frontmatter (Level-1) mode, mirroring `hasInlineRules`.
+ * (Note `require-instructions-spec` is narrow — only a `.spec.ts` satisfies it —
+ * so this no longer feeds that rule.)
  */
 export function hasFrontmatterRules(content: string): boolean {
   const r = parseFrontmatterRules(content);
