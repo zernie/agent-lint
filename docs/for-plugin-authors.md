@@ -75,13 +75,20 @@ too-broad description that hijacks unrelated work fails too). See
 
 ## 4. Rank against the field
 
-Point `scan` at a whole marketplace (a directory of plugins, or a repo with a
-`marketplace.json`) and it ranks every plugin by structural health — a 0–100 score
-and an A–F grade, worst issues first, **no key**:
+Give `scan` more than one plugin and it ranks every one by structural health — a
+0–100 score and an A–F grade, worst issues first, **no key**. Two ways to do that:
 
 ```bash
+# 1) Pass several plugin directories explicitly:
+npx vigiles scan ./plugin-a ./plugin-b ./plugin-c
+
+# 2) Point it at a repo that ships a marketplace.json (e.g.
+#    .claude-plugin/marketplace.json) — scan expands it into its members:
 npx vigiles scan ./marketplace
 ```
+
+A single plain folder with no `marketplace.json` is scanned as **one** plugin (its
+root), not a ranking — pass the child dirs explicitly (option 1) to rank them.
 
 Use it to see where your plugin lands against the rest of a collection before you
 publish, and to find the highest-impact fixes. The marketplace ranking is the
