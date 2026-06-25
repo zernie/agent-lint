@@ -88,23 +88,27 @@ Three instruments, adopt any:
 
 **Your agent writes the spec — and you can always eject.** A typed spec gives you
 compiler-grade guarantees, but you rarely hand-write one: model-invocable skills author
-and maintain it for you. Not ready? Plain markdown + inline `<!-- vigiles:enforce -->`
-comments work on any CLAUDE.md with zero TypeScript — and `vigiles eject` hands a managed
-file back as plain markdown you own, anytime. **Works with Claude Code and Codex**
-([`vigiles/codex`](docs/harnesses.md)), or [teach it your own
-harness](docs/authoring-an-adapter.md).
+and maintain it for you. **Already have a CLAUDE.md? `init` adopts it for you** —
+faithfully and **non-destructively** (your file is untouched until you choose to
+compile). Not ready for a spec at all? Plain markdown + inline
+`<!-- vigiles:enforce -->` comments work on any CLAUDE.md with zero TypeScript — and
+`vigiles eject` hands a managed file back as plain markdown you own, anytime.
+**Works with Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)), or
+[teach it your own harness](docs/authoring-an-adapter.md).
 
 ## Quick start
 
 **Paste into Claude Code or Codex:**
 
 ```text
-Set up vigiles in this repo with good defaults (lint + test, non-interactive).
-Verify my CLAUDE.md / AGENTS.md references and show me what's stale, then write
-and run a harness test for one of my hooks or skills. Ask me first before
-enforcing the workflow tier (a spec per file + a test per surface — i.e.
---strict) or adding a real-model eval.
+Set up vigiles in this repo: run `npx vigiles init` and accept the defaults. If I
+already have a CLAUDE.md or AGENTS.md, adopt it into a spec and show me which
+references are stale. Then install the dep, compile, and write + run one harness
+test for a hook or skill of mine. Don't enforce a spec-per-file or add a real-model
+eval without asking me first.
 ```
+
+The same prompt works in Codex.
 
 Or do it yourself:
 
@@ -257,6 +261,16 @@ default, not an unbypassable wall._
 **[Compiled hooks — bug classes + trade-offs →](docs/compiled-hooks.md)**
 
 -->
+
+## FAQ
+
+- **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
+- **Do I have to write TypeScript?** No. Lint your markdown with zero new files; when you want a spec, your agent writes it. It's gradual, like TS's `strict`.
+- **Does it overwrite my files?** No. `init` adopts an existing CLAUDE.md _non-destructively_ — untouched until you `compile`, and `eject` reverses it.
+- **Need an API key?** No for almost everything (free, every commit). Real-model evals run on your Claude Pro/Max subscription — $0 metered tokens.
+- **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).
+
+**[Full FAQ →](docs/faq.md)**
 
 ## More
 
