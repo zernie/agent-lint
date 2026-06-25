@@ -2117,6 +2117,32 @@ describe("CLI: vigiles eject", () => {
     assert.ok(existsSync(join(tmpDir, "K.md.spec.ts")), "spec kept");
   });
 
+  it("does NOT delete a SHARED source spec when ejecting a secondary target", () => {
+    // A mirrored AGENTS.md compiled from CLAUDE.md.spec.ts: its header names the
+    // shared source. Ejecting AGENTS.md must NOT delete that spec, or the primary
+    // CLAUDE.md could no longer recompile.
+    const sharedDir = mkdtempSync(join(tmpdir(), "vigiles-eject-shared-"));
+    try {
+      writeFileSync(
+        join(sharedDir, "CLAUDE.md.spec.ts"),
+        "export default {}\n",
+      );
+      writeFileSync(
+        join(sharedDir, "AGENTS.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# AGENTS.md\n\nShared.\n",
+      );
+      const { stdout, exitCode } = run("eject AGENTS.md", sharedDir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(sharedDir, "CLAUDE.md.spec.ts")),
+        "shared spec must survive ejecting the secondary target",
+      );
+      assert.match(stdout, /SHARED source spec|Kept CLAUDE\.md\.spec\.ts/);
+    } finally {
+      rmSync(sharedDir, { recursive: true, force: true });
+    }
+  });
+
   it("errors on a missing file", () => {
     const { exitCode } = run("eject does-not-exist.md", tmpDir);
     assert.equal(exitCode, 1);
