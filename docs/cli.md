@@ -96,13 +96,21 @@ into `--strict` doesn't turn your CI red on a wall of missing specs.
 When `init` finds an existing hand-written `CLAUDE.md` / `AGENTS.md`, it
 **faithfully adopts** it into a `.spec.ts` instead of scaffolding a blank one:
 every heading becomes a prose section verbatim, **no rule is inferred**, nothing
-is dropped. The compile that follows reproduces the file (plus the integrity
+is dropped.
+
+**Adoption is non-destructive — `init` never overwrites your file.** It writes the
+spec and leaves your `CLAUDE.md` exactly as-is. When you're ready to switch it to
+spec-managed, run `npx vigiles compile`: it reproduces the file (plus an integrity
 header) — for a well-structured file the diff is just that header, so **review the
 diff and commit**. Then run the `/strengthen` skill to upgrade prose to verified
-`enforce()` / `guard()` rules when you're ready, or
+`enforce()` / `guard()` rules when you want, or
 [`eject`](#eject-file--adopting-a-spec-is-never-a-one-way-door) to hand the file
 back as plain markdown. Adopt one file by hand with
 `npx vigiles init --target=CLAUDE.md`.
+
+(In a brand-new repo, `init` defers the compile until you've run `npm install`
+— the spec imports `vigiles`, so it can't compile before the dep is installed. It
+prints the exact next step instead of erroring.)
 
 **Interactive `init` offers the workflow tier (recommended, opt-out):** at a
 terminal it asks _"Also enforce specs + a test per surface?"_ (default yes), and

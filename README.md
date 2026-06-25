@@ -126,6 +126,7 @@ and recompiles on save; you never touch it by hand):
 <summary>What <code>init</code> sets up</summary>
 
 - **Both lint and test** by default; scope with `--lint` / `--test`.
+- **Already have a CLAUDE.md / AGENTS.md? `init` adopts it** into a spec faithfully and **non-destructively** — your file is left untouched until you choose to `compile` (and `eject` undoes it).
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
 - Wires CI as a `zernie/vigiles@v1` workflow (a composite over the same CLI) that posts a sticky PR comment + a `valid` output.
 

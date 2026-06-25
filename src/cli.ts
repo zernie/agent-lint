@@ -2301,19 +2301,51 @@ async function setupPillar1(
   console.log("✓ Generated .vigiles/schema.json (YAML-LSP frontmatter schema)");
   written.push(".vigiles/schema.json");
 
-  // Compile — greenfield targets, already-ours targets, AND the just-adopted
-  // ones (a faithful adopted spec reproduces the file + adds the integrity
-  // header). A blank spec freshly scaffolded over an existing hand-written file
-  // is still skipped so we never overwrite instructions with an empty compile.
-  console.log("\nCompiling specs...");
-  const adoptedTargets = new Set(adopted.map((t) => resolve(cwd, t)));
-  const specs = findSpecs().filter((s) => {
-    const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
-    return !existsSync(tf) || targetHasHash(tf) || adoptedTargets.has(tf);
-  });
-  if (specs.length > 0) await compile(specs, loadConfig());
+  // Compile — but NEVER overwrite an existing hand-written file during `init`:
+  // we compile only GREENFIELD targets (the file doesn't exist yet) and targets
+  // we already manage (carry our hash). An ADOPTED file is left untouched — the
+  // user reviews the generated spec and runs `vigiles compile` themselves to
+  // switch it to spec-managed (non-destructive by default; the compile is
+  // byte-faithful, but it's the user's call to make, with a diff to review).
+  // And we only compile when `vigiles` actually resolves — a fresh repo hasn't
+  // run `npm install` yet, so compiling would just error; defer it with a clear
+  // next step instead of a scary stack-traceless "failed to load".
+  const canCompile = canResolveVigiles(cwd);
+  const specs = canCompile
+    ? findSpecs().filter((s) => {
+        const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
+        return !existsSync(tf) || targetHasHash(tf);
+      })
+    : [];
+  if (specs.length > 0) {
+    console.log("\nCompiling specs...");
+    await compile(specs, loadConfig());
+  } else if (!canCompile) {
+    console.log(
+      "\n  Skipping compile — `vigiles` isn't installed yet. Run `npm install`, then `npx vigiles compile`.",
+    );
+  }
 
   return { specTargets: targets, written, adopted };
+}
+
+/**
+ * Whether `vigiles/spec` will resolve for a spec compiled from `cwd` — true when
+ * vigiles is installed locally (`node_modules/vigiles`) or `cwd` IS the vigiles
+ * package itself (the in-repo dogfood / a monorepo workspace). A fresh user repo
+ * that hasn't run `npm install` yet returns false, so `init` defers the compile
+ * instead of emitting a resolution error.
+ */
+function canResolveVigiles(cwd: string): boolean {
+  if (existsSync(resolve(cwd, "node_modules", "vigiles"))) return true;
+  try {
+    const pkg = JSON.parse(
+      readFileSync(resolve(cwd, "package.json"), "utf-8"),
+    ) as { name?: string };
+    return pkg.name === "vigiles";
+  } catch {
+    return false;
+  }
 }
 
 /** Whether a harness binary (`claude`, `codex`) is on PATH. */
@@ -2499,17 +2531,24 @@ function printSetupSummary(opts: {
   const specPathsList = targets.map((t) => `${t}.spec.ts`);
   console.log("\n---\nSetup complete.\n");
 
+  // Next steps in DEPENDENCY order: install the dep first, then compile (which
+  // needs it), then the optional hardening / test / CI steps.
   const nextSteps: string[] = [];
+  if (written.includes("package.json")) {
+    nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
+  }
   if (adopted.length > 0) {
+    // Adoption is NON-DESTRUCTIVE: the file is untouched until you compile, so
+    // the diff to review is what compile WOULD produce (byte-faithful).
     nextSteps.push(
-      `Review the diff on ${adopted.join(", ")} — faithfully adopted into a spec (\`git diff\`); \`vigiles eject\` reverses it`,
+      `Run \`npx vigiles compile\` to put ${adopted.join(", ")} under spec management — it reproduces the file + adds an integrity header, so review the diff (\`vigiles eject\` reverses it)`,
     );
     nextSteps.push(
-      `Run the \`/strengthen\` skill to upgrade prose rules to verified enforce()/guard()`,
+      "Run the `/strengthen` skill to upgrade prose rules to verified enforce()/guard()",
     );
   } else if (specPathsList.length > 0) {
     nextSteps.push(
-      `Edit ${specPathsList.join(", ")} — add your conventions, then \`/strengthen\``,
+      `Edit ${specPathsList.join(", ")} — add your conventions, then \`npx vigiles compile\` (and \`/strengthen\`)`,
     );
   }
   if (plan.test) {
@@ -2517,11 +2556,10 @@ function printSetupSummary(opts: {
       "Edit vigiles.harness.mjs to test a real hook, then `npx vigiles test`",
     );
   }
-  if (written.includes("package.json")) {
-    nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
-  }
   if (!strict) {
-    nextSteps.push("When ready, enforce in CI: npx vigiles init --strict");
+    nextSteps.push(
+      "When ready, enforce specs + tests in CI: `npx vigiles init --strict`",
+    );
   }
   nextSteps.forEach((s, i) => {
     console.log(`  ${String(i + 1)}. ${s}`);
@@ -2620,6 +2658,7 @@ async function setup(args: string[]): Promise<void> {
     harnesses,
     strict,
     reportOnly: parsed.reportOnly,
+    lint: plan.lint,
     written,
   });
 
@@ -2641,6 +2680,9 @@ function writeProjectConfig(opts: {
   harnesses: string[];
   strict: boolean;
   reportOnly: boolean;
+  /** Lint pillar on — gates writing the lint rule severities (test-only setups
+   * record only the harness). */
+  lint: boolean;
   written: string[];
 }): void {
   const configPath = resolve(process.cwd(), ".vigilesrc.json");
@@ -2660,6 +2702,7 @@ function writeProjectConfig(opts: {
     harness: harnessConfigValue(opts.harnesses),
     strict: opts.strict,
     reportOnly: opts.reportOnly,
+    lint: opts.lint,
   });
   if (!merged) return;
   writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
@@ -4044,7 +4087,7 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha, --force)",
+    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
