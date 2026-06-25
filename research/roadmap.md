@@ -94,7 +94,7 @@
 >   on-ramp to **floor / eject-target**. ENABLER (must ship for "always ejectable" to be
 >   true): a one-command **`vigiles eject`** — strip the `vigiles:sha256` header → clean
 >   owned markdown lint won't nag about (none exists; hand-deleting the spec makes
->   `require-spec` error). The create-react-app move that dissolves the two spec objections
+>   `require-instructions-spec` error). The create-react-app move that dissolves the two spec objections
 >   (TypeScript friction — the agent writes it; lock-in — you eject). Reframe Lint as "your
 >   spec's references are real," never "lint my markdown." Detail in `pre-release-focus.md`.
 > - **SHIPPED this session (branch `claude/handoff-mylfen`, not merged):** the surface

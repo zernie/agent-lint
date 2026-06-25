@@ -535,9 +535,11 @@ Real rule:
     assert.equal(exitCode, 2);
   });
 
-  it("satisfies require-spec when inline rules are present", () => {
-    // A file with inline rules but no .spec.ts should NOT trigger
-    // the require-spec validation warning.
+  it("does NOT satisfy require-instructions-spec via inline rules (narrow rule)", () => {
+    // Inline mode is a valid Level-0 on-ramp, but `require-instructions-spec` is
+    // NARROW — only a `.spec.ts` satisfies it (the name says "spec"). So an
+    // inline-only CLAUDE.md still gets the default-warn nudge; an inline user
+    // keeps the rule off. The inline rules themselves are still parsed/verified.
     writeFileSync(
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/no-console "valid" -->
@@ -547,8 +549,8 @@ Real rule:
     );
     const { stdout } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
-      !stdout.includes("require-spec"),
-      `require-spec should be satisfied by inline rules, got: ${stdout.slice(0, 600)}`,
+      stdout.includes("require-instructions-spec"),
+      `inline must NOT satisfy the narrow require-instructions-spec, got: ${stdout.slice(0, 600)}`,
     );
   });
 });
@@ -686,7 +688,10 @@ vigiles:
     assert.equal(exitCode, 2);
   });
 
-  it("satisfies require-spec when frontmatter rules are present", () => {
+  it("does NOT satisfy require-instructions-spec via frontmatter rules (narrow rule)", () => {
+    // Same narrowing as inline mode: a `vigiles:` frontmatter block is a valid
+    // Level-1 on-ramp but does NOT count as a `.spec.ts`, so the narrow
+    // `require-instructions-spec` nudge still fires (default warn).
     writeFileSync(
       join(fmDir, "CLAUDE.md"),
       `---
@@ -701,8 +706,8 @@ vigiles:
     );
     const { stdout } = run("lint CLAUDE.md", fmDir);
     assert.ok(
-      !stdout.includes("require-spec"),
-      `require-spec should be satisfied by frontmatter, got: ${stdout.slice(0, 600)}`,
+      stdout.includes("require-instructions-spec"),
+      `frontmatter must NOT satisfy the narrow require-instructions-spec, got: ${stdout.slice(0, 600)}`,
     );
   });
 
@@ -1356,16 +1361,27 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("scaffolds a spec for an existing CLAUDE.md without clobbering it", () => {
+  it("auto-adopts an existing CLAUDE.md into a faithful spec (content preserved)", () => {
     const dir = freshProject();
     try {
-      writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n\nKeep me.\n");
-      run("init --lint --no-plugin --no-gha", dir);
-      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec scaffolded");
-      // The hand-written file must be untouched (no compile-over).
-      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
-      assert.ok(md.includes("Keep me."), "content preserved");
-      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nKeep me.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      // Auto-adopt: the hand-written file is converted into a spec (not a blank
+      // scaffold), and the spec captures the content verbatim (faithful).
+      assert.match(stdout, /Adopted CLAUDE\.md/);
+      const spec = readFileSync(join(dir, "CLAUDE.md.spec.ts"), "utf-8");
+      assert.ok(spec.includes("Adopted from CLAUDE.md"), "adopted spec");
+      assert.ok(spec.includes("Keep me."), "content captured in the spec");
+      // The original content is never lost — compile reproduces it (the byte
+      // round-trip is proven in src/core/adopt.test.ts; here freshProject has no
+      // resolvable vigiles install so the in-process compile is a no-op).
+      assert.ok(
+        readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes("Keep me."),
+        "content preserved",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1495,11 +1511,20 @@ describe("CLI: installation smoke test (deterministic)", () => {
       const { stdout, exitCode } = run("init --no-plugin --no-gha", dir);
       assert.equal(exitCode, 0, stdout);
 
-      // Pillar 1: spec scaffolded, hand-written CLAUDE.md untouched.
-      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
-      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
-      assert.ok(md.includes("Keep this prose."), "CLAUDE.md preserved");
-      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      // Pillar 1: the hand-written CLAUDE.md is adopted into a spec that
+      // captures its prose faithfully (the content is never lost).
+      const spec = readFileSync(join(dir, "CLAUDE.md.spec.ts"), "utf-8");
+      assert.ok(spec.includes("Adopted from CLAUDE.md"), "adopted spec");
+      assert.ok(
+        spec.includes("Keep this prose."),
+        "prose captured in the spec",
+      );
+      assert.ok(
+        readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes(
+          "Keep this prose.",
+        ),
+        "CLAUDE.md content preserved",
+      );
       assert.ok(existsSync(join(dir, ".vigiles/generated.d.ts")), "types");
 
       // Dep: moved to devDependencies, out of dependencies.
@@ -1919,7 +1944,7 @@ describe("E2E: fixture project adoption", () => {
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
       stdout.includes("no vigiles hash") ||
-        stdout.includes("require-spec") ||
+        stdout.includes("require-instructions-spec") ||
         stdout.includes("Verifying"),
     );
   });
@@ -2059,18 +2084,18 @@ describe("CLI: vigiles eject", () => {
     const out = readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8");
     assert.ok(!out.includes("vigiles:sha256"), "header stripped");
     assert.ok(
-      out.includes("<!-- vigiles-disable require-spec -->"),
+      out.includes("<!-- vigiles-disable require-instructions-spec -->"),
       "marker added",
     );
     assert.ok(out.includes("# CLAUDE.md"), "body preserved");
     assert.ok(!existsSync(join(tmpDir, "CLAUDE.md.spec.ts")), "spec removed");
   });
 
-  it("leaves lint quiet on the ejected file (no require-spec error)", () => {
+  it("leaves lint quiet on the ejected file (no require-instructions-spec error)", () => {
     const { stdout, stderr, exitCode } = run("lint CLAUDE.md", tmpDir);
     assert.ok(
-      !(stdout + stderr).includes("require-spec"),
-      "require-spec satisfied",
+      !(stdout + stderr).includes("require-instructions-spec"),
+      "require-instructions-spec satisfied",
     );
     assert.equal(exitCode, 0);
   });
@@ -2123,7 +2148,9 @@ describe("CLI: vigiles lint directory arg + strict gating", () => {
       }),
     );
   });
-  after(() => rmSync(dir, { recursive: true, force: true }));
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   function reviewer(tools: string, desc = "Reviews a diff."): void {
     writeFileSync(

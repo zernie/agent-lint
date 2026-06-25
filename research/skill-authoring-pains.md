@@ -102,7 +102,7 @@ This suggests shifting the center of gravity:
 (edit-time TS proof is irrelevant when an agent authors), _"spec for skills"_ should mean a
 **verified contract**, not necessarily a `.spec.ts`. The value is deterministic
 verification — which works in markdown-mode on the SKILL.md itself _and_ in the typed
-`skill()` spec. Same level ladder; the asymmetry is in policy: **`require-spec` mild for
+`skill()` spec. Same level ladder; the asymmetry is in policy: **`require-instructions-spec` mild for
 CLAUDE.md, strict for SKILL.md.**
 
 ## Open questions (for continued discussion before changing scope)
@@ -113,7 +113,7 @@ CLAUDE.md, strict for SKILL.md.**
 3. Triggering quality (the biggest activation pain) is largely prompt-quality, not
    deterministic verification — is that in scope, out of scope, or a `guidance()`-style
    advisory check?
-4. Does `require-skill-spec` get strengthened while `require-spec` (CLAUDE.md) relaxes?
+4. Does `require-skill-spec` get strengthened while `require-instructions-spec` (CLAUDE.md) relaxes?
 
 ## See also
 

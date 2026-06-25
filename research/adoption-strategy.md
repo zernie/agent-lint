@@ -6,7 +6,7 @@ Goal: **`npx vigiles setup && npx skills add zernie/vigiles` works on first run 
 
 1. **Works on first run.** Setup must succeed in any project without configuration. Auto-detect everything. Create reasonable defaults. Don't block on missing tools.
 2. **Zero workflow change.** After plugin install, the agent edits specs instead of markdown. The user doesn't need to learn a new workflow — they say "update CLAUDE.md" and the plugin handles the redirect.
-3. **Start permissive, tighten later.** First run creates `guidance()` rules (no enforcement). User upgrades to `enforce()` as they add linter rules. `require-spec: false` available for incremental migration.
+3. **Start permissive, tighten later.** First run creates `guidance()` rules (no enforcement). User upgrades to `enforce()` as they add linter rules. `require-instructions-spec: false` available for incremental migration.
 4. **Every surface tells you the next step.** `vigiles check` says "run setup." The hook says "edit the spec." The wizard says "install the plugin." No dead ends.
 
 ---
@@ -41,7 +41,7 @@ After setup, the user edits the spec, runs `vigiles compile`, and commits. The p
 
 ### Level 0: Discovery
 
-User runs `npx vigiles check` on an existing repo. `require-spec` fires: "No spec file found. Run `npx vigiles setup`." First nudge.
+User runs `npx vigiles check` on an existing repo. `require-instructions-spec` fires: "No spec file found. Run `npx vigiles setup`." First nudge.
 
 ### Level 1: Setup
 

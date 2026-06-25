@@ -145,7 +145,7 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
   This also collapses the earlier choice-anxiety worry to ONE path. ENABLER (must ship for
   the claim to be true): a one-command **`vigiles eject`** — strip the `vigiles:sha256`
   integrity header → clean markdown lint won't nag about; NONE exists today (hand-deleting
-  the spec makes `require-spec` error, `cli.ts:679`).
+  the spec makes `require-instructions-spec` error, `cli.ts:679`).
 - **Citeable authorities (ride the now-canon "harness engineering" frame):** Karpathy —
   _"LLMs can automate what you can verify"_; OpenAI — _"the harness is hard"_; arXiv AHE's
   **structure-beats-prose** ablation = the proof that `enforce()` > `guidance()`. Use these

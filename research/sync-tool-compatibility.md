@@ -120,11 +120,11 @@ writes `CLAUDE.md` from `.ruler/`. They clobber each other every run.
    `targets`, Ruler distribution). vigiles must treat these as the same file, not
    two competing targets:
    - **Follow the symlink** when reading/compiling/validating — resolve to the
-     real path so the integrity hash and `require-spec` check run once on the real
+     real path so the integrity hash and `require-instructions-spec` check run once on the real
      artifact, and a symlinked `AGENTS.md` is never flagged as a second,
      spec-less instruction file. (`validate.ts` already recognizes both
      CLAUDE.md and AGENTS.md as instruction files via `INSTRUCTION_FILES`; the
-     symlink case must not double-fire `require-spec`.)
+     symlink case must not double-fire `require-instructions-spec`.)
    - **Don't stamp two hashes.** When the same content is synced/symlinked to both
      names, only the compile _source_ slot carries the integrity hash (requirement
      3's topology); the mirror is a distributed copy vigiles verifies, not owns.

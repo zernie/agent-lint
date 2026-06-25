@@ -49,8 +49,10 @@ export function checkIntegrity(content: string): IntegrityResult {
   return { intact: true };
 }
 
-/** The marker that tells `require-spec` a file is intentionally hand-owned. */
-export const REQUIRE_SPEC_DISABLE = "<!-- vigiles-disable require-spec -->";
+/** The marker that tells `require-instructions-spec` a file is intentionally
+ * hand-owned (no `.spec.ts` expected). */
+export const REQUIRE_INSTRUCTIONS_SPEC_DISABLE =
+  "<!-- vigiles-disable require-instructions-spec -->";
 
 /**
  * Parse the `vigiles:sha256 … compiled from <spec>` integrity header, if the
@@ -68,18 +70,18 @@ export function parseIntegrityHeader(
 /**
  * "Eject" a compiled instruction file to plain, hand-owned markdown: strip the
  * integrity header so the file is no longer spec-managed, and prepend a
- * `require-spec` disable marker so `vigiles lint` won't ask for a spec back.
- * Pure — the caller writes the file and removes the spec. Returns `null` when
- * there is no header to strip (nothing to eject). Idempotent: a body that
- * already carries the marker is not double-marked.
+ * `require-instructions-spec` disable marker so `vigiles lint` won't ask for a
+ * spec back. Pure — the caller writes the file and removes the spec. Returns
+ * `null` when there is no header to strip (nothing to eject). Idempotent: a body
+ * that already carries the marker is not double-marked.
  */
 export function ejectMarkdown(
   content: string,
 ): { markdown: string; specFile: string } | null {
   const parsed = parseIntegrityHeader(content);
   if (!parsed) return null;
-  const markdown = parsed.body.startsWith(REQUIRE_SPEC_DISABLE)
+  const markdown = parsed.body.startsWith(REQUIRE_INSTRUCTIONS_SPEC_DISABLE)
     ? parsed.body
-    : `${REQUIRE_SPEC_DISABLE}\n\n${parsed.body}`;
+    : `${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\n\n${parsed.body}`;
   return { markdown, specFile: parsed.specFile };
 }

@@ -85,7 +85,7 @@ deterministic contract/outcome oracle — determine where a spec earns its keep:
 ## Settled design: the `require-*-spec` split + defaults
 
 1. **Split — yes.** Consistent with the `untested-surface` → per-kind precedent. Keep
-   `require-spec` (instruction files), add `require-agent-spec`, retire the already-
+   `require-instructions-spec` (instruction files), add `require-agent-spec`, retire the already-
    deprecated `require-skill-spec`.
 2. **All default OFF — and now _principled_, not just cautious.** Since lint/test/eval
    don't need a spec, requiring one is requiring the _latency/typing/oracle upgrade_,

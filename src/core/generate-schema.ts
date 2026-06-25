@@ -106,8 +106,7 @@ export function generateSchema(
     $schema: "http://json-schema.org/draft-07/schema#",
     $id: "https://vigiles.dev/frontmatter.schema.json",
     title: "vigiles frontmatter",
-    description:
-      "vigiles enforce rules declared in markdown YAML frontmatter (Level 1).",
+    description: "vigiles enforce rules declared in markdown YAML frontmatter.",
     type: "object",
     properties: {
       vigiles: {

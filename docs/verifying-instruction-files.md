@@ -181,7 +181,7 @@ the surface exists.
 
 | Surface (the gate)          | Rules                                                                                      | Applies to                                |
 | --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Instruction file &amp; docs | `require-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                    | all harnesses                             |
+| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`       | all harnesses                             |
 | Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
 | MCP                         | `mcp-config`                                                                               | all with MCP                              |
 | Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`              | Claude Code, Codex                        |
@@ -191,12 +191,12 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Spec &amp; integrity
 
-| Rule                                                | Default  | What it checks                                                      |
-| --------------------------------------------------- | -------- | ------------------------------------------------------------------- |
-| [`require-spec`](rules/require-spec.md)             | `"warn"` | Every CLAUDE.md / AGENTS.md has a spec, inline rule, or frontmatter |
-| [`integrity`](rules/integrity.md)                   | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                |
-| [`coverage`](rules/coverage.md)                     | `false`  | The spec covers enough of the project surface                       |
-| [`require-skill-spec`](rules/require-skill-spec.md) | `false`  | **Deprecated** — use `untested-skill` instead                       |
+| Rule                                                              | Default  | What it checks                                                                                   |
+| ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| [`require-instructions-spec`](rules/require-instructions-spec.md) | `"warn"` | Every CLAUDE.md / AGENTS.md has a `.spec.ts` behind it (narrow — inline/frontmatter don't count) |
+| [`integrity`](rules/integrity.md)                                 | `"warn"` | Compiled markdown wasn't hand-edited (SHA-256 check)                                             |
+| [`coverage`](rules/coverage.md)                                   | `false`  | The spec covers enough of the project surface                                                    |
+| [`require-skill-spec`](rules/require-skill-spec.md)               | `false`  | Every SKILL.md has a `.spec.ts` (the consistent parallel; off by default)                        |
 
 ### Test coverage
 
@@ -222,14 +222,14 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Hooks &amp; MCP
 
-| Rule                                                            | Default  | What it checks                                                            |
-| --------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
-| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)             |
-| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)       |
-| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)                |
-| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server    |
-| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool                  |
-| [`prefer-compiled-hooks`](rules/prefer-compiled-hooks.md)       | `"warn"` | One nudge: hand-written hooks could be compiled (recommendation, opt-out) |
+| Rule                                                            | Default  | What it checks                                                                   |
+| --------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)                    |
+| [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)              |
+| [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)                       |
+| [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server           |
+| [`mcp-hook-target-resolves`](rules/mcp-hook-target-resolves.md) | `"warn"` | A `type: mcp_tool` hook names a declared server + a tool                         |
+| [`prefer-compiled-hooks`](rules/prefer-compiled-hooks.md)       | `false`  | One nudge: hand-written hooks could be compiled (recommendation; off by default) |
 
 ### Skill triggers
 
@@ -252,15 +252,24 @@ Set severities in `.vigilesrc.json`:
 ```json
 {
   "rules": {
-    "require-spec": "error",
+    "require-instructions-spec": "error",
     "integrity": "error",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }
 ```
 
-Disable a rule for one file with `<!-- vigiles-disable require-spec -->` at the
-top of the markdown. `--strict` promotes `require-spec` to `"error"`.
+Disable a rule for one file with `<!-- vigiles-disable require-instructions-spec -->`
+at the top of the markdown. `--strict` promotes `require-instructions-spec` to
+`"error"`.
+
+`vigiles init` groups rules by confidence: the FP-safe **`structural`** group
+(broken tools / dead hooks / broken MCP / collisions) gates at `error` by default;
+the opinionated **`workflow`** group (`require-instructions-spec`, `untested-*`)
+is added by `--strict`; the **`nudge`** group (`frontmatter-valid`,
+`skill-frontmatter`, `prefer-compiled-hooks`, `unmarked-refs`) stays `warn` and
+never gates. `--report-only` writes the whole gate at `warn` (nothing fails CI).
+See [the CLI guide](cli.md#init).
 
 ## The marking nudge — what happens on every file save
 

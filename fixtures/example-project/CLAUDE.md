@@ -1,4 +1,4 @@
-<!-- vigiles-disable require-spec -->
+<!-- vigiles-disable require-instructions-spec -->
 
 # CLAUDE.md
 

@@ -220,8 +220,9 @@ import {
 import {
   checkIntegrity,
   ejectMarkdown,
-  REQUIRE_SPEC_DISABLE,
+  REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./core/integrity.js";
+import { adoptMarkdown } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
@@ -689,7 +690,7 @@ function validateSpecs(
       const specRef = resolve(process.cwd(), hashMatch[1]);
       if (!existsSync(specRef)) {
         log(
-          `  ✗ [require-spec] ${filePath} references "${hashMatch[1]}" but that spec no longer exists.`,
+          `  ✗ [require-instructions-spec] ${filePath} references "${hashMatch[1]}" but that spec no longer exists.`,
         );
         allValid = false;
       }
@@ -727,7 +728,7 @@ function check(filePaths: string[], silent = false): CombinedCheckResult {
     // `validateSpecs` only returns a boolean today, so we collapse
     // failures to 1 until it starts reporting counts. Kept in its own
     // counter so lint's "stale hash — run vigiles compile" remediation
-    // doesn't misreport a require-spec / other validation failure.
+    // doesn't misreport a require-instructions-spec / other validation failure.
     validationErrors: specsValid ? 0 : 1,
   };
 }
@@ -1690,9 +1691,29 @@ function init(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
   const specPath = `${target}.spec.ts`;
+  const specAbs = resolve(process.cwd(), specPath);
 
-  if (existsSync(resolve(process.cwd(), specPath))) {
+  if (existsSync(specAbs)) {
     console.log(`${specPath} already exists.`);
+    return;
+  }
+
+  // Auto-adopt: when the target file already exists with hand-written content
+  // (no integrity header), faithfully convert it into a spec instead of
+  // scaffolding a blank one — so `init` leaves you with a spec, not homework, and
+  // `require-instructions-spec` is satisfied by construction. The compile that
+  // follows reproduces the file (+ the header); review the diff. `vigiles eject`
+  // reverses it. See research/install-enforcement-dx.md.
+  const targetAbs = resolve(process.cwd(), target);
+  if (existsSync(targetAbs) && !targetHasHash(targetAbs)) {
+    const md = readFileSync(targetAbs, "utf-8");
+    const { source, tier, sectionCount } = adoptMarkdown(md, basename(target));
+    mkdirSync(dirname(specAbs), { recursive: true });
+    writeFileSync(specAbs, source);
+    console.log(
+      `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
+        `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
+    );
     return;
   }
 
@@ -1743,7 +1764,6 @@ export default claude({${targetLine}
   },
 });
 `;
-  const specAbs = resolve(process.cwd(), specPath);
   mkdirSync(dirname(specAbs), { recursive: true });
   writeFileSync(specAbs, template);
   console.log(`Created ${specPath} — edit it and run \`vigiles compile\`.`);
@@ -1752,7 +1772,7 @@ export default claude({${targetLine}
 /**
  * `vigiles eject [file]` — the inverse of `compile`: hand a compiled instruction
  * file back to the user as plain, hand-owned markdown. Strips the `vigiles:sha256`
- * integrity header, adds a `require-spec` disable marker so `lint` stays quiet,
+ * integrity header, adds a `require-instructions-spec` disable marker so `lint` stays quiet,
  * and removes the spec that managed it (`--keep-spec` to leave it). The
  * "managed-but-ejectable" escape hatch: adopting a typed spec is never a one-way
  * door.
@@ -1787,7 +1807,7 @@ function eject(args: string[]): void {
     }
   }
   console.log(
-    `  Left a \`${REQUIRE_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
+    `  Left a \`${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
   );
 }
 
@@ -2119,8 +2139,9 @@ interface Pillar1Result {
   specTargets: string[];
   /** Files actually written (for the commit hint). */
   written: string[];
-  /** Existing hand-written targets that still need adopt-spec. */
-  needsMigration: string[];
+  /** Existing hand-written targets `init` faithfully adopted into a spec (the
+   *  compiled output replaced them — the user reviews the diff). */
+  adopted: string[];
 }
 
 /** The instruction-file targets Pillar 1 will create specs for — the harness's
@@ -2213,7 +2234,7 @@ async function setupPillar1(
 ): Promise<Pillar1Result> {
   const cwd = process.cwd();
   const written: string[] = [];
-  const needsMigration: string[] = [];
+  const adopted: string[] = [];
   // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
   // AGENTS.md mirror (symlink or synced) to one canonical spec, then redirect
   // into a sync tool's source slot when one would own the output.
@@ -2227,22 +2248,23 @@ async function setupPillar1(
         ),
       );
 
-  // Create specs (blank). An existing hand-written target keeps its content —
-  // we scaffold the spec but flag it for migration rather than clobbering it.
+  // Create specs. An existing hand-written target is faithfully ADOPTED into a
+  // spec (init() does the convert), not clobbered with a blank one — so the
+  // compile below reproduces it (the user reviews the diff). A greenfield target
+  // gets a blank starter spec.
   for (const target of targets) {
     const specPath = `${target}.spec.ts`;
-    const targetExists = existsSync(resolve(cwd, target));
+    const targetAbs = resolve(cwd, target);
+    const willAdopt =
+      existsSync(targetAbs) &&
+      !targetHasHash(targetAbs) &&
+      !existsSync(resolve(cwd, specPath));
     if (existsSync(resolve(cwd, specPath))) {
       console.log(`✓ ${specPath} already exists`);
     } else {
-      init(["--target=" + target]); // prints "Created …"
+      init(["--target=" + target]); // adopts existing content, else blank scaffold
       written.push(specPath);
-    }
-    if (targetExists && !targetHasHash(resolve(cwd, target))) {
-      needsMigration.push(target);
-      console.log(
-        `  ${target} already has content — adopt it into a spec with the adopt-spec skill, then \`vigiles compile\`.`,
-      );
+      if (willAdopt) adopted.push(target);
     }
   }
 
@@ -2269,17 +2291,19 @@ async function setupPillar1(
   console.log("✓ Generated .vigiles/schema.json (YAML-LSP frontmatter schema)");
   written.push(".vigiles/schema.json");
 
-  // Compile — but only specs whose target is greenfield or already ours. A
-  // freshly-scaffolded blank spec over an existing hand-written file is skipped
-  // so we never overwrite the user's instructions with an empty compile.
+  // Compile — greenfield targets, already-ours targets, AND the just-adopted
+  // ones (a faithful adopted spec reproduces the file + adds the integrity
+  // header). A blank spec freshly scaffolded over an existing hand-written file
+  // is still skipped so we never overwrite instructions with an empty compile.
   console.log("\nCompiling specs...");
+  const adoptedTargets = new Set(adopted.map((t) => resolve(cwd, t)));
   const specs = findSpecs().filter((s) => {
     const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
-    return !existsSync(tf) || targetHasHash(tf);
+    return !existsSync(tf) || targetHasHash(tf) || adoptedTargets.has(tf);
   });
   if (specs.length > 0) await compile(specs, loadConfig());
 
-  return { specTargets: targets, written, needsMigration };
+  return { specTargets: targets, written, adopted };
 }
 
 /** Whether a harness binary (`claude`, `codex`) is on PATH. */
@@ -2458,17 +2482,20 @@ function printSetupSummary(opts: {
   plan: SetupPlan;
   strict: boolean;
   targets: string[];
-  needsMigration: string[];
+  adopted: string[];
   written: string[];
 }): void {
-  const { plan, strict, targets, needsMigration, written } = opts;
+  const { plan, strict, targets, adopted, written } = opts;
   const specPathsList = targets.map((t) => `${t}.spec.ts`);
   console.log("\n---\nSetup complete.\n");
 
   const nextSteps: string[] = [];
-  if (needsMigration.length > 0) {
+  if (adopted.length > 0) {
     nextSteps.push(
-      `Adopt ${needsMigration.join(", ")} into a spec with the adopt-spec skill, then \`npx vigiles compile\``,
+      `Review the diff on ${adopted.join(", ")} — faithfully adopted into a spec (\`git diff\`); \`vigiles eject\` reverses it`,
+    );
+    nextSteps.push(
+      `Run the \`/strengthen\` skill to upgrade prose rules to verified enforce()/guard()`,
     );
   } else if (specPathsList.length > 0) {
     nextSteps.push(
@@ -2526,12 +2553,12 @@ async function setup(args: string[]): Promise<void> {
 
   // Lint pillar — verify instruction-file references.
   let targets: string[] = [];
-  let needsMigration: string[] = [];
+  let adopted: string[] = [];
   if (plan.lint) {
     console.log("");
     const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
-    needsMigration = p1.needsMigration;
+    adopted = p1.adopted;
     written.push(...p1.written);
   }
 
@@ -2574,10 +2601,16 @@ async function setup(args: string[]): Promise<void> {
   }
 
   // Project config — record the harness(es) so compile/lint select the dialect
-  // deterministically (no cwd sniffing), plus strict rule severities on --strict.
-  writeProjectConfig({ harnesses, strict, written });
+  // deterministically (no cwd sniffing), plus strict rule severities on --strict
+  // (or all-warn under --report-only).
+  writeProjectConfig({
+    harnesses,
+    strict,
+    reportOnly: parsed.reportOnly,
+    written,
+  });
 
-  printSetupSummary({ plan, strict, targets, needsMigration, written });
+  printSetupSummary({ plan, strict, targets, adopted, written });
 }
 
 /** Canonical, de-duplicated harness list → a config value (string when one). */
@@ -2594,6 +2627,7 @@ function harnessConfigValue(harnesses: string[]): string | string[] {
 function writeProjectConfig(opts: {
   harnesses: string[];
   strict: boolean;
+  reportOnly: boolean;
   written: string[];
 }): void {
   const configPath = resolve(process.cwd(), ".vigilesrc.json");
@@ -2612,6 +2646,7 @@ function writeProjectConfig(opts: {
   const merged = mergeProjectConfig(existing, {
     harness: harnessConfigValue(opts.harnesses),
     strict: opts.strict,
+    reportOnly: opts.reportOnly,
   });
   if (!merged) return;
   writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
@@ -3333,7 +3368,7 @@ function findInstructionFiles(
 ): string[] {
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
   // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
-  // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-spec.
+  // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-instructions-spec.
   // node_modules/dist/.git stay always-excluded.
   const ignore = [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude];
   // Discover instruction files under one directory, as paths relative to cwd.
@@ -5084,7 +5119,7 @@ async function main(): Promise<void> {
     case "init": {
       // Explicit --target bypasses the setup wizard and always creates a
       // bare spec, so `npx vigiles init --target=<file>` is a reliable
-      // remediation for the require-spec validator. Bare `vigiles init`
+      // remediation for the require-instructions-spec validator. Bare `vigiles init`
       // still runs the full wizard (project detection + auto-targets).
       const hasTarget = args.some((a) => a.startsWith("--target="));
       if (hasTarget) {

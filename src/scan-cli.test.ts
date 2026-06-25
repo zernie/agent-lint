@@ -672,8 +672,10 @@ describe("scan: trigger-tier nudge", () => {
     env: Record<string, string | undefined>,
   ): string {
     // Start from a copy with all model-access signals stripped, then apply env.
-    const base: Record<string, string | undefined> = { ...process.env };
-    for (const k of MODEL_ENV_KEYS) delete base[k];
+    const base: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (!(MODEL_ENV_KEYS as readonly string[]).includes(k)) base[k] = v;
+    }
     try {
       return execSync(`node ${CLI} ${args}`, {
         encoding: "utf-8",
@@ -700,7 +702,9 @@ describe("scan: trigger-tier nudge", () => {
       "---\nname: do-thing\ndescription: Does a thing when the user asks to do the thing.\n---\n\nBody.\n",
     );
   });
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
     const out = runEnv("scan .", { CLAUDECODE: "1" });

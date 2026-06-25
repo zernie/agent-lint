@@ -3,9 +3,6 @@ import { globSync } from "glob";
 import { resolve, basename as pathBasename } from "node:path";
 import { cosmiconfigSync } from "cosmiconfig";
 
-import { hasInlineRules } from "./inline.js";
-import { hasFrontmatterRules } from "./frontmatter.js";
-
 import type {
   ParsedRule,
   ValidationError,
@@ -63,13 +60,13 @@ const INSTRUCTION_FILES: readonly string[] = ["CLAUDE.md", "AGENTS.md"];
 const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
 const DEFAULT_RULES: Required<RulesConfig> = {
-  "require-spec": "warn",
-  // DEPRECATED — default OFF. Skills are legitimately hand-written (Level 0/1),
-  // so requiring a .spec.ts per SKILL.md was the wrong constraint and only added
-  // noise (it also nagged about vendored/fixture/bench skills). Use the
-  // `untested-*` rules instead — "every skill/agent/hook ships with a test or
-  // eval" is the coverage that matters. The implementation is kept: setting
-  // `require-skill-spec` explicitly still works for anyone who wants it.
+  "require-instructions-spec": "warn",
+  // Default OFF — the consistent `require-<surface>-spec` parallel. Skills are
+  // legitimately hand-written, so requiring a .spec.ts per SKILL.md is the wrong
+  // default (it would nag about vendored/fixture/bench skills); the coverage that
+  // matters is the `untested-*` rules ("every skill/agent/hook ships with a test
+  // or eval"). Set `require-skill-spec` explicitly if your team wants every skill
+  // spec-managed.
   "require-skill-spec": false,
   integrity: "warn",
   coverage: false,
@@ -92,8 +89,10 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "mcp-tool-resolves": "warn",
   // A hook script referenced but missing never runs — on by default at warn.
   "hook-script-exists": "warn",
-  // Discovery nudge toward compiled hooks (one finding, opt-out) — warn.
-  "prefer-compiled-hooks": "warn",
+  // Discovery nudge toward compiled hooks (one finding) — default OFF: it's a
+  // recommendation, not a defect (the hand-written shell lane stays first-class),
+  // so it shouldn't fire unasked. Set "warn"/"error" to opt in.
+  "prefer-compiled-hooks": false,
   // High-precision (close-typo only) deny-list mirror of subagent-tool-contract.
   "disallowed-tools-contract": "warn",
   // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
@@ -255,7 +254,8 @@ export function validate(
 
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
-  const disableComment = /<!--\s*vigiles-disable\s+require-spec\s*-->/;
+  const disableComment =
+    /<!--\s*vigiles-disable\s+require-instructions-spec\s*-->/;
 
   if (filePath) {
     const basename = pathBasename(filePath);
@@ -263,20 +263,19 @@ export function validate(
     const isInstruction = recognized.includes(basename);
     const isSkill = basename === "SKILL.md";
 
-    // --- require-spec (CLAUDE.md / AGENTS.md) ---
-    const specSeverity = activeRules["require-spec"];
+    // --- require-instructions-spec (CLAUDE.md / AGENTS.md) ---
+    // NARROW: only a `.spec.ts` sibling satisfies it. The rule name says "spec",
+    // so inline `<!-- vigiles:enforce -->` / `vigiles:` frontmatter do NOT count
+    // (a user on inline mode keeps this rule off — it's a workflow-tier opt-in).
+    // `vigiles init` auto-adopts every instruction file into a spec, so this is
+    // green by construction after setup.
+    const specSeverity = activeRules["require-instructions-spec"];
     if (specSeverity && isInstruction && !disableComment.test(content)) {
       const specPath = filePath + ".spec.ts";
-      // Inline mode counts as a spec — any parseable
-      // `<!-- vigiles:enforce ... -->` comment means the file is
-      // verified on `vigiles lint` even without a .spec.ts sibling.
-      // Delegate to the real parser so a malformed marker can't
-      // satisfy require-spec with a rule that lint can't verify.
-      const hasInline = hasInlineRules(content) || hasFrontmatterRules(content);
-      if (!existsSync(specPath) && !hasInline) {
+      if (!existsSync(specPath)) {
         const msg: ValidationError = {
-          rule: "require-spec",
-          message: `No spec file found for "${filePath}". Expected "${specPath}". Run \`npx vigiles init --target=${filePath}\` to create one, add inline \`<!-- vigiles:enforce ... -->\` comments or a \`vigiles:\` frontmatter block, or disable with <!-- vigiles-disable require-spec -->.`,
+          rule: "require-instructions-spec",
+          message: `No spec file found for "${filePath}". Expected "${specPath}". Run \`npx vigiles init --target=${filePath}\` to adopt it into a spec, or disable with <!-- vigiles-disable require-instructions-spec -->.`,
           line: 1,
         };
         if (specSeverity === "error") {
@@ -287,9 +286,8 @@ export function validate(
       }
     }
 
-    // --- require-skill-spec (SKILL.md) — DEPRECATED but still honored when a
-    // user sets it explicitly, so reading the deprecated key here is intentional.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    // --- require-skill-spec (SKILL.md) — the consistent require-<surface>-spec
+    // parallel, off by default; honored when a user sets it explicitly.
     const skillSeverity = activeRules["require-skill-spec"];
     if (skillSeverity && isSkill && !disableComment.test(content)) {
       const specPath = filePath + ".spec.ts";
@@ -399,7 +397,7 @@ export function validatePaths(
   let allValid = true;
   // Maps a real (symlink-resolved) path → the first path validated for it, so a
   // symlinked/synced CLAUDE.md⇄AGENTS.md mirror is validated ONCE on the real
-  // file instead of double-firing require-spec on the mirror's name (sync-tool-
+  // file instead of double-firing require-instructions-spec on the mirror's name (sync-tool-
   // compatibility.md req 7). Recorded only on a successful validation, so a
   // symlink seen first (and skipped) never shadows its real target.
   const seenReal = new Map<string, string>();
@@ -438,7 +436,7 @@ export function validatePaths(
       continue;
     }
 
-    // Attribute require-spec/integrity to the REAL file when this path is a
+    // Attribute require-instructions-spec/integrity to the REAL file when this path is a
     // symlink, so a symlinked AGENTS.md resolves to CLAUDE.md's spec rather than
     // a nonexistent AGENTS.md.spec.ts. Non-symlinks keep the original path
     // verbatim (behaviour-preserving).
