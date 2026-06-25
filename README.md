@@ -12,6 +12,16 @@
      buried mid-paragraph, and END a section on the win, not the caveat (demote
      trade-offs to a trailing aside). Break run-on em-dash/semicolon chains — a
      paragraph is ≤ ~3 lines, one idea.
+  1c. LEAD WITH THE CONCRETE PAIN the reader already feels — named in THEIR
+     situation, with the SPECIFIC silent failure, not an abstraction. "You
+     installed plugins and wrote skills — but do they actually work? A skill that
+     never fires, a hook that blocks nothing, a CLAUDE.md full of dead refs" beats
+     "reliability for your harness"; "a library with no tests" is the anchoring
+     analogy. This is NOT a 1b violation: a pain about the READER's situation is a
+     hook, not an apology — 1b bans opening with vigiles's OWN deficiency, a
+     caveat, or a competitor, never the user's pain. SAME FOR THE SUBDOCS: open
+     every guide with the concrete pain, THEN the "what this doc is" line + the
+     README uplink (per docs-quality in CLAUDE.md).
   2. COMPILED SPECS ARE EASY — reassure, never intimidate. You rarely hand-write
      a .spec.ts: model-invocable skills (edit-spec / strengthen / test-harness)
      author + edit it, and hooks auto-compile on save. Present the typed spec as
