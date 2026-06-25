@@ -397,6 +397,9 @@ export function glob(pattern: string): GlobRef {
  * the region the unit is treated as read-only (the `"pure"` effective floor),
  * inside it the declared purity floor applies. The position-aware companion to
  * the per-call `purity` floor. See `research/effect-boundary-design.md`.
+ *
+ * @internal Experimental (parked P3) — NOT part of the frozen public surface;
+ * may change or be removed without a major bump pre-1.0.
  */
 export interface EffectRegion {
   readonly _ref: "effect";
@@ -442,6 +445,9 @@ export function instructions(
  * Returns an `EffectRegion` fragment; `compile` wraps its rendered body in
  * `<!-- vigiles:effect -->` markers. Independent of the `doc()` authoring
  * surface — it does not block on it.
+ *
+ * @internal Experimental (parked P3) — NOT part of the frozen public surface;
+ * may change or be removed without a major bump pre-1.0.
  */
 export function effect(
   strings: TemplateStringsArray,
@@ -1057,6 +1063,9 @@ export function railway(spec: Omit<Railway, "_specType">): Railway {
  * Declared via `needs(...)` and threaded into the typed agent so `pipe` can
  * cross-reference it. Independent of `result()` (the output) — an agent both
  * `needs` an input shape and produces an `ok`/`err` output shape.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export type NeedsContract<N extends Shape> = N;
 
@@ -1066,6 +1075,9 @@ export type NeedsContract<N extends Shape> = N;
  * step with no upstream requirement — valid as the FIRST step of a pipeline.
  *
  *   needs({ plan: "string", files: "string[]" })
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export function needs<const N extends Shape>(shape: N): NeedsContract<N> {
   return shape;
@@ -1075,6 +1087,9 @@ export function needs<const N extends Shape>(shape: N): NeedsContract<N> {
  * A typed pipeline step: a `TypedAgentSpec` paired with the input `needs` it
  * reads from the prior step's `ok`. `step()` builds one; `pipe` checks that the
  * prior step's `ok` shape supplies this step's `needs`.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export interface PipeStep<
   Needs extends Shape,
@@ -1092,6 +1107,9 @@ export interface PipeStep<
  * second is the `needs(...)` input contract.
  *
  *   pipeStep(implementer, needs({ plan: "string", files: "string[]" }))
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export function pipeStep<
   Needs extends Shape,
@@ -1110,6 +1128,9 @@ export function pipeStep<
  * descriptive error object naming the offending field (`__missing` /
  * `__mismatch`), which surfaces at the mismatched call. Shallow (a per-field
  * mapped type, not a recursion) to avoid TS2589.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export type Supplies<Producer extends Shape, Consumer extends Shape> = {
   [K in keyof Consumer]: K extends keyof Producer
@@ -1134,6 +1155,9 @@ export type Supplies<Producer extends Shape, Consumer extends Shape> = {
  * assigning `true` to it is a `tsc` error at edit time. Shallow (one wrap over
  * the per-field `Supplies` mapped type, no recursion); the generator emits one
  * assertion per consecutive step pair (O(N)), keeping clear of TS2589.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export type Handoff<Producer extends Shape, Consumer extends Shape> =
   Supplies<Producer, Consumer> extends true
@@ -1141,7 +1165,9 @@ export type Handoff<Producer extends Shape, Consumer extends Shape> =
     : { readonly __handoff_error: Supplies<Producer, Consumer> };
 
 /** A typed pipeline value — carries the LAST step's `ok` and the UNION of every
- *  step's `err` (any step can short-circuit to the error track). */
+ *  step's `err` (any step can short-circuit to the error track).
+ *  @internal Experimental typed-composition surface — NOT part of the frozen
+ *  public API (pre-1.0); may change without a major bump. */
 export interface Pipeline<Ok extends Shape, Err extends Shape> {
   readonly _specType: "pipeline";
   /** Ordered agent names — the resolved compose order. */
@@ -1158,6 +1184,9 @@ export interface Pipeline<Ok extends Shape, Err extends Shape> {
  * Begin a typed pipeline from its first step. The first step has no upstream, so
  * its `needs` must be empty (`needs({})` or omitted). Returns a `Pipeline`
  * carrying that step's `ok`/`err` forward.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export function start<Ok extends Shape, Err extends Shape>(
   first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>,
@@ -1187,6 +1216,9 @@ export function start<Ok extends Shape, Err extends Shape>(
  * Named `andThen` (Wlaschin's railway `bind`/`andThen`), NOT `then`: a module
  * exporting a function called `then` becomes a thenable, so `await import()` of
  * any barrel re-exporting it would invoke it — a footgun the rename avoids.
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export function andThen<
   PriorOk extends Shape,
@@ -1231,6 +1263,9 @@ export function andThen<
  *     pipeStep(implementer, needs({ plan: "string", files: "string[]" })),
  *     pipeStep(reviewer, needs({ diff: "string" })),
  *   ) // ← won't compile if a handoff doesn't line up
+ *
+ * @internal Experimental typed-composition surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 /* eslint-disable no-redeclare -- TypeScript function overloads (the base
    no-redeclare rule, unlike @typescript-eslint/no-redeclare, flags the overload
@@ -1332,6 +1367,9 @@ export function pipe(
  * object naming the dangling target + the railway it came from — so assigning
  * `true` to it is a `tsc` error at edit time. Shallow (one conditional, no
  * recursion); the generator emits one assertion per edge (O(N)).
+ *
+ * @internal Experimental whole-harness-codegen surface — NOT part of the frozen
+ * public API (pre-1.0); may change without a major bump.
  */
 export type KnownAgentName<
   Target extends string,

@@ -20,7 +20,7 @@ npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve 
 npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
-npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (Level 1; --check to verify)
+npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (--check to verify)
 npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
 ```
 
