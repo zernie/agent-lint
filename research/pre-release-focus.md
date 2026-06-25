@@ -122,6 +122,16 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
   vigiles verifies + measures the harness your agent runs on.
 - **Category line:** the **deterministic shift-left guardrail + private measurement for
   your agent harness.**
+- **The differentiator (author-time vs runtime — THE one-line wedge):** every other
+  player catches drift at **runtime, after the fact** (observability / post-hoc) or lints
+  **structure**; vigiles proves the references are real and the spec compiles **before the
+  agent ever runs** — author-time, deterministic, pre-run. Public-safe phrasing (no
+  competitor names): _"verify the harness before it runs, not after, in production."_ This
+  is the empty lane; lead the article + README with it.
+- **Citeable authorities (ride the now-canon "harness engineering" frame):** Karpathy —
+  _"LLMs can automate what you can verify"_; OpenAI — _"the harness is hard"_; arXiv AHE's
+  **structure-beats-prose** ablation = the proof that `enforce()` > `guidance()`. Use these
+  in the launch article; keep competitor + VC names OUT (they live in the `startup/` vault).
 - **The analogy (pick ONE):** lead with **"a test suite + CI for your CLAUDE.md, hooks &
   skills"** (concrete, matches the MEASURE wedge); keep **"TypeScript's `strict` mode for
   your harness"** as the depth/graduated-adoption analogy (the type-safety-guardrail
