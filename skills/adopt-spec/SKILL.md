@@ -7,7 +7,7 @@ argument-hint: <path to CLAUDE.md, defaults to CLAUDE.md>
 
 Start a typed `CLAUDE.md.spec.ts` from an existing hand-written CLAUDE.md (or AGENTS.md). This is the non-destructive adoption path — you keep your existing instruction file as the starting point and get type safety going forward.
 
-> **Don't need full TypeScript?** A typed spec is the deepest commitment level. If the user only wants verified rules without a build step, point them at markdown mode first: inline `<!-- vigiles:enforce ... -->` comments (Level 0) or a `vigiles:` YAML frontmatter block with `vigiles generate-schema` for editor autocomplete (Level 1). Both are verified by `vigiles lint` with the same engine as a spec. See `docs/markdown-mode.md`. Adopt a spec only when they want compiler-grade guarantees.
+> **Faithful by default, and reversible.** Adoption is non-destructive: the goal is a spec that compiles back to the user's existing file as closely as possible — preserve every rule, command, key file, and prose section. Don't upgrade `guidance()` to `enforce()` here; that's a separate, opt-in step (the `strengthen` skill). And it's never a one-way door — `vigiles eject <file>` hands the file back as plain hand-owned markdown anytime. For the lightest touch with no spec at all, inline `<!-- vigiles:enforce ... -->` comments are verified by `vigiles lint` with the same engine.
 
 ## Instructions
 
@@ -100,9 +100,9 @@ Show the user:
 2. How many rules were converted (enforce vs guidance vs TODO)
 3. How many file/cmd refs were added for stale reference detection
 4. The command to compile: `npx vigiles compile`
-5. The command to verify: `npx vigiles check`
+5. The command to verify: `npx vigiles lint`
 
-Ask if they want you to write the file. If yes, also suggest adding to `.gitignore` or updating CI to run `vigiles compile` and `vigiles check`.
+Ask if they want you to write the file. If yes, also suggest adding to `.gitignore` or updating CI to run `vigiles compile` and `vigiles lint`.
 
 ### Step 6: Optional — Set Up CI
 
@@ -111,14 +111,14 @@ If the user wants CI integration, suggest adding to their GitHub Actions workflo
 ```yaml
 - name: Compile specs
   run: npx vigiles compile
-- name: Verify integrity
-  run: npx vigiles check
+- name: Verify references + integrity
+  run: npx vigiles lint
 ```
 
 Or using the vigiles GitHub Action:
 
 ```yaml
-- uses: zernie/vigiles@main
+- uses: zernie/vigiles@v1
   with:
-    command: check
+    command: lint
 ```

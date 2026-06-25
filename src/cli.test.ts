@@ -2032,3 +2032,68 @@ describe("CLI: markdown-mode file/cmd verification", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// vigiles eject — un-manage a compiled file back to plain markdown
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles eject", () => {
+  let tmpDir: string;
+  const HEADER =
+    "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->";
+  const compiled = `${HEADER}\n\n# CLAUDE.md\n\nSome guidance.\n`;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-eject-"));
+  });
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("strips the integrity header, adds the disable marker, and removes the spec", () => {
+    writeFileSync(join(tmpDir, "CLAUDE.md"), compiled);
+    writeFileSync(join(tmpDir, "CLAUDE.md.spec.ts"), "export default {}\n");
+    const { stdout, exitCode } = run("eject CLAUDE.md", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(stdout.includes("Ejected CLAUDE.md"));
+    const out = readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8");
+    assert.ok(!out.includes("vigiles:sha256"), "header stripped");
+    assert.ok(
+      out.includes("<!-- vigiles-disable require-spec -->"),
+      "marker added",
+    );
+    assert.ok(out.includes("# CLAUDE.md"), "body preserved");
+    assert.ok(!existsSync(join(tmpDir, "CLAUDE.md.spec.ts")), "spec removed");
+  });
+
+  it("leaves lint quiet on the ejected file (no require-spec error)", () => {
+    const { stdout, stderr, exitCode } = run("lint CLAUDE.md", tmpDir);
+    assert.ok(
+      !(stdout + stderr).includes("require-spec"),
+      "require-spec satisfied",
+    );
+    assert.equal(exitCode, 0);
+  });
+
+  it("reports nothing to eject on a plain (already-ejected) file", () => {
+    const { stdout, exitCode } = run("eject CLAUDE.md", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(stdout.includes("nothing to eject"));
+  });
+
+  it("--keep-spec leaves the spec in place", () => {
+    writeFileSync(
+      join(tmpDir, "K.md"),
+      `${HEADER.replace("CLAUDE.md", "K.md")}\n\n# K\n`,
+    );
+    writeFileSync(join(tmpDir, "K.md.spec.ts"), "export default {}\n");
+    const { exitCode } = run("eject K.md --keep-spec", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(existsSync(join(tmpDir, "K.md.spec.ts")), "spec kept");
+  });
+
+  it("errors on a missing file", () => {
+    const { exitCode } = run("eject does-not-exist.md", tmpDir);
+    assert.equal(exitCode, 1);
+  });
+});

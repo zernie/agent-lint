@@ -9,6 +9,7 @@ For the pitch and quick start, see the [README](../README.md).
 ```bash
 npx vigiles init [--target=X.md]    # Scaffold a spec (runs full setup wizard by default)
 npx vigiles compile [files...]      # Compile .spec.ts → .md AND .vigiles/hooks/* → merged hooks config + stamp
+npx vigiles eject [file]            # Un-manage a compiled file → plain hand-owned markdown (--keep-spec)
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
@@ -104,6 +105,25 @@ Two multi-harness behaviours:
 `lint` takes **no** `--harness`: reference verification is harness-agnostic (it
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
 one dialect) and `scan` (reports harness-specific structure).
+
+### `eject [file]` — adopting a spec is never a one-way door
+
+`eject` is the inverse of `compile`: it hands a compiled instruction file back to
+you as plain, hand-owned markdown. It strips the `vigiles:sha256` integrity
+header, removes the `.spec.ts` that managed the file (`--keep-spec` leaves it),
+and adds a `<!-- vigiles-disable require-spec -->` marker so `lint` won't ask for
+a spec back. The compiled file's content is preserved verbatim — you keep
+everything, you just stop managing it through a spec.
+
+```bash
+npx vigiles eject CLAUDE.md             # back to plain markdown; the spec is removed
+npx vigiles eject CLAUDE.md --keep-spec # keep the spec (compile would re-manage the file)
+```
+
+A file with no integrity header isn't vigiles-managed, so `eject` reports
+"nothing to eject" and changes nothing. This is the escape hatch behind
+"managed, but ejectable": you can adopt a typed spec for stronger guarantees
+knowing you can always drop back to markdown you own.
 
 ### Compiled hooks — folded into `compile`
 

@@ -365,7 +365,7 @@ If two rules try to fix the same range of code, ESLint drops both fixes. Avoid t
 ### Monorepo considerations
 
 - ESLint flat config is resolved from `cwd`, not from the file being linted. In a monorepo, set `cwd` to the package root, not the workspace root.
-- `vigiles generate-types` discovers ESLint rules using `calculateConfigForFile("dummy.js")` from the project `basePath`. If your monorepo has different configs per package, run `generate-types` from each package root.
+- `vigiles generate types` discovers ESLint rules using `calculateConfigForFile("dummy.js")` from the project `basePath`. If your monorepo has different configs per package, run `generate types` from each package root.
 - Plugin rules must be installed in the `node_modules` visible from the config file's location. Hoisted deps in a monorepo can cause "plugin not found" errors — install them in the package's own `devDependencies`.
 
 ## Mapping PR Feedback to Rule Strategy

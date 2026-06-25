@@ -16,6 +16,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   lstatSync,
 } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
@@ -208,7 +209,11 @@ import {
   anyFailed,
   scriptGlob,
 } from "./adapters/claude-code/run-scripts.js";
-import { checkIntegrity } from "./core/integrity.js";
+import {
+  checkIntegrity,
+  ejectMarkdown,
+  REQUIRE_SPEC_DISABLE,
+} from "./core/integrity.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
@@ -1734,6 +1739,48 @@ export default claude({${targetLine}
   mkdirSync(dirname(specAbs), { recursive: true });
   writeFileSync(specAbs, template);
   console.log(`Created ${specPath} — edit it and run \`vigiles compile\`.`);
+}
+
+/**
+ * `vigiles eject [file]` — the inverse of `compile`: hand a compiled instruction
+ * file back to the user as plain, hand-owned markdown. Strips the `vigiles:sha256`
+ * integrity header, adds a `require-spec` disable marker so `lint` stays quiet,
+ * and removes the spec that managed it (`--keep-spec` to leave it). The
+ * "managed-but-ejectable" escape hatch: adopting a typed spec is never a one-way
+ * door.
+ */
+function eject(args: string[]): void {
+  const keepSpec = args.includes("--keep-spec");
+  const file = args.find((a) => !a.startsWith("-")) ?? "CLAUDE.md";
+  const abs = resolve(process.cwd(), file);
+  if (!existsSync(abs)) {
+    console.error(`✗ ${file}: no such file.`);
+    process.exitCode = 1;
+    return;
+  }
+  const ejected = ejectMarkdown(readFileSync(abs, "utf-8"));
+  if (!ejected) {
+    console.log(
+      `${file} is not vigiles-managed (no integrity header) — nothing to eject.`,
+    );
+    return;
+  }
+  writeFileSync(abs, ejected.markdown);
+  console.log(`✓ Ejected ${file} — it's now plain, hand-owned markdown.`);
+  const specAbs = resolve(process.cwd(), ejected.specFile);
+  if (existsSync(specAbs)) {
+    if (keepSpec) {
+      console.log(
+        `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
+      );
+    } else {
+      rmSync(specAbs);
+      console.log(`  Removed ${ejected.specFile} (the spec that managed it).`);
+    }
+  }
+  console.log(
+    `  Left a \`${REQUIRE_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -3951,6 +3998,9 @@ function printUsage(command: string | undefined): void {
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
   console.log(
+    "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
+  );
+  console.log(
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
@@ -4985,6 +5035,12 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "eject":
+      // Inverse of compile: un-manage a compiled file → plain hand-owned
+      // markdown (the "always ejectable" escape hatch).
+      eject(args.slice(1));
+      break;
 
     case "lint": {
       // lint = verify references + discover + guidance count
