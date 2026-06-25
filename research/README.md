@@ -13,6 +13,9 @@ one click away.
 
 - [`landscape-mid-2026.md`](landscape-mid-2026.md) — the mid-2026 frame: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI. The positioning vigiles sits in.
 - [`competitive-landscape.md`](competitive-landscape.md) — competitive landscape: rule-porter, rulesync, vibe-cli, Ruler, moat analysis.
+- [`pre-release-focus.md`](pre-release-focus.md) — the consolidation: the park/polish/add triage of the WHOLE feature surface, the API-surface freeze plan, the positioning lock, the markdown-mode decision, and the launch sequence. The "what actually ships" lens the roadmap points to. (Investor/competitor strategy lives in the private `startup/` vault, not indexed here.)
+- [`agentic-harness-evolution-poach.md`](agentic-harness-evolution-poach.md) — poach of the arXiv "Agentic Harness Engineering" paper (auto-evolving coding-agent harnesses) for the optimize/measure/evolve line: the falsifiable-prediction-per-edit + auto-rollback loop, and the peer-reviewed validation that structure (tools/hooks/memory) beats prose (enforce > guidance).
+- [`oss-lane-sweep-2026-06.md`](oss-lane-sweep-2026-06.md) — GitHub/npm sweep confirming the cross-reference-verification + harness-testing + skill-eval lane is unoccupied by OSS; the structural-lint surface is crowded with `agnix` (297★) the incumbent to watch (differentiate on capabilities A/B/C/D, not rule count).
 - [`sync-landscape-analysis.md`](sync-landscape-analysis.md) — rule-sync landscape, per-tool breakdown, what's worth absorbing.
 - [`reference-verification-limits.md`](reference-verification-limits.md) — the conceptual boundary of reference verification (the moat) and its undecidability ceiling.
 

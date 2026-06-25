@@ -31,6 +31,84 @@
 > after. The bridge bet = **capability-diff (#2)** (serves both). Full status & gaps:
 > [`measurement-authority.md`](measurement-authority.md#status--gaps-2026-06-21--honest-read-of-where-the-pivot-stands).
 
+## 🚀 Launch readiness (pre-HN) — the current top priority (2026-06-24)
+
+> **▶ The full triage lives in [`pre-release-focus.md`](pre-release-focus.md)** — the
+> park/polish/add decision over the WHOLE feature surface, the API-surface freeze plan,
+> the positioning lock, the markdown-mode decision, and the launch sequence. This
+> section is the summary; that doc is the detail.
+
+> **📌 Positioning validation + the launch-article language to mirror** ("silent
+> failure / drift from system prompt / tool contracts / harness fixes") live in the
+> private `startup/` vault (git-crypt) along with the investor/competitor research —
+> not detailed here.
+
+> The new orienting goal: ship a **stable, focused public surface** and launch via a
+> **measurement/debunk ARTICLE**, not a bare "Show HN: repo" drop (lint alone is too
+> boring for the front page; the eval/measurement story is the interesting one). The
+> repo is the DESTINATION the article drives to ("run it yourself — free, no key"),
+> not the headline.
+>
+> **Launch framing — method-first AT SCALE, NOT caveman-first.** Caveman is
+> SATURATED (~6mo old, multiple outlets, author conceded — see the Explore "viral
+> debunk" note), so it is ONE validation row (it agrees with prior coverage → proves
+> the harness is sound), never the headline. Headline = _"I built a re-runnable
+> harness and measured the claims of N hyped Claude skills — here's the
+> claim-vs-reality leaderboard,"_ where the FRESH content is the under-measured
+> skills + head-to-heads + the surprising findings (output GROWS, best-case-is-worst).
+>
+> **The reorder this implies:**
+>
+> - **PROMOTED to launch-critical-path:** Ecosystem-Benchmark v0 (P1 below) — measure
+>   ~10–20 hyped skills on `bench/corpus`. This is the main thing between us and the
+>   article. The single most important pre-launch BUILD.
+> - **PROMOTED — surface freeze (the "stop the breaking changes" posture the launch
+>   needs):** (1) lock the **8 CLI verbs + flags + exit codes** (just consolidated —
+>   the CLI is what ~90% of launch users touch, and it's a narrower/stabler contract
+>   than the library); (2) draw a hard **public vs internal line** — un-export or
+>   loudly label the experimental/parked surface (`guards.ts`, `hook-spec.ts`,
+>   effect-region, the opencode prototype, the deep typed-spec exports) so a later
+>   breaking change burns nobody (audit via the `api-extractor` `etc/*.api.md`
+>   surface); (3) ship a one-paragraph **0.x stability statement** ("CLI stable;
+>   library API 0.x, evolving") — honest beats a fake 1.0.
+> - **PROMOTED — first-run hardening + don't-cry-wolf:** a clean `npx vigiles@latest`
+>   from an empty dir AND a real repo works fast, no crash, no key / no TS for
+>   lint+scan+init; run scan/lint over the **top ~10 community plugins** and kill any
+>   embarrassing false positive (a cry-wolf on a famous repo on launch day is fatal).
+>   Plus a 20-sec asciinema/GIF of `lint` finding a stale ref + `scan` ranking a
+>   marketplace, and a smoke-test of the PUBLISHED npm package.
+> - **PARKED for launch (add back post-HN):** Guard / compiled hooks — niche (you must
+>   write hooks) + the honest #34692 caveat dilutes a first impression. README section
+>   - table row commented out (markers point here); the `docs/compiled-hooks.md` guide
+>     stays. Re-headline post-launch.
+> - **CUT / COLLAPSE — the markdown adoption ladder:** KEEP the zero-TS inline-comment
+>   on-ramp (`<!-- vigiles:enforce -->`; the README depends on it), but collapse the
+>   3-rung ladder (inline / frontmatter / spec) to **2 (plain markdown → typed spec)** —
+>   frontmatter mode (Level 1 `vigiles:` block) is a redundant 2nd syntax. Stop marketing
+>   "Level 0/1/2"; cutting the frontmatter surface is a small BREAKING change (mark it).
+>   Detail in `pre-release-focus.md`.
+> - **DEFERRED to post-launch (the flywheel, run once there are eyeballs):** the public
+>   leaderboard site + README badge, capability-diff M1, the twin work, macOS Seatbelt,
+>   all remaining typed-spec depth. **Moratorium on net-new research + new instruments
+>   until after launch** (the churn this whole reprioritization is meant to end).
+>
+> **Launch-blocker checklist:** [ ] Ecosystem-Benchmark v0 · [ ] CLI/API surface frozen
+>
+> - stability statement · [ ] first-run hardened + top-10-plugin FP sweep · [ ] the
+>   article drafted (method-first) · [ ] README 60-sec proof + GIF · [ ] CI green +
+>   published-package smoke test. The viral leaderboard/badge is the FOLLOW-UP, not a blocker.
+
+> **🧭 The positioning wedge (from the 2026-06-25 competitive fan-out) — for the
+> article + README.** Every competitor, funded AND OSS, is **runtime/observability/
+> post-hoc** (BentoLabs/Salus/Braintrust) or **structure-lint** (agnix); vigiles is the
+> ONLY **author-time / deterministic / pre-run verification** play. One-liner:
+> _"everyone else catches drift at runtime, after the fact; vigiles proves the
+> references are real and the spec compiles **before the agent ever runs**."_ Ride the
+> now-canon **"harness engineering"** frame and cite the authorities (Karpathy: _"LLMs
+> can automate what you can verify"_; OpenAI: _"the harness is hard"_; arXiv AHE's
+> **structure-beats-prose** ablation = the proof for enforce > guidance). Competitor
+> names + VC who-to-pitch are in the `startup/` vault (keep them OUT of public docs).
+
 **P0 — validate the thesis before building (cheapest, do first):**
 
 - [x] **Measure one hyped skill vs its claim — DONE (2026-06-20), thesis VALIDATED.**
@@ -74,7 +152,11 @@
       re-prints scan's findings is a third command on one report — see P2 below.
       **Remaining (the measured half):** wire the real-model A/B so each add/drop/swap
       carries a measured delta (`runEval` over `bench/corpus`, gated on the subscription).
-      → `measurement-authority.md`, `divergent-bets.md`
+      **Mechanism to poach (arXiv AHE, `agentic-harness-evolution-poach.md`):** wrap each
+      recommendation in a **falsifiable predicted-delta contract** — predict which evals
+      it improves/regresses, run, **auto-revert on no-improvement**, and predict
+      REGRESSIONS explicitly (their regression-foresight was the weak spot). →
+      `measurement-authority.md`, `divergent-bets.md`, `agentic-harness-evolution-poach.md`
 - [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
       doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
       bill/target/blast-radius — grounded in the P0 caveman measurement). The
@@ -131,7 +213,10 @@
   abstract-interpreter (fp-theory T2). MUST carry a loud sign-off hatch
   (`vigiles:allow-net` / `allowTrifecta`) so an intentional widening doesn't cry wolf.
   A **Snyk/Dependabot-for-harnesses** trajectory bet — early to the market, but the one
-  moat feature that also pulls adoption. → `typed-spec-moat.md` (Moat #2),
+  moat feature that also pulls adoption. A funded competitor validates the
+  PR-time-verification-for-agents surface AND leaves this lane open (they test the app
+  the agent built, not the agent's powers) — see the private `startup/` vault.
+  → `typed-spec-moat.md` (Moat #2),
   `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
 - [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
       unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
@@ -203,6 +288,11 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
       `measurement-authority.md` (A2)
 - [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
+      CONFIRMED by the 2026-06-25 OSS sweep (`oss-lane-sweep-2026-06.md`): **agnix** is the
+      structure-lint incumbent (297★, 429 rules, Rust, LSP) — the lane to NOT race. Our
+      differentiated four (catalog cross-ref / harness-execution-test / trigger-eval / typed
+      specs) are **unoccupied by OSS**; that's the wedge. **Watch agnix** (if it adds catalog
+      cross-ref or execution it closes toward us).
 - [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
       column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
 - [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
@@ -367,7 +457,12 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   ahead of real-service/testcontainers provisioning:** a survey of community
   collections + a ~90-artifact production audit put R1+R2 at ~90%+ of real plugin
   surface (R3 real-service ≤ ~9%), and every GitHub/issue-tracker/chat/CI/linter/
-  test-runner integration is replayable at R2 with no Docker. Higher leverage than
+  test-runner integration is replayable at R2 with no Docker. **STATEFUL extension
+  (competitor-informed — see the private `startup/` vault):** record a whole SESSION
+  trace and replay it in order → a stateful local twin for multi-step SaaS flows,
+  auto-built from real traffic (no per-service hand-build grind — we record, not
+  author). SaaS-HTTP/MCP only; DB/Redis stay R3 run-real-disposable. The one "twin"
+  worth building because recording sidesteps the hand-build grind. Higher leverage than
   a container integration. [eval-coverage-and-isolation](eval-coverage-and-isolation.md) · **HIGH**
 - **Native input/output/cache token + cost measurement** — split `tokens()` into
   `inputTokens`/`outputTokens`, capture cache tokens, and report a per-class A/B
@@ -573,6 +668,13 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **MCP-reference conformance** + a typed `mcp()` / `mcpConfig` harness hook —
   "does the cited `server#tool` still exist" via live or `.well-known`.
   [standards #3](standards-conformance.md) · [coverage-matrix](harness-testing-coverage-matrix.md) · **MED**
+- **Twin-contract verification (NEW, competitor-informed)** — "valid is not true"
+  applied to mocks/twins: does a twin still match the real API's CURRENT OpenAPI spec? A
+  drifted twin gives false confidence; the cross-ref engine is built for it ("your twin
+  claims Stripe v2024-06 but Stripe shipped a breaking change"). Could run against a
+  hosted vendor's twins (compose). **Gate on demand** — contingent on the twin pattern
+  spreading in users' workflows; don't build ahead of it. (Source in the private
+  `startup/` vault.) · **MED / Explore**
 - **Unify `scan` + `lint` on one rule engine** — promote scan's hard-coded
   structural findings (no-description skill, no-tool-contract agent, missing hook)
   to documented, configurable, CI-gatable rules; scan becomes inventory + a
