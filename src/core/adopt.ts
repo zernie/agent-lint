@@ -119,6 +119,19 @@ function safeKey(heading: string): string {
 }
 
 /**
+ * Allocate a unique section key, disambiguating a duplicate with ` (2)`, ` (3)`,
+ * … and recording it in `used`. Shared by the real-heading loop and the
+ * synthesized `Overview`, so no two sections collide on one object key (which
+ * would silently drop the earlier one's content).
+ */
+function allocKey(base: string, used: Set<string>): string {
+  let key = base;
+  for (let n = 2; used.has(key); n++) key = `${base} (${n})`;
+  used.add(key);
+  return key;
+}
+
+/**
  * Emit a readable multi-line TS template literal for arbitrary section content,
  * escaping the three sequences that would break it: backslash, backtick, and the
  * `${` interpolation opener. TS un-escapes them back to the original string, so
@@ -195,17 +208,17 @@ export function adoptToSpec(markdown: string, target: string): AdoptedSpec {
       overviewLines.push(...block.lines);
       continue;
     }
-    const base = safeKey(block.heading ?? "");
-    let key = base;
-    for (let n = 2; usedKeys.has(key); n++) key = `${base} (${n})`;
-    usedKeys.add(key);
+    const key = allocKey(safeKey(block.heading ?? ""), usedKeys);
     ordered.push({ key, content: block.lines.join("\n").trim() });
   }
 
   const overview = overviewLines.join("\n").trim();
   if (overview) {
     synthesizedHeading = true;
-    ordered.unshift({ key: "Overview", content: overview });
+    // Allocate the synthesized key with the SAME dedup as real headings, so a
+    // file that already has a literal `## Overview` doesn't collide and silently
+    // drop the intro when the sections object is built (it becomes "Overview (2)").
+    ordered.unshift({ key: allocKey("Overview", usedKeys), content: overview });
   }
 
   const sections: Record<string, string> = {};
