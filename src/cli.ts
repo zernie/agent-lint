@@ -1798,8 +1798,21 @@ function eject(args: string[]): void {
   writeFileSync(abs, ejected.markdown);
   console.log(`✓ Ejected ${file} — it's now plain, hand-owned markdown.`);
   const specAbs = resolve(process.cwd(), ejected.specFile);
+  // SAFETY: the `compiled from <path>` header is untrusted text — a hand-edited /
+  // forged header could name `package.json` or `../../secret`, and a blind rmSync
+  // would delete it. Only ever remove a `.spec.ts` that resolves INSIDE the
+  // project (no `..` escape).
+  const relSpec = relative(resolve(process.cwd()), specAbs);
+  const isSafeSpecTarget =
+    ejected.specFile.endsWith(".spec.ts") &&
+    relSpec !== "" &&
+    !relSpec.startsWith("..");
   if (existsSync(specAbs)) {
-    if (keepSpec) {
+    if (!isSafeSpecTarget) {
+      console.log(
+        `  ⚠ Kept ${ejected.specFile} — the integrity header names a path that isn't a .spec.ts inside this project (it may have been hand-edited); refusing to delete it. Remove it yourself if that's intended.`,
+      );
+    } else if (keepSpec) {
       console.log(
         `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
       );
@@ -5120,9 +5133,11 @@ async function maybeSuggestTrigger(
   );
   const decision = decideTriggerSuggestion({
     modelAccess: hasModelAccess(process.env),
-    // `isTTY` is typed boolean but is `undefined` at runtime when not a terminal;
-    // both the type and the falsy-undefined runtime value drive the agent (hint) path.
-    isTTY: process.stdout.isTTY,
+    // Prompt only when BOTH streams are a terminal — `askOnce` reads stdin, so a
+    // TTY stdout with piped/redirected stdin (agents, shell pipelines) must take
+    // the non-blocking hint path, not block on a read that never gets input.
+    // `isTTY` is `undefined` at runtime when not a terminal (falsy → hint path).
+    isTTY: process.stdout.isTTY && process.stdin.isTTY,
     triggerableSkills: triggerable.length,
     json,
     noInteractive: args.includes("--no-interactive") || args.includes("--yes"),

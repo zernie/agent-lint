@@ -2232,6 +2232,28 @@ describe("CLI: vigiles eject", () => {
     }
   });
 
+  it("refuses to delete a forged out-of-spec target named in the header", () => {
+    // A hand-edited/forged header points `compiled from` at a non-spec file.
+    // eject must NOT delete it (path-safety) — only a .spec.ts inside the project.
+    const d = mkdtempSync(join(tmpdir(), "vigiles-eject-forged-"));
+    try {
+      writeFileSync(join(d, "package.json"), '{"name":"victim"}\n');
+      writeFileSync(
+        join(d, "CLAUDE.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from package.json -->\n\n# CLAUDE.md\n\nx.\n",
+      );
+      const { stdout, exitCode } = run("eject CLAUDE.md", d);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(d, "package.json")),
+        "must NOT delete package.json",
+      );
+      assert.match(stdout, /refusing to delete|isn't a \.spec\.ts/);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
   it("removes the spec once its LAST compiled output is ejected", () => {
     const dir = multiTargetDir();
     try {
