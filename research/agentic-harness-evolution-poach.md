@@ -38,8 +38,8 @@ transfers cross-benchmark (SWE-bench-verified) and cross-model (+2.3–10.1pp).
 2. **Empirical validation of enforce() > guidance() (positioning, citeable).** The
    ablation localizes the gain to **tools, middleware (hooks), and long-term memory —
    NOT the system prompt**; system-prompt-only edits were a **−2.3pp REGRESSION**, and
-   they conclude *"factual harness structure transfers while prose-level strategy does
-   not."* This is peer-reviewed evidence for vigiles's core thesis: **deterministic /
+   they conclude _"factual harness structure transfers while prose-level strategy does
+   not."_ This is peer-reviewed evidence for vigiles's core thesis: **deterministic /
    structural constraints (enforce(), hooks, tool contracts) carry the reliability
    gain; prose/guidance doesn't.** Cite it in the launch article and as the argument
    for upgrading `guidance()` → `enforce()`.
@@ -52,7 +52,7 @@ transfers cross-benchmark (SWE-bench-verified) and cross-model (+2.3–10.1pp).
 
 4. **Attribution + the regression-foresight warning.** They cross-reference predicted
    vs observed task sets; fix-precision ≈ 5× random, but **regression-precision only
-   ≈ 2× random** → *"evidence-driven targeting works; regression foresight fails."*
+   ≈ 2× random** → _"evidence-driven targeting works; regression foresight fails."_
    Lesson for our measured half: **predict regressions, not just improvements**, and
    weight the gate toward catching them (the blast-radius column of our metric triple
    is the right place).
