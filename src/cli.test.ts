@@ -2295,6 +2295,33 @@ describe("CLI: vigiles eject", () => {
     }
   });
 
+  it("keeps the shared spec when the other output is in a SUBDIRECTORY", () => {
+    // `target: ["CLAUDE.md", "docs/AGENTS.md"]` — the secondary lives in a subdir.
+    // Ejecting the root file must scan the whole tree (not just its own dir) so it
+    // doesn't orphan docs/AGENTS.md by deleting the shared spec.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-eject-subdir-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md.spec.ts"), "export default {}\n");
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# CLAUDE.md\n",
+      );
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(
+        join(dir, "docs", "AGENTS.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# AGENTS.md\n",
+      );
+      const { exitCode } = run("eject CLAUDE.md", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — docs/AGENTS.md still references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("errors on a missing file", () => {
     const { exitCode } = run("eject does-not-exist.md", tmpDir);
     assert.equal(exitCode, 1);
