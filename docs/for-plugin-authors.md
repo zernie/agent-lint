@@ -1,5 +1,11 @@
 # Shipping plugins with vigiles
 
+**You shipped a plugin — but do its skills fire for the people who install it?** A
+description that never triggers, a hook whose `${CLAUDE_PLUGIN_ROOT}` path resolves
+to nothing on someone else's machine, a subagent missing the frontmatter that
+registers it — all of it looks fine in your repo and silently breaks for your
+users. This guide catches it before you ship.
+
 > The [README](../README.md) has the pitch — this is the full guide for **plugin
 > and marketplace authors**: how to ship a plugin that's structurally sound and
 > whose skills actually fire for the people who install it.
