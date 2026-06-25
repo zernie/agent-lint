@@ -20,8 +20,10 @@ set -euo pipefail
 input="$(cat 2>/dev/null || true)"
 
 # Loop guard: if this Stop already triggered a continuation, don't re-block.
-if command -v jq >/dev/null 2>&1 &&
-  [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ]; then
+# Parse stop_hook_active WITHOUT requiring jq (a grep fallback — grep is always
+# present, jq may not be) so the guard still fires in a jq-less env instead of
+# exit-2-trapping the session when the handoff is stale.
+if printf '%s' "$input" | grep -Eq '"stop_hook_active"[[:space:]]*:[[:space:]]*true'; then
   exit 0
 fi
 
