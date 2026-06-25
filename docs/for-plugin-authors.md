@@ -84,8 +84,9 @@ npx vigiles scan ./marketplace
 ```
 
 Use it to see where your plugin lands against the rest of a collection before you
-publish, and to find the highest-impact fixes. Add `--trigger` for the model-gated
-column: do the skills across the marketplace actually fire?
+publish, and to find the highest-impact fixes. Add `--trigger --prompts=prompts.json`
+(the same prompts file as step 3) for the model-gated column: do the skills across the
+marketplace actually fire?
 
 ## 5. Test and gate it in CI
 
