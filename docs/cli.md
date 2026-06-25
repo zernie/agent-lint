@@ -53,13 +53,34 @@ which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 | `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
 | `--no-gha`               | Skip wiring CI                                                   |
 | `--no-plugin`            | Skip installing the Claude Code plugin                           |
-| `--strict`               | Set `require-spec` to `"error"`                                  |
+| `--strict`               | Gate CI on broken surfaces (see below)                           |
 | `--target=AGENTS.md`     | Create a bare spec for one file (Lint layer only)                |
 
 Passing a single positive layer flag selects only it (`--lint` = the Lint
 layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
 `devDependencies` (moving it out of `dependencies` if it's there) so the
 scaffolded `vigiles.harness.mjs` resolves `vigiles/testing`.
+
+#### What `--strict` gates
+
+By default the structural rules **warn** (a nudge, exit 1) so adoption is
+painless. `--strict` promotes the **high-precision, FP-safe** rules to `error`
+in `.vigilesrc.json`, so a broken surface **fails CI** (`vigiles lint` exits 2):
+`require-spec`, `subagent-tool-contract` (a typo'd/never-available tool),
+`subagent-frontmatter` (a subagent missing `name`/`description`), `hook-events`
+(a typo'd event that never fires), `hook-script-exists` (a dead hook script),
+`mcp-config` / `mcp-tool-resolves` / `mcp-hook-target-resolves` (broken MCP),
+`disallowed-tools-contract`, and `description-overlap` (two skills that collide
+in the selector). It **never clobbers a severity you set** — only fills in the
+undefined ones — and leaves the lenient/recommendation rules at `warn`
+(`frontmatter-valid`, `skill-frontmatter`, `prefer-compiled-hooks`,
+`untested-*`). Honest limit: Claude Code itself loads a name-less or
+broken-YAML **skill**, so vigiles can't hard-gate skill content that still
+works — it gates the subagent / hook / MCP defects (and skill collisions) that
+genuinely break. See the [rules matrix](verifying-instruction-files.md#the-validation-rules--the-full-matrix).
+
+`vigiles lint` accepts files **or a directory** (`vigiles lint .` discovers the
+instruction files under it); with no argument it discovers them from the repo root.
 
 See the [agent setup guide](agent-setup.md) and
 [agent workflows](agent-workflows.md).

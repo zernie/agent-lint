@@ -3344,21 +3344,30 @@ function findInstructionFiles(
   restArgs: string[],
   exclude: readonly string[] = [],
 ): string[] {
-  if (restArgs.length > 0) return restArgs;
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
-  const files: string[] = [];
-  for (const pattern of patterns) {
-    files.push(
-      ...globSync(pattern, {
-        // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the
-        // repo's own lint shouldn't police — a third-party CLAUDE.md isn't held
-        // to require-spec. node_modules/dist/.git stay always-excluded.
-        ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude],
-        cwd: process.cwd(),
-      }),
-    );
+  // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
+  // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-spec.
+  // node_modules/dist/.git stay always-excluded.
+  const ignore = [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude];
+  // Discover instruction files under one directory, as paths relative to cwd.
+  const discoverIn = (dirAbs: string): string[] =>
+    patterns
+      .flatMap((p) => globSync(p, { ignore, cwd: dirAbs, absolute: true }))
+      .map((abs) => relative(process.cwd(), abs));
+  if (restArgs.length === 0) return discoverIn(process.cwd());
+  // Explicit args: expand a DIRECTORY to the instruction files inside it (so
+  // `vigiles lint .` works), keep a file arg as-is, and pass a non-existent arg
+  // through unchanged (lint reports it as not-found rather than crashing).
+  const out: string[] = [];
+  for (const arg of restArgs) {
+    const abs = resolve(process.cwd(), arg);
+    if (existsSync(abs) && lstatSync(abs).isDirectory()) {
+      out.push(...discoverIn(abs));
+    } else {
+      out.push(arg);
+    }
   }
-  return files;
+  return out;
 }
 
 /** Value of a `--flag=value` arg (the `=` form, so it never collides with a positional). */

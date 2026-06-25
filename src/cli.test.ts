@@ -2097,3 +2097,71 @@ describe("CLI: vigiles eject", () => {
     assert.equal(exitCode, 1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// vigiles lint — directory args + --strict gating of structural rules
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles lint directory arg + strict gating", () => {
+  let dir: string;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), "vigiles-lint-strict-"));
+    mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(dir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "demo" }),
+    );
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    // The strict config init --strict now writes: structural rules gate.
+    writeFileSync(
+      join(dir, ".vigilesrc.json"),
+      JSON.stringify({
+        rules: {
+          "subagent-tool-contract": "error",
+          "subagent-frontmatter": "error",
+        },
+      }),
+    );
+  });
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  function reviewer(tools: string, desc = "Reviews a diff."): void {
+    writeFileSync(
+      join(dir, "agents", "reviewer.md"),
+      `---\nname: reviewer\ndescription: ${desc}\ntools: [${tools}]\n---\n\nReview.\n`,
+    );
+  }
+
+  it("`lint .` (a directory arg) does not crash (regression: EISDIR)", () => {
+    reviewer("Read, Grep");
+    const { exitCode } = run("lint .", dir);
+    assert.notEqual(exitCode, undefined);
+    assert.ok(
+      exitCode === 0,
+      `clean plugin lints green, got ${String(exitCode)}`,
+    );
+  });
+
+  it("a clean subagent passes under strict (exit 0)", () => {
+    reviewer("Read, Grep");
+    assert.equal(run("lint", dir).exitCode, 0);
+  });
+
+  it("a typo'd tool FAILS CI under strict (exit 2)", () => {
+    reviewer("Reed, Grep"); // Reed = typo of Read
+    const { stdout, exitCode } = run("lint", dir);
+    assert.equal(exitCode, 2, "broken subagent gates CI");
+    assert.ok(
+      /Reed/.test(stdout) && /Read/.test(stdout),
+      "names the typo + fix",
+    );
+  });
+
+  it("a subagent missing its description FAILS CI under strict (exit 2)", () => {
+    writeFileSync(
+      join(dir, "agents", "reviewer.md"),
+      "---\nname: reviewer\ntools: [Read]\n---\n\nReview.\n",
+    );
+    assert.equal(run("lint", dir).exitCode, 2);
+  });
+});
