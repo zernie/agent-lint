@@ -71,6 +71,12 @@ import {
   preferCompiledHooksMessage,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
+import {
+  hasModelAccess,
+  decideTriggerSuggestion,
+  formatTriggerHint,
+  scaffoldTriggerPrompts,
+} from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
   explainScore,
@@ -4010,6 +4016,9 @@ function printUsage(command: string | undefined): void {
     "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
   );
   console.log(
+    "                                 with model access + a TTY, scan offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
+  );
+  console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
@@ -4967,6 +4976,96 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   }
 }
 
+/**
+ * After a single-plugin `scan` report: if the plugin ships model-invocable
+ * skills AND a real model is reachable, surface the real-model `--trigger` tier
+ * that measures whether those skills actually FIRE. A human at a TTY is offered
+ * setup; an agent / CI (non-TTY / `--json` / `--no-interactive` / `--yes`) gets a
+ * one-line, non-blocking hint — a `scan` must never hang (`great-agent-flow`).
+ */
+async function maybeSuggestTrigger(
+  report: ScanReport,
+  dir: string,
+  json: boolean,
+  args: string[],
+): Promise<void> {
+  const triggerable = report.skills.filter(
+    (s) => s.hasDescription && !s.userInvoked,
+  );
+  const decision = decideTriggerSuggestion({
+    modelAccess: hasModelAccess(process.env),
+    // `isTTY` is typed boolean but is `undefined` at runtime when not a terminal;
+    // both the type and the falsy-undefined runtime value drive the agent (hint) path.
+    isTTY: process.stdout.isTTY,
+    triggerableSkills: triggerable.length,
+    json,
+    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
+  });
+  if (decision === "none") return;
+  if (decision === "hint") {
+    console.log("\n" + formatTriggerHint(dir, triggerable.length));
+    return;
+  }
+  await promptTriggerSetup(report, dir, triggerable.length, args);
+}
+
+/** Ask one question on a fresh readline, closing it after (the codebase pattern). */
+async function askOnce(q: string): Promise<string> {
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    return await new Promise<string>((res) => {
+      rl.question(q, (a) => {
+        res(a.trim());
+      });
+    });
+  } finally {
+    rl.close();
+  }
+}
+
+/** Interactive (TTY) trigger-tier setup: run an existing prompts file now, or
+ *  scaffold one to fill in. The real-model run stays an explicit confirmation so
+ *  a plain `scan` never spends a token without a yes. */
+async function promptTriggerSetup(
+  report: ScanReport,
+  dir: string,
+  n: number,
+  args: string[],
+): Promise<void> {
+  const promptsPath = resolve(process.cwd(), "trigger-prompts.json");
+  const exists = existsSync(promptsPath);
+  const q = exists
+    ? `\nℹ Model access detected. Measure whether your ${String(n)} skill(s) FIRE now using trigger-prompts.json (real model)? [y/N] `
+    : `\nℹ ${String(n)} model-invocable skill(s) + model access detected. Scaffold trigger-prompts.json to measure firing? [y/N] `;
+  const answer = await askOnce(q);
+  if (!/^y(es)?$/i.test(answer)) {
+    console.log("  Skipped. " + formatTriggerHint(dir, n));
+    return;
+  }
+  if (exists) {
+    await handleMeasure([dir], [...args, "--prompts=trigger-prompts.json"]);
+    return;
+  }
+  writeFileSync(
+    promptsPath,
+    scaffoldTriggerPrompts(
+      report.skills
+        .filter((s) => s.hasDescription && !s.userInvoked)
+        .map((s) => s.name),
+    ),
+  );
+  console.log(
+    "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
+  );
+  console.log(
+    `    vigiles scan ${dir} --trigger --prompts=trigger-prompts.json`,
+  );
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -5178,6 +5277,9 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
+        // Nudge toward the real-model trigger tier when a model is reachable and
+        // the plugin ships model-invocable skills (hint for agents, offer for humans).
+        await maybeSuggestTrigger(report, targets[0], json, args);
       }
       break;
     }

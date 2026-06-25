@@ -46,6 +46,13 @@ pushed, on top of `origin/main` `2747878`):
 
 ### Gotchas (read before trusting test output)
 
+- **REAL-MODEL TIERS ARE RUNNABLE HERE (Claude Code web).** Do NOT say "eval /
+  `scan --trigger` need quota, not exercisable." There is NO `ANTHROPIC_API_KEY`, but
+  the `claude` CLI on PATH (`/opt/node22/bin/claude`, 2.1.191) is AUTHENTICATED via the
+  session OAuth (`CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` + `ANTHROPIC_BASE_URL` proxy).
+  Proven: `claude -p "Reply READY"` → `READY`, exit 0. vigiles drives that authenticated
+  CLI, so `vigiles eval` / `scan --trigger` / `measureTriggerRate` run on the subscription
+  here — use them to dogfood the real-model tier.
 - **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only: the container has
   `@anthropic-ai/claude-code` **2.1.42** vs the validated **2.1.187**, so the installed tool
   set drifts from `ACKNOWLEDGED_TOOL_INPUT_TYPES`. CI PINS CC → green there. My diff touches

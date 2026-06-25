@@ -332,6 +332,15 @@ token (lower with `--min-prompts=` for a narrow skill). `--harness=codex` routes
 trigger probe through the native Codex driver. See
 [`docs/harness-testing.md`](harness-testing.md).
 
+**You don't have to remember it exists.** When a plain `scan` finds model-invocable
+skills **and** a model is reachable (an `ANTHROPIC_API_KEY`, or an authenticated Claude
+Code session — `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT`), it nudges you toward this tier:
+a human at a terminal is **offered** setup (scaffold a `trigger-prompts.json`, or run an
+existing one); an agent or CI run gets a **one-line, non-blocking hint** instead. Pass
+`--no-interactive` (or `--yes` / `--json`) to force the hint and never prompt — so
+`scan` never hangs an agent. The real-model run is always an explicit yes; a plain
+`scan` never spends a token on its own.
+
 ### `scan <dir> --explain [name]`
 
 The deterministic **WHY** behind a low score. A measurement (a trigger-rate
