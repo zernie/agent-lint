@@ -1368,6 +1368,33 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("gives honest guidance on a non-JS repo (no package.json)", () => {
+    // A Python/Rust repo with a CLAUDE.md but no package.json can't resolve the
+    // npm package — init must point at `npx vigiles lint` (no install), NOT a
+    // bare "npm install" that wouldn't help.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-nonjs-"));
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nPy app.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      assert.ok(
+        !existsSync(join(dir, "package.json")),
+        "no package.json created",
+      );
+      assert.match(stdout, /No package\.json/);
+      assert.match(stdout, /npx vigiles lint/);
+      // Must NOT tell a non-JS user to run a bare `npm install` (won't help).
+      assert.ok(
+        !/Run `npm install`/.test(stdout),
+        "no misleading npm install step",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("auto-adopt is NON-DESTRUCTIVE: never compiles over an existing file in init", () => {
     const dir = freshProject();
     try {
