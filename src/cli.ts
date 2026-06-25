@@ -1796,10 +1796,20 @@ function eject(args: string[]): void {
   writeFileSync(abs, ejected.markdown);
   console.log(`✓ Ejected ${file} — it's now plain, hand-owned markdown.`);
   const specAbs = resolve(process.cwd(), ejected.specFile);
+  // A spec EXCLUSIVELY corresponds to the file being ejected only when its
+  // basename is `<thisFile>.spec.ts`. A multi-target compile (e.g. a mirrored
+  // AGENTS.md compiled from CLAUDE.md.spec.ts) leaves the SHARED source named in
+  // the header — deleting it would break the primary file's recompile. So only
+  // remove the spec when it's this file's own; otherwise keep it and say why.
+  const ownsSpec = basename(ejected.specFile) === `${basename(file)}.spec.ts`;
   if (existsSync(specAbs)) {
     if (keepSpec) {
       console.log(
         `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
+      );
+    } else if (!ownsSpec) {
+      console.log(
+        `  Kept ${ejected.specFile} — it's a SHARED source spec (${file} was compiled from it as a secondary target); deleting it would break the primary. Remove it by hand if it's truly unused.`,
       );
     } else {
       rmSync(specAbs);
@@ -2528,13 +2538,16 @@ function printSetupSummary(opts: {
 
 async function setup(args: string[]): Promise<void> {
   const parsed = parseSetupArgs(args);
-  const strict = parsed.strict;
 
   // Plan: defaults → flags → interactive prompts (only a human at a TTY).
   let plan = resolvePlan(parsed);
   if (shouldPrompt(parsed, process.stdin.isTTY ?? false)) {
     plan = resolvePlan(parsed, await promptSetup());
   }
+  // Read strict from the RESOLVED plan, not the raw flag — an interactive "yes"
+  // to the workflow tier (no `--strict` flag) sets plan.strict, and the config
+  // write + summary must honor it.
+  const strict = plan.strict;
 
   const pillars = [plan.lint && "lint", plan.test && "test"]
     .filter(Boolean)

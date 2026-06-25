@@ -90,9 +90,9 @@ irregular prose; structured tier is byte-identical).
 ### Gotchas (ops)
 
 - CC-on-web: GitHub via `mcp__github__*` (NO `gh` CLI). Before commit: `npm run build`
-  + `npx vitest run` + `npm run fmt:check` + `npm run lint`; `self-command-refs` fails
-  CI on a stale `vigiles <cmd>` ref (scans `skills/` too). Conventional commits + `!`
-  on breaking. NO session links / model IDs in commits. Trust `origin/main`.
+  - `npx vitest run` + `npm run fmt:check` + `npm run lint`; `self-command-refs` fails
+    CI on a stale `vigiles <cmd>` ref (scans `skills/` too). Conventional commits + `!`
+    on breaking. NO session links / model IDs in commits. Trust `origin/main`.
 
 ## Don't re-read unless the task needs it
 
