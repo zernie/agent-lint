@@ -10,12 +10,26 @@
 
 ## RESUME HERE — `claude/handoff-mylfen`, **PR #48 OPEN** — watching CI
 
-**State:** PR **#48** is open. The big batch + the **rule-cleanup/auto-adopt** batch
+**State:** PR **#48** is open + green-pending-CI; **all 8 Codex review threads
+resolved** (Codex now at its review usage limit — no more auto-reviews). Layers
+landed on the branch: the big batch → **rule-cleanup/auto-adopt** → **init-DX
+hardening** → **8 Codex review fixes** → a **5★ onboarding-polish** pass. Lint **0
+errors**, fmt clean, `api:check` no drift. The env-only `dialect-drift` test fails
+in THIS container only (green in CI). Subscribed to #48; a recurring self-check
+watches CI.
 
-- an **init-DX hardening** pass (this session, from Codex review + a self-audit) are
-  pushed. Lint **0 errors**, fmt clean, `api:check` no drift. The env-only
-  `dialect-drift` test fails in THIS container only (green in CI). Subscribed to #48;
-  a recurring self-check watches CI.
+**5★ ONBOARDING POLISH (latest commits):**
+
+- **`docs/faq.md`** + a compact README **FAQ** (why a typed spec & is it optional,
+  do I write TS, does init touch my files, CC+Codex, cost/key, non-JS repo, vs
+  promptfoo). Install prompt rewritten (plain English, names adoption, tells the
+  agent to install+compile). Adoption reassurance lifted above the fold.
+- **`init` non-JS guidance**: a repo with no package.json gets honest steps
+  (`npx vigiles lint` / `npm init`), not a misleading `npm install`.
+- **`scripts/demo.sh`** — zero-dep asciinema recorder of the Lint layer (tested);
+  README has a **DEMO GIF slot** wired with the exact `asciinema`/`agg` command.
+- README rendered ≈152 non-blank lines (within the ~200 cap). The GIF itself is the
+  one remaining asset for the user to record + embed.
 
 **INIT-DX HARDENING (latest commits — review-driven):**
 
