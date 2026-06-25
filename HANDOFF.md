@@ -8,97 +8,91 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you when
 > ≥5 commits pile up without a refresh — it's live and dogfood-proven.
 
-## RESUME HERE — surface freeze + markdown cut (NOT yet done; PR #47 merged WITHOUT it)
+## RESUME HERE — surface freeze SHIPPED on `claude/handoff-mylfen`; finish launch polish
 
-**State:** **PR #47 is MERGED** (commit `2747878` on `main`) — it shipped the README
-overhaul + research consolidation + handoff hook + encrypted `startup/` vault, but **NOT**
-the surface-freeze/markdown-cut that the prior handoff queued onto it. Verified this
-session: no `STABILITY` statement, `Level 1` frontmatter mode still marketed
-(`docs/markdown-mode.md`), `package.json` `exports` still expose the full unfrozen surface
-(`linting`/`integration`/`e2e` + the experimental cluster). So the task below is **still
-open** and now needs a **NEW branch + PR** (not #47).
+**State:** the **pre-release surface freeze + markdown cut + launch-polish pass is DONE**
+and pushed on branch **`claude/handoff-mylfen`** (NOT merged, **no PR open yet** —
+awaiting user go-ahead). The freeze the prior handoff queued is complete. Commits (all
+pushed, on top of `origin/main` `2747878`):
 
-This session's branch is **`claude/handoff-mylfen`** — even with `origin/main`, clean tree
-(only this HANDOFF refresh on it). Start the freeze work on a fresh branch off it.
+- `ef7281c` **freeze!** — typed-composition cluster + `effect()`/EffectRegion marked
+  `@internal` in `vigiles/spec` (still exported at runtime, excluded from API docs +
+  flagged in `etc/*.api.md`); `evolve.ts` noted `@internal`; markdown ladder collapsed to
+  two on-ramps with the frontmatter docs **PARKED via HTML comment** in
+  `docs/markdown-mode.md` (nothing deleted); `STABILITY.md` shipped + README pointer.
+- `83d41e3` positioning — author-time-vs-runtime wedge + citeable quotes into the
+  Positioning lock (`research/pre-release-focus.md`).
+- `911b328` README hero — leads with the concrete pain ("installed plugins + wrote skills,
+  but do they work? a library with no tests"); `53423cc` same pain-first pass on the
+  subdoc openings (lint/test/plugin-author guides).
+- `2d24d9f` codified the pain-first principle into the README direction comment (new rule
+  **1c**, reconciled with 1b) + fixed a stale `vendor.test.ts` doc link.
 
-**THE TASK (read `research/pre-release-focus.md` first):**
+**This is BREAKING** → when opened as a PR, title needs `!`
+(`refactor!: freeze pre-release public surface + collapse markdown ladder`) with a
+`BREAKING CHANGE:` footer (the freeze commit already has both).
 
-1. **Un-export / `@internal`** the experimental cluster (`guards.ts`, `hook-spec.ts`,
-   `effect()`/effect-region, `evolve.ts`, deep experimental typed-spec builders). Keep the
-   code; remove from PUBLIC exports.
-2. **Audit the surface via `api-extractor`** (`etc/*.api.md`). PUBLIC/frozen = the 8 CLI
-   verbs + exit codes + `vigiles/{spec,testing,unit,claude-code,codex,adapter}`
-   (`vigiles/hook` stays exported, un-headlined).
-3. **Markdown cut:** KEEP inline `<!-- vigiles:enforce -->`; CUT frontmatter mode (Level
-   1); collapse the ladder to 2 (markdown → typed spec). Stop marketing "Level 0/1/2".
-4. **Ship a `STABILITY` statement** ("0.x — CLI stable; library API evolving").
+**DO NEXT (the two overdue loose ends + launch polish):**
 
-**This is BREAKING** (removes `exports` subpaths / public symbols) → the PR title needs
-`!` (e.g. `refactor!: freeze pre-release public surface`).
+1. **Open the PR?** (user hadn't said yes — ask/confirm.) Re-`subscribe_pr_activity` if you
+   want it watched (the old #47 watch is dead).
+2. **Quick-win launch polish (all polish-grade, doable now):** first-run smoke
+   (`vigiles init` clean temp dir, non-interactive doesn't hang); README length trim (256
+   raw lines — comments/parked-Guard inflate it, keep visible skim-content under cap); final
+   full gate (build+vitest+fmt+api:check); FP spot-check a famous plugin beyond the vendored 4. See the launch sequence in `research/pre-release-focus.md`.
+3. **Bigger launch builds (NOT polish, separate):** ecosystem-benchmark v0 (the ONE
+   sanctioned pre-launch build, needs sub/quota) + the method-first article + README 60-sec
+   proof/GIF.
 
-**ALSO PENDING (offered earlier, awaiting user go-ahead):** 3 small positioning edits —
-(a) the **author-time-vs-runtime wedge** as the one-line differentiator; (b) citeable
-harness-engineering quotes (Karpathy "automate what you can verify", OpenAI "the harness is
-hard") into the launch positioning; (c) a roadmap A2 note for the AHE prediction-loop.
-Public-safe; not yet done.
+### Gotchas (read before trusting test output)
 
-### SHIPPED most recently (don't rebuild) — landed via PR #47
-
-- **README overhaul + research consolidation + handoff hook + encrypted `startup/` vault**
-  all merged to `main`. The big 2026-06-25 harness-market fan-out is VAULTED in
-  `startup/harness-market-2026.md` (+ `harness-players-appendix-2026.md` +
-  `harness-sources-2026.md`), encrypted at rest.
-- **`startup/CLAUDE.md` vault index** (dir-scoped, auto-loaded under `startup/`) + the
-  `.vigilesrc.json` `startup/**` exclusion (vigiles dogfoods `require-spec`; the locked
-  ciphertext vault file would otherwise fail CI).
-- **`deep-research` skill** (`.claude/skills/deep-research/SKILL.md`, project-local, NOT
-  shipped, `vigiles:ignore-test`) — mandates write-full-findings-to-disk + durable appendix
-  so subagent transcripts aren't lost. Use it for future fan-outs.
-- **PR #47 Codex-review doc fixes** (`docs/for-plugin-authors.md`): `scan --trigger` is
-  per-plugin; ranking needs `marketplace.json` OR multiple dir args.
+- **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only: the container has
+  `@anthropic-ai/claude-code` **2.1.42** vs the validated **2.1.187**, so the installed tool
+  set drifts from `ACKNOWLEDGED_TOOL_INPUT_TYPES`. CI PINS CC → green there. My diff touches
+  nothing dialect-related; `scan` also prints a non-blocking `⚠ dialect freshness` for the
+  same reason (working as designed). Full suite otherwise: **1596 passed / 11 skipped / 1
+  (this) failed**.
+- `etc/*.api.md` is the surface gate (`npm run api:check`); regenerate with
+  `node scripts/api-extractor.mjs --local` after an intentional API change.
+- `docs/markdown-mode.md` parked block: inner `<!-- … -->` markers are written `<!~~ … ~~>`
+  so a nested `-->` doesn't close the park comment — restore them when un-parking.
 
 ### SHIPPED earlier (don't rebuild)
 
+- **PR #47 MERGED** (`2747878`) — README overhaul + research consolidation + handoff hook +
+  encrypted `startup/` vault. CLI verb consolidation 13→8 (PR #46) + typed-spec moat (#43).
 - **🔐 git-crypt `startup/` vault** — VC/competitor/funding research ENCRYPTED at rest
   (`.gitattributes startup/** filter=git-crypt`; in `.prettierignore`; outside scan paths).
-  Branch history was filter-repo-scrubbed + force-pushed to remove old plaintext. **The user
-  has the base64 key saved** (NOT in repo). Next session the vault is LOCKED:
-  `apt-get install -y git-crypt` → paste key → `git-crypt unlock`.
-- **GitHub-diff note:** the `startup/` vault shows as `Bin 0 -> N bytes` on GitHub —
-  content is committed + correct-size, just ciphertext-invisible by design.
-- **CLI verb consolidation 13→8** (PR #46, merged) + **typed-spec moat** (PR #43, merged).
-- **Stale-HANDOFF Stop hook** (`.claude/hooks/session-handoff-check.sh` + 5-case test) —
-  jq→grep loop-guard fix landed.
+  **The user has the base64 key saved** (NOT in repo). Next session the vault is LOCKED:
+  `apt-get install -y git-crypt` → paste key → `git-crypt unlock`. GitHub shows it as
+  `Bin 0 -> N bytes` — committed + correct, ciphertext-invisible by design.
+- **`deep-research` skill** (`.claude/skills/deep-research/SKILL.md`, project-local, NOT
+  shipped, `vigiles:ignore-test`) — write-full-findings-to-disk + durable appendix. Use it
+  for future fan-outs.
 
 ### Decisions of record (don't relitigate)
 
-- **The competitive wedge:** EVERY competitor — funded (BentoLabs/Salus/Braintrust) AND
-  OSS (agnix @297★) — is **runtime/observability/post-hoc** or **structure-lint**. vigiles
-  is the ONLY **author-time / deterministic / pre-run verification + typed-spec** play. The
-  lane is empty; that's the positioning.
-- **CORRECTION:** the "YC RFS describes vigiles" claim was WRONG — Bento/Lark/Salus are
-  FUNDED YC COMPANIES, not RFS entries. (Details in the vault.)
+- **The competitive wedge:** EVERY competitor — funded (BentoLabs/Salus/Braintrust) AND OSS
+  (agnix @297★) — is **runtime/observability/post-hoc** or **structure-lint**. vigiles is the
+  ONLY **author-time / deterministic / pre-run verification + typed-spec** play. Empty lane.
 - **Focus = VERIFY + MEASURE.** Launch = article-led MEASUREMENT (NOT caveman-headline);
-  ecosystem-benchmark v0 is the one real pre-launch build.
-- **Moratorium on net-new research + new instruments until after launch.**
+  ecosystem-benchmark v0 is the one real pre-launch build. **Moratorium on net-new research +
+  new instruments until after launch.**
 - **Verb surface = 8 + hidden `hook-runtime`.** Public docs name the USER BENEFIT (no
   `moat`/`flywheel` vocab, no `research/` links, no VC/firm names — those live in the vault).
+- **README pain-first hook** (new this session, codified as rule 1c): lead with the reader's
+  concrete pain + "a library with no tests", for hero AND every subdoc opening.
 
-### Gotchas
+### Gotchas (ops)
 
-- **No PR is open right now.** The old PR #47 watch subscription + hourly cron `42d90a74`
-  are DEAD (session-only). When you open the surface-freeze PR, re-`subscribe_pr_activity`
-  if you want it watched.
 - CC-on-web: GitHub via `mcp__github__*` (NO `gh` CLI). Before commit: `npm run build` +
   `npx vitest run` + `npm run fmt:check`; `self-command-refs` fails CI on a stale
   `vigiles <cmd>` ref. Conventional commits + `!` on breaking. NO session links / model IDs
   in commits.
-- This session's branch `claude/handoff-mylfen` was created fresh off `origin/main`; the
-  local `main` ref is stale (27 commits behind origin) — trust `origin/main`.
+- Local `main` ref is stale (behind `origin/main`) — trust `origin/main`.
 
 ## Don't re-read unless the task needs it
 
-- `research/pre-release-focus.md` — THE plan for the resume task.
+- `research/pre-release-focus.md` — the launch sequence + Positioning lock.
 - `research/roadmap.md` — `🚀 Launch readiness` front door.
-- `startup/` — git-crypt vault (locked; competitor + who-to-pitch intel; unlock with the
-  saved key).
+- `startup/` — git-crypt vault (locked; competitor + who-to-pitch intel; unlock with the key).
