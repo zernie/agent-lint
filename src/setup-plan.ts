@@ -202,7 +202,10 @@ export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
   // repo can fail just for not having done the work yet, so it's the recommended
   // default a human opts OUT of (never forced on a silent run).
   const strict = isYesAnswer(
-    await ask("Also enforce specs + a test per surface (recommended)? [Y/n]: ", "y"),
+    await ask(
+      "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
+      "y",
+    ),
   );
   return {
     lint: pillars !== "test",
