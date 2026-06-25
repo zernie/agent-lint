@@ -173,7 +173,7 @@ export function shouldPrompt(parsed: ParsedSetupArgs, isTTY: boolean): boolean {
 
 /** Interactive answers (only the fields the prompts cover). */
 export type SetupAnswers = Partial<
-  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin">
+  Pick<SetupPlan, "lint" | "test" | "gha" | "plugin" | "strict">
 >;
 
 /**
@@ -196,6 +196,7 @@ function applyAnswers(plan: SetupPlan, answers: SetupAnswers): void {
   if (answers.test !== undefined) plan.test = answers.test;
   if (answers.gha !== undefined) plan.gha = answers.gha;
   if (answers.plugin !== undefined) plan.plugin = answers.plugin;
+  if (answers.strict !== undefined) plan.strict = answers.strict;
 }
 
 /**

@@ -106,6 +106,17 @@ test("resolvePlan: interactive answers override flags/defaults", () => {
   assert.equal(p.lint, true); // untouched
 });
 
+test("resolvePlan: an interactive 'yes' to strict opts into the workflow tier", () => {
+  // The recommended-default opt-out: a TTY human says yes → strict; a bare
+  // non-interactive run (no answers) stays non-strict (structural-only floor).
+  assert.equal(resolvePlan(parseSetupArgs([]), { strict: true }).strict, true);
+  assert.equal(
+    resolvePlan(parseSetupArgs([]), { strict: false }).strict,
+    false,
+  );
+  assert.equal(resolvePlan(parseSetupArgs([])).strict, false); // no human asked
+});
+
 test("planPluginInstall: claude uses the marketplace and never vendors", () => {
   const [withCli] = planPluginInstall(["claude"], { hasClaude: true });
   assert.equal(withCli.harness, "claude");
