@@ -3,6 +3,10 @@
 How-to and reference docs for using vigiles. New here? Start with the
 [README](../README.md).
 
+## Shipping a plugin?
+
+- [`for-plugin-authors.md`](for-plugin-authors.md) — the plugin-author journey end to end: scan a draft for structural health, fix what it flags, make your skills actually fire for users, rank against a marketplace, and gate it in CI.
+
 ## Verify your instruction files (layer 1)
 
 - [`verifying-instruction-files.md`](verifying-instruction-files.md) — the full guide: the markdown→typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references + marks, and the before/after tables.
