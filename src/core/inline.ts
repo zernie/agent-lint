@@ -220,13 +220,13 @@ export function parseInlineRules(content: string): InlineParseResult {
 /**
  * True if the content contains at least one parseable vigiles inline marker —
  * an `enforce` rule, a `file` reference, or a `cmd` reference (ignoring fenced
- * code blocks and malformed markers). Used by `require-spec` validation to
- * treat inline mode as spec-equivalent: a file that pins even a single path is
- * meaningfully managed.
+ * code blocks and malformed markers). A utility for detecting whether a file is
+ * inline-managed (Level-0 mode). Deliberately delegates to `parseInlineRules` so
+ * a loose prefix regex can't report a malformed marker that produces no real
+ * reference.
  *
- * Deliberately delegates to `parseInlineRules` so a loose prefix regex
- * can't satisfy require-spec with a malformed marker that produces no
- * real reference.
+ * NB `require-instructions-spec` is NARROW — it is satisfied only by a `.spec.ts`,
+ * not by inline markers — so this no longer feeds that rule.
  */
 export function hasInlineRules(content: string): boolean {
   const r = parseInlineRules(content);

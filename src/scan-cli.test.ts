@@ -654,3 +654,79 @@ describe("scan --capability-diff e2e", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// scan → trigger-tier nudge (env-gated; deterministic via explicit env)
+// ---------------------------------------------------------------------------
+
+describe("scan: trigger-tier nudge", () => {
+  let dir: string;
+  const MODEL_ENV_KEYS = [
+    "ANTHROPIC_API_KEY",
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+  ];
+
+  function runEnv(
+    args: string,
+    env: Record<string, string | undefined>,
+  ): string {
+    // Start from a copy with all model-access signals stripped, then apply env.
+    const base: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (!(MODEL_ENV_KEYS as readonly string[]).includes(k)) base[k] = v;
+    }
+    try {
+      return execSync(`node ${CLI} ${args}`, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 30000,
+        cwd: dir,
+        env: { ...base, ...env } as NodeJS.ProcessEnv,
+      });
+    } catch (e: unknown) {
+      return (e as { stdout?: string }).stdout ?? "";
+    }
+  }
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "vigiles-scan-nudge-"));
+    mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(dir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "nudge-demo" }),
+    );
+    mkdirSync(join(dir, "skills", "do-thing"), { recursive: true });
+    writeFileSync(
+      join(dir, "skills", "do-thing", "SKILL.md"),
+      "---\nname: do-thing\ndescription: Does a thing when the user asks to do the thing.\n---\n\nBody.\n",
+    );
+  });
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
+    const out = runEnv("scan .", { CLAUDECODE: "1" });
+    assert.ok(out.includes("model access detected"), "hint shown");
+    assert.ok(out.includes("--trigger"), "names the trigger command");
+  });
+
+  it("stays silent with no model access", () => {
+    const out = runEnv("scan .", {}); // all model signals stripped
+    assert.ok(!out.includes("model access detected"), "no hint without access");
+  });
+
+  it("stays silent under --json even with model access (machine output)", () => {
+    const out = runEnv("scan . --json", { CLAUDECODE: "1" });
+    assert.ok(!out.includes("model access detected"), "no hint in json mode");
+  });
+
+  it("--no-interactive never prompts (hint only)", () => {
+    const out = runEnv("scan . --no-interactive", { CLAUDECODE: "1" });
+    assert.ok(
+      out.includes("model access detected"),
+      "hint shown, not a prompt",
+    );
+  });
+});

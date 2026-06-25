@@ -50,11 +50,15 @@ actually sound?" question.
 
 ### Severity
 
-| Value              | Behavior                                                   |
-| ------------------ | ---------------------------------------------------------- |
-| `"error"`          | `vigiles lint` exits non-zero (2) — enforce compiled hooks |
-| `"warn"` (default) | Prints one `ℹ` recommendation, exits 0                     |
-| `false`            | Skip the nudge (you've chosen the hand-written lane)       |
+| Value             | Behavior                                                   |
+| ----------------- | ---------------------------------------------------------- |
+| `"error"`         | `vigiles lint` exits non-zero (2) — enforce compiled hooks |
+| `"warn"`          | Prints one `ℹ` recommendation, exits 0                     |
+| `false` (default) | Skip the nudge (the hand-written lane stays first-class)   |
+
+**Off by default.** This is a recommendation, not a defect — the hand-written shell
+hook lane is fully supported — so it shouldn't fire unasked. Opt in with `"warn"`
+(or `"error"`) when you want the nudge toward compiled hooks.
 
 ## Scope
 

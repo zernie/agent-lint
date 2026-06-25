@@ -156,7 +156,7 @@ export interface ScanHook {
  * Every cc/codex repo has one even when it ships no plugin surface, so `scan`
  * reports it — otherwise a plain instruction-only repo looks empty. `hasSpec` is
  * the deterministic fact that a `<file>.spec.ts` sits beside it (spec-managed vs
- * hand-written); it is informational, NOT the `require-spec` gate (that's lint).
+ * hand-written); it is informational, NOT the `require-instructions-spec` gate (that's lint).
  */
 export interface ScanInstructions {
   readonly file: string;

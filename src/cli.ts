@@ -16,7 +16,10 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  rmSync,
   lstatSync,
+  type Dirent,
 } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
@@ -40,8 +43,10 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
+  collectSetupAnswers,
   type SetupPlan,
   type SetupAnswers,
+  type AskFn,
   type ParsedSetupArgs,
 } from "./setup-plan.js";
 import type {
@@ -70,6 +75,12 @@ import {
   preferCompiledHooksMessage,
 } from "./scan.js";
 import type { ScanReport } from "./scan.js";
+import {
+  hasModelAccess,
+  decideTriggerSuggestion,
+  formatTriggerHint,
+  scaffoldTriggerPrompts,
+} from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
   explainScore,
@@ -208,7 +219,13 @@ import {
   anyFailed,
   scriptGlob,
 } from "./adapters/claude-code/run-scripts.js";
-import { checkIntegrity } from "./core/integrity.js";
+import {
+  checkIntegrity,
+  ejectMarkdown,
+  parseIntegrityHeader,
+  REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
+} from "./core/integrity.js";
+import { adoptMarkdown } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
@@ -676,7 +693,7 @@ function validateSpecs(
       const specRef = resolve(process.cwd(), hashMatch[1]);
       if (!existsSync(specRef)) {
         log(
-          `  ✗ [require-spec] ${filePath} references "${hashMatch[1]}" but that spec no longer exists.`,
+          `  ✗ [require-instructions-spec] ${filePath} references "${hashMatch[1]}" but that spec no longer exists.`,
         );
         allValid = false;
       }
@@ -714,7 +731,7 @@ function check(filePaths: string[], silent = false): CombinedCheckResult {
     // `validateSpecs` only returns a boolean today, so we collapse
     // failures to 1 until it starts reporting counts. Kept in its own
     // counter so lint's "stale hash — run vigiles compile" remediation
-    // doesn't misreport a require-spec / other validation failure.
+    // doesn't misreport a require-instructions-spec / other validation failure.
     validationErrors: specsValid ? 0 : 1,
   };
 }
@@ -1677,9 +1694,29 @@ function init(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
   const specPath = `${target}.spec.ts`;
+  const specAbs = resolve(process.cwd(), specPath);
 
-  if (existsSync(resolve(process.cwd(), specPath))) {
+  if (existsSync(specAbs)) {
     console.log(`${specPath} already exists.`);
+    return;
+  }
+
+  // Auto-adopt: when the target file already exists with hand-written content
+  // (no integrity header), faithfully convert it into a spec instead of
+  // scaffolding a blank one — so `init` leaves you with a spec, not homework, and
+  // `require-instructions-spec` is satisfied by construction. The compile that
+  // follows reproduces the file (+ the header); review the diff. `vigiles eject`
+  // reverses it. See research/install-enforcement-dx.md.
+  const targetAbs = resolve(process.cwd(), target);
+  if (existsSync(targetAbs) && !targetHasHash(targetAbs)) {
+    const md = readFileSync(targetAbs, "utf-8");
+    const { source, tier, sectionCount } = adoptMarkdown(md, basename(target));
+    mkdirSync(dirname(specAbs), { recursive: true });
+    writeFileSync(specAbs, source);
+    console.log(
+      `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
+        `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
+    );
     return;
   }
 
@@ -1730,10 +1767,132 @@ export default claude({${targetLine}
   },
 });
 `;
-  const specAbs = resolve(process.cwd(), specPath);
   mkdirSync(dirname(specAbs), { recursive: true });
   writeFileSync(specAbs, template);
   console.log(`Created ${specPath} — edit it and run \`vigiles compile\`.`);
+}
+
+/**
+ * `vigiles eject [file]` — the inverse of `compile`: hand a compiled instruction
+ * file back to the user as plain, hand-owned markdown. Strips the `vigiles:sha256`
+ * integrity header, adds a `require-instructions-spec` disable marker so `lint` stays quiet,
+ * and removes the spec that managed it (`--keep-spec` to leave it). The
+ * "managed-but-ejectable" escape hatch: adopting a typed spec is never a one-way
+ * door.
+ */
+function eject(args: string[]): void {
+  const keepSpec = args.includes("--keep-spec");
+  const file = args.find((a) => !a.startsWith("-")) ?? "CLAUDE.md";
+  const abs = resolve(process.cwd(), file);
+  if (!existsSync(abs)) {
+    console.error(`✗ ${file}: no such file.`);
+    process.exitCode = 1;
+    return;
+  }
+  const ejected = ejectMarkdown(readFileSync(abs, "utf-8"));
+  if (!ejected) {
+    console.log(
+      `${file} is not vigiles-managed (no integrity header) — nothing to eject.`,
+    );
+    return;
+  }
+  writeFileSync(abs, ejected.markdown);
+  console.log(`✓ Ejected ${file} — it's now plain, hand-owned markdown.`);
+  const specAbs = resolve(process.cwd(), ejected.specFile);
+  // SAFETY: the `compiled from <path>` header is untrusted text — a hand-edited /
+  // forged header could name `package.json` or `../../secret`, and a blind rmSync
+  // would delete it. Only ever remove a `.spec.ts` that resolves INSIDE the
+  // project (no `..` escape).
+  const relSpec = relative(resolve(process.cwd()), specAbs);
+  const isSafeSpecTarget =
+    ejected.specFile.endsWith(".spec.ts") &&
+    relSpec !== "" &&
+    !relSpec.startsWith("..");
+  if (existsSync(specAbs)) {
+    if (!isSafeSpecTarget) {
+      console.log(
+        `  ⚠ Kept ${ejected.specFile} — the integrity header names a path that isn't a .spec.ts inside this project (it may have been hand-edited); refusing to delete it. Remove it yourself if that's intended.`,
+      );
+    } else if (keepSpec) {
+      console.log(
+        `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
+      );
+    } else if (specReferencedElsewhere(ejected.specFile, file)) {
+      // A multi-target spec (e.g. `target: ["CLAUDE.md", "docs/AGENTS.md"]`, or a
+      // mirror) compiles to several files — possibly in other directories — that
+      // all name the SAME source in their header. Deleting it while ANY of them is
+      // still managed would orphan that file. So keep the spec until its last
+      // consumer is ejected.
+      console.log(
+        `  Kept ${ejected.specFile} — another compiled file in this project is still managed by it (a multi-target / mirrored spec); deleting it would orphan that file. Eject the others too, or remove the spec by hand once it's unused.`,
+      );
+    } else {
+      rmSync(specAbs);
+      console.log(`  Removed ${ejected.specFile} (the spec that managed it).`);
+    }
+  }
+  // The disable marker is only added to instruction files (not skills/agents),
+  // so only mention it when it was actually written.
+  if (ejected.markdown.startsWith(REQUIRE_INSTRUCTIONS_SPEC_DISABLE)) {
+    console.log(
+      `  Left a \`${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
+    );
+  }
+}
+
+/**
+ * Whether another compiled markdown file ANYWHERE under the project still carries
+ * an integrity header naming `specFile` — i.e. the spec has OTHER compiled outputs
+ * (a multi-target `target: [...]` spec or a CLAUDE.md⇄AGENTS.md mirror, possibly
+ * in a different directory like `docs/AGENTS.md`), so removing it would orphan
+ * them. Walks the project tree from cwd, skipping heavy/irrelevant dirs; the
+ * ejected file itself is skipped (its header was already stripped). Matches on the
+ * RESOLVED spec path (not basename), so two unrelated specs that happen to share a
+ * filename — `src/CLAUDE.md.spec.ts` vs `CLAUDE.md.spec.ts`, common in a monorepo —
+ * don't collide; genuine sibling outputs of one compile carry the identical
+ * recorded spec path. Best-effort: an unreadable file is ignored.
+ */
+function specReferencedElsewhere(
+  specFile: string,
+  ejectedFile: string,
+): boolean {
+  const root = resolve(process.cwd());
+  const ejectedAbs = resolve(root, ejectedFile);
+  const specAbs = resolve(root, specFile);
+  const SKIP = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    "out",
+  ]);
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const p = resolve(dir, e.name);
+      if (e.isDirectory()) {
+        if (!SKIP.has(e.name)) stack.push(p);
+        continue;
+      }
+      if (!e.name.endsWith(".md") || p === ejectedAbs) continue;
+      try {
+        const header = parseIntegrityHeader(readFileSync(p, "utf-8"));
+        if (header && resolve(root, header.specFile) === specAbs) return true;
+      } catch {
+        /* unreadable file — skip */
+      }
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1937,37 +2096,22 @@ function scaffoldPillar2(): string[] {
   return ["vigiles.harness.mjs"];
 }
 
-/** Interactive prompts (TTY only): which pillars, CI, plugin. */
+/** Interactive prompts (TTY only): the readline IO shell over the pure
+ *  `collectSetupAnswers` (the Q&A logic is unit-tested in setup-plan.test.ts). */
 async function promptSetup(): Promise<SetupAnswers> {
   const readline = await import("node:readline");
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
-  const ask = (q: string, def: string): Promise<string> =>
+  const ask: AskFn = (q, def) =>
     new Promise((res) => {
       rl.question(q, (a) => {
         res(a.trim() || def);
       });
     });
-  const isYes = (s: string): boolean => /^y(es)?$/i.test(s);
   try {
-    const pillars = (
-      await ask("Set up which pillars? [both/lint/test] (both): ", "both")
-    ).toLowerCase();
-    const gha = isYes(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
-    const plugin = isYes(
-      await ask(
-        "Install the Claude Code plugin (hooks + skills)? [Y/n]: ",
-        "y",
-      ),
-    );
-    return {
-      lint: pillars !== "test",
-      test: pillars !== "lint" && pillars !== "verify",
-      gha,
-      plugin,
-    };
+    return await collectSetupAnswers(ask);
   } finally {
     rl.close();
   }
@@ -2079,8 +2223,9 @@ interface Pillar1Result {
   specTargets: string[];
   /** Files actually written (for the commit hint). */
   written: string[];
-  /** Existing hand-written targets that still need adopt-spec. */
-  needsMigration: string[];
+  /** Existing hand-written targets `init` faithfully adopted into a spec (the
+   *  compiled output replaced them — the user reviews the diff). */
+  adopted: string[];
 }
 
 /** The instruction-file targets Pillar 1 will create specs for — the harness's
@@ -2173,7 +2318,7 @@ async function setupPillar1(
 ): Promise<Pillar1Result> {
   const cwd = process.cwd();
   const written: string[] = [];
-  const needsMigration: string[] = [];
+  const adopted: string[] = [];
   // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
   // AGENTS.md mirror (symlink or synced) to one canonical spec, then redirect
   // into a sync tool's source slot when one would own the output.
@@ -2187,22 +2332,23 @@ async function setupPillar1(
         ),
       );
 
-  // Create specs (blank). An existing hand-written target keeps its content —
-  // we scaffold the spec but flag it for migration rather than clobbering it.
+  // Create specs. An existing hand-written target is faithfully ADOPTED into a
+  // spec (init() does the convert), not clobbered with a blank one — so the
+  // compile below reproduces it (the user reviews the diff). A greenfield target
+  // gets a blank starter spec.
   for (const target of targets) {
     const specPath = `${target}.spec.ts`;
-    const targetExists = existsSync(resolve(cwd, target));
+    const targetAbs = resolve(cwd, target);
+    const willAdopt =
+      existsSync(targetAbs) &&
+      !targetHasHash(targetAbs) &&
+      !existsSync(resolve(cwd, specPath));
     if (existsSync(resolve(cwd, specPath))) {
       console.log(`✓ ${specPath} already exists`);
     } else {
-      init(["--target=" + target]); // prints "Created …"
+      init(["--target=" + target]); // adopts existing content, else blank scaffold
       written.push(specPath);
-    }
-    if (targetExists && !targetHasHash(resolve(cwd, target))) {
-      needsMigration.push(target);
-      console.log(
-        `  ${target} already has content — adopt it into a spec with the adopt-spec skill, then \`vigiles compile\`.`,
-      );
+      if (willAdopt) adopted.push(target);
     }
   }
 
@@ -2229,17 +2375,63 @@ async function setupPillar1(
   console.log("✓ Generated .vigiles/schema.json (YAML-LSP frontmatter schema)");
   written.push(".vigiles/schema.json");
 
-  // Compile — but only specs whose target is greenfield or already ours. A
-  // freshly-scaffolded blank spec over an existing hand-written file is skipped
-  // so we never overwrite the user's instructions with an empty compile.
-  console.log("\nCompiling specs...");
-  const specs = findSpecs().filter((s) => {
-    const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
-    return !existsSync(tf) || targetHasHash(tf);
-  });
-  if (specs.length > 0) await compile(specs, loadConfig());
+  // Compile — but NEVER overwrite an existing hand-written file during `init`:
+  // we compile only GREENFIELD targets (the file doesn't exist yet) and targets
+  // we already manage (carry our hash). An ADOPTED file is left untouched — the
+  // user reviews the generated spec and runs `vigiles compile` themselves to
+  // switch it to spec-managed (non-destructive by default; the compile is
+  // byte-faithful, but it's the user's call to make, with a diff to review).
+  // And we only compile when `vigiles` actually resolves — a fresh repo hasn't
+  // run `npm install` yet, so compiling would just error; defer it with a clear
+  // next step instead of a scary stack-traceless "failed to load".
+  const canCompile = canResolveVigiles(cwd);
+  const specs = canCompile
+    ? findSpecs().filter((s) => {
+        const tf = resolve(cwd, s.replace(/\.spec\.ts$/, ""));
+        return !existsSync(tf) || targetHasHash(tf);
+      })
+    : [];
+  if (specs.length > 0) {
+    console.log("\nCompiling specs...");
+    await compile(specs, loadConfig());
+  } else if (!canCompile) {
+    // Honest, project-type-aware guidance. A JS repo just needs `npm install`
+    // (init already added the devDep). A repo with NO package.json (Python, Rust,
+    // …) can't resolve the npm package at all, so point at the no-install paths
+    // instead of a misleading `npm install`.
+    if (existsSync(resolve(cwd, "package.json"))) {
+      console.log(
+        "\n  Skipping compile — run `npm install` (to fetch the vigiles dep just added), then `npx vigiles compile`.",
+      );
+    } else {
+      console.log(
+        "\n  No package.json here, so the typed-spec compile isn't available yet.\n" +
+          "  • `npx vigiles lint` verifies your instruction files right now — no install needed.\n" +
+          "  • To spec-manage them, add a package.json first: `npm init -y && npm i -D vigiles`, then `npx vigiles compile`.",
+      );
+    }
+  }
 
-  return { specTargets: targets, written, needsMigration };
+  return { specTargets: targets, written, adopted };
+}
+
+/**
+ * Whether `vigiles/spec` will resolve for a spec compiled from `cwd` — true when
+ * vigiles is installed locally (`node_modules/vigiles`) or `cwd` IS the vigiles
+ * package itself (the in-repo dogfood / a monorepo workspace). A fresh user repo
+ * that hasn't run `npm install` yet returns false, so `init` defers the compile
+ * instead of emitting a resolution error.
+ */
+function canResolveVigiles(cwd: string): boolean {
+  if (existsSync(resolve(cwd, "node_modules", "vigiles"))) return true;
+  try {
+    const pkg = JSON.parse(
+      readFileSync(resolve(cwd, "package.json"), "utf-8"),
+    ) as { name?: string };
+    return pkg.name === "vigiles";
+  } catch {
+    return false;
+  }
 }
 
 /** Whether a harness binary (`claude`, `codex`) is on PATH. */
@@ -2418,21 +2610,40 @@ function printSetupSummary(opts: {
   plan: SetupPlan;
   strict: boolean;
   targets: string[];
-  needsMigration: string[];
+  adopted: string[];
   written: string[];
 }): void {
-  const { plan, strict, targets, needsMigration, written } = opts;
+  const { plan, strict, targets, adopted, written } = opts;
   const specPathsList = targets.map((t) => `${t}.spec.ts`);
+  // A repo with no package.json (Python/Rust/…) can't resolve the npm package,
+  // so the typed-spec compile path needs an install first — give honest steps.
+  const hasPkg = existsSync(resolve(process.cwd(), "package.json"));
   console.log("\n---\nSetup complete.\n");
 
+  // Next steps in DEPENDENCY order: install the dep first, then compile (which
+  // needs it), then the optional hardening / test / CI steps.
   const nextSteps: string[] = [];
-  if (needsMigration.length > 0) {
+  if (written.includes("package.json")) {
+    nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
+  }
+  if (adopted.length > 0 && !hasPkg) {
+    // Non-JS repo: compile needs a local install. Point at the no-install verify
+    // path + how to enable specs, instead of a compile that would fail.
     nextSteps.push(
-      `Adopt ${needsMigration.join(", ")} into a spec with the adopt-spec skill, then \`npx vigiles compile\``,
+      `Verify now with \`npx vigiles lint\` (no install). To spec-manage ${adopted.join(", ")}, add a package.json first (\`npm init -y && npm i -D vigiles\`), then \`npx vigiles compile\` and review the diff`,
+    );
+  } else if (adopted.length > 0) {
+    // Adoption is NON-DESTRUCTIVE: the file is untouched until you compile, so
+    // the diff to review is what compile WOULD produce (byte-faithful).
+    nextSteps.push(
+      `Run \`npx vigiles compile\` to put ${adopted.join(", ")} under spec management — it reproduces the file + adds an integrity header, so review the diff (\`vigiles eject\` reverses it)`,
+    );
+    nextSteps.push(
+      "Run the `/strengthen` skill to upgrade prose rules to verified enforce()/guard()",
     );
   } else if (specPathsList.length > 0) {
     nextSteps.push(
-      `Edit ${specPathsList.join(", ")} — add your conventions, then \`/strengthen\``,
+      `Edit ${specPathsList.join(", ")} — add your conventions, then \`npx vigiles compile\` (and \`/strengthen\`)`,
     );
   }
   if (plan.test) {
@@ -2440,11 +2651,10 @@ function printSetupSummary(opts: {
       "Edit vigiles.harness.mjs to test a real hook, then `npx vigiles test`",
     );
   }
-  if (written.includes("package.json")) {
-    nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
-  }
   if (!strict) {
-    nextSteps.push("When ready, enforce in CI: npx vigiles init --strict");
+    nextSteps.push(
+      "When ready, enforce specs + tests in CI: `npx vigiles init --strict`",
+    );
   }
   nextSteps.forEach((s, i) => {
     console.log(`  ${String(i + 1)}. ${s}`);
@@ -2461,13 +2671,16 @@ function printSetupSummary(opts: {
 
 async function setup(args: string[]): Promise<void> {
   const parsed = parseSetupArgs(args);
-  const strict = parsed.strict;
 
   // Plan: defaults → flags → interactive prompts (only a human at a TTY).
   let plan = resolvePlan(parsed);
   if (shouldPrompt(parsed, process.stdin.isTTY ?? false)) {
     plan = resolvePlan(parsed, await promptSetup());
   }
+  // Read strict from the RESOLVED plan, not the raw flag — an interactive "yes"
+  // to the workflow tier (no `--strict` flag) sets plan.strict, and the config
+  // write + summary must honor it.
+  const strict = plan.strict;
 
   const pillars = [plan.lint && "lint", plan.test && "test"]
     .filter(Boolean)
@@ -2486,12 +2699,12 @@ async function setup(args: string[]): Promise<void> {
 
   // Lint pillar — verify instruction-file references.
   let targets: string[] = [];
-  let needsMigration: string[] = [];
+  let adopted: string[] = [];
   if (plan.lint) {
     console.log("");
     const p1 = await setupPillar1(detected, parsed.target, harnesses);
     targets = p1.specTargets;
-    needsMigration = p1.needsMigration;
+    adopted = p1.adopted;
     written.push(...p1.written);
   }
 
@@ -2534,10 +2747,17 @@ async function setup(args: string[]): Promise<void> {
   }
 
   // Project config — record the harness(es) so compile/lint select the dialect
-  // deterministically (no cwd sniffing), plus strict rule severities on --strict.
-  writeProjectConfig({ harnesses, strict, written });
+  // deterministically (no cwd sniffing), plus strict rule severities on --strict
+  // (or all-warn under --report-only).
+  writeProjectConfig({
+    harnesses,
+    strict,
+    reportOnly: parsed.reportOnly,
+    lint: plan.lint,
+    written,
+  });
 
-  printSetupSummary({ plan, strict, targets, needsMigration, written });
+  printSetupSummary({ plan, strict, targets, adopted, written });
 }
 
 /** Canonical, de-duplicated harness list → a config value (string when one). */
@@ -2554,6 +2774,10 @@ function harnessConfigValue(harnesses: string[]): string | string[] {
 function writeProjectConfig(opts: {
   harnesses: string[];
   strict: boolean;
+  reportOnly: boolean;
+  /** Lint pillar on — gates writing the lint rule severities (test-only setups
+   * record only the harness). */
+  lint: boolean;
   written: string[];
 }): void {
   const configPath = resolve(process.cwd(), ".vigilesrc.json");
@@ -2572,6 +2796,8 @@ function writeProjectConfig(opts: {
   const merged = mergeProjectConfig(existing, {
     harness: harnessConfigValue(opts.harnesses),
     strict: opts.strict,
+    reportOnly: opts.reportOnly,
+    lint: opts.lint,
   });
   if (!merged) return;
   writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
@@ -3291,21 +3517,30 @@ function findInstructionFiles(
   restArgs: string[],
   exclude: readonly string[] = [],
 ): string[] {
-  if (restArgs.length > 0) return restArgs;
   const patterns = ["**/CLAUDE.md", "**/AGENTS.md", "**/SKILL.md"];
-  const files: string[] = [];
-  for (const pattern of patterns) {
-    files.push(
-      ...globSync(pattern, {
-        // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the
-        // repo's own lint shouldn't police — a third-party CLAUDE.md isn't held
-        // to require-spec. node_modules/dist/.git stay always-excluded.
-        ignore: [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude],
-        cwd: process.cwd(),
-      }),
-    );
+  // `exclude` (from .vigilesrc.json) drops vendored/benchmark fixtures the repo's
+  // own lint shouldn't police — a third-party CLAUDE.md isn't held to require-instructions-spec.
+  // node_modules/dist/.git stay always-excluded.
+  const ignore = [...IGNORE_NODE_MODULES, "dist/**", ".git/**", ...exclude];
+  // Discover instruction files under one directory, as paths relative to cwd.
+  const discoverIn = (dirAbs: string): string[] =>
+    patterns
+      .flatMap((p) => globSync(p, { ignore, cwd: dirAbs, absolute: true }))
+      .map((abs) => relative(process.cwd(), abs));
+  if (restArgs.length === 0) return discoverIn(process.cwd());
+  // Explicit args: expand a DIRECTORY to the instruction files inside it (so
+  // `vigiles lint .` works), keep a file arg as-is, and pass a non-existent arg
+  // through unchanged (lint reports it as not-found rather than crashing).
+  const out: string[] = [];
+  for (const arg of restArgs) {
+    const abs = resolve(process.cwd(), arg);
+    if (existsSync(abs) && lstatSync(abs).isDirectory()) {
+      out.push(...discoverIn(abs));
+    } else {
+      out.push(arg);
+    }
   }
-  return files;
+  return out;
 }
 
 /** Value of a `--flag=value` arg (the `=` form, so it never collides with a positional). */
@@ -3947,9 +4182,12 @@ function printUsage(command: string | undefined): void {
   console.log("");
   console.log("Commands:");
   console.log(
-    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --no-gha, --force)",
+    "  vigiles init [flags]           Setup project (--lint, --test, --harness=, --strict, --report-only, --no-gha, --force)",
   );
   console.log("  vigiles compile [files...]     Compile .spec.ts → .md");
+  console.log(
+    "  vigiles eject [file]           Un-manage a compiled file → plain hand-owned markdown (--keep-spec)",
+  );
   console.log(
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
@@ -3958,6 +4196,9 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
+  );
+  console.log(
+    "                                 with model access + a TTY, scan offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -4917,6 +5158,98 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
   }
 }
 
+/**
+ * After a single-plugin `scan` report: if the plugin ships model-invocable
+ * skills AND a real model is reachable, surface the real-model `--trigger` tier
+ * that measures whether those skills actually FIRE. A human at a TTY is offered
+ * setup; an agent / CI (non-TTY / `--json` / `--no-interactive` / `--yes`) gets a
+ * one-line, non-blocking hint — a `scan` must never hang (`great-agent-flow`).
+ */
+async function maybeSuggestTrigger(
+  report: ScanReport,
+  dir: string,
+  json: boolean,
+  args: string[],
+): Promise<void> {
+  const triggerable = report.skills.filter(
+    (s) => s.hasDescription && !s.userInvoked,
+  );
+  const decision = decideTriggerSuggestion({
+    modelAccess: hasModelAccess(process.env),
+    // Prompt only when BOTH streams are a terminal — `askOnce` reads stdin, so a
+    // TTY stdout with piped/redirected stdin (agents, shell pipelines) must take
+    // the non-blocking hint path, not block on a read that never gets input.
+    // `isTTY` is `undefined` at runtime when not a terminal (falsy → hint path).
+    isTTY: process.stdout.isTTY && process.stdin.isTTY,
+    triggerableSkills: triggerable.length,
+    json,
+    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
+  });
+  if (decision === "none") return;
+  if (decision === "hint") {
+    console.log("\n" + formatTriggerHint(dir, triggerable.length));
+    return;
+  }
+  await promptTriggerSetup(report, dir, triggerable.length, args);
+}
+
+/** Ask one question on a fresh readline, closing it after (the codebase pattern). */
+async function askOnce(q: string): Promise<string> {
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    return await new Promise<string>((res) => {
+      rl.question(q, (a) => {
+        res(a.trim());
+      });
+    });
+  } finally {
+    rl.close();
+  }
+}
+
+/** Interactive (TTY) trigger-tier setup: run an existing prompts file now, or
+ *  scaffold one to fill in. The real-model run stays an explicit confirmation so
+ *  a plain `scan` never spends a token without a yes. */
+async function promptTriggerSetup(
+  report: ScanReport,
+  dir: string,
+  n: number,
+  args: string[],
+): Promise<void> {
+  const promptsPath = resolve(process.cwd(), "trigger-prompts.json");
+  const exists = existsSync(promptsPath);
+  const q = exists
+    ? `\nℹ Model access detected. Measure whether your ${String(n)} skill(s) FIRE now using trigger-prompts.json (real model)? [y/N] `
+    : `\nℹ ${String(n)} model-invocable skill(s) + model access detected. Scaffold trigger-prompts.json to measure firing? [y/N] `;
+  const answer = await askOnce(q);
+  if (!/^y(es)?$/i.test(answer)) {
+    console.log("  Skipped. " + formatTriggerHint(dir, n));
+    return;
+  }
+  if (exists) {
+    await handleMeasure([dir], [...args, "--prompts=trigger-prompts.json"]);
+    return;
+  }
+  writeFileSync(
+    promptsPath,
+    scaffoldTriggerPrompts(
+      report.skills
+        .filter((s) => s.hasDescription && !s.userInvoked)
+        .map((s) => s.name),
+    ),
+  );
+  console.log(
+    "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
+  );
+  console.log(
+    `    vigiles scan ${dir} --trigger --prompts=trigger-prompts.json`,
+  );
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -4939,7 +5272,7 @@ async function main(): Promise<void> {
     case "init": {
       // Explicit --target bypasses the setup wizard and always creates a
       // bare spec, so `npx vigiles init --target=<file>` is a reliable
-      // remediation for the require-spec validator. Bare `vigiles init`
+      // remediation for the require-instructions-spec validator. Bare `vigiles init`
       // still runs the full wizard (project detection + auto-targets).
       const hasTarget = args.some((a) => a.startsWith("--target="));
       if (hasTarget) {
@@ -4985,6 +5318,12 @@ async function main(): Promise<void> {
       }
       break;
     }
+
+    case "eject":
+      // Inverse of compile: un-manage a compiled file → plain hand-owned
+      // markdown (the "always ejectable" escape hatch).
+      eject(args.slice(1));
+      break;
 
     case "lint": {
       // lint = verify references + discover + guidance count
@@ -5122,6 +5461,9 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
+        // Nudge toward the real-model trigger tier when a model is reachable and
+        // the plugin ships model-invocable skills (hint for agents, offer for humans).
+        await maybeSuggestTrigger(report, targets[0], json, args);
       }
       break;
     }

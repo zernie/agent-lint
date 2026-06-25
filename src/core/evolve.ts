@@ -1,6 +1,10 @@
 /**
  * vigiles — Evolution engine for self-evolving specifications.
  *
+ * @internal Research-stage / experimental — NOT exported from any public entry
+ * point and NOT part of the frozen public surface (pre-1.0). Kept for the
+ * self-evolving-specs line; `proofs.ts` (used by ncd / covering-array) stays.
+ *
  * AI agents propose mutations. The engine applies them, runs the proof suite,
  * and only accepts mutations that pass all proofs AND improve fitness.
  *

@@ -9,6 +9,10 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
+  collectSetupAnswers,
+  STRUCTURAL_RULES,
+  WORKFLOW_RULES,
+  type AskFn,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -43,6 +47,12 @@ test("parseSetupArgs reads flags", () => {
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
   assert.equal(p.yes, true);
+  assert.equal(p.reportOnly, false);
+});
+
+test("parseSetupArgs reads --report-only", () => {
+  assert.equal(parseSetupArgs(["--report-only"]).reportOnly, true);
+  assert.equal(parseSetupArgs([]).reportOnly, false);
 });
 
 test("parseSetupArgs reads --lint / --no-test / --harness", () => {
@@ -104,6 +114,17 @@ test("resolvePlan: interactive answers override flags/defaults", () => {
   assert.equal(p.lint, true); // untouched
 });
 
+test("resolvePlan: an interactive 'yes' to strict opts into the workflow tier", () => {
+  // The recommended-default opt-out: a TTY human says yes → strict; a bare
+  // non-interactive run (no answers) stays non-strict (structural-only floor).
+  assert.equal(resolvePlan(parseSetupArgs([]), { strict: true }).strict, true);
+  assert.equal(
+    resolvePlan(parseSetupArgs([]), { strict: false }).strict,
+    false,
+  );
+  assert.equal(resolvePlan(parseSetupArgs([])).strict, false); // no human asked
+});
+
 test("planPluginInstall: claude uses the marketplace and never vendors", () => {
   const [withCli] = planPluginInstall(["claude"], { hasClaude: true });
   assert.equal(withCli.harness, "claude");
@@ -161,72 +182,191 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
 
 // --- mergeProjectConfig: what `vigiles init` writes to .vigilesrc.json ---
 
-test("mergeProjectConfig: empty config gets the harness", () => {
-  assert.deepEqual(
-    mergeProjectConfig({}, { harness: "claude-code", strict: false }),
-    {
-      harness: "claude-code",
-    },
+test("mergeProjectConfig: default init gates the FP-safe structural rules + harness", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
+  const expected = Object.fromEntries(
+    STRUCTURAL_RULES.map((r) => [r, "error"]),
   );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
 });
 
-test("mergeProjectConfig: array harness is recorded as-is", () => {
-  assert.deepEqual(
-    mergeProjectConfig(
-      {},
-      { harness: ["claude-code", "codex"], strict: false },
-    ),
-    { harness: ["claude-code", "codex"] },
-  );
-});
-
-test("mergeProjectConfig: never clobbers an existing harness (returns null)", () => {
+test("mergeProjectConfig: default does NOT gate require-instructions-spec (stays opt-in)", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
+  const rules = (out as { rules: Record<string, string> }).rules;
   assert.equal(
-    mergeProjectConfig(
-      { harness: "codex" },
-      { harness: "claude-code", strict: false },
-    ),
-    null,
+    rules["require-instructions-spec"],
+    undefined,
+    "require-instructions-spec is --strict-only",
+  );
+  assert.equal(
+    rules["untested-skill"],
+    undefined,
+    "untested-* is --strict-only",
   );
 });
 
-test("mergeProjectConfig: preserves other existing keys while adding harness", () => {
-  assert.deepEqual(
-    mergeProjectConfig({ maxRules: 50 }, { harness: "codex", strict: false }),
-    { maxRules: 50, harness: "codex" },
-  );
-});
-
-test("mergeProjectConfig: strict tightens require-spec alongside harness", () => {
-  // `require-skill-spec` is deprecated, so --strict tightens only `require-spec`.
-  assert.deepEqual(
-    mergeProjectConfig({}, { harness: "claude-code", strict: true }),
-    {
-      harness: "claude-code",
-      rules: { "require-spec": "error" },
-    },
-  );
-});
-
-test("mergeProjectConfig: strict leaves an already-set require-spec alone", () => {
-  // require-spec already defined and the only rule --strict touches → nothing to
-  // tighten → no write.
+test("mergeProjectConfig: --report-only writes the structural gate at warn, not error", () => {
   const out = mergeProjectConfig(
-    { harness: "codex", rules: { "require-spec": "warn" } },
-    { harness: "codex", strict: true },
+    {},
+    { harness: "claude-code", strict: false, reportOnly: true },
   );
-  assert.equal(out, null);
+  const expected = Object.fromEntries(STRUCTURAL_RULES.map((r) => [r, "warn"]));
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("mergeProjectConfig: --report-only composes with --strict (workflow tier at warn)", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "claude-code", strict: true, reportOnly: true },
+  );
+  const expected = Object.fromEntries(
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "warn"]),
+  );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("mergeProjectConfig: test-only (lint:false) records harness but writes NO lint rules", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "claude-code", strict: false, lint: false },
+  );
+  // Honors the positive-flag contract: `init --test` selects only the test
+  // pillar, so the lint rule gate is not written.
+  assert.deepEqual(out, { harness: "claude-code" });
+});
+
+test("mergeProjectConfig: lint:false with --strict still writes no rules", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "codex", strict: true, lint: false },
+  );
+  assert.deepEqual(out, { harness: "codex" });
+});
+
+test("mergeProjectConfig: array harness is recorded as-is (with default gates)", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: ["claude-code", "codex"], strict: false },
+  );
+  assert.deepEqual((out as { harness: unknown }).harness, [
+    "claude-code",
+    "codex",
+  ]);
+});
+
+test("mergeProjectConfig: never clobbers an existing harness key", () => {
+  // harness already set, but the default gate rules are still added → writes.
+  const out = mergeProjectConfig(
+    { harness: "codex" },
+    { harness: "claude-code", strict: false },
+  );
+  assert.equal((out as { harness: string }).harness, "codex", "kept");
+});
+
+test("mergeProjectConfig: preserves other existing keys", () => {
+  const out = mergeProjectConfig(
+    { maxRules: 50 },
+    { harness: "codex", strict: false },
+  );
+  assert.equal((out as { maxRules: number }).maxRules, 50);
+  assert.equal((out as { harness: string }).harness, "codex");
+});
+
+test("mergeProjectConfig: --strict adds the workflow-forcing tier on top of the gates", () => {
+  const out = mergeProjectConfig({}, { harness: "claude-code", strict: true });
+  const expected = Object.fromEntries(
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "error"]),
+  );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("WORKFLOW_RULES is require-instructions-spec + untested-*; nudge rules are NOT gated", () => {
+  assert.ok(WORKFLOW_RULES.includes("require-instructions-spec"));
+  assert.ok(WORKFLOW_RULES.includes("untested-skill"));
+  // frontmatter-valid / skill-frontmatter are nudge-group — never gated, even --strict.
+  assert.ok(
+    !(WORKFLOW_RULES as readonly string[]).includes("frontmatter-valid"),
+  );
+  assert.ok(
+    !(WORKFLOW_RULES as readonly string[]).includes("skill-frontmatter"),
+  );
+});
+
+test("mergeProjectConfig: never clobbers a user-set severity, fills the rest", () => {
+  const out = mergeProjectConfig(
+    { harness: "codex", rules: { "subagent-tool-contract": "warn" } },
+    { harness: "codex", strict: false },
+  );
+  const rules = (out as { rules: Record<string, string> }).rules;
+  assert.equal(rules["subagent-tool-contract"], "warn", "user severity kept");
+  assert.equal(rules["description-overlap"], "error", "others gated");
 });
 
 test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {
+  const rules = Object.fromEntries(
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "error"]),
+  );
   assert.equal(
     mergeProjectConfig(
-      {
-        harness: "codex",
-        rules: { "require-spec": "error", "require-skill-spec": "error" },
-      },
+      { harness: "codex", rules },
       { harness: "codex", strict: true },
     ),
     null,
   );
+});
+
+// --- collectSetupAnswers: the interactive Q&A, unit-tested via a fake ask ---
+
+/** A fake `ask` that returns the scripted answer per matched question substring,
+ *  else the default (simulating the user hitting Enter). Records the prompts. */
+function fakeAsk(scripted: Record<string, string>): {
+  ask: AskFn;
+  asked: string[];
+} {
+  const asked: string[] = [];
+  const ask: AskFn = (q, def) => {
+    asked.push(q);
+    const hit = Object.keys(scripted).find((k) => q.includes(k));
+    return Promise.resolve(hit ? scripted[hit] : def);
+  };
+  return { ask, asked };
+}
+
+test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all on, strict", async () => {
+  const { ask, asked } = fakeAsk({});
+  assert.deepEqual(await collectSetupAnswers(ask), {
+    lint: true,
+    test: true,
+    gha: true,
+    plugin: true,
+    strict: true,
+  });
+  assert.equal(asked.length, 4, "asks pillars, CI, plugin, strict");
+});
+
+test("collectSetupAnswers: 'lint' pillar → test off", async () => {
+  const { ask } = fakeAsk({ "which pillars": "lint" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.lint, true);
+  assert.equal(a.test, false);
+});
+
+test("collectSetupAnswers: 'test' pillar → lint off", async () => {
+  const { ask } = fakeAsk({ "which pillars": "test" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.lint, false);
+  assert.equal(a.test, true);
+});
+
+test("collectSetupAnswers: declining CI / plugin / strict is honored", async () => {
+  const { ask } = fakeAsk({
+    "Wire CI": "n",
+    "Install the Claude Code plugin": "n",
+    "enforce specs": "n",
+  });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.gha, false);
+  assert.equal(a.plugin, false);
+  assert.equal(a.strict, false, "opts OUT of the workflow tier");
+  assert.equal(a.lint, true, "structural gating still set up");
 });

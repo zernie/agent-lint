@@ -55,8 +55,8 @@ const p = loadPlugin("examples/harness/vendor/oh-my-claudecode@deee3a4");
 ```
 
 All four surfaces in one load. This runs model-free in the gate as a conformance
-case in [`src/vendor.test.ts`](../src/vendor.test.ts), alongside obra/superpowers
-and wshobson/agents.
+case in [`src/adapters/claude-code/vendor.test.ts`](../src/adapters/claude-code/vendor.test.ts),
+alongside obra/superpowers and wshobson/agents.
 
 ### Tier 1 — unit-test a hook (`runHook`)
 

@@ -118,10 +118,38 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
 
 ## Positioning lock
 
-- **Consumer one-liner (README hero, set):** _"You're a 100x coder, a 1x verifier."_ →
-  vigiles verifies + measures the harness your agent runs on.
+- **Consumer one-liner (README hero):** lead straight into the pain — _"You installed a
+  bunch of plugins and wrote a few skills — but do they actually work? It's a library with
+  no tests."_ → vigiles verifies + measures the harness your agent runs on. (The earlier
+  _"100x coder, 1x verifier"_ line is kept as a backup hook.)
 - **Category line:** the **deterministic shift-left guardrail + private measurement for
   your agent harness.**
+- **The differentiator (author-time vs runtime — THE one-line wedge):** every other
+  player catches drift at **runtime, after the fact** (observability / post-hoc) or lints
+  **structure**; vigiles proves the references are real and the spec compiles **before the
+  agent ever runs** — author-time, deterministic, pre-run. Public-safe phrasing (no
+  competitor names): _"verify the harness before it runs, not after, in production."_ This
+  is the empty lane; lead the article + README with it.
+- **What we are NOT — don't fight for the linting crown (decided 2026-06-25).** vigiles is
+  NOT a markdown / structure linter. That lane is crowded + commoditized (the OSS leader is
+  well ahead) and "lint-my-markdown" adoption is weak — not worth contesting on its axis. We
+  do something DIFFERENT and bold: author-time TYPED SPECS the agent writes (+ EJECT anytime)
+  and EVALS you can afford. Reframe Lint as _"your spec's references are real,"_ never "lint
+  my markdown" — reference verification is the floor under the spec, not the product.
+- **Spec-first; markdown is the FLOOR / eject-target, not the on-ramp.** Adoption is
+  frictionless for the two reasons that normally sink a typed-spec product: (1) CC WRITES the
+  spec (`edit-spec` / `adopt-spec` / `strengthen`), so "I don't want to write TypeScript" is
+  moot; (2) you can EJECT to plain owned markdown anytime (the create-react-app move —
+  managed but ejectable), so "lock-in / permanent build step" is moot. The ladder INVERTS:
+  spec-first (agent-authored, faithful-to-original by default), markdown = the safety valve.
+  This also collapses the earlier choice-anxiety worry to ONE path. ENABLER (must ship for
+  the claim to be true): a one-command **`vigiles eject`** — strip the `vigiles:sha256`
+  integrity header → clean markdown lint won't nag about; NONE exists today (hand-deleting
+  the spec makes `require-instructions-spec` error, `cli.ts:679`).
+- **Citeable authorities (ride the now-canon "harness engineering" frame):** Karpathy —
+  _"LLMs can automate what you can verify"_; OpenAI — _"the harness is hard"_; arXiv AHE's
+  **structure-beats-prose** ablation = the proof that `enforce()` > `guidance()`. Use these
+  in the launch article; keep competitor + VC names OUT (they live in the `startup/` vault).
 - **The analogy (pick ONE):** lead with **"a test suite + CI for your CLAUDE.md, hooks &
   skills"** (concrete, matches the MEASURE wedge); keep **"TypeScript's `strict` mode for
   your harness"** as the depth/graduated-adoption analogy (the type-safety-guardrail

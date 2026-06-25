@@ -535,9 +535,11 @@ Real rule:
     assert.equal(exitCode, 2);
   });
 
-  it("satisfies require-spec when inline rules are present", () => {
-    // A file with inline rules but no .spec.ts should NOT trigger
-    // the require-spec validation warning.
+  it("does NOT satisfy require-instructions-spec via inline rules (narrow rule)", () => {
+    // Inline mode is a valid Level-0 on-ramp, but `require-instructions-spec` is
+    // NARROW — only a `.spec.ts` satisfies it (the name says "spec"). So an
+    // inline-only CLAUDE.md still gets the default-warn nudge; an inline user
+    // keeps the rule off. The inline rules themselves are still parsed/verified.
     writeFileSync(
       join(inlineDir, "CLAUDE.md"),
       `<!-- vigiles:enforce eslint/no-console "valid" -->
@@ -547,8 +549,8 @@ Real rule:
     );
     const { stdout } = run("lint CLAUDE.md", inlineDir);
     assert.ok(
-      !stdout.includes("require-spec"),
-      `require-spec should be satisfied by inline rules, got: ${stdout.slice(0, 600)}`,
+      stdout.includes("require-instructions-spec"),
+      `inline must NOT satisfy the narrow require-instructions-spec, got: ${stdout.slice(0, 600)}`,
     );
   });
 });
@@ -686,7 +688,10 @@ vigiles:
     assert.equal(exitCode, 2);
   });
 
-  it("satisfies require-spec when frontmatter rules are present", () => {
+  it("does NOT satisfy require-instructions-spec via frontmatter rules (narrow rule)", () => {
+    // Same narrowing as inline mode: a `vigiles:` frontmatter block is a valid
+    // Level-1 on-ramp but does NOT count as a `.spec.ts`, so the narrow
+    // `require-instructions-spec` nudge still fires (default warn).
     writeFileSync(
       join(fmDir, "CLAUDE.md"),
       `---
@@ -701,8 +706,8 @@ vigiles:
     );
     const { stdout } = run("lint CLAUDE.md", fmDir);
     assert.ok(
-      !stdout.includes("require-spec"),
-      `require-spec should be satisfied by frontmatter, got: ${stdout.slice(0, 600)}`,
+      stdout.includes("require-instructions-spec"),
+      `frontmatter must NOT satisfy the narrow require-instructions-spec, got: ${stdout.slice(0, 600)}`,
     );
   });
 
@@ -1223,10 +1228,10 @@ describe("CLI: vigiles init auto-detection", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should detect existing CLAUDE.md and suggest adoption", () => {
+  it("should detect existing CLAUDE.md and adopt it", () => {
     writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
     const { stdout } = run("init --no-plugin", tmpDir);
-    assert.ok(stdout.includes("without a spec") || stdout.includes("adopt"));
+    assert.match(stdout, /adopt/i, "should adopt the hand-written CLAUDE.md");
   });
 
   it("should detect .cursorrules and suggest sync tool", () => {
@@ -1302,6 +1307,20 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("--test: records the harness but writes NO lint rules (lint pillar off)", () => {
+    const dir = freshProject();
+    try {
+      run("init --test --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { harness?: unknown; rules?: unknown };
+      assert.equal(cfg.harness, "claude-code", "harness recorded");
+      assert.equal(cfg.rules, undefined, "no lint gate for a test-only setup");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("--lint: spec only, no harness", () => {
     const dir = freshProject();
     try {
@@ -1309,6 +1328,89 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       assert.match(stdout, /pillars: lint/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--strict: writes the workflow-tier rules to .vigilesrc.json", () => {
+    const dir = freshProject();
+    try {
+      run("init --lint --strict --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { rules?: Record<string, string> };
+      assert.equal(
+        cfg.rules?.["require-instructions-spec"],
+        "error",
+        "workflow rule gated under --strict",
+      );
+      assert.equal(
+        cfg.rules?.["subagent-tool-contract"],
+        "error",
+        "structural",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--report-only: writes the gate at warn (nothing fails CI)", () => {
+    const dir = freshProject();
+    try {
+      run("init --lint --report-only --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { rules?: Record<string, string> };
+      assert.equal(cfg.rules?.["subagent-tool-contract"], "warn");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("gives honest guidance on a non-JS repo (no package.json)", () => {
+    // A Python/Rust repo with a CLAUDE.md but no package.json can't resolve the
+    // npm package — init must point at `npx vigiles lint` (no install), NOT a
+    // bare "npm install" that wouldn't help.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-nonjs-"));
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nPy app.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      assert.ok(
+        !existsSync(join(dir, "package.json")),
+        "no package.json created",
+      );
+      assert.match(stdout, /No package\.json/);
+      assert.match(stdout, /npx vigiles lint/);
+      // Must NOT tell a non-JS user to run a bare `npm install` (won't help).
+      assert.ok(
+        !/Run `npm install`/.test(stdout),
+        "no misleading npm install step",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-adopt is NON-DESTRUCTIVE: never compiles over an existing file in init", () => {
+    const dir = freshProject();
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nMine.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      // The spec is adopted, but the user's file is left exactly as-is — no
+      // integrity header is written during init (the user runs `compile` to opt in).
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec adopted");
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.equal(md, "# CLAUDE.md\n\n## Notes\n\nMine.\n", "file untouched");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      // Fresh repo (no node_modules/vigiles) → compile is deferred, not errored.
+      assert.match(stdout, /Skipping compile|npm install/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1356,16 +1458,27 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("scaffolds a spec for an existing CLAUDE.md without clobbering it", () => {
+  it("auto-adopts an existing CLAUDE.md into a faithful spec (content preserved)", () => {
     const dir = freshProject();
     try {
-      writeFileSync(join(dir, "CLAUDE.md"), "# Hand-written\n\nKeep me.\n");
-      run("init --lint --no-plugin --no-gha", dir);
-      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec scaffolded");
-      // The hand-written file must be untouched (no compile-over).
-      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
-      assert.ok(md.includes("Keep me."), "content preserved");
-      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nKeep me.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      // Auto-adopt: the hand-written file is converted into a spec (not a blank
+      // scaffold), and the spec captures the content verbatim (faithful).
+      assert.match(stdout, /Adopted CLAUDE\.md/);
+      const spec = readFileSync(join(dir, "CLAUDE.md.spec.ts"), "utf-8");
+      assert.ok(spec.includes("Adopted from CLAUDE.md"), "adopted spec");
+      assert.ok(spec.includes("Keep me."), "content captured in the spec");
+      // The original content is never lost — compile reproduces it (the byte
+      // round-trip is proven in src/core/adopt.test.ts; here freshProject has no
+      // resolvable vigiles install so the in-process compile is a no-op).
+      assert.ok(
+        readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes("Keep me."),
+        "content preserved",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1495,11 +1608,20 @@ describe("CLI: installation smoke test (deterministic)", () => {
       const { stdout, exitCode } = run("init --no-plugin --no-gha", dir);
       assert.equal(exitCode, 0, stdout);
 
-      // Pillar 1: spec scaffolded, hand-written CLAUDE.md untouched.
-      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
-      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
-      assert.ok(md.includes("Keep this prose."), "CLAUDE.md preserved");
-      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      // Pillar 1: the hand-written CLAUDE.md is adopted into a spec that
+      // captures its prose faithfully (the content is never lost).
+      const spec = readFileSync(join(dir, "CLAUDE.md.spec.ts"), "utf-8");
+      assert.ok(spec.includes("Adopted from CLAUDE.md"), "adopted spec");
+      assert.ok(
+        spec.includes("Keep this prose."),
+        "prose captured in the spec",
+      );
+      assert.ok(
+        readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes(
+          "Keep this prose.",
+        ),
+        "CLAUDE.md content preserved",
+      );
       assert.ok(existsSync(join(dir, ".vigiles/generated.d.ts")), "types");
 
       // Dep: moved to devDependencies, out of dependencies.
@@ -1905,12 +2027,13 @@ describe("E2E: fixture project adoption", () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
-  it("setup detects existing hand-written CLAUDE.md", () => {
+  it("setup detects existing hand-written CLAUDE.md and adopts it", () => {
     const { stdout } = run("init --no-plugin", workDir);
-    // Should detect CLAUDE.md without spec and suggest adoption
-    assert.ok(
-      stdout.includes("without a spec") || stdout.includes("adopt"),
-      "Should detect hand-written CLAUDE.md",
+    // Existing CLAUDE.md without a spec → adopted into one (non-destructively).
+    assert.match(
+      stdout,
+      /adopt/i,
+      "Should adopt the existing hand-written CLAUDE.md",
     );
   });
 
@@ -1919,7 +2042,7 @@ describe("E2E: fixture project adoption", () => {
     // Hand-written CLAUDE.md has no hash — should report it
     assert.ok(
       stdout.includes("no vigiles hash") ||
-        stdout.includes("require-spec") ||
+        stdout.includes("require-instructions-spec") ||
         stdout.includes("Verifying"),
     );
   });
@@ -2030,5 +2153,247 @@ describe("CLI: markdown-mode file/cmd verification", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// vigiles eject — un-manage a compiled file back to plain markdown
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles eject", () => {
+  let tmpDir: string;
+  const HEADER =
+    "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->";
+  const compiled = `${HEADER}\n\n# CLAUDE.md\n\nSome guidance.\n`;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "vigiles-cli-eject-"));
+  });
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("strips the integrity header, adds the disable marker, and removes the spec", () => {
+    writeFileSync(join(tmpDir, "CLAUDE.md"), compiled);
+    writeFileSync(join(tmpDir, "CLAUDE.md.spec.ts"), "export default {}\n");
+    const { stdout, exitCode } = run("eject CLAUDE.md", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(stdout.includes("Ejected CLAUDE.md"));
+    const out = readFileSync(join(tmpDir, "CLAUDE.md"), "utf-8");
+    assert.ok(!out.includes("vigiles:sha256"), "header stripped");
+    assert.ok(
+      out.includes("<!-- vigiles-disable require-instructions-spec -->"),
+      "marker added",
+    );
+    assert.ok(out.includes("# CLAUDE.md"), "body preserved");
+    assert.ok(!existsSync(join(tmpDir, "CLAUDE.md.spec.ts")), "spec removed");
+  });
+
+  it("leaves lint quiet on the ejected file (no require-instructions-spec error)", () => {
+    const { stdout, stderr, exitCode } = run("lint CLAUDE.md", tmpDir);
+    assert.ok(
+      !(stdout + stderr).includes("require-instructions-spec"),
+      "require-instructions-spec satisfied",
+    );
+    assert.equal(exitCode, 0);
+  });
+
+  it("reports nothing to eject on a plain (already-ejected) file", () => {
+    const { stdout, exitCode } = run("eject CLAUDE.md", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(stdout.includes("nothing to eject"));
+  });
+
+  it("--keep-spec leaves the spec in place", () => {
+    writeFileSync(
+      join(tmpDir, "K.md"),
+      `${HEADER.replace("CLAUDE.md", "K.md")}\n\n# K\n`,
+    );
+    writeFileSync(join(tmpDir, "K.md.spec.ts"), "export default {}\n");
+    const { exitCode } = run("eject K.md --keep-spec", tmpDir);
+    assert.equal(exitCode, 0);
+    assert.ok(existsSync(join(tmpDir, "K.md.spec.ts")), "spec kept");
+  });
+
+  // A multi-target spec `target: ["CLAUDE.md", "AGENTS.md"]` compiles BOTH files
+  // from CLAUDE.md.spec.ts; their headers both name it. Ejecting EITHER one while
+  // the OTHER is still managed must keep the shared spec (or the other orphans).
+  function multiTargetDir(): string {
+    const d = mkdtempSync(join(tmpdir(), "vigiles-eject-shared-"));
+    writeFileSync(join(d, "CLAUDE.md.spec.ts"), "export default {}\n");
+    for (const f of ["CLAUDE.md", "AGENTS.md"]) {
+      writeFileSync(
+        join(d, f),
+        `<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# ${f}\n\nShared.\n`,
+      );
+    }
+    return d;
+  }
+
+  it("keeps the shared spec when ejecting the SECONDARY target", () => {
+    const dir = multiTargetDir();
+    try {
+      const { stdout, exitCode } = run("eject AGENTS.md", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — CLAUDE.md still references it",
+      );
+      assert.match(stdout, /Kept CLAUDE\.md\.spec\.ts/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the shared spec when ejecting the PRIMARY target", () => {
+    const dir = multiTargetDir();
+    try {
+      const { exitCode } = run("eject CLAUDE.md", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — AGENTS.md still references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to delete a forged out-of-spec target named in the header", () => {
+    // A hand-edited/forged header points `compiled from` at a non-spec file.
+    // eject must NOT delete it (path-safety) — only a .spec.ts inside the project.
+    const d = mkdtempSync(join(tmpdir(), "vigiles-eject-forged-"));
+    try {
+      writeFileSync(join(d, "package.json"), '{"name":"victim"}\n');
+      writeFileSync(
+        join(d, "CLAUDE.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from package.json -->\n\n# CLAUDE.md\n\nx.\n",
+      );
+      const { stdout, exitCode } = run("eject CLAUDE.md", d);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(d, "package.json")),
+        "must NOT delete package.json",
+      );
+      assert.match(stdout, /refusing to delete|isn't a \.spec\.ts/);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("removes the spec once its LAST compiled output is ejected", () => {
+    const dir = multiTargetDir();
+    try {
+      run("eject AGENTS.md", dir); // secondary first — spec kept
+      run("eject CLAUDE.md", dir); // last consumer — now safe to delete
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "spec deleted when no compiled output references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the shared spec when the other output is in a SUBDIRECTORY", () => {
+    // `target: ["CLAUDE.md", "docs/AGENTS.md"]` — the secondary lives in a subdir.
+    // Ejecting the root file must scan the whole tree (not just its own dir) so it
+    // doesn't orphan docs/AGENTS.md by deleting the shared spec.
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-eject-subdir-"));
+    try {
+      writeFileSync(join(dir, "CLAUDE.md.spec.ts"), "export default {}\n");
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# CLAUDE.md\n",
+      );
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(
+        join(dir, "docs", "AGENTS.md"),
+        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# AGENTS.md\n",
+      );
+      const { exitCode } = run("eject CLAUDE.md", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — docs/AGENTS.md still references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("errors on a missing file", () => {
+    const { exitCode } = run("eject does-not-exist.md", tmpDir);
+    assert.equal(exitCode, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// vigiles lint — directory args + --strict gating of structural rules
+// ---------------------------------------------------------------------------
+
+describe("CLI: vigiles lint directory arg + strict gating", () => {
+  let dir: string;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), "vigiles-lint-strict-"));
+    mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(dir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "demo" }),
+    );
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    // The strict config init --strict now writes: structural rules gate.
+    writeFileSync(
+      join(dir, ".vigilesrc.json"),
+      JSON.stringify({
+        rules: {
+          "subagent-tool-contract": "error",
+          "subagent-frontmatter": "error",
+        },
+      }),
+    );
+  });
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function reviewer(tools: string, desc = "Reviews a diff."): void {
+    writeFileSync(
+      join(dir, "agents", "reviewer.md"),
+      `---\nname: reviewer\ndescription: ${desc}\ntools: [${tools}]\n---\n\nReview.\n`,
+    );
+  }
+
+  it("`lint .` (a directory arg) does not crash (regression: EISDIR)", () => {
+    reviewer("Read, Grep");
+    const { exitCode } = run("lint .", dir);
+    assert.notEqual(exitCode, undefined);
+    assert.ok(
+      exitCode === 0,
+      `clean plugin lints green, got ${String(exitCode)}`,
+    );
+  });
+
+  it("a clean subagent passes under strict (exit 0)", () => {
+    reviewer("Read, Grep");
+    assert.equal(run("lint", dir).exitCode, 0);
+  });
+
+  it("a typo'd tool FAILS CI under strict (exit 2)", () => {
+    reviewer("Reed, Grep"); // Reed = typo of Read
+    const { stdout, exitCode } = run("lint", dir);
+    assert.equal(exitCode, 2, "broken subagent gates CI");
+    assert.ok(
+      /Reed/.test(stdout) && /Read/.test(stdout),
+      "names the typo + fix",
+    );
+  });
+
+  it("a subagent missing its description FAILS CI under strict (exit 2)", () => {
+    writeFileSync(
+      join(dir, "agents", "reviewer.md"),
+      "---\nname: reviewer\ntools: [Read]\n---\n\nReview.\n",
+    );
+    assert.equal(run("lint", dir).exitCode, 2);
   });
 });
