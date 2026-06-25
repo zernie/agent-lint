@@ -192,6 +192,14 @@ A file with no integrity header isn't vigiles-managed, so `eject` reports
 "managed, but ejectable": you can adopt a typed spec for stronger guarantees
 knowing you can always drop back to markdown you own.
 
+Two safety details: a **shared spec is kept** — if the file you eject was one of
+several outputs of a multi-target spec (`target: ["CLAUDE.md", "AGENTS.md"]`, or a
+mirror), the spec is left in place until its last compiled output is ejected, so
+the others never orphan. And a compiled **skill / subagent** (its body leads with
+YAML frontmatter) is ejected verbatim — no disable marker is inserted (that would
+displace the frontmatter and break the surface; the marker only applies to
+instruction files).
+
 ### Compiled hooks — folded into `compile`
 
 A **compiled hook** is a hook authored as a pure typed function against the
