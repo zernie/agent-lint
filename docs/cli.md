@@ -45,16 +45,17 @@ which layers, CI, and the plugin. Run by an agent, in CI, or with piped input
 
 ### `init` flags
 
-| Flag                     | Effect                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, plugin)             |
-| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)     |
-| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                |
-| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo) |
-| `--no-gha`               | Skip wiring CI                                                   |
-| `--no-plugin`            | Skip installing the Claude Code plugin                           |
-| `--strict`               | Also enforce the workflow tier (specs + tests; see below)        |
-| `--target=AGENTS.md`     | Create a bare spec for one file (Lint layer only)                |
+| Flag                     | Effect                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| `--yes`, `-y`            | Skip prompts; use defaults (both layers, CI, plugin)               |
+| `--lint` / `--no-lint`   | Lint layer — verify instruction-file references (default on)       |
+| `--test` / `--no-test`   | Test layer — scaffold a harness test (default on)                  |
+| `--harness=claude,codex` | Which harness(es) to set up (default: auto-detect from the repo)   |
+| `--no-gha`               | Skip wiring CI                                                     |
+| `--no-plugin`            | Skip installing the Claude Code plugin                             |
+| `--strict`               | Also enforce the workflow tier (specs + tests; see below)          |
+| `--report-only`          | Write the whole gate at `warn` — nothing fails CI (migration mode) |
+| `--target=AGENTS.md`     | Adopt / create a spec for one file (Lint layer only)               |
 
 Passing a single positive layer flag selects only it (`--lint` = the Lint
 layer only); pass both, or neither, for both. `init` also adds `vigiles` to your
@@ -76,11 +77,32 @@ lint`** (exit 2) — but a well-formed plugin stays green, so it never cries wol
 - `disallowed-tools-contract`, and `description-overlap` (two skills that
   collide in the selector).
 
-`--strict` adds the **workflow-forcing** tier on top — the rules a clean repo can
-still fail because you haven't done the work yet: `require-spec` (a spec per
-instruction file), `untested-skill` / `untested-subagent` / `untested-hook` (a
-test per surface), `frontmatter-valid` (strict YAML), `skill-frontmatter`. These
-stay opt-in so your first CI run isn't red just for not having written a spec yet.
+`--strict` adds the **`workflow`** group on top — the rules a clean repo can
+still fail because you haven't done the work yet: `require-instructions-spec` (a
+spec per instruction file) and `untested-skill` / `untested-subagent` /
+`untested-hook` (a test per surface). These stay opt-in so your first CI run isn't
+red just for not having written a spec yet. (`frontmatter-valid` and
+`skill-frontmatter` are **`nudge`**-group — they stay `warn` and never gate, even
+under `--strict`.) `--report-only` is the orthogonal dial: it writes the whole
+gate at `warn` so nothing fails CI — the migration / observe on-ramp.
+
+Because `init` **auto-adopts** every existing instruction file into a spec (see
+[`compile`](#compile-files--harness-selection) / the adopt note below),
+`require-instructions-spec` is green by construction right after setup — opting
+into `--strict` doesn't turn your CI red on a wall of missing specs.
+
+#### Auto-adopt — `init` leaves you with specs, not homework
+
+When `init` finds an existing hand-written `CLAUDE.md` / `AGENTS.md`, it
+**faithfully adopts** it into a `.spec.ts` instead of scaffolding a blank one:
+every heading becomes a prose section verbatim, **no rule is inferred**, nothing
+is dropped. The compile that follows reproduces the file (plus the integrity
+header) — for a well-structured file the diff is just that header, so **review the
+diff and commit**. Then run the `/strengthen` skill to upgrade prose to verified
+`enforce()` / `guard()` rules when you're ready, or
+[`eject`](#eject-file--adopting-a-spec-is-never-a-one-way-door) to hand the file
+back as plain markdown. Adopt one file by hand with
+`npx vigiles init --target=CLAUDE.md`.
 
 **Interactive `init` offers the workflow tier (recommended, opt-out):** at a
 terminal it asks _"Also enforce specs + a test per surface?"_ (default yes), and
@@ -148,8 +170,8 @@ one dialect) and `scan` (reports harness-specific structure).
 `eject` is the inverse of `compile`: it hands a compiled instruction file back to
 you as plain, hand-owned markdown. It strips the `vigiles:sha256` integrity
 header, removes the `.spec.ts` that managed the file (`--keep-spec` leaves it),
-and adds a `<!-- vigiles-disable require-spec -->` marker so `lint` won't ask for
-a spec back. The compiled file's content is preserved verbatim — you keep
+and adds a `<!-- vigiles-disable require-instructions-spec -->` marker so `lint`
+won't ask for a spec back. The compiled file's content is preserved verbatim — you keep
 everything, you just stop managing it through a spec.
 
 ```bash
@@ -674,11 +696,11 @@ Quick severity config:
 ```json
 {
   "rules": {
-    "require-spec": "error",
+    "require-instructions-spec": "error",
     "integrity": "error",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }]
   }
 }
 ```
 
-Disable per-file with `<!-- vigiles-disable require-spec -->` at the top of the markdown.
+Disable per-file with `<!-- vigiles-disable require-instructions-spec -->` at the top of the markdown.

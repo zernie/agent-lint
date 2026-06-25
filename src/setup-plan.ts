@@ -29,6 +29,10 @@ export interface SetupPlan {
 export interface ParsedSetupArgs {
   target?: string;
   strict: boolean;
+  /** `--report-only` — write the gating rules at "warn" (nothing fails CI). The
+   * orthogonal severity dial; composes with `--strict` (which rules) by setting
+   * their severity. */
+  reportOnly: boolean;
   yes: boolean;
   /** `--force` — rewrite a stale CI workflow in place. */
   force: boolean;
@@ -62,6 +66,7 @@ export function parseSetupArgs(args: readonly string[]): ParsedSetupArgs {
   return {
     target: flagValue(args, "--target="),
     strict: args.includes("--strict"),
+    reportOnly: args.includes("--report-only"),
     yes: args.includes("--yes") || args.includes("-y"),
     force: args.includes("--force"),
     lint: boolFlag(args, "lint"),
@@ -99,11 +104,14 @@ export function defaultPlan(strict = false): SetupPlan {
  * ref, two skills that collide in the selector) — so a well-formed plugin stays
  * green and catching real breakage out of the box never cries wolf.
  *
- * Deliberately EXCLUDES `require-spec` and the workflow-forcing rules: those make
- * a CLEAN repo fail (you simply haven't written the spec/test yet), so they stay
- * opt-in under `--strict` (progressive adoption — see `STRICT_EXTRA_RULES`).
+ * Deliberately EXCLUDES `require-instructions-spec` and the workflow-forcing rules:
+ * those make a CLEAN repo fail (you simply haven't written the spec/test yet), so
+ * they stay opt-in under `--strict` (progressive adoption — see
+ * `STRICT_EXTRA_RULES`).
+ *
+ * This is the **`structural`** rule group (see research/install-enforcement-dx.md).
  */
-export const DEFAULT_GATE_RULES = [
+export const STRUCTURAL_RULES = [
   "subagent-tool-contract",
   "subagent-frontmatter",
   "hook-events",
@@ -116,24 +124,42 @@ export const DEFAULT_GATE_RULES = [
 ] as const;
 
 /**
- * The additional rules `--strict` gates — the WORKFLOW-FORCING / opinionated tier
- * a clean repo can still fail because you haven't done the work yet: a spec per
- * instruction file (`require-spec`), a test/eval per surface (`untested-*`), strict
- * YAML (`frontmatter-valid`, stricter than CC's loader), explicit skill
- * frontmatter. Opt-in by design (the smooth-adoption on-ramp).
+ * The **`workflow`** group — the WORKFLOW-FORCING / opinionated tier `--strict`
+ * gates, which a clean repo can still fail because you haven't done the work yet:
+ * a spec per instruction file (`require-instructions-spec`), a test/eval per
+ * surface (`untested-*`). Opt-in by design (the smooth-adoption on-ramp). The
+ * Clippy-`pedantic` / TS-`strict` analog — ONE opinionated opt-in.
+ *
+ * NB `frontmatter-valid` / `skill-frontmatter` live in the `nudge` group, not
+ * here: they're acknowledged-noisy recommendations we never gate on (see
+ * research/install-enforcement-dx.md).
  */
-export const STRICT_EXTRA_RULES = [
-  "require-spec",
+export const WORKFLOW_RULES = [
+  "require-instructions-spec",
   "untested-skill",
   "untested-subagent",
   "untested-hook",
+] as const;
+
+/**
+ * The **`nudge`** group — recommendations / acknowledged-noisy checks that NEVER
+ * gate (not even under `--strict`): `frontmatter-valid` (js-yaml is stricter than
+ * CC's loader), `skill-frontmatter` (skills load without it) and `unmarked-refs`
+ * (the undecidable-plaintext nudge) sit at `warn`; `prefer-compiled-hooks` defaults
+ * OFF (a recommendation that shouldn't fire unasked — the shell lane stays
+ * first-class). `init` does not write these — they keep their own default
+ * severities. Named for the group taxonomy (research/install-enforcement-dx.md).
+ */
+export const NUDGE_RULES = [
   "frontmatter-valid",
   "skill-frontmatter",
+  "prefer-compiled-hooks",
+  "unmarked-refs",
 ] as const;
 
 export function mergeProjectConfig(
   existing: Record<string, unknown>,
-  opts: { harness: string | string[]; strict: boolean },
+  opts: { harness: string | string[]; strict: boolean; reportOnly?: boolean },
 ): Record<string, unknown> | null {
   const config = { ...existing };
   let changed = false;
@@ -141,16 +167,19 @@ export function mergeProjectConfig(
     config.harness = opts.harness;
     changed = true;
   }
-  // Gate the FP-safe structural rules by default; --strict adds the
-  // workflow-forcing tier on top. Never clobber a severity the user already set —
-  // only fill in the undefined ones.
+  // Gate the FP-safe `structural` group by default; `--strict` adds the
+  // `workflow` group on top. `--report-only` is the orthogonal severity dial —
+  // it writes the SAME rule set at "warn" (nothing fails CI; the migration/observe
+  // mode). Never clobber a severity the user already set — only fill the
+  // undefined ones.
+  const severity = opts.reportOnly ? "warn" : "error";
   const gate = opts.strict
-    ? [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES]
-    : [...DEFAULT_GATE_RULES];
+    ? [...STRUCTURAL_RULES, ...WORKFLOW_RULES]
+    : [...STRUCTURAL_RULES];
   const rules = { ...(config.rules as Record<string, unknown> | undefined) };
   for (const r of gate) {
     if (rules[r] === undefined) {
-      rules[r] = "error";
+      rules[r] = severity;
       changed = true;
     }
   }

@@ -1,6 +1,6 @@
 {
   "rules": {
-    "require-spec": "error",
+    "require-instructions-spec": "error",
     "integrity": "warn",
     "coverage": ["warn", { "scripts": 50, "linterRules": 5 }],
     "subagent-tool-contract": "error",

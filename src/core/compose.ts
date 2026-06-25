@@ -129,7 +129,7 @@ function targetName(target: string): string {
  * content (a sync tool keeping them in lockstep). Claude Code reads CLAUDE.md
  * only ([anthropics/claude-code#34235]); users bridge to the AGENTS.md tools this
  * way (see `research/sync-tool-compatibility.md` requirement 7). When mirrored,
- * vigiles must treat them as the same file — hash + `require-spec` run once on the
+ * vigiles must treat them as the same file — hash + `require-instructions-spec` run once on the
  * real one, and the mirror is never flagged as a second, spec-less instruction
  * file. Returns null when one is absent, or both exist but genuinely differ.
  */

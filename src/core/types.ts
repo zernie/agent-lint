@@ -96,12 +96,23 @@ export interface TestCoverageConfig {
 }
 
 export interface RulesConfig {
-  /** Require .spec.ts for CLAUDE.md / AGENTS.md. Default: "warn". */
-  "require-spec"?: RuleSeverity;
   /**
-   * @deprecated Skills are legitimately hand-written; use `untested-skill`
-   * ("every skill ships with a test/eval") instead. Default: false (off). The
-   * check still runs if you set this explicitly.
+   * Require a `.spec.ts` behind each instruction file (CLAUDE.md / AGENTS.md) —
+   * the file must be compiled from a typed spec, not hand-written. NARROW: only a
+   * `.spec.ts` sibling (or an explicit `<!-- vigiles-disable
+   * require-instructions-spec -->` marker) satisfies it; inline
+   * `<!-- vigiles:enforce -->` comments do NOT (the rule name says "spec"). Default:
+   * "warn". `vigiles init` auto-adopts every instruction file into a spec, so this
+   * is GREEN by construction after setup — a safety net for a NEW hand-added file,
+   * not a nag. The workflow-tier opt-in (gated under `--strict`).
+   */
+  "require-instructions-spec"?: RuleSeverity;
+  /**
+   * Require a `.spec.ts` behind each SKILL.md — the consistent
+   * `require-<surface>-spec` parallel to `require-instructions-spec`. Default:
+   * false (OFF): skills are legitimately hand-written, and the coverage that
+   * matters ("every skill ships with a test/eval") is the `untested-skill` rule.
+   * Set it explicitly if your team wants every skill spec-managed.
    */
   "require-skill-spec"?: RuleSeverity;
   /** Detect hand-edits to compiled markdown via SHA-256 hash. Default: "warn". */
@@ -271,7 +282,8 @@ export interface VigilesConfig {
    * (tsconfig-style, relative to the repo root). Use it for vendored or
    * benchmark fixtures the repo's own lint shouldn't police — e.g.
    * `["bench/**"]` so a third-party `CLAUDE.md` injected verbatim as a benchmark
-   * arm isn't held to `require-spec`. `node_modules`/`dist` are always excluded.
+   * arm isn't held to `require-instructions-spec`. `node_modules`/`dist` are always
+   * excluded.
    */
   exclude?: readonly string[];
   /**

@@ -10,8 +10,8 @@ import {
   planPluginInstall,
   mergeProjectConfig,
   collectSetupAnswers,
-  DEFAULT_GATE_RULES,
-  STRICT_EXTRA_RULES,
+  STRUCTURAL_RULES,
+  WORKFLOW_RULES,
   type AskFn,
 } from "./setup-plan.js";
 
@@ -47,6 +47,12 @@ test("parseSetupArgs reads flags", () => {
   assert.equal(p.plugin, false);
   assert.equal(p.strict, true);
   assert.equal(p.yes, true);
+  assert.equal(p.reportOnly, false);
+});
+
+test("parseSetupArgs reads --report-only", () => {
+  assert.equal(parseSetupArgs(["--report-only"]).reportOnly, true);
+  assert.equal(parseSetupArgs([]).reportOnly, false);
 });
 
 test("parseSetupArgs reads --lint / --no-test / --harness", () => {
@@ -179,24 +185,44 @@ test("shouldPrompt: only a TTY human with unpinned choices", () => {
 test("mergeProjectConfig: default init gates the FP-safe structural rules + harness", () => {
   const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
   const expected = Object.fromEntries(
-    DEFAULT_GATE_RULES.map((r) => [r, "error"]),
+    STRUCTURAL_RULES.map((r) => [r, "error"]),
   );
   assert.deepEqual(out, { harness: "claude-code", rules: expected });
 });
 
-test("mergeProjectConfig: default does NOT gate require-spec (stays opt-in)", () => {
+test("mergeProjectConfig: default does NOT gate require-instructions-spec (stays opt-in)", () => {
   const out = mergeProjectConfig({}, { harness: "claude-code", strict: false });
   const rules = (out as { rules: Record<string, string> }).rules;
   assert.equal(
-    rules["require-spec"],
+    rules["require-instructions-spec"],
     undefined,
-    "require-spec is --strict-only",
+    "require-instructions-spec is --strict-only",
   );
   assert.equal(
     rules["untested-skill"],
     undefined,
     "untested-* is --strict-only",
   );
+});
+
+test("mergeProjectConfig: --report-only writes the structural gate at warn, not error", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "claude-code", strict: false, reportOnly: true },
+  );
+  const expected = Object.fromEntries(STRUCTURAL_RULES.map((r) => [r, "warn"]));
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("mergeProjectConfig: --report-only composes with --strict (workflow tier at warn)", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "claude-code", strict: true, reportOnly: true },
+  );
+  const expected = Object.fromEntries(
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "warn"]),
+  );
+  assert.deepEqual(out, { harness: "claude-code", rules: expected });
 });
 
 test("mergeProjectConfig: array harness is recorded as-is (with default gates)", () => {
@@ -231,9 +257,21 @@ test("mergeProjectConfig: preserves other existing keys", () => {
 test("mergeProjectConfig: --strict adds the workflow-forcing tier on top of the gates", () => {
   const out = mergeProjectConfig({}, { harness: "claude-code", strict: true });
   const expected = Object.fromEntries(
-    [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES].map((r) => [r, "error"]),
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "error"]),
   );
   assert.deepEqual(out, { harness: "claude-code", rules: expected });
+});
+
+test("WORKFLOW_RULES is require-instructions-spec + untested-*; nudge rules are NOT gated", () => {
+  assert.ok(WORKFLOW_RULES.includes("require-instructions-spec"));
+  assert.ok(WORKFLOW_RULES.includes("untested-skill"));
+  // frontmatter-valid / skill-frontmatter are nudge-group — never gated, even --strict.
+  assert.ok(
+    !(WORKFLOW_RULES as readonly string[]).includes("frontmatter-valid"),
+  );
+  assert.ok(
+    !(WORKFLOW_RULES as readonly string[]).includes("skill-frontmatter"),
+  );
 });
 
 test("mergeProjectConfig: never clobbers a user-set severity, fills the rest", () => {
@@ -248,7 +286,7 @@ test("mergeProjectConfig: never clobbers a user-set severity, fills the rest", (
 
 test("mergeProjectConfig: fully-satisfied config returns null (no write)", () => {
   const rules = Object.fromEntries(
-    [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES].map((r) => [r, "error"]),
+    [...STRUCTURAL_RULES, ...WORKFLOW_RULES].map((r) => [r, "error"]),
   );
   assert.equal(
     mergeProjectConfig(

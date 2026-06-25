@@ -7,7 +7,7 @@ import {
   checkIntegrity,
   parseIntegrityHeader,
   ejectMarkdown,
-  REQUIRE_SPEC_DISABLE,
+  REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./integrity.js";
 import { sha256short } from "./hash.js";
 
@@ -47,11 +47,13 @@ describe("parseIntegrityHeader", () => {
 });
 
 describe("ejectMarkdown", () => {
-  it("strips the header and prepends the require-spec disable marker", () => {
+  it("strips the header and prepends the require-instructions-spec disable marker", () => {
     const out = ejectMarkdown(compiled("# Title\n\nBody.\n"));
     expect(out).not.toBeNull();
     expect(out?.specFile).toBe("CLAUDE.md.spec.ts");
-    expect(out?.markdown).toBe(`${REQUIRE_SPEC_DISABLE}\n\n# Title\n\nBody.\n`);
+    expect(out?.markdown).toBe(
+      `${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\n\n# Title\n\nBody.\n`,
+    );
     // No integrity header remains.
     expect(out?.markdown.includes("vigiles:sha256")).toBe(false);
   });
@@ -61,10 +63,12 @@ describe("ejectMarkdown", () => {
   });
 
   it("is idempotent — does not double-mark an already-disabled body", () => {
-    const body = `${REQUIRE_SPEC_DISABLE}\n\n# Title\n`;
+    const body = `${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\n\n# Title\n`;
     const out = ejectMarkdown(compiled(body));
     expect(out?.markdown).toBe(body);
     // Exactly one marker.
-    expect(out?.markdown.split(REQUIRE_SPEC_DISABLE).length).toBe(2);
+    expect(out?.markdown.split(REQUIRE_INSTRUCTIONS_SPEC_DISABLE).length).toBe(
+      2,
+    );
   });
 });

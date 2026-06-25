@@ -8,101 +8,95 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you when
 > ≥5 commits pile up without a refresh — it's live and dogfood-proven.
 
-## RESUME HERE — big launch-polish branch on `claude/handoff-mylfen`; OPEN THE PR
+## RESUME HERE — launch-polish branch `claude/handoff-mylfen`; PR should be OPEN
 
-**State:** a large, coherent pre-launch chunk is DONE + pushed on
-**`claude/handoff-mylfen`** (NOT merged, **NO PR OPEN yet** — the main loose end).
-On top of `origin/main` `2747878`. Full suite: **~1629 passed / 11 skipped / 1
-failed** — the 1 fail is the env-only `dialect-drift` (see Gotchas), green in CI.
+**State:** the big pre-launch chunk is DONE on **`claude/handoff-mylfen`**. This
+session added the **rule-cleanup + auto-adopt** batch on top and **opened the PR**
+(see DO NEXT if the PR wasn't opened — check `mcp__github__list_pull_requests`).
+Full suite: **1653 passed / 11 skipped / 1 failed** — the 1 fail is the env-only
+`dialect-drift` (container CC ≠ pinned 2.1.187; green in CI). Lint **0 errors**,
+fmt clean, `api:check` no drift, CLAUDE.md recompiled (38 rules).
 
-**THE COHESIVE THEME this session:** vigiles is now USEFUL OUT OF THE BOX +
-spec-first. Key commits (newest first):
+**THIS SESSION's batch (one `refactor!` commit — BREAKING):**
 
-- `dc91eca` **interactive init offers the workflow tier (opt-out)** — asks "enforce
-  specs + a test per surface? [Y/n]" (default yes); bare non-interactive stays
-  structural-only (safe first-run).
-- `02b3ae5` **init GATES broken surfaces BY DEFAULT** — a plain `init` writes the 9
-  FP-safe structural rules as `error` (subagent-tool-contract, subagent-frontmatter,
-  hook-events, hook-script-exists, mcp-config, mcp-tool-resolves,
-  mcp-hook-target-resolves, disallowed-tools-contract, description-overlap), so a
-  broken subagent/hook/MCP/collision FAILS `vigiles lint` (exit 2) while a clean
-  plugin stays green. `--strict` = the WORKFLOW tier (require-spec, untested-\*,
-  frontmatter-valid, skill-frontmatter). vigiles dogfoods the 9 in its own
-  `.vigilesrc.json`. **Also fixed: `vigiles lint .` (dir arg) crashed EISDIR — now
-  discovers files under the dir.**
-- `39c62fb` **`scan` nudges toward `--trigger`** when model-invocable skills + model
-  access (offer at TTY, hint for agents; `--no-interactive`/`--json` → hint only).
-- `cb3734b` **`vigiles eject`** — inverse of compile: strip the integrity header →
-  plain hand-owned markdown + `vigiles-disable require-spec` marker, removes the
-  spec (`--keep-spec`). The "managed but ejectable" escape hatch.
-- earlier: surface freeze (`@internal` typed-composition + `effect()`; `STABILITY.md`),
-  markdown cut (parked via HTML comment), pain-first README hero + subdocs (rule 1c),
-  positioning lock (not-a-linter / author-time-vs-runtime wedge / spec-first), adopt-spec
-  cleanup + `skills/` added to self-command-refs scan.
+- **`require-spec` → `require-instructions-spec`**, and **NARROWED**: only a
+  `.spec.ts` satisfies it now — inline `<!-- vigiles:enforce -->` / `vigiles:`
+  frontmatter NO LONGER do. Disable marker is now
+  `<!-- vigiles-disable require-instructions-spec -->`. Clean break (no alias — no
+  users yet). Renamed across code, `.vigilesrc.json`, tests, ~16 docs/research files,
+  and `docs/rules/require-instructions-spec.md` (old doc deleted).
+- **Rule GROUPS named** in `src/setup-plan.ts`: `STRUCTURAL_RULES` (the 9 FP-safe
+  gate, default error) / `WORKFLOW_RULES` (require-instructions-spec + untested-\*,
+  `--strict`) / `NUDGE_RULES` (never gate). Added **`--report-only`** (writes the
+  whole gate at `warn`) threaded through `mergeProjectConfig`.
+- **`prefer-compiled-hooks` → default OFF**; **`require-skill-spec` un-deprecated**
+  (the consistent `require-<surface>-spec` parallel, default off).
+- **AUTO-ADOPT** (the headline): new **`src/core/adopt.ts`** — `adoptMarkdown()` /
+  `adoptToSpec()` faithfully convert an existing CLAUDE.md/AGENTS.md into a
+  `claude()` spec (every heading → a verbatim prose section, NO rule inferred,
+  always compiles). Wired into `init()` (adopt-or-scaffold) + `setupPillar1` (adopted
+  targets are compiled). Proven **byte-identical below the integrity header** on a
+  real e2e + a round-trip unit suite (`adopt.test.ts`, 15 tests). So
+  `require-instructions-spec` is **green by construction** after `init` — a safety
+  net, not a nag (resolves the old inconsistency). Design recorded in
+  `research/install-enforcement-dx.md` (the auto-adopt section + group table).
+- Swept stale **Level-0/1/2** markdown-mode comments; fixed 3 pre-existing branch
+  lint errors (`scan-cli.test.ts`, `cli.test.ts`) that would've failed CI.
+- `npx vigiles strengthen` is NOT a verb — it's the **`/strengthen` skill**; all refs
+  use `/strengthen` (self-command-refs would flag `vigiles strengthen`).
 
 **DO NEXT:**
 
-1. **OPEN THE PR.** Title needs `!` + BREAKING CHANGE footer (the freeze commit
-   `ef7281c` already has both): e.g. `refactor!: pre-release surface freeze +
-spec-first defaults (eject, default gating, scan nudge)`. Re-`subscribe_pr_activity`
-   to watch it.
-2. **RECONCILE the `progressive-adoption` / `smooth-adoption` rules** in `CLAUDE.md`
-   (via `CLAUDE.md.spec.ts`): they still say "start permissive (warnings), tighten via
-   --strict" — but default `init` now GATES structural breakage. New stance: "permissive
-   = doesn't force specs/TS + doesn't cry wolf (FP-safe), NOT ignores breakage." User
-   AGREED to this reframe. Small spec edit + recompile.
-3. Launch builds (NOT polish, separate): ecosystem-benchmark v0 + the method-first
-   article + README 60-sec proof/GIF.
+1. **If the PR isn't open**, open it from `claude/handoff-mylfen` → `main`. Title
+   needs `!` + the BREAKING CHANGE is the `require-instructions-spec` rename/narrow.
+   Then `subscribe_pr_activity` to watch CI.
+2. Launch builds (separate from polish): ecosystem-benchmark v0 + the method-first
+   article + README 60-sec proof/GIF (see `research/pre-release-focus.md`).
 
-**OPEN IDEA (discussed, not built):** auto-generate trigger prompts from skill
-descriptions so `scan --trigger` runs with zero hand-written prompts (turns the nudge
-into one-keystroke "do my skills fire?"). The scan nudge today only SUGGESTS/scaffolds.
+**OPEN IDEA (not built):** the deterministic adopt converter falls back to a `raw`
+tier (one synthesized `Overview` section) for heading-less / intro-bearing files —
+content preserved but the diff adds a heading. A compiler passthrough primitive
+would make `raw` truly byte-identical; not needed yet (agentic path handles
+irregular prose; structured tier is byte-identical).
 
 ### Gotchas (read before trusting test output)
 
 - **REAL-MODEL TIERS RUN HERE (Claude Code web).** No `ANTHROPIC_API_KEY`, but the
-  `claude` CLI on PATH (`/opt/node22/bin/claude`) is AUTHENTICATED via session OAuth
-  (`CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` + `ANTHROPIC_BASE_URL`). Proven: `claude -p`
-  → `READY`, and a live `scan --trigger` (test-harness recall 100%). Use `eval` /
+  `claude` CLI on PATH is AUTHENTICATED via session OAuth. Use `eval` /
   `scan --trigger` / `measureTriggerRate` to dogfood the real-model tier — do NOT say
   "needs quota / not exercisable."
-- **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only: container CC
-  `2.1.42`/`2.1.191`-on-PATH vs validated `2.1.187`, so the installed tool set drifts
-  from `ACKNOWLEDGED_TOOL_INPUT_TYPES`. CI PINS CC → green there. `scan` prints a
-  non-blocking `⚠ dialect freshness` for the same reason (by design).
-- Dogfood VERDICT (this session): self-lint clean, self-scan clean, first-run + the
-  **published tarball** (`npm pack`→install) both work, FP sweep on vendored plugins
-  shows only EXPECTED findings. Structurally release-ready. `pack-smoke` is NOT a CI
-  job yet (offered) — the one gap CI doesn't cover.
+- **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only (container CC
+  version vs validated 2.1.187). CI PINS CC → green there. By design.
+- **Auto-adopt + compile in a tmp dir fails to resolve `vigiles/spec`** unless vigiles
+  is installed (devDep + `npm install`) — same as any scaffolded spec. The repo
+  self-resolves `vigiles/spec`, so e2e adopt→compile works inside the repo tree. The
+  round-trip is proven model-free in `src/core/adopt.test.ts` (compileClaude direct).
 - `etc/*.api.md` is the surface gate (`npm run api:check`); regenerate via
   `node scripts/api-extractor.mjs --local` after an intentional API change.
-- `docs/markdown-mode.md` parked block: inner `<!-- … -->` written `<!~~ … ~~>` so a
-  nested `-->` doesn't close the park comment — restore on un-park.
 
 ### Decisions of record (don't relitigate)
 
-- **The wedge:** every competitor (funded + OSS agnix) is runtime/observability/post-hoc
-  or structure-lint; vigiles is the ONLY author-time / deterministic / pre-run + typed-spec
-  play. DON'T fight agnix for the linting crown — vigiles is NOT a linter.
-- **Spec-first + ejectable** is the adoption story: the agent writes the spec, you can
-  always `vigiles eject`. Markdown demoted to floor/eject-target (inline kept; frontmatter
-  parked). Verb surface = 9 (added `eject`) + hidden `hook-runtime`.
-- **Default = useful out of the box:** catch breakage by default (FP-safe), offer
-  specs+tests interactively (opt-out). The user pushed for this; it reverses the old
-  "start permissive" framing (reconcile the rule — DO NEXT #2).
+- **The wedge:** vigiles is the author-time / deterministic / pre-run + typed-spec
+  play. NOT a linter. Don't fight agnix for the linting crown.
+- **Spec-first + ejectable + auto-adopted:** the agent writes the spec, `init` adopts
+  your existing files faithfully, you can always `vigiles eject`. Markdown demoted to
+  floor/eject-target (inline kept; frontmatter parked).
+- **Rule groups, NOT a preset menu** (Clippy/Biome best practice): structural (error,
+  default) / workflow (`--strict`) / nudge (warn). `--report-only` is an orthogonal
+  severity dial. Presets EXPAND to explicit `.vigilesrc.json` severities.
 - Public docs name the USER BENEFIT (no `moat`/`flywheel`, no `research/` links, no
   VC/firm names — those live in the git-crypt `startup/` vault; user has the key).
 
 ### Gotchas (ops)
 
-- CC-on-web: GitHub via `mcp__github__*` (NO `gh` CLI). Before commit: `npm run build` +
-  `npx vitest run` + `npm run fmt:check`; `self-command-refs` fails CI on a stale
-  `vigiles <cmd>` ref (it scans `skills/` now too). Conventional commits + `!` on breaking.
-  NO session links / model IDs in commits. Local `main` ref is stale — trust `origin/main`.
+- CC-on-web: GitHub via `mcp__github__*` (NO `gh` CLI). Before commit: `npm run build`
+  + `npx vitest run` + `npm run fmt:check` + `npm run lint`; `self-command-refs` fails
+  CI on a stale `vigiles <cmd>` ref (scans `skills/` too). Conventional commits + `!`
+  on breaking. NO session links / model IDs in commits. Trust `origin/main`.
 
 ## Don't re-read unless the task needs it
 
+- `research/install-enforcement-dx.md` — install groups + the auto-adopt design.
 - `research/pre-release-focus.md` — launch sequence + Positioning lock.
 - `research/roadmap.md` — `🚀 Launch readiness` front door.
-- `startup/` — git-crypt vault (LOCKED; unlock with the saved key: apt-get install
-  git-crypt → paste key → git-crypt unlock).
+- `startup/` — git-crypt vault (LOCKED; unlock with the saved key).

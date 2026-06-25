@@ -56,13 +56,16 @@ handling, scoped plugin names, graduating to a typed spec — see
 
 ---
 
-## `require-spec`
+## `require-instructions-spec`
 
-The built-in `require-spec` rule asks for a spec sibling for every
-`CLAUDE.md` / `AGENTS.md`. Markdown mode satisfies it: any file with at
-least one parseable inline `<!-- vigiles:enforce -->` comment (or one valid
-`vigiles:` frontmatter rule) is treated as spec-equivalent. No
-`vigiles-disable require-spec` comment needed.
+The built-in `require-instructions-spec` rule asks for a `.spec.ts` sibling
+for every `CLAUDE.md` / `AGENTS.md`. It is **narrow**: only a `.spec.ts`
+satisfies it. Inline `<!-- vigiles:enforce -->` comments and `vigiles:`
+frontmatter are still valid plain-markdown on-ramps, but they do **not**
+satisfy `require-instructions-spec` — so a markdown-mode user simply keeps
+the rule off (it is off by default; turning it on is a workflow-tier opt-in
+for teams that want to require a typed spec). No `vigiles-disable
+require-instructions-spec` comment needed unless you have enabled the rule.
 
 A file is checked for inline rules **only when it is not managed by a spec** —
 i.e. it has no sibling `<file>.spec.ts` and no `vigiles:sha256 … compiled from

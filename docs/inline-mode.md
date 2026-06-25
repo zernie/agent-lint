@@ -98,13 +98,16 @@ comments inside `CLAUDE.md`, the spec compiler will overwrite the markdown
 on the next compile, and your inline comments will be gone. Pick one per
 file.
 
-## Ignoring `require-spec`
+## `require-instructions-spec`
 
-The built-in `require-spec` validation rule demands a `.spec.ts` sibling
-for every `CLAUDE.md` / `AGENTS.md`. Inline mode satisfies it — any file
-with at least one `<!-- vigiles:enforce ... -->` comment is treated as
-spec-equivalent, so you do not need to add a `vigiles-disable require-spec`
-comment.
+The built-in `require-instructions-spec` validation rule demands a `.spec.ts`
+sibling for every `CLAUDE.md` / `AGENTS.md`. It is **narrow**: only a
+`.spec.ts` satisfies it. Inline mode is a valid plain-markdown on-ramp, but
+it does **not** satisfy `require-instructions-spec` — so an inline-mode user
+simply keeps the rule off (it is off by default; turning it on is a
+workflow-tier opt-in for teams that want to require a typed spec). You don't
+need a `vigiles-disable require-instructions-spec` comment unless you have
+enabled the rule.
 
 ## Graduating to spec mode
 
