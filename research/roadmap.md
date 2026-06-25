@@ -87,6 +87,19 @@
 >   frontmatter mode (Level 1 `vigiles:` block) is a redundant 2nd syntax. Stop marketing
 >   "Level 0/1/2"; cutting the frontmatter surface is a small BREAKING change (mark it).
 >   Detail in `pre-release-focus.md`.
+> - **PROMOTED — spec-first reframe + `vigiles eject` (decided 2026-06-25):** DON'T contest
+>   the linting crown (the structure-lint lane is crowded/commoditized; "lint-my-markdown"
+>   adoption is weak — not worth fighting on its axis). Lead with the BOLD different thing:
+>   author-time TYPED SPECS the agent writes + EVALS you can afford. Markdown demotes from
+>   on-ramp to **floor / eject-target**. ENABLER (must ship for "always ejectable" to be
+>   true): a one-command **`vigiles eject`** — strip the `vigiles:sha256` header → clean
+>   owned markdown lint won't nag about (none exists; hand-deleting the spec makes
+>   `require-spec` error). The create-react-app move that dissolves the two spec objections
+>   (TypeScript friction — the agent writes it; lock-in — you eject). Reframe Lint as "your
+>   spec's references are real," never "lint my markdown." Detail in `pre-release-focus.md`.
+> - **SHIPPED this session (branch `claude/handoff-mylfen`, not merged):** the surface
+>   freeze + STABILITY + markdown cut (parked, not deleted) + pain-first hero/subdocs — so
+>   the freeze and markdown-cut items above are DONE there.
 > - **DEFERRED to post-launch (the flywheel, run once there are eyeballs):** the public
 >   leaderboard site + README badge, capability-diff M1, the twin work, macOS Seatbelt,
 >   all remaining typed-spec depth. **Moratorium on net-new research + new instruments
