@@ -8,14 +8,31 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you when
 > ≥5 commits pile up without a refresh — it's live and dogfood-proven.
 
-## RESUME HERE — launch-polish branch `claude/handoff-mylfen`; PR should be OPEN
+## RESUME HERE — `claude/handoff-mylfen`, **PR #48 OPEN** — watching CI
 
-**State:** the big pre-launch chunk is DONE on **`claude/handoff-mylfen`**. This
-session added the **rule-cleanup + auto-adopt** batch on top and **opened the PR**
-(see DO NEXT if the PR wasn't opened — check `mcp__github__list_pull_requests`).
-Full suite: **1653 passed / 11 skipped / 1 failed** — the 1 fail is the env-only
-`dialect-drift` (container CC ≠ pinned 2.1.187; green in CI). Lint **0 errors**,
-fmt clean, `api:check` no drift, CLAUDE.md recompiled (38 rules).
+**State:** PR **#48** is open. The big batch + the **rule-cleanup/auto-adopt** batch
+
+- an **init-DX hardening** pass (this session, from Codex review + a self-audit) are
+  pushed. Lint **0 errors**, fmt clean, `api:check` no drift. The env-only
+  `dialect-drift` test fails in THIS container only (green in CI). Subscribed to #48;
+  a recurring self-check watches CI.
+
+**INIT-DX HARDENING (latest commits — review-driven):**
+
+- **Auto-adopt is NON-DESTRUCTIVE**: `init` writes the spec but NEVER overwrites
+  your CLAUDE.md/AGENTS.md. You run `vigiles compile` to opt the file into spec
+  management (byte-faithful; review the diff; `eject` reverses). Was: the wizard
+  compiled-over adopted targets.
+- **Deferred compile** when `vigiles` isn't resolvable yet (fresh repo pre-`npm
+install`) — prints the next step instead of a "failed to load". Helper
+  `canResolveVigiles(cwd)` (node_modules/vigiles OR cwd pkg name === vigiles).
+- **Test-only setup writes NO lint rules** (`mergeProjectConfig` `lint:false`) —
+  Codex catch: `init --test` honors the positive-flag contract.
+- **Interactive `--strict` is honored** — `setup()` reads `plan.strict` (resolved),
+  not the raw flag (was silently dropped).
+- **eject** won't delete a SHARED source spec (mirrored AGENTS.md ← CLAUDE.md.spec.ts).
+- Next-steps reordered (install → compile → strengthen → test); `--report-only` in
+  `init --help`; README surfaces non-destructive adopt. New e2e tests for each.
 
 **THIS SESSION's batch (one `refactor!` commit — BREAKING):**
 
@@ -47,11 +64,16 @@ fmt clean, `api:check` no drift, CLAUDE.md recompiled (38 rules).
 
 **DO NEXT:**
 
-1. **If the PR isn't open**, open it from `claude/handoff-mylfen` → `main`. Title
-   needs `!` + the BREAKING CHANGE is the `require-instructions-spec` rename/narrow.
-   Then `subscribe_pr_activity` to watch CI.
+1. **Watch PR #48 to green + merge.** CI re-runs on each push; the subscription +
+   a recurring self-check handle it. (An earlier `test`-job failure was a
+   `fmt:check` on HANDOFF.md — fixed.)
 2. Launch builds (separate from polish): ecosystem-benchmark v0 + the method-first
    article + README 60-sec proof/GIF (see `research/pre-release-focus.md`).
+
+**REMAINING DX gaps (documented, low-pri):** raw-tier adopt not byte-identical
+(compiler passthrough would fix); a pure-digit heading (`## 1`) could reorder
+sections (negligible); Codex compile-on-edit hook not auto-wired (non-goal);
+monorepo sub-package CLAUDE.md not auto-discovered (use `--target`).
 
 **OPEN IDEA (not built):** the deterministic adopt converter falls back to a `raw`
 tier (one synthesized `Overview` section) for heading-less / intro-bearing files —

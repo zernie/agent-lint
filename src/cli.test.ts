@@ -1228,10 +1228,10 @@ describe("CLI: vigiles init auto-detection", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should detect existing CLAUDE.md and suggest adoption", () => {
+  it("should detect existing CLAUDE.md and adopt it", () => {
     writeFileSync(join(tmpDir, "CLAUDE.md"), "# Hand-written\n");
     const { stdout } = run("init --no-plugin", tmpDir);
-    assert.ok(stdout.includes("without a spec") || stdout.includes("adopt"));
+    assert.match(stdout, /adopt/i, "should adopt the hand-written CLAUDE.md");
   });
 
   it("should detect .cursorrules and suggest sync tool", () => {
@@ -1307,6 +1307,20 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("--test: records the harness but writes NO lint rules (lint pillar off)", () => {
+    const dir = freshProject();
+    try {
+      run("init --test --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { harness?: unknown; rules?: unknown };
+      assert.equal(cfg.harness, "claude-code", "harness recorded");
+      assert.equal(cfg.rules, undefined, "no lint gate for a test-only setup");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("--lint: spec only, no harness", () => {
     const dir = freshProject();
     try {
@@ -1314,6 +1328,62 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       assert.match(stdout, /pillars: lint/);
       assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec");
       assert.ok(!existsSync(join(dir, "vigiles.harness.mjs")), "no harness");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--strict: writes the workflow-tier rules to .vigilesrc.json", () => {
+    const dir = freshProject();
+    try {
+      run("init --lint --strict --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { rules?: Record<string, string> };
+      assert.equal(
+        cfg.rules?.["require-instructions-spec"],
+        "error",
+        "workflow rule gated under --strict",
+      );
+      assert.equal(
+        cfg.rules?.["subagent-tool-contract"],
+        "error",
+        "structural",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--report-only: writes the gate at warn (nothing fails CI)", () => {
+    const dir = freshProject();
+    try {
+      run("init --lint --report-only --no-plugin --no-gha", dir);
+      const cfg = JSON.parse(
+        readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
+      ) as { rules?: Record<string, string> };
+      assert.equal(cfg.rules?.["subagent-tool-contract"], "warn");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-adopt is NON-DESTRUCTIVE: never compiles over an existing file in init", () => {
+    const dir = freshProject();
+    try {
+      writeFileSync(
+        join(dir, "CLAUDE.md"),
+        "# CLAUDE.md\n\n## Notes\n\nMine.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      // The spec is adopted, but the user's file is left exactly as-is — no
+      // integrity header is written during init (the user runs `compile` to opt in).
+      assert.ok(existsSync(join(dir, "CLAUDE.md.spec.ts")), "spec adopted");
+      const md = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+      assert.equal(md, "# CLAUDE.md\n\n## Notes\n\nMine.\n", "file untouched");
+      assert.ok(!md.includes("vigiles:sha256"), "not compiled over");
+      // Fresh repo (no node_modules/vigiles) → compile is deferred, not errored.
+      assert.match(stdout, /Skipping compile|npm install/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1930,12 +2000,13 @@ describe("E2E: fixture project adoption", () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
-  it("setup detects existing hand-written CLAUDE.md", () => {
+  it("setup detects existing hand-written CLAUDE.md and adopts it", () => {
     const { stdout } = run("init --no-plugin", workDir);
-    // Should detect CLAUDE.md without spec and suggest adoption
-    assert.ok(
-      stdout.includes("without a spec") || stdout.includes("adopt"),
-      "Should detect hand-written CLAUDE.md",
+    // Existing CLAUDE.md without a spec → adopted into one (non-destructively).
+    assert.match(
+      stdout,
+      /adopt/i,
+      "Should adopt the existing hand-written CLAUDE.md",
     );
   });
 

@@ -225,6 +225,24 @@ test("mergeProjectConfig: --report-only composes with --strict (workflow tier at
   assert.deepEqual(out, { harness: "claude-code", rules: expected });
 });
 
+test("mergeProjectConfig: test-only (lint:false) records harness but writes NO lint rules", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "claude-code", strict: false, lint: false },
+  );
+  // Honors the positive-flag contract: `init --test` selects only the test
+  // pillar, so the lint rule gate is not written.
+  assert.deepEqual(out, { harness: "claude-code" });
+});
+
+test("mergeProjectConfig: lint:false with --strict still writes no rules", () => {
+  const out = mergeProjectConfig(
+    {},
+    { harness: "codex", strict: true, lint: false },
+  );
+  assert.deepEqual(out, { harness: "codex" });
+});
+
 test("mergeProjectConfig: array harness is recorded as-is (with default gates)", () => {
   const out = mergeProjectConfig(
     {},

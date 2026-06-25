@@ -159,7 +159,15 @@ export const NUDGE_RULES = [
 
 export function mergeProjectConfig(
   existing: Record<string, unknown>,
-  opts: { harness: string | string[]; strict: boolean; reportOnly?: boolean },
+  opts: {
+    harness: string | string[];
+    strict: boolean;
+    reportOnly?: boolean;
+    /** Whether the LINT pillar is on (default true). The rule gate is a lint-layer
+     * concern, so a test-only setup (`init --test` / `--no-lint`) records the
+     * harness but writes NO lint rules. */
+    lint?: boolean;
+  },
 ): Record<string, unknown> | null {
   const config = { ...existing };
   let changed = false;
@@ -167,23 +175,28 @@ export function mergeProjectConfig(
     config.harness = opts.harness;
     changed = true;
   }
-  // Gate the FP-safe `structural` group by default; `--strict` adds the
-  // `workflow` group on top. `--report-only` is the orthogonal severity dial —
-  // it writes the SAME rule set at "warn" (nothing fails CI; the migration/observe
-  // mode). Never clobber a severity the user already set — only fill the
-  // undefined ones.
-  const severity = opts.reportOnly ? "warn" : "error";
-  const gate = opts.strict
-    ? [...STRUCTURAL_RULES, ...WORKFLOW_RULES]
-    : [...STRUCTURAL_RULES];
-  const rules = { ...(config.rules as Record<string, unknown> | undefined) };
-  for (const r of gate) {
-    if (rules[r] === undefined) {
-      rules[r] = severity;
-      changed = true;
+  // The rule gate belongs to the LINT layer — a test-only setup records the
+  // harness but writes no rules (honoring the positive-flag contract that
+  // `--test` selects only the test pillar).
+  if (opts.lint !== false) {
+    // Gate the FP-safe `structural` group by default; `--strict` adds the
+    // `workflow` group on top. `--report-only` is the orthogonal severity dial —
+    // it writes the SAME rule set at "warn" (nothing fails CI; the
+    // migration/observe mode). Never clobber a severity the user already set —
+    // only fill the undefined ones.
+    const severity = opts.reportOnly ? "warn" : "error";
+    const gate = opts.strict
+      ? [...STRUCTURAL_RULES, ...WORKFLOW_RULES]
+      : [...STRUCTURAL_RULES];
+    const rules = { ...(config.rules as Record<string, unknown> | undefined) };
+    for (const r of gate) {
+      if (rules[r] === undefined) {
+        rules[r] = severity;
+        changed = true;
+      }
     }
+    config.rules = rules;
   }
-  config.rules = rules;
   return changed ? config : null;
 }
 
