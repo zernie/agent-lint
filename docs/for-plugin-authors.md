@@ -62,7 +62,10 @@ users actually type — and stays quiet on the ones it shouldn't hijack. That's
 either. This is the one model-gated step, measured on your own subscription:
 
 ```bash
-npx vigiles scan ./my-plugin --trigger
+# --trigger needs a prompts file: a map of skill name → realistic prompts to
+# fire it (+ optional `irrelevant` prompts that should NOT, to score precision):
+#   { "my-skill": { "prompts": ["how do I …", "…"], "irrelevant": ["…"] } }
+npx vigiles scan ./my-plugin --trigger --prompts=prompts.json
 ```
 
 For per-skill thresholds in a test, drive `measureTriggerRate` directly — it
