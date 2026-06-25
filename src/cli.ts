@@ -2373,9 +2373,21 @@ async function setupPillar1(
     console.log("\nCompiling specs...");
     await compile(specs, loadConfig());
   } else if (!canCompile) {
-    console.log(
-      "\n  Skipping compile — `vigiles` isn't installed yet. Run `npm install`, then `npx vigiles compile`.",
-    );
+    // Honest, project-type-aware guidance. A JS repo just needs `npm install`
+    // (init already added the devDep). A repo with NO package.json (Python, Rust,
+    // …) can't resolve the npm package at all, so point at the no-install paths
+    // instead of a misleading `npm install`.
+    if (existsSync(resolve(cwd, "package.json"))) {
+      console.log(
+        "\n  Skipping compile — run `npm install` (to fetch the vigiles dep just added), then `npx vigiles compile`.",
+      );
+    } else {
+      console.log(
+        "\n  No package.json here, so the typed-spec compile isn't available yet.\n" +
+          "  • `npx vigiles lint` verifies your instruction files right now — no install needed.\n" +
+          "  • To spec-manage them, add a package.json first: `npm init -y && npm i -D vigiles`, then `npx vigiles compile`.",
+      );
+    }
   }
 
   return { specTargets: targets, written, adopted };
@@ -2581,6 +2593,9 @@ function printSetupSummary(opts: {
 }): void {
   const { plan, strict, targets, adopted, written } = opts;
   const specPathsList = targets.map((t) => `${t}.spec.ts`);
+  // A repo with no package.json (Python/Rust/…) can't resolve the npm package,
+  // so the typed-spec compile path needs an install first — give honest steps.
+  const hasPkg = existsSync(resolve(process.cwd(), "package.json"));
   console.log("\n---\nSetup complete.\n");
 
   // Next steps in DEPENDENCY order: install the dep first, then compile (which
@@ -2589,7 +2604,13 @@ function printSetupSummary(opts: {
   if (written.includes("package.json")) {
     nextSteps.push("Run `npm install` to fetch the vigiles dev dependency");
   }
-  if (adopted.length > 0) {
+  if (adopted.length > 0 && !hasPkg) {
+    // Non-JS repo: compile needs a local install. Point at the no-install verify
+    // path + how to enable specs, instead of a compile that would fail.
+    nextSteps.push(
+      `Verify now with \`npx vigiles lint\` (no install). To spec-manage ${adopted.join(", ")}, add a package.json first (\`npm init -y && npm i -D vigiles\`), then \`npx vigiles compile\` and review the diff`,
+    );
+  } else if (adopted.length > 0) {
     // Adoption is NON-DESTRUCTIVE: the file is untouched until you compile, so
     // the diff to review is what compile WOULD produce (byte-faithful).
     nextSteps.push(
