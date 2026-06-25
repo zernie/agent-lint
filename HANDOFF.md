@@ -54,9 +54,10 @@ prediction-loop. Public-safe; not yet done.
 - **🗂️ `startup/CLAUDE.md` vault index** — directory-scoped agent file (auto-loaded under
   `startup/`): file index + the always-verify-unlocked-before-writing rule + no-public-leak
   discipline + unlock workflow. README updated to mirror it.
-- **🩹 `.vigilesrc.json` `exclude: ["startup/**"]`** — vigiles dogfoots `require-spec`, so
-  the new vault `CLAUDE.md` failed CI; an inline `vigiles-disable` CAN'T work (locked vault
-  = ciphertext in CI, comment unreadable), so the dir is excluded at config level.
+- **🩹 require-spec fix — `.vigilesrc.json` now excludes the `startup/` glob.** vigiles
+  dogfoots `require-spec`, so the new vault `CLAUDE.md` failed CI; an inline
+  `vigiles-disable` can't work (locked vault = ciphertext in CI, comment unreadable), so
+  the dir is excluded at config level (sibling of its prettier/scan exclusion).
 - **📝 PR #47 Codex-review doc fixes** (`docs/for-plugin-authors.md`): `scan --trigger` is
   per-plugin not a marketplace op (handleMeasure returns before marketplace expansion);
   ranking needs `marketplace.json` OR multiple dir args (a plain folder scans as one root).
