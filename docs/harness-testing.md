@@ -1,9 +1,11 @@
 # Testing your harness
 
-Your hooks, skills, settings, and instruction file are **code** — vigiles tests
-they do their job: hooks block, skills fire, the assembled agent does the task and
-not the dangerous thing. The [README](../README.md) has the pitch; this is the
-how-to. Testing is one of four reliability instruments — alongside
+**You wired a hook — but does it actually block? Does your skill fire on the right
+prompts and stay quiet on the wrong ones?** Your hooks, skills, settings, and
+instruction file are **code**, and right now they're untested. vigiles tests they
+do their job: hooks block, skills fire, the assembled agent does the task and not
+the dangerous thing. The [README](../README.md) has the pitch; this is the how-to.
+Testing is one of four reliability instruments — alongside
 [verifying](verifying-instruction-files.md) references are true and
 [guarding](compiled-hooks.md) with a compiled hook that can't be wrong (the
 deterministic gate); this guide is the **test** instrument.

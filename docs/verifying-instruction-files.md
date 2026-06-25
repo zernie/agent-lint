@@ -1,12 +1,14 @@
 # Verifying your instruction files
 
-vigiles's **linting layer** for agentic coding — it checks that every reference
-your CLAUDE.md / AGENTS.md makes is real: each linter rule exists **and** is
-enabled, every file path and script resolves, and every referenced code symbol
-actually exists in the file that defines it. Stale references can't silently
-mislead the agent. The [README](../README.md) has the 30-second pitch; this is
-the full guide. For the testing layer, see
-[Testing your harness](harness-testing.md).
+**Your CLAUDE.md drifts the moment you refactor.** It still points the agent at a
+file that moved and a script that was renamed — and the agent trusts the stale
+claim as fact and acts on fiction. `vigiles lint` resolves every reference against
+reality: a dead file path, a missing script, a renamed code symbol, or a linter
+rule that doesn't exist (or exists but is **disabled**) is caught before it can
+mislead the agent.
+
+> The [README](../README.md) has the 30-second pitch; this is the full guide. For
+> the testing layer, see [Testing your harness](harness-testing.md).
 
 ## Two on-ramps: markdown, then typed spec
 
