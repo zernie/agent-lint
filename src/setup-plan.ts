@@ -92,24 +92,18 @@ export function defaultPlan(strict = false): SetupPlan {
  * malformed-file guard) stays in cli.ts.
  */
 /**
- * The rules `--strict` promotes to `error` so a broken surface FAILS CI. It is
- * `require-spec` PLUS the HIGH-PRECISION structural checks — every one documented
- * FP-safe (never-available / close-typo / can't-start / can't-resolve only) — so
- * a broken subagent tool contract, a dead hook script, a typo'd hook event, a
- * misconfigured MCP server, or two skills that collide in the selector all turn
- * CI red, WITHOUT crying wolf on a well-formed plugin.
+ * The structural rules `init` gates BY DEFAULT (severity `error`, so a broken
+ * surface fails `vigiles lint`). Every one is HIGH-PRECISION / FP-safe — it fires
+ * only on a genuine defect (a never-available/typo'd tool, a subagent missing
+ * `name`/`description`, a typo'd hook event, a dead hook script, a broken MCP
+ * ref, two skills that collide in the selector) — so a well-formed plugin stays
+ * green and catching real breakage out of the box never cries wolf.
  *
- * Deliberately EXCLUDED (they stay `warn`): the LENIENT or RECOMMENDATION rules
- * — `frontmatter-valid` (js-yaml is stricter than CC's loader, so verify before
- * enforcing), `skill-frontmatter` (a best-practice nudge; the skill still loads),
- * `prefer-compiled-hooks` (a discovery nudge), and `untested-skill/subagent/hook`
- * (gating "every surface ships a test" is a separate, bigger opt-in). The honest
- * limit: Claude Code itself loads a name-less / first-paragraph skill, so vigiles
- * cannot hard-gate skill content that still works — only collisions and the
- * subagent / hook / MCP defects that genuinely break.
+ * Deliberately EXCLUDES `require-spec` and the workflow-forcing rules: those make
+ * a CLEAN repo fail (you simply haven't written the spec/test yet), so they stay
+ * opt-in under `--strict` (progressive adoption — see `STRICT_EXTRA_RULES`).
  */
-export const STRICT_ERROR_RULES = [
-  "require-spec",
+export const DEFAULT_GATE_RULES = [
   "subagent-tool-contract",
   "subagent-frontmatter",
   "hook-events",
@@ -119,6 +113,22 @@ export const STRICT_ERROR_RULES = [
   "mcp-hook-target-resolves",
   "disallowed-tools-contract",
   "description-overlap",
+] as const;
+
+/**
+ * The additional rules `--strict` gates — the WORKFLOW-FORCING / opinionated tier
+ * a clean repo can still fail because you haven't done the work yet: a spec per
+ * instruction file (`require-spec`), a test/eval per surface (`untested-*`), strict
+ * YAML (`frontmatter-valid`, stricter than CC's loader), explicit skill
+ * frontmatter. Opt-in by design (the smooth-adoption on-ramp).
+ */
+export const STRICT_EXTRA_RULES = [
+  "require-spec",
+  "untested-skill",
+  "untested-subagent",
+  "untested-hook",
+  "frontmatter-valid",
+  "skill-frontmatter",
 ] as const;
 
 export function mergeProjectConfig(
@@ -131,18 +141,20 @@ export function mergeProjectConfig(
     config.harness = opts.harness;
     changed = true;
   }
-  if (opts.strict) {
-    const rules = { ...(config.rules as Record<string, unknown> | undefined) };
-    // Promote the high-precision structural gate set to "error" — but never
-    // clobber a severity the user already set (only fill in the undefined ones).
-    for (const r of STRICT_ERROR_RULES) {
-      if (rules[r] === undefined) {
-        rules[r] = "error";
-        changed = true;
-      }
+  // Gate the FP-safe structural rules by default; --strict adds the
+  // workflow-forcing tier on top. Never clobber a severity the user already set —
+  // only fill in the undefined ones.
+  const gate = opts.strict
+    ? [...DEFAULT_GATE_RULES, ...STRICT_EXTRA_RULES]
+    : [...DEFAULT_GATE_RULES];
+  const rules = { ...(config.rules as Record<string, unknown> | undefined) };
+  for (const r of gate) {
+    if (rules[r] === undefined) {
+      rules[r] = "error";
+      changed = true;
     }
-    config.rules = rules;
   }
+  config.rules = rules;
   return changed ? config : null;
 }
 
