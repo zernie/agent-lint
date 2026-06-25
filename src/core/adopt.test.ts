@@ -119,6 +119,18 @@ echo hi
     expect(spec.sections["Overview"]).toBe("Intro paragraph.");
   });
 
+  it("does not drop intro text when a literal ## Overview already exists", () => {
+    // Intro prose (→ synthesized Overview) PLUS a real `## Overview` heading must
+    // not collide on one key — both contents are preserved (the later wins the
+    // key otherwise, silently dropping the intro).
+    const md = `# CLAUDE.md\n\nIntro lead-in.\n\n## Overview\n\nReal overview body.\n`;
+    const spec = adoptToSpec(md, "CLAUDE.md");
+    const values = Object.values(spec.sections).join("\n");
+    expect(values).toContain("Intro lead-in.");
+    expect(values).toContain("Real overview body.");
+    expect(Object.keys(spec.sections).length).toBe(2); // two distinct keys
+  });
+
   it("lifts maxSectionLines above a long faithful section", () => {
     const long = Array.from({ length: 220 }, (_, i) => `line ${i}`).join("\n");
     const spec = adoptToSpec(`# CLAUDE.md\n\n## Big\n\n${long}\n`, "CLAUDE.md");
