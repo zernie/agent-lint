@@ -22,12 +22,14 @@
      caveat, or a competitor, never the user's pain. SAME FOR THE SUBDOCS: open
      every guide with the concrete pain, THEN the "what this doc is" line + the
      README uplink (per docs-quality in CLAUDE.md).
-  2. COMPILED SPECS ARE EASY — reassure, never intimidate. You rarely hand-write
-     a .spec.ts: model-invocable skills (edit-spec / strengthen / test-harness)
-     author + edit it, and hooks auto-compile on save. Present the typed spec as
-     the SMOOTH, AUTO-ENFORCED next step you don't think about — the natural
-     evolution (JS→TS: gradual, strict opt-in), NEVER a wall. Markdown + inline
-     mode work with zero TS for anyone not there yet (progressive adoption).
+  2. SPEC-FIRST IS THE DEFAULT — but easy, never intimidating. `init` adopts your
+     existing CLAUDE.md INTO a spec, and model-invocable skills (edit-spec /
+     strengthen / test-harness) author + edit it, so you rarely hand-write a
+     .spec.ts and hooks auto-compile on save. Present the typed spec as the default
+     the agent manages for you, NOT an advanced opt-in or a "step up". Inline
+     markdown is the ZERO-TS FLOOR for anyone who skips `init` (progressive
+     adoption) — the on-ramp, not the default starting point. `eject` always
+     reverses. NEVER a wall.
   3. THE INSTRUMENTS stay first-class — including Eval (measuring whether a skill
      actually helps is core, not optional). NOTE: Guard / compiled hooks is PARKED
      FOR LAUNCH (commented out below; see research/roadmap.md "Launch readiness") —
@@ -91,13 +93,13 @@ Three instruments, adopt any:
 - **Ship plugins to a marketplace?** **[`vigiles scan`](docs/for-plugin-authors.md)**
   ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
-**Your agent writes the spec — and you can always eject.** You rarely hand-write a
-`.spec.ts`: skills author it for you, **`init` adopts an existing CLAUDE.md
-non-destructively** (untouched until you compile), and plain markdown + inline
-`<!-- vigiles:enforce -->` comments work with zero TypeScript. **Claude Code and
-Codex** ([`vigiles/codex`](docs/harnesses.md)), or [your own
-harness](docs/authoring-an-adapter.md). _(New here? [the FAQ](docs/faq.md) covers the
-"do I write TypeScript / will it touch my files" questions.)_
+**Your agent writes the spec — and you can always eject.** Skills author the
+`.spec.ts` for you, **`init` adopts an existing CLAUDE.md non-destructively**
+(untouched until you compile), and plain markdown + inline `<!-- vigiles:enforce -->`
+comments work with zero TypeScript. Works with **Claude Code and Codex**
+([`vigiles/codex`](docs/harnesses.md)) or [your own harness](docs/authoring-an-adapter.md).
+
+New? **[The FAQ](docs/faq.md)** answers "do I write TypeScript?" and "will it touch my files?"
 
 ## Quick start
 
@@ -159,9 +161,10 @@ CLAUDE.md:
 File paths, scripts, code symbols — plus linter rules across **7 linters**
 (ESLint, Ruff, Clippy + four more): each rule exists **and is enabled**.
 
-**Start with one inline comment — no new files.** Step up to a typed `.spec.ts`
-(your agent writes it; it compiles to CLAUDE.md) when you want compiler-grade
-guarantees — and `vigiles eject` hands it back to plain markdown anytime.
+**Your agent writes the spec — `init` adopts your existing CLAUDE.md into one,
+faithfully and non-destructively.** Prefer zero new files? Plain markdown + one
+inline `<!-- vigiles:enforce -->` comment lints too — no spec, no TypeScript. And
+`vigiles eject` hands a spec back to markdown anytime.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
 > **Want more? Bad states can stop compiling.** Opt in deeper and a broken
@@ -268,7 +271,7 @@ default, not an unbypassable wall._
 ## FAQ
 
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No. Lint your markdown with zero new files; when you want a spec, your agent writes it. It's gradual, like TS's `strict`.
+- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one). Prefer zero new files? Plain markdown lints too. The deeper compiler-grade guarantees are the gradual, opt-in part — like TS's `strict`.
 - **Does it overwrite my files?** No. `init` adopts an existing CLAUDE.md _non-destructively_ — untouched until you `compile`, and `eject` reverses it.
 - **Need an API key?** No for almost everything (free, every commit). Real-model evals run on your Claude Pro/Max subscription — $0 metered tokens.
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).
