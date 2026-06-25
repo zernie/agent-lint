@@ -53,8 +53,9 @@ by hand. And the harness fails **silently**: a stale reference it trusts as fact
 safety hook that blocks nothing, a skill that never fires.
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
-own. vigiles[^name] makes it prove itself: verify, test, measure. Mostly free, no API
-key — real-model checks run on your **Claude Pro/Max subscription, not metered tokens**.
+own. vigiles[^name] makes it prove itself **before the agent ever runs** — verify, test,
+measure. Mostly free, no API key — real-model checks run on your **Claude Pro/Max
+subscription, not metered tokens**.
 
 Three instruments, adopt any:
 
