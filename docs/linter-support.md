@@ -191,7 +191,7 @@ Project files default to `src/**/*` but can be configured via `fileGlobs`.
 
 ## generate-schema
 
-`vigiles generate types` gives authoring-time feedback to `.spec.ts` authors via the TypeScript compiler. For projects using markdown frontmatter (Level 1) instead of a typed spec, `vigiles generate schema` provides the same feedback without TypeScript:
+`vigiles generate types` gives authoring-time feedback to `.spec.ts` authors via the TypeScript compiler. For projects using markdown frontmatter instead of a typed spec, `vigiles generate schema` provides the same feedback without TypeScript:
 
 ```sh
 npx vigiles generate schema

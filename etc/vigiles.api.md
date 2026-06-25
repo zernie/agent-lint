@@ -34,7 +34,7 @@ export type AgentSpecInput<P extends AuthoredPurity | undefined, V extends ToolV
 // @public
 export type AllowedAt<P extends AuthoredPurity | undefined, V extends ToolVocabulary> = P extends "pure" ? V["readOnly"] : P extends "bounded" ? V["bounded"] : string;
 
-// @public
+// @internal
 export function andThen<PriorOk extends Shape, PriorErr extends Shape, Needs extends Shape, Ok extends Shape, Err extends Shape>(prior: Pipeline<PriorOk, PriorErr>, next: Supplies<PriorOk, Needs> extends true ? PipeStep<Needs, Ok, Err> : {
     readonly __HANDOFF_ERROR: Supplies<PriorOk, Needs>;
 }): Pipeline<Ok, PriorErr | Err>;
@@ -89,10 +89,10 @@ export interface DirRef {
     readonly _ref: "dir";
 }
 
-// @public
+// @internal
 export function effect(strings: TemplateStringsArray, ...values: InstructionFragment[]): EffectRegion;
 
-// @public
+// @internal
 export interface EffectRegion {
     // (undocumented)
     readonly body: InstructionFragment[];
@@ -173,7 +173,7 @@ export interface GuidanceRule {
     readonly text: string;
 }
 
-// @public
+// @internal
 export type Handoff<Producer extends Shape, Consumer extends Shape> = Supplies<Producer, Consumer> extends true ? true : {
     readonly __handoff_error: Supplies<Producer, Consumer>;
 };
@@ -195,7 +195,7 @@ export function instructions(strings: TemplateStringsArray, ...values: Instructi
 // @public
 export type InstructionTarget = "CLAUDE.md" | "AGENTS.md" | (string & {});
 
-// @public
+// @internal
 export type KnownAgentName<Target extends string, Names extends string, From extends string = string> = [Target] extends [Names] ? true : {
     readonly __dangling_delegate: Target;
     readonly from: From;
@@ -224,10 +224,10 @@ export type LintersVerified<T extends ClaudeSpec | SkillSpec = ClaudeSpec> = T &
     readonly [__stage]: "linters-verified";
 };
 
-// @public
+// @internal
 export function needs<const N extends Shape>(shape: N): NeedsContract<N>;
 
-// @public
+// @internal
 export type NeedsContract<N extends Shape> = N;
 
 // @public
@@ -257,7 +257,7 @@ export type OutputFieldType = "string" | "number" | "boolean" | "string[]";
 // @public
 export type OutputPath<Spec extends `${string}.md.spec.ts`> = Spec extends `${infer Base}.spec.ts` ? Base : never;
 
-// @public
+// @internal
 export function pipe<A extends Shape, AE extends Shape>(a: TypedAgentSpec<A, AE>): Pipeline<A, AE>;
 
 // @public (undocumented)
@@ -281,7 +281,7 @@ export function pipe<A extends Shape, AE extends Shape, BN extends Shape, B exte
     readonly __HANDOFF_ERROR: Supplies<C, DN>;
 }): Pipeline<D, AE | BE | CE | DE>;
 
-// @public
+// @internal
 export interface Pipeline<Ok extends Shape, Err extends Shape> {
     readonly agents: readonly string[];
     readonly err: Err;
@@ -291,7 +291,7 @@ export interface Pipeline<Ok extends Shape, Err extends Shape> {
     readonly _specType: "pipeline";
 }
 
-// @public
+// @internal
 export interface PipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape> {
     // (undocumented)
     readonly agent: TypedAgentSpec<Ok, Err>;
@@ -301,7 +301,7 @@ export interface PipeStep<Needs extends Shape, Ok extends Shape, Err extends Sha
     readonly _step: "typed-delegate";
 }
 
-// @public
+// @internal
 export function pipeStep<Needs extends Shape, Ok extends Shape, Err extends Shape>(a: TypedAgentSpec<Ok, Err>, needsContract?: Needs): PipeStep<Needs, Ok, Err>;
 
 // @public
@@ -428,7 +428,7 @@ export interface SkillStep {
 // @public
 export type SpecPath<Output extends `${string}.md`> = `${Output}.spec.ts`;
 
-// @public
+// @internal
 export function start<Ok extends Shape, Err extends Shape>(first: PipeStep<Record<string, never>, Ok, Err> | TypedAgentSpec<Ok, Err>): Pipeline<Ok, Err>;
 
 // @public
@@ -448,7 +448,7 @@ export type StrictLinterRule = [keyof KnownLinterRules] extends [never] ? Linter
     [K in keyof KnownLinterRules]: `${K & string}/${KnownLinterRules[K] & string}`;
 }[keyof KnownLinterRules];
 
-// @public
+// @internal
 export type Supplies<Producer extends Shape, Consumer extends Shape> = {
     [K in keyof Consumer]: K extends keyof Producer ? Producer[K] extends Consumer[K] ? true : {
         readonly __mismatch: K;

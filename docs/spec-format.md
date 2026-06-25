@@ -7,8 +7,7 @@ vigiles specs are TypeScript files (`*.spec.ts`) that compile to markdown instru
 Be honest about what a spec is **not** for. The reference checks — does this
 `file()` exist, is this linter rule enabled, is this `cmd()` a real script — do
 **not** need a spec. vigiles runs them on a plain CLAUDE.md via inline
-[`<!-- vigiles:enforce -->` comments](inline-mode.md) (Level 0) or a
-[`vigiles:` frontmatter](markdown-mode.md) block (Level 1), on purpose, as the
+[`<!-- vigiles:enforce -->` comments](inline-mode.md), on purpose, as the
 on-ramp. If verification is all you want, **stay in markdown**.
 
 A spec earns its place when you cross from **declaring** your harness to
