@@ -176,6 +176,43 @@ export type SetupAnswers = Partial<
   Pick<SetupPlan, "lint" | "test" | "gha" | "plugin" | "strict">
 >;
 
+/** Ask one question with a default — injected so the interactive Q&A is pure +
+ *  unit-testable (a fake `ask` scripts answers; no TTY, no readline). */
+export type AskFn = (question: string, def: string) => Promise<string>;
+
+const isYesAnswer = (s: string): boolean => /^y(es)?$/i.test(s);
+
+/**
+ * The interactive setup Q&A as PURE logic over an injected `ask` — the prompts,
+ * their defaults, and the answer→`SetupAnswers` mapping. The IO shell (readline)
+ * lives in `cli.ts`'s `promptSetup`, which just supplies a real `ask`. Keeping
+ * this here means the fragile interactive path is unit-tested deterministically
+ * (the questions can't silently break) without a terminal.
+ */
+export async function collectSetupAnswers(ask: AskFn): Promise<SetupAnswers> {
+  const pillars = (
+    await ask("Set up which pillars? [both/lint/test] (both): ", "both")
+  ).toLowerCase();
+  const gha = isYesAnswer(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
+  const plugin = isYesAnswer(
+    await ask("Install the Claude Code plugin (hooks + skills)? [Y/n]: ", "y"),
+  );
+  // Structural gating (broken tools/hooks/MCP/collisions) is always on. This asks
+  // about the WORKFLOW tier — a spec per file + a test per surface — which a clean
+  // repo can fail just for not having done the work yet, so it's the recommended
+  // default a human opts OUT of (never forced on a silent run).
+  const strict = isYesAnswer(
+    await ask("Also enforce specs + a test per surface (recommended)? [Y/n]: ", "y"),
+  );
+  return {
+    lint: pillars !== "test",
+    test: pillars !== "lint" && pillars !== "verify",
+    gha,
+    plugin,
+    strict,
+  };
+}
+
 /**
  * Apply the pillar flags. A positive flag (`--lint` and/or `--test`) is an
  * explicit SELECTION — enable exactly the named pillars. Otherwise default to

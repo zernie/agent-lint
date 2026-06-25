@@ -41,8 +41,10 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
+  collectSetupAnswers,
   type SetupPlan,
   type SetupAnswers,
+  type AskFn,
   type ParsedSetupArgs,
 } from "./setup-plan.js";
 import type {
@@ -1990,48 +1992,22 @@ function scaffoldPillar2(): string[] {
   return ["vigiles.harness.mjs"];
 }
 
-/** Interactive prompts (TTY only): which pillars, CI, plugin. */
+/** Interactive prompts (TTY only): the readline IO shell over the pure
+ *  `collectSetupAnswers` (the Q&A logic is unit-tested in setup-plan.test.ts). */
 async function promptSetup(): Promise<SetupAnswers> {
   const readline = await import("node:readline");
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
-  const ask = (q: string, def: string): Promise<string> =>
+  const ask: AskFn = (q, def) =>
     new Promise((res) => {
       rl.question(q, (a) => {
         res(a.trim() || def);
       });
     });
-  const isYes = (s: string): boolean => /^y(es)?$/i.test(s);
   try {
-    const pillars = (
-      await ask("Set up which pillars? [both/lint/test] (both): ", "both")
-    ).toLowerCase();
-    const gha = isYes(await ask("Wire CI (GitHub Action)? [Y/n]: ", "y"));
-    const plugin = isYes(
-      await ask(
-        "Install the Claude Code plugin (hooks + skills)? [Y/n]: ",
-        "y",
-      ),
-    );
-    // Structural gating (broken tools/hooks/MCP/collisions) is always on. This
-    // asks about the WORKFLOW tier — require a spec per file + a test per surface
-    // — which a clean repo can fail just for not having done the work yet, so it's
-    // the recommended default a human opts OUT of (never forced on a silent run).
-    const strict = isYes(
-      await ask(
-        "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
-        "y",
-      ),
-    );
-    return {
-      lint: pillars !== "test",
-      test: pillars !== "lint" && pillars !== "verify",
-      gha,
-      plugin,
-      strict,
-    };
+    return await collectSetupAnswers(ask);
   } finally {
     rl.close();
   }

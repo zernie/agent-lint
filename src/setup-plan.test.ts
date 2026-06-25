@@ -9,8 +9,10 @@ import {
   resolvePlan,
   planPluginInstall,
   mergeProjectConfig,
+  collectSetupAnswers,
   DEFAULT_GATE_RULES,
   STRICT_EXTRA_RULES,
+  type AskFn,
 } from "./setup-plan.js";
 
 test("defaults: both pillars, CI, plugin, non-strict", () => {
@@ -255,4 +257,60 @@ test("mergeProjectConfig: fully-satisfied config returns null (no write)", () =>
     ),
     null,
   );
+});
+
+// --- collectSetupAnswers: the interactive Q&A, unit-tested via a fake ask ---
+
+/** A fake `ask` that returns the scripted answer per matched question substring,
+ *  else the default (simulating the user hitting Enter). Records the prompts. */
+function fakeAsk(scripted: Record<string, string>): {
+  ask: AskFn;
+  asked: string[];
+} {
+  const asked: string[] = [];
+  const ask: AskFn = (q, def) => {
+    asked.push(q);
+    const hit = Object.keys(scripted).find((k) => q.includes(k));
+    return Promise.resolve(hit ? scripted[hit] : def);
+  };
+  return { ask, asked };
+}
+
+test("collectSetupAnswers: all defaults (user hits Enter) → both pillars, all on, strict", async () => {
+  const { ask, asked } = fakeAsk({});
+  assert.deepEqual(await collectSetupAnswers(ask), {
+    lint: true,
+    test: true,
+    gha: true,
+    plugin: true,
+    strict: true,
+  });
+  assert.equal(asked.length, 4, "asks pillars, CI, plugin, strict");
+});
+
+test("collectSetupAnswers: 'lint' pillar → test off", async () => {
+  const { ask } = fakeAsk({ "which pillars": "lint" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.lint, true);
+  assert.equal(a.test, false);
+});
+
+test("collectSetupAnswers: 'test' pillar → lint off", async () => {
+  const { ask } = fakeAsk({ "which pillars": "test" });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.lint, false);
+  assert.equal(a.test, true);
+});
+
+test("collectSetupAnswers: declining CI / plugin / strict is honored", async () => {
+  const { ask } = fakeAsk({
+    "Wire CI": "n",
+    "Install the Claude Code plugin": "n",
+    "enforce specs": "n",
+  });
+  const a = await collectSetupAnswers(ask);
+  assert.equal(a.gha, false);
+  assert.equal(a.plugin, false);
+  assert.equal(a.strict, false, "opts OUT of the workflow tier");
+  assert.equal(a.lint, true, "structural gating still set up");
 });
