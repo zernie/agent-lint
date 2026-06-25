@@ -10,11 +10,13 @@
 
 ## RESUME HERE — execute the pre-release SURFACE FREEZE + markdown cut
 
-Branch **`claude/readme-review-formatting-k8108k`** = **PR #47 (OPEN)**, latest commit
-is this handoff. All work pushed. The branch history was **squashed to one commit on
-main + follow-ups** (to scrub VC plaintext — see below), so it's clean. CI on #47 is
-green (the only failures were stale `fmt:check` + a `validate` PR-title issue, both
-fixed). Continue on this SAME branch/PR after compaction.
+Branch **`claude/readme-review-formatting-k8108k`** = **PR #47 (OPEN)**, latest commits
+are this session's research-vault + doc-fix work (see SHIPPED). All pushed. The branch
+history was **squashed to one commit on main + follow-ups** (to scrub VC plaintext), so
+it's clean. CI on #47: a `require-spec` lint failure (the new `startup/CLAUDE.md` tripped
+vigiles's own dogfood) was fixed by excluding `startup/**` in `.vigilesrc.json` (commit
+1298ffb) — **re-run is GREEN** (`✅ vigiles lint passed`; the vault file no longer appears
+in lint output at all). Continue on this SAME branch/PR.
 
 **THE TASK (do next, same PR #47):** execute the surface-freeze + markdown cut from
 **`research/pre-release-focus.md`** (read it first):
@@ -38,7 +40,30 @@ harness-engineering quotes (Karpathy "automate what you can verify", OpenAI "the
 is hard") into the launch positioning; (c) a roadmap A2 note for the AHE
 prediction-loop. Public-safe; not yet done.
 
-### SHIPPED this session (don't rebuild)
+### SHIPPED most recently (don't rebuild)
+
+- **📊 Harness-market research → VAULTED.** A big 2026-06-25 parallel fan-out (CC/Codex
+  sizing + YoY growth, full player landscape, private-internal-harness "fee" thesis) is
+  written to `startup/harness-market-2026.md` (encrypted). KEY FINDINGS: CC/Codex compound
+  6–8×/yr; no clean harness market-% exists (CC leads adoption ~2.5:1, Codex leads raw WAU
+  5M+ & benchmark); ecosystem standardizing on AGENTS.md+MCP (AAIF/Linux Fdn); the
+  "support-a-private-harness-for-a-fee" play is a REAL wedge ONLY via the security/
+  compliance channel (AIUC-1/ISO-42001 evidence), NOT bespoke adapters to FAANG (NIH trap);
+  beyond Codex, only Factory (`.factory/droids/*.md`) + OpenHands have a real harness
+  surface to verify.
+- **🗂️ `startup/CLAUDE.md` vault index** — directory-scoped agent file (auto-loaded under
+  `startup/`): file index + the always-verify-unlocked-before-writing rule + no-public-leak
+  discipline + unlock workflow. README updated to mirror it.
+- **🩹 `.vigilesrc.json` `exclude: ["startup/**"]`** — vigiles dogfoots `require-spec`, so
+  the new vault `CLAUDE.md` failed CI; an inline `vigiles-disable` CAN'T work (locked vault
+  = ciphertext in CI, comment unreadable), so the dir is excluded at config level.
+- **📝 PR #47 Codex-review doc fixes** (`docs/for-plugin-authors.md`): `scan --trigger` is
+  per-plugin not a marketplace op (handleMeasure returns before marketplace expansion);
+  ranking needs `marketplace.json` OR multiple dir args (a plain folder scans as one root).
+- **🧭 Roadmap fan-out edits** (`research/roadmap.md`): positioning-wedge note, AHE
+  prediction-loop on optimizer A2, agnix-watch on the breadth-race item.
+
+### SHIPPED earlier (don't rebuild)
 
 - **🔐 git-crypt `startup/` vault** — VC/competitor/funding research is ENCRYPTED at rest
   (`.gitattributes startup/** filter=git-crypt`; `startup/` in `.prettierignore`; outside
