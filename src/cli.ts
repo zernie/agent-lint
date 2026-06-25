@@ -16,6 +16,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   lstatSync,
 } from "node:fs";
@@ -220,6 +221,7 @@ import {
 import {
   checkIntegrity,
   ejectMarkdown,
+  parseIntegrityHeader,
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./core/integrity.js";
 import { adoptMarkdown } from "./core/adopt.js";
@@ -1796,29 +1798,66 @@ function eject(args: string[]): void {
   writeFileSync(abs, ejected.markdown);
   console.log(`✓ Ejected ${file} — it's now plain, hand-owned markdown.`);
   const specAbs = resolve(process.cwd(), ejected.specFile);
-  // A spec EXCLUSIVELY corresponds to the file being ejected only when its
-  // basename is `<thisFile>.spec.ts`. A multi-target compile (e.g. a mirrored
-  // AGENTS.md compiled from CLAUDE.md.spec.ts) leaves the SHARED source named in
-  // the header — deleting it would break the primary file's recompile. So only
-  // remove the spec when it's this file's own; otherwise keep it and say why.
-  const ownsSpec = basename(ejected.specFile) === `${basename(file)}.spec.ts`;
   if (existsSync(specAbs)) {
     if (keepSpec) {
       console.log(
         `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
       );
-    } else if (!ownsSpec) {
+    } else if (specReferencedBySibling(ejected.specFile, file)) {
+      // A multi-target spec (e.g. `target: ["CLAUDE.md", "AGENTS.md"]`, or a
+      // mirror) compiles to several files that all name the SAME source in their
+      // header. Deleting it while ANY of them is still managed would orphan that
+      // file. So keep the spec until its last consumer is ejected.
       console.log(
-        `  Kept ${ejected.specFile} — it's a SHARED source spec (${file} was compiled from it as a secondary target); deleting it would break the primary. Remove it by hand if it's truly unused.`,
+        `  Kept ${ejected.specFile} — another compiled file alongside ${file} is still managed by it (a multi-target / mirrored spec); deleting it would orphan that file. Eject the others too, or remove the spec by hand once it's unused.`,
       );
     } else {
       rmSync(specAbs);
       console.log(`  Removed ${ejected.specFile} (the spec that managed it).`);
     }
   }
-  console.log(
-    `  Left a \`${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
-  );
+  // The disable marker is only added to instruction files (not skills/agents),
+  // so only mention it when it was actually written.
+  if (ejected.markdown.startsWith(REQUIRE_INSTRUCTIONS_SPEC_DISABLE)) {
+    console.log(
+      `  Left a \`${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\` marker so \`vigiles lint\` won't ask for a spec; delete it if you remove vigiles entirely.`,
+    );
+  }
+}
+
+/**
+ * Whether another compiled markdown file in the ejected file's directory still
+ * carries an integrity header naming `specFile` — i.e. the spec has OTHER
+ * compiled outputs (a multi-target `target: [...]` spec or a CLAUDE.md⇄AGENTS.md
+ * mirror), so removing it would orphan them. Scans the ejected file's directory
+ * (where a same-dir mirror lives); the ejected file itself is skipped (its header
+ * was already stripped). Best-effort — an unreadable sibling is ignored.
+ */
+function specReferencedBySibling(
+  specFile: string,
+  ejectedFile: string,
+): boolean {
+  const ejectedAbs = resolve(process.cwd(), ejectedFile);
+  const dir = dirname(ejectedAbs);
+  const specBase = basename(specFile);
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return false;
+  }
+  for (const name of entries) {
+    if (!name.endsWith(".md")) continue;
+    const p = resolve(dir, name);
+    if (p === ejectedAbs) continue;
+    try {
+      const header = parseIntegrityHeader(readFileSync(p, "utf-8"));
+      if (header && basename(header.specFile) === specBase) return true;
+    } catch {
+      /* unreadable sibling — skip */
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

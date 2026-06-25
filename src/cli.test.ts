@@ -2188,29 +2188,61 @@ describe("CLI: vigiles eject", () => {
     assert.ok(existsSync(join(tmpDir, "K.md.spec.ts")), "spec kept");
   });
 
-  it("does NOT delete a SHARED source spec when ejecting a secondary target", () => {
-    // A mirrored AGENTS.md compiled from CLAUDE.md.spec.ts: its header names the
-    // shared source. Ejecting AGENTS.md must NOT delete that spec, or the primary
-    // CLAUDE.md could no longer recompile.
-    const sharedDir = mkdtempSync(join(tmpdir(), "vigiles-eject-shared-"));
+  // A multi-target spec `target: ["CLAUDE.md", "AGENTS.md"]` compiles BOTH files
+  // from CLAUDE.md.spec.ts; their headers both name it. Ejecting EITHER one while
+  // the OTHER is still managed must keep the shared spec (or the other orphans).
+  function multiTargetDir(): string {
+    const d = mkdtempSync(join(tmpdir(), "vigiles-eject-shared-"));
+    writeFileSync(join(d, "CLAUDE.md.spec.ts"), "export default {}\n");
+    for (const f of ["CLAUDE.md", "AGENTS.md"]) {
+      writeFileSync(
+        join(d, f),
+        `<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# ${f}\n\nShared.\n`,
+      );
+    }
+    return d;
+  }
+
+  it("keeps the shared spec when ejecting the SECONDARY target", () => {
+    const dir = multiTargetDir();
     try {
-      writeFileSync(
-        join(sharedDir, "CLAUDE.md.spec.ts"),
-        "export default {}\n",
-      );
-      writeFileSync(
-        join(sharedDir, "AGENTS.md"),
-        "<!-- vigiles:sha256:deadbeef compiled from CLAUDE.md.spec.ts -->\n\n# AGENTS.md\n\nShared.\n",
-      );
-      const { stdout, exitCode } = run("eject AGENTS.md", sharedDir);
+      const { stdout, exitCode } = run("eject AGENTS.md", dir);
       assert.equal(exitCode, 0);
       assert.ok(
-        existsSync(join(sharedDir, "CLAUDE.md.spec.ts")),
-        "shared spec must survive ejecting the secondary target",
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — CLAUDE.md still references it",
       );
-      assert.match(stdout, /SHARED source spec|Kept CLAUDE\.md\.spec\.ts/);
+      assert.match(stdout, /Kept CLAUDE\.md\.spec\.ts/);
     } finally {
-      rmSync(sharedDir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the shared spec when ejecting the PRIMARY target", () => {
+    const dir = multiTargetDir();
+    try {
+      const { exitCode } = run("eject CLAUDE.md", dir);
+      assert.equal(exitCode, 0);
+      assert.ok(
+        existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "shared spec survives — AGENTS.md still references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes the spec once its LAST compiled output is ejected", () => {
+    const dir = multiTargetDir();
+    try {
+      run("eject AGENTS.md", dir); // secondary first — spec kept
+      run("eject CLAUDE.md", dir); // last consumer — now safe to delete
+      assert.ok(
+        !existsSync(join(dir, "CLAUDE.md.spec.ts")),
+        "spec deleted when no compiled output references it",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

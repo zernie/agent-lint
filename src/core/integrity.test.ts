@@ -62,6 +62,20 @@ describe("ejectMarkdown", () => {
     expect(ejectMarkdown("# Already plain\n")).toBeNull();
   });
 
+  it("does NOT prepend the marker before YAML frontmatter (skill/agent)", () => {
+    // A compiled SKILL.md body leads with `---` frontmatter that must stay first
+    // — prepending an HTML comment would break the skill (lost name/description).
+    const body =
+      "---\nname: my-skill\ndescription: Does a thing.\n---\n\nBody.\n";
+    const out = ejectMarkdown(compiled(body, "SKILL.md.spec.ts"));
+    expect(out?.markdown).toBe(body); // frontmatter stays in first position
+    expect(out?.markdown.startsWith("---")).toBe(true);
+    expect(out?.markdown.includes(REQUIRE_INSTRUCTIONS_SPEC_DISABLE)).toBe(
+      false,
+    );
+    expect(out?.specFile).toBe("SKILL.md.spec.ts");
+  });
+
   it("is idempotent — does not double-mark an already-disabled body", () => {
     const body = `${REQUIRE_INSTRUCTIONS_SPEC_DISABLE}\n\n# Title\n`;
     const out = ejectMarkdown(compiled(body));
