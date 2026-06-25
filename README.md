@@ -80,11 +80,10 @@ Three instruments, adopt any:
 | **🛡 Guard** | A safety hook that **can't silently fail open** — write a typed function, get a guard that blocks. **[→](docs/compiled-hooks.md)** |
 -->
 
-<!-- DEMO GIF SLOT (prime "see it work" spot). Record + embed:
-       asciinema rec --command "bash scripts/demo.sh" vigiles.cast
-       agg vigiles.cast vigiles-demo.gif   # then commit the gif
-     <p align="center"><img src="vigiles-demo.gif" width="640" alt="vigiles lint catching a stale reference" /></p>
--->
+<p align="center">
+  <img src="vigiles-demo.gif" width="720" alt="vigiles lint catching a file that moved and a script that was renamed" />
+</p>
+<!-- Regenerate the GIF: `python3 scripts/make-demo-gif.py` (output is verbatim CLI; see scripts/demo.sh for a live asciinema recording). -->
 
 **Two ways in** — pick the pain that's yours:
 
