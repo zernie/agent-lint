@@ -50,10 +50,19 @@ prediction-loop. Public-safe; not yet done.
   "support-a-private-harness-for-a-fee" play is a REAL wedge ONLY via the security/
   compliance channel (AIUC-1/ISO-42001 evidence), NOT bespoke adapters to FAANG (NIH trap);
   beyond Codex, only Factory (`.factory/droids/*.md`) + OpenHands have a real harness
-  surface to verify.
+  surface to verify. FULL DETAIL preserved in `startup/harness-players-appendix-2026.md`
+  (per-company funding/surface/scale) + `startup/harness-sources-2026.md` (~3.4K verbatim
+  source URLs, recovered from the ephemeral agent transcripts before reclaim).
 - **🗂️ `startup/CLAUDE.md` vault index** — directory-scoped agent file (auto-loaded under
   `startup/`): file index + the always-verify-unlocked-before-writing rule + no-public-leak
   discipline + unlock workflow. README updated to mirror it.
+- **🔬 `deep-research` skill** (`.claude/skills/deep-research/SKILL.md`, project-local, NOT
+  shipped, `vigiles:ignore-test`) — fixes the root cause of the trim: subagents trim + their
+  transcripts are ephemeral, so the skill mandates write-full-findings-to-disk + a durable
+  appendix beside the synthesis. Use it for future fan-outs.
+- **GitHub-diff note:** the `startup/` vault shows as `Bin 0 -> N bytes` (0 ins/0 del) on
+  GitHub — content is committed + correct-size, just ciphertext-invisible by design. The
+  small visible PR diff is ONLY the public files; not a sign of lost data.
 - **🩹 require-spec fix — `.vigilesrc.json` now excludes the `startup/` glob.** vigiles
   dogfoots `require-spec`, so the new vault `CLAUDE.md` failed CI; an inline
   `vigiles-disable` can't work (locked vault = ciphertext in CI, comment unreadable), so
