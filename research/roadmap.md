@@ -98,6 +98,17 @@
 >   article drafted (method-first) · [ ] README 60-sec proof + GIF · [ ] CI green +
 >   published-package smoke test. The viral leaderboard/badge is the FOLLOW-UP, not a blocker.
 
+> **🧭 The positioning wedge (from the 2026-06-25 competitive fan-out) — for the
+> article + README.** Every competitor, funded AND OSS, is **runtime/observability/
+> post-hoc** (BentoLabs/Salus/Braintrust) or **structure-lint** (agnix); vigiles is the
+> ONLY **author-time / deterministic / pre-run verification** play. One-liner:
+> _"everyone else catches drift at runtime, after the fact; vigiles proves the
+> references are real and the spec compiles **before the agent ever runs**."_ Ride the
+> now-canon **"harness engineering"** frame and cite the authorities (Karpathy: _"LLMs
+> can automate what you can verify"_; OpenAI: _"the harness is hard"_; arXiv AHE's
+> **structure-beats-prose** ablation = the proof for enforce > guidance). Competitor
+> names + VC who-to-pitch are in the `startup/` vault (keep them OUT of public docs).
+
 **P0 — validate the thesis before building (cheapest, do first):**
 
 - [x] **Measure one hyped skill vs its claim — DONE (2026-06-20), thesis VALIDATED.**
@@ -141,7 +152,11 @@
       re-prints scan's findings is a third command on one report — see P2 below.
       **Remaining (the measured half):** wire the real-model A/B so each add/drop/swap
       carries a measured delta (`runEval` over `bench/corpus`, gated on the subscription).
-      → `measurement-authority.md`, `divergent-bets.md`
+      **Mechanism to poach (arXiv AHE, `agentic-harness-evolution-poach.md`):** wrap each
+      recommendation in a **falsifiable predicted-delta contract** — predict which evals
+      it improves/regresses, run, **auto-revert on no-improvement**, and predict
+      REGRESSIONS explicitly (their regression-foresight was the weak spot). →
+      `measurement-authority.md`, `divergent-bets.md`, `agentic-harness-evolution-poach.md`
 - [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
       doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
       bill/target/blast-radius — grounded in the P0 caveman measurement). The
@@ -273,6 +288,11 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
       `measurement-authority.md` (A2)
 - [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
+      CONFIRMED by the 2026-06-25 OSS sweep (`oss-lane-sweep-2026-06.md`): **agnix** is the
+      structure-lint incumbent (297★, 429 rules, Rust, LSP) — the lane to NOT race. Our
+      differentiated four (catalog cross-ref / harness-execution-test / trigger-eval / typed
+      specs) are **unoccupied by OSS**; that's the wedge. **Watch agnix** (if it adds catalog
+      cross-ref or execution it closes toward us).
 - [ ] **Capability / lethal-trifecta check** (`warn` + `vigiles:allow-trifecta` sign-off) — one
       column in the benchmark ("safe AND effective"), not the headline. → `harness-state-space.md`
 - [ ] **Lint-as-hook + agent-consumable JSON** (see Now). → `instruction-file-linter-landscape.md`
