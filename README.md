@@ -101,8 +101,9 @@ harness](docs/authoring-an-adapter.md).
 ```text
 Set up vigiles in this repo with good defaults (lint + test, non-interactive).
 Verify my CLAUDE.md / AGENTS.md references and show me what's stale, then write
-and run a harness test for one of my hooks or skills. Ask me first before gating
-it in CI, adding a real-model eval, or enforcing strictly (--strict).
+and run a harness test for one of my hooks or skills. Ask me first before
+enforcing the workflow tier (a spec per file + a test per surface — i.e.
+--strict) or adding a real-model eval.
 ```
 
 Or do it yourself:

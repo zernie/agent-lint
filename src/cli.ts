@@ -2015,11 +2015,22 @@ async function promptSetup(): Promise<SetupAnswers> {
         "y",
       ),
     );
+    // Structural gating (broken tools/hooks/MCP/collisions) is always on. This
+    // asks about the WORKFLOW tier — require a spec per file + a test per surface
+    // — which a clean repo can fail just for not having done the work yet, so it's
+    // the recommended default a human opts OUT of (never forced on a silent run).
+    const strict = isYes(
+      await ask(
+        "Also enforce specs + a test per surface (recommended)? [Y/n]: ",
+        "y",
+      ),
+    );
     return {
       lint: pillars !== "test",
       test: pillars !== "lint" && pillars !== "verify",
       gha,
       plugin,
+      strict,
     };
   } finally {
     rl.close();

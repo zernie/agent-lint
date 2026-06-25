@@ -82,6 +82,13 @@ instruction file), `untested-skill` / `untested-subagent` / `untested-hook` (a
 test per surface), `frontmatter-valid` (strict YAML), `skill-frontmatter`. These
 stay opt-in so your first CI run isn't red just for not having written a spec yet.
 
+**Interactive `init` offers the workflow tier (recommended, opt-out):** at a
+terminal it asks _"Also enforce specs + a test per surface?"_ (default yes), and
+the agentic install flow asks the same — so a human turns it on with eyes open. A
+**non-interactive** `init` (an agent / CI with no one to ask) stays
+structural-only unless you pass `--strict`, so an automated setup never silently
+turns an existing repo's CI red for not having written a spec yet.
+
 Either way `init` **never clobbers a severity you set** — it only fills in the
 undefined ones. Honest limit: Claude Code itself loads a name-less or broken-YAML
 **skill**, so vigiles can't hard-gate skill content that still works — it gates
