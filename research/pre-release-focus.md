@@ -118,8 +118,10 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
 
 ## Positioning lock
 
-- **Consumer one-liner (README hero, set):** _"You're a 100x coder, a 1x verifier."_ →
-  vigiles verifies + measures the harness your agent runs on.
+- **Consumer one-liner (README hero):** lead straight into the pain — _"You installed a
+  bunch of plugins and wrote a few skills — but do they actually work? It's a library with
+  no tests."_ → vigiles verifies + measures the harness your agent runs on. (The earlier
+  _"100x coder, 1x verifier"_ line is kept as a backup hook.)
 - **Category line:** the **deterministic shift-left guardrail + private measurement for
   your agent harness.**
 - **The differentiator (author-time vs runtime — THE one-line wedge):** every other

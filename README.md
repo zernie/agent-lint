@@ -47,10 +47,11 @@
 
 ---
 
-**You're a 100x coder now — and a 1x verifier.** Your agent writes more of the
-harness it runs on — your **CLAUDE.md, hooks, and skills** — than you can ever check
-by hand. And the harness fails **silently**: a stale reference it trusts as fact, a
-safety hook that blocks nothing, a skill that never fires.
+**You installed a bunch of plugins and wrote a few skills — but do they actually work?**
+A skill that never fires, a safety hook that blocks nothing, a CLAUDE.md full of dead
+references — your harness fails **silently**, and you find out mid-task.
+
+**It's a library with no tests.**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] makes it prove itself **before the agent ever runs** — verify, test,
