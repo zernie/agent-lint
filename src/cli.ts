@@ -19,6 +19,7 @@ import {
   readdirSync,
   rmSync,
   lstatSync,
+  type Dirent,
 } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
 import { globSync } from "glob";
@@ -1816,13 +1817,14 @@ function eject(args: string[]): void {
       console.log(
         `  Kept ${ejected.specFile} (--keep-spec) — but \`vigiles compile\` would re-manage ${file}.`,
       );
-    } else if (specReferencedBySibling(ejected.specFile, file)) {
-      // A multi-target spec (e.g. `target: ["CLAUDE.md", "AGENTS.md"]`, or a
-      // mirror) compiles to several files that all name the SAME source in their
-      // header. Deleting it while ANY of them is still managed would orphan that
-      // file. So keep the spec until its last consumer is ejected.
+    } else if (specReferencedElsewhere(ejected.specFile, file)) {
+      // A multi-target spec (e.g. `target: ["CLAUDE.md", "docs/AGENTS.md"]`, or a
+      // mirror) compiles to several files — possibly in other directories — that
+      // all name the SAME source in their header. Deleting it while ANY of them is
+      // still managed would orphan that file. So keep the spec until its last
+      // consumer is ejected.
       console.log(
-        `  Kept ${ejected.specFile} — another compiled file alongside ${file} is still managed by it (a multi-target / mirrored spec); deleting it would orphan that file. Eject the others too, or remove the spec by hand once it's unused.`,
+        `  Kept ${ejected.specFile} — another compiled file in this project is still managed by it (a multi-target / mirrored spec); deleting it would orphan that file. Eject the others too, or remove the spec by hand once it's unused.`,
       );
     } else {
       rmSync(specAbs);
@@ -1839,35 +1841,55 @@ function eject(args: string[]): void {
 }
 
 /**
- * Whether another compiled markdown file in the ejected file's directory still
- * carries an integrity header naming `specFile` — i.e. the spec has OTHER
- * compiled outputs (a multi-target `target: [...]` spec or a CLAUDE.md⇄AGENTS.md
- * mirror), so removing it would orphan them. Scans the ejected file's directory
- * (where a same-dir mirror lives); the ejected file itself is skipped (its header
- * was already stripped). Best-effort — an unreadable sibling is ignored.
+ * Whether another compiled markdown file ANYWHERE under the project still carries
+ * an integrity header naming `specFile` — i.e. the spec has OTHER compiled outputs
+ * (a multi-target `target: [...]` spec or a CLAUDE.md⇄AGENTS.md mirror, possibly
+ * in a different directory like `docs/AGENTS.md`), so removing it would orphan
+ * them. Walks the project tree from cwd, skipping heavy/irrelevant dirs; the
+ * ejected file itself is skipped (its header was already stripped). Matches on the
+ * RESOLVED spec path (not basename), so two unrelated specs that happen to share a
+ * filename — `src/CLAUDE.md.spec.ts` vs `CLAUDE.md.spec.ts`, common in a monorepo —
+ * don't collide; genuine sibling outputs of one compile carry the identical
+ * recorded spec path. Best-effort: an unreadable file is ignored.
  */
-function specReferencedBySibling(
+function specReferencedElsewhere(
   specFile: string,
   ejectedFile: string,
 ): boolean {
-  const ejectedAbs = resolve(process.cwd(), ejectedFile);
-  const dir = dirname(ejectedAbs);
-  const specBase = basename(specFile);
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return false;
-  }
-  for (const name of entries) {
-    if (!name.endsWith(".md")) continue;
-    const p = resolve(dir, name);
-    if (p === ejectedAbs) continue;
+  const root = resolve(process.cwd());
+  const ejectedAbs = resolve(root, ejectedFile);
+  const specAbs = resolve(root, specFile);
+  const SKIP = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    "out",
+  ]);
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop() as string;
+    let entries: Dirent[];
     try {
-      const header = parseIntegrityHeader(readFileSync(p, "utf-8"));
-      if (header && basename(header.specFile) === specBase) return true;
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      /* unreadable sibling — skip */
+      continue;
+    }
+    for (const e of entries) {
+      const p = resolve(dir, e.name);
+      if (e.isDirectory()) {
+        if (!SKIP.has(e.name)) stack.push(p);
+        continue;
+      }
+      if (!e.name.endsWith(".md") || p === ejectedAbs) continue;
+      try {
+        const header = parseIntegrityHeader(readFileSync(p, "utf-8"));
+        if (header && resolve(root, header.specFile) === specAbs) return true;
+      } catch {
+        /* unreadable file — skip */
+      }
     }
   }
   return false;
