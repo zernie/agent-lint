@@ -192,9 +192,29 @@ the SECURITY angle, which keeps the differentiation clean.
 - **Differentiation (clean + citeable):** security layer (Snyk) vs correctness/testing
   layer (vigiles) — complementary, not overlapping. The ACM/IEEE 2026 MCP-Scanner paper
   (`dl.acm.org/doi/10.1145/3786160.3788471`) formalizes Snyk's approach — a useful cite
-  for positioning vigiles as the correctness layer.
-- **THREAT VERDICT: MEDIUM.** Not a head-on competitor today (different question), but the
-  biggest mover on our artifacts + the distribution to define the category. Lead the
+  for positioning vigiles as the correctness layer. Confirmed across 3 sub-probes:
+  agent-scan's ~21 issue codes (E001–W021) are ALL threat-detection; the word
+  "correctness" never appears in their docs; and **a perfectly broken harness — dead hook
+  scripts, typo'd linter rules, an unreachable MCP server — passes Snyk's checks
+  completely.** That sentence is the demo.
+- **Direction + pricing (lowers the threat):** Snyk is moving DEEPER into security (Evo
+  AI-SPM GA Mar 2026; Evo Agentic Development Security GA ~Jun 29 2026; Vercel/skills.sh
+  install-time scanning), with NO signal — no acquisition, job post, or blog — toward
+  correctness/quality scoring. Monetization is enterprise seats (~$25–$105/dev/mo); the
+  OSS CLI + free web Skill Inspector are the funnel. So there is **no Snyk free tier that
+  solves the correctness problem — clean air for vigiles.**
+- **Snyk ALREADY ran the "scan-the-ecosystem → scary stat → viral" play — on the
+  SECURITY axis.** Their **ToxicSkills** research (Feb 2026) scanned 3,984 skills → 36%
+  had issues, 76 human-confirmed malicious — the exact motion vigiles's
+  ecosystem-benchmark plans. TWO implications: (1) run OUR benchmark on the
+  **correctness / performance axis ("what works vs hype")**, NOT security — that axis is
+  taken; (2) Snyk publicly dismantles rival scanners ("False Security" blog), so do NOT
+  pick a fight on their axis — position as the complementary CORRECTNESS layer. (Their
+  free Skill Inspector web UI needs no account; the CLI needs a `SNYK_TOKEN`; enterprise
+  = Snyk Evo ADS, GA ~2026-06-29.)
+- **THREAT VERDICT: MEDIUM.** Not a head-on competitor today (different question —
+  confirmed: all ~20 of agent-scan's checks are threat-detection, zero correctness), but
+  the biggest mover on our artifacts + the distribution to define the category. Lead the
   differentiation HARD: _"Snyk scans your harness for malice; vigiles verifies it's
   correct and tests that it works."_ Watch issue #301 and any "reliability/quality score"
   signal.
