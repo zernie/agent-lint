@@ -13,11 +13,12 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
+npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model); prints health score
 npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
 npx vigiles scan <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
 npx vigiles scan <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
 npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
+npx vigiles scan <dir> --check-hooks # Run the disaster battery against every ok hook (opt-in, executes hooks, sandboxed for foreign plugins)
 npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
@@ -345,6 +346,39 @@ Three things to know:
   Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
   (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
 
+#### Safety battery — `scan --check-hooks`
+
+The static scan reports hook scripts that are **present** (`✓`) or **missing** (`✗`).
+`--check-hooks` goes further: it **executes each ok hook** against a curated disaster
+battery (`DISASTER_CATALOG` — force-push, `rm -rf`, `--no-verify`, secret-read,
+`curl|sh`) and reports what it actually **blocks vs allows**.
+
+This is the #1 verified hook pain: a guard that _looks_ like it blocks and silently
+doesn't (exit 1 ≠ 2, wrong JSON field, a missed compound command). The battery proves
+the hook's **logic**, not just its presence.
+
+```bash
+npx vigiles scan ./my-plugin --check-hooks   # runs every ok hook against 7 disasters
+```
+
+Output example:
+
+```
+Safety battery (2 hook(s) × 7 disasters):
+  hooks/guard.sh: blocks 7/7 disasters
+  hooks/mcp.sh: blocks 0/7 disasters
+  Guardrail coverage for `hooks/mcp.sh` — blocks 0/7 of the dangerous battery
+  ...
+  Total: blocks 7/14 disasters
+```
+
+**When scanning a foreign plugin** (not your own `cwd`), the hooks are run under
+`sandbox: "auto"` (bubblewrap network namespace when available); where no sandbox is
+available, the battery is **skipped with a loud note** rather than run unconfined — a
+stranger's hooks never execute unsandboxed. Scanning your own cwd runs hooks directly
+(your code, like your tests). Default scan stays execution-free; `--check-hooks` is
+opt-in, mirroring `--verify-mcp`.
+
 #### Capability diff — `scan <after> --capability-diff=<before>`
 
 **Did this change widen the agent's blast radius?** Computes each version's
@@ -614,6 +648,7 @@ deterministic + every-commit).
 | Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |        –         |
 | Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |        –         |
 | MCP tool exists on **live** server (`--verify-mcp`)         |    –     |  opt-in²  |        –         |
+| Hook disaster battery (`--check-hooks`)                     |    –     |  opt-in³  |        –         |
 | Leaderboard (rank a marketplace)                            |    –     |     ✓     |        –         |
 | Trigger recall/precision (does a skill fire?)               |    –     |     –     |        ✓         |
 | Config severities + CI exit codes                           |    ✓     | read-only |    read-only     |
@@ -636,6 +671,10 @@ frontmatter, or a spec; plain prose isn't auto-parsed).
 ² `--verify-mcp` is **opt-in and side-effecting** (it starts the declared MCP server
 to list its tools) — deterministic but not free/offline, so it's a flag, never a
 default `scan`/`lint` check. See the `scan --verify-mcp` section above.
+
+³ `--check-hooks` is **opt-in and side-effecting** (it executes each ok hook against
+the disaster battery) — sandboxed (`sandbox: "auto"`) for a foreign plugin, direct for
+your own `cwd`. See the `scan --check-hooks` section above.
 
 ## GitHub Action
 
