@@ -82,8 +82,7 @@ not a sibling `doctor`/`checkup` command.
    green). One false positive on a famous plugin and casual users dismiss the
    score forever. (Ties directly to the launch FP-sweep: `scripts/fp-sweep.sh`.)
 3. **Keep power concepts off the casual path** — `scan` output must not mention
-   `vigiles/hook`, typed specs, or `.harness.mjs` until the user has engaged Layer
-   2. The score + fix list is the interface; the typed machinery is the impl.
+   `vigiles/hook`, typed specs, or `.harness.mjs` until the user has engaged Layer 2. The score + fix list is the interface; the typed machinery is the impl.
 4. **Invest in actionability** — "blocks 2/7 of the disaster battery, `git push -f`
    slips through" (high-signal), never "consider adding more rules" (noise).
 
@@ -102,7 +101,7 @@ not a sibling `doctor`/`checkup` command.
 - Decide the exact `scan` UX: where the score + battery land in default output vs a
   `--full`/`--report` flag; the badge URL/markdown.
 - Auto-prompt generation for the Layer-1 over-fire check (reuse `measureTriggerRate`
-  + a deterministic prompt synthesizer) — the one genuinely new-ish piece.
+  - a deterministic prompt synthesizer) — the one genuinely new-ish piece.
 - Monetization/company angle (CI policy, org views, history/trending) — post-launch.
 
 ## Appendix — external research (preserve; sources)
