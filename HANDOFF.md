@@ -8,92 +8,53 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you when
 > ≥5 commits pile up without a refresh — it's live and dogfood-proven.
 
-## RESUME HERE — `claude/handoff-mylfen`, **PR #48 OPEN** — watching CI
+## RESUME HERE — `claude/lint-inline-mode-go56av` — README/docs spec-first pass (no PR yet)
 
-**State:** PR **#48** is open + green-pending-CI; **all 8 Codex review threads
-resolved** (Codex now at its review usage limit — no more auto-reviews). Layers
-landed on the branch: the big batch → **rule-cleanup/auto-adopt** → **init-DX
-hardening** → **8 Codex review fixes** → a **5★ onboarding-polish** pass. Lint **0
-errors**, fmt clean, `api:check` no drift. The env-only `dialect-drift` test fails
-in THIS container only (green in CI). Subscribed to #48; a recurring self-check
-watches CI.
+**State:** A README-review session (user skimming the rendered README on mobile,
+spotting framing weak spots). 4 commits on this branch, all green locally:
+`npm run build`/tsc clean, fmt clean, lint **0 errors**, **103 cli + inline tests
+pass**. **No PR opened yet** — user was deciding; a `fix:` is in the batch, so a
+merge cuts a patch release.
 
-**5★ ONBOARDING POLISH (latest commits):**
+**This session's 4 commits:**
 
-- **`docs/faq.md`** + a compact README **FAQ** (why a typed spec & is it optional,
-  do I write TS, does init touch my files, CC+Codex, cost/key, non-JS repo, vs
-  promptfoo). Install prompt rewritten (plain English, names adoption, tells the
-  agent to install+compile). Adoption reassurance lifted above the fold.
-- **`init` non-JS guidance**: a repo with no package.json gets honest steps
-  (`npx vigiles lint` / `npm init`), not a misleading `npm install`.
-- **`scripts/demo.sh`** — zero-dep asciinema recorder of the Lint layer (tested);
-  README has a **DEMO GIF slot** wired with the exact `asciinema`/`agg` command.
-- README rendered ≈152 non-blank lines (within the ~200 cap). The GIF itself is the
-  one remaining asset for the user to record + embed.
-
-**INIT-DX HARDENING (latest commits — review-driven):**
-
-- **Auto-adopt is NON-DESTRUCTIVE**: `init` writes the spec but NEVER overwrites
-  your CLAUDE.md/AGENTS.md. You run `vigiles compile` to opt the file into spec
-  management (byte-faithful; review the diff; `eject` reverses). Was: the wizard
-  compiled-over adopted targets.
-- **Deferred compile** when `vigiles` isn't resolvable yet (fresh repo pre-`npm
-install`) — prints the next step instead of a "failed to load". Helper
-  `canResolveVigiles(cwd)` (node_modules/vigiles OR cwd pkg name === vigiles).
-- **Test-only setup writes NO lint rules** (`mergeProjectConfig` `lint:false`) —
-  Codex catch: `init --test` honors the positive-flag contract.
-- **Interactive `--strict` is honored** — `setup()` reads `plan.strict` (resolved),
-  not the raw flag (was silently dropped).
-- **eject** won't delete a SHARED source spec (mirrored AGENTS.md ← CLAUDE.md.spec.ts).
-- Next-steps reordered (install → compile → strengthen → test); `--report-only` in
-  `init --help`; README surfaces non-destructive adopt. New e2e tests for each.
-
-**THIS SESSION's batch (one `refactor!` commit — BREAKING):**
-
-- **`require-spec` → `require-instructions-spec`**, and **NARROWED**: only a
-  `.spec.ts` satisfies it now — inline `<!-- vigiles:enforce -->` / `vigiles:`
-  frontmatter NO LONGER do. Disable marker is now
-  `<!-- vigiles-disable require-instructions-spec -->`. Clean break (no alias — no
-  users yet). Renamed across code, `.vigilesrc.json`, tests, ~16 docs/research files,
-  and `docs/rules/require-instructions-spec.md` (old doc deleted).
-- **Rule GROUPS named** in `src/setup-plan.ts`: `STRUCTURAL_RULES` (the 9 FP-safe
-  gate, default error) / `WORKFLOW_RULES` (require-instructions-spec + untested-\*,
-  `--strict`) / `NUDGE_RULES` (never gate). Added **`--report-only`** (writes the
-  whole gate at `warn`) threaded through `mergeProjectConfig`.
-- **`prefer-compiled-hooks` → default OFF**; **`require-skill-spec` un-deprecated**
-  (the consistent `require-<surface>-spec` parallel, default off).
-- **AUTO-ADOPT** (the headline): new **`src/core/adopt.ts`** — `adoptMarkdown()` /
-  `adoptToSpec()` faithfully convert an existing CLAUDE.md/AGENTS.md into a
-  `claude()` spec (every heading → a verbatim prose section, NO rule inferred,
-  always compiles). Wired into `init()` (adopt-or-scaffold) + `setupPillar1` (adopted
-  targets are compiled). Proven **byte-identical below the integrity header** on a
-  real e2e + a round-trip unit suite (`adopt.test.ts`, 15 tests). So
-  `require-instructions-spec` is **green by construction** after `init` — a safety
-  net, not a nag (resolves the old inconsistency). Design recorded in
-  `research/install-enforcement-dx.md` (the auto-adopt section + group table).
-- Swept stale **Level-0/1/2** markdown-mode comments; fixed 3 pre-existing branch
-  lint errors (`scan-cli.test.ts`, `cli.test.ts`) that would've failed CI.
-- `npx vigiles strengthen` is NOT a verb — it's the **`/strengthen` skill**; all refs
-  use `/strengthen` (self-command-refs would flag `vigiles strengthen`).
+- `2dcb472` **docs(README)** — ① Lint now leads **spec-first** ("your agent writes
+  the spec; `init` adopts your CLAUDE.md"); inline markdown demoted to the zero-TS
+  floor; the embedded README direction-note (point 2) updated to match so it isn't
+  reverted. ② Test clarified: a "cheapest tier" lead-in so the `runHook` snippet
+  reads as rung 1 (kills the hook-only impression), a **subagents** bullet
+  (`assertAgentOk`/`assertAgentErr`), and "evals" → "real-model tier" so the word
+  _eval_ stays reserved for ③. Trimmed the wordy FAQ parenthetical.
+- `6b80fa7` **docs(lint guide)** — `verifying-instruction-files.md` was still
+  markdown-first ("start in markdown, step up"; "markdown is the destination, not a
+  stepping stone") — reframed spec-first to match the README. The public-doc
+  markdown-first sweep is now CLEAN (it was the only offender; faq/markdown-mode/README
+  already frame markdown as the floor).
+- `2d5a011` **fix(inline)** — `<!-- vigiles:file "path" -->` (quoted, like `cmd`) kept
+  its quotes: it never resolved AND printed `File not found: ""path""`. `unquote()`
+  strips a surrounding pair at the parse boundary (`src/core/inline.ts`); regression
+  test added. Now matches the demo (`File not found: "path"`).
+- `c5bb15e` **refactor** — the `init()` helper → **`scaffoldSpec()`** so the `init`
+  verb's wizard (`setup()`) isn't shadowed by a same-named single-target scaffolder.
+  Verb unchanged. Docstring + a `src/CLAUDE.md` maintainer note record the
+  verb→`setup()`/`scaffoldSpec()` split. (Decided NOT to add public docs for the
+  split — internal detail; `docs/cli.md` already covers user-facing `init`.)
 
 **DO NEXT:**
 
-1. **Watch PR #48 to green + merge.** CI re-runs on each push; the subscription +
-   a recurring self-check handle it. (An earlier `test`-job failure was a
-   `fmt:check` on HANDOFF.md — fixed.)
-2. Launch builds (separate from polish): ecosystem-benchmark v0 + the method-first
-   article + README 60-sec proof/GIF (see `research/pre-release-focus.md`).
+1. **Open a PR for this branch** if the user confirms (title `fix:` so the patch
+   release fires; body summarizes the README/lint-guide spec-first pass + the inline
+   quote fix + the `init()`→`scaffoldSpec()` refactor).
+2. Optional polish the user floated: physically reorder the lint guide so the
+   typed-spec EXAMPLE precedes the markdown one (wording is spec-first now; the
+   example order still shows markdown first).
+3. Resume launch builds (separate from this polish): ecosystem-benchmark v0 +
+   method-first article + README 60-sec proof/GIF (`research/pre-release-focus.md`).
 
-**REMAINING DX gaps (documented, low-pri):** raw-tier adopt not byte-identical
-(compiler passthrough would fix); a pure-digit heading (`## 1`) could reorder
-sections (negligible); Codex compile-on-edit hook not auto-wired (non-goal);
-monorepo sub-package CLAUDE.md not auto-discovered (use `--target`).
-
-**OPEN IDEA (not built):** the deterministic adopt converter falls back to a `raw`
-tier (one synthesized `Overview` section) for heading-less / intro-bearing files —
-content preserved but the diff adds a heading. A compiler passthrough primitive
-would make `raw` truly byte-identical; not needed yet (agentic path handles
-irregular prose; structured tier is byte-identical).
+**Prior in-flight (SEPARATE branch — this session did NOT touch it):** PR **#48**
+(`claude/handoff-mylfen`) — the big rule-cleanup / auto-adopt / init-DX batch + 5★
+onboarding polish. Was open + green-pending-CI last session; re-check its live state
+if returning to it.
 
 ### Gotchas (read before trusting test output)
 
@@ -103,20 +64,24 @@ irregular prose; structured tier is byte-identical).
   "needs quota / not exercisable."
 - **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only (container CC
   version vs validated 2.1.187). CI PINS CC → green there. By design.
-- **Auto-adopt + compile in a tmp dir fails to resolve `vigiles/spec`** unless vigiles
-  is installed (devDep + `npm install`) — same as any scaffolded spec. The repo
-  self-resolves `vigiles/spec`, so e2e adopt→compile works inside the repo tree. The
-  round-trip is proven model-free in `src/core/adopt.test.ts` (compileClaude direct).
+- **A scaffolded/adopted spec in a tmp dir fails to resolve `vigiles/spec`** unless
+  vigiles is installed (devDep + `npm install`). The repo self-resolves it, so
+  in-repo e2e works; the adopt round-trip is proven model-free in
+  `src/core/adopt.test.ts` (compileClaude direct).
 - `etc/*.api.md` is the surface gate (`npm run api:check`); regenerate via
   `node scripts/api-extractor.mjs --local` after an intentional API change.
+- `src/CLAUDE.md` is COMPILED from `src/CLAUDE.md.spec.ts` — edit the spec, the
+  compile-on-save guard recompiles the md (don't hand-edit the md).
 
 ### Decisions of record (don't relitigate)
 
 - **The wedge:** vigiles is the author-time / deterministic / pre-run + typed-spec
   play. NOT a linter. Don't fight agnix for the linting crown.
 - **Spec-first + ejectable + auto-adopted:** the agent writes the spec, `init` adopts
-  your existing files faithfully, you can always `vigiles eject`. Markdown demoted to
-  floor/eject-target (inline kept; frontmatter parked).
+  your existing files faithfully, you can always `vigiles eject`. Markdown is the
+  **zero-TS floor** for those who skip `init`, NOT the default starting point (inline
+  kept; frontmatter parked). README + lint guide now both say this — keep new docs
+  consistent.
 - **Rule groups, NOT a preset menu** (Clippy/Biome best practice): structural (error,
   default) / workflow (`--strict`) / nudge (warn). `--report-only` is an orthogonal
   severity dial. Presets EXPAND to explicit `.vigilesrc.json` severities.
