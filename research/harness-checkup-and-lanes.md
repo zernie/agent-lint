@@ -104,6 +104,70 @@ not a sibling `doctor`/`checkup` command.
   - a deterministic prompt synthesizer) — the one genuinely new-ish piece.
 - Monetization/company angle (CI policy, org views, history/trending) — post-launch.
 
+## Competitive landscape (2026-06 — fanned-out research, 4 search angles)
+
+The "free zero-config harness audit/score" SURFACE is more crowded than expected —
+but vigiles's two real wedges (cross-reference CORRECTNESS + the TESTING layer) are
+unclaimed by anyone.
+
+**Funded startups — vigiles's lane is OPEN.** Two camps, neither in it: runtime
+observability / output-eval (Langfuse, Braintrust, Arize/Phoenix, Patronus, HoneyHive,
+Galileo, LangSmith — trace the running agent, grade OUTPUTS) and agent/MCP security
+scanning (Snyk Agent Scan — the closest: free, PLG-shaped, reads static SKILL.md/MCP;
+
+- Enkrypt AI). The security scanners ask "is this MALICIOUS?" (prompt injection, tool
+  poisoning), never "is this WIRED CORRECTLY?". No funded startup scores harness
+  CORRECTNESS.
+
+**OSS — the SCORE surface is commoditizing fast.** Multiple zero-config tools already
+ship the Lighthouse score+grade shape:
+
+- **agnix** (`agent-sh/agnix`, ~250–300★) — the lint-breadth + MINDSHARE leader:
+  ~425 rules over CLAUDE.md/AGENTS.md/SKILL.md/hooks/MCP, multi-harness, real LSP,
+  `--fix`. But pass/fail diagnostics, **no graded report card, no cross-ref engine**.
+  The incumbent to watch (could bolt on a score any release).
+- **AgentLinter** (`seojoonkim/agentlinter`, ~69★) — the SCORECARD-UX leader: 0–100 +
+  letter grades, 8 dimensions, shareable web report, zero-config. But scores
+  **prose/content quality**, not reference correctness. (AgentLint `0xmariowu` ~41★ +
+  cc-health-check are the same static-heuristic-scorer pattern.)
+- **cc-health-check** (`yurukusa/...`, new) — 0–100 + bands, 20 checks/6 dims, README
+  badge. **Config completeness**, not correctness.
+- **claudelint** (claudelint.com) — agnix's twin: 114 rules / 10 categories over
+  CLAUDE.md/skills/settings/hooks/MCP/plugins/agents, SARIF output. Validate-only,
+  **no score, no cross-ref**.
+- **SkillCheck** (getskillcheck.com / `thedaviddias/skill-check`, ~183★) — owns the
+  **score + A–F grade + badge** UX, but scoped to a single SKILL.md's content quality
+  (not the whole harness). The UX motion to beat.
+- Also: Reporails (score/10, 92 rules), AgentLint (`0xmariowu`/agentlint.app),
+  Emasoft/claude-plugins-validation (190+ rules, weighted score), cclint ×2,
+  Anthropic's own `claude plugin validate`.
+
+**The consistent verdict across both thorough sweeps — NONE have either vigiles wedge:**
+
+1. the **cross-referencing engine** (does a declared tool / hook-event / script /
+   linter-rule actually EXIST and is it ENABLED, across 7 catalogs) — everyone checks
+   prose quality / structure / config-completeness / security, never reference TRUTH;
+2. the **harness-TESTING layer** (`runHook`/`runHarnessTest`/`runEval` — does it
+   actually fire / block / help) — everyone is a static linter/scorer; nobody tests
+   the assembled machine.
+
+### Strategic implication (refines the decision above)
+
+- The free zero-config SCORE is now **table stakes, not a differentiator.** Do NOT
+  pitch vigiles as "another scored harness linter" — agnix owns lint breadth, 3+ tools
+  own the score UX. The score is the familiar WRAPPER, not the substance.
+- **LEAD the free report with what's uniquely vigiles AND visceral:** (a) cross-ref
+  FAILURES ("your hook fires on a typo'd event → it never runs"; "this tool isn't in
+  the catalog"; "this linter rule is disabled"), and (b) the DISASTER-BATTERY result
+  ("blocks 2/7") — a TESTING result, not a lint, so **no competitor can produce it.**
+  That one line is the moat made visible.
+- **Competitive watch:** agnix (lint leader — could bolt on a score); the score-racers
+  (AgentLinter / cc-health-check / Reporails); Snyk Agent Scan (funded incumbent doing
+  free static agent-config scanning — "add a correctness score" is a plausible
+  adjacent move).
+- (Adjacent-category sweep — eval/guardrails/MCP-security/AI-code-review — still
+  finishing; not expected to change the verdict since those are different lanes.)
+
 ## Appendix — external research (preserve; sources)
 
 Patterns + named examples the synthesis draws on:
