@@ -55,7 +55,7 @@ test("a structurally clean plugin scores 100", () => {
         descriptionScript: null,
       },
     ],
-    hooks: [{ script: "h.sh", status: "ok" }],
+    hooks: [{ command: "bash h.sh", script: "h.sh", status: "ok" }],
   });
   const { score, issues } = scoreReport(r);
   assert.equal(score, 100);
@@ -64,7 +64,11 @@ test("a structurally clean plugin scores 100", () => {
 
 test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", () => {
   assert.equal(
-    scoreReport(report({ hooks: [{ script: "h", status: "missing" }] })).score,
+    scoreReport(
+      report({
+        hooks: [{ command: "bash h", script: "h", status: "missing" }],
+      }),
+    ).score,
     85,
   );
   assert.equal(
@@ -124,7 +128,7 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
 test("penalty: broken intra-plugin reference -8 each", () => {
   const { score, issues } = scoreReport(
     report({
-      hooks: [{ script: "h.sh", status: "ok" }],
+      hooks: [{ command: "bash h.sh", script: "h.sh", status: "ok" }],
       danglingRefs: ["skills/using-x/SKILL.md", "agents/missing.md"],
     }),
   );
@@ -140,6 +144,7 @@ test("score clamps at 0 and an empty machine is not healthy", () => {
   // many missing hooks would go negative without the clamp
   const r = report({
     hooks: Array.from({ length: 10 }, (_, i) => ({
+      command: `bash h${String(i)}`,
       script: `h${String(i)}`,
       status: "missing" as const,
     })),

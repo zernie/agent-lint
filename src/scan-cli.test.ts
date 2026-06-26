@@ -24,6 +24,7 @@ import {
   readdirSync,
   existsSync,
   rmSync,
+  chmodSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -727,6 +728,184 @@ describe("scan: trigger-tier nudge", () => {
     assert.ok(
       out.includes("model access detected"),
       "hint shown, not a prompt",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Health-score header in default single-dir scan output
+// ---------------------------------------------------------------------------
+
+describe("scan default output — health score header", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "scan-score-"));
+    // A clean plugin — CLAUDE.md + one well-formed skill (nothing broken).
+    mkdirSync(join(root, "skills", "greet"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# Project\nRun the build.\n");
+    writeFileSync(
+      join(root, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly with a personalised message\n---\nGreet them.\n",
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("prints a Harness health: <grade> (<score>/100) line before the report", () => {
+    const r = run(`scan ${root}`);
+    assert.equal(r.exitCode, 0);
+    // The score header must appear.
+    assert.match(r.stdout, /Harness health: [A-F] \(\d+\/100\)/);
+    // The report body still follows.
+    assert.match(r.stdout, /Scan:/);
+  });
+
+  it("score header is absent under --json (machine output)", () => {
+    const r = run(`scan ${root} --json`);
+    assert.equal(r.exitCode, 0);
+    assert.doesNotMatch(r.stdout, /Harness health:/);
+    // But the JSON still parses as a report.
+    const report = JSON.parse(r.stdout) as { dir: string };
+    assert.ok(report.dir, "json has dir field");
+  });
+
+  it("score header is absent under --fix-plan (that branch has its own score line)", () => {
+    const r = run(`scan ${root} --fix-plan`);
+    assert.equal(r.exitCode, 0);
+    // --fix-plan prints "Harness health: N/100" via formatOptimize, NOT our header
+    assert.match(r.stdout, /Harness health:/);
+  });
+
+  it("prints the --check-hooks hint when the flag is absent", () => {
+    const r = run(`scan ${root}`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /vigiles scan --check-hooks/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --check-hooks: disaster battery against hook scripts
+// ---------------------------------------------------------------------------
+
+describe("scan --check-hooks e2e", () => {
+  let root: string;
+  let blockingPlugin: string;
+  let permissivePlugin: string;
+  let noHooksPlugin: string;
+
+  /** Write a shell script and make it executable; return the absolute path. */
+  const writeScript = (dir: string, name: string, body: string): string => {
+    const p = join(dir, name);
+    writeFileSync(p, body);
+    chmodSync(p, 0o755);
+    return p;
+  };
+
+  /** Wire a hook script into a Claude Code plugin's .claude/settings.json. */
+  const wireHook = (pluginDir: string, scriptPath: string): void => {
+    const settingsDir = join(pluginDir, ".claude");
+    mkdirSync(settingsDir, { recursive: true });
+    const settings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: scriptPath }],
+          },
+        ],
+      },
+    };
+    writeFileSync(
+      join(settingsDir, "settings.json"),
+      JSON.stringify(settings, null, 2),
+    );
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "scan-check-hooks-"));
+
+    // 1. Blocking plugin — hook exits 2 on any bash call → blocks all disasters.
+    blockingPlugin = join(root, "blocking");
+    mkdirSync(blockingPlugin, { recursive: true });
+    writeFileSync(join(blockingPlugin, "CLAUDE.md"), "# Blocking\n");
+    const blockScript = writeScript(
+      blockingPlugin,
+      "guard.sh",
+      "#!/usr/bin/env bash\nexit 2\n",
+    );
+    wireHook(blockingPlugin, blockScript);
+
+    // 2. Permissive plugin — hook exits 0 (no block) → all disasters slip through.
+    permissivePlugin = join(root, "permissive");
+    mkdirSync(permissivePlugin, { recursive: true });
+    writeFileSync(join(permissivePlugin, "CLAUDE.md"), "# Permissive\n");
+    const permitScript = writeScript(
+      permissivePlugin,
+      "noop.sh",
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    wireHook(permissivePlugin, permitScript);
+
+    // 3. No-hooks plugin — nothing wired, battery should report "no runnable safety hooks".
+    noHooksPlugin = join(root, "nohooks");
+    mkdirSync(noHooksPlugin, { recursive: true });
+    writeFileSync(join(noHooksPlugin, "CLAUDE.md"), "# No hooks\n");
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // Run the battery as the user's OWN repo (cwd === scanned dir) so the hook
+  // executes DIRECT (trusted) — the deterministic path. A non-cwd ("foreign")
+  // scan is sandbox-or-skip (env-dependent), covered separately below.
+  it("blocking hook (own repo): reports all disasters blocked", () => {
+    const r = run(`scan . --check-hooks`, blockingPlugin);
+    assert.equal(r.exitCode, 0);
+    // Must show a Safety battery section.
+    assert.match(r.stdout, /Safety battery/);
+    // The blocking hook should block every disaster (N/N).
+    assert.match(r.stdout, /blocks (\d+)\/\1 disasters/);
+    // Totals line.
+    assert.match(r.stdout, /Total: blocks \d+\/\d+ disasters/);
+  });
+
+  it("permissive hook (own repo): reports disasters slipping through", () => {
+    const r = run(`scan . --check-hooks`, permissivePlugin);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Safety battery/);
+    // The permissive hook (exit 0) blocks nothing.
+    assert.match(r.stdout, /blocks 0\/\d+ disasters/);
+    // The guardrail report names the missed disasters.
+    assert.match(r.stdout, /allows/);
+  });
+
+  it("foreign plugin: shows the battery sandboxed-or-skipped, never a crash", () => {
+    // Scanning a NON-cwd dir runs from the repo root (cwd) → the plugin is
+    // foreign → it must sandbox or skip-with-a-loud-note, never run unconfined.
+    // Env-robust: pass either way as long as it doesn't crash and the section shows.
+    const r = run(`scan ${blockingPlugin} --check-hooks`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Safety battery/);
+  });
+
+  it("no-hooks plugin: reports no runnable safety hooks found", () => {
+    const r = run(`scan ${noHooksPlugin} --check-hooks`);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
+  });
+
+  it("does NOT print the --check-hooks hint when the flag is passed", () => {
+    // The hint is suppressed when the user is already using --check-hooks.
+    const r = run(`scan ${noHooksPlugin} --check-hooks`);
+    assert.equal(r.exitCode, 0);
+    // The hint should not appear (user already opted in).
+    assert.doesNotMatch(
+      r.stdout,
+      /run `vigiles scan --check-hooks` to test your safety hooks/,
     );
   });
 });

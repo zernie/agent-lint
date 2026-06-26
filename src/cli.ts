@@ -111,7 +111,15 @@ import {
   rankPlugins,
   formatLeaderboard,
   formatLeaderboardMarkdown,
+  scoreReport,
+  gradeFor,
 } from "./leaderboard.js";
+import {
+  verifyGuardrail,
+  unblockedDisasters,
+  formatGuardrailReport,
+  DISASTER_CATALOG,
+} from "./guardrail-check.js";
 import { optimize, formatOptimize } from "./optimize.js";
 
 import {
@@ -5429,9 +5437,26 @@ async function main(): Promise<void> {
             json ? JSON.stringify(plan, null, 2) : formatOptimize(plan),
           );
         } else {
+          if (!json) {
+            // Surface the structural-health score + grade as a one-line header
+            // before the full report so the most important signal is visible first.
+            const { score } = scoreReport(report);
+            const grade = gradeFor(score);
+            console.log(`Harness health: ${grade} (${String(score)}/100)`);
+            console.log("");
+          }
           console.log(
             json ? JSON.stringify(report, null, 2) : formatScanReport(report),
           );
+          if (!json) {
+            // Opt-in hint toward the safety battery (keeping default scan
+            // execution-free per the scan-side-effect-free rule).
+            if (!args.includes("--check-hooks")) {
+              console.log(
+                `\n(run \`vigiles scan --check-hooks\` to test your safety hooks against the disaster battery)`,
+              );
+            }
+          }
         }
         if (args.includes("--verify-mcp")) {
           // Opt-in LIVE MCP tool resolution: starts each declared server and checks
@@ -5447,6 +5472,66 @@ async function main(): Promise<void> {
               ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
               : "\n" + formatMcpContractReport(mcpErrs),
           );
+        }
+        if (args.includes("--check-hooks")) {
+          // Opt-in disaster battery: run each ok hook against the DISASTER_CATALOG
+          // to prove (or disprove) it actually blocks. It EXECUTES hooks, so per the
+          // scan-side-effect-free rule it is opt-in AND confinement-aware: the user's
+          // OWN repo (scanned dir === cwd) runs direct — their code, like their tests —
+          // but a FOREIGN plugin (a non-cwd dir, e.g. you're evaluating a stranger's
+          // plugin) runs SANDBOXED, and AUTO-SKIPS with a loud note where no sandbox
+          // (bubblewrap) is available. Never a stranger's hooks unconfined.
+          const isForeign = resolve(root) !== process.cwd();
+          const runnableHooks = report.hooks.filter(
+            (h) => h.status === "ok" && h.command.trim() !== "",
+          );
+          if (runnableHooks.length === 0) {
+            console.log("\nSafety battery: no runnable safety hooks found");
+          } else {
+            console.log(
+              `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
+            );
+            let totalBlocked = 0;
+            let totalRun = 0;
+            for (const hook of runnableHooks) {
+              let results;
+              try {
+                results = isForeign
+                  ? verifyGuardrail(hook.command, {
+                      cwd: root,
+                      sandbox: "auto",
+                    })
+                  : verifyGuardrail(hook.command, { cwd: root });
+              } catch {
+                // Foreign plugin + no sandbox available → skip loudly, never run
+                // a stranger's hooks unconfined (the scan-side-effect-free rule).
+                console.log(
+                  `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
+                );
+                continue;
+              }
+              const blocked = results.filter((r) => r.blocked).length;
+              totalBlocked += blocked;
+              totalRun += results.length;
+              console.log(
+                `  ${hook.script}: blocks ${String(blocked)}/${String(results.length)} disasters`,
+              );
+              const missed = unblockedDisasters(results);
+              if (missed.length > 0) {
+                console.log(
+                  formatGuardrailReport(hook.command, results)
+                    .split("\n")
+                    .map((l) => `  ${l}`)
+                    .join("\n"),
+                );
+              }
+            }
+            if (totalRun > 0) {
+              console.log(
+                `  Total: blocks ${String(totalBlocked)}/${String(totalRun)} disasters`,
+              );
+            }
+          }
         }
         const capBase = flagValue(args, "--capability-diff");
         if (capBase) {

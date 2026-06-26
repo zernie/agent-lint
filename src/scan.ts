@@ -147,6 +147,14 @@ export interface FrontmatterValueIssue {
 export type HookStatus = "ok" | "missing" | "unresolved";
 
 export interface ScanHook {
+  /**
+   * The full hook command as it would be run (plugin-root token expanded, shell
+   * quotes stripped). Present on script-based hooks; empty string on hooks whose
+   * command is entirely inline (no script file) — but inline hooks never appear
+   * in `hooks[]`, they are counted by `inlineHooks`, so in practice `command` is
+   * always non-empty when a `ScanHook` is in the list.
+   */
+  readonly command: string;
   readonly script: string;
   readonly status: HookStatus;
 }
@@ -472,6 +480,7 @@ function resolveScript(
   token: string,
   root: string,
   pluginRootToken: string,
+  fullCommand: string,
 ): ScanHook {
   // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT".
   const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
@@ -479,14 +488,24 @@ function resolveScript(
     .replace(/["']/g, "")
     .replaceAll(pluginRootToken, root)
     .replaceAll(unbraced, root);
-  if (cleaned.includes("$")) return { script: token, status: "unresolved" };
+  if (cleaned.includes("$"))
+    return { command: fullCommand, script: token, status: "unresolved" };
   // A relative hook path (`./hooks/x.sh`, `scripts/x.py`) is the plugin's own —
   // resolve it against the PLUGIN ROOT, not the scanner's cwd. Without this, a
   // plugin that references `./hooks/x.sh` (the file IS present) was reported
   // MISSING because existsSync() checked cwd-relative (a false positive caught on
   // ananddtyagi/cc-marketplace). The displayed `script` stays as the author wrote it.
   const abs = isAbsolute(cleaned) ? cleaned : resolve(root, cleaned);
-  return { script: cleaned, status: existsSync(abs) ? "ok" : "missing" };
+  // Resolve the full command the same way we resolve the script token (expand
+  // plugin-root, strip outer quotes) so the CLI can pass it to verifyGuardrail.
+  const resolvedCommand = fullCommand
+    .replaceAll(pluginRootToken, root)
+    .replaceAll(unbraced, root);
+  return {
+    command: resolvedCommand,
+    script: cleaned,
+    status: existsSync(abs) ? "ok" : "missing",
+  };
 }
 
 // A shell existence guard around a command — `[ ! -f x ] || x`, `[ -f x ] && x`,
@@ -549,7 +568,7 @@ function scanHooks(
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root, pluginRootToken);
+      const hook = resolveScript(tok, root, pluginRootToken, unescaped);
       byScript.set(hook.script, hook);
     }
   }
