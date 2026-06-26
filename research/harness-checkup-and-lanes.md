@@ -170,6 +170,35 @@ ship the Lighthouse score+grade shape:
    actually fire / block / help) — everyone is a static linter/scorer; nobody tests
    the assembled machine.
 
+### Snyk Agent Scan — the incumbent to watch (deep dive, 2026-06)
+
+Bigger than the first sweep suggested, and moving onto our exact artifacts — but from
+the SECURITY angle, which keeps the differentiation clean.
+
+- **Provenance + scale:** Snyk acquired **Invariant Labs** (ETH Zurich / Vechev lab)
+  June 2025; `invariantlabs-ai/mcp-scan` → **`snyk/agent-scan`** (npm `@snyk/agent-scan`,
+  Oct 2025, **~2.4k★**, Apache-2.0). An ~$8B incumbent with real distribution.
+- **Scope EXPANDED** from MCP-servers-only to agent Skills (SKILL.md), harnesses
+  (CLAUDE.md / AGENTS.md / GEMINI.md), and enterprise fleet scanning (Snyk Evo). **Open
+  issue #301 explicitly requests scanning CLAUDE.md/AGENTS.md/GEMINI.md + commands +
+  referenced markdown** — i.e. Snyk is actively moving toward whole-harness scanning on
+  the SAME files vigiles compiles + verifies. The clearest competitive signal in the sweep.
+- **But it's a SECURITY threat detector, not a correctness verifier.** Detection = local
+  heuristics + a hosted LLM "Guardrails" classifier (`--local-only` is weaker). Classes:
+  prompt injection, tool poisoning, cross-origin / tool-shadowing, rug pulls
+  (tool-description hash pinning), toxic flows (cross-tool data-flow). All "is this
+  MALICIOUS?" — none asks "does the declared rule/tool/event EXIST + resolve?", none RUNS
+  the harness (no `runHook`/`runHarnessTest`/`runEval`), none scores correctness.
+- **Differentiation (clean + citeable):** security layer (Snyk) vs correctness/testing
+  layer (vigiles) — complementary, not overlapping. The ACM/IEEE 2026 MCP-Scanner paper
+  (`dl.acm.org/doi/10.1145/3786160.3788471`) formalizes Snyk's approach — a useful cite
+  for positioning vigiles as the correctness layer.
+- **THREAT VERDICT: MEDIUM.** Not a head-on competitor today (different question), but the
+  biggest mover on our artifacts + the distribution to define the category. Lead the
+  differentiation HARD: _"Snyk scans your harness for malice; vigiles verifies it's
+  correct and tests that it works."_ Watch issue #301 and any "reliability/quality score"
+  signal.
+
 ### Strategic implication (refines the decision above)
 
 - The free zero-config SCORE is now **table stakes, not a differentiator.** Do NOT
