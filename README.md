@@ -67,8 +67,7 @@ references — your harness fails **silently**, and you find out mid-task.
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] makes it prove itself **before the agent ever runs** — verify, test,
-measure. Mostly free, no API key — real-model checks run on your **Claude Pro/Max
-subscription, not metered tokens**.
+measure.
 
 Three instruments, adopt any:
 
@@ -98,8 +97,6 @@ Three instruments, adopt any:
 (untouched until you compile), and plain markdown + inline `<!-- vigiles:enforce -->`
 comments work with zero TypeScript. Works with **Claude Code and Codex**
 ([`vigiles/codex`](docs/harnesses.md)) or [your own harness](docs/authoring-an-adapter.md).
-
-New? **[The FAQ](docs/faq.md)** answers "do I write TypeScript?" and "will it touch my files?"
 
 ## Quick start
 
@@ -208,7 +205,7 @@ commit; only the real-model tier needs a model, on your own `claude` CLI.
 
 **"65% fewer tokens." "3× faster." Says who?** A skill claims it, a plugin promises
 it — stars and vibes, **zero measurement**. vigiles A/Bs the claim on real coding
-tasks, the harness loaded exactly as it ships, and reports the **metric triple**:
+tasks, the harness loaded exactly as it ships, and reports **three numbers**:
 
 ```typescript
 import { measureArms } from "vigiles/testing";
