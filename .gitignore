@@ -17,3 +17,6 @@ logo-v*.png
 # API Documenter reference site (a derived artifact — `npm run docs:api`).
 temp/
 api-reference/
+
+# npm pack artifacts (smoke tests)
+*.tgz
