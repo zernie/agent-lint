@@ -124,6 +124,19 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
   _"100x coder, 1x verifier"_ line is kept as a backup hook.)
 - **Category line:** the **deterministic shift-left guardrail + private measurement for
   your agent harness.**
+- **THE GATEWAY SHARPENING (2026-06-26, from CC-user feedback + the competitive sweep —
+  see `harness-checkup-and-lanes.md`):** `scan` is the ONE simple front door (the iPhone
+  principle — NO second subcommand, NO env to configure) that runs BOTH the
+  cross-reference LINT _and_ canned TESTS (the disaster-battery "does your safety hook
+  actually block?", skill over-fire) and prints a score. The SIDEWAYS move past agnix:
+  markdown-linting is crowded + low-demand, so we do NOT compete on rule-count — we
+  compete on **"we RUN your harness, not just read it."** Authored tests/evals + the
+  `vigiles/testing` API are the DEPTH for those who want more (the funnel, not a second
+  product). The competitive sweep confirmed: the score surface is commoditizing
+  (agnix ~250–300★ lint leader, AgentLinter the scorecard-UX leader), but
+  cross-reference correctness + the testing layer is unclaimed by everyone — that
+  intersection IS the wedge, so `scan` must lead with the canned-TEST finding
+  ("blocks 2/7"), not the score.
 - **The differentiator (author-time vs runtime — THE one-line wedge):** every other
   player catches drift at **runtime, after the fact** (observability / post-hoc) or lints
   **structure**; vigiles proves the references are real and the spec compiles **before the

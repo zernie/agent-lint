@@ -30,6 +30,25 @@ depth (CI budgets, custom checks, authored tests) is for teams. The mistake to
 avoid is leading any casual surface with "write evals for your skills" (niche)
 instead of "get a free harness health grade" (mass).
 
+### The positioning conclusion — `scan` is the GATEWAY (pre-release goal)
+
+The iPhone principle: ONE simple thing to start with. So this is NOT a new
+subcommand — **`scan` is the single front door** that runs BOTH the cross-reference
+lint AND the canned tests (disaster-battery, over-fire) and prints a score. The
+SIDEWAYS move: agnix already owns markdown-linting (crowded, and "lint my markdown"
+demand is weak), so vigiles does NOT compete on rule-count — it competes on **"we RUN
+your harness, not just read it."** Authored tests/evals + the `vigiles/testing` API
+are the DEPTH for those who want more (the funnel's bottom, not a second product).
+This is the proposed pre-release positioning + goal.
+
+**No env var, no setup (the iPhone reassurance).** The canned checks need NO API key
+and NO model. The disaster-battery runs your hook via `runHook` (just spawns the hook
+process) — for YOUR OWN repo that's like running your own tests: zero config. The
+only nuance is scanning OTHER people's plugins (leaderboard mode), where the hook is
+run under the existing sandbox; where the sandbox isn't available (e.g. no bubblewrap)
+the battery **auto-skips with a LOUD note**, never asks you to configure anything.
+So adding it to `scan` is genuinely zero-config for the common case.
+
 ## Why this is mostly PACKAGING, not a new build
 
 vigiles already ships ~80% of the checkup:
