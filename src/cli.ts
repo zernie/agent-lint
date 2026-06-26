@@ -1690,7 +1690,16 @@ function targetHasHash(absPath: string): boolean {
   }
 }
 
-function init(args: string[]): void {
+/**
+ * Single-target spec scaffolder — the small building block behind the `init`
+ * verb, NOT the wizard. Creates exactly one sibling `<target>.spec.ts`: it
+ * faithfully ADOPTS an existing hand-written instruction file (non-destructive —
+ * never overwrites the markdown) or writes a blank starter for a greenfield
+ * target. Called directly for `vigiles init --target=<file>`, and once per
+ * target by `setupPillar1`. The full onboarding (both layers, deps, CI, plugin)
+ * is `setup()`.
+ */
+function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
   const specPath = `${target}.spec.ts`;
@@ -2333,7 +2342,7 @@ async function setupPillar1(
       );
 
   // Create specs. An existing hand-written target is faithfully ADOPTED into a
-  // spec (init() does the convert), not clobbered with a blank one — so the
+  // spec (scaffoldSpec() does the convert), not clobbered with a blank one — so the
   // compile below reproduces it (the user reviews the diff). A greenfield target
   // gets a blank starter spec.
   for (const target of targets) {
@@ -2346,7 +2355,7 @@ async function setupPillar1(
     if (existsSync(resolve(cwd, specPath))) {
       console.log(`✓ ${specPath} already exists`);
     } else {
-      init(["--target=" + target]); // adopts existing content, else blank scaffold
+      scaffoldSpec(["--target=" + target]); // adopts existing content, else blank scaffold
       written.push(specPath);
       if (willAdopt) adopted.push(target);
     }
@@ -5276,7 +5285,7 @@ async function main(): Promise<void> {
       // still runs the full wizard (project detection + auto-targets).
       const hasTarget = args.some((a) => a.startsWith("--target="));
       if (hasTarget) {
-        init(args.slice(1));
+        scaffoldSpec(args.slice(1));
       } else {
         await setup(args);
       }
