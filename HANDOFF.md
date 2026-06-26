@@ -5,102 +5,99 @@
 > The SessionStart hook injects this file so a new session starts oriented — **read it
 > first.** Git-TRACKED + EPHEMERAL container, so an update persists ONLY if you
 > **commit + push**. **REFRESH IT before you end the session** (and on any "handoff"
-> request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you when
-> ≥5 commits pile up without a refresh — it's live and dogfood-proven.
+> request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you at
+> ≥5 commits without a refresh.
 
-## RESUME HERE — `claude/lint-inline-mode-go56av` — README/docs spec-first + launch-readiness (no PR yet)
+## RESUME HERE — `claude/lint-inline-mode-go56av` — positioning + launch-readiness pass (no PR yet)
 
-**State:** README-review session that grew into a positioning + launch-readiness
-pass. ~11 commits on this branch, all green locally (build/tsc, fmt, lint 0 errors,
-cli + inline tests pass). **No PR opened yet** — a `fix:` is in the batch, so a merge
-cuts a patch release.
+**State:** Long session. Started as a README review, became a positioning lock +
+competitive research + launch-readiness pass. ~14 commits, all green locally
+(build/tsc, fmt, lint 0 errors, cli+inline tests pass). **No PR opened yet** — a
+`fix:` is in the batch (→ patch release on merge).
 
-**This session's work (by theme):**
+**Code/doc changes (shipped on the branch):**
 
-- **Spec-first made consistent end-to-end.** README ① Lint leads spec-first; ② Test
-  clarified (cheapest-tier lead-in so `runHook` reads as rung 1, subagents bullet,
-  "evals"→"real-model tier"); lint guide (`verifying-instruction-files.md`) reframed
-  off markdown-first; **root `CLAUDE.md` positioning reworded "markdown-first" →
-  "spec-first with a markdown on-ramp"** (the one real internal contradiction). Public
-  markdown-first sweep CLEAN; `research/` left as historical record (don't scrub).
-- **README hero trimmed** (dropped the 3×-repeated cost aside) + **demo GIF
-  regenerated mode-neutral** (was `CLAUDE.md (inline mode):` — the floor we demoted;
-  now `CLAUDE.md:` + a ✓ rule line, via `scripts/make-demo-gif.py`, Pillow).
-- **`fix(inline)`** — quoted `vigiles:file "path"` kept its quotes (`File not found:
-""path""` + never resolved); `unquote()` at the parse boundary + regression test.
-- **`refactor`** — `init()` helper → **`scaffoldSpec()`** (the `init` verb's wizard
-  `setup()` was shadowed by a same-named single-target scaffolder; verb unchanged).
-- **Launch-readiness:** clean-install smoke test (npm pack → fresh dir → init/lint/
-  scan) **ALL GREEN** ✅; `scripts/fp-sweep.sh` written for the **fresh-plugin FP
-  sweep you must run LOCALLY** (CC-web git is repo-scoped — 403 on other repos);
-  `*.tgz` gitignored.
-- **DECISION RECORDED** — `research/harness-checkup-and-lanes.md` (the casual/power
-  lane question): ship `scan` as a zero-config **"Lighthouse for your harness"**
-  (score + score-explainer + predefined disaster-battery/over-fire checks, NO
-  authoring) = the mass front door; authored tests/evals = discovered depth. BOTH
-  lanes as ONE funnel. ~80% already shipped — it's packaging. Validated vs
-  Lighthouse/npm-audit/Snyk/SonarCloud/ESLint/Knip/Codecov + PLG research.
+- **Spec-first made consistent** end-to-end: README ① Lint + ② Test, the lint guide,
+  AND the root `CLAUDE.md` positioning ("markdown-first" → "spec-first with a markdown
+  on-ramp"). README hero trimmed; demo GIF regenerated mode-neutral.
+- **`fix(inline)`** quoted `vigiles:file "path"` (`unquote()` + test). **`refactor`**
+  `init()` helper → `scaffoldSpec()` (verb unchanged).
+- **Clean-install smoke = GREEN** (npm pack → fresh dir → init/lint/scan). `*.tgz`
+  gitignored. `scripts/fp-sweep.sh` = the fresh-plugin FP sweep to run LOCALLY.
+- **TWO new rules in `CLAUDE.md`:** `doc-tiers` (public / internal / vault-locked
+  split) and `scan-side-effect-free` (scan is pure or sandboxed; executing checks are
+  opt-in + sandboxed).
+
+**THE BIG OUTPUT — `research/harness-checkup-and-lanes.md` (read this):**
+
+- **DECISION: `scan` is the GATEWAY** (iPhone — ONE front door, no new subcommand):
+  runs the cross-ref LINT + canned TESTS (disaster-battery "does your hook actually
+  block?", skill over-fire) + a score, FREE/zero-config. Authored tests/evals + the
+  `vigiles/testing` API = the DEPTH (funnel, not a 2nd product). The sideways move
+  past agnix: don't compete on rule-count — compete on **"we RUN your harness, not
+  just read it."** This is the proposed pre-release positioning (also in
+  `pre-release-focus.md` positioning lock).
+- **Lead the free report with the TEST finding ("blocks 2/7"), NOT the score** — the
+  score is commoditizing (agnix ~250-300★ lint leader; AgentLinter the scorecard-UX
+  leader); the cross-ref correctness + testing layer is what NObody else has.
+- **Ref-checking decision:** do NOT heuristically guess refs in `scan` (unreliable,
+  cry-wolf). Reliable refs = **adopt a spec** (auto-generated, reviewed, ejectable —
+  keep it = the gateway drug into spec-first). `scan` free value = tests + structural
+  (no spec needed); refs are the adopt upgrade.
+- **Competitive landscape (4-angle fan-out + Snyk deep dive):** the zero-config SCORE
+  surface is crowded but shallow; cross-ref correctness + harness TESTING is unclaimed
+  by everyone (funded + OSS + adjacent). **Snyk Agent Scan** (~2.7k★, $8B, expanding
+  to CLAUDE.md via issue #301) is the one to watch but is pure SECURITY ("is this
+  malicious?") — a perfectly broken harness passes it completely; no correctness
+  signal → clean air. THREAT: MEDIUM. Snyk already ran the viral ecosystem-scan play
+  (ToxicSkills) on the SECURITY axis → **our ecosystem-benchmark must be on the
+  CORRECTNESS/PERFORMANCE axis ("what works vs hype"), not security.**
 
 **DO NEXT (ranked):**
 
-1. **Wire the disaster-battery + over-fire checks into `scan` output** — the first
-   concrete checkup build; detectors exist (`guardrail-check.ts` DISASTER_CATALOG,
-   `description-overlap.ts`), just not in the default `scan` report. Small, high
-   leverage, dogfoods on vigiles's own plugin. NOT a new verb (`cohesive-cli-surface`).
-2. **Reframe the README mass on-ramp** around "free harness health report + the one
-   scary true finding" per the lane decision.
-3. **Open the PR** for this branch (done + green; `fix:` → patch release).
-4. **Ecosystem-benchmark v0** — still THE gating launch build (the article's spine).
-5. Run `scripts/fp-sweep.sh` locally; paste output, triage FPs.
+1. **Open the PR** for this branch (done + green; `fix:` → patch release).
+2. **BUILD: wire the disaster-battery + skill over-fire into `scan`'s DEFAULT output**
+   (the first concrete gateway move). Detectors exist (`guardrail-check.ts`
+   DISASTER_CATALOG, `description-overlap.ts`); battery runs SANDBOXED per the new
+   `scan-side-effect-free` rule; lead output with the score + scariest true finding.
+   NOT a new verb. Big piece — consider a fresh session.
+3. **Ecosystem-benchmark v0** — THE gating launch build; run it on the
+   correctness/performance axis (Snyk owns security).
+4. Run `scripts/fp-sweep.sh` locally; triage FPs.
 
-**Prior in-flight (SEPARATE branch — not touched):** PR **#48** (`claude/handoff-mylfen`)
-— the rule-cleanup / auto-adopt / init-DX + surface-freeze + STABILITY batch. Re-check
-its live state if returning to it.
+**Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
+— surface-freeze + STABILITY + auto-adopt batch. Re-check its live state if returning.
 
-### Gotchas (read before trusting test output)
+### Gotchas
 
-- **REAL-MODEL TIERS RUN HERE (Claude Code web).** No `ANTHROPIC_API_KEY`, but the
-  `claude` CLI on PATH is authenticated via session OAuth. Use `eval` /
-  `scan --trigger` / `measureTriggerRate` to dogfood the real-model tier.
-- **GIT IS REPO-SCOPED HERE** — `git clone`/GitHub MCP only reach `zernie/vigiles`
-  (403 on any other repo). So the fresh-plugin FP sweep CAN'T run in this container;
-  it's a local task (`scripts/fp-sweep.sh`). The npm registry IS reachable.
-- **`src/dialect-drift.test.ts` FAILS in THIS container** — env-only (container CC
-  version vs validated 2.1.187). CI PINS CC → green there. By design.
-- `etc/*.api.md` is the surface gate (`npm run api:check`); regenerate via
-  `node scripts/api-extractor.mjs --local` after an intentional API change.
-- **`CLAUDE.md` + `src/CLAUDE.md` are COMPILED** from their `.spec.ts` — edit the
-  spec; the compile-on-save guard recompiles the md (don't hand-edit the md).
-- `npm pack` drops a `*.tgz` in the root (now gitignored) — don't commit it.
+- **GIT IS REPO-SCOPED HERE** — `git clone`/GitHub MCP reach only `zernie/vigiles`
+  (403 elsewhere) → the fresh-plugin FP sweep is a LOCAL task. npm registry IS reachable.
+- **REAL-MODEL TIERS RUN HERE** — no API key, but `claude` CLI is OAuth-authed; use
+  `eval`/`scan --trigger`/`measureTriggerRate` to dogfood.
+- **Background research agents kept returning PLACEHOLDERS** (spawned children, didn't
+  deliver) — re-poke via SendMessage to the agentId for the real output; the children
+  delivered the substance.
+- **`src/dialect-drift.test.ts` fails in THIS container only** (env CC version). CI pins it.
+- `CLAUDE.md` + `src/CLAUDE.md` are COMPILED from `.spec.ts` — edit the spec; never hand-edit the md.
+- `npm pack` drops a `*.tgz` in root (gitignored) — don't commit it.
 
 ### Decisions of record (don't relitigate)
 
-- **The wedge:** vigiles is the author-time / deterministic / pre-run + typed-spec
-  play. NOT a linter. Don't fight agnix for the linting crown.
-- **Spec-first with a markdown on-ramp:** the agent writes the spec, `init` adopts
-  existing files faithfully, `eject` always reverses. Markdown = the **zero-TS floor**
-  for those who skip `init`, NOT the default. README + lint guide + root positioning
-  now all say this.
-- **Checkup lane = both, as ONE funnel** (`research/harness-checkup-and-lanes.md`):
-  free zero-config `scan` checkup (score + battery, no authoring) is the mass front
-  door; authored tests/evals are discovered depth. Don't tease, don't cry wolf, keep
-  power concepts off the casual path.
-- **Rule groups, NOT a preset menu:** structural (error) / workflow (`--strict`) /
-  nudge (warn). `--report-only` is an orthogonal severity dial.
-- Public docs name the USER BENEFIT (no `moat`/`flywheel`, no `research/` links, no
-  VC/firm names — those live in the git-crypt `startup/` vault).
-
-### Gotchas (ops)
-
-- CC-on-web: GitHub via `mcp__github__*` (NO `gh` CLI), repo-scoped. Before commit:
-  `npm run build` + `npx vitest run` + `npm run fmt:check` + `npm run lint`;
-  `self-command-refs` fails CI on a stale `vigiles <cmd>` ref. Conventional commits +
-  `!` on breaking. NO session links / model IDs in commits. Trust `origin/main`.
+- **The wedge:** author-time / deterministic / pre-run + typed-spec. NOT a linter; don't
+  fight agnix for the linting crown. The moat = cross-ref CORRECTNESS + the TESTING layer.
+- **`scan` is the gateway** (free: lint + canned tests + score); API/authored tests = depth.
+- **Spec-first with a markdown on-ramp;** markdown = zero-TS floor, not the default.
+  Reliable refs come via adopt-a-spec (ejectable; keep = gateway drug), never heuristics.
+- **`scan` is side-effect-free or sandboxed** (the new rule). No new CLI verbs unless
+  truly needed (`cohesive-cli-surface` / `high-bar-for-new-commands`).
+- **3 doc tiers** (`doc-tiers` rule): public (benefits only) / internal (`research/`+CLAUDE.md)
+  / vault (`startup/`, git-crypt, LOCKED — unlock only if a task needs it; it's a leak rail).
+- **Ecosystem-benchmark axis = correctness/performance**, NOT security (Snyk owns that).
+- Public docs name the USER BENEFIT (no `moat`/`flywheel`, no `research/` links, no VC names).
 
 ## Don't re-read unless the task needs it
 
-- `research/harness-checkup-and-lanes.md` — the checkup/lane decision (this session).
+- `research/harness-checkup-and-lanes.md` — the gateway decision + competitive landscape + Snyk.
 - `research/pre-release-focus.md` — launch sequence + positioning lock.
 - `research/roadmap.md` — `🚀 Launch readiness` front door.
-- `research/install-enforcement-dx.md` — install groups + the auto-adopt design.
-- `startup/` — git-crypt vault (LOCKED; unlock with the saved key).
+- `startup/` — git-crypt vault (LOCKED).
