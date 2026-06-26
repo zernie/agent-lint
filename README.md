@@ -177,7 +177,9 @@ inline `<!-- vigiles:enforce -->` comment lints too — no spec, no TypeScript. 
 **You wired the hook — but does it actually block?** A skill's description can fail
 to trigger, or hijack unrelated prompts; injected context can silently never reach
 the model. All of it passes a naive "did it run?" check. vigiles tests the
-assembled harness for real:
+assembled harness for real.
+
+Start with the cheapest tier — a hook, called directly. No model, no key:
 
 ```typescript
 import { runHook } from "vigiles/testing";
@@ -194,11 +196,12 @@ It goes well past _"did it fire?"_:
 
 - **Hooks block** what they must — `runHook`, or the real agent CLI via `runHarnessTest`.
 - **Skills trigger** on the right prompts and stay quiet on the wrong ones — recall _and_ precision (`measureTriggerRate`).
+- **Subagents finish right** — assert a subagent ended in the success (or error) outcome it promised, with a plain check, no LLM judge (`assertAgentOk` / `assertAgentErr`).
 - **Behaviour is good** — score a skill's output, or A/B it on-vs-off for the real lift (`measure` / `runEval`, with significance testing).
 - **Safety holds** — the agent _didn't_ push to the wrong branch or hit a paid API; `interceptTools` catches the attempt so the side effect never happens.
 
 Almost every tier runs with **no model and no API key** — milliseconds, on every
-commit; only the real-model evals need a model, on your own `claude` CLI.
+commit; only the real-model tier needs a model, on your own `claude` CLI.
 **[How it works →](docs/harness-testing.md)**
 
 ## ③ Eval — does it actually help, or just cost more?
