@@ -138,10 +138,21 @@ not a sibling `doctor`/`checkup` command.
 - Companies are the monetizable depth (they WILL author tests — discipline +
   stakes); casual users are the funnel that feeds them. Not pick-one.
 
-## Open / next (post-decision)
+## Status / next (post-decision)
 
-- Decide the exact `scan` UX: where the score + battery land in default output vs a
-  `--full`/`--report` flag; the badge URL/markdown.
+**SHIPPED (2026-06-26, branch `claude/lint-inline-mode-go56av`):** the first gateway
+increment — `scan` now prints a **harness health score + A–F grade** in default output
+(absent under `--json`), and an opt-in **`scan --check-hooks`** runs each ok hook
+against the `DISASTER_CATALOG` and reports blocks-vs-allows ("we RUN your harness").
+No new verb (a flag). Confinement-aware per `scan-side-effect-free`: own repo runs
+direct, foreign plugin sandboxes or auto-skips. Over-fire (description-overlap) was
+already in `scan`. So the differentiated free finding is live.
+
+**Next:**
+
+- The **badge** (README markdown + URL) — the distribution flywheel, not yet built.
+- Lead the casual surfaces (README, `init` output, GH Action PR comment) with the
+  score + the scariest true finding — not yet wired into those surfaces.
 - Auto-prompt generation for the Layer-1 over-fire check (reuse `measureTriggerRate`
   - a deterministic prompt synthesizer) — the one genuinely new-ish piece.
 - Monetization/company angle (CI policy, org views, history/trending) — post-launch.

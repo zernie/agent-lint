@@ -53,16 +53,24 @@ competitive research + launch-readiness pass. ~14 commits, all green locally
   (ToxicSkills) on the SECURITY axis → **our ecosystem-benchmark must be on the
   CORRECTNESS/PERFORMANCE axis ("what works vs hype"), not security.**
 
+**SHIPPED this session — the first gateway increment (`feat(scan)`):** `scan` now
+prints a **health score + A–F grade** in default output (absent under `--json`) + an
+opt-in **`scan --check-hooks`** disaster-battery ("we RUN your harness"). Flag, not a
+verb. Confinement-aware per `scan-side-effect-free`: own repo direct, foreign
+sandbox-or-auto-skip. 111 affected tests pass; only the known env-only `dialect-drift`
+fails locally. NOTE: the build subagent first ran hooks UNCONFINED ("trusted bc opt-in")
+— I caught + fixed that to honor the rule (own vs foreign). Lesson: review subagent
+diffs against the rules, don't trust the green-gate alone.
+
 **DO NEXT (ranked):**
 
-1. **Open the PR** for this branch (done + green; `fix:` → patch release).
-2. **BUILD: wire the disaster-battery + skill over-fire into `scan`'s DEFAULT output**
-   (the first concrete gateway move). Detectors exist (`guardrail-check.ts`
-   DISASTER_CATALOG, `description-overlap.ts`); battery runs SANDBOXED per the new
-   `scan-side-effect-free` rule; lead output with the score + scariest true finding.
-   NOT a new verb. Big piece — consider a fresh session.
-3. **Ecosystem-benchmark v0** — THE gating launch build; run it on the
-   correctness/performance axis (Snyk owns security).
+1. **Open the PR** for this branch — BUT note it carries the whole #38–#48 batch + this
+   session, NOT a small patch; review scope before opening.
+2. **Badge** (README markdown + URL — the distribution flywheel) + **lead the casual
+   surfaces** (README, `init` output, GH Action PR comment) with the score + scariest
+   true finding. The gateway is built; now make it VISIBLE.
+3. **Ecosystem-benchmark v0** — THE gating launch build; correctness/performance axis
+   (Snyk owns security — see the checkup doc).
 4. Run `scripts/fp-sweep.sh` locally; triage FPs.
 
 **Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
