@@ -49,6 +49,29 @@ run under the existing sandbox; where the sandbox isn't available (e.g. no bubbl
 the battery **auto-skips with a LOUD note**, never asks you to configure anything.
 So adding it to `scan` is genuinely zero-config for the common case.
 
+### Ref-checking on a plain CLAUDE.md — DON'T guess; adopt a spec (the gateway drug)
+
+Decided 2026-06-26. Earlier idea: have `scan` heuristically EXTRACT code-shaped refs
+(paths, `npm run X`) from plain prose and verify them. **Rejected — too unreliable +
+cry-wolf risk** (the README's own illustrative `src/auth/login.ts` would flag). And it
+would make `scan` guess, violating scan-side-effect-free / don't-cry-wolf.
+
+The reliable path is what vigiles already has: **auto-ADOPT a spec.** `init` (and a
+prompted `scan` follow-up) generates a faithful `.spec.ts` from the existing CLAUDE.md;
+the user REVIEWS the candidate marks (the human absorbs the extraction uncertainty —
+no silent FPs), compiles → references are verified RELIABLY. It is **ejectable
+(throwaway), or KEEP it if you like it — the gateway drug into spec-first.** So:
+
+- `scan` (zero-config gateway) leads with the checks that need NO marks/spec: the
+  disaster-battery, over-fire, structural health, score. That is the differentiated
+  free value.
+- Reliable file/cmd/symbol/linter-rule ref-checking = the **adopt → review → keep/eject**
+  flow, not a scan heuristic. Refs degrade gracefully: nothing guessed for free →
+  adopt a spec for reliable + complete (the on-ramp), keep it if it earns its place.
+- Net: nobody is forced to write a spec to get value, AND we never ship an unreliable
+  guess. The spec is the reliable artifact; adoption + eject is what makes committing
+  to it risk-free.
+
 ## Why this is mostly PACKAGING, not a new build
 
 vigiles already ships ~80% of the checkup:
