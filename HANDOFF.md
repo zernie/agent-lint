@@ -81,8 +81,7 @@ confinement unbuilt; impl in `src/sandbox.ts`+`egress.ts` KEPT/parked, lives in 
   curl reachable; git clone of other repos is NOT. **No bubblewrap** → `sandboxAvailable()` false.
 - **`src/dialect-drift.test.ts` fails in THIS container only** (CC 2.1.42 vs validated 2.1.187). CI pins it.
 - `CLAUDE.md` + `src/CLAUDE.md` are COMPILED from `.spec.ts` — edit the spec + recompile
-  (`node dist/cli.js compile CLAUDE.md.spec.ts`); never hand-edit the md. (NB the cli.ts
-  keyFile description in the spec is now slightly stale re: skill/agent adoption — update it.)
+  (`node dist/cli.js compile CLAUDE.md.spec.ts`); never hand-edit the md.
 - **Commits: NO session links / NO model IDs** (auto-classifier blocks them).
 - Use `mcp__github__*` for PR ops (no `gh`). Watch a PR via `subscribe_pr_activity`.
 
