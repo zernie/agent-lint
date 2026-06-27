@@ -69,3 +69,40 @@ run anywhere.
 - Auto-prompt QUALITY — the hard part; may need a small model call or a deterministic
   template from the description. Deterministic first, measure.
 - "Open the report" cross-platform (`open`/`xdg-open`/`start`), best-effort, never fail.
+
+## SHIPPED (2026-06-27) — increments 1–5 + the report stack
+
+All five increments landed: battery-by-default + `--deep` collapse + the
+`audit-side-effect-free` rule; category rings (`src/audit-score.ts`); `--deep`
+auto-prompts (`src/audit-prompts.ts`); the HTML report; the README/docs reframe.
+
+**Then the report was re-architected around monetization (founder, 2026-06-27).**
+The decision that reshaped it: **the JSON is the product boundary, not the HTML.**
+
+- **`AuditReport` JSON contract** (`src/audit-report.ts`, `schemaVersion`) — the
+  versioned wire format everything renders from: the local HTML report, `audit
+--json` for CI, and a future UPLOAD to a hosted dashboard. `buildAuditReport` is
+  pure (no clock; the CLI stamps `generatedAt` at write time). A default `audit`
+  writes `vigiles-report.json` beside the HTML (`--no-json` to skip).
+- **The report is a real Vite + React + shadcn app** (`report/`, a separate
+  package) built via `vite-plugin-singlefile` to ONE self-contained file the CLI
+  fills with the JSON (`window.__VIGILES_DATA__` placeholder → injected, `<>&`
+  escaped). React runs in the reader's browser; the CLI ships only the built
+  template (`dist/audit-report.template.html`, via `scripts/build-report.mjs`) and
+  stays runtime-dep-light. Pure shadcn/Tailwind (band colors as theme utilities,
+  no inline styles); auto light/dark. `renderAuditHtmlSimple` is the zero-dep
+  inline fallback (`--simple`, or when the template isn't built).
+
+**Stack choice — now vs the hosted dashboard:** Vite SPA + single-file for the
+LOCAL report (a static openable file); **TanStack Start** for the future HOSTED
+dashboard (SSR + auth + Stripe — the paid tier), NOT for the local file. Both
+consume the same `AuditReport` JSON and reuse the same presentational shadcn
+components, so the dashboard is "wrap the components in routes + add auth/upload,"
+not a rewrite. The JSON contract is the asset the business is built on; deeper
+monetization/business strategy stays in the `startup/` vault.
+
+**Follow-ups (not yet done):** the hosted dashboard itself; an `audit --upload`
+that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`
+mirrors `src/audit-report.ts` by hand + the `audit-report.test.ts` shape tests);
+harden `build-report.mjs` to fail loud in the release pipeline (it currently
+degrades to the inline report if the toolchain is absent).

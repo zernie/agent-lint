@@ -303,9 +303,13 @@ Each deterministic finding carries its **fix inline** under the report — the
 cross-reference cause + a one-line correction (`FIX` a dead-end, `DIFFERENTIATE` a
 description collision), `likely` dead-ends before `possible` proxies.
 
-**A shareable HTML report** is written to `vigiles-report.html` by default (the
-category rings as SVG donuts, the findings, the fix cards) — screenshot it, attach
-it to a PR; for a human at a TTY it's opened best-effort. Pass `--no-html` to skip.
+**A shareable HTML report** is written to `vigiles-report.html` by default — a
+self-contained React app (category rings, findings, fix cards; auto light/dark)
+the CLI fills with the report JSON, so it opens offline by double-click. Screenshot
+it, attach it to a PR; for a human at a TTY it's opened best-effort. `--no-html`
+skips it; `--simple` emits a zero-dependency inline-CSS version instead. A versioned
+**`vigiles-report.json`** is written alongside (`--no-json` to skip) — the same
+contract `--json` prints, for CI or upload.
 
 `audit` reports **harness-specific structure** (plugin layout, hook resolution),
 so it auto-detects the harness — printing the detected one and warning when a repo
