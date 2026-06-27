@@ -14,7 +14,7 @@ A `SKILL.md` requires **no** frontmatter: per the
 paragraph of the body**. So a frontmatter-less skill still loads and can fire;
 flagging it would be a false positive. (Whether its fallback description is a
 _good_ trigger surface is a behavioral question — measure it with
-`scan --trigger`, don't assert it structurally.)
+`audit --deep`, don't assert it structurally.)
 
 ## What it flags
 

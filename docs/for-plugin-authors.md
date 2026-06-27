@@ -65,13 +65,16 @@ and linter rule it names is real and enabled.
 A skill only helps if its description reliably **triggers** on the prompts your
 users actually type — and stays quiet on the ones it shouldn't hijack. That's
 **recall** and **precision**, and a well-formed description tells you nothing about
-either. This is the one model-gated step, measured on your own subscription:
+either. This is the model-gated `--deep` tier, measured on your own subscription:
 
 ```bash
-# --trigger needs a prompts file: a map of skill name → realistic prompts to
-# fire it (+ optional `irrelevant` prompts that should NOT, to score precision):
+# --deep auto-generates probe prompts from each skill's description — zero setup:
+npx vigiles audit ./my-plugin --deep
+# …or supply a curated set (a map of skill name → realistic prompts to fire it,
+# + optional `irrelevant` prompts that should NOT, to score precision) — this also
+# adds the selection-collision matrix:
 #   { "my-skill": { "prompts": ["how do I …", "…"], "irrelevant": ["…"] } }
-npx vigiles audit ./my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./my-plugin --deep --prompts=prompts.json
 ```
 
 For per-skill thresholds in a test, drive `measureTriggerRate` directly — it
@@ -100,12 +103,12 @@ Use it to see where your plugin lands against the rest of a collection before yo
 publish, and to find the highest-impact fixes. The marketplace ranking is the
 **structural** signal — it's deterministic and covers every member at once.
 
-The model-gated `--trigger` column (step 3) is **per-plugin**, not a marketplace
+The model-gated `--deep` tier (step 3) is **per-plugin**, not a marketplace
 operation: point it at an individual plugin directory, not the marketplace root.
 Run it on the member dirs you care about:
 
 ```bash
-npx vigiles audit ./marketplace/my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./marketplace/my-plugin --deep
 ```
 
 ## 5. Test and gate it in CI

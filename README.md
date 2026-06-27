@@ -65,11 +65,33 @@ references — your harness fails **silently**, and you find out mid-task.
 
 **It's a library with no tests.**
 
-`Agent = Model + Harness` — the model gets the headlines, the harness is the half you
-own. vigiles[^name] makes it prove itself **before the agent ever runs** — verify, test,
-measure.
+**One command shows you — like a Lighthouse report for your harness:**
 
-Three instruments, adopt any:
+```bash
+npx vigiles audit          # no key, no config, safe to run anywhere
+```
+
+It **runs** your harness — fires your safety hooks against a real disaster battery,
+not just reads them — scores five categories, and writes a shareable HTML report:
+
+<p align="center">
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall C (77/100) with five category rings — Safety red (6/7 disasters slip through), Triggering/Structure amber — and fix cards" />
+</p>
+
+| Ring                | What it proves                                                        |
+| ------------------- | --------------------------------------------------------------------- |
+| **🔎 Truthfulness** | Every path / script / symbol / linter rule in your CLAUDE.md resolves |
+| **🛡 Safety**       | Your hooks actually **block** the dangerous thing — _we run them_     |
+| **🎯 Triggering**   | Skills fire on the right prompts and don't collide                    |
+| **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
+| **🧪 Tested**       | Every surface ships a test                                            |
+
+`--deep` adds the real-model checks (live MCP + do skills actually fire) on your own
+subscription. **[Audit a harness →](docs/for-plugin-authors.md)**
+
+`Agent = Model + Harness` — the model gets the headlines, the harness is the half you
+own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and
+**three instruments** fix and prove what it finds —
 
 |             |                                                                                                                                                 |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,16 +103,11 @@ Three instruments, adopt any:
 | **🛡 Guard** | A safety hook that **can't silently fail open** — write a typed function, get a guard that blocks. **[→](docs/compiled-hooks.md)** |
 -->
 
-<p align="center">
-  <img src="vigiles-demo.gif" width="720" alt="vigiles lint catching a file that moved and a script that was renamed" />
-</p>
-<!-- Regenerate the GIF: `python3 scripts/make-demo-gif.py` (output is verbatim CLI; see scripts/demo.sh for a live asciinema recording). -->
-
 **Two ways in** — pick the pain that's yours:
 
-- **Run agents on your own repo?** Start with **Lint** below, or `npx vigiles init`.
-- **Ship plugins to a marketplace?** **[`vigiles audit`](docs/for-plugin-authors.md)**
-  ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
+- **Run agents on your own repo?** `npx vigiles audit`, then `npx vigiles init`.
+- **Ship plugins to a marketplace?** `npx vigiles audit ./plugins/*/` ranks a whole
+  marketplace (0–100, A–F) — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
 **Your agent writes the spec — and you can always eject.** Skills author the
 `.spec.ts` for you, **`init` adopts an existing CLAUDE.md non-destructively**
@@ -154,6 +171,11 @@ CLAUDE.md:
   ✗ npm run check — not in package.json. Did you mean: "check:types"?
   ✓ @typescript-eslint/no-floating-promises — exists and enabled in eslint config
 ```
+
+<p align="center">
+  <img src="vigiles-demo.gif" width="720" alt="vigiles lint catching a file that moved and a script that was renamed" />
+</p>
+<!-- Regenerate the GIF: `python3 scripts/make-demo-gif.py` (output is verbatim CLI; see scripts/demo.sh for a live asciinema recording). -->
 
 File paths, scripts, code symbols — plus linter rules across **7 linters**
 (ESLint, Ruff, Clippy + four more): each rule exists **and is enabled**.
