@@ -213,7 +213,7 @@ test("superpowers find-polluter.sh (R2): a recorded `npm` stub on PATH drives th
 test("wshobson scan (R1): ui-visual-validator surfaces the inherits-all footgun", () => {
   // agent-runtime.test.ts proves parseAgentTools/decidePreToolUse report the
   // missing rail; this asserts the SAME footgun on the scan REPORT surface (what a
-  // `vigiles scan` user sees): the agent ships no `tools:` line, so its contract is
+  // `vigiles audit` user sees): the agent ships no `tools:` line, so its contract is
   // null = inherits EVERY tool, despite being a read-only visual validator.
   const report = scanPlugin(wsRoot);
   const agent = report.agents.find((a) => a.name === "ui-visual-validator");

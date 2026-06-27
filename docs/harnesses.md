@@ -46,7 +46,7 @@ carries the adapter you use, and the choice is type-checked where you write it.
 
 ## The CLI auto-detects (or reads project config)
 
-The CLI can't take an import, so `vigiles compile`, `vigiles scan`, and
+The CLI can't take an import, so `vigiles compile`, `vigiles audit`, and
 `vigiles lint` **detect** the harness from the repo (a `.claude-plugin/`, an
 `AGENTS.md`, …) and work with zero config. When detection is ambiguous, or you
 want a deterministic, committed choice, set it explicitly — both override the

@@ -3,7 +3,7 @@
 A **single repo-level recommendation** (one finding regardless of how many hooks
 you have): when a plugin/repo ships **hand-written** hook commands that aren't
 compiled [`vigiles/hook`](../compiled-hooks.md) artifacts, nudge toward compiling
-them. Same detector `vigiles scan` uses (`manualHookCount` in `src/scan.ts`); one
+them. Same detector `vigiles audit` uses (`manualHookCount` in `src/scan.ts`); one
 detector, two callers.
 
 This is a **discovery nudge, not a defect**. Hand-written shell hooks are a

@@ -89,7 +89,7 @@ Three instruments, adopt any:
 **Two ways in** — pick the pain that's yours:
 
 - **Run agents on your own repo?** Start with **Lint** below, or `npx vigiles init`.
-- **Ship plugins to a marketplace?** **[`vigiles scan`](docs/for-plugin-authors.md)**
+- **Ship plugins to a marketplace?** **[`vigiles audit`](docs/for-plugin-authors.md)**
   ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
 **Your agent writes the spec — and you can always eject.** Skills author the

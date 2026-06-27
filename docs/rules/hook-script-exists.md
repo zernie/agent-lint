@@ -3,7 +3,7 @@
 Flag a **hook command that references a script file which doesn't exist** on disk.
 A `PreToolUse`/`SessionStart`/… hook pointing at `${CLAUDE_PLUGIN_ROOT}/hooks/x.sh`
 when that file isn't there silently never runs — the protection or automation the
-author wired up simply doesn't happen, with no error. Same detector `vigiles scan`
+author wired up simply doesn't happen, with no error. Same detector `vigiles audit`
 uses (the hook resolver in `src/scan.ts`); one detector, two callers.
 
 This matches Anthropic's own `claude plugin validate` — adopting it makes vigiles

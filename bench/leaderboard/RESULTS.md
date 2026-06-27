@@ -1,6 +1,6 @@
 # Plugin health leaderboard — v0
 
-_Generated 2026-06-22 by `bench/leaderboard/run.mjs`. Deterministic structural health only (no model) — the free column of `vigiles scan`._
+_Generated 2026-06-22 by `bench/leaderboard/run.mjs`. Deterministic structural health only (no model) — the free column of `vigiles audit`._
 
 ## Corpus
 

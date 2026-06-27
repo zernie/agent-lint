@@ -1,5 +1,5 @@
 /**
- * `vigiles scan <dir>` — point vigiles at any plugin/repo and see what it ships
+ * `vigiles audit <dir>` — point vigiles at any plugin/repo and see what it ships
  * and what's broken, with **no model and no API key**.
  *
  * This is the deterministic substrate under the plugin/skill leaderboard
@@ -922,7 +922,7 @@ export interface MarketplaceInfo {
  * Read a `marketplace.json` beside the layout's plugin manifest and classify its
  * members into on-disk vs external. Returns `null` when `dir` is not a
  * marketplace. The source of truth behind {@link expandMarketplace} and the
- * curated-marketplace report in `vigiles scan`.
+ * curated-marketplace report in `vigiles audit`.
  */
 export function inspectMarketplace(
   dir: string,
@@ -974,7 +974,7 @@ export function inspectMarketplace(
  * plugin manifest, e.g. `.claude-plugin/marketplace.json`), expand it into the
  * absolute dirs of its member plugins. Returns `null` when there's no
  * marketplace, `[]` when it's a marketplace whose members are all external (not
- * on disk). Used by `vigiles scan` to rank a whole marketplace — wshobson/agents
+ * on disk). Used by `vigiles audit` to rank a whole marketplace — wshobson/agents
  * alone ships 80+ plugins under one `marketplace.json`. See {@link inspectMarketplace}.
  */
 export function expandMarketplace(

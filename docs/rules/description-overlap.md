@@ -5,7 +5,7 @@ model selects a skill by its description; if two are basically the same, the
 selector can't tell them apart and the **wrong one fires** — a precision
 collision. This is a **deterministic proxy for a behavioral risk**: it catches a
 `--trigger`-class problem with **no model**, reusing the NCD engine in
-`src/core/proofs.ts`. Same detector `vigiles scan` uses
+`src/core/proofs.ts`. Same detector `vigiles audit` uses
 (`findDescriptionOverlaps` in `src/core/description-overlap.ts`); no other plugin
 linter has it.
 

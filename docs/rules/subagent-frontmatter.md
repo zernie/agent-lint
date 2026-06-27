@@ -4,7 +4,7 @@ Flag a **subagent** (`agents/*.md`) missing a required frontmatter field. Per th
 [subagent docs](https://code.claude.com/docs/en/sub-agents), a subagent
 **requires** both `name` and `description` (no fallback) — without them Claude
 Code won't register it, so the agent is silently undispatchable. Same detector
-`vigiles scan` uses (`frontmatterIssues`); one detector, two callers.
+`vigiles audit` uses (`frontmatterIssues`); one detector, two callers.
 
 ## Skills are deliberately NOT checked
 

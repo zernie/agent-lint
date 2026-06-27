@@ -8,7 +8,7 @@ among them, the tool can't resolve — a dead contract entry.
 This is the **MCP half of the tool cross-reference**:
 [`subagent-tool-contract`](subagent-tool-contract.md) verifies a subagent's _built-in_
 tools but passes any `mcp__*` token through unchecked; this rule verifies the MCP
-half. Same detector `vigiles scan` uses (`verifyMcpToolServers` in
+half. Same detector `vigiles audit` uses (`verifyMcpToolServers` in
 `src/core/mcp-tool.ts`) — one detector, two callers.
 
 ## What it flags

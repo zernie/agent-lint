@@ -67,7 +67,7 @@ export function formatTriggerHint(
   return (
     `ℹ ${String(n)} model-invocable skill${n === 1 ? "" : "s"} + model access detected — ` +
     `measure whether they actually FIRE (recall + precision) with:\n` +
-    `    vigiles scan ${dir} --trigger --prompts=trigger-prompts.json`
+    `    vigiles audit ${dir} --trigger --prompts=trigger-prompts.json`
   );
 }
 
