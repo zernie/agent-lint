@@ -227,6 +227,17 @@ Decision (chosen: **cut only the safety battery**):
   Neither needs the parked confinement.
 - `audit` re-promotes a Safety ring only once one confinement works the same on
   macOS + Linux (the unchanged exit criterion).
+- **The confinement IMPLEMENTATION is KEPT, not removed — only the audit WIRING is
+  parked.** `src/sandbox.ts` (bubblewrap + netns) and `src/egress.ts` (allowlisted
+  egress) are intact and still drive `runHook({sandbox})`, `runHarnessTest`, and the
+  testing-API battery (`guardrail-check.ts`). What was deleted is `src/audit-battery.ts`
+  — the thin _audit wrapper_ — and the CLI's headless battery path. So re-promotion is
+  a re-WIRE (point `audit` at the existing confinement once the cross-platform backend
+  lands), never a rebuild. The reason it's unwired-by-default is the OS asymmetry alone:
+  bubblewrap is Linux-only, so a default-on battery would be confined on Linux and
+  unconfined-with-a-warning on macOS — exactly the "half-made" surface to avoid in a
+  zero-config-safe `audit`. The implementation stays so the eval/testing lane (where
+  the user opts in explicitly) keeps its full safety story today.
 
 Two Codex (PR #49) review bugs fixed in the same pass:
 
