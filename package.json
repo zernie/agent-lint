@@ -55,6 +55,7 @@
     "dist/**/*.mjs",
     "dist/**/*.d.ts",
     "dist/**/*.d.mts",
+    "dist/audit-report.template.html",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
     "action.yml",
@@ -66,7 +67,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-report.mjs",
+    "build:core": "tsc",
     "test": "npm run build && vitest run",
     "coverage": "npm run build && vitest run --coverage",
     "lint": "eslint src/",

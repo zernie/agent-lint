@@ -22,12 +22,14 @@
      caveat, or a competitor, never the user's pain. SAME FOR THE SUBDOCS: open
      every guide with the concrete pain, THEN the "what this doc is" line + the
      README uplink (per docs-quality in CLAUDE.md).
-  2. COMPILED SPECS ARE EASY — reassure, never intimidate. You rarely hand-write
-     a .spec.ts: model-invocable skills (edit-spec / strengthen / test-harness)
-     author + edit it, and hooks auto-compile on save. Present the typed spec as
-     the SMOOTH, AUTO-ENFORCED next step you don't think about — the natural
-     evolution (JS→TS: gradual, strict opt-in), NEVER a wall. Markdown + inline
-     mode work with zero TS for anyone not there yet (progressive adoption).
+  2. SPEC-FIRST IS THE DEFAULT — but easy, never intimidating. `init` adopts your
+     existing CLAUDE.md INTO a spec, and model-invocable skills (edit-spec /
+     strengthen / test-harness) author + edit it, so you rarely hand-write a
+     .spec.ts and hooks auto-compile on save. Present the typed spec as the default
+     the agent manages for you, NOT an advanced opt-in or a "step up". Inline
+     markdown is the ZERO-TS FLOOR for anyone who skips `init` (progressive
+     adoption) — the on-ramp, not the default starting point. `eject` always
+     reverses. NEVER a wall.
   3. THE INSTRUMENTS stay first-class — including Eval (measuring whether a skill
      actually helps is core, not optional). NOTE: Guard / compiled hooks is PARKED
      FOR LAUNCH (commented out below; see research/roadmap.md "Launch readiness") —
@@ -58,17 +60,41 @@
 ---
 
 **You installed a bunch of plugins and wrote a few skills — but do they actually work?**
-A skill that never fires, a safety hook that blocks nothing, a CLAUDE.md full of dead
-references — your harness fails **silently**, and you find out mid-task.
+A skill that never fires, a subagent wired to a tool that doesn't exist, a CLAUDE.md
+full of dead references — your harness fails **silently**, and you find out mid-task.
 
 **It's a library with no tests.**
 
-`Agent = Model + Harness` — the model gets the headlines, the harness is the half you
-own. vigiles[^name] makes it prove itself **before the agent ever runs** — verify, test,
-measure. Mostly free, no API key — real-model checks run on your **Claude Pro/Max
-subscription, not metered tokens**.
+**One command shows you — like a Lighthouse report for your harness:**
 
-Three instruments, adopt any:
+```bash
+npx vigiles audit          # no key, no config, safe to run anywhere
+```
+
+It **reads** your harness deterministically — every reference checked, four categories
+scored, each finding's fix inline — and writes a shareable HTML report:
+
+<p align="center">
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall score with four category rings — Truthfulness, Triggering, Structure, Tested — and fix cards" />
+</p>
+
+| Ring                | What it proves                                                        |
+| ------------------- | --------------------------------------------------------------------- |
+| **🔎 Truthfulness** | Every path / script / symbol / linter rule in your CLAUDE.md resolves |
+| **🎯 Triggering**   | Skills fire on the right prompts and don't collide                    |
+| **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
+| **🧪 Tested**       | Every surface ships a test                                            |
+
+Like Lighthouse, `audit` is a **local report you run on your machine** — a
+deterministic read, safe on any repo (even one wired to prod), identical on every
+OS. **Not a CI step** (CI uses `lint`, the deterministic gate). The **executing
+checks** (resolve MCP live · **do your skills fire?** · **what would vigiles
+catch in your repo?**) run only when there's a human to consent: `audit` **asks
+once** at a terminal and remembers. **[Audit a harness →](docs/for-plugin-authors.md)**
+
+`Agent = Model + Harness` — the model gets the headlines, the harness is the half you
+own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and
+**three instruments** fix and prove what it finds —
 
 |             |                                                                                                                                                 |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -80,24 +106,17 @@ Three instruments, adopt any:
 | **🛡 Guard** | A safety hook that **can't silently fail open** — write a typed function, get a guard that blocks. **[→](docs/compiled-hooks.md)** |
 -->
 
-<p align="center">
-  <img src="vigiles-demo.gif" width="720" alt="vigiles lint catching a file that moved and a script that was renamed" />
-</p>
-<!-- Regenerate the GIF: `python3 scripts/make-demo-gif.py` (output is verbatim CLI; see scripts/demo.sh for a live asciinema recording). -->
-
 **Two ways in** — pick the pain that's yours:
 
-- **Run agents on your own repo?** Start with **Lint** below, or `npx vigiles init`.
-- **Ship plugins to a marketplace?** **[`vigiles scan`](docs/for-plugin-authors.md)**
-  ranks structural health with no key — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
+- **Run agents on your own repo?** `npx vigiles audit`, then `npx vigiles init`.
+- **Ship plugins to a marketplace?** `npx vigiles audit ./plugins/*/` ranks a whole
+  marketplace (0–100, A–F) — see the **[plugin-author guide →](docs/for-plugin-authors.md)**.
 
-**Your agent writes the spec — and you can always eject.** You rarely hand-write a
-`.spec.ts`: skills author it for you, **`init` adopts an existing CLAUDE.md
-non-destructively** (untouched until you compile), and plain markdown + inline
-`<!-- vigiles:enforce -->` comments work with zero TypeScript. **Claude Code and
-Codex** ([`vigiles/codex`](docs/harnesses.md)), or [your own
-harness](docs/authoring-an-adapter.md). _(New here? [the FAQ](docs/faq.md) covers the
-"do I write TypeScript / will it touch my files" questions.)_
+**Your agent writes the spec — and you can always eject.** Skills author the
+`.spec.ts` for you, **`init` adopts an existing CLAUDE.md non-destructively**
+(untouched until you compile), and plain markdown + inline `<!-- vigiles:enforce -->`
+comments work with zero TypeScript. Works with **Claude Code and Codex**
+([`vigiles/codex`](docs/harnesses.md)) or [your own harness](docs/authoring-an-adapter.md).
 
 ## Quick start
 
@@ -156,12 +175,18 @@ CLAUDE.md:
   ✓ @typescript-eslint/no-floating-promises — exists and enabled in eslint config
 ```
 
+<p align="center">
+  <img src="vigiles-demo.gif" width="720" alt="vigiles lint catching a file that moved and a script that was renamed" />
+</p>
+<!-- Regenerate the GIF: `python3 scripts/make-demo-gif.py` (output is verbatim CLI; see scripts/demo.sh for a live asciinema recording). -->
+
 File paths, scripts, code symbols — plus linter rules across **7 linters**
 (ESLint, Ruff, Clippy + four more): each rule exists **and is enabled**.
 
-**Start with one inline comment — no new files.** Step up to a typed `.spec.ts`
-(your agent writes it; it compiles to CLAUDE.md) when you want compiler-grade
-guarantees — and `vigiles eject` hands it back to plain markdown anytime.
+**Your agent writes the spec — `init` adopts your existing CLAUDE.md into one,
+faithfully and non-destructively.** Prefer zero new files? Plain markdown + one
+inline `<!-- vigiles:enforce -->` comment lints too — no spec, no TypeScript. And
+`vigiles eject` hands a spec back to markdown anytime.
 **[Full guide →](docs/verifying-instruction-files.md)**
 
 > **Want more? Bad states can stop compiling.** Opt in deeper and a broken
@@ -174,7 +199,9 @@ guarantees — and `vigiles eject` hands it back to plain markdown anytime.
 **You wired the hook — but does it actually block?** A skill's description can fail
 to trigger, or hijack unrelated prompts; injected context can silently never reach
 the model. All of it passes a naive "did it run?" check. vigiles tests the
-assembled harness for real:
+assembled harness for real.
+
+Start with the cheapest tier — a hook, called directly. No model, no key:
 
 ```typescript
 import { runHook } from "vigiles/testing";
@@ -191,18 +218,19 @@ It goes well past _"did it fire?"_:
 
 - **Hooks block** what they must — `runHook`, or the real agent CLI via `runHarnessTest`.
 - **Skills trigger** on the right prompts and stay quiet on the wrong ones — recall _and_ precision (`measureTriggerRate`).
+- **Subagents finish right** — assert a subagent ended in the success (or error) outcome it promised, with a plain check, no LLM judge (`assertAgentOk` / `assertAgentErr`).
 - **Behaviour is good** — score a skill's output, or A/B it on-vs-off for the real lift (`measure` / `runEval`, with significance testing).
 - **Safety holds** — the agent _didn't_ push to the wrong branch or hit a paid API; `interceptTools` catches the attempt so the side effect never happens.
 
 Almost every tier runs with **no model and no API key** — milliseconds, on every
-commit; only the real-model evals need a model, on your own `claude` CLI.
+commit; only the real-model tier needs a model, on your own `claude` CLI.
 **[How it works →](docs/harness-testing.md)**
 
 ## ③ Eval — does it actually help, or just cost more?
 
 **"65% fewer tokens." "3× faster." Says who?** A skill claims it, a plugin promises
 it — stars and vibes, **zero measurement**. vigiles A/Bs the claim on real coding
-tasks, the harness loaded exactly as it ships, and reports the **metric triple**:
+tasks, the harness loaded exactly as it ships, and reports **three numbers**:
 
 ```typescript
 import { measureArms } from "vigiles/testing";
@@ -268,7 +296,7 @@ default, not an unbypassable wall._
 ## FAQ
 
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No. Lint your markdown with zero new files; when you want a spec, your agent writes it. It's gradual, like TS's `strict`.
+- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one). Prefer zero new files? Plain markdown lints too. The deeper compiler-grade guarantees are the gradual, opt-in part — like TS's `strict`.
 - **Does it overwrite my files?** No. `init` adopts an existing CLAUDE.md _non-destructively_ — untouched until you `compile`, and `eject` reverses it.
 - **Need an API key?** No for almost everything (free, every commit). Real-model evals run on your Claude Pro/Max subscription — $0 metered tokens.
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).

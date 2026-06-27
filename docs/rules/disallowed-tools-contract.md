@@ -4,7 +4,7 @@ Cross-reference a subagent's **`disallowedTools:` block-list** against the harne
 tool catalog — the deny-side mirror of [`subagent-tool-contract`](subagent-tool-contract.md).
 A typo here is dangerous: you meant to block `Bash` but wrote `Bsh`, so **nothing
 is blocked** and the tool you intended to deny stays available, silently. Same
-detector `vigiles scan` uses (`disallowedToolIssues` in `src/core/tool-contract.ts`).
+detector `vigiles audit` uses (`disallowedToolIssues` in `src/core/tool-contract.ts`).
 
 ## What it flags
 

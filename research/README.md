@@ -14,6 +14,7 @@ one click away.
 - [`landscape-mid-2026.md`](landscape-mid-2026.md) — the mid-2026 frame: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI. The positioning vigiles sits in.
 - [`competitive-landscape.md`](competitive-landscape.md) — competitive landscape: rule-porter, rulesync, vibe-cli, Ruler, moat analysis.
 - [`pre-release-focus.md`](pre-release-focus.md) — the consolidation: the park/polish/add triage of the WHOLE feature surface, the API-surface freeze plan, the positioning lock, the markdown-mode decision, and the launch sequence. The "what actually ships" lens the roadmap points to. (Investor/competitor strategy lives in the private `startup/` vault, not indexed here.)
+- [`harness-checkup-and-lanes.md`](harness-checkup-and-lanes.md) — the casual-vs-power lane decision (from CC-user feedback: most users won't author tests but want free harness info): ship `scan` as a zero-config "Lighthouse for your harness" (score + score-explainer + predefined disaster-battery/over-fire checks, no authoring), authored tests/evals as discoverable depth — both lanes as ONE funnel. Mostly packaging (vigiles already ships ~80%). Validated against Lighthouse/npm-audit/Snyk/SonarCloud/ESLint/Knip/Codecov + PLG research.
 - [`agentic-harness-evolution-poach.md`](agentic-harness-evolution-poach.md) — poach of the arXiv "Agentic Harness Engineering" paper (auto-evolving coding-agent harnesses) for the optimize/measure/evolve line: the falsifiable-prediction-per-edit + auto-rollback loop, and the peer-reviewed validation that structure (tools/hooks/memory) beats prose (enforce > guidance).
 - [`oss-lane-sweep-2026-06.md`](oss-lane-sweep-2026-06.md) — GitHub/npm sweep confirming the cross-reference-verification + harness-testing + skill-eval lane is unoccupied by OSS; the structural-lint surface is crowded with `agnix` (297★) the incumbent to watch (differentiate on capabilities A/B/C/D, not rule count).
 - [`sync-landscape-analysis.md`](sync-landscape-analysis.md) — rule-sync landscape, per-tool breakdown, what's worth absorbing.
@@ -69,6 +70,7 @@ one click away.
 
 - [`distribution-strategy.md`](distribution-strategy.md) — **why nobody uses vigiles yet**: funnel diagnosis + the demo lever (now shipped).
 - [`adoption-strategy.md`](adoption-strategy.md) — zero-config setup, progressive enforcement, agent workflows.
+- [`adoption-gateway-preview.md`](adoption-gateway-preview.md) — **"what would vigiles catch in YOUR repo?"** — the `audit` adoption preview. Why deterministic spec-creation fails (extraction is semantic), and the architecture that works: **LLM proposes, deterministic disposes** — the model drafts the spec, the moat verifies the refs, so the "M broken right now" number is trustworthy though extraction is probabilistic. A model-gated tier behind the existing consent.
 - [`feature-ideas.md`](feature-ideas.md) — the parked-ideas list (custom-rule plugin API, reverse coverage, sandboxed exec §13, …).
 - [`architecture-platform.md`](architecture-platform.md) — architecture-aware agent platform (FSD/DDD/hexagonal presets).
 - [`ai-code-quality.md`](ai-code-quality.md) — AI code-quality patterns.

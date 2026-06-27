@@ -31,7 +31,7 @@
  *
  * Pure parsers (testable with fixtures) + a local-install locator. TWO consumers:
  * the gated CI test in `dialect-drift.test.ts` (fails loud on tool/event drift), and
- * `vigiles scan` at runtime via `checkDialectDrift`/`formatDialectDrift` (a best-effort,
+ * `vigiles audit` at runtime via `checkDialectDrift`/`formatDialectDrift` (a best-effort,
  * read-local freshness WARN when the installed CC's tool surface drifts from ours).
  */
 import { existsSync, readFileSync } from "node:fs";

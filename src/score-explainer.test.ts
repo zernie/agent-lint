@@ -219,8 +219,12 @@ test("a missing hook script → hook-never-runs", () => {
   const exps = explainScore(
     report({
       hooks: [
-        { script: "${CLAUDE_PLUGIN_ROOT}/hooks/gate.sh", status: "missing" },
-        { script: "hooks/ok.sh", status: "ok" },
+        {
+          command: "bash ${CLAUDE_PLUGIN_ROOT}/hooks/gate.sh",
+          script: "${CLAUDE_PLUGIN_ROOT}/hooks/gate.sh",
+          status: "missing",
+        },
+        { command: "bash hooks/ok.sh", script: "hooks/ok.sh", status: "ok" },
       ],
     }),
   );

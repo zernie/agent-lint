@@ -1,5 +1,5 @@
 /**
- * `vigiles scan` test suite. Builds a tiny fake plugin in a tmp dir and asserts
+ * `vigiles audit` test suite. Builds a tiny fake plugin in a tmp dir and asserts
  * the deterministic report: skill description/user-invoked flags, agent tool
  * contracts (incl. the inherits-all footgun), hook script resolution across the
  * braced/unbraced `$CLAUDE_PLUGIN_ROOT` forms (ok / missing / unresolved),

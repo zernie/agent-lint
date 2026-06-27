@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:2e1acb212d8a2748 compiled from src/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:c40f21e2814f36f7 compiled from src/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -8,7 +8,7 @@ Working in `src/`? The root `CLAUDE.md` holds the full positioning, architecture
 
 ## Key Files
 
-- `src/cli.ts` — CLI dispatch — the single source of truth for what each verb does
+- `src/cli.ts` — CLI dispatch — the single source of truth for what each verb does. NB the `init` verb splits two ways: bare `vigiles init` runs `setup()` (the full onboarding wizard — both layers, deps, CI, plugin), while `vigiles init --target=<file>` runs `scaffoldSpec()` (the single-target spec scaffolder; also called once per target by `setupPillar1`). The verb name is `init`; the helper is `scaffoldSpec`, not `init`.
 - `src/cli-commands.ts` — The canonical VERBS + HOOK_RUNTIME_KINDS list (the self-command-refs moat)
 
 ## Rules

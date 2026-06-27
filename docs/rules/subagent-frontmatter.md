@@ -4,7 +4,7 @@ Flag a **subagent** (`agents/*.md`) missing a required frontmatter field. Per th
 [subagent docs](https://code.claude.com/docs/en/sub-agents), a subagent
 **requires** both `name` and `description` (no fallback) — without them Claude
 Code won't register it, so the agent is silently undispatchable. Same detector
-`vigiles scan` uses (`frontmatterIssues`); one detector, two callers.
+`vigiles audit` uses (`frontmatterIssues`); one detector, two callers.
 
 ## Skills are deliberately NOT checked
 
@@ -14,7 +14,7 @@ A `SKILL.md` requires **no** frontmatter: per the
 paragraph of the body**. So a frontmatter-less skill still loads and can fire;
 flagging it would be a false positive. (Whether its fallback description is a
 _good_ trigger surface is a behavioral question — measure it with
-`scan --trigger`, don't assert it structurally.)
+the `audit` trigger tier / `measureTriggerRate`, don't assert it structurally.)
 
 ## What it flags
 

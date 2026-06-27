@@ -16,7 +16,7 @@ export default claude({
 
   keyFiles: {
     "src/cli.ts":
-      "CLI dispatch — the single source of truth for what each verb does",
+      "CLI dispatch — the single source of truth for what each verb does. NB the `init` verb splits two ways: bare `vigiles init` runs `setup()` (the full onboarding wizard — both layers, deps, CI, plugin), while `vigiles init --target=<file>` runs `scaffoldSpec()` (the single-target spec scaffolder; also called once per target by `setupPillar1`). The verb name is `init`; the helper is `scaffoldSpec`, not `init`.",
     "src/cli-commands.ts":
       "The canonical VERBS + HOOK_RUNTIME_KINDS list (the self-command-refs moat)",
   },

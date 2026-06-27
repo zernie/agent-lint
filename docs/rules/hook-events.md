@@ -2,7 +2,7 @@
 
 Cross-reference each hook's **event name** against the harness event catalog — a
 hook registered under a name the platform doesn't define silently **never fires**,
-a dead registration no generic JSON linter catches. Same detector `vigiles scan`
+a dead registration no generic JSON linter catches. Same detector `vigiles audit`
 uses (`verifyHookEvents` / `confidentHookEventIssues` in
 `src/core/hook-events.ts`); one detector, two callers, no drift.
 

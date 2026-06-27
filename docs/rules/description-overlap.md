@@ -4,8 +4,8 @@ Flag two **model-invocable skills whose descriptions are near-identical**. The
 model selects a skill by its description; if two are basically the same, the
 selector can't tell them apart and the **wrong one fires** — a precision
 collision. This is a **deterministic proxy for a behavioral risk**: it catches a
-`--trigger`-class problem with **no model**, reusing the NCD engine in
-`src/core/proofs.ts`. Same detector `vigiles scan` uses
+model-tier-class problem with **no model**, reusing the NCD engine in
+`src/core/proofs.ts`. Same detector `vigiles audit` uses
 (`findDescriptionOverlaps` in `src/core/description-overlap.ts`); no other plugin
 linter has it.
 
@@ -52,8 +52,8 @@ the first body paragraph) — the same trigger surface `scan` reports.
 
 ## Why
 
-Skill _triggering_ is normally the model-gated behavioral column (`scan
---trigger` / `measureTriggerRate`), which costs tokens. A near-identical
+Skill _triggering_ is normally the model-gated behavioral column (the `audit`
+model trigger tier / `measureTriggerRate`), which costs tokens. A near-identical
 description is the one precision failure you can catch **deterministically and
 for free** — a bridge between the deterministic and behavioral columns.
 

@@ -39,7 +39,7 @@ surface sorts into one of three buckets:
 
 - **A — Free & deterministic** (no model, runs in CI on every commit): a hook's
   block/allow decision (`runHook`), a tool-contract / "did NOT call the forbidden
-  tool" check, structural facts (`vigiles scan`), and **record-replay** of any tool
+  tool" check, structural facts (`vigiles audit`), and **record-replay** of any tool
   a skill shells out to (record the real result once, replay it via a PATH stub).
 - **B — Model-gated, on your subscription** (real model, **no metered API**): does a
   skill's description **fire** (`measureTriggerRate`, recall + precision) **and**

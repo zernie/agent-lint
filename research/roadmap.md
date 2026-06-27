@@ -27,7 +27,7 @@
 > harnesses" category — but the work has leaned **maker-cool (the moat) over user-pull
 > (the measurement/benchmark identity)**, and vigiles still has ~no users. Near-term
 > priority is the **adoption engine** (the at-scale ecosystem benchmark + zero-friction
-> `scan`/measure that needs no typed spec), with the moat as the depth users discover
+> `audit`/measure that needs no typed spec), with the moat as the depth users discover
 > after. The bridge bet = **capability-diff (#2)** (serves both). Full status & gaps:
 > [`measurement-authority.md`](measurement-authority.md#status--gaps-2026-06-21--honest-read-of-where-the-pivot-stands).
 
@@ -73,9 +73,9 @@
 >   library API 0.x, evolving") — honest beats a fake 1.0.
 > - **PROMOTED — first-run hardening + don't-cry-wolf:** a clean `npx vigiles@latest`
 >   from an empty dir AND a real repo works fast, no crash, no key / no TS for
->   lint+scan+init; run scan/lint over the **top ~10 community plugins** and kill any
+>   lint+audit+init; run audit/lint over the **top ~10 community plugins** and kill any
 >   embarrassing false positive (a cry-wolf on a famous repo on launch day is fatal).
->   Plus a 20-sec asciinema/GIF of `lint` finding a stale ref + `scan` ranking a
+>   Plus a 20-sec asciinema/GIF of `lint` finding a stale ref + `audit` ranking a
 >   marketplace, and a smoke-test of the PUBLISHED npm package.
 > - **PARKED for launch (add back post-HN):** Guard / compiled hooks — niche (you must
 >   write hooks) + the honest #34692 caveat dilutes a first impression. README section
@@ -153,16 +153,16 @@
       name; (2) the sub's `result()` block lands in its RETURN (the dispatch's top-level
       `tool_result`) → captured as `SubagentTrace.output`. Unlocks
       `subagent(name,[output(/vigiles:ok/)])` — any subagent-contract eval.
-- [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), shipped as
-      `scan --fix-plan`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
-      `formatOptimize`, 6 vitest + 2 e2e cases) surfaced as the **`vigiles scan <dir>
---fix-plan`** lens (`--json`, `--harness=`, documented in `docs/cli.md`). The free
+- [x] **Per-repo optimizer v0 — DETERMINISTIC SPINE DONE (2026-06-20), now folded
+      INLINE into `audit`.** [`src/optimize.ts`](../src/optimize.ts) (`optimize` /
+      `formatOptimize` / `formatRecommendations`, vitest + e2e cases) — the free
       half: a structural-health score (reuses `scoreReport`/`gradeFor`) + a typed, ranked
       `Recommendation[]` reusing `explainScore` (one-detector-no-drift) — `FIX` /
       `DIFFERENTIATE`, likely dead-ends first — that you clear BEFORE spending a token,
-      then it hands off to the measured layer. **Folded into `scan` (NOT a standalone
-      `optimize` verb)** because, until the measured half lands, an optimizer that only
-      re-prints scan's findings is a third command on one report — see P2 below.
+      then it hands off to the measured layer. **Folded INLINE into the default `audit`
+      report (NOT a standalone `optimize` verb, and no longer a `--fix-plan`/`--explain`
+      flag)** because, until the measured half lands, an optimizer that only re-prints
+      audit's findings is a third surface on one report — see P2 below.
       **Remaining (the measured half):** wire the real-model A/B so each add/drop/swap
       carries a measured delta (`runEval` over `bench/corpus`, gated on the subscription).
       **Mechanism to poach (arXiv AHE, `agentic-harness-evolution-poach.md`):** wrap each
@@ -218,7 +218,7 @@
   "this PR gives `summarizer` network access / removes the review gate / opens a
   cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
   gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
-  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `scan`,
+  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `audit`,
   richer on specs — so value without authoring a typed spec). Built on: the
   whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
   `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
@@ -236,7 +236,7 @@
       `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler
       demands. Rides typed purity's EXACT machinery (the same `const` tools tuple → a typed
       capability lattice). Defense-in-depth: the type tier (config, edit-time) sits above the
-      planned `scan` check (config, CI) + the runtime egress wall (behaviour) + F4's
+      planned `audit` check (config, CI) + the runtime egress wall (behaviour) + F4's
       hyperproperty (the true noninterference question). Honest limit: the type sees the
       capability COMBINATION, not the data FLOW (that's runtime). → `typed-spec-frontier.md`
       (F1, prototyped) · **P0**
@@ -291,13 +291,13 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
 
 - [ ] **Reconsider a standalone `optimize` verb — only once the MEASURED half exists.**
-      The deterministic spine ships as `scan --fix-plan` (above), deliberately NOT its own
-      command: today an "optimizer" that just re-prints scan's structural findings is a
-      third verb over one `ScanReport` (`scan` reports / `explain` diagnoses one surface /
-      fix-plan ranks the repo) — confusing, no new capability. Revisit promoting it back to
+      The deterministic spine ships folded inline in `audit` (above), deliberately NOT its
+      own command: today an "optimizer" that just re-prints audit's structural findings is a
+      third surface over one `ScanReport` (`audit` reports + ranks the repo inline) —
+      confusing, no new capability. Revisit promoting it back to
       `vigiles optimize` WHEN it genuinely optimizes: when each add/drop/swap recommendation
       carries a real-model before/after delta (the A2 measured half over `bench/corpus`).
-      At that point "optimize" means something `scan` can't, and the verb is earned. The
+      At that point "optimize" means something `audit` can't, and the verb is earned. The
       pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
       `measurement-authority.md` (A2)
 - [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
@@ -316,10 +316,10 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       (wrong-skill-fires / skill-never-fires / agent-underperforms / hook-never-runs /
       subagent-never-dispatches) + a one-line fix — so the optimizer says "underperforms
       BECAUSE its description overlaps X — differentiate them", not just "drop it".
-      Shipped as **`vigiles explain <dir> [name]`** (deterministic, `--json` for the
-      agent-consumable array; 4 e2e cases in `scan-cli.test.ts`, documented in
-      `docs/cli.md`). Now also consumed by **`scan --fix-plan`** (A2) — each
-      recommendation IS an explanation reshaped with an action verb. →
+      Shipped as the `explainScore` engine (deterministic; `explainSurface` narrows to
+      one surface). Now folded INLINE into the default `audit` report (A2) via
+      `formatRecommendations` — each recommendation IS an explanation reshaped with an
+      action verb (the former `--explain`/`--fix-plan` flags are gone). →
       `measurement-authority.md`
 
 **Distribution:**
@@ -335,7 +335,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   / `effectSurface` / `purityViolations` + the pure/bounded/unrestricted ladder,
   `dialect.sideEffectingTools`); the **`purity:` floor** on skill/agent
   (`"pure" | "bounded" | "dangerously-unrestricted"`, enforced at compile —
-  absent tools = inherits-all = violation); the **scan effect-surface column**
+  absent tools = inherits-all = violation); the **audit effect-surface column**
   (per-unit purity + `N pure · M bounded · K unrestricted` audit); and the
   standalone **deterministic Bash-effect classifier** (`src/core/bash-effects.ts`,
   `mvdan-sh` AST + catalog + fail-closed residue, zero-false-read-only gate). Two
@@ -354,7 +354,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   (`dangerously-unrestricted` → neutral `unrestricted`). KEY ladder change:
   `bounded` now **admits command-gated `Bash`** (read-only allowed as
   observation, mutating denied) — `pure` still bars `Bash` entirely; the static
-  `effectSurface`/`scan` still reports any `Bash` as `unrestricted` (can't see
+  `effectSurface`/`audit` still reports any `Bash` as `unrestricted` (can't see
   the command — the runtime gate is where the refinement lands). **Skill-parity
   shipped same day** — skills now carry the SAME per-call gate
   (`src/adapters/claude-code/skill-runtime.ts`: `parseSkillPurity` +
@@ -363,7 +363,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   effect-BOUNDARY region mark (see "Effect-surface: the runtime half" under Now).
   See [`side-effect-separation.md`](side-effect-separation.md) +
   [`bash-effect-classification.md`](bash-effect-classification.md).
-- **`vigiles scan`** + **plugin health leaderboard** — deterministic per-plugin
+- **`vigiles audit`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
 - **`untested-surface` rule** + **skills conformance gate** — third gap detector;
   every skill loads with a usable description (`src/test-coverage.ts`,
@@ -512,7 +512,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   (high-precision: the pattern is unambiguous, near-zero FP). Pair it with the
   orphan-docs invariant so stripping the last public link still leaves the
   research doc referenced from `CLAUDE.md` keyFiles / `research/README.md`. Same
-  one-detector-no-drift shape (shared by `lint` + a `scan` note) as the other doc
+  one-detector-no-drift shape (shared by `lint` + a `audit` note) as the other doc
   rules. Add the `RulesConfig` key + `docs/rules/<name>.md` + the matrix row
   (rules-docs-in-sync). · **P1**
 - **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook.** The lint
@@ -541,8 +541,8 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **AGENTS.md + SKILL.md as first-class verified inputs** — the engine is already
   format-agnostic; rides the 60k-repo / 32-tool wave.
   [standards-conformance](standards-conformance.md) · [synthesis T1#1](strategic-synthesis-2026-06.md) · **MED**
-- **`scan` → observed-egress column** — boot each hook under `recordEgress`, list
-  hosts reached; turns `scan` from static into behavioural, feeding the
+- **`audit` → observed-egress column** — boot each hook under `recordEgress`, list
+  hosts reached; turns `audit` from static into behavioural, feeding the
   leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md) · **MED**
 - **Wire `composeCollisions` into `vigiles lint`** — warn when a compile target
   is a file Ruler/rulesync regenerates (stales the integrity hash); suggest the
@@ -563,7 +563,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
       model-free, CI, works on hand-written hooks with NO spec/compile (zero adoption tax) —
       and it sidesteps CC's runtime delivery bugs (subagent-bypass #34692 etc.) by verifying
       LOGIC, not delivering enforcement. Receipt proven 2026-06-22 (runHook caught an exit-1
-      fake guard). Smallest build: a curated disaster-event catalog + the `scan`/`scaffold-test`
+      fake guard). Smallest build: a curated disaster-event catalog + the `audit`/`scaffold-test`
       surface over it; dogfood on a real OSS safety hook to find a secret no-op. Compile is the
       OPTIONAL Level-2 (declared intent → auto-generated test); verify is the mechanism.
       [hook-pain-points](hook-pain-points.md) · **HIGH — highest-conviction, lowest-risk**
@@ -656,7 +656,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
   (~20 stubbed runs) to confirm the curve is real + model-dependent before any
   matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
-- **Plugin selection-collision matrix** — **SHIPPED (core + CLI `scan --collisions`).**
+- **Plugin selection-collision matrix** — **SHIPPED (core + CLI `audit --prompts=`, interactive).**
   The behavioral CONFIRMATION of the deterministic `description-overlap` rule: run
   each model-invocable skill's own prompts against the whole installed plugin and
   record WHICH skills fired (N×N matrix; diagonal = recall, off-diagonal = a sibling
@@ -688,10 +688,10 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   hosted vendor's twins (compose). **Gate on demand** — contingent on the twin pattern
   spreading in users' workflows; don't build ahead of it. (Source in the private
   `startup/` vault.) · **MED / Explore**
-- **Unify `scan` + `lint` on one rule engine** — promote scan's hard-coded
-  structural findings (no-description skill, no-tool-contract agent, missing hook)
-  to documented, configurable, CI-gatable rules; scan becomes inventory + a
-  rule-derived score. The ESLint model: one rule vocabulary, two frontends.
+- **Unify `audit` + `lint` on one rule engine** — promote the audit report's
+  hard-coded structural findings (no-description skill, no-tool-contract agent,
+  missing hook) to documented, configurable, CI-gatable rules; `audit` becomes
+  inventory + a rule-derived score. The ESLint model: one rule vocabulary, two frontends.
   [scan-lint-unification](scan-lint-unification.md) · **MED**
 - **`compile --policy` → Cedar/OPA codegen** — one `tools:` declaration drives the
   dev-loop hook, the prod gate, and the trace check; emit-and-verify only.
@@ -742,7 +742,7 @@ assertRates`) is the recommended path for testing one skill, but
   - `examples/plugin-test-demo.mjs` and their `demo`/`demo:plugin` scripts) have
     been **deleted**. What's still needed: ONE polished, reliably-passing demo plus a
     recorded GIF/asciinema, framed by the three "best"s — the stale-`enforce()`
-    "lies" story as the one-sentence sell, and `vigiles scan` as the zero-setup wedge.
+    "lies" story as the one-sentence sell, and `vigiles audit` as the zero-setup wedge.
     [distribution-strategy](distribution-strategy.md) · feature-ideas #14 · **MED**
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
   structural score. [divergent-bets #9](divergent-bets.md) · **LOW**
@@ -762,7 +762,7 @@ assertRates`) is the recommended path for testing one skill, but
 
 - Pillar 1: #12 annotation-typo (partial), #10 instruction diff (PR-time), #4
   snapshot, #1 custom-rule plugin API, #7 token budget, #8 skill coloring, #11
-  dep graph, #9 hook validation (**partial** — `scan` already checks hook-script
+  dep graph, #9 hook validation (**partial** — `audit` already checks hook-script
   existence). [feature-ideas.md](feature-ideas.md)
 - Pillar 2: property-based hook fuzzing, monotonic eval invariants.
   [coverage-matrix](harness-testing-coverage-matrix.md)
@@ -823,7 +823,7 @@ assertRates`) is the recommended path for testing one skill, but
   mocks; the 2026-06-17 multi-SDK probe relocates pillar-2 value to the Claude
   Agent SDK + Codex (no mock, unenforced/buggy tool contract) + a mock-ergonomics
   borrow-list. [sdk-harness-testing.md](sdk-harness-testing.md)
-- **Demoted:** vigiles-as-MCP-oracle → fold into `scan`. [divergent-bets #5](divergent-bets.md)
+- **Demoted:** vigiles-as-MCP-oracle → fold into `audit`. [divergent-bets #5](divergent-bets.md)
 - **Punted:** promptfoo interop (E) + dataset/scorer parity (D).
   [eval-api-landscape.md](eval-api-landscape.md) · [promptfoo-deep-dive.md](promptfoo-deep-dive.md)
 - **Rejected pivots:** security vendor, guardrails/observability vendor, generic
@@ -885,7 +885,7 @@ assertRates`) is the recommended path for testing one skill, but
   typed purity PRUNES the impossible configs (PICT-style constraints), a 2-way covering
   array SAMPLES the rest, and the subscription eval runs them; measured 3072 → 18 rows
   (99.4% fewer real-model runs) on a 10-skill × 3-model space. Non-replicable (markdown
-  can't be fed to a CA generator) + ties the eval moat. Lint/scan is a crisp NO (free
+  can't be fed to a CA generator) + ties the eval moat. Lint/audit is a crisp NO (free
   cells). Prototyped (real IPOG-style generator) in
   [`prototypes/covering-arrays/`](prototypes/covering-arrays/).
 - [`typed-spec-fp-theory.md`](typed-spec-fp-theory.md) — round-3 deep FP/monad theory.
