@@ -1734,6 +1734,36 @@ function logAdoptedSurface(
   );
 }
 
+/** Discover existing skill (`skills/<x>/SKILL.md`) and subagent (`agents/<x>.md`)
+ * surfaces — under the bare or `.claude/` roots — that don't yet have a spec, so
+ * bare `vigiles init` creates a spec for EVERY surface it can, not just the
+ * instruction file. Shallow (top-level only) so it never walks node_modules or a
+ * vendored plugin. CC paths are intentional here — `init` is the one composition
+ * point allowed to know them (see adapter-aware-lint-rules). */
+function discoverAdoptableSurfaces(cwd: string): string[] {
+  const out: string[] = [];
+  const unspecced = (rel: string): boolean =>
+    existsSync(resolve(cwd, rel)) &&
+    !existsSync(resolve(cwd, `${rel}.spec.ts`));
+  for (const root of ["skills", ".claude/skills"]) {
+    const abs = resolve(cwd, root);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${root}/${e.name}/SKILL.md`;
+      if (e.isDirectory() && unspecced(rel)) out.push(rel);
+    }
+  }
+  for (const root of ["agents", ".claude/agents"]) {
+    const abs = resolve(cwd, root);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${root}/${e.name}`;
+      if (e.isFile() && e.name.endsWith(".md") && unspecced(rel)) out.push(rel);
+    }
+  }
+  return out;
+}
+
 function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
@@ -2383,7 +2413,7 @@ async function setupPillar1(
   // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
   // AGENTS.md mirror (symlink or synced) to one canonical spec, then redirect
   // into a sync tool's source slot when one would own the output.
-  const targets = targetValue
+  const instructionTargets = targetValue
     ? determineTargets(detected, targetValue, harnesses)
     : redirectSyncToolTargets(
         cwd,
@@ -2392,6 +2422,12 @@ async function setupPillar1(
           detectInstructionMirror(cwd),
         ),
       );
+  // Bare `init` (no explicit --target) also adopts every existing skill +
+  // subagent surface — "create all the specs it can", not just the instruction
+  // file. An explicit --target stays scoped to that one surface.
+  const targets = targetValue
+    ? instructionTargets
+    : [...instructionTargets, ...discoverAdoptableSurfaces(cwd)];
 
   // Create specs. An existing hand-written target is faithfully ADOPTED into a
   // spec (scaffoldSpec() does the convert), not clobbered with a blank one — so the
