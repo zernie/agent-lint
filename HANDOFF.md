@@ -63,23 +63,32 @@ report + fmt + lint clean.
   - consent disclosure read Claude env for cost wording → Codex repo told "no model
     access" wrongly. Threaded harness into `buildExecuteDisclosure` (`src/cli.ts`).
 - **Adoption-gateway design doc** written: `research/adoption-gateway-preview.md`.
+- **Adoption-gateway preview v1 SHIPPED** (the founder's "build it bro"):
+  `src/adoptability.ts` — `verifyDraftedRefs` (pure deterministic verdict, reuses
+  `checkLinterRule` + compile validators) + `parseDraftJson` (tolerant) +
+  `runAdoptabilityTier` (injectable drafter; the one real model call is the only
+  v8-ignored seam) + `formatAdoptability`. Fully unit-tested with a FAKE drafter
+  (`src/adoptability.test.ts`, 14 tests) incl. the hallucinated-rule-is-broken
+  property. Wired into `audit` behind the EXISTING consent — `surfaces.adoptableRefs`
+  makes a bare CLAUDE.md repo consent-eligible (the prime adoption target). Optional
+  additive `adoptability?` field on `AuditReport` (+ `report/src/schema.ts` mirror) +
+  an HTML section (`report/src/components/Adoptability.tsx`). Docs in README + cli.md.
+  v1 = Claude Code only (drafting drives the `claude` CLI); Codex gets a LOUD deferral
+  note (harness-parity). NOTE: the REAL model draft was NOT run end-to-end here (no
+  model auth in this container) — the deterministic half is fully proven, the LLM half
+  is the injectable v8-ignored seam + parse tests. A live spike is the gated follow-up.
 
 ### DO NEXT
 
-- **MERGE DECISION is the founder's** — PR #49 is green. Either re-arm merge-when-green
-  (CronCreate, poll `pull_request_read get_check_runs`, squash keeping the `refactor!:`
-  title) or merge now. Don't merge without an explicit go.
-- **Adoption-gateway preview** (the founder's new ask — design doc only, BUILD NOT
-  STARTED): "what would vigiles catch in YOUR repo?" Architecture decided —
-  **LLM proposes, deterministic disposes**: the model drafts a sibling spec
-  (`adopt-spec`/`strengthen` skills, high recall), the cross-ref engine (`linters.ts`)
-  verifies every drafted ref, so "M broken right now" is trustworthy though extraction
-  is probabilistic. A model-gated audit tier behind the EXISTING consent (not a free
-  ring, not in the A–F grade, ephemeral draft — `init` writes). v1 scope (open Q #1):
-  **instruction-file only** first, then skills/subagents. See the doc's build increments.
+- **MERGE DECISION is the founder's** — PR #49 is green (was, before these pushes; CI
+  re-runs). Either re-arm merge-when-green or merge. Don't merge without an explicit go.
+- **Adoptability follow-ups** (v1 shipped): a LIVE real-model spike (gated on auth) to
+  validate the draft prompt's recall; extend to skills/subagents (flag-gated); caching
+  via `eval-cache.ts`; Codex drafting (the deferred harness-parity gap). See
+  `research/adoption-gateway-preview.md` build increments 1 + 4.
 - Deferred (not blockers): OSS FP sweep (needs open-net machine — git scoped to
   `zernie/vigiles` here); env-scrub/`sandbox-exec` backend (re-earns the Safety ring);
-  hosted dashboard + `audit --upload`; cross-package schema-parity guard.
+  hosted dashboard + `audit --upload`.
 
 ### Gotchas
 
