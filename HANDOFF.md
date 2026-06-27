@@ -39,10 +39,36 @@ green in CI). Branch pushed.
 5. `docs`: README reframe (audit gateway + real screenshot `vigiles-audit.png` + ring
    table) + docs/cli.md rewrite + swept `scan --trigger`→`audit --deep` across docs.
 
+**THEN re-architected the report around MONETIZATION (founder, 2026-06-27) — "JSON
+is the product, not the HTML":**
+
+6. `feat`: **AuditReport JSON contract** (`src/audit-report.ts`, `schemaVersion`) — the
+   versioned wire format everything renders from. `audit --json` emits it; a default
+   `audit` writes `vigiles-report.json` (`--no-json`), the upload/CI artifact.
+7. `feat`: **React + shadcn single-file report** (`report/`, a SEPARATE Vite package;
+   `vite-plugin-singlefile`). CLI injects the JSON into the built template
+   (`dist/audit-report.template.html` via `scripts/build-report.mjs`, wired into
+   `npm run build`). React runs in the browser; CLI stays runtime-dep-light. PURE
+   shadcn/Tailwind (band colors as theme utilities, no inline styles/`[var()]`; auto
+   light/dark). `renderAuditHtmlSimple` = the zero-dep `--simple` fallback.
+   Components presentational → reusable by a future hosted dashboard.
+
+**Stack decision (in `research/audit-lighthouse-design.md` + CLAUDE.md positioning):**
+Vite single-file for the LOCAL report; **TanStack Start** for the future HOSTED
+dashboard (SSR/auth/Stripe — the paid tier), both over the SAME `AuditReport` JSON +
+shared components. Private docs UPDATED (CLAUDE.md keyFiles + positioning, the design
+doc) per the founder's request.
+
+**State:** all committed + green locally (build/tsc, fmt, lint 0 errors, ~1715 tests;
+only env-only `dialect-drift`). Branch pushed. PR still NOT opened (founder okay pending).
+
 **DO NEXT:** open the ONE `refactor!` PR for the whole branch (carries #38–#48 + the
-earlier session work + this Lighthouse build) **once the founder okays it**. Then:
-ecosystem-benchmark v0 (correctness axis); run `scripts/fp-sweep.sh` locally; optional
-live `--deep` validation run (auto-prompts → real model) gated on quota.
+earlier session work + the Lighthouse build + the report stack) **once the founder okays
+it**. Open follow-ups (not blockers): the hosted dashboard + `audit --upload`; a
+cross-package schema-parity guard (report/src/schema.ts mirrors src/audit-report.ts by
+hand today); harden `build-report.mjs` to fail-loud in the release pipeline; decide
+whether to keep the `--simple` inline fallback (the one remaining custom-CSS path).
+Also: ecosystem-benchmark v0; run `scripts/fp-sweep.sh` locally.
 
 **Code/doc changes (shipped on the branch):**
 
