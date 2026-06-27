@@ -65,23 +65,21 @@ and linter rule it names is real and enabled.
 A skill only helps if its description reliably **triggers** on the prompts your
 users actually type — and stays quiet on the ones it shouldn't hijack. That's
 **recall** and **precision**, and a well-formed description tells you nothing about
-either. This is the model-gated trigger tier, measured on your own subscription. It
-runs by default when a model is reachable (asked once, then remembered); `--measure`
-forces it anywhere:
+either. This is the model-gated trigger tier, measured on your own subscription. As
+a local report, `audit` runs it interactively — it **asks once** (then remembers):
 
 ```bash
-# auto-generates probe prompts from each skill's description — zero setup:
-npx vigiles audit ./my-plugin --measure
-# …or supply a curated set (a map of skill name → realistic prompts to fire it,
-# + optional `irrelevant` prompts that should NOT, to score precision) — this also
-# adds the selection-collision matrix:
+# audit asks "run the executing checks?" — say yes; probes are auto-generated from
+# each skill's description (zero setup). A curated set (+ the selection-collision
+# matrix) is used if you supply one:
 #   { "my-skill": { "prompts": ["how do I …", "…"], "irrelevant": ["…"] } }
-npx vigiles audit ./my-plugin --measure --prompts=prompts.json
+npx vigiles audit ./my-plugin --prompts=prompts.json
 ```
 
-For per-skill thresholds in a test, drive `measureTriggerRate` directly — it
-reports recall across varied prompts and, with irrelevant prompts, precision (so a
-too-broad description that hijacks unrelated work fails too). See
+**For automation / CI** (no human to consent), drive `measureTriggerRate` directly
+— it reports recall across varied prompts and, with irrelevant prompts, precision
+(so a too-broad description that hijacks unrelated work fails too). That's the
+designed path for testing skills in a script. See
 [measuring skills](measuring-skills.md) and the [testing API](testing-api.md).
 
 ## 4. Rank against the field
@@ -110,7 +108,7 @@ operation: point it at an individual plugin directory, not the marketplace root.
 Run it on the member dirs you care about:
 
 ```bash
-npx vigiles audit ./marketplace/my-plugin --measure
+npx vigiles audit ./marketplace/my-plugin   # then say yes to run the checks
 ```
 
 ## 5. Test and gate it in CI

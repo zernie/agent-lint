@@ -657,31 +657,26 @@ describe("audit: read-vs-run (executing checks are opt-in)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("a headless run stays a READ + a loud nudge to --measure (never executes)", () => {
+  it("a headless run stays a READ + a nudge (points to interactive + the API, no flag)", () => {
     const out = runEnv("audit .", { CLAUDECODE: "1" });
-    assert.ok(out.includes("Executing checks not run"), "read-vs-run nudge");
-    assert.ok(out.includes("--measure"), "names the --measure escape");
+    assert.ok(out.includes("Executing checks"), "read-vs-run nudge");
+    assert.ok(out.includes("interactively"), "points at the interactive path");
+    assert.ok(!out.includes("--measure"), "no execution flag exists");
   });
 
   it("the nudge is model-agnostic — it's about execution, shown with or without a model", () => {
     const out = runEnv("audit .", {}); // all model signals stripped
-    assert.ok(out.includes("Executing checks not run"), "nudge still shown");
+    assert.ok(out.includes("Executing checks"), "nudge still shown");
   });
 
   it("stays silent under --json (machine output — no human nudge)", () => {
     const out = runEnv("audit . --json", { CLAUDECODE: "1" });
-    assert.ok(
-      !out.includes("Executing checks not run"),
-      "no nudge in json mode",
-    );
+    assert.ok(!out.includes("Executing checks"), "no nudge in json mode");
   });
 
   it("--no-interactive never prompts (loud nudge only)", () => {
     const out = runEnv("audit . --no-interactive", { CLAUDECODE: "1" });
-    assert.ok(
-      out.includes("Executing checks not run"),
-      "nudge shown, not a prompt",
-    );
+    assert.ok(out.includes("Executing checks"), "nudge shown, not a prompt");
   });
 });
 
@@ -731,123 +726,50 @@ describe("scan default output — health score header", () => {
     const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
     assert.doesNotMatch(r.stdout, /Safety battery/);
-    assert.match(r.stdout, /Executing checks not run/);
+    assert.match(r.stdout, /Executing checks/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// the safety battery is opt-in via --measure (own-direct/confined; foreign
-// sandbox-or-skip). A plain audit never runs it (covered above).
+// the safety battery never runs on a headless `audit` (it's a local report, not a
+// CI step — execution is TTY-consent only). The battery's block/allow + confine
+// logic is unit-tested directly in src/audit-battery.test.ts (no TTY needed).
+// Here we assert the CLI BOUNDARY: a headless audit over a hooks-bearing plugin
+// stays a read and never executes.
 // ---------------------------------------------------------------------------
 
-describe("audit safety battery e2e (--measure)", () => {
-  let root: string;
-  let blockingPlugin: string;
-  let permissivePlugin: string;
-  let noHooksPlugin: string;
-
-  /** Write a shell script and make it executable; return the absolute path. */
-  const writeScript = (dir: string, name: string, body: string): string => {
-    const p = join(dir, name);
-    writeFileSync(p, body);
-    chmodSync(p, 0o755);
-    return p;
-  };
-
-  /** Wire a hook script into a Claude Code plugin's .claude/settings.json. */
-  const wireHook = (pluginDir: string, scriptPath: string): void => {
-    const settingsDir = join(pluginDir, ".claude");
-    mkdirSync(settingsDir, { recursive: true });
-    const settings = {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: "Bash",
-            hooks: [{ type: "command", command: scriptPath }],
-          },
-        ],
-      },
-    };
-    writeFileSync(
-      join(settingsDir, "settings.json"),
-      JSON.stringify(settings, null, 2),
-    );
-  };
+describe("audit safety battery — headless never executes", () => {
+  let pluginWithHook: string;
 
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "scan-check-hooks-"));
-
-    // 1. Blocking plugin — hook exits 2 on any bash call → blocks all disasters.
-    blockingPlugin = join(root, "blocking");
-    mkdirSync(blockingPlugin, { recursive: true });
-    writeFileSync(join(blockingPlugin, "CLAUDE.md"), "# Blocking\n");
-    const blockScript = writeScript(
-      blockingPlugin,
-      "guard.sh",
-      "#!/usr/bin/env bash\nexit 2\n",
+    pluginWithHook = mkdtempSync(join(tmpdir(), "scan-battery-boundary-"));
+    writeFileSync(join(pluginWithHook, "CLAUDE.md"), "# Has a hook\n");
+    const guard = join(pluginWithHook, "guard.sh");
+    writeFileSync(guard, "#!/usr/bin/env bash\nexit 2\n");
+    chmodSync(guard, 0o755);
+    mkdirSync(join(pluginWithHook, ".claude"), { recursive: true });
+    writeFileSync(
+      join(pluginWithHook, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: guard }] },
+          ],
+        },
+      }),
     );
-    wireHook(blockingPlugin, blockScript);
-
-    // 2. Permissive plugin — hook exits 0 (no block) → all disasters slip through.
-    permissivePlugin = join(root, "permissive");
-    mkdirSync(permissivePlugin, { recursive: true });
-    writeFileSync(join(permissivePlugin, "CLAUDE.md"), "# Permissive\n");
-    const permitScript = writeScript(
-      permissivePlugin,
-      "noop.sh",
-      "#!/usr/bin/env bash\nexit 0\n",
-    );
-    wireHook(permissivePlugin, permitScript);
-
-    // 3. No-hooks plugin — nothing wired, battery should report "no runnable safety hooks".
-    noHooksPlugin = join(root, "nohooks");
-    mkdirSync(noHooksPlugin, { recursive: true });
-    writeFileSync(join(noHooksPlugin, "CLAUDE.md"), "# No hooks\n");
   });
 
   afterAll(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(pluginWithHook, { recursive: true, force: true });
   });
 
-  // Run the battery as the user's OWN repo (cwd === scanned dir) so the hook
-  // executes DIRECT (trusted) — the deterministic path. A non-cwd ("foreign")
-  // scan is sandbox-or-skip (env-dependent), covered separately below.
-  it("blocking hook (own repo): reports all disasters blocked", () => {
-    const r = run(`audit . --measure`, blockingPlugin);
-    assert.equal(r.exitCode, 0);
-    // Must show a Safety battery section.
-    assert.match(r.stdout, /Safety battery/);
-    // The blocking hook should block every disaster (N/N).
-    assert.match(r.stdout, /blocks (\d+)\/\1 disasters/);
-    // Totals line.
-    assert.match(r.stdout, /Total: blocks \d+\/\d+ disasters/);
-  });
-
-  it("permissive hook (own repo): reports disasters slipping through", () => {
-    const r = run(`audit . --measure`, permissivePlugin);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Safety battery/);
-    // The permissive hook (exit 0) blocks nothing.
-    assert.match(r.stdout, /blocks 0\/\d+ disasters/);
-    // The guardrail report names the missed disasters.
-    assert.match(r.stdout, /allows/);
-  });
-
-  it("foreign plugin: shows the battery sandboxed-or-skipped, never a crash", () => {
-    // Scanning a NON-cwd dir runs from the repo root (cwd) → the plugin is
-    // foreign → it must sandbox or skip-with-a-loud-note, never run unconfined.
-    // Env-robust: pass either way as long as it doesn't crash and the section shows.
-    const r = run(`audit ${blockingPlugin} --measure`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Safety battery/);
-  });
-
-  it("no-hooks/no-skills plugin: --measure has nothing to run → a clean read", () => {
-    // Nothing executable (no hooks, MCP, or skills) → --measure is a no-op; the
-    // audit is just the deterministic read, no battery section, no crash.
-    const r = run(`audit ${noHooksPlugin} --measure`);
+  it("a headless audit over a plugin with hooks runs NO battery — just the read + nudge", () => {
+    // execSync is non-TTY → headless → execution is skipped; the battery never runs.
+    const r = run(`audit ${pluginWithHook}`);
     assert.equal(r.exitCode, 0);
     assert.doesNotMatch(r.stdout, /Safety battery/);
+    assert.match(r.stdout, /Executing checks .* skipped/);
   });
 });
 

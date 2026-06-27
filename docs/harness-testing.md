@@ -243,7 +243,7 @@ selector model (`sonnet`). Every knob — `fixture`, `installSet`, `concurrency`
 
 > **Whole plugin at once:** `vigiles audit <plugin>` measures recall / precision
 > for every model-invocable skill (auto-generated probes) and prints it as the
-> behavioral column of the audit report — run when capable, `--measure` to force.
+> behavioral column of the audit report (interactive); for automation call this directly.
 > Same engine, batch front-end.
 
 ## Test a change moves behaviour (`runEval`)
