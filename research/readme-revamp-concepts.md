@@ -233,6 +233,21 @@ full file. If you say nothing, I'll draft Concept 1.
 - **Screenshots/gifs still need a capture pass** (HTML report renders, but no headless
   screenshot here). That's a follow-up on a TTY machine.
 
+### STATUS (2026-06-27): Concept-5 README DRAFTED + dogfood saved
+
+- **`README.md` rewritten** to the proof-led Concept-5 spine — every proof block traces
+  to a real run in `research/dogfood/` (no fabricated output). Direction comment at the
+  top of the README encodes the spine for future edits. Prettier-clean; the
+  self-command-refs dogfood passes (no stale `vigiles <cmd>` refs).
+- **Dogfood corpus saved** in `research/dogfood/`: `audit-superpowers.txt|json|html`,
+  `audit-madappgang.txt`, `audit-oh-my-claudecode.txt`, `audit-leaderboard.txt`,
+  `audit-vigiles-self.txt` (100/100 A), `lint-vigiles-self.txt`, `test-hook-unit.txt`.
+- **Still TODO before launch:** (1) refresh `vigiles-audit.png` from
+  `research/dogfood/audit-superpowers.html` on a pinned-CC machine (no drift banner);
+  (2) the "skill never fires" Triggering block is currently carried by the audit
+  ring/score, not a live trigger-rate capture — a model-auth spike or the
+  description-overlap proxy would make it a hard proof; (3) founder wordsmith pass.
+
 ### Remaining prep before writing Concept 5
 
 1. **Live trigger-rate spike** (needs model auth) for the "skill that never fires"

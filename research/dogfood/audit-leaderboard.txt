@@ -1,0 +1,18 @@
+# Captured 2026-06-27 by running the built CLI against SHA-pinned upstream
+# plugins in examples/harness/vendor/. The 'dialect freshness' banner (this
+# container runs CC 2.1.42 vs vigiles's validated 2.1.187) is an ENV artifact and
+# is filtered out here — it would not appear on a pinned-CC machine.
+
+$ node dist/cli.js audit examples/harness/vendor/*@*
+
+Plugin health leaderboard (4 scanned)
+
+  #   score  grade  plugin
+   1   89    B      madappgang-frontend@6097ad4 — 1 agent tool(s) that don't exist (typo / never-available); 1 untested surface(s)
+   2   86    B      accessibility-compliance — 3 untested surface(s); 1 agent(s) inherit all tools (no contract)
+   3   86    B      superpowers — 2 untested surface(s); 1 broken intra-plugin reference(s)
+   4   78    C      oh-my-claudecode — 4 untested surface(s); 2 agent(s) inherit all tools (no contract)
+
+Structural health only (no model). Weights: missing hook -15, no-description
+skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5,
+untested surface -3.

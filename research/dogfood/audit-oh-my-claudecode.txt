@@ -1,0 +1,51 @@
+# Captured 2026-06-27 by running the built CLI against SHA-pinned upstream
+# plugins in examples/harness/vendor/. The 'dialect freshness' banner (this
+# container runs CC 2.1.42 vs vigiles's validated 2.1.187) is an ENV artifact and
+# is filtered out here — it would not appear on a pinned-CC machine.
+
+$ node dist/cli.js audit examples/harness/vendor/oh-my-claudecode@deee3a4
+
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ● Triggering     100  ██████████████████████
+  ● Structure       90  ████████████████████░░
+       └ 2 agent(s) inherit all tools (no contract)
+  ◑ Tested          88  ███████████████████░░░
+       └ 4 untested surface(s)
+
+Harness health: A (95/100)
+
+Scan: examples/harness/vendor/oh-my-claudecode@deee3a4
+
+Skills (2):
+  ✓ ask
+  ✓ verify
+
+Agents (2):
+  ⚠ code-reviewer — tools: (inherits all — no contract) [unrestricted]
+  ⚠ critic — tools: (inherits all — no contract) [unrestricted]
+
+Hooks (3):
+  ✓ /home/user/vigiles/examples/harness/vendor/oh-my-claudecode@deee3a4/scripts/keyword-detector.mjs
+  ✓ /home/user/vigiles/examples/harness/vendor/oh-my-claudecode@deee3a4/scripts/run.cjs
+  ✓ /home/user/vigiles/examples/harness/vendor/oh-my-claudecode@deee3a4/scripts/session-start.mjs
+
+MCP servers: yes
+Untested surfaces: 4
+Effect surface: 0 pure · 0 bounded · 2 unrestricted
+
+Warnings:
+  - plugin defines 2 subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.
+  - plugin declares MCP server(s) (mcpServers / .mcp.json) — the loader does not wire MCP; bring the server up yourself if your test needs it.
+
+ℹ 2 hand-written hook command(s) — if any gate the agent (a block/deny decision), compiled hooks (`vigiles/hook`) make whole hook bug classes unrepresentable at authoring time, and `guardrail-check` proves an existing one blocks. See docs/compiled-hooks.md.
+
+✓ no structural issues found
+
+ℹ Executing checks (safety battery · live MCP · skill firing) skipped — `audit` runs them only interactively (a terminal). For automation, test the harness with the `vigiles/testing` API.
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

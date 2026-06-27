@@ -1,0 +1,104 @@
+Verifying compiled files...
+
+
+✓ CLAUDE.md — hash valid (from CLAUDE.md.spec.ts)
+
+✓ src/CLAUDE.md — hash valid (from src/CLAUDE.md.spec.ts)
+
+- fixtures/example-project/CLAUDE.md — no vigiles hash (hand-written or pre-v2)
+
+✓ examples/CLAUDE.md — hash valid (from examples/CLAUDE.md.spec.ts)
+
+- examples/harness/fixture-plugin/CLAUDE.md — no vigiles hash (hand-written or pre-v2)
+
+- skills/test-harness/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- skills/strengthen/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- skills/linter-docs/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- skills/edit-spec/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- skills/adopt-spec/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+✓ examples/SKILL.md — hash valid (from examples/SKILL.md.spec.ts)
+
+✓ examples/ship-pr/SKILL.md — hash valid (from examples/ship-pr/SKILL.md.spec.ts)
+
+- examples/harness/vendor/wshobson-accessibility@cf6059d/skills/wcag-audit-patterns/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/vendor/wshobson-accessibility@cf6059d/skills/screen-reader-testing/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/vendor/superpowers@6fd4507/skills/test-driven-development/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/vendor/superpowers@6fd4507/skills/systematic-debugging/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/vendor/oh-my-claudecode@deee3a4/skills/verify/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/vendor/oh-my-claudecode@deee3a4/skills/ask/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- examples/harness/fixture-skill-plugin/skills/greet/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- dev/skills/pr-to-lint-rule/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- dev/skills/generate-logo/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- dev/skills/enforce-rules-format/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- dev/skills/audit-feedback-loop/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+- dev/skills/audience-check/SKILL.md — no vigiles hash (hand-written or pre-v2)
+
+Inline + frontmatter rule verification:
+  (no inline vigiles:enforce comments or vigiles: frontmatter found)
+
+Linter rule coverage:
+
+Scanning project for linter rules...
+
+Detected linters:
+
+  eslint: 0/64 rules documented (0%)
+    Top undocumented:
+    ✗ eslint/constructor-super
+    ✗ eslint/for-direction
+    ✗ eslint/getter-return
+    ✗ eslint/no-async-promise-executor
+    ✗ eslint/no-case-declarations
+    ... and 59 more
+
+Coverage: 0/64 rules documented (0%)
+
+Consider adding enforce() rules for frequently-triggered undocumented rules.
+The agent encounters these rules but has no context about WHY.
+
+Duplicate rule detection:
+
+No near-duplicate rules detected.
+38 guidance rule(s) — run /strengthen to find enforce() upgrades
+
+
+Integrity check:
+
+  ✓ CLAUDE.md
+  ✓ src/CLAUDE.md
+  ✓ fixtures/example-project/CLAUDE.md
+  ✓ examples/CLAUDE.md
+  ✓ examples/harness/fixture-plugin/CLAUDE.md
+  ✓ skills/test-harness/SKILL.md
+  ✓ skills/strengthen/SKILL.md
+  ✓ skills/linter-docs/SKILL.md
+  ✓ skills/edit-spec/SKILL.md
+  ✓ skills/adopt-spec/SKILL.md
+  ✓ examples/SKILL.md
+  ✓ examples/ship-pr/SKILL.md
+  ✓ examples/harness/vendor/wshobson-accessibility@cf6059d/skills/wcag-audit-patterns/SKILL.md
+  ✓ examples/harness/vendor/wshobson-accessibility@cf6059d/skills/screen-reader-testing/SKILL.md
+  ✓ examples/harness/vendor/superpowers@6fd4507/skills/test-driven-development/SKILL.md
+  ✓ examples/harness/vendor/superpowers@6fd4507/skills/systematic-debugging/SKILL.md
+  ✓ examples/harness/vendor/oh-my-claudecode@deee3a4/skills/verify/SKILL.md
+  ✓ examples/harness/vendor/oh-my-claudecode@deee3a4/skills/ask/SKILL.md
+  ✓ examples/harness/fixture-skill-plugin/skills/greet/SKILL.md
+  ✓ dev/skills/pr-to-lint-rule/SKILL.md
+  ✓ dev/skills/generate-logo/SKILL.md
+  ✓ dev/skills/enforce-rules-format/SKILL
