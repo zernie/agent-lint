@@ -1,14 +1,18 @@
 /**
- * HTML-report suite (vitest, no browser). renderAuditHtmlSimple is the zero-dep
- * inline-CSS fallback — pure + deterministic, so it carries the substring asserts.
- * renderAuditHtml prefers the built React template but falls back to simple when
- * it's absent; both consume the versioned AuditReport and escape untrusted text.
+ * HTML-report suite (vitest, no browser). injectReportData is the pure, testable
+ * core: it embeds the versioned AuditReport into the React template's placeholder
+ * and escapes untrusted text so it can't break out of the <script>. renderAuditHtml
+ * (which reads the built template from disk) is exercised e2e in scan-cli.test.ts.
  */
 import { describe, it, expect } from "vitest";
-import { renderAuditHtml, renderAuditHtmlSimple } from "./audit-html.js";
+import { injectReportData } from "./audit-html.js";
 import type { AuditReport } from "./audit-report.js";
 
-const base: AuditReport = {
+const TEMPLATE = `<!doctype html><html><body><div id="root"></div>
+<script>window.__VIGILES_DATA__ = "__VIGILES_DATA_PLACEHOLDER__";</script>
+</body></html>`;
+
+const report: AuditReport = {
   meta: {
     schemaVersion: 1,
     tool: "vigiles",
@@ -38,7 +42,7 @@ const base: AuditReport = {
       surface: "rev",
       action: "fix",
       rationale: "the subagent loses a declared tool",
-      fix: 'change the tool "Reed" to "Read"',
+      fix: 'change "Reed" to "Read"',
       detector: "subagent-tool-contract",
       confidence: "likely",
     },
@@ -53,61 +57,32 @@ const base: AuditReport = {
   },
 };
 
-describe("renderAuditHtmlSimple", () => {
-  it("is a self-contained document with the overall + grade", () => {
-    const html = renderAuditHtmlSimple(base);
-    expect(html).toMatch(/^<!doctype html>/);
-    expect(html).toContain("<style>");
-    expect(html).toContain("Harness health:");
-    expect(html).toContain("81/100");
-    expect(html).toContain("claude-code");
-  });
-
-  it("renders every category + an SVG ring per category (overall + 5)", () => {
-    const html = renderAuditHtmlSimple(base);
-    for (const c of base.score.categories) expect(html).toContain(c.key);
-    expect(html.match(/<svg /g)?.length).toBe(6);
-    expect(html).toContain("n/a"); // the Tested category is n/a
-  });
-
-  it("renders a fix card with surface, detector, and the one-line fix", () => {
-    const html = renderAuditHtmlSimple(base);
-    expect(html).toContain("rev");
+describe("injectReportData", () => {
+  it("replaces the placeholder with the report JSON (data lands in the file)", () => {
+    const html = injectReportData(TEMPLATE, report);
+    expect(html).not.toContain("__VIGILES_DATA_PLACEHOLDER__");
+    expect(html).toContain('"schemaVersion":1');
+    expect(html).toContain('"grade":"B"');
     expect(html).toContain("subagent-tool-contract");
-    expect(html).toContain("Read");
+    // Still a single self-contained document.
+    expect(html).toMatch(/^<!doctype html>/);
   });
 
-  it("escapes untrusted text from findings/fixes (no raw injection)", () => {
-    const html = renderAuditHtmlSimple({
-      ...base,
+  it("escapes <, >, & so report text can't break out of the <script>", () => {
+    const evil: AuditReport = {
+      ...report,
       recommendations: [
-        { ...base.recommendations[0], fix: 'use <script>alert("x")</script>' },
+        { ...report.recommendations[0], fix: "use </script><script>alert(1)" },
       ],
-    });
-    expect(html).not.toContain("<script>alert");
-    expect(html).toContain("&lt;script&gt;");
+    };
+    const html = injectReportData(TEMPLATE, evil);
+    expect(html).not.toContain("</script><script>alert");
+    expect(html).toContain("\\u003c"); // < was escaped
   });
 
-  it("an empty machine still renders (overall 0)", () => {
-    const html = renderAuditHtmlSimple({
-      ...base,
-      score: { ...base.score, overall: 0, grade: "F", empty: true },
-    });
-    expect(html).toContain("0/100");
-  });
-});
-
-describe("renderAuditHtml (template-or-fallback)", () => {
-  it("--simple forces the inline fallback (identical to renderAuditHtmlSimple)", () => {
-    expect(renderAuditHtml(base, { simple: true })).toBe(
-      renderAuditHtmlSimple(base),
-    );
-  });
-
-  it("produces a self-contained document either way (template or fallback)", () => {
-    const html = renderAuditHtml(base);
-    // Whichever path: a single HTML doc that embeds/renders the report data.
-    expect(html).toMatch(/^<!doctype html>/i);
-    expect(html.length).toBeGreaterThan(500);
+  it("throws when the template lacks the placeholder (malformed build)", () => {
+    expect(() =>
+      injectReportData("<html>no placeholder</html>", report),
+    ).toThrow(/placeholder/);
   });
 });

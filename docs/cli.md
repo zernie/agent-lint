@@ -307,9 +307,8 @@ description collision), `likely` dead-ends before `possible` proxies.
 self-contained React app (category rings, findings, fix cards; auto light/dark)
 the CLI fills with the report JSON, so it opens offline by double-click. Screenshot
 it, attach it to a PR; for a human at a TTY it's opened best-effort. `--no-html`
-skips it; `--simple` emits a zero-dependency inline-CSS version instead. A versioned
-**`vigiles-report.json`** is written alongside (`--no-json` to skip) — the same
-contract `--json` prints, for CI or upload.
+skips it. A versioned **`vigiles-report.json`** is written alongside (`--no-json` to
+skip) — the same contract `--json` prints, for CI or upload.
 
 `audit` reports **harness-specific structure** (plugin layout, hook resolution),
 so it auto-detects the harness — printing the detected one and warning when a repo

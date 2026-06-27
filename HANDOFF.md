@@ -50,8 +50,10 @@ is the product, not the HTML":**
    (`dist/audit-report.template.html` via `scripts/build-report.mjs`, wired into
    `npm run build`). React runs in the browser; CLI stays runtime-dep-light. PURE
    shadcn/Tailwind (band colors as theme utilities, no inline styles/`[var()]`; auto
-   light/dark). `renderAuditHtmlSimple` = the zero-dep `--simple` fallback.
-   Components presentational → reusable by a future hosted dashboard.
+   light/dark). ONE renderer — no inline-CSS fallback (`--simple` removed); the
+   build fails loud so the template always ships, and if it's missing the CLI skips
+   the HTML (JSON + terminal still work). Components presentational → reusable by a
+   future hosted dashboard.
 
 **Stack decision (in `research/audit-lighthouse-design.md` + CLAUDE.md positioning):**
 Vite single-file for the LOCAL report; **TanStack Start** for the future HOSTED
@@ -66,9 +68,7 @@ only env-only `dialect-drift`). Branch pushed. PR still NOT opened (founder okay
 earlier session work + the Lighthouse build + the report stack) **once the founder okays
 it**. Open follow-ups (not blockers): the hosted dashboard + `audit --upload`; a
 cross-package schema-parity guard (report/src/schema.ts mirrors src/audit-report.ts by
-hand today); harden `build-report.mjs` to fail-loud in the release pipeline; decide
-whether to keep the `--simple` inline fallback (the one remaining custom-CSS path).
-Also: ecosystem-benchmark v0; run `scripts/fp-sweep.sh` locally.
+hand today). Also: ecosystem-benchmark v0; run `scripts/fp-sweep.sh` locally.
 
 **Code/doc changes (shipped on the branch):**
 
