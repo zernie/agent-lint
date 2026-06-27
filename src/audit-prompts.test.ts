@@ -84,4 +84,17 @@ describe("autoTriggerPrompts", () => {
     );
     expect(overlap).toEqual([]);
   });
+
+  it("the irrelevant arm ALSO clears the AUTO diversity floor (both arms gated)", () => {
+    // Regression: the trigger tier applies `minPrompts: AUTO_RECALL_COUNT` to BOTH
+    // arms. A short irrelevant bank fails preflight ("need at least N") and every
+    // skill reports unmeasured instead of running. The bank must meet the floor.
+    const set = autoTriggerPrompts(skills);
+    const issues = checkPromptDiversity(set.review.irrelevant ?? [], {
+      minPrompts: AUTO_RECALL_COUNT,
+      minDistance: AUTO_MIN_DISTANCE,
+      label: "irrelevantPrompts",
+    });
+    expect(issues).toEqual([]);
+  });
 });

@@ -91,6 +91,16 @@ describe("auditScore", () => {
     expect(s.categories.every((c) => c.score === null)).toBe(true);
   });
 
+  it("an inline-hook-only harness is NOT empty (inline hooks are a real surface)", () => {
+    // A harness that defines only inline hook commands (no script file, no skills
+    // /agents/commands/mcp) has a real loadable hook surface — it must score, not
+    // be graded F/0. Regression: `inlineHooks` was excluded from the surface count.
+    const s = auditScore(
+      makeReport({ commands: 0, mcp: false, inlineHooks: 2 }),
+    );
+    expect(s.empty).toBe(false);
+  });
+
   it("an instruction-only repo is NOT empty (a CLAUDE.md is a loadable surface)", () => {
     // Just a top-level instruction file, no plugin surface — must still score,
     // not be graded F/0 "no loadable surface".
