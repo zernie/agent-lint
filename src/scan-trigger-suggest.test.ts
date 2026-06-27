@@ -1,14 +1,18 @@
 /**
- * scan trigger-suggestion tests — the pure decision that surfaces the real-model
- * `--trigger` tier (prompt a human, hint an agent, or stay silent) and the
- * scaffold for its prompts file.
+ * audit read-vs-run decision tests — the pure `decideExecute` that makes a plain
+ * `audit` a deterministic READ and gates ALL execution (safety battery + live MCP
+ * + trigger-rate) behind one consent: ask at a TTY (remembered), `--measure` is
+ * the headless yes, headless stays a read + a loud nudge. Plus the model-access
+ * helpers (disclosure wording) and the prompts scaffold.
  */
 import { describe, it, expect } from "vitest";
 import {
   hasModelAccess,
-  decideTriggerSuggestion,
-  formatTriggerHint,
+  isMeteredAccess,
+  decideExecute,
+  formatExecuteSkip,
   scaffoldTriggerPrompts,
+  type ExecuteEnv,
 } from "./scan-trigger-suggest.js";
 
 describe("hasModelAccess", () => {
@@ -25,49 +29,84 @@ describe("hasModelAccess", () => {
   });
 });
 
-describe("decideTriggerSuggestion", () => {
-  const base = {
-    modelAccess: true,
+describe("isMeteredAccess", () => {
+  it("metered iff a paid API key is set (subscription is not metered)", () => {
+    expect(isMeteredAccess({ ANTHROPIC_API_KEY: "sk-x" })).toBe(true);
+    expect(isMeteredAccess({ CLAUDECODE: "1" })).toBe(false);
+    expect(isMeteredAccess({})).toBe(false);
+  });
+});
+
+describe("decideExecute", () => {
+  // The default: an interactive human, something executable present, no sticky.
+  const base: ExecuteEnv = {
+    hasExecutable: true,
     isTTY: true,
-    triggerableSkills: 2,
     json: false,
     noInteractive: false,
   };
 
-  it("prompts a human at a TTY with model access + skills", () => {
-    expect(decideTriggerSuggestion(base)).toBe("prompt");
+  it("ASKS once at a TTY when there's something to run and no sticky choice", () => {
+    expect(decideExecute(base)).toEqual({ kind: "ask" });
   });
-  it("hints (never prompts) an agent: non-TTY", () => {
-    expect(decideTriggerSuggestion({ ...base, isTTY: false })).toBe("hint");
+
+  it("nothing executable → skip 'nothing' (a clean read, no nudge)", () => {
+    expect(decideExecute({ ...base, hasExecutable: false })).toEqual({
+      kind: "skip",
+      reason: "nothing",
+    });
   });
-  it("hints under explicit --no-interactive even at a TTY", () => {
-    expect(decideTriggerSuggestion({ ...base, noInteractive: true })).toBe(
-      "hint",
-    );
+
+  it("headless (non-TTY / --json / --no-interactive) stays a read → skip 'headless'", () => {
+    expect(decideExecute({ ...base, isTTY: false })).toEqual({
+      kind: "skip",
+      reason: "headless",
+    });
+    expect(decideExecute({ ...base, json: true })).toEqual({
+      kind: "skip",
+      reason: "headless",
+    });
+    expect(decideExecute({ ...base, noInteractive: true })).toEqual({
+      kind: "skip",
+      reason: "headless",
+    });
   });
-  it("stays silent for --json (machine output)", () => {
-    expect(decideTriggerSuggestion({ ...base, json: true })).toBe("none");
+
+  it("headless never executes — not even a remembered yes (audit is a local report, not CI)", () => {
+    expect(decideExecute({ ...base, isTTY: false, remembered: true })).toEqual({
+      kind: "skip",
+      reason: "headless",
+    });
   });
-  it("stays silent with no model access", () => {
-    expect(decideTriggerSuggestion({ ...base, modelAccess: false })).toBe(
-      "none",
-    );
-  });
-  it("stays silent with no triggerable skills", () => {
-    expect(decideTriggerSuggestion({ ...base, triggerableSkills: 0 })).toBe(
-      "none",
-    );
+
+  it("interactive honors the sticky choice (no re-ask)", () => {
+    expect(decideExecute({ ...base, remembered: true })).toEqual({
+      kind: "run",
+    });
+    expect(decideExecute({ ...base, remembered: false })).toEqual({
+      kind: "skip",
+      reason: "remembered-no",
+    });
   });
 });
 
-describe("formatTriggerHint", () => {
-  it("names the count + the runnable command, pluralized", () => {
-    const one = formatTriggerHint("./plugin", 1);
-    expect(one).toContain("1 model-invocable skill ");
-    expect(one).toContain("vigiles scan ./plugin --trigger --prompts=");
-    expect(formatTriggerHint("./plugin", 3)).toContain(
-      "3 model-invocable skills",
-    );
+describe("formatExecuteSkip", () => {
+  it("'nothing' → no nudge (a clean read)", () => {
+    expect(formatExecuteSkip("nothing")).toBeNull();
+  });
+
+  it("headless points at interactive + the testing API (no execution flag exists)", () => {
+    const note = formatExecuteSkip("headless");
+    expect(note).toContain("skipped");
+    expect(note).toContain("interactively");
+    expect(note).toContain("vigiles/testing");
+    expect(note).not.toContain("--measure");
+  });
+
+  it("remembered-no points at the config, not a flag", () => {
+    const note = formatExecuteSkip("remembered-no");
+    expect(note).toContain("audit.measure");
+    expect(note).not.toContain("--measure`");
   });
 });
 
@@ -82,7 +121,6 @@ describe("scaffoldTriggerPrompts", () => {
     expect(Array.isArray(parsed.alpha.prompts)).toBe(true);
     expect(parsed.alpha.prompts.length).toBeGreaterThan(0);
     expect(Array.isArray(parsed.alpha.irrelevant)).toBe(true);
-    // Each entry names its skill so the placeholders are self-documenting.
     expect(parsed.beta.prompts[0]).toContain("beta");
   });
 });

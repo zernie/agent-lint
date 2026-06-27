@@ -1,9 +1,9 @@
 /**
- * The per-repo harness optimizer's DETERMINISTIC spine — shipped as the
- * `vigiles scan --fix-plan` lens (NOT its own `optimize` verb: until the measured
- * A/B half lands, an "optimizer" that only re-prints scan's findings doesn't earn
- * a separate command, so it's folded into scan as one more view on the same
- * report; see research/roadmap.md §P2 "reconsider an `optimize` verb").
+ * The per-repo harness optimizer's DETERMINISTIC spine — folded INLINE into the
+ * default `vigiles audit` report (each finding carries its fix; NOT its own
+ * `optimize` verb, and no longer a `--fix-plan` flag: until the measured A/B half
+ * lands, an "optimizer" that only re-prints audit's findings doesn't earn a
+ * separate surface; see research/roadmap.md §P2 "reconsider an `optimize` verb").
  *
  * A2 in the measurement-authority pivot is the ADOPTION product: measure a user's
  * own skills/model/rules on their tasks and recommend add/drop/swap with a MEASURED
@@ -112,6 +112,27 @@ const ACTION_LABEL: Record<OptimizeAction, string> = {
 
 const measureHint = (dir: string): string =>
   `\`vigiles measure ${dir} --prompts=<file>\` — real-model, runs on your subscription`;
+
+/**
+ * Just the deterministic fix list (no score header) — folded into the default
+ * `vigiles audit` report so every finding carries its fix inline (replaces the
+ * former `--fix-plan`/`--explain` flags). Empty string when there's nothing to
+ * fix (or no loadable surface), so the caller can skip the section entirely.
+ */
+export function formatRecommendations(rep: OptimizeReport): string {
+  if (rep.empty || rep.recommendations.length === 0) return "";
+  const lines: string[] = [
+    `${String(rep.recommendations.length)} deterministic fix(es) — free, no model:`,
+    "",
+  ];
+  for (const r of rep.recommendations) {
+    const mark = r.confidence === "likely" ? "✗" : "⚠";
+    lines.push(`${mark} [${ACTION_LABEL[r.action]}] ${r.surface}`);
+    lines.push(`    why: ${r.rationale}  [${r.detector}]`);
+    lines.push(`    →    ${r.fix}`);
+  }
+  return lines.join("\n");
+}
 
 /** Render an optimization plan for the CLI. */
 export function formatOptimize(rep: OptimizeReport): string {

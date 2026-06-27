@@ -13,12 +13,11 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model)
-npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
-npx vigiles scan <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
-npx vigiles scan <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
-npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
-npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
+npx vigiles audit [dir]              # Lighthouse for your harness: category rings + fixes (a deterministic read); writes vigiles-report.html + .json
+                                     # the executing checks (your hooks · live MCP · do skills FIRE?) run only interactively — a plain audit asks once
+npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
+npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
+npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
 npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (--check to verify)
@@ -171,7 +170,7 @@ Two multi-harness behaviours:
 
 `lint` takes **no** `--harness`: reference verification is harness-agnostic (it
 already recognizes both `CLAUDE.md` and `AGENTS.md`), unlike `compile` (renders
-one dialect) and `scan` (reports harness-specific structure).
+one dialect) and `audit` (reports harness-specific structure).
 
 ### `eject [file]` — adopting a spec is never a one-way door
 
@@ -253,29 +252,72 @@ type one yourself; `compile` wires them for you.
   emitted gates. Renaming a `<kind>` breaks every already-emitted block, so it's
   a breaking change.
 
-### `scan [dir]`
+### `audit [dir]`
 
-Point vigiles at any plugin or repo (defaults to `.`) and get a read-only report
-of what it ships and what's structurally broken — **no model, no API key**. It
-re-aims the existing machinery (`loadPlugin`, `parseAgentTools`,
-`findUntestedSurfaces`): per-skill description presence + user-invoked flag +
-**description-script** detection (a description whose dominant script differs from
-the expected one — **default Latin, configurable** — carries a cross-language
+**Lighthouse for your harness.** Point vigiles at any plugin or repo (defaults to
+`.`) and get a one-command report — **no model, no API key, safe to run
+anywhere**: four deterministic **category rings**, each finding's **fix** inline,
+and a self-contained **HTML report**. It's a local report, not a CI step (CI uses
+[`lint`](#lint-files)).
+
+```
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ◑ Triggering      92  ████████████████████░░
+  ● Structure      100  ██████████████████████
+  ◑ Tested          88  ███████████████████░░░
+
+Harness health: B (95/100)
+```
+
+The four categories — **Truthfulness** (refs resolve) · **Triggering** (skills
+fire / don't collide) · **Structure** (tool contracts, MCP, frontmatter) ·
+**Tested** (coverage) — are each 0–100, weighted into the overall grade; an n/a
+category is excluded, never a false 0. All four are **deterministic** (no
+execution). (There's no **Safety** ring: "do your hooks actually block?" requires
+executing your hooks, which needs cross-platform confinement that isn't shipped
+yet — so it lives in the [`vigiles/testing` API](harness-testing.md) via
+`guardrail-check` / `assertBlocksDisasters`, where you opt in explicitly.)
+
+Under the rings, the detailed report lists per-skill description + user-invoked
+flag + **description-script** detection (a description whose dominant script differs
+from the expected one — **default Latin, configurable** — carries a cross-language
 trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
-under-fire on English prompts; a RISK flag, not a defect — measure it with
-`--trigger`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
-footgun), hook scripts resolved across the braced/unbraced `$CLAUDE_PLUGIN_ROOT`
-forms (`ok` / `missing` / `unresolved`), command + MCP detection, untested-surface
-counts, and the loader's dangling-ref / surface warnings. `--json` for CI.
+under-fire on English prompts; a RISK flag, not a defect — measure it with the
+trigger tier), per-agent tool contract (and the "no `tools:` line → inherits every tool"
+footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
+detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
+report file.
 
-`scan` reports **harness-specific structure** (plugin layout, hook resolution),
+**The safety battery is a [testing-API](harness-testing.md) capability, not an
+`audit` ring** — it _executes_ your `PreToolUse` hooks against a curated disaster
+catalog (force-push, `rm -rf`, `--no-verify`, secret-read, `curl|sh`) to prove
+they actually **block** (the #1 verified hook pain: a guard that _looks_ like it
+blocks and silently doesn't). Because running arbitrary hooks safely needs
+cross-platform confinement that isn't shipped yet, it's **not** part of the
+zero-config report; you run it where you opt in explicitly — `guardrail-check` /
+`assertBlocksDisasters` from `vigiles/unit`, or via the `test-harness` skill.
+
+Each deterministic finding carries its **fix inline** under the report — the
+cross-reference cause + a one-line correction (`FIX` a dead-end, `DIFFERENTIATE` a
+description collision), `likely` dead-ends before `possible` proxies.
+
+**A shareable HTML report** is written to `vigiles-report.html` by default — a
+self-contained React app (category rings, findings, fix cards; auto light/dark)
+the CLI fills with the report JSON, so it opens offline by double-click. Screenshot
+it, attach it to a PR; for a human at a TTY it's opened best-effort. `--no-html`
+skips it. A versioned **`vigiles-report.json`** is written alongside (`--no-json` to
+skip) — the same contract `--json` prints, for CI or upload.
+
+`audit` reports **harness-specific structure** (plugin layout, hook resolution),
 so it auto-detects the harness — printing the detected one and warning when a repo
 matches several — and takes `--harness=<name>` to override. (`compile` is
 harness-aware for the same reason; `lint` isn't — reference verification is
 harness-agnostic.)
 
 **Dialect freshness (Claude Code).** Because vigiles's tool/event catalog is
-hand-maintained against a specific Claude Code version, `scan` does a best-effort,
+hand-maintained against a specific Claude Code version, `audit` does a best-effort,
 **read-local** check of your _installed_ `@anthropic-ai/claude-code` and prints a
 one-line `⚠` only when its tool surface has drifted (a new/removed tool type) from
 the catalog — a nudge that tool/contract checks may be stale and a vigiles update
@@ -283,17 +325,19 @@ may be due. It reads only your own install (nothing is sent or vendored), never
 throws, and stays silent on a mere version bump with no surface change.
 
 ```bash
-npx vigiles scan ./some-plugin          # human-readable report for one plugin
-npx vigiles scan ./some-plugin --json   # structured, for pipelines
-npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
-npx vigiles scan ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
-npx vigiles scan ./marketplace-repo     # a marketplace.json root → ranks every member
-npx vigiles scan ./repo --harness=codex # override harness detection
+npx vigiles audit ./some-plugin          # human-readable report for one plugin
+npx vigiles audit ./some-plugin --json   # structured, for pipelines
+npx vigiles audit ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles audit ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
+npx vigiles audit ./marketplace-repo     # a marketplace.json root → ranks every member
+npx vigiles audit ./repo --harness=codex # override harness detection
 ```
+
+#### Leaderboard — rank many plugins
 
 Pass **more than one directory** — or a single **marketplace** root (a
 `.claude-plugin/marketplace.json`, e.g. `wshobson/agents`' 80+ plugins, which
-`scan` expands into its members) — and `scan` switches to a **ranked health
+`audit` expands into its members) — and `audit` switches to a **ranked health
 leaderboard**: a deterministic structural-health score (0–100 + A–F) per plugin,
 worst issues first. Weights: a missing hook script −15 (won't run), a skill with
 no usable description −10 (can't trigger), a broken intra-plugin reference −8
@@ -306,46 +350,75 @@ own health — only a directory with _no_ surface at all scores 0. Add **`--md`*
 emit the ranking as a **Markdown table** (the publishable form for a README/gist/site;
 `--json` gives the full per-plugin breakdown). A worked at-scale run over real public
 plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
+(The leaderboard is the multi-dir form and does not run the executing checks or
+write an HTML report — those are the single-dir audit.)
 
-This is the deterministic substrate for the plugin/skill leaderboard and the
-harness-aware supply-chain audit.
+#### `audit` is a local report, not a CI step
 
-Behavioral measurement (does a skill actually fire / collide?) is the model-gated
-**`scan --trigger`** flag (documented below) — the paid tier; plain `scan` stays
-free/deterministic.
+Like Lighthouse, `audit` is something you **run on your machine** to see your
+harness's health — not a build gate. **CI uses [`vigiles lint`](#lint-files)**
+(deterministic, stable exit codes 0/1/2); `audit` is the human-facing read +
+report. (You _can_ pipe `audit --json` somewhere, but it's not a pass/fail gate.)
 
-#### Live MCP tool resolution — `scan --verify-mcp`
+#### The executing checks — `audit` asks (interactive only)
 
-The static scan checks an `mcp__server__tool` reference's **server** is _declared_
-(`mcp-tool-resolves`). **`--verify-mcp`** goes further: it **starts each declared MCP
-server and checks the tool itself actually exists** on it — catching the silent
-"rename rot" where a server consolidates or removes a tool (e.g. chrome-devtools-mcp
-collapsing `emulate_cpu` + `emulate_network` into a single `emulate`), which leaves a
-dead reference no static linter can see.
+A plain `audit` is a deterministic **read**. Three checks actually _run_ your
+harness, and they share **one** consent:
+
+1. **Safety battery** — execute each PreToolUse hook against the disaster catalog
+   to prove it blocks (network-confined where a sandbox exists; otherwise your own
+   hooks run direct with a loud warning, a foreign plugin's skip).
+2. **Live MCP resolution** — **start each declared MCP server** and check every
+   `mcp__server__tool` resolves (`tools/list`), catching silent "rename rot". Own-repo
+   only — a foreign plugin's servers are never spawned. (Starting a server connects
+   to its real backend, which is why it never runs on a plain read.)
+3. **Skill firing (trigger-rate)** — how reliably each model-invocable skill's
+   description **FIRES** (recall) and stays quiet on unrelated prompts (precision).
+   Probes are **auto-generated from each skill's description** (zero setup);
+   `--prompts=<file>` supplies a curated set + the selection-collision matrix.
+
+4. **Adoptability preview** — see what vigiles would catch **before you adopt it**.
+   `audit` uses a model to draft a spec from your `CLAUDE.md`, then
+   deterministically verifies every reference it found — linter rules, file paths,
+   npm scripts, directories — and reports how many are broken right now. This is a
+   **read-only preview**: it never writes anything; `vigiles init` is what adopts
+   the spec. Claude Code only in v1.
+
+   ```
+   Adoptability — what vigiles would lock in
+     vigiles drafted a spec from CLAUDE.md: 23 verifiable reference(s) found
+      3 broken right now:
+        ✗ eslint rule "import/no-cycle" is referenced but not enabled
+        ✗ `npm run typecheck` referenced — no such script in package.json
+     → run `vigiles init` to adopt the spec and catch these at edit time.
+   ```
+
+**How the consent works** — `audit` is a read by default; the executing checks need
+a human to consent (there's **no execution flag** — see below):
+
+- **At a terminal (TTY)** → `audit` **asks once** ("Run the executing checks against
+  your harness?" — with a confinement + cost disclosure) and **remembers** the answer
+  in `.vigilesrc.json` (`audit.measure`).
+- **Headless** (`--json` / CI / non-interactive / an agent) → stays a read + a
+  one-line nudge; never hangs, never silently executes.
+- **No execution flag.** `audit` is a local report — it runs the executing checks
+  only when a human can consent. For automation, test the harness through the
+  [`vigiles/testing` API](harness-testing.md) (`measureTriggerRate`, `guardrail-check`)
+  - skills — the layered tiers that exist for exactly that. The deterministic read is
+    identical on every OS; there's deliberately no `--measure`/`--fast`.
 
 ```bash
-npx vigiles scan ./some-plugin --verify-mcp          # human-readable; did-you-mean on a miss
-npx vigiles scan ./some-plugin --verify-mcp --json   # { "mcpContractTools": [...] }
+npx vigiles audit ./some-plugin                                # read; asks to run the checks at a TTY
+npx vigiles audit ./some-plugin --prompts=./probes.json       # curated trigger set (used when you say yes)
 ```
 
-Three things to know:
+The trigger tier needs the harness CLI + model auth; it **degrades honestly**
+("unavailable") when absent, runs on your own Claude Pro/Max subscription (or
+`ANTHROPIC_API_KEY`). `--harness=codex` routes the trigger probe through the native
+Codex driver. See
+[`docs/harness-testing.md`](harness-testing.md).
 
-- **It's not an eval** — no model, no tokens, fully deterministic _given the server_.
-  But it is the **only** way to catch a renamed/removed tool, because an MCP server's
-  tool list lives in its code and is only knowable by **running** it (`tools/list`) —
-  there is no static manifest. That's why it's a separate, **opt-in** flag (it spawns
-  the real server, needs it installed) and **not** a default lint rule: `lint`/`scan`
-  stay free + offline; `--verify-mcp` opts into execution, like the sandbox/egress tiers.
-- **`server-unreachable` is informational, never a hard failure** — if a declared
-  server can't start in this environment, that's "couldn't verify," not a bug. Only a
-  **`tool-missing`** (the server started and the tool genuinely isn't there) is a real
-  finding.
-- **Scope:** it only fires on plugins whose agents pin specific `mcp__server__tool`
-  names in a `tools:` contract _and_ declare the server — a sharp but minority pattern.
-  Engine + CI-safe coverage: `verifyMcpContractTools` in `src/core/mcp.ts`
-  (`src/core/mcp.test.ts`, against a real fixture server). Dogfood finding (3 dead refs
-
-#### Capability diff — `scan <after> --capability-diff=<before>`
+#### Capability diff — `audit <after> --capability-diff=<before>`
 
 **Did this change widen the agent's blast radius?** Computes each version's
 whole-harness **capability lattice** from its scanned agents — the union of every
@@ -360,92 +433,13 @@ to make a widening a non-zero exit (the opt-in CI gate — don't cry wolf, since
 widening is often intended).
 
 ```bash
-npx vigiles scan ./head --capability-diff=./base                  # report (exit 0)
-npx vigiles scan ./head --capability-diff=./base --fail-on-widen  # exit 1 if widened
-npx vigiles scan ./head --capability-diff=./base --json           # structured diff
+npx vigiles audit ./head --capability-diff=./base                  # report (exit 0)
+npx vigiles audit ./head --capability-diff=./base --fail-on-widen  # exit 1 if widened
+npx vigiles audit ./head --capability-diff=./base --json           # structured diff
 ```
 
 This is the **capability-diff** check: the capability surface is the typed
 effect lattice `generate-harness` already computes; the diff reads it.
-
-### `scan <dir> --trigger` — does each skill FIRE / COLLIDE?
-
-The **model-gated** behavioral column on `scan` (the paid tier; plain `scan` stays free). Loads the
-author-supplied per-skill prompts (`--prompts`) and reports both columns:
-
-- **Trigger-rate** — how reliably each model-invocable skill's description actually
-  **FIRES** (recall) and stays quiet on unrelated prompts (precision) — the bug a
-  green structural scan can't see (a fine description that never triggers).
-- **Selection-collision** — does one skill **HIJACK** a sibling's prompt? Runs each
-  skill's prompts against the whole installed plugin, records which skills fired (an
-  N×N matrix; diagonal = recall, off-diagonal = collision) — the **behavioral
-  confirmation** of the deterministic `description-overlap` rule. Claude Code only;
-  reports `n/a` for a single skill or Codex (no skill-selection event).
-
-Needs the harness CLI + model auth; **degrades honestly** ("unavailable") when absent.
-Prompts are **author-supplied** (a path in prose is undecidable): a JSON map of skill
-name → `{ prompts, irrelevant }`.
-
-```bash
-npx vigiles scan ./some-plugin --trigger --prompts=./probes.json
-npx vigiles scan ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
-```
-
-```jsonc
-// probes.json — keyed by bare skill name
-{
-  "brainstorming": {
-    "prompts": ["…≥10 prompts it SHOULD fire on…"],
-    "irrelevant": ["…prompts it should stay quiet on (→ precision)…"],
-  },
-}
-```
-
-Flags: `--prompts=`, `--concurrency=`, `--model=`, `--min-prompts=`, `--trials=`,
-`--harness=`. A diversity gate requires **≥10 prompts per set** before spending a
-token (lower with `--min-prompts=` for a narrow skill). `--harness=codex` routes the
-trigger probe through the native Codex driver. See
-[`docs/harness-testing.md`](harness-testing.md).
-
-**You don't have to remember it exists.** When a plain `scan` finds model-invocable
-skills **and** a model is reachable (an `ANTHROPIC_API_KEY`, or an authenticated Claude
-Code session — `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT`), it nudges you toward this tier:
-a human at a terminal is **offered** setup (scaffold a `trigger-prompts.json`, or run an
-existing one); an agent or CI run gets a **one-line, non-blocking hint** instead. Pass
-`--no-interactive` (or `--yes` / `--json`) to force the hint and never prompt — so
-`scan` never hangs an agent. The real-model run is always an explicit yes; a plain
-`scan` never spends a token on its own.
-
-### `scan <dir> --explain [name]`
-
-The deterministic **WHY** behind a low score. A measurement (a trigger-rate
-eval, a benchmark) tells you a skill _underperforms_ — `--explain` tells you the
-structural **cause** and the one-line **fix**, reading the same `ScanReport`
-`scan` computes (no model, free, every commit). It maps each cross-reference
-finding to the behavioural symptom it accounts for:
-
-| Symptom                            | Deterministic cause it surfaces                                                                           |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| the selector fires the wrong skill | two skills with near-identical descriptions (`description-overlap`)                                       |
-| the skill never fires              | a skill with no usable description (`skill-frontmatter`)                                                  |
-| the subagent loses a tool          | a never-available / typo'd tool or undeclared MCP server (`subagent-tool-contract` / `mcp-tool-resolves`) |
-| the hook never runs                | a typo'd event or a missing script (`hook-events` / `hook-script-exists`)                                 |
-| the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
-
-```bash
-npx vigiles scan ./some-plugin --explain          # every cause found, likely-first
-npx vigiles scan ./some-plugin --explain caveman  # narrow to one underperformer
-npx vigiles scan ./some-plugin --explain --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
-npx vigiles scan ./repo --explain --harness=codex # override harness detection
-```
-
-`confidence` is `likely` (a hard dead-end — a missing script can't run) or
-`possible` (a high-precision proxy — an overlap _may_ collide; confirm with
-`scan --trigger`). With no deterministic cause, it says so and points you at the
-behavioural tier (the cause is likely in the prose, measured by an eval). It's
-the diagnostic the per-repo optimizer prints beside each drop/swap
-recommendation — _"underperforms **because** its description overlaps X"_, not
-just _"drop it"_.
 
 ### `scaffold-test [dir]`
 
@@ -473,32 +467,6 @@ npx vigiles scaffold-test ./repo --harness=codex
 the untested-surface detector looks for it — so the surface stops being reported
 untested. Fill in the TODOs (prompts / event input / assertions), then run with
 `vigiles test` or `vigiles eval`.
-
-### `scan --fix-plan [dir]`
-
-The **fix-plan lens** on a scan — the per-repo harness optimizer's free,
-deterministic half. Where `explain` diagnoses _one_ surface a measurement
-flagged, `scan --fix-plan` is the whole-repo adoption view: a
-structural-**health score** (the same `scoreReport` the leaderboard uses) plus
-the **ranked free fixes** to apply _before_ you spend a token measuring. It
-reuses `explain`'s findings (one detector, no drift), so each recommendation
-carries the cause, the one-line fix, and an action verb — `FIX` (a structural
-dead-end) or `DIFFERENTIATE` (a description-overlap pair).
-
-```bash
-npx vigiles scan ./my-plugin --fix-plan          # health score + ranked free fixes, likely-first
-npx vigiles scan ./my-plugin --fix-plan --json   # the agent-consumable plan {score, grade, empty, recommendations}
-npx vigiles scan ./repo --fix-plan --harness=codex
-```
-
-This is the **"linting as a free pre-filter to measurement"** thesis: clear the
-structural problems a model can't help with first (free, certain), _then_
-measure whether the structurally-clean skills earn their keep with
-`scan --trigger` (real-model, on your subscription). That **measured behavioural
-delta** — does dropping/swapping a skill actually move success or cost? — is the
-next layer; this v0 ships the deterministic spine it stacks on. It's a `scan`
-flag rather than its own `optimize` verb until that measured half lands (an
-optimizer that only re-prints scan's findings hasn't earned a separate command).
 
 ### `generate harness [dir] [out]`
 
@@ -579,9 +547,9 @@ railway({
 See [`docs/railway-subagents.md`](railway-subagents.md) for the typed-composition
 guide.
 
-## Lint vs scan — gate vs report
+## Lint vs audit — gate vs report
 
-`lint` and `scan` look like they overlap, but they're **different verbs with
+`lint` and `audit` look like they overlap, but they're **different verbs with
 different contracts** — the classic gate-vs-report split (think `eslint .` /
 `tsc --noEmit` vs `npm audit` / `terraform plan`):
 
@@ -590,52 +558,77 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   the rule exist _and_ is it enabled?), checks integrity/hash, coverage
   thresholds, orphan docs, duplicate rules — and exits with **config-driven
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
-- **`scan` is the report.** Zero config, **read-only**, harness-aware, works on
-  **any** plugin (including third-party ones with no spec). It inventories the
-  structure, ranks a whole marketplace (leaderboard), and — with `--trigger` —
-  adds the model-gated behavioural column.
+- **`audit` is the report** (Lighthouse-style, local — not a CI step). Zero config,
+  harness-aware, works on **any** plugin (including third-party ones with no spec).
+  It scores the four deterministic category rings, ranks a whole marketplace
+  (leaderboard), and writes the HTML report — all a safe read. Two **executing**
+  checks (live MCP resolution + "do skills fire?") run only on the interactive
+  consent (`audit-side-effect-free`); for automation, run those — and the safety
+  battery — through the `vigiles/testing` API.
 
 They deliberately **share one implementation** of the few deterministic
 structural detectors they have in common (untested-surface, dangling-ref,
 description-script), per the `one-detector-no-drift` rule, so the two surfaces can
 never disagree. The asymmetry everywhere else is intentional: some checks need
-inputs only the gate has (your catalogs, your compiled output), and the paid
-`--trigger` column must **never** become a `lint` rule (lint stays free +
+inputs only the gate has (your catalogs, your compiled output), and the
+**model-gated trigger column must never become a `lint` rule** (lint stays free +
 deterministic + every-commit).
 
 **What each does:**
 
-| Check                                                       |  `lint`  |  `scan`   | `scan --trigger` |
-| ----------------------------------------------------------- | :------: | :-------: | :--------------: |
-| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |        –         |
-| Marked file/script ref verification                         |    ✓     |     –     |        –         |
-| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |        –         |
-| Untested surface                                            |  ✓ gate  |  ✓ count  |        –         |
-| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |        –         |
-| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |        –         |
-| MCP tool exists on **live** server (`--verify-mcp`)         |    –     |  opt-in²  |        –         |
-| Leaderboard (rank a marketplace)                            |    –     |     ✓     |        –         |
-| Trigger recall/precision (does a skill fire?)               |    –     |     –     |        ✓         |
-| Config severities + CI exit codes                           |    ✓     | read-only |    read-only     |
-| **Cost tier**                                               | free/det | free/det  |  **paid/model**  |
+| Check                                                       |  `lint`  |  `audit`  | `audit` (interactive) |
+| ----------------------------------------------------------- | :------: | :-------: | :-------------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |           –           |
+| Marked file/script ref verification                         |    ✓     |     –     |           –           |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |           –           |
+| Untested surface                                            |  ✓ gate  |  ✓ ring   |           –           |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |           –           |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |           –           |
+| Category rings + weighted health score                      |    –     |     ✓     |           –           |
+| HTML report                                                 |    –     | ✓ default |       ✓ default       |
+| Leaderboard (rank a marketplace)                            |    –     |     ✓     |           –           |
+| MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo¹      |
+| Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓²           |
+| Adoptability preview (broken refs in your instruction file) |    –     |     –     |          ✓⁴           |
+| Safety battery (does a hook block?) — `vigiles/testing`     |    –     |     –     |          –⁵           |
+| Config severities + CI exit codes                           |    ✓     | read-only |       read-only       |
+| **Cost tier**                                               | free/det | free/det  |     **model/sub**     |
+
+The two executing checks share **one consent**: a plain `audit` is a read; at a
+TTY it **asks once** (remembered in `.vigilesrc.json`). There is no execution flag
+— for automation use the `vigiles/testing` API, not the report verb.
+
+¹ Live MCP **starts your servers** (connects to real backends), so it's **own-repo
+only**; a foreign plugin's servers are never spawned.
+² The trigger tier needs model auth; it **degrades honestly** ("unavailable") when
+absent and runs on your subscription (or a metered key).
+⁴ The adoptability preview uses a model to draft a spec from your instruction file and
+then verifies every reference deterministically. Claude Code only in v1; never writes
+anything to the repo. Runs on your subscription ($0 metered).
+⁵ The safety battery (run your hooks against the disaster catalog) is **not** an
+`audit` check — it needs cross-platform confinement that isn't shipped, so it lives
+in the `vigiles/testing` API (`guardrail-check`/`assertBlocksDisasters`).
 
 **Where each runs:**
 
-| Target             |        `lint`        |        `scan`         |  `scan --trigger`   |
-| ------------------ | :------------------: | :-------------------: | :-----------------: |
-| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)¹ |   n/a (no skills)   |
-| Claude Code plugin |          ✓           |           ✓           |          ✓          |
-| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
-| Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
+| Target             |        `lint`        |        `audit`        | `audit` (interactive) |
+| ------------------ | :------------------: | :-------------------: | :-------------------: |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)⁴ |    n/a (no skills)    |
+| Claude Code plugin |          ✓           |           ✓           |           ✓           |
+| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) |  ✓ `--harness=codex`  |
+| Marketplace (many) |       per-file       |     ✓ leaderboard     |    per-plugin only    |
 
-¹ On a plain repo `scan` reports the detected instruction file (`CLAUDE.md` /
+⁴ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
 `AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
 _verification_ of that file is `lint`'s job (and needs marks — inline,
 frontmatter, or a spec; plain prose isn't auto-parsed).
 
-² `--verify-mcp` is **opt-in and side-effecting** (it starts the declared MCP server
-to list its tools) — deterministic but not free/offline, so it's a flag, never a
-default `scan`/`lint` check. See the `scan --verify-mcp` section above.
+The executing checks are **state-safe by consent**: a plain `audit` runs none of
+them (a deterministic read), so it's safe on any repo, even one wired to prod. On
+opt-in, live MCP starts servers own-repo only, and the trigger-rate stubs skill
+bodies so no procedure runs. (The safety battery — which executes arbitrary hooks
+and so needs cross-platform confinement that isn't shipped — is not here; it's a
+`vigiles/testing` capability you invoke explicitly.)
 
 ## GitHub Action
 

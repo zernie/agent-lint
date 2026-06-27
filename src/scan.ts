@@ -1,5 +1,5 @@
 /**
- * `vigiles scan <dir>` — point vigiles at any plugin/repo and see what it ships
+ * `vigiles audit <dir>` — point vigiles at any plugin/repo and see what it ships
  * and what's broken, with **no model and no API key**.
  *
  * This is the deterministic substrate under the plugin/skill leaderboard
@@ -79,14 +79,20 @@ export interface ScanSkill {
   readonly name: string;
   readonly path: string;
   readonly hasDescription: boolean;
+  /**
+   * The skill's effective description (frontmatter `description`, else the first
+   * body paragraph — the same text the selector keys on), trimmed; `undefined`
+   * when neither exists. Feeds the model trigger tier's auto-generated probes.
+   */
+  readonly description?: string;
   readonly userInvoked: boolean;
   /**
    * The description's dominant script when it DIFFERS from the expected one
    * (default `"Latin"`), else null. The model's skill-selection context is
    * English-centric, so a description in another script carries a cross-language
    * trigger risk — it may under-fire on English prompts. A RISK flag, not a
-   * defect (a language-matched audience is fine); measure the real gap with
-   * `scan --trigger`.
+   * defect (a language-matched audience is fine); measure the real gap with the
+   * `audit` trigger tier / `measureTriggerRate`.
    */
   readonly descriptionScript: Script | null;
 }
@@ -147,8 +153,25 @@ export interface FrontmatterValueIssue {
 export type HookStatus = "ok" | "missing" | "unresolved";
 
 export interface ScanHook {
+  /**
+   * The full hook command as it would be run (plugin-root token expanded, shell
+   * quotes stripped). Present on script-based hooks; empty string on hooks whose
+   * command is entirely inline (no script file) — but inline hooks never appear
+   * in `hooks[]`, they are counted by `inlineHooks`, so in practice `command` is
+   * always non-empty when a `ScanHook` is in the list.
+   */
+  readonly command: string;
   readonly script: string;
   readonly status: HookStatus;
+  /**
+   * The hook EVENT this script is registered under (`PreToolUse`, `PostToolUse`,
+   * `SessionStart`, …), when it can be determined from the canonical
+   * object-keyed-by-event settings shape; `undefined` for a non-object/array
+   * config. The safety battery uses it to test only the blocking-capable
+   * `PreToolUse` guards — so a `SessionStart`/`PostToolUse` hook isn't unfairly
+   * scored against "does it block rm -rf".
+   */
+  readonly event?: string;
 }
 
 /**
@@ -382,6 +405,7 @@ function scanSkills(
       name: fm.name ?? skillName(path),
       path,
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
+      description: effectiveDesc?.trim(),
       userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
       descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
     });
@@ -472,6 +496,7 @@ function resolveScript(
   token: string,
   root: string,
   pluginRootToken: string,
+  fullCommand: string,
 ): ScanHook {
   // "${CLAUDE_PLUGIN_ROOT}" → unbraced "$CLAUDE_PLUGIN_ROOT".
   const unbraced = pluginRootToken.replace(/^\$\{(.+)\}$/, "$$$1");
@@ -479,14 +504,24 @@ function resolveScript(
     .replace(/["']/g, "")
     .replaceAll(pluginRootToken, root)
     .replaceAll(unbraced, root);
-  if (cleaned.includes("$")) return { script: token, status: "unresolved" };
+  if (cleaned.includes("$"))
+    return { command: fullCommand, script: token, status: "unresolved" };
   // A relative hook path (`./hooks/x.sh`, `scripts/x.py`) is the plugin's own —
   // resolve it against the PLUGIN ROOT, not the scanner's cwd. Without this, a
   // plugin that references `./hooks/x.sh` (the file IS present) was reported
   // MISSING because existsSync() checked cwd-relative (a false positive caught on
   // ananddtyagi/cc-marketplace). The displayed `script` stays as the author wrote it.
   const abs = isAbsolute(cleaned) ? cleaned : resolve(root, cleaned);
-  return { script: cleaned, status: existsSync(abs) ? "ok" : "missing" };
+  // Resolve the full command the same way we resolve the script token (expand
+  // plugin-root, strip outer quotes) so the CLI can pass it to verifyGuardrail.
+  const resolvedCommand = fullCommand
+    .replaceAll(pluginRootToken, root)
+    .replaceAll(unbraced, root);
+  return {
+    command: resolvedCommand,
+    script: cleaned,
+    status: existsSync(abs) ? "ok" : "missing",
+  };
 }
 
 // A shell existence guard around a command — `[ ! -f x ] || x`, `[ -f x ] && x`,
@@ -518,6 +553,34 @@ export function preferCompiledHooksMessage(count: number): string {
 }
 
 /** Pull script-file hook commands out of the resolved settings; count inline ones. */
+/**
+ * Best-effort map of each script token → the hook EVENT it's registered under,
+ * by walking the canonical object-keyed-by-event settings shape
+ * (`{ PreToolUse: [{ hooks: [{ command }] }], … }`). Lets the safety battery
+ * scope itself to `PreToolUse` (the only event that can block a tool call), so a
+ * `SessionStart`/`PostToolUse`/`Stop` hook isn't tested against the disaster
+ * catalog. Returns an empty map for a non-object/array config (event → unknown).
+ */
+function eventsByScript(hooks: unknown): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return map;
+  for (const [event, arr] of Object.entries(hooks as Record<string, unknown>)) {
+    if (!Array.isArray(arr)) continue;
+    for (const entry of arr) {
+      const hookList = (entry as { hooks?: unknown }).hooks;
+      if (!Array.isArray(hookList)) continue;
+      for (const h of hookList) {
+        const cmd = (h as { command?: unknown }).command;
+        if (typeof cmd !== "string") continue;
+        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
+          if (!map.has(tok)) map.set(tok, event);
+        }
+      }
+    }
+  }
+  return map;
+}
+
 function scanHooks(
   settings: { hooks?: unknown },
   root: string,
@@ -527,6 +590,7 @@ function scanHooks(
   const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
     (m) => m[1],
   );
+  const evMap = eventsByScript(settings.hooks);
   // A hand-written hook is any non-empty command that isn't a vigiles-managed
   // (compiled) hook-runtime invocation — the basis for the prefer-compiled-hooks nudge.
   const manual = commands.filter((c) => {
@@ -549,8 +613,9 @@ function scanHooks(
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root, pluginRootToken);
-      byScript.set(hook.script, hook);
+      const hook = resolveScript(tok, root, pluginRootToken, unescaped);
+      const event = evMap.get(tok);
+      byScript.set(hook.script, event ? { ...hook, event } : hook);
     }
   }
   const hooks = [...byScript.values()].sort((a, b) =>
@@ -843,14 +908,16 @@ export function scanPlugin(
 }
 
 /**
- * LIVE MCP tool resolution for a scanned plugin — the opt-in (`scan --verify-mcp`)
- * dynamic check no static linter can do: it STARTS each declared MCP server and
- * checks every `mcp__server__tool` the plugin's agents reference actually exists on
- * it (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the
+ * LIVE MCP tool resolution for a scanned plugin — the dynamic check no static
+ * linter can do: it STARTS each declared MCP server and checks every
+ * `mcp__server__tool` the plugin's agents reference actually exists on it
+ * (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the
  * already-computed `report` (its agents' tool lists) + the declared server configs;
  * returns `[]` when the plugin declares no MCP servers (nothing to start). Async +
- * side-effecting (spawns servers) — which is exactly why it's opt-in, not a default
- * lint rule. See `verifyMcpContractTools` (core/mcp.ts).
+ * side-effecting (spawns servers) — so `audit` runs it by default only for the
+ * user's OWN repo (own-repo, like running your own tools); a FOREIGN plugin's
+ * servers are never spawned, and `--fast` opts out. See `verifyMcpContractTools`
+ * (core/mcp.ts).
  */
 export async function verifyLiveMcpTools(
   report: ScanReport,
@@ -903,7 +970,7 @@ export interface MarketplaceInfo {
  * Read a `marketplace.json` beside the layout's plugin manifest and classify its
  * members into on-disk vs external. Returns `null` when `dir` is not a
  * marketplace. The source of truth behind {@link expandMarketplace} and the
- * curated-marketplace report in `vigiles scan`.
+ * curated-marketplace report in `vigiles audit`.
  */
 export function inspectMarketplace(
   dir: string,
@@ -955,7 +1022,7 @@ export function inspectMarketplace(
  * plugin manifest, e.g. `.claude-plugin/marketplace.json`), expand it into the
  * absolute dirs of its member plugins. Returns `null` when there's no
  * marketplace, `[]` when it's a marketplace whose members are all external (not
- * on disk). Used by `vigiles scan` to rank a whole marketplace — wshobson/agents
+ * on disk). Used by `vigiles audit` to rank a whole marketplace — wshobson/agents
  * alone ships 80+ plugins under one `marketplace.json`. See {@link inspectMarketplace}.
  */
 export function expandMarketplace(

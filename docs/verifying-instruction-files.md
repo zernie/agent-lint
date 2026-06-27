@@ -10,12 +10,15 @@ mislead the agent.
 > The [README](../README.md) has the 30-second pitch; this is the full guide. For
 > the testing layer, see [Testing your harness](harness-testing.md).
 
-## Two on-ramps: markdown, then typed spec
+## Two ways to lint: a typed spec (the default) or plain markdown
 
-Both are independently useful: start in **markdown** (no new files), step up to a
-**typed spec** when you want compiler-grade guarantees.
+**The default is a typed spec your agent writes** — `init` adopts your existing
+CLAUDE.md into one and the `edit-spec` / `strengthen` skills keep it current, so you
+rarely hand-write a `.spec.ts`. Prefer zero new files, or not ready for TypeScript?
+Plain markdown with inline comments lints too — and gives up nothing on reference
+verification.
 
-### Markdown mode — no new files, no TypeScript
+### Markdown mode — the zero-setup floor
 
 Add a comment to your existing CLAUDE.md and lint it:
 
@@ -36,12 +39,13 @@ Zero install commitment, zero new files.
 > language server autocompletes rule names and squiggles typos at edit time, no
 > TypeScript required. [Markdown mode →](markdown-mode.md)
 
-### Typed spec — compiler-grade guarantees
+### Typed spec — the default
 
-**You rarely hand-write one.** It's TypeScript for your harness — opt-in and
-gradual: the `edit-spec` / `strengthen` skills write and update the spec from a
-plain-English ask, and a hook recompiles it on save. So the typed spec is the
-auto-enforced next step, not a chore — here's what it buys you.
+**You rarely hand-write one.** It's TypeScript for your harness, but the
+`edit-spec` / `strengthen` skills write and update the spec from a plain-English ask
+and a hook recompiles it on save — so the spec is the default `init` sets up and the
+agent manages, not a chore. The deeper **compiler-grade guarantees** are gradual and
+opt-in, like TypeScript's `strict` — here's what they buy you.
 
 **Markdown mode is not a lesser tier for verification.** It squiggles rule typos
 at edit time (the YAML schema `init` generates), and its inline marks —
@@ -63,8 +67,10 @@ composable, type-checked code.**
 - **Monotonicity proofs.** A rule can be strengthened (`guidance` → `enforce`) but
   never silently weakened or removed, gated by the proof system below.
 
-So: reach for the spec when you're standardizing rules across a codebase or
-generating them; otherwise markdown is the destination, not a stepping stone.
+So: the spec is the default — and the clear choice once you're standardizing rules
+across a codebase, generating them, or wanting the integrity hash. For a single
+instruction file, markdown is a fully capable floor you can stay on, not a lesser
+tier.
 
 ```typescript
 // CLAUDE.md.spec.ts

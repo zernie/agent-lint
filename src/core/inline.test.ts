@@ -222,6 +222,16 @@ describe("parseInlineRules: file/cmd references", () => {
     assert.equal(commands[0].line, 4);
   });
 
+  it("strips surrounding quotes from a quoted vigiles:file path", () => {
+    const { files } = parseInlineRules(
+      `# P\n<!-- vigiles:file "src/auth/login.ts" -->\n<!-- vigiles:file 'src/single.ts' -->\n`,
+    );
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ["src/auth/login.ts", "src/single.ts"],
+    );
+  });
+
   it("ignores file/cmd markers inside fenced code blocks", () => {
     const { files, commands } = parseInlineRules(
       '```md\n<!-- vigiles:file src/inside.ts -->\n<!-- vigiles:cmd "npm run x" -->\n```\n<!-- vigiles:file src/outside.ts -->\n',

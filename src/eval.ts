@@ -339,7 +339,7 @@ export function resolveSpawnEnv(
 
 /* v8 ignore start -- real claude subprocess; exercised by bench/, not the unit gate */
 /** The real `claude`-spawning runner (composition root). Exported so other
- *  real-model entries (e.g. `scan --trigger`) bind the same runner. */
+ *  real-model entries (e.g. the `audit` trigger tier) bind the same runner. */
 export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
   return new Promise((resolvePromise) => {
     const args = [

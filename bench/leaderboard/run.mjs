@@ -69,7 +69,7 @@ const md = [
   "# Plugin health leaderboard — v0",
   "",
   `_Generated ${new Date().toISOString().slice(0, 10)} by \`bench/leaderboard/run.mjs\`. ` +
-    `Deterministic structural health only (no model) — the free column of \`vigiles scan\`._`,
+    `Deterministic structural health only (no model) — the free column of \`vigiles audit\`._`,
   "",
   "## Corpus",
   "",

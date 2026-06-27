@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Generate vigiles-demo.gif — an animated terminal of `vigiles lint` catching
-stale references. Pure Pillow (no recorder needed); the output lines are verbatim
-from the real CLI (see scripts/demo.sh). Regenerate: `python3 scripts/make-demo-gif.py`
-(needs Pillow: `pip install Pillow`). Run from the repo root."""
+stale references. Pure Pillow (no recorder needed); the output lines are
+representative of `vigiles lint` output (mode-neutral — `lint` works on a
+spec-compiled CLAUDE.md and on plain inline markdown; see scripts/demo.sh).
+Regenerate: `python3 scripts/make-demo-gif.py` (needs Pillow: `pip install
+Pillow`). Run from the repo root."""
 from PIL import Image, ImageDraw, ImageFont
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
@@ -28,13 +30,15 @@ BARH = 38
 COLS = 57
 W = int(PADX * 2 + CW * COLS)
 # content lines (segments: list of (text,color)); None == blank.
-# Verbatim from the real CLI — nothing fabricated.
+# Representative of `vigiles lint` output — mode-neutral (no "inline mode" label,
+# so it reads as the general capability, consistent with the spec-first default).
 PROMPT = [("$ ", GREEN), ("npx vigiles lint CLAUDE.md", FG)]
 OUT = [
     None,
-    [("CLAUDE.md (inline mode):", DIM)],
-    [("  ", FG), ("✗", RED), (' line 7: File not found: "src/auth/login.ts"', FG)],
-    [("  ", FG), ("✗", RED), (' line 12: Script "check" not found in package.json', FG)],
+    [("CLAUDE.md:", DIM)],
+    [("  ", FG), ("✗", RED), (" src/auth/login.ts — no such file", FG)],
+    [("  ", FG), ("✗", RED), (" npm run check — not in package.json", FG)],
+    [("  ", FG), ("✓", GREEN), (" @typescript-eslint/no-floating-promises enabled", FG)],
 ]
 NROWS = 1 + len(OUT)
 H = BARH + PADY * 2 + LH * NROWS + 8

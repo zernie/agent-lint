@@ -30,7 +30,7 @@ Point `scan` at your plugin directory. It's deterministic — no model, no API k
 and reports what you ship and what's broken:
 
 ```bash
-npx vigiles scan ./my-plugin
+npx vigiles audit ./my-plugin
 ```
 
 It surfaces the defects that quietly break a plugin for everyone who installs it,
@@ -65,18 +65,21 @@ and linter rule it names is real and enabled.
 A skill only helps if its description reliably **triggers** on the prompts your
 users actually type — and stays quiet on the ones it shouldn't hijack. That's
 **recall** and **precision**, and a well-formed description tells you nothing about
-either. This is the one model-gated step, measured on your own subscription:
+either. This is the model-gated trigger tier, measured on your own subscription. As
+a local report, `audit` runs it interactively — it **asks once** (then remembers):
 
 ```bash
-# --trigger needs a prompts file: a map of skill name → realistic prompts to
-# fire it (+ optional `irrelevant` prompts that should NOT, to score precision):
+# audit asks "run the executing checks?" — say yes; probes are auto-generated from
+# each skill's description (zero setup). A curated set (+ the selection-collision
+# matrix) is used if you supply one:
 #   { "my-skill": { "prompts": ["how do I …", "…"], "irrelevant": ["…"] } }
-npx vigiles scan ./my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./my-plugin --prompts=prompts.json
 ```
 
-For per-skill thresholds in a test, drive `measureTriggerRate` directly — it
-reports recall across varied prompts and, with irrelevant prompts, precision (so a
-too-broad description that hijacks unrelated work fails too). See
+**For automation / CI** (no human to consent), drive `measureTriggerRate` directly
+— it reports recall across varied prompts and, with irrelevant prompts, precision
+(so a too-broad description that hijacks unrelated work fails too). That's the
+designed path for testing skills in a script. See
 [measuring skills](measuring-skills.md) and the [testing API](testing-api.md).
 
 ## 4. Rank against the field
@@ -86,11 +89,11 @@ Give `scan` more than one plugin and it ranks every one by structural health —
 
 ```bash
 # 1) Pass several plugin directories explicitly:
-npx vigiles scan ./plugin-a ./plugin-b ./plugin-c
+npx vigiles audit ./plugin-a ./plugin-b ./plugin-c
 
 # 2) Point it at a repo that ships a marketplace.json (e.g.
 #    .claude-plugin/marketplace.json) — scan expands it into its members:
-npx vigiles scan ./marketplace
+npx vigiles audit ./marketplace
 ```
 
 A single plain folder with no `marketplace.json` is scanned as **one** plugin (its
@@ -100,12 +103,12 @@ Use it to see where your plugin lands against the rest of a collection before yo
 publish, and to find the highest-impact fixes. The marketplace ranking is the
 **structural** signal — it's deterministic and covers every member at once.
 
-The model-gated `--trigger` column (step 3) is **per-plugin**, not a marketplace
+The model-gated trigger tier (step 3) is **per-plugin**, not a marketplace
 operation: point it at an individual plugin directory, not the marketplace root.
 Run it on the member dirs you care about:
 
 ```bash
-npx vigiles scan ./marketplace/my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./marketplace/my-plugin   # then say yes to run the checks
 ```
 
 ## 5. Test and gate it in CI

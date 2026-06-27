@@ -19,7 +19,7 @@ export const VERBS = [
   "lint",
   "test",
   "eval",
-  "scan",
+  "audit",
   "scaffold-test",
   "generate",
   "hook-runtime",

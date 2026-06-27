@@ -15,21 +15,20 @@ skill helps. See [verifying instruction files](verifying-instruction-files.md).
 
 ## Why a typed spec — and do I have to write TypeScript?
 
-**You almost never write one by hand.** Markdown has no structure to check against,
-so verifying it is fragile. A typed `.spec.ts` gives you autocomplete, references
-proven at edit time (a dead path is a red squiggle as you type, not a missed lint),
-and rules you can **compose and reuse** across files and repos.
+**No — your agent writes the spec, not you.** `init` adopts your existing CLAUDE.md
+_into_ one (faithfully — every heading becomes a verbatim section, no rule
+invented), and the `edit-spec` / `strengthen` skills author and maintain it from
+plain-English asks, recompiling on save. You rarely touch it by hand.
 
-But it's **opt-in and gradual**:
+It's the default because markdown has no structure to check against. A typed
+`.spec.ts` is what buys you autocomplete, references proven at edit time (a dead
+path is a red squiggle as you type, not a missed lint), and rules you **compose and
+reuse** across files and repos.
 
-- Most people start by linting their existing markdown — **zero new files**, with
-  inline `<!-- vigiles:enforce -->` comments.
-- When you do want a spec, your **agent writes and maintains it** (the `edit-spec` /
-  `strengthen` skills), and a hook recompiles it on save. You rarely touch it.
-- Adopting one adds just **a sibling `.spec.ts` + a few inline annotations** — never
-  a rewrite.
-
-So linting your markdown is the easy floor; the typed spec is depth you grow into.
+**Not ready for a spec? Lint plain markdown with zero new files** — inline
+`<!-- vigiles:enforce -->` comments, no TypeScript — and `vigiles eject` turns a
+spec back into markdown anytime. The deeper compiler-grade guarantees are the part
+that's **gradual and opt-in, like TypeScript's `strict`**.
 
 ## Does `init` overwrite or touch my files?
 

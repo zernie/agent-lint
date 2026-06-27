@@ -5,7 +5,7 @@ harness tool catalog — the "valid is not true" cross-reference applied to a to
 A subagent may only run a built-in tool or an MCP tool; anything else is a typo
 or a tool the platform will never hand it, so the declared rail is silently wrong.
 
-This is the same detector `vigiles scan` and `compileAgent` use
+This is the same detector `vigiles audit` and `compileAgent` use
 (`verifyToolContract` / `confidentToolIssues` in `src/core/tool-contract.ts`) —
 one detector, three callers, no drift.
 

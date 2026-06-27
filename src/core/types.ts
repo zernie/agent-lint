@@ -296,6 +296,17 @@ export interface VigilesConfig {
    * `"claude-code"`. See research/multi-harness-compile.md.
    */
   harness?: string | string[];
+
+  /**
+   * `vigiles audit` preferences. `measure` is the sticky remembered answer to the
+   * "run the executing checks against your harness?" prompt — at a TTY `audit`
+   * asks once, then records the choice here so it never asks again. `true` runs
+   * the executing checks (safety battery · live MCP · skill firing) on every
+   * interactive run, `false` keeps them off (edit this key to change). Written by
+   * the audit consent prompt, not `init`. Headless runs never execute regardless
+   * (audit is a local report, not a CI step — there is no execution flag).
+   */
+  audit?: { measure?: boolean };
 }
 
 /** Valid marker types for rule detection. */

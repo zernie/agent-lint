@@ -1,6 +1,6 @@
 /**
- * End-to-end `vigiles scan` over the repo-shape matrix — driving the REAL built
- * CLI (`node dist/cli.js scan …`) the way a user does, across Claude Code,
+ * End-to-end `vigiles audit` over the repo-shape matrix — driving the REAL built
+ * CLI (`node dist/cli.js audit …`) the way a user does, across Claude Code,
  * Codex, mixed, instruction-only, and marketplace repos.
  *
  * Two fixture sources, by design:
@@ -34,8 +34,15 @@ const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
 
 function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
+  // A default `audit` writes vigiles-report.html + vigiles-report.json into cwd —
+  // suppress both here so the test run never drops an artifact in the repo root.
+  // The dedicated write tests exercise those paths explicitly in a tmp cwd.
+  const a =
+    args.startsWith("audit ") && !args.includes("--json")
+      ? `${args}${args.includes("--no-html") ? "" : " --no-html"}${args.includes("--no-json") ? "" : " --no-json"}`
+      : args;
   try {
-    const stdout = execSync(`node ${CLI} ${args}`, {
+    const stdout = execSync(`node ${CLI} ${a}`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
@@ -61,7 +68,7 @@ function vendored(prefix: string): string {
 
 describe("scan e2e — Claude Code (dogfood real OSS)", () => {
   it("reports a real multi-surface plugin (oh-my-claudecode)", () => {
-    const r = run(`scan ${vendored("oh-my-claudecode")}`);
+    const r = run(`audit ${vendored("oh-my-claudecode")}`);
     assert.equal(r.exitCode, 0, "scan is read-only — always exits 0");
     assert.match(r.stdout, /Detected harness: claude-code/);
     assert.match(r.stdout, /Skills \(\d+\)/);
@@ -69,7 +76,7 @@ describe("scan e2e — Claude Code (dogfood real OSS)", () => {
   });
 
   it("flags an inherits-all agent in a real plugin (wshobson-accessibility)", () => {
-    const r = run(`scan ${vendored("wshobson-accessibility")}`);
+    const r = run(`audit ${vendored("wshobson-accessibility")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: claude-code/);
     // ships an agent with no `tools:` line → the inherits-all footgun
@@ -154,7 +161,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("CC instruction-only repo: detects claude-code + reports the instruction file", () => {
-    const r = run(`scan ${join(root, "normal")}`);
+    const r = run(`audit ${join(root, "normal")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: claude-code/);
     assert.match(
@@ -165,7 +172,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("Codex repo: detects codex, reports AGENTS.md + skill + TOML MCP", () => {
-    const r = run(`scan ${join(root, "codex")}`);
+    const r = run(`audit ${join(root, "codex")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: codex/);
     assert.match(
@@ -198,18 +205,18 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("mixed repo: warns it matches both harnesses, and --harness overrides", () => {
-    const auto = run(`scan ${join(root, "mixed")}`);
+    const auto = run(`audit ${join(root, "mixed")}`);
     assert.equal(auto.exitCode, 0);
     assert.match(auto.stdout, /Detected harness: claude-code/);
     assert.match(auto.stdout, /repo also matches: codex/);
 
-    const forced = run(`scan ${join(root, "mixed")} --harness=codex`);
+    const forced = run(`audit ${join(root, "mixed")} --harness=codex`);
     assert.match(forced.stdout, /Detected harness: codex/);
     assert.doesNotMatch(forced.stdout, /repo also matches/); // override silences it
   });
 
   it("marketplace root: expands members into a ranked leaderboard", () => {
-    const r = run(`scan ${join(root, "mp")}`);
+    const r = run(`audit ${join(root, "mp")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Plugin health leaderboard \(2 scanned\)/);
     assert.match(r.stdout, /alpha/);
@@ -229,7 +236,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
         ],
       }),
     );
-    const r = run(`scan ${join(root, "curated")}`);
+    const r = run(`audit ${join(root, "curated")}`);
     assert.equal(r.exitCode, 0);
     assert.match(
       r.stdout,
@@ -239,30 +246,27 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     assert.doesNotMatch(r.stdout, /nothing was loaded/);
   });
 
-  it("--json emits a parseable report with the instruction file", () => {
-    const r = run(`scan ${join(root, "codex")} --json`);
+  it("--json emits the versioned AuditReport (harness + inventory)", () => {
+    const r = run(`audit ${join(root, "codex")} --json`);
     assert.equal(r.exitCode, 0);
     const report = JSON.parse(r.stdout) as {
-      instructions: { file: string; hasSpec: boolean } | null;
-      skills: unknown[];
-      mcp: boolean;
+      meta: { schemaVersion: number; harness: string };
+      inventory: { skills: number; mcp: boolean };
     };
-    assert.deepEqual(report.instructions, {
-      file: "AGENTS.md",
-      hasSpec: false,
-    });
-    assert.equal(report.skills.length, 1);
-    assert.equal(report.mcp, true);
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.harness, "codex");
+    assert.equal(report.inventory.skills, 1);
+    assert.equal(report.inventory.mcp, true);
   });
 });
 
-// --- `vigiles explain` — the deterministic WHY (C4) over the real CLI ----------
+// --- folded deterministic fixes in the default `audit` report (was --explain/--fix-plan)
 
-describe("explain e2e — deterministic cause + fix", () => {
+describe("audit default — folds the deterministic fix into the report", () => {
   let root: string;
 
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "explain-e2e-"));
+    root = mkdtempSync(join(tmpdir(), "audit-fixes-e2e-"));
     mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
     writeFileSync(
       join(root, "demo", ".claude-plugin", "plugin.json"),
@@ -270,8 +274,8 @@ describe("explain e2e — deterministic cause + fix", () => {
     );
     mkdirSync(join(root, "demo", "agents"), { recursive: true });
     // A subagent whose `tools:` names "Reed" — a close typo of the real "Read",
-    // so it's silently dropped: the subagent-tool-contract cause of an
-    // agent-underperforms symptom, with a did-you-mean fix.
+    // so it's silently dropped: the subagent-tool-contract cause, with a
+    // did-you-mean fix the default report now surfaces inline.
     writeFileSync(
       join(root, "demo", "agents", "rev.md"),
       `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
@@ -282,91 +286,31 @@ describe("explain e2e — deterministic cause + fix", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("names the deterministic cause, the symptom, and the one-line fix", () => {
-    const r = run(`scan ${join(root, "demo")} --explain`);
+  it("the default report carries the health score + the ranked FIX with the detector + one-line fix", () => {
+    const r = run(`audit ${join(root, "demo")}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /the subagent loses a declared tool/);
-    assert.match(r.stdout, /\[subagent-tool-contract\]/);
-    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
-  });
-
-  it("a surface name filters to that one underperformer", () => {
-    const r = run(`scan ${join(root, "demo")} --explain rev`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Explaining "rev":/);
-    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
-  });
-
-  it("--json emits the structured explanation array", () => {
-    const r = run(`scan ${join(root, "demo")} --explain --json`);
-    assert.equal(r.exitCode, 0);
-    const exps = JSON.parse(r.stdout) as {
-      surface: string;
-      symptom: string;
-      detector: string;
-      fix: string;
-      confidence: string;
-    }[];
-    assert.equal(exps.length, 1);
-    assert.equal(exps[0].symptom, "agent-underperforms");
-    assert.equal(exps[0].detector, "subagent-tool-contract");
-    assert.equal(exps[0].confidence, "likely");
-    assert.match(exps[0].fix, /Read/);
-  });
-
-  it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
-    const r = run(`scan ${join(root, "demo")} --explain absent`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /No deterministic cause found/);
-  });
-});
-
-describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => {
-  let root: string;
-
-  beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "fix-plan-e2e-"));
-    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
-    writeFileSync(
-      join(root, "demo", ".claude-plugin", "plugin.json"),
-      '{"name":"demo"}\n',
-    );
-    mkdirSync(join(root, "demo", "agents"), { recursive: true });
-    // Same typo'd-tool subagent as the explain fixture: a deterministic FIX.
-    writeFileSync(
-      join(root, "demo", "agents", "rev.md"),
-      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
-    );
-  });
-
-  afterAll(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
-    const r = run(`scan ${join(root, "demo")} --fix-plan`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Harness health: \d+\/100/);
+    assert.match(r.stdout, /Harness health: [A-F] \(\d+\/100\)/);
     assert.match(r.stdout, /\[FIX\] rev/);
     assert.match(r.stdout, /\[subagent-tool-contract\]/);
-    // The whole point: hand off the behavioral question to the measured layer.
-    assert.match(r.stdout, /vigiles measure/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
-  it("--fix-plan --json emits the structured plan (score, grade, recommendations)", () => {
-    const r = run(`scan ${join(root, "demo")} --fix-plan --json`);
+  it("--json emits the versioned AuditReport (the upload/CI contract)", () => {
+    const r = run(`audit ${join(root, "demo")} --json`);
     assert.equal(r.exitCode, 0);
-    const plan = JSON.parse(r.stdout) as {
-      score: number;
-      grade: string;
-      empty: boolean;
-      recommendations: { surface: string; action: string; detector: string }[];
+    const report = JSON.parse(r.stdout) as {
+      meta: { schemaVersion: number; tool: string; dir: string };
+      score: { overall: number; grade: string };
+      recommendations: { surface: string }[];
     };
-    assert.equal(plan.empty, false);
-    assert.equal(plan.recommendations.length, 1);
-    assert.equal(plan.recommendations[0].action, "fix");
-    assert.equal(plan.recommendations[0].surface, "rev");
-    assert.equal(plan.recommendations[0].detector, "subagent-tool-contract");
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.tool, "vigiles");
+    assert.ok(report.meta.dir, "meta.dir present");
+    assert.ok(
+      typeof report.score.overall === "number",
+      "score.overall present",
+    );
+    assert.doesNotMatch(r.stdout, /\[FIX\]/);
   });
 });
 
@@ -622,7 +566,7 @@ describe("scan --capability-diff e2e", () => {
   it("flags a widened blast radius and exits 0 by default (informational)", () => {
     const { before, after, root } = versions();
     try {
-      const r = run(`scan ${after} --capability-diff=${before}`);
+      const r = run(`audit ${after} --capability-diff=${before}`);
       assert.equal(r.exitCode, 0, "widening is informational by default");
       assert.match(r.stdout, /WIDENED/);
       assert.match(r.stdout, /side-effecting: Bash/);
@@ -635,7 +579,7 @@ describe("scan --capability-diff e2e", () => {
     const { before, after, root } = versions();
     try {
       const r = run(
-        `scan ${after} --capability-diff=${before} --fail-on-widen`,
+        `audit ${after} --capability-diff=${before} --fail-on-widen`,
       );
       assert.equal(r.exitCode, 1);
     } finally {
@@ -646,7 +590,9 @@ describe("scan --capability-diff e2e", () => {
   it("reports no change when the surface is identical", () => {
     const { after, root } = versions();
     try {
-      const r = run(`scan ${after} --capability-diff=${after} --fail-on-widen`);
+      const r = run(
+        `audit ${after} --capability-diff=${after} --fail-on-widen`,
+      );
       assert.equal(r.exitCode, 0, "no widening → no gate trip");
       assert.match(r.stdout, /unchanged/);
     } finally {
@@ -656,10 +602,14 @@ describe("scan --capability-diff e2e", () => {
 });
 
 // ---------------------------------------------------------------------------
-// scan → trigger-tier nudge (env-gated; deterministic via explicit env)
+// audit → read-vs-run (env-gated; deterministic via explicit env). A plain
+// `audit` is a deterministic READ; the executing checks are opt-in. These run
+// non-TTY (execSync pipes), so they're headless — `audit` never PROMPTS, it
+// stays a read + a loud nudge. The interactive ask-once path is unit-tested via
+// decideExecute.
 // ---------------------------------------------------------------------------
 
-describe("scan: trigger-tier nudge", () => {
+describe("audit: read-vs-run (executing checks are opt-in)", () => {
   let dir: string;
   const MODEL_ENV_KEYS = [
     "ANTHROPIC_API_KEY",
@@ -706,27 +656,127 @@ describe("scan: trigger-tier nudge", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
-    const out = runEnv("scan .", { CLAUDECODE: "1" });
-    assert.ok(out.includes("model access detected"), "hint shown");
-    assert.ok(out.includes("--trigger"), "names the trigger command");
+  it("a headless run stays a READ + a nudge (points to interactive + the API, no flag)", () => {
+    const out = runEnv("audit .", { CLAUDECODE: "1" });
+    assert.ok(out.includes("Executing checks"), "read-vs-run nudge");
+    assert.ok(out.includes("interactively"), "points at the interactive path");
+    assert.ok(!out.includes("--measure"), "no execution flag exists");
   });
 
-  it("stays silent with no model access", () => {
-    const out = runEnv("scan .", {}); // all model signals stripped
-    assert.ok(!out.includes("model access detected"), "no hint without access");
+  it("the nudge is model-agnostic — it's about execution, shown with or without a model", () => {
+    const out = runEnv("audit .", {}); // all model signals stripped
+    assert.ok(out.includes("Executing checks"), "nudge still shown");
   });
 
-  it("stays silent under --json even with model access (machine output)", () => {
-    const out = runEnv("scan . --json", { CLAUDECODE: "1" });
-    assert.ok(!out.includes("model access detected"), "no hint in json mode");
+  it("stays silent under --json (machine output — no human nudge)", () => {
+    const out = runEnv("audit . --json", { CLAUDECODE: "1" });
+    assert.ok(!out.includes("Executing checks"), "no nudge in json mode");
   });
 
-  it("--no-interactive never prompts (hint only)", () => {
-    const out = runEnv("scan . --no-interactive", { CLAUDECODE: "1" });
-    assert.ok(
-      out.includes("model access detected"),
-      "hint shown, not a prompt",
+  it("--no-interactive never prompts (loud nudge only)", () => {
+    const out = runEnv("audit . --no-interactive", { CLAUDECODE: "1" });
+    assert.ok(out.includes("Executing checks"), "nudge shown, not a prompt");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Health-score header in default single-dir scan output
+// ---------------------------------------------------------------------------
+
+describe("scan default output — health score header", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "scan-score-"));
+    // A clean plugin — CLAUDE.md + one well-formed skill (nothing broken).
+    mkdirSync(join(root, "skills", "greet"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# Project\nRun the build.\n");
+    writeFileSync(
+      join(root, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly with a personalised message\n---\nGreet them.\n",
     );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("prints a Harness health: <grade> (<score>/100) line before the report", () => {
+    const r = run(`audit ${root}`);
+    assert.equal(r.exitCode, 0);
+    // The score header must appear.
+    assert.match(r.stdout, /Harness health: [A-F] \(\d+\/100\)/);
+    // The report body still follows.
+    assert.match(r.stdout, /Scan:/);
+  });
+
+  it("score header is absent under --json (machine output)", () => {
+    const r = run(`audit ${root} --json`);
+    assert.equal(r.exitCode, 0);
+    assert.doesNotMatch(r.stdout, /Harness health:/);
+    // But the JSON still parses as the versioned AuditReport.
+    const report = JSON.parse(r.stdout) as { meta: { dir: string } };
+    assert.ok(report.meta.dir, "json has meta.dir");
+  });
+
+  it("a plain (headless) audit is a deterministic read — nothing executes", () => {
+    // A plain audit is a READ; the executing checks (live MCP + skill firing) are
+    // opt-in. `root` ships a skill, so a headless run nudges toward them but runs
+    // nothing. There is no safety battery in `audit` at all (it's a testing-API
+    // capability now), so its section never appears.
+    const r = run(`audit ${root}`);
+    assert.equal(r.exitCode, 0);
+    assert.doesNotMatch(r.stdout, /Safety battery/);
+    assert.match(r.stdout, /Executing checks/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Default artifacts: vigiles-report.html + vigiles-report.json (the upload boundary)
+// ---------------------------------------------------------------------------
+
+describe("audit default artifacts (html + json) written to cwd", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "audit-artifacts-"));
+    mkdirSync(join(root, "skills", "greet"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# Project\n");
+    writeFileSync(
+      join(root, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly with a personalised message\n---\nGreet.\n",
+    );
+  });
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // Run with cwd INSIDE the tmp dir (raw, not the suppressing `run` helper) so the
+  // artifacts land in tmp (cleaned), and assert both are written + valid.
+  it("writes a self-contained HTML report and a versioned JSON artifact", () => {
+    execSync(`node ${CLI} audit .`, { cwd: root, encoding: "utf-8" });
+    const html = join(root, "vigiles-report.html");
+    const jsonPath = join(root, "vigiles-report.json");
+    assert.ok(existsSync(html), "vigiles-report.html written");
+    assert.ok(existsSync(jsonPath), "vigiles-report.json written");
+    assert.match(readFileSync(html, "utf-8"), /^<!doctype html>/);
+    const report = JSON.parse(readFileSync(jsonPath, "utf-8")) as {
+      meta: { schemaVersion: number; generatedAt?: string };
+      score: { overall: number };
+    };
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.ok(report.meta.generatedAt, "json artifact is timestamped");
+    assert.ok(typeof report.score.overall === "number");
+  });
+
+  it("--no-html --no-json suppresses both", () => {
+    rmSync(join(root, "vigiles-report.html"), { force: true });
+    rmSync(join(root, "vigiles-report.json"), { force: true });
+    execSync(`node ${CLI} audit . --no-html --no-json`, {
+      cwd: root,
+      encoding: "utf-8",
+    });
+    assert.ok(!existsSync(join(root, "vigiles-report.html")), "no html");
+    assert.ok(!existsSync(join(root, "vigiles-report.json")), "no json");
   });
 });

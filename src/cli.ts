@@ -77,16 +77,11 @@ import {
 import type { ScanReport } from "./scan.js";
 import {
   hasModelAccess,
-  decideTriggerSuggestion,
-  formatTriggerHint,
-  scaffoldTriggerPrompts,
+  isMeteredAccess,
+  decideExecute,
+  formatExecuteSkip,
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
-import {
-  explainScore,
-  explainSurface,
-  formatExplanations,
-} from "./score-explainer.js";
 import {
   probePluginTriggers,
   formatBehavioralReport,
@@ -112,7 +107,21 @@ import {
   formatLeaderboard,
   formatLeaderboardMarkdown,
 } from "./leaderboard.js";
-import { optimize, formatOptimize } from "./optimize.js";
+import { optimize, formatRecommendations } from "./optimize.js";
+import { formatAuditScore } from "./audit-score.js";
+import {
+  autoTriggerPrompts,
+  AUTO_RECALL_COUNT,
+  AUTO_MIN_DISTANCE,
+  type PromptSkill,
+} from "./audit-prompts.js";
+import { renderAuditHtml } from "./audit-html.js";
+import { buildAuditReport, type AuditReport } from "./audit-report.js";
+import {
+  runAdoptabilityTier,
+  formatAdoptability,
+  type AdoptabilityResult,
+} from "./adoptability.js";
 
 import {
   compileClaude,
@@ -1690,7 +1699,16 @@ function targetHasHash(absPath: string): boolean {
   }
 }
 
-function init(args: string[]): void {
+/**
+ * Single-target spec scaffolder — the small building block behind the `init`
+ * verb, NOT the wizard. Creates exactly one sibling `<target>.spec.ts`: it
+ * faithfully ADOPTS an existing hand-written instruction file (non-destructive —
+ * never overwrites the markdown) or writes a blank starter for a greenfield
+ * target. Called directly for `vigiles init --target=<file>`, and once per
+ * target by `setupPillar1`. The full onboarding (both layers, deps, CI, plugin)
+ * is `setup()`.
+ */
+function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
   const specPath = `${target}.spec.ts`;
@@ -1954,7 +1972,7 @@ function workflowUsesStaleApi(content: string): boolean {
   if (content.includes("zernie/vigiles@")) return false; // uses the Action — fine
   if (!/\bvigiles\b/.test(content)) return false; // not a vigiles workflow
   const hasModernCmd =
-    /vigiles\s+(lint|test|eval|compile|scan|generate-types|generate-schema|init)\b/.test(
+    /vigiles\s+(lint|test|eval|compile|audit|generate-types|generate-schema|init)\b/.test(
       content,
     );
   return !hasModernCmd;
@@ -1968,7 +1986,7 @@ function workflowUsesStaleApi(content: string): boolean {
  * the bare-API heuristic above, which an Action reference short-circuits.
  */
 const REMOVED_SUBCOMMANDS: Record<string, string> = {
-  audit: "lint", // v3 → v4 rename
+  scan: "audit", // renamed: the Lighthouse report verb is `audit`
 };
 
 /** The first removed/renamed `vigiles <sub>` a workflow still calls, if any. */
@@ -1982,7 +2000,7 @@ function workflowRemovedSubcommand(
   return null;
 }
 
-/** Rewrite removed/renamed `vigiles <sub>` invocations in place (audit → lint).
+/** Rewrite removed/renamed `vigiles <sub>` invocations in place (scan → audit).
  * Surgical — preserves the rest of the user's workflow. */
 function rewriteRemovedSubcommands(content: string): string {
   let out = content;
@@ -2333,7 +2351,7 @@ async function setupPillar1(
       );
 
   // Create specs. An existing hand-written target is faithfully ADOPTED into a
-  // spec (init() does the convert), not clobbered with a blank one — so the
+  // spec (scaffoldSpec() does the convert), not clobbered with a blank one — so the
   // compile below reproduces it (the user reviews the diff). A greenfield target
   // gets a blank starter spec.
   for (const target of targets) {
@@ -2346,7 +2364,7 @@ async function setupPillar1(
     if (existsSync(resolve(cwd, specPath))) {
       console.log(`✓ ${specPath} already exists`);
     } else {
-      init(["--target=" + target]); // adopts existing content, else blank scaffold
+      scaffoldSpec(["--target=" + target]); // adopts existing content, else blank scaffold
       written.push(specPath);
       if (willAdopt) adopted.push(target);
     }
@@ -3549,14 +3567,14 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * `vigiles scan <dir> --trigger` — the MODEL-GATED behavioral report on a plugin (the paid
- * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
- * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
- * skill actually FIRE — recall + precision) and the selection-collision matrix (does
- * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
+ * The MODEL-GATED behavioral half of `vigiles audit` (the model trigger tier; the
+ * deterministic core of `audit` stays free). Loads the author-supplied per-skill
+ * prompt sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does
+ * each skill actually FIRE — recall + precision) and the selection-collision matrix
+ * (does one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles scan ./plugin --trigger --prompts=p.json`.
+ * `vigiles audit ./plugin --prompts=p.json` (interactive — say yes when asked).
  */
 async function handleMeasure(
   restArgs: string[],
@@ -3993,32 +4011,6 @@ function harnessFlagFrom(argv: string[]): string | undefined {
 }
 
 /**
- * `vigiles scan <dir> --explain [name]` — the deterministic WHY behind a low score (C4):
- * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
- * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
- * optional surface name narrows to one underperforming skill/agent (the
- * optimizer's call). `--json` for the agent-consumable shape, `--harness=` to
- * override detection.
- */
-function handleExplain(restArgs: string[], args: string[]): void {
-  const dir = resolve(restArgs[0] ?? ".");
-  const surface = restArgs[1];
-  const json = args.includes("--json");
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
-  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
-  const exps = surface ? explainSurface(report, surface) : explainScore(report);
-  if (json) {
-    console.log(JSON.stringify(exps, null, 2));
-    return;
-  }
-  if (surface) console.log(`Explaining "${surface}":\n`);
-  console.log(formatExplanations(exps));
-}
-
-/**
  * Whole-harness capability lattice from a scanned plugin's agents (no `tools:` line →
  * inherits-all). The substrate `scan --capability-diff` diffs. Reused for both the
  * already-scanned "after" report and the freshly-scanned "before" dir.
@@ -4192,13 +4184,13 @@ function printUsage(command: string | undefined): void {
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
-    "  vigiles scan [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
+    "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
+    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json for machine output. NOT a CI step — use `vigiles lint` in CI.",
   );
   console.log(
-    "                                 with model access + a TTY, scan offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
+    "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -5159,38 +5151,225 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
- * After a single-plugin `scan` report: if the plugin ships model-invocable
- * skills AND a real model is reachable, surface the real-model `--trigger` tier
- * that measures whether those skills actually FIRE. A human at a TTY is offered
- * setup; an agent / CI (non-TTY / `--json` / `--no-interactive` / `--yes`) gets a
- * one-line, non-blocking hint — a `scan` must never hang (`great-agent-flow`).
+ * Write the versioned JSON artifact (`vigiles-report.json`) — the upload/CI
+ * boundary a hosted dashboard ingests. Stamps `meta.generatedAt` here (at write
+ * time, not in the pure builder, so the HTML-embedded form stays deterministic).
  */
-async function maybeSuggestTrigger(
-  report: ScanReport,
+function writeAuditJson(report: AuditReport): void {
+  const jsonPath = resolve(process.cwd(), "vigiles-report.json");
+  const stamped: AuditReport = {
+    ...report,
+    meta: { ...report.meta, generatedAt: new Date().toISOString() },
+  };
+  try {
+    writeFileSync(jsonPath, JSON.stringify(stamped, null, 2) + "\n");
+    console.log("✓ Wrote vigiles-report.json — the upload/CI artifact");
+  } catch (e) {
+    console.log(
+      `\n⚠ could not write vigiles-report.json: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+/** Best-effort open the report in the default browser (TTY-only caller). */
+function openBestEffort(file: string): void {
+  const cmd =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+  void import("node:child_process")
+    .then(({ spawn }) => {
+      const child = spawn(cmd, [file], {
+        stdio: "ignore",
+        detached: true,
+        shell: process.platform === "win32",
+      });
+      child.on("error", () => undefined);
+      child.unref();
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * Write the self-contained HTML audit report to `vigiles-report.html` (cwd) and,
+ * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
+ * never spawns a browser for an agent / CI run.
+ */
+function writeAuditHtml(report: AuditReport): void {
+  const htmlPath = resolve(process.cwd(), "vigiles-report.html");
+  try {
+    writeFileSync(htmlPath, renderAuditHtml(report));
+    console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
+    if (process.stdout.isTTY) openBestEffort(htmlPath);
+  } catch (e) {
+    // No template (unbuilt checkout) or a write error — skip the HTML; the JSON
+    // artifact + terminal report don't depend on it.
+    console.log(
+      `\n⚠ skipped vigiles-report.html: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+/**
+ * Run the model trigger tier with no `--prompts`: auto-generate diverse probe
+ * prompts from each skill's description and measure trigger-rate (recall +
+ * precision) — zero-setup. `--prompts=<file>` (handled by handleMeasure)
+ * overrides for a curated benchmark + the collision matrix. Model-gated: the
+ * probes are deterministic, but RUNNING them needs the harness CLI + model auth
+ * (degrades to "unavailable" otherwise).
+ */
+async function runAutoTrigger(
   dir: string,
-  json: boolean,
+  report: ScanReport,
+  adapter: HarnessAdapter,
   args: string[],
 ): Promise<void> {
-  const triggerable = report.skills.filter(
-    (s) => s.hasDescription && !s.userInvoked,
-  );
-  const decision = decideTriggerSuggestion({
-    modelAccess: hasModelAccess(process.env),
-    // Prompt only when BOTH streams are a terminal — `askOnce` reads stdin, so a
-    // TTY stdout with piped/redirected stdin (agents, shell pipelines) must take
-    // the non-blocking hint path, not block on a read that never gets input.
-    // `isTTY` is `undefined` at runtime when not a terminal (falsy → hint path).
-    isTTY: process.stdout.isTTY && process.stdin.isTTY,
-    triggerableSkills: triggerable.length,
-    json,
-    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
-  });
-  if (decision === "none") return;
-  if (decision === "hint") {
-    console.log("\n" + formatTriggerHint(dir, triggerable.length));
+  const json = args.includes("--json");
+  const harness: ProbeHarness =
+    adapter.name === "codex" ? "codex" : "claude-code";
+  const skills: PromptSkill[] = report.skills
+    .filter((s) => s.hasDescription && !s.userInvoked && s.description)
+    .map((s) => ({ name: s.name, description: s.description ?? "" }));
+  if (skills.length === 0) {
+    if (!json) {
+      console.log(
+        "\nℹ no model-invocable skills with a description to measure.",
+      );
+    }
     return;
   }
-  await promptTriggerSetup(report, dir, triggerable.length, args);
+  const promptSet = autoTriggerPrompts(skills);
+  if (!json) {
+    console.log(
+      "\nℹ auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
+    );
+  }
+  const trigger = await probePluginTriggers(dir, promptSet, {
+    minPrompts: AUTO_RECALL_COUNT,
+    minDistance: AUTO_MIN_DISTANCE,
+    model: flagValue(args, "--model"),
+    harness,
+    // Discover candidates with the resolved adapter's layout/dialect — a Codex
+    // repo's skills live under the Codex layout, not the default CC one.
+    layout: adapter.layout,
+    dialect: adapter.dialect,
+  });
+  console.log(
+    json
+      ? JSON.stringify({ trigger }, null, 2)
+      : "\n" + formatBehavioralReport(trigger),
+  );
+}
+
+/**
+ * What `audit`'s executing checks (safety battery + live MCP + trigger-rate) need
+ * — used to decide whether there's anything to run, and to disclose it at consent.
+ */
+interface ExecutableSurfaces {
+  readonly hasMcp: boolean; // own-repo + declares MCP server(s)
+  readonly triggerableSkills: number; // model-invocable, described skills
+  // An instruction file whose refs the adoption preview can draft+verify. Harness-
+  // aware: Claude Code only in v1 (drafting drives the `claude` CLI), so a bare
+  // CLAUDE.md repo is consent-eligible but a Codex AGENTS.md repo isn't (it gets a
+  // loud deferral note instead).
+  readonly adoptableRefs: boolean;
+}
+
+/**
+ * The ONE read-vs-run decision for a single-plugin `audit`. A plain `audit` is a
+ * deterministic READ; the executing checks are opt-in via a single consent —
+ * `decideExecute` resolves it (run / ask / skip). At a TTY we ASK ONCE (bundled,
+ * with a confinement + cost DISCLOSURE) and remember the answer in `.vigilesrc.json`;
+ * headless we stay a read (the `note` is the loud nudge, printed by the caller
+ * AFTER the report). Never hangs an agent / CI run (`great-agent-flow`).
+ *
+ * Returns `execute` (run the executing checks?) + a `note` to print at the end.
+ */
+async function resolveExecution(
+  s: ExecutableSurfaces,
+  json: boolean,
+  args: string[],
+  harness: string,
+): Promise<{ execute: boolean; note: string | null }> {
+  const decision = decideExecute({
+    hasExecutable: s.hasMcp || s.triggerableSkills > 0 || s.adoptableRefs,
+    // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
+    // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
+    // pipelines) must NOT block on a read that never gets input.
+    isTTY: process.stdout.isTTY && process.stdin.isTTY,
+    json,
+    noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
+    remembered: loadConfig().audit?.measure,
+  });
+  if (decision.kind === "run") return { execute: true, note: null };
+  if (decision.kind === "skip")
+    return {
+      execute: false,
+      note: json ? null : formatExecuteSkip(decision.reason),
+    };
+  // ask — prompt once, then remember the answer.
+  const answer = await askOnce(buildExecuteDisclosure(s, harness));
+  const yes = /^y(es)?$/i.test(answer); // default NO (executes your hooks / servers)
+  rememberAuditMeasure(yes);
+  return {
+    execute: yes,
+    note: yes
+      ? null
+      : "  Skipped (remembered — edit .vigilesrc.json `audit.measure` to change).",
+  };
+}
+
+/** The bundled consent prompt — discloses exactly what will execute (and what it
+ *  costs) so the yes is informed. Default NO. Harness-aware: a Codex repo measures
+ *  via the codex CLI (not a Claude env var), so the cost wording must not falsely
+ *  read "no model access" in exactly the case the prompt is meant to disclose. */
+function buildExecuteDisclosure(
+  s: ExecutableSurfaces,
+  harness: string,
+): string {
+  const lines = ["\nRun the executing checks against your harness?"];
+  if (s.hasMcp)
+    lines.push("  · start your MCP servers — connects to their backends");
+  if (s.triggerableSkills > 0) {
+    lines.push(
+      `  · measure whether skills fire (${triggerCostWording(harness)})`,
+    );
+  }
+  if (s.adoptableRefs) {
+    lines.push(
+      `  · draft + verify your instruction file's references (${triggerCostWording(harness)})`,
+    );
+  }
+  lines.push("Asked once — remembered in .vigilesrc.json. [y/N] ");
+  return lines.join("\n");
+}
+
+/** Cost/availability wording for the trigger tier, per harness. Codex runs on the
+ *  codex CLI (its own auth/plan), so it's never gated on a Claude env var. */
+function triggerCostWording(harness: string): string {
+  if (harness === "codex")
+    return "your Codex CLI, $0 metered — skips if `codex` isn't on PATH";
+  return !hasModelAccess(process.env)
+    ? "needs model access — none detected, will skip"
+    : isMeteredAccess(process.env)
+      ? "⚠ spends API credits"
+      : "your subscription, $0 metered";
+}
+
+/** Run the trigger tier: a curated `--prompts` file, else auto-generated probes. */
+async function runTriggerTier(
+  dir: string,
+  report: ScanReport,
+  adapter: HarnessAdapter,
+  args: string[],
+): Promise<void> {
+  if (flagValue(args, "--prompts")) {
+    await handleMeasure([dir], args);
+  } else {
+    await runAutoTrigger(dir, report, adapter, args);
+  }
 }
 
 /** Ask one question on a fresh readline, closing it after (the codebase pattern). */
@@ -5211,43 +5390,35 @@ async function askOnce(q: string): Promise<string> {
   }
 }
 
-/** Interactive (TTY) trigger-tier setup: run an existing prompts file now, or
- *  scaffold one to fill in. The real-model run stays an explicit confirmation so
- *  a plain `scan` never spends a token without a yes. */
-async function promptTriggerSetup(
-  report: ScanReport,
-  dir: string,
-  n: number,
-  args: string[],
-): Promise<void> {
-  const promptsPath = resolve(process.cwd(), "trigger-prompts.json");
-  const exists = existsSync(promptsPath);
-  const q = exists
-    ? `\nℹ Model access detected. Measure whether your ${String(n)} skill(s) FIRE now using trigger-prompts.json (real model)? [y/N] `
-    : `\nℹ ${String(n)} model-invocable skill(s) + model access detected. Scaffold trigger-prompts.json to measure firing? [y/N] `;
-  const answer = await askOnce(q);
-  if (!/^y(es)?$/i.test(answer)) {
-    console.log("  Skipped. " + formatTriggerHint(dir, n));
-    return;
+/**
+ * Persist the audit consent (`audit.measure`) into `.vigilesrc.json` without
+ * clobbering existing keys — the "ask once, remember" sticky choice. Best-effort:
+ * a malformed user config is left untouched, a write error is non-fatal (the
+ * measurement already ran / was skipped; only the memory is lost).
+ */
+function rememberAuditMeasure(value: boolean): void {
+  const configPath = resolve(process.cwd(), ".vigilesrc.json");
+  let existing: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    try {
+      existing = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return; // user-owned malformed config — never clobber it
+    }
   }
-  if (exists) {
-    await handleMeasure([dir], [...args, "--prompts=trigger-prompts.json"]);
-    return;
+  const prevAudit =
+    typeof existing.audit === "object" && existing.audit !== null
+      ? (existing.audit as Record<string, unknown>)
+      : {};
+  const merged = { ...existing, audit: { ...prevAudit, measure: value } };
+  try {
+    writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
+  } catch {
+    /* non-fatal — the run already happened; only the remembered choice is lost */
   }
-  writeFileSync(
-    promptsPath,
-    scaffoldTriggerPrompts(
-      report.skills
-        .filter((s) => s.hasDescription && !s.userInvoked)
-        .map((s) => s.name),
-    ),
-  );
-  console.log(
-    "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
-  );
-  console.log(
-    `    vigiles scan ${dir} --trigger --prompts=trigger-prompts.json`,
-  );
 }
 
 async function main(): Promise<void> {
@@ -5276,7 +5447,7 @@ async function main(): Promise<void> {
       // still runs the full wizard (project detection + auto-targets).
       const hasTarget = args.some((a) => a.startsWith("--target="));
       if (hasTarget) {
-        init(args.slice(1));
+        scaffoldSpec(args.slice(1));
       } else {
         await setup(args);
       }
@@ -5345,19 +5516,15 @@ async function main(): Promise<void> {
       handleRunScripts("eval", args, restArgs);
       break;
 
-    case "scan": {
-      // Model-gated behavioral column + the deterministic diagnostic, folded into
-      // scan (formerly the `measure` / `explain` verbs): `--trigger` measures
-      // whether each skill FIRES / COLLIDES (real model), `--explain` is the
-      // free WHY-a-surface-underperforms + the fix.
-      if (args.includes("--trigger")) {
-        await handleMeasure(restArgs, args);
-        break;
-      }
-      if (args.includes("--explain")) {
-        handleExplain(restArgs, args);
-        break;
-      }
+    case "audit": {
+      // The Lighthouse run: a plain `audit` is a deterministic READ — rings, each
+      // finding's fix inline, HTML/JSON report — safe + identical on every OS,
+      // nothing executes. Like Lighthouse it's a LOCAL report, NOT a CI step (CI
+      // uses `vigiles lint`). The executing checks (safety battery + live MCP +
+      // skill firing) run only on consent: at a TTY `audit` asks once (remembered
+      // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. There
+      // is NO execution flag — automation tests the harness via the vigiles/testing
+      // API + skills, not the report verb. See the `audit-side-effect-free` rule.
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5412,22 +5579,60 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        if (args.includes("--fix-plan")) {
-          // The deterministic optimization lens on the SAME report: health score
-          // + the ranked free fixes to clear before measuring (the A2 spine).
-          const plan = optimize(report);
-          console.log(
-            json ? JSON.stringify(plan, null, 2) : formatOptimize(plan),
-          );
-        } else {
-          console.log(
-            json ? JSON.stringify(report, null, 2) : formatScanReport(report),
-          );
+        // The versioned AuditReport is the product boundary — the same JSON the
+        // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
+        // Built ONCE; the rings + fix list are read off it. Pure deterministic —
+        // nothing executes to produce it.
+        const auditReport = buildAuditReport(report, {
+          harness: adapter.name,
+          vigilesVersion: getVersion(),
+        });
+        const sc = auditReport.score;
+        const plan = optimize(report);
+        if (!json) {
+          // The Lighthouse rings: per-category 0–100 + the weighted overall,
+          // shown before the detailed report so the headline signal leads.
+          console.log(formatAuditScore(sc));
+          console.log("");
         }
-        if (args.includes("--verify-mcp")) {
-          // Opt-in LIVE MCP tool resolution: starts each declared server and checks
-          // the agent's mcp__server__tool refs actually exist (the dynamic check no
-          // static linter can do). Side-effecting (spawns servers) → opt-in only.
+        console.log(
+          json
+            ? JSON.stringify(auditReport, null, 2)
+            : formatScanReport(report),
+        );
+        if (!json) {
+          // Fold each finding's fix inline (replaces the former --fix-plan/--explain
+          // flags): the deterministic, free recommendation list under the report.
+          const fixes = formatRecommendations(plan);
+          if (fixes) console.log("\n" + fixes);
+        }
+        // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
+        // firing). A plain `audit` is a deterministic READ; these run only on
+        // consent — ASK once at a TTY (remembered); headless stays a read + a
+        // nudge (no execution flag — automation uses the vigiles/testing API).
+        // (The safety battery is NOT here — it needs cross-platform confinement
+        // that isn't shipped, so it lives in the vigiles/testing API.)
+        const isForeign = root !== process.cwd();
+        const surfaces: ExecutableSurfaces = {
+          hasMcp: report.mcp && !isForeign,
+          triggerableSkills: report.skills.filter(
+            (s) => s.hasDescription && !s.userInvoked,
+          ).length,
+          adoptableRefs:
+            adapter.name === "claude-code" &&
+            existsSync(resolve(root, adapter.layout.instructionFile)),
+        };
+        const { execute, note: execNote } = await resolveExecution(
+          surfaces,
+          json,
+          args,
+          adapter.name,
+        );
+        // LIVE MCP tool resolution STARTS each declared MCP server — a server is
+        // exactly what connects to a real Postgres / authenticates a real API on
+        // boot. So it runs only under consent (`execute`) AND own-repo (never
+        // spawn a stranger's server).
+        if (execute && surfaces.hasMcp) {
           const mcpErrs = await verifyLiveMcpTools(
             report,
             adapter.layout,
@@ -5461,9 +5666,87 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
-        // Nudge toward the real-model trigger tier when a model is reachable and
-        // the plugin ships model-invocable skills (hint for agents, offer for humans).
-        await maybeSuggestTrigger(report, targets[0], json, args);
+        // The model trigger tier — "do your skills actually FIRE?" — runs as part
+        // of the same consent (`execute`), and only when a model is reachable;
+        // otherwise it's a one-line note (never a hang).
+        if (execute && surfaces.triggerableSkills > 0) {
+          // Model-access detection is per-harness: `hasModelAccess` reads Claude
+          // env (claude CLI / ANTHROPIC_API_KEY). A Codex repo authenticates the
+          // codex CLI instead, so we DON'T gate it on a Claude var — the Codex
+          // probe checks `codexDriver.available()` internally and self-reports
+          // unavailable. (harness-parity: never block Codex behind a CC check.)
+          const modelReachable =
+            adapter.name === "codex" || hasModelAccess(process.env);
+          if (modelReachable) {
+            await runTriggerTier(targets[0], report, adapter, args);
+          } else if (!json) {
+            console.log(
+              "\nℹ skill firing not measured — no model access (authenticate the `claude` CLI or set ANTHROPIC_API_KEY).",
+            );
+          }
+        }
+        // The adoption preview — "what would vigiles catch in YOUR repo?" The model
+        // DRAFTS the verifiable refs in the instruction file; the cross-ref engine
+        // VERIFIES each, so "M broken right now" is trustworthy though the extraction
+        // is probabilistic. Same consent as the trigger tier (`surfaces.adoptableRefs`
+        // makes a bare instruction-file repo consent-eligible — the prime adoption
+        // target). v1: instruction-file only; drafting drives the `claude` CLI, so
+        // `adoptableRefs` is Claude Code only (the Codex deferral note is printed
+        // below as a LOUD harness-parity deferral, never a silent CC-only path).
+        let adoptabilityResult: AdoptabilityResult | undefined;
+        if (execute && surfaces.adoptableRefs) {
+          if (hasModelAccess(process.env)) {
+            const instrPath = resolve(root, adapter.layout.instructionFile);
+            adoptabilityResult = await runAdoptabilityTier({
+              instructionContent: readFileSync(instrPath, "utf-8"),
+              basePath: root,
+            });
+            if (!json)
+              console.log(
+                "\n" +
+                  formatAdoptability(
+                    adoptabilityResult,
+                    adapter.layout.instructionFile,
+                  ),
+              );
+          } else if (!json && surfaces.triggerableSkills === 0) {
+            // Only when the trigger tier didn't already print the same note.
+            console.log(
+              "\nℹ adoptability not measured — no model access (authenticate the `claude` CLI or set ANTHROPIC_API_KEY).",
+            );
+          }
+        }
+        // LOUD harness-parity deferral: adoptability drafting drives the `claude`
+        // CLI, so a Codex repo with an instruction file is told it's a follow-up,
+        // never silently skipped (research/adoption-gateway-preview.md, increment 4).
+        if (
+          !json &&
+          adapter.name === "codex" &&
+          existsSync(resolve(root, adapter.layout.instructionFile))
+        ) {
+          console.log(
+            "\nℹ adoptability preview (what vigiles would catch in your repo) is Claude Code only for now — Codex support is a follow-up.",
+          );
+        }
+        // The loud read-vs-run nudge for a headless / remembered-no skip — printed
+        // AFTER the report so the deterministic read leads.
+        if (execNote) console.log(execNote);
+        // The final report folds in the adoptability preview (when the model-gated
+        // tier ran) so the written HTML/JSON carry it; a deterministic read omits it.
+        const finalReport: AuditReport = adoptabilityResult
+          ? { ...auditReport, adoptability: adoptabilityResult }
+          : auditReport;
+        // The shareable HTML report — written by default (--no-html to skip), and
+        // opened best-effort only for a human at a TTY (never spawn a browser for
+        // an agent / CI run).
+        if (!json && !args.includes("--no-html")) {
+          writeAuditHtml(finalReport);
+        }
+        // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
+        // ingests this). Written by default in the human path; --no-json to skip.
+        if (!json && !args.includes("--no-json")) {
+          writeAuditJson(finalReport);
+        }
       }
       break;
     }

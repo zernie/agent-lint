@@ -69,6 +69,17 @@ const ENFORCE_RE =
 const FILE_RE = /<!--\s*vigiles:file\s+(\S+)\s*-->/;
 
 /**
+ * Strip a single surrounding pair of matching quotes from a captured token.
+ * The documented `vigiles:file` syntax is an unquoted path, but users
+ * reasonably quote it for symmetry with `vigiles:cmd "..."` — without this,
+ * the quotes become part of the path, so it never resolves and the error
+ * reads `File not found: ""path""`. Normalize at the parse boundary.
+ */
+function unquote(token: string): string {
+  return /^"[^]*"$|^'[^]*'$/.test(token) ? token.slice(1, -1) : token;
+}
+
+/**
  * Match `<!-- vigiles:cmd "<command>" -->`. The command is quoted because
  * commands contain spaces (e.g. `npm run build`).
  */
@@ -165,7 +176,7 @@ export function parseInlineRules(content: string): InlineParseResult {
 
     const fileMatch = FILE_RE.exec(scannable);
     if (fileMatch) {
-      files.push({ path: fileMatch[1], line: i + 1 });
+      files.push({ path: unquote(fileMatch[1]), line: i + 1 });
       continue;
     }
 
