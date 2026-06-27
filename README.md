@@ -86,9 +86,11 @@ not just reads them — scores five categories, and writes a shareable HTML repo
 | **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
 | **🧪 Tested**       | Every surface ships a test                                            |
 
-Live MCP resolution runs by default on your own repo; **do your skills actually
-fire?** is measured on your own subscription — offered by default, asked once
-(`--measure` to force, `--fast` to skip). **[Audit a harness →](docs/for-plugin-authors.md)**
+**Do your skills actually fire?** is measured on your own subscription — offered by
+default, asked once (`--measure` to force, `--fast` to skip). The safety battery
+runs your hooks **network-confined**, and live MCP resolution (which starts your
+servers) is opt-in via `--measure` — so a plain `audit` is safe on any repo, even
+one wired to prod. **[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and

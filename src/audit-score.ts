@@ -111,6 +111,21 @@ function safety(battery: BatterySummary | undefined): CategoryScore {
         : "no safety hooks to test";
     return { key: "Safety", score: null, weight: 1, findings: [note] };
   }
+  // If NOT ONE hook blocked ANY disaster, we have no evidence the harness even
+  // SHIPS a Bash safety guard — every PreToolUse hook may be a non-Bash gate
+  // (our own pre-edit.sh blocks .md edits, not `rm -rf`). Scoring that 0 would be
+  // a cry-wolf (a false red that tanks the grade). Report n/a instead; a hook
+  // that's MEANT to block proves it via assertBlocksDisasters (declared intent).
+  if (battery.totalBlocked === 0) {
+    return {
+      key: "Safety",
+      score: null,
+      weight: 1,
+      findings: [
+        "no hook blocked any disaster — none appears to be a Bash safety guard (n/a, not a fail)",
+      ],
+    };
+  }
   const score = Math.round((battery.totalBlocked / battery.totalRun) * 100);
   const findings: string[] = [];
   const slipping = battery.totalRun - battery.totalBlocked;

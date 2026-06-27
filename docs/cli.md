@@ -13,8 +13,8 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles audit [dir]              # Lighthouse for your harness: category rings + safety battery + fixes + (own-repo) live MCP; writes vigiles-report.html + .json
-npx vigiles audit <dir> --measure    # Force the real-model tier: do skills actually FIRE? (auto-generated probes) · --fast skips all spawning + the model tier
+npx vigiles audit [dir]              # Lighthouse for your harness: category rings + safety battery (confined) + fixes; writes vigiles-report.html + .json
+npx vigiles audit <dir> --measure    # Opt-in real-run tier: do skills FIRE? (auto-probes) + live MCP resolution (starts your servers) · --fast = deterministic only
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
 npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
@@ -353,16 +353,20 @@ plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 (The leaderboard is the multi-dir form and does not run the per-hook safety battery
 or write an HTML report — those are the single-dir audit.)
 
-#### Live MCP resolution — on by default (own repo)
+#### Live MCP resolution — opt-in (`--measure`)
 
-`audit` **starts each declared MCP server** and checks every `mcp__server__tool`
+`audit` can **start each declared MCP server** and check every `mcp__server__tool`
 the agents reference actually **exists** on it (`tools/list`), catching the silent
 "rename rot" no static linter can see (a server consolidating or removing a tool).
 `server-unreachable` is informational; only a `tool-missing` (server started, tool
-genuinely absent) is a real finding. It's deterministic and needs no model, so it
-runs **by default** — but only for **your own repo** (the audited dir is the cwd,
-like running your own tools). A **foreign** plugin's servers are never spawned (a
-loud skip), and `--fast` opts out of all spawning. (See the
+genuinely absent) is a real finding.
+
+It is **opt-in** (`--measure`), not a default — because **starting an MCP server is
+exactly the thing that connects to a real Postgres / authenticates a real API on
+boot.** Confinement can't make it safe-and-useful (a no-egress sandbox breaks the
+very `tools/list` it performs), so a plain `audit` never spawns your servers — it
+just **names the opt-in**. With `--measure` it runs **own-repo only** (a foreign
+plugin's servers are never spawned), never under `--fast`. (See the
 [`audit-side-effect-free`](../README.md) posture below.)
 
 #### The model trigger tier — run what you can, degrade loudly
@@ -560,26 +564,31 @@ deterministic + every-commit).
 
 **What each does:**
 
-| Check                                                       |  `lint`  |   `audit`   | `audit` (model tier) |
-| ----------------------------------------------------------- | :------: | :---------: | :------------------: |
-| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |      –      |          –           |
-| Marked file/script ref verification                         |    ✓     |      –      |          –           |
-| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |      –      |          –           |
-| Untested surface                                            |  ✓ gate  |   ✓ ring    |          –           |
-| Dangling ref · description-script _(shared detectors)_      |    ✓     |      ✓      |          –           |
-| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |      ✓      |          –           |
-| Category rings + weighted health score                      |    –     |      ✓      |          –           |
-| Safety battery (does a hook actually block?)                |    –     |  ✓ default  |          –           |
-| MCP tool exists on **live** server                          |    –     | ✓ own-repo¹ |          –           |
-| HTML report                                                 |    –     |  ✓ default  |      ✓ default       |
-| Leaderboard (rank a marketplace)                            |    –     |      ✓      |          –           |
-| Trigger recall/precision (does a skill fire?)               |    –     |      –      |   ✓ when capable²    |
-| Config severities + CI exit codes                           |    ✓     |  read-only  |      read-only       |
-| **Cost tier**                                               | free/det |  free/det   |    **model/sub**     |
+| Check                                                       |  `lint`  |  `audit`   | `audit --measure`  |
+| ----------------------------------------------------------- | :------: | :--------: | :----------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –      |         –          |
+| Marked file/script ref verification                         |    ✓     |     –      |         –          |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –      |         –          |
+| Untested surface                                            |  ✓ gate  |   ✓ ring   |         –          |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓      |         –          |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓      |         –          |
+| Category rings + weighted health score                      |    –     |     ✓      |         –          |
+| Safety battery (does a hook actually block?)                |    –     | ✓ default¹ |         –          |
+| HTML report                                                 |    –     | ✓ default  |     ✓ default      |
+| Leaderboard (rank a marketplace)                            |    –     |     ✓      |         –          |
+| MCP tool exists on **live** server                          |    –     |     –      |    ✓ own-repo²     |
+| Trigger recall/precision (does a skill fire?)               |    –     |  ✓ auto³   |      ✓ forced      |
+| Config severities + CI exit codes                           |    ✓     | read-only  |     read-only      |
+| **Cost tier**                                               | free/det |  free/det  | **exec+model/sub** |
 
-¹ Live MCP runs by default only for your **own** repo (audited dir = cwd); a
-foreign plugin's servers are never spawned, and `--fast` opts out.
-² The model tier runs by default for an **interactive human on a subscription**
+¹ The safety battery runs every hook under a **no-egress sandbox** where one
+exists (so a hook can't reach your DB/API during the probe); where none does
+(macOS today) it runs your **own** hooks direct with a **loud warning** and skips
+a foreign plugin's. `--fast` skips it.
+² Live MCP **starts your servers** (connects to real backends), so it's opt-in
+via `--measure`, **own-repo only**, never `--fast`; a foreign plugin's servers are
+never spawned.
+³ The trigger tier runs by default for an **interactive human on a subscription**
 (asked once, remembered), is **forced** by `--measure`, and is **skipped with a
 loud note** under `--json`/CI/non-interactive/`--fast` or a metered API key.
 
@@ -587,20 +596,22 @@ loud note** under `--json`/CI/non-interactive/`--fast` or a metered API key.
 
 | Target             |        `lint`        |        `audit`        | `audit` model tier  |
 | ------------------ | :------------------: | :-------------------: | :-----------------: |
-| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)³ |   n/a (no skills)   |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)⁴ |   n/a (no skills)   |
 | Claude Code plugin |          ✓           |           ✓           |          ✓          |
 | Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
 | Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
 
-³ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
+⁴ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
 `AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
 _verification_ of that file is `lint`'s job (and needs marks — inline,
 frontmatter, or a spec; plain prose isn't auto-parsed).
 
-The safety battery + live MCP run by default but are **confinement-aware**:
-own-repo hooks/servers run directly (like your tests), a foreign plugin's hooks
-run sandboxed (`sandbox: "auto"`) or skip with a loud note and its servers are
-never spawned. The model trigger-rate is the one **model-gated** tier — run when
+The safety battery runs by default but is **state-safe**: every hook runs under a
+no-egress sandbox where one exists (so it can't reach your DB/API mid-probe);
+where none does, your own hooks run direct with a loud warning and a foreign
+plugin's are skipped. Live MCP is **opt-in** (`--measure`, own-repo) precisely
+because starting a server connects to real backends. The model trigger-rate is
+run-when-capable — auto for an interactive human on a sub, `--measure` to force,
 capable, `--measure` to force, `--fast` to skip; see the model trigger tier
 section above.
 
