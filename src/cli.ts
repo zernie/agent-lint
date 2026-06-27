@@ -119,6 +119,12 @@ import {
   formatAuditScore,
   type BatterySummary,
 } from "./audit-score.js";
+import {
+  autoTriggerPrompts,
+  AUTO_RECALL_COUNT,
+  AUTO_MIN_DISTANCE,
+  type PromptSkill,
+} from "./audit-prompts.js";
 
 import {
   compileClaude,
@@ -5227,6 +5233,52 @@ function runSafetyBattery(
 }
 
 /**
+ * `--deep` with no `--prompts`: auto-generate diverse probe prompts from each
+ * skill's description and measure trigger-rate (recall + precision) — zero-setup.
+ * `--prompts=<file>` (handled by handleMeasure) overrides for a curated benchmark
+ * + the collision matrix. Model-gated: the probes are deterministic, but RUNNING
+ * them needs the harness CLI + model auth (degrades to "unavailable" otherwise).
+ */
+async function runAutoTrigger(
+  dir: string,
+  report: ScanReport,
+  adapter: HarnessAdapter,
+  args: string[],
+): Promise<void> {
+  const json = args.includes("--json");
+  const harness: ProbeHarness =
+    adapter.name === "codex" ? "codex" : "claude-code";
+  const skills: PromptSkill[] = report.skills
+    .filter((s) => s.hasDescription && !s.userInvoked && s.description)
+    .map((s) => ({ name: s.name, description: s.description ?? "" }));
+  if (skills.length === 0) {
+    if (!json) {
+      console.log(
+        "\nℹ --deep: no model-invocable skills with a description to measure.",
+      );
+    }
+    return;
+  }
+  const promptSet = autoTriggerPrompts(skills);
+  if (!json) {
+    console.log(
+      "\nℹ --deep: auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
+    );
+  }
+  const trigger = await probePluginTriggers(dir, promptSet, {
+    minPrompts: AUTO_RECALL_COUNT,
+    minDistance: AUTO_MIN_DISTANCE,
+    model: flagValue(args, "--model"),
+    harness,
+  });
+  console.log(
+    json
+      ? JSON.stringify({ trigger }, null, 2)
+      : "\n" + formatBehavioralReport(trigger),
+  );
+}
+
+/**
  * After a single-plugin `audit` report: if the plugin ships model-invocable
  * skills AND a real model is reachable, surface the real-model `--deep` tier
  * that measures whether those skills actually FIRE. A human at a TTY is offered
@@ -5509,14 +5561,13 @@ async function main(): Promise<void> {
               ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
               : "\n" + formatMcpContractReport(mcpErrs),
           );
-          // Model-gated trigger-rate. Until zero-setup auto-prompts land, it needs
-          // an explicit --prompts file; without one, say so rather than erroring.
+          // Model-gated trigger-rate. An explicit --prompts file runs the full
+          // measure (recall + precision + collisions); without one, auto-generate
+          // diverse probes from the skill descriptions (zero-setup).
           if (flagValue(args, "--prompts")) {
             await handleMeasure([targets[0]], args);
-          } else if (!json) {
-            console.log(
-              "\nℹ --deep trigger-rate needs --prompts=<file> for now (zero-setup auto-prompts are coming).",
-            );
+          } else {
+            await runAutoTrigger(targets[0], report, adapter, args);
           }
         }
         const capBase = flagValue(args, "--capability-diff");
