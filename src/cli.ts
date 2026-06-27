@@ -107,9 +107,7 @@ import {
   formatLeaderboard,
   formatLeaderboardMarkdown,
 } from "./leaderboard.js";
-import { runSafetyBattery, runnableSafetyHooks } from "./audit-battery.js";
 import { optimize, formatRecommendations } from "./optimize.js";
-import { sandboxAvailable } from "./sandbox.js";
 import { formatAuditScore } from "./audit-score.js";
 import {
   autoTriggerPrompts,
@@ -5261,10 +5259,8 @@ async function runAutoTrigger(
  * — used to decide whether there's anything to run, and to disclose it at consent.
  */
 interface ExecutableSurfaces {
-  readonly hasBattery: boolean; // ≥1 runnable PreToolUse hook
   readonly hasMcp: boolean; // own-repo + declares MCP server(s)
   readonly triggerableSkills: number; // model-invocable, described skills
-  readonly confined: boolean; // a sandbox (bubblewrap) is available
 }
 
 /**
@@ -5283,7 +5279,7 @@ async function resolveExecution(
   args: string[],
 ): Promise<{ execute: boolean; note: string | null }> {
   const decision = decideExecute({
-    hasExecutable: s.hasBattery || s.hasMcp || s.triggerableSkills > 0,
+    hasExecutable: s.hasMcp || s.triggerableSkills > 0,
     // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
     // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
     // pipelines) must NOT block on a read that never gets input.
@@ -5298,8 +5294,7 @@ async function resolveExecution(
       execute: false,
       note: json ? null : formatExecuteSkip(decision.reason),
     };
-  // ask — prompt once (early, so a yes lets the battery feed the Safety ring),
-  // then remember the answer.
+  // ask — prompt once, then remember the answer.
   const answer = await askOnce(buildExecuteDisclosure(s));
   const yes = /^y(es)?$/i.test(answer); // default NO (executes your hooks / servers)
   rememberAuditMeasure(yes);
@@ -5311,18 +5306,10 @@ async function resolveExecution(
   };
 }
 
-/** The bundled consent prompt — discloses exactly what will execute (and whether
- *  it's confined / what it costs) so the yes is informed. Default NO. */
+/** The bundled consent prompt — discloses exactly what will execute (and what it
+ *  costs) so the yes is informed. Default NO. */
 function buildExecuteDisclosure(s: ExecutableSurfaces): string {
   const lines = ["\nRun the executing checks against your harness?"];
-  if (s.hasBattery)
-    lines.push(
-      `  · execute your hooks against the disaster battery ${
-        s.confined
-          ? "(network-confined)"
-          : "(⚠ WITHOUT network confinement on this OS)"
-      }`,
-    );
   if (s.hasMcp)
     lines.push("  · start your MCP servers — connects to their backends");
   if (s.triggerableSkills > 0) {
@@ -5558,37 +5545,13 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        // ONE read-vs-run decision. A plain `audit` is a deterministic READ; the
-        // executing checks (safety battery + live MCP + skill-firing) run only on
-        // consent — ASK once at a TTY (remembered); headless stays a read + a
-        // nudge (no execution flag — automation uses the vigiles/testing API).
-        // Resolve it EARLY so a yes lets the battery feed the Safety ring; the
-        // nudge prints at the end.
-        const isForeign = root !== process.cwd();
-        const surfaces: ExecutableSurfaces = {
-          hasBattery: runnableSafetyHooks(report).length > 0,
-          hasMcp: report.mcp && !isForeign,
-          triggerableSkills: report.skills.filter(
-            (s) => s.hasDescription && !s.userInvoked,
-          ).length,
-          confined: sandboxAvailable(),
-        };
-        const { execute, note: execNote } = await resolveExecution(
-          surfaces,
-          json,
-          args,
-        );
-        // The safety battery runs only on consent (own-repo direct or, where a
-        // sandbox exists, network-confined; foreign always confined-or-skipped).
-        // runSafetyBattery itself reports "no hooks to test" when there are none.
-        const battery = execute ? runSafetyBattery(report, root) : null;
         // The versioned AuditReport is the product boundary — the same JSON the
         // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
-        // Built ONCE; the rings + fix list are read off it.
+        // Built ONCE; the rings + fix list are read off it. Pure deterministic —
+        // nothing executes to produce it.
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
-          battery: battery?.summary ?? undefined,
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -5609,12 +5572,28 @@ async function main(): Promise<void> {
           const fixes = formatRecommendations(plan);
           if (fixes) console.log("\n" + fixes);
         }
-        if (battery) console.log(battery.lines.join("\n"));
+        // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
+        // firing). A plain `audit` is a deterministic READ; these run only on
+        // consent — ASK once at a TTY (remembered); headless stays a read + a
+        // nudge (no execution flag — automation uses the vigiles/testing API).
+        // (The safety battery is NOT here — it needs cross-platform confinement
+        // that isn't shipped, so it lives in the vigiles/testing API.)
+        const isForeign = root !== process.cwd();
+        const surfaces: ExecutableSurfaces = {
+          hasMcp: report.mcp && !isForeign,
+          triggerableSkills: report.skills.filter(
+            (s) => s.hasDescription && !s.userInvoked,
+          ).length,
+        };
+        const { execute, note: execNote } = await resolveExecution(
+          surfaces,
+          json,
+          args,
+        );
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is
         // exactly what connects to a real Postgres / authenticates a real API on
-        // boot, and confinement can't save it (deny-all-net breaks the `tools/list`
-        // it performs). So it runs only under consent (`execute`) AND own-repo
-        // (never spawn a stranger's server).
+        // boot. So it runs only under consent (`execute`) AND own-repo (never
+        // spawn a stranger's server).
         if (execute && surfaces.hasMcp) {
           const mcpErrs = await verifyLiveMcpTools(
             report,

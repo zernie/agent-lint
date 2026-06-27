@@ -75,13 +75,12 @@ It **runs** your harness — fires your safety hooks against a real disaster bat
 not just reads them — scores five categories, and writes a shareable HTML report:
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall C (77/100) with five category rings — Safety red (6/7 disasters slip through), Triggering/Structure amber — and fix cards" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall score with four category rings — Truthfulness, Triggering, Structure, Tested — and fix cards" />
 </p>
 
 | Ring                | What it proves                                                        |
 | ------------------- | --------------------------------------------------------------------- |
 | **🔎 Truthfulness** | Every path / script / symbol / linter rule in your CLAUDE.md resolves |
-| **🛡 Safety**       | Your hooks actually **block** the dangerous thing — _we run them_     |
 | **🎯 Triggering**   | Skills fire on the right prompts and don't collide                    |
 | **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
 | **🧪 Tested**       | Every surface ships a test                                            |
@@ -89,8 +88,8 @@ not just reads them — scores five categories, and writes a shareable HTML repo
 Like Lighthouse, `audit` is a **local report you run on your machine** — a
 deterministic read, safe on any repo (even one wired to prod), identical on every
 OS. **Not a CI step** (CI uses `lint`, the deterministic gate). The **executing
-checks** (run your hooks against the disaster battery · resolve MCP live · **do your
-skills fire?**) run only when there's a human to consent: `audit` **asks once** at a
+checks** (resolve MCP live · **do your skills fire?**) run only when there's a human
+to consent: `audit` **asks once** at a
 terminal and remembers. **[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you

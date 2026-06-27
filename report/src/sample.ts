@@ -16,12 +16,6 @@ export const SAMPLE: AuditReport = {
     categories: [
       { key: "Truthfulness", score: 100, weight: 1, findings: [] },
       {
-        key: "Safety",
-        score: 14,
-        weight: 1,
-        findings: ["6/7 disaster(s) slip through your hooks"],
-      },
-      {
         key: "Triggering",
         score: 92,
         weight: 1,

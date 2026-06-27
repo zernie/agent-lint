@@ -141,8 +141,8 @@ not a sibling `doctor`/`checkup` command.
 ## Status / next (post-decision)
 
 **SHIPPED (2026-06-27, branch `claude/lint-inline-mode-go56av`) — the FULL Lighthouse
-build:** the verb is `audit`; a default run prints **five category rings**
-(Truthfulness/Safety/Triggering/Structure/Tested) + a weighted A–F health score,
+build:** the verb is `audit`; a default run prints **four deterministic category
+rings** (Truthfulness/Triggering/Structure/Tested) + a weighted A–F health score,
 folds each finding's **fix inline**, and writes a **self-contained HTML report**
 (`vigiles-report.html`) — a deterministic READ, nothing executes. "We RUN your
 harness" is THREE executing checks (safety battery · live MCP · trigger-rate)

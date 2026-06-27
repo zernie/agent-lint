@@ -256,26 +256,29 @@ type one yourself; `compile` wires them for you.
 
 **Lighthouse for your harness.** Point vigiles at any plugin or repo (defaults to
 `.`) and get a one-command report — **no model, no API key, safe to run
-anywhere**: five **category rings**, the **safety battery** run against your hooks,
-each finding's **fix** inline, and a self-contained **HTML report**.
+anywhere**: four deterministic **category rings**, each finding's **fix** inline,
+and a self-contained **HTML report**. It's a local report, not a CI step (CI uses
+[`lint`](#lint-files)).
 
 ```
 Harness audit
 
   ● Truthfulness   100  ██████████████████████
-  ✗ Safety          14  ███░░░░░░░░░░░░░░░░░░░░
-       └ 6/7 disaster(s) slip through your hooks
   ◑ Triggering      92  ████████████████████░░
   ● Structure      100  ██████████████████████
   ◑ Tested          88  ███████████████████░░░
 
-Harness health: C (77/100)
+Harness health: B (95/100)
 ```
 
-The five categories — **Truthfulness** (refs resolve) · **Safety** (hooks block) ·
-**Triggering** (skills fire / don't collide) · **Structure** (tool contracts, MCP,
-frontmatter) · **Tested** (coverage) — are each 0–100, weighted into the overall
-grade; an n/a category (e.g. Safety with no hooks) is excluded, never a false 0.
+The four categories — **Truthfulness** (refs resolve) · **Triggering** (skills
+fire / don't collide) · **Structure** (tool contracts, MCP, frontmatter) ·
+**Tested** (coverage) — are each 0–100, weighted into the overall grade; an n/a
+category is excluded, never a false 0. All four are **deterministic** (no
+execution). (There's no **Safety** ring: "do your hooks actually block?" requires
+executing your hooks, which needs cross-platform confinement that isn't shipped
+yet — so it lives in the [`vigiles/testing` API](harness-testing.md) via
+`guardrail-check` / `assertBlocksDisasters`, where you opt in explicitly.)
 
 Under the rings, the detailed report lists per-skill description + user-invoked
 flag + **description-script** detection (a description whose dominant script differs
@@ -287,17 +290,14 @@ footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
 detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
 report file.
 
-**The safety battery runs by default** — it _executes_ your `PreToolUse` hooks
-against a curated disaster catalog (force-push, `rm -rf`, `--no-verify`,
-secret-read, `curl|sh`) and reports what they actually **block vs allow**. This is
-the #1 verified hook pain: a guard that _looks_ like it blocks and silently
-doesn't (exit 1 ≠ 2, wrong JSON field, a missed compound command). The battery
-proves the hook's **logic**, not just its presence. **Confinement-aware** (the
-`audit-side-effect-free` rule): your OWN repo (scanned dir = cwd) runs its hooks
-directly, like running your tests; a FOREIGN plugin runs them sandboxed
-(bubblewrap) or **skips with a loud note** — a stranger's hooks never run
-unconfined. Only `PreToolUse` guards are tested (a `SessionStart` / `PostToolUse`
-hook can't block a tool call, so it isn't scored against the catalog).
+**The safety battery is a [testing-API](harness-testing.md) capability, not an
+`audit` ring** — it _executes_ your `PreToolUse` hooks against a curated disaster
+catalog (force-push, `rm -rf`, `--no-verify`, secret-read, `curl|sh`) to prove
+they actually **block** (the #1 verified hook pain: a guard that _looks_ like it
+blocks and silently doesn't). Because running arbitrary hooks safely needs
+cross-platform confinement that isn't shipped yet, it's **not** part of the
+zero-config report; you run it where you opt in explicitly — `guardrail-check` /
+`assertBlocksDisasters` from `vigiles/unit`, or via the `test-harness` skill.
 
 Each deterministic finding carries its **fix inline** under the report — the
 cross-reference cause + a one-line correction (`FIX` a dead-end, `DIFFERENTIATE` a
@@ -350,8 +350,8 @@ own health — only a directory with _no_ surface at all scores 0. Add **`--md`*
 emit the ranking as a **Markdown table** (the publishable form for a README/gist/site;
 `--json` gives the full per-plugin breakdown). A worked at-scale run over real public
 plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
-(The leaderboard is the multi-dir form and does not run the per-hook safety battery
-or write an HTML report — those are the single-dir audit.)
+(The leaderboard is the multi-dir form and does not run the executing checks or
+write an HTML report — those are the single-dir audit.)
 
 #### `audit` is a local report, not a CI step
 
@@ -542,14 +542,13 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   the rule exist _and_ is it enabled?), checks integrity/hash, coverage
   thresholds, orphan docs, duplicate rules — and exits with **config-driven
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
-- **`audit` is the report.** Zero config, harness-aware, works on **any** plugin
-  (including third-party ones with no spec). It scores the five category rings,
-  runs the safety battery + (own-repo) live MCP resolution, ranks a whole
-  marketplace (leaderboard), writes the HTML report, and **measures whether skills
-  fire** (the model tier) when it can — run what you can, degrade loudly. It's
-  safe-to-run-anywhere by default (the `audit-side-effect-free` rule): the only
-  things that execute are your own hooks/servers (or a foreign plugin's, sandboxed
-  or skipped).
+- **`audit` is the report** (Lighthouse-style, local — not a CI step). Zero config,
+  harness-aware, works on **any** plugin (including third-party ones with no spec).
+  It scores the four deterministic category rings, ranks a whole marketplace
+  (leaderboard), and writes the HTML report — all a safe read. Two **executing**
+  checks (live MCP resolution + "do skills fire?") run only on the interactive
+  consent (`audit-side-effect-free`); for automation, run those — and the safety
+  battery — through the `vigiles/testing` API.
 
 They deliberately **share one implementation** of the few deterministic
 structural detectors they have in common (untested-surface, dangling-ref,
@@ -570,26 +569,25 @@ deterministic + every-commit).
 | Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |           –           |
 | Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |           –           |
 | Category rings + weighted health score                      |    –     |     ✓     |           –           |
-| Safety battery (does a hook actually block?)                |    –     |     –     |          ✓¹           |
 | HTML report                                                 |    –     | ✓ default |       ✓ default       |
 | Leaderboard (rank a marketplace)                            |    –     |     ✓     |           –           |
-| MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo²      |
-| Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓³           |
+| MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo¹      |
+| Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓²           |
+| Safety battery (does a hook block?) — `vigiles/testing`     |    –     |     –     |          –³           |
 | Config severities + CI exit codes                           |    ✓     | read-only |       read-only       |
-| **Cost tier**                                               | free/det | free/det  |  **exec+model/sub**   |
+| **Cost tier**                                               | free/det | free/det  |     **model/sub**     |
 
-The three executing checks share **one consent**: a plain `audit` is a read; at a
+The two executing checks share **one consent**: a plain `audit` is a read; at a
 TTY it **asks once** (remembered in `.vigilesrc.json`). There is no execution flag
 — for automation use the `vigiles/testing` API, not the report verb.
 
-¹ The safety battery runs every hook under a **no-egress sandbox** where one
-exists (so a hook can't reach your DB/API during the probe); where none does
-(macOS today) it runs your **own** hooks direct with a **loud warning** and skips
-a foreign plugin's.
-² Live MCP **starts your servers** (connects to real backends), so it's **own-repo
+¹ Live MCP **starts your servers** (connects to real backends), so it's **own-repo
 only**; a foreign plugin's servers are never spawned.
-³ The trigger tier needs model auth; it **degrades honestly** ("unavailable") when
+² The trigger tier needs model auth; it **degrades honestly** ("unavailable") when
 absent and runs on your subscription (or a metered key).
+³ The safety battery (run your hooks against the disaster catalog) is **not** an
+`audit` check — it needs cross-platform confinement that isn't shipped, so it lives
+in the `vigiles/testing` API (`guardrail-check`/`assertBlocksDisasters`).
 
 **Where each runs:**
 
@@ -607,10 +605,10 @@ frontmatter, or a spec; plain prose isn't auto-parsed).
 
 The executing checks are **state-safe by consent**: a plain `audit` runs none of
 them (a deterministic read), so it's safe on any repo, even one wired to prod. On
-opt-in, the safety battery runs each hook under a no-egress sandbox where one
-exists (so it can't reach your DB/API mid-probe), else your own hooks run direct
-with a loud warning and a foreign plugin's are skipped; live MCP starts servers
-own-repo only; the trigger-rate stubs skill bodies so no procedure runs.
+opt-in, live MCP starts servers own-repo only, and the trigger-rate stubs skill
+bodies so no procedure runs. (The safety battery — which executes arbitrary hooks
+and so needs cross-platform confinement that isn't shipped — is not here; it's a
+`vigiles/testing` capability you invoke explicitly.)
 
 ## GitHub Action
 

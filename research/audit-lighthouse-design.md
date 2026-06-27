@@ -209,7 +209,35 @@ Resolved into the shipped shape — **one read-vs-run axis, consent-first:**
   in tests), `runSafetyBattery` moved to `src/audit-battery.ts` and is unit-tested
   there directly; the CLI e2e only asserts the read-vs-run boundary.
 
+### Battery cut from audit entirely (2026-06-27, in PR #49 review) — "no half-made shit pre-release"
+
+The above still ran the battery (consent-gated, Linux-confined / Mac-unconfined+warning).
+The founder pulled the thread one more turn: shipping a capability whose safety is
+Linux-only is the half-made part — narrow it out rather than document the caveat.
+
+Decision (chosen: **cut only the safety battery**):
+
+- **`audit` drops the Safety ring entirely → four DETERMINISTIC rings**
+  (Truthfulness/Triggering/Structure/Tested). No battery in the `audit` verb.
+- **The battery lives in the `vigiles/testing` API** (`guardrail-check` /
+  `assertBlocksDisasters`, confined by `src/sandbox.ts`) — where you opt in
+  explicitly and there's no zero-config-safety promise to break. `src/audit-battery.ts`
+  (the audit wrapper) is **deleted**; `runSafetyBattery`/`runnableSafetyHooks` with it.
+- **Kept** behind the same one-consent: live MCP (own-repo) + trigger-rate (model).
+  Neither needs the parked confinement.
+- `audit` re-promotes a Safety ring only once one confinement works the same on
+  macOS + Linux (the unchanged exit criterion).
+
+Two Codex (PR #49) review bugs fixed in the same pass:
+
+- **instruction-only repos aren't "empty"** — `isEmptyMachine` now also checks
+  `!r.instructions`, so a repo with just a `CLAUDE.md` scores instead of grading F/0
+  "no loadable surface" (`src/audit-score.ts`).
+- the reused-script-event mis-tag (scan.ts) is **mooted** by removing the battery
+  from audit (its only consumer, `runnableSafetyHooks`, is gone).
+
 **Follow-ups (not yet done):** the env-scrub ephemeral floor + macOS sandbox backend
-(the exit criterion above); the hosted dashboard itself; an `audit --upload`
-that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`
-mirrors `src/audit-report.ts` by hand + the `audit-report.test.ts` shape tests).
+(the exit criterion that earns the Safety ring back); the hosted dashboard itself; an
+`audit --upload` that POSTs the JSON; a cross-package schema-parity guard (today
+`report/src/schema.ts` mirrors `src/audit-report.ts` by hand + the
+`audit-report.test.ts` shape tests).

@@ -7,7 +7,6 @@
  */
 export type CategoryKey =
   | "Truthfulness"
-  | "Safety"
   | "Triggering"
   | "Structure"
   | "Tested";

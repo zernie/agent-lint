@@ -11,11 +11,7 @@
  * timestamp is attached by the CLI at write time, never by this pure builder, so
  * the embedded-in-HTML form stays deterministic).
  */
-import {
-  auditScore,
-  type AuditScore,
-  type BatterySummary,
-} from "./audit-score.js";
+import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
 import type { ScanReport } from "./scan.js";
 
@@ -52,7 +48,7 @@ export interface AuditInventory {
  */
 export interface AuditReport {
   readonly meta: AuditReportMeta;
-  /** The five category rings + the weighted overall + grade. */
+  /** The four deterministic category rings + the weighted overall + grade. */
   readonly score: AuditScore;
   /** The deterministic, ranked fixes (the inline recommendations). */
   readonly recommendations: readonly Recommendation[];
@@ -62,8 +58,6 @@ export interface AuditReport {
 export interface BuildAuditReportOptions {
   readonly harness: string;
   readonly vigilesVersion: string;
-  /** The safety-battery aggregate (feeds the Safety ring); omit if not run. */
-  readonly battery?: BatterySummary;
 }
 
 /**
@@ -83,7 +77,7 @@ export function buildAuditReport(
       harness: opts.harness,
       dir: report.dir,
     },
-    score: auditScore(report, opts.battery),
+    score: auditScore(report),
     recommendations: optimize(report).recommendations,
     inventory: {
       skills: report.skills.length,
