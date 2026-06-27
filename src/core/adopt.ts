@@ -20,6 +20,13 @@
  */
 
 import { parseIntegrityHeader } from "./integrity.js";
+import {
+  readFrontmatter,
+  frontmatterScalar,
+  frontmatterList,
+  type FrontmatterRead,
+} from "./frontmatter-read.js";
+import { skill, agent, type SkillSpec, type AgentSpec } from "./spec.js";
 
 export type AdoptTier = "structured" | "raw";
 
@@ -251,4 +258,274 @@ export function adoptMarkdown(markdown: string, target: string): AdoptResult {
     tier: spec.tier,
     sectionCount: Object.keys(spec.sections).length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Skill / subagent adoption — turn an existing SKILL.md / agents/<name>.md into
+// a `skill()` / `agent()` spec source. BEST-EFFORT (not a guaranteed byte
+// round-trip like the instruction-file path): the verbatim BODY and the
+// standard frontmatter fields round-trip, but a non-standard frontmatter key the
+// typed spec can't model (e.g. a custom `level:`/`skills:`) is PRESERVED in a
+// loud comment, never silently dropped (the same "review the diff, lose nothing"
+// contract as instruction adoption). The deferred harness-parity gap from the
+// roadmap — `init` adopts CLAUDE.md today; this extends it to skills + subagents.
+// ---------------------------------------------------------------------------
+
+export interface AdoptSurfaceResult {
+  /** Generated `.spec.ts` source. */
+  source: string;
+  kind: "skill" | "agent";
+  /**
+   * The parsed spec object the source builds — exposed so a round-trip test can
+   * feed it straight to `compileSkill`/`compileAgent` without evaluating the
+   * generated TS (the same split as `adoptToSpec`/`renderSpecSource`).
+   */
+  spec: SkillSpec | AgentSpec;
+  /**
+   * Frontmatter keys present in the source that the typed spec has no field for
+   * — emitted as a `// NOTE:` comment in the source so nothing is lost silently.
+   */
+  unmappedKeys: string[];
+}
+
+// Consumes the WHOLE leading frontmatter block (through its closing `---` and the
+// trailing newline) so the remainder is the verbatim body — mirrors BLOCK_RE in
+// frontmatter-read.ts but matches past the closing fence.
+const FRONTMATTER_CONSUME_RE =
+  /^\uFEFF?(?:<!--[\s\S]*?-->\s*)?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/;
+
+function splitFrontmatterBody(markdown: string): {
+  fm: FrontmatterRead;
+  body: string;
+} {
+  const fm = readFrontmatter(markdown);
+  if (fm.block === null) return { fm, body: markdown.replace(/^\uFEFF/, "") };
+  const m = FRONTMATTER_CONSUME_RE.exec(markdown);
+  return { fm, body: m ? markdown.slice(m[0].length) : markdown };
+}
+
+/** The first non-empty, non-heading paragraph — the CC fallback for a skill's
+ * description when its frontmatter omits one (name←dir, description←first ¶). */
+function firstParagraph(body: string): string {
+  const para: string[] = [];
+  let started = false;
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!started) {
+      if (t === "" || /^#{1,6}\s/.test(t)) continue;
+      started = true;
+      para.push(t);
+    } else {
+      if (t === "") break;
+      para.push(t);
+    }
+  }
+  return para.join(" ").trim();
+}
+
+/** Keys the typed spec models — everything else is reported as unmapped. */
+const SKILL_KNOWN_KEYS = new Set([
+  "name",
+  "description",
+  "allowed-tools",
+  "tools",
+  "disable-model-invocation",
+  "argument-hint",
+  "context",
+]);
+const AGENT_KNOWN_KEYS = new Set([
+  "name",
+  "description",
+  "model",
+  "color",
+  "tools",
+  "disallowedTools",
+  "disallowed-tools",
+]);
+
+function unmappedFrontmatterKeys(
+  fm: FrontmatterRead,
+  known: Set<string>,
+): string[] {
+  if (!fm.data) return [];
+  return Object.keys(fm.data).filter((k) => !known.has(k));
+}
+
+/** A `// NOTE:` banner naming any frontmatter keys we couldn't represent. */
+function unmappedNote(kind: "skill" | "agent", keys: string[]): string {
+  if (keys.length === 0) return "";
+  return (
+    `// NOTE: these frontmatter keys had no ${kind}() field and were left out —\n` +
+    `// re-add them by hand if they matter: ${keys.join(", ")}\n`
+  );
+}
+
+const SURFACE_HEADER = (from: string) =>
+  `// Adopted from ${from} by \`vigiles init\` — body verbatim, standard\n` +
+  `// frontmatter mapped; no rules inferred. Review the diff, then \`compile\`.\n`;
+
+/**
+ * Adopt an existing SKILL.md into a `skill()` spec. The body is carried verbatim
+ * (skills are freeform markdown — `##` headings stay in the body), so a clean
+ * skill round-trips below the integrity header.
+ *
+ * @param markdown the SKILL.md content
+ * @param dirName  the skill's directory name — the CC fallback for `name` when
+ *   frontmatter omits it
+ */
+export function adoptSkill(
+  markdown: string,
+  dirName: string,
+): AdoptSurfaceResult {
+  const { fm, body } = splitFrontmatterBody(markdown);
+  const name = frontmatterScalar(fm, "name") ?? dirName;
+  const description =
+    frontmatterScalar(fm, "description") ?? firstParagraph(body) ?? name;
+  const tools =
+    frontmatterList(fm, "allowed-tools") ?? frontmatterList(fm, "tools");
+  const argumentHint = frontmatterScalar(fm, "argument-hint");
+  const disableModelInvocation =
+    frontmatterScalar(fm, "disable-model-invocation") === "true";
+  const unmappedKeys = unmappedFrontmatterKeys(fm, SKILL_KNOWN_KEYS);
+
+  const lines = [
+    `  name: ${JSON.stringify(name)},`,
+    `  description: ${JSON.stringify(description)},`,
+  ];
+  if (argumentHint)
+    lines.push(`  argumentHint: ${JSON.stringify(argumentHint)},`);
+  if (disableModelInvocation) lines.push(`  disableModelInvocation: true,`);
+  if (tools && tools.length > 0)
+    lines.push(`  tools: ${JSON.stringify(tools)},`);
+  const trimmedBody = body.trim();
+  if (trimmedBody) lines.push(`  body: ${tsTemplate(trimmedBody)},`);
+
+  const spec = skill({
+    name,
+    description,
+    ...(argumentHint ? { argumentHint } : {}),
+    ...(disableModelInvocation ? { disableModelInvocation: true } : {}),
+    ...(tools && tools.length > 0 ? { tools } : {}),
+    ...(trimmedBody ? { body: trimmedBody } : {}),
+  });
+
+  const source =
+    SURFACE_HEADER(`${dirName}/SKILL.md`) +
+    unmappedNote("skill", unmappedKeys) +
+    `import { skill } from "vigiles/spec";\n\n` +
+    `export default skill({\n${lines.join("\n")}\n});\n`;
+  return { source, kind: "skill", spec, unmappedKeys };
+}
+
+/**
+ * Adopt an existing subagent (`agents/<name>.md`) into an `agent()` spec. Unlike
+ * a skill, an agent's `sections` reject `##` headers, so the body is split: the
+ * lead preamble becomes `body` and each `##`/`#` heading becomes a named section
+ * (reusing the instruction-file splitter). The tool contract is carried as-is —
+ * if the source lists a never-available tool, the generated spec surfaces it on
+ * `compile` (which is the point).
+ *
+ * @param markdown the subagent file content
+ * @param fileBase the file's base name (sans `.md`) — the fallback for `name`
+ */
+/** Split a subagent system prompt: preamble → `body`, each `#`/`##` heading →
+ * a named section (agent `sections` reject `##` in the body, so they're hoisted). */
+function splitAgentBody(body: string): {
+  lead: string;
+  sectionEntries: { key: string; content: string }[];
+} {
+  const blocks = splitIntoBlocks(body);
+  let lead = "";
+  const used = new Set<string>();
+  const sectionEntries: { key: string; content: string }[] = [];
+  for (const block of blocks) {
+    if (block.level === null) {
+      lead = block.lines.join("\n").trim();
+    } else {
+      sectionEntries.push({
+        key: allocKey(safeKey(block.heading ?? ""), used),
+        content: block.lines.join("\n").trim(),
+      });
+    }
+  }
+  return { lead, sectionEntries };
+}
+
+interface AgentFields {
+  name: string;
+  description: string;
+  model?: string;
+  color?: string;
+  tools: string[] | null;
+  disallowedTools: string[] | null;
+  lead: string;
+  sectionEntries: { key: string; content: string }[];
+}
+
+/** Render the `agent({…})` source lines from the extracted fields. */
+function buildAgentLines(f: AgentFields): string[] {
+  const lines = [
+    `  name: ${JSON.stringify(f.name)},`,
+    `  description: ${JSON.stringify(f.description)},`,
+  ];
+  if (f.model) lines.push(`  model: ${JSON.stringify(f.model)},`);
+  if (f.color) lines.push(`  color: ${JSON.stringify(f.color)},`);
+  if (f.tools && f.tools.length > 0)
+    lines.push(`  tools: ${JSON.stringify(f.tools)},`);
+  if (f.disallowedTools && f.disallowedTools.length > 0)
+    lines.push(`  disallowedTools: ${JSON.stringify(f.disallowedTools)},`);
+  if (f.lead) lines.push(`  body: ${tsTemplate(f.lead)},`);
+  if (f.sectionEntries.length > 0) {
+    const entries = f.sectionEntries
+      .map(
+        ({ key, content }) =>
+          `    ${JSON.stringify(key)}: ${tsTemplate(content)},`,
+      )
+      .join("\n");
+    lines.push(`  sections: {\n${entries}\n  },`);
+  }
+  return lines;
+}
+
+export function adoptAgent(
+  markdown: string,
+  fileBase: string,
+): AdoptSurfaceResult {
+  const { fm, body } = splitFrontmatterBody(markdown);
+  const name = frontmatterScalar(fm, "name") ?? fileBase;
+  const f: AgentFields = {
+    name,
+    description: frontmatterScalar(fm, "description") ?? name,
+    model: frontmatterScalar(fm, "model"),
+    color: frontmatterScalar(fm, "color"),
+    tools: frontmatterList(fm, "tools"),
+    disallowedTools:
+      frontmatterList(fm, "disallowedTools") ??
+      frontmatterList(fm, "disallowed-tools"),
+    ...splitAgentBody(body),
+  };
+  const unmappedKeys = unmappedFrontmatterKeys(fm, AGENT_KNOWN_KEYS);
+
+  const sections: Record<string, string> = {};
+  for (const { key, content } of f.sectionEntries) sections[key] = content;
+
+  const spec = agent({
+    name: f.name,
+    description: f.description,
+    ...(f.model ? { model: f.model } : {}),
+    ...(f.color ? { color: f.color } : {}),
+    ...(f.tools && f.tools.length > 0 ? { tools: f.tools } : {}),
+    ...(f.disallowedTools && f.disallowedTools.length > 0
+      ? { disallowedTools: f.disallowedTools }
+      : {}),
+    ...(f.lead ? { body: f.lead } : {}),
+    ...(f.sectionEntries.length > 0 ? { sections } : {}),
+  });
+
+  const source =
+    SURFACE_HEADER(`${fileBase}.md`) +
+    unmappedNote("agent", unmappedKeys) +
+    `import { agent } from "vigiles/spec";\n\n` +
+    `export default agent({\n${buildAgentLines(f).join("\n")}\n});\n`;
+  return { source, kind: "agent", spec, unmappedKeys };
 }
