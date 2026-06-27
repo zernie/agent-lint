@@ -35,14 +35,12 @@ const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
 
 function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
-  // A default `audit` writes vigiles-report.html into cwd — suppress it here so
-  // the test run never drops an artifact in the repo root. The dedicated HTML
-  // test below exercises the write path explicitly in a tmp cwd.
+  // A default `audit` writes vigiles-report.html + vigiles-report.json into cwd —
+  // suppress both here so the test run never drops an artifact in the repo root.
+  // The dedicated write tests exercise those paths explicitly in a tmp cwd.
   const a =
-    args.startsWith("audit ") &&
-    !args.includes("--json") &&
-    !args.includes("--no-html")
-      ? `${args} --no-html`
+    args.startsWith("audit ") && !args.includes("--json")
+      ? `${args}${args.includes("--no-html") ? "" : " --no-html"}${args.includes("--no-json") ? "" : " --no-json"}`
       : args;
   try {
     const stdout = execSync(`node ${CLI} ${a}`, {
@@ -249,20 +247,17 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     assert.doesNotMatch(r.stdout, /nothing was loaded/);
   });
 
-  it("--json emits a parseable report with the instruction file", () => {
+  it("--json emits the versioned AuditReport (harness + inventory)", () => {
     const r = run(`audit ${join(root, "codex")} --json`);
     assert.equal(r.exitCode, 0);
     const report = JSON.parse(r.stdout) as {
-      instructions: { file: string; hasSpec: boolean } | null;
-      skills: unknown[];
-      mcp: boolean;
+      meta: { schemaVersion: number; harness: string };
+      inventory: { skills: number; mcp: boolean };
     };
-    assert.deepEqual(report.instructions, {
-      file: "AGENTS.md",
-      hasSpec: false,
-    });
-    assert.equal(report.skills.length, 1);
-    assert.equal(report.mcp, true);
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.harness, "codex");
+    assert.equal(report.inventory.skills, 1);
+    assert.equal(report.inventory.mcp, true);
   });
 });
 
@@ -301,11 +296,21 @@ describe("audit default — folds the deterministic fix into the report", () => 
     assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
-  it("--json stays the plain machine-readable report (no fix decoration)", () => {
+  it("--json emits the versioned AuditReport (the upload/CI contract)", () => {
     const r = run(`audit ${join(root, "demo")} --json`);
     assert.equal(r.exitCode, 0);
-    const report = JSON.parse(r.stdout) as { dir: string };
-    assert.ok(report.dir, "json parses as a scan report");
+    const report = JSON.parse(r.stdout) as {
+      meta: { schemaVersion: number; tool: string; dir: string };
+      score: { overall: number; grade: string };
+      recommendations: { surface: string }[];
+    };
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.equal(report.meta.tool, "vigiles");
+    assert.ok(report.meta.dir, "meta.dir present");
+    assert.ok(
+      typeof report.score.overall === "number",
+      "score.overall present",
+    );
     assert.doesNotMatch(r.stdout, /\[FIX\]/);
   });
 });
@@ -708,9 +713,9 @@ describe("scan default output — health score header", () => {
     const r = run(`audit ${root} --json`);
     assert.equal(r.exitCode, 0);
     assert.doesNotMatch(r.stdout, /Harness health:/);
-    // But the JSON still parses as a report.
-    const report = JSON.parse(r.stdout) as { dir: string };
-    assert.ok(report.dir, "json has dir field");
+    // But the JSON still parses as the versioned AuditReport.
+    const report = JSON.parse(r.stdout) as { meta: { dir: string } };
+    assert.ok(report.meta.dir, "json has meta.dir");
   });
 
   it("runs the safety battery by default (no flag) — reports no hooks here", () => {
@@ -838,5 +843,55 @@ describe("audit safety battery e2e (runs by default)", () => {
       r.stdout,
       /Safety battery: no PreToolUse safety hooks to test/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Default artifacts: vigiles-report.html + vigiles-report.json (the upload boundary)
+// ---------------------------------------------------------------------------
+
+describe("audit default artifacts (html + json) written to cwd", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "audit-artifacts-"));
+    mkdirSync(join(root, "skills", "greet"), { recursive: true });
+    writeFileSync(join(root, "CLAUDE.md"), "# Project\n");
+    writeFileSync(
+      join(root, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greets the user warmly with a personalised message\n---\nGreet.\n",
+    );
+  });
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  // Run with cwd INSIDE the tmp dir (raw, not the suppressing `run` helper) so the
+  // artifacts land in tmp (cleaned), and assert both are written + valid.
+  it("writes a self-contained HTML report and a versioned JSON artifact", () => {
+    execSync(`node ${CLI} audit .`, { cwd: root, encoding: "utf-8" });
+    const html = join(root, "vigiles-report.html");
+    const jsonPath = join(root, "vigiles-report.json");
+    assert.ok(existsSync(html), "vigiles-report.html written");
+    assert.ok(existsSync(jsonPath), "vigiles-report.json written");
+    assert.match(readFileSync(html, "utf-8"), /^<!doctype html>/);
+    const report = JSON.parse(readFileSync(jsonPath, "utf-8")) as {
+      meta: { schemaVersion: number; generatedAt?: string };
+      score: { overall: number };
+    };
+    assert.equal(report.meta.schemaVersion, 1);
+    assert.ok(report.meta.generatedAt, "json artifact is timestamped");
+    assert.ok(typeof report.score.overall === "number");
+  });
+
+  it("--no-html --no-json suppresses both", () => {
+    rmSync(join(root, "vigiles-report.html"), { force: true });
+    rmSync(join(root, "vigiles-report.json"), { force: true });
+    execSync(`node ${CLI} audit . --no-html --no-json`, {
+      cwd: root,
+      encoding: "utf-8",
+    });
+    assert.ok(!existsSync(join(root, "vigiles-report.html")), "no html");
+    assert.ok(!existsSync(join(root, "vigiles-report.json")), "no json");
   });
 });

@@ -126,6 +126,7 @@ import {
   type PromptSkill,
 } from "./audit-prompts.js";
 import { renderAuditHtml } from "./audit-html.js";
+import { buildAuditReport, type AuditReport } from "./audit-report.js";
 
 import {
   compileClaude,
@@ -4191,7 +4192,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles audit [dir...]          Audit a harness: what it ships, what's broken, + the safety battery (free; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 --deep: live MCP check + do skills actually fire? (real model) · --json (CI) · --harness=",
+    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --deep: live MCP + do skills fire? (real model) · --json (CI)",
   );
   console.log(
     "                                 with model access + a TTY, audit offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
@@ -5233,6 +5234,27 @@ function runSafetyBattery(
   return { lines, summary: { totalBlocked, totalRun, hooksSkipped } };
 }
 
+/**
+ * Write the versioned JSON artifact (`vigiles-report.json`) — the upload/CI
+ * boundary a hosted dashboard ingests. Stamps `meta.generatedAt` here (at write
+ * time, not in the pure builder, so the HTML-embedded form stays deterministic).
+ */
+function writeAuditJson(report: AuditReport): void {
+  const jsonPath = resolve(process.cwd(), "vigiles-report.json");
+  const stamped: AuditReport = {
+    ...report,
+    meta: { ...report.meta, generatedAt: new Date().toISOString() },
+  };
+  try {
+    writeFileSync(jsonPath, JSON.stringify(stamped, null, 2) + "\n");
+    console.log("✓ Wrote vigiles-report.json — the upload/CI artifact");
+  } catch (e) {
+    console.log(
+      `\n⚠ could not write vigiles-report.json: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
 /** Best-effort open the report in the default browser (TTY-only caller). */
 function openBestEffort(file: string): void {
   const cmd =
@@ -5588,9 +5610,15 @@ async function main(): Promise<void> {
         // foreign sandboxed-or-skipped. JSON/CI output stays the structured
         // report for now (the unified category JSON is a later increment).
         const battery = json ? null : runSafetyBattery(report, root);
-        // Compute the rings + the fix plan ONCE — reused by the terminal output
-        // AND the HTML report.
-        const sc = auditScore(report, battery?.summary ?? undefined);
+        // The versioned AuditReport is the product boundary — the same JSON the
+        // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
+        // Built ONCE; the rings + fix list are read off it.
+        const auditReport = buildAuditReport(report, {
+          harness: adapter.name,
+          vigilesVersion: getVersion(),
+          battery: battery?.summary ?? undefined,
+        });
+        const sc = auditReport.score;
         const plan = optimize(report);
         if (!json) {
           // The Lighthouse rings: per-category 0–100 + the weighted overall,
@@ -5599,7 +5627,9 @@ async function main(): Promise<void> {
           console.log("");
         }
         console.log(
-          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+          json
+            ? JSON.stringify(auditReport, null, 2)
+            : formatScanReport(report),
         );
         if (!json) {
           // Fold each finding's fix inline (replaces the former --fix-plan/--explain
@@ -5662,6 +5692,11 @@ async function main(): Promise<void> {
         // an agent / CI run).
         if (!json && !args.includes("--no-html")) {
           writeAuditHtml(adapter.name, sc, plan, report);
+        }
+        // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
+        // ingests this). Written by default in the human path; --no-json to skip.
+        if (!json && !args.includes("--no-json")) {
+          writeAuditJson(auditReport);
         }
       }
       break;

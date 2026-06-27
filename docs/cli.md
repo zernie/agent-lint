@@ -13,10 +13,10 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles audit [dir]              # Lighthouse for your harness: category rings + the safety battery + fixes + an HTML report (no model)
+npx vigiles audit [dir]              # Lighthouse for your harness: category rings + safety battery + fixes; writes vigiles-report.html + .json (no model)
 npx vigiles audit <dir> --deep       # + the real-model tier: live MCP resolution + do skills actually FIRE (auto-generated probes)
-npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html (it's written by default)
-npx vigiles audit <dir> --json       # Structured report for CI
+npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
+npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
