@@ -16,6 +16,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runSafetyBattery, runnableSafetyHooks } from "./audit-battery.js";
+import { sandboxAvailable } from "./sandbox.js";
 import type { ScanReport } from "./scan.js";
 
 /** A ScanReport with only the `hooks` the battery reads (the rest is irrelevant). */
@@ -94,23 +95,36 @@ describe("runSafetyBattery", () => {
     expect(r.lines.join("\n")).toMatch(/blocks 0\//);
   });
 
-  it("own-repo with no sandbox warns it ran WITHOUT network confinement", () => {
-    // The test env has no bubblewrap → the own-repo path runs direct + warns.
+  // The own/foreign × sandbox behavior is environment-dependent: a CI Linux
+  // runner HAS bubblewrap (confined), a bare dev box / macOS does NOT — so these
+  // branch on the real capability rather than assuming one.
+  it("own-repo: confined where a sandbox exists, else runs direct with a loud warning", () => {
     const r = runSafetyBattery(
       reportWithHooks([hook(`bash ${permitAll}`, "permit.sh")]),
       process.cwd(),
     );
-    expect(r.lines.join("\n")).toMatch(/WITHOUT network confinement/);
+    expect(r.summary?.totalRun).toBeGreaterThan(0); // own-repo always runs
+    if (sandboxAvailable()) {
+      expect(r.lines.join("\n")).not.toMatch(/WITHOUT network confinement/);
+    } else {
+      expect(r.lines.join("\n")).toMatch(/WITHOUT network confinement/);
+    }
   });
 
-  it("a FOREIGN plugin with no sandbox is skipped loudly (never run unconfined)", () => {
-    // root !== cwd and no bubblewrap → skip, never execute a stranger's hook.
+  it("a FOREIGN plugin is confined where a sandbox exists, else skipped loudly (never run unconfined)", () => {
     const r = runSafetyBattery(
       reportWithHooks([hook(`bash ${permitAll}`, "permit.sh")]),
       dir, // a non-cwd dir
     );
-    expect(r.summary?.hooksSkipped).toBe(1);
-    expect(r.summary?.totalRun).toBe(0);
-    expect(r.lines.join("\n")).toMatch(/skipped — testing a non-cwd plugin/);
+    if (sandboxAvailable()) {
+      // confined → safe to run a foreign hook (no-egress namespace)
+      expect(r.summary?.hooksSkipped).toBe(0);
+      expect(r.summary?.totalRun).toBeGreaterThan(0);
+    } else {
+      // no sandbox → never execute a stranger's hook unconfined
+      expect(r.summary?.hooksSkipped).toBe(1);
+      expect(r.summary?.totalRun).toBe(0);
+      expect(r.lines.join("\n")).toMatch(/skipped — testing a non-cwd plugin/);
+    }
   });
 });
