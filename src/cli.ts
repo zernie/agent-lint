@@ -106,8 +106,6 @@ import {
   rankPlugins,
   formatLeaderboard,
   formatLeaderboardMarkdown,
-  scoreReport,
-  gradeFor,
 } from "./leaderboard.js";
 import {
   verifyGuardrail,
@@ -116,6 +114,11 @@ import {
   DISASTER_CATALOG,
 } from "./guardrail-check.js";
 import { optimize, formatRecommendations } from "./optimize.js";
+import {
+  auditScore,
+  formatAuditScore,
+  type BatterySummary,
+} from "./audit-score.js";
 
 import {
   compileClaude,
@@ -5152,21 +5155,38 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
  * hooks DIRECT (their code, like running their own tests); a FOREIGN plugin (a
  * non-cwd dir) runs SANDBOXED, and AUTO-SKIPS with a loud note where no sandbox
  * (bubblewrap) is available. Never a stranger's hooks unconfined.
+ *
+ * Returns the human-readable lines AND the aggregate `summary` (the Safety
+ * category's input) so the caller can both feed the rings and print the detail.
+ * `summary` is null when there's no runnable hook to test (Safety → n/a).
  */
-function runSafetyBattery(report: ScanReport, root: string): void {
+function runSafetyBattery(
+  report: ScanReport,
+  root: string,
+): { lines: string[]; summary: BatterySummary | null } {
   const isForeign = resolve(root) !== process.cwd();
+  // Only test hooks that can actually BLOCK a tool call — PreToolUse guards. A
+  // SessionStart / PostToolUse / Stop hook can't (and shouldn't) block the
+  // disaster catalog, so testing it would unfairly tank Safety (a cry-wolf). An
+  // unknown-event hook (non-object config shape) is included best-effort.
   const runnableHooks = report.hooks.filter(
-    (h) => h.status === "ok" && h.command.trim() !== "",
+    (h) =>
+      h.status === "ok" &&
+      h.command.trim() !== "" &&
+      (h.event === undefined || h.event === "PreToolUse"),
   );
   if (runnableHooks.length === 0) {
-    console.log("\nSafety battery: no runnable safety hooks found");
-    return;
+    return {
+      lines: ["\nSafety battery: no PreToolUse safety hooks to test"],
+      summary: null,
+    };
   }
-  console.log(
+  const lines: string[] = [
     `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
-  );
+  ];
   let totalBlocked = 0;
   let totalRun = 0;
+  let hooksSkipped = 0;
   for (const hook of runnableHooks) {
     let results;
     try {
@@ -5176,7 +5196,8 @@ function runSafetyBattery(report: ScanReport, root: string): void {
     } catch {
       // Foreign plugin + no sandbox available → skip loudly, never run a
       // stranger's hooks unconfined (the audit-side-effect-free rule).
-      console.log(
+      hooksSkipped += 1;
+      lines.push(
         `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
       );
       continue;
@@ -5184,12 +5205,12 @@ function runSafetyBattery(report: ScanReport, root: string): void {
     const blocked = results.filter((r) => r.blocked).length;
     totalBlocked += blocked;
     totalRun += results.length;
-    console.log(
+    lines.push(
       `  ${hook.script}: blocks ${String(blocked)}/${String(results.length)} disasters`,
     );
     const missed = unblockedDisasters(results);
     if (missed.length > 0) {
-      console.log(
+      lines.push(
         formatGuardrailReport(hook.command, results)
           .split("\n")
           .map((l) => `  ${l}`)
@@ -5198,10 +5219,11 @@ function runSafetyBattery(report: ScanReport, root: string): void {
     }
   }
   if (totalRun > 0) {
-    console.log(
+    lines.push(
       `  Total: blocks ${String(totalBlocked)}/${String(totalRun)} disasters`,
     );
   }
+  return { lines, summary: { totalBlocked, totalRun, hooksSkipped } };
 }
 
 /**
@@ -5449,12 +5471,18 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
+        // Run the safety battery FIRST so its result feeds the Safety ring — but
+        // print the detail AFTER the report. It runs by DEFAULT (the
+        // differentiated "we RUN your harness" finding) — own-repo hooks direct,
+        // foreign sandboxed-or-skipped. JSON/CI output stays the structured
+        // report for now (the unified category JSON is a later increment).
+        const battery = json ? null : runSafetyBattery(report, root);
         if (!json) {
-          // Surface the structural-health score + grade as a one-line header
-          // before the full report so the most important signal is visible first.
-          const { score } = scoreReport(report);
-          const grade = gradeFor(score);
-          console.log(`Harness health: ${grade} (${String(score)}/100)`);
+          // The Lighthouse rings: per-category 0–100 + the weighted overall,
+          // shown before the detailed report so the headline signal leads.
+          console.log(
+            formatAuditScore(auditScore(report, battery?.summary ?? undefined)),
+          );
           console.log("");
         }
         console.log(
@@ -5466,11 +5494,7 @@ async function main(): Promise<void> {
           const fixes = formatRecommendations(optimize(report));
           if (fixes) console.log("\n" + fixes);
         }
-        // The safety battery runs by DEFAULT (the differentiated "we RUN your
-        // harness" finding) — own-repo hooks direct, foreign sandboxed-or-skipped.
-        // JSON/CI output stays the structured report for now (the unified
-        // category JSON lands with scoring).
-        if (!json) runSafetyBattery(report, root);
+        if (battery) console.log(battery.lines.join("\n"));
         if (deep) {
           // The ONE opt-in expensive tier (audit-side-effect-free): LIVE MCP tool
           // resolution (spawns each declared server — the dynamic check no static

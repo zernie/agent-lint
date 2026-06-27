@@ -704,12 +704,15 @@ describe("scan default output — health score header", () => {
     assert.ok(report.dir, "json has dir field");
   });
 
-  it("runs the safety battery by default (no flag) — reports no runnable hooks here", () => {
+  it("runs the safety battery by default (no flag) — reports no hooks here", () => {
     // This fixture ships no hooks, so the default battery reports that — proving
     // it runs without an opt-in flag (the differentiated finding leads).
     const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
+    assert.match(
+      r.stdout,
+      /Safety battery: no PreToolUse safety hooks to test/,
+    );
   });
 });
 
@@ -819,9 +822,12 @@ describe("audit safety battery e2e (runs by default)", () => {
     assert.match(r.stdout, /Safety battery/);
   });
 
-  it("no-hooks plugin: reports no runnable safety hooks found", () => {
+  it("no-hooks plugin: reports no PreToolUse safety hooks to test", () => {
     const r = run(`audit ${noHooksPlugin}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
+    assert.match(
+      r.stdout,
+      /Safety battery: no PreToolUse safety hooks to test/,
+    );
   });
 });
