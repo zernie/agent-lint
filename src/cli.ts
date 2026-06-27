@@ -114,11 +114,7 @@ import {
   DISASTER_CATALOG,
 } from "./guardrail-check.js";
 import { optimize, formatRecommendations } from "./optimize.js";
-import {
-  auditScore,
-  formatAuditScore,
-  type BatterySummary,
-} from "./audit-score.js";
+import { formatAuditScore, type BatterySummary } from "./audit-score.js";
 import {
   autoTriggerPrompts,
   AUTO_RECALL_COUNT,
@@ -5281,27 +5277,9 @@ function openBestEffort(file: string): void {
  * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
  * never spawns a browser for an agent / CI run.
  */
-function writeAuditHtml(
-  harness: string,
-  sc: ReturnType<typeof auditScore>,
-  plan: ReturnType<typeof optimize>,
-  report: ScanReport,
-): void {
+function writeAuditHtml(report: AuditReport, simple: boolean): void {
   const htmlPath = resolve(process.cwd(), "vigiles-report.html");
-  const html = renderAuditHtml({
-    dir: report.dir,
-    harness,
-    score: sc,
-    recommendations: plan.recommendations,
-    inventory: {
-      skills: report.skills.length,
-      agents: report.agents.length,
-      hooks: report.hooks.length,
-      commands: report.commands,
-      mcp: report.mcp,
-      untested: report.untested,
-    },
-  });
+  const html = renderAuditHtml(report, { simple });
   try {
     writeFileSync(htmlPath, html);
     console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
@@ -5691,7 +5669,7 @@ async function main(): Promise<void> {
         // opened best-effort only for a human at a TTY (never spawn a browser for
         // an agent / CI run).
         if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(adapter.name, sc, plan, report);
+          writeAuditHtml(auditReport, args.includes("--simple"));
         }
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.

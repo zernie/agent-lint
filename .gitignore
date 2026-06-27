@@ -24,3 +24,4 @@ api-reference/
 # Generated audit report
 vigiles-report.html
 vigiles-report.json
+report/dist
