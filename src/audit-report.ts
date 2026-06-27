@@ -13,6 +13,7 @@
  */
 import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
+import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport } from "./scan.js";
 
 /** The current schema version. Bump only on a BREAKING change to the shape. */
@@ -53,6 +54,12 @@ export interface AuditReport {
   /** The deterministic, ranked fixes (the inline recommendations). */
   readonly recommendations: readonly Recommendation[];
   readonly inventory: AuditInventory;
+  /**
+   * The adoption preview — "what would vigiles catch in your repo?" Present only
+   * when the model-gated tier ran (behind consent); a deterministic read omits it.
+   * Additive/optional, so the schema version is unchanged.
+   */
+  readonly adoptability?: AdoptabilityResult;
 }
 
 export interface BuildAuditReportOptions {
