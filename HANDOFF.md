@@ -8,12 +8,17 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you at
 > ≥5 commits without a refresh.
 
-## RESUME HERE — `claude/lint-inline-mode-go56av` — positioning + launch-readiness pass (no PR yet)
+## RESUME HERE — `claude/lint-inline-mode-go56av` — full "Lighthouse for your harness" build IN PROGRESS
 
-**State:** Long session. Started as a README review, became a positioning lock +
-competitive research + launch-readiness pass. ~14 commits, all green locally
-(build/tsc, fmt, lint 0 errors, cli+inline tests pass). **No PR opened yet** — a
-`fix:` is in the batch (→ patch release on merge).
+**⚠ FINISH THE WHOLE BUILD ON THIS BRANCH = ONE PR.** Do NOT open a new branch/PR for
+the remaining increments — the `audit` rename + every Lighthouse increment below ship
+together as one PR off `claude/lint-inline-mode-go56av`. Open the PR only once the build
+(increments 1–5) is done. It's already a big `refactor!` (breaking), so the PR title
+needs `!`.
+
+**State:** Long multi-theme session — README/positioning pass + competitive research +
+the Lighthouse pivot. All green locally (build/tsc, fmt, lint 0 errors, 1677 tests; only
+env-only `dialect-drift` fails here). No PR yet — by design, finishing the build first.
 
 **Code/doc changes (shipped on the branch):**
 
@@ -85,8 +90,9 @@ README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=F
    open. THE wow artifact.
 5. **README reframe** — "Lighthouse for your harness"; `audit` flagship; HTML screenshot.
 
-Then: open the PR (carries #38–#48 + this session — big, review scope); ecosystem-benchmark
-v0 (correctness axis); run `scripts/fp-sweep.sh` locally.
+**Only after 1–5 are all green on this branch:** open ONE PR for the whole branch
+(carries #38–#48 + this session + the full Lighthouse build — big; `refactor!` title with
+`!`). Then: ecosystem-benchmark v0 (correctness axis); run `scripts/fp-sweep.sh` locally.
 
 **Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
 — surface-freeze + STABILITY + auto-adopt batch. Re-check its live state if returning.
