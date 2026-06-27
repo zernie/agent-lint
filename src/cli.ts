@@ -5277,6 +5277,7 @@ async function resolveExecution(
   s: ExecutableSurfaces,
   json: boolean,
   args: string[],
+  harness: string,
 ): Promise<{ execute: boolean; note: string | null }> {
   const decision = decideExecute({
     hasExecutable: s.hasMcp || s.triggerableSkills > 0,
@@ -5295,7 +5296,7 @@ async function resolveExecution(
       note: json ? null : formatExecuteSkip(decision.reason),
     };
   // ask — prompt once, then remember the answer.
-  const answer = await askOnce(buildExecuteDisclosure(s));
+  const answer = await askOnce(buildExecuteDisclosure(s, harness));
   const yes = /^y(es)?$/i.test(answer); // default NO (executes your hooks / servers)
   rememberAuditMeasure(yes);
   return {
@@ -5307,21 +5308,35 @@ async function resolveExecution(
 }
 
 /** The bundled consent prompt — discloses exactly what will execute (and what it
- *  costs) so the yes is informed. Default NO. */
-function buildExecuteDisclosure(s: ExecutableSurfaces): string {
+ *  costs) so the yes is informed. Default NO. Harness-aware: a Codex repo measures
+ *  via the codex CLI (not a Claude env var), so the cost wording must not falsely
+ *  read "no model access" in exactly the case the prompt is meant to disclose. */
+function buildExecuteDisclosure(
+  s: ExecutableSurfaces,
+  harness: string,
+): string {
   const lines = ["\nRun the executing checks against your harness?"];
   if (s.hasMcp)
     lines.push("  · start your MCP servers — connects to their backends");
   if (s.triggerableSkills > 0) {
-    const cost = !hasModelAccess(process.env)
-      ? "needs model access — none detected, will skip"
-      : isMeteredAccess(process.env)
-        ? "⚠ spends API credits"
-        : "your subscription, $0 metered";
-    lines.push(`  · measure whether skills fire (${cost})`);
+    lines.push(
+      `  · measure whether skills fire (${triggerCostWording(harness)})`,
+    );
   }
   lines.push("Asked once — remembered in .vigilesrc.json. [y/N] ");
   return lines.join("\n");
+}
+
+/** Cost/availability wording for the trigger tier, per harness. Codex runs on the
+ *  codex CLI (its own auth/plan), so it's never gated on a Claude env var. */
+function triggerCostWording(harness: string): string {
+  if (harness === "codex")
+    return "your Codex CLI, $0 metered — skips if `codex` isn't on PATH";
+  return !hasModelAccess(process.env)
+    ? "needs model access — none detected, will skip"
+    : isMeteredAccess(process.env)
+      ? "⚠ spends API credits"
+      : "your subscription, $0 metered";
 }
 
 /** Run the trigger tier: a curated `--prompts` file, else auto-generated probes. */
@@ -5589,6 +5604,7 @@ async function main(): Promise<void> {
           surfaces,
           json,
           args,
+          adapter.name,
         );
         // LIVE MCP tool resolution STARTS each declared MCP server — a server is
         // exactly what connects to a real Postgres / authenticates a real API on

@@ -82,7 +82,10 @@ export function buildAuditReport(
     inventory: {
       skills: report.skills.length,
       agents: report.agents.length,
-      hooks: report.hooks.length,
+      // All hooks, file-backed + inline — matches formatScanReport and the
+      // emptiness/scoring count, so a JSON/HTML "What it ships" never reports 0
+      // hooks for an inline-hook-only harness.
+      hooks: report.hooks.length + report.inlineHooks,
       commands: report.commands,
       mcp: report.mcp,
       untested: report.untested,
