@@ -90,8 +90,9 @@ The decision that reshaped it: **the JSON is the product boundary, not the HTML.
   escaped). React runs in the reader's browser; the CLI ships only the built
   template (`dist/audit-report.template.html`, via `scripts/build-report.mjs`) and
   stays runtime-dep-light. Pure shadcn/Tailwind (band colors as theme utilities,
-  no inline styles); auto light/dark. `renderAuditHtmlSimple` is the zero-dep
-  inline fallback (`--simple`, or when the template isn't built).
+  no inline styles); auto light/dark. ONE renderer — no inline-CSS fallback; the
+  build fails loud so the template is guaranteed (if missing, the CLI skips the HTML
+  and the JSON + terminal report still work).
 
 **Stack choice — now vs the hosted dashboard:** Vite SPA + single-file for the
 LOCAL report (a static openable file); **TanStack Start** for the future HOSTED
@@ -101,8 +102,12 @@ components, so the dashboard is "wrap the components in routes + add auth/upload
 not a rewrite. The JSON contract is the asset the business is built on; deeper
 monetization/business strategy stays in the `startup/` vault.
 
+**`--simple` removed (2026-06-27):** the inline-CSS fallback was a hedge, not a
+need (the build guarantees the template; a 236KB self-contained React file is
+already fine). Dropped → one renderer, pure shadcn/Tailwind. `build-report.mjs`
+now fails loud so the template always ships; if it's ever missing the CLI skips
+the HTML (JSON + terminal still work).
+
 **Follow-ups (not yet done):** the hosted dashboard itself; an `audit --upload`
 that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`
-mirrors `src/audit-report.ts` by hand + the `audit-report.test.ts` shape tests);
-harden `build-report.mjs` to fail loud in the release pipeline (it currently
-degrades to the inline report if the toolchain is absent).
+mirrors `src/audit-report.ts` by hand + the `audit-report.test.ts` shape tests).

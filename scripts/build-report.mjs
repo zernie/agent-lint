@@ -3,10 +3,10 @@
  * ONE self-contained file and copy it to dist/audit-report.template.html — the
  * template the CLI fills with an AuditReport. Run after `tsc` by `npm run build`.
  *
- * Resilient by design: if the report toolchain can't build (e.g. an offline core
- * checkout that never installed report/ deps), it WARNS and exits 0 — the CLI then
- * falls back to the zero-dep inline report (`renderAuditHtmlSimple`). A release
- * env has the deps, so the React template ships there.
+ * Fails LOUD (exit 1) if it can't build — the React report is part of the product,
+ * so a build/release must not silently ship without the template. It auto-installs
+ * report/ deps if missing (first run / CI), so a normal `npm run build` Just Works
+ * where the npm registry is reachable.
  */
 import { existsSync, copyFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -31,12 +31,13 @@ try {
   copyFileSync(built, out);
   console.log("[build-report] → dist/audit-report.template.html");
 } catch (e) {
-  console.warn(
-    "[build-report] SKIPPED — report build unavailable: " +
+  console.error(
+    "[build-report] FAILED to build the audit report template: " +
       (e instanceof Error ? e.message : String(e)),
   );
-  console.warn(
-    "[build-report] the CLI will fall back to the inline-CSS report (--simple).",
+  console.error(
+    "[build-report] the React report is part of the product — fix the report/ build " +
+      "(needs the npm registry for first install).",
   );
-  process.exit(0);
+  process.exit(1);
 }

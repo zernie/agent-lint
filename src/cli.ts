@@ -5277,16 +5277,17 @@ function openBestEffort(file: string): void {
  * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
  * never spawns a browser for an agent / CI run.
  */
-function writeAuditHtml(report: AuditReport, simple: boolean): void {
+function writeAuditHtml(report: AuditReport): void {
   const htmlPath = resolve(process.cwd(), "vigiles-report.html");
-  const html = renderAuditHtml(report, { simple });
   try {
-    writeFileSync(htmlPath, html);
+    writeFileSync(htmlPath, renderAuditHtml(report));
     console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
     if (process.stdout.isTTY) openBestEffort(htmlPath);
   } catch (e) {
+    // No template (unbuilt checkout) or a write error — skip the HTML; the JSON
+    // artifact + terminal report don't depend on it.
     console.log(
-      `\n⚠ could not write vigiles-report.html: ${e instanceof Error ? e.message : String(e)}`,
+      `\n⚠ skipped vigiles-report.html: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 }
@@ -5669,7 +5670,7 @@ async function main(): Promise<void> {
         // opened best-effort only for a human at a TTY (never spawn a browser for
         // an agent / CI run).
         if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(auditReport, args.includes("--simple"));
+          writeAuditHtml(auditReport);
         }
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
