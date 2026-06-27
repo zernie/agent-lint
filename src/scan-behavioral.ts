@@ -1,5 +1,5 @@
 /**
- * `vigiles audit --trigger` — the BEHAVIORAL column of the scan report.
+ * `vigiles audit --deep` — the BEHAVIORAL column of the audit report.
  *
  * Structural `scan`/`scanPlugin` is deterministic, no-model, CI-free — and stays
  * that way. This is the opt-in, model-gated column that stacks on top: for each

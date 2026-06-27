@@ -83,11 +83,6 @@ import {
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
-  explainScore,
-  explainSurface,
-  formatExplanations,
-} from "./score-explainer.js";
-import {
   probePluginTriggers,
   formatBehavioralReport,
   measurePluginSelection,
@@ -120,7 +115,7 @@ import {
   formatGuardrailReport,
   DISASTER_CATALOG,
 } from "./guardrail-check.js";
-import { optimize, formatOptimize } from "./optimize.js";
+import { optimize, formatRecommendations } from "./optimize.js";
 
 import {
   compileClaude,
@@ -3566,14 +3561,14 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * `vigiles audit <dir> --trigger` — the MODEL-GATED behavioral report on a plugin (the paid
- * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
- * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
- * skill actually FIRE — recall + precision) and the selection-collision matrix (does
- * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
+ * The MODEL-GATED behavioral half of `vigiles audit --deep` (the paid tier; a
+ * default `audit` stays free/deterministic). Loads the author-supplied per-skill
+ * prompt sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does
+ * each skill actually FIRE — recall + precision) and the selection-collision matrix
+ * (does one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles audit ./plugin --trigger --prompts=p.json`.
+ * `vigiles audit ./plugin --deep --prompts=p.json`.
  */
 async function handleMeasure(
   restArgs: string[],
@@ -4010,32 +4005,6 @@ function harnessFlagFrom(argv: string[]): string | undefined {
 }
 
 /**
- * `vigiles audit <dir> --explain [name]` — the deterministic WHY behind a low score (C4):
- * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
- * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
- * optional surface name narrows to one underperforming skill/agent (the
- * optimizer's call). `--json` for the agent-consumable shape, `--harness=` to
- * override detection.
- */
-function handleExplain(restArgs: string[], args: string[]): void {
-  const dir = resolve(restArgs[0] ?? ".");
-  const surface = restArgs[1];
-  const json = args.includes("--json");
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
-  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
-  const exps = surface ? explainSurface(report, surface) : explainScore(report);
-  if (json) {
-    console.log(JSON.stringify(exps, null, 2));
-    return;
-  }
-  if (surface) console.log(`Explaining "${surface}":\n`);
-  console.log(formatExplanations(exps));
-}
-
-/**
  * Whole-harness capability lattice from a scanned plugin's agents (no `tools:` line →
  * inherits-all). The substrate `scan --capability-diff` diffs. Reused for both the
  * already-scanned "after" report and the freshly-scanned "before" dir.
@@ -4209,13 +4178,13 @@ function printUsage(command: string | undefined): void {
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
-    "  vigiles audit [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
+    "  vigiles audit [dir...]          Audit a harness: what it ships, what's broken, + the safety battery (free; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
+    "                                 --deep: live MCP check + do skills actually fire? (real model) · --json (CI) · --harness=",
   );
   console.log(
-    "                                 with model access + a TTY, scan offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
+    "                                 with model access + a TTY, audit offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -5176,11 +5145,71 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
- * After a single-plugin `scan` report: if the plugin ships model-invocable
- * skills AND a real model is reachable, surface the real-model `--trigger` tier
+ * The safety battery — run each runnable hook against the DISASTER_CATALOG to
+ * prove (or disprove) it actually blocks. Runs by DEFAULT in a single-dir audit
+ * (the differentiated "we RUN your harness" finding). Confinement-aware per the
+ * audit-side-effect-free rule: the user's OWN repo (scanned dir === cwd) runs its
+ * hooks DIRECT (their code, like running their own tests); a FOREIGN plugin (a
+ * non-cwd dir) runs SANDBOXED, and AUTO-SKIPS with a loud note where no sandbox
+ * (bubblewrap) is available. Never a stranger's hooks unconfined.
+ */
+function runSafetyBattery(report: ScanReport, root: string): void {
+  const isForeign = resolve(root) !== process.cwd();
+  const runnableHooks = report.hooks.filter(
+    (h) => h.status === "ok" && h.command.trim() !== "",
+  );
+  if (runnableHooks.length === 0) {
+    console.log("\nSafety battery: no runnable safety hooks found");
+    return;
+  }
+  console.log(
+    `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
+  );
+  let totalBlocked = 0;
+  let totalRun = 0;
+  for (const hook of runnableHooks) {
+    let results;
+    try {
+      results = isForeign
+        ? verifyGuardrail(hook.command, { cwd: root, sandbox: "auto" })
+        : verifyGuardrail(hook.command, { cwd: root });
+    } catch {
+      // Foreign plugin + no sandbox available → skip loudly, never run a
+      // stranger's hooks unconfined (the audit-side-effect-free rule).
+      console.log(
+        `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
+      );
+      continue;
+    }
+    const blocked = results.filter((r) => r.blocked).length;
+    totalBlocked += blocked;
+    totalRun += results.length;
+    console.log(
+      `  ${hook.script}: blocks ${String(blocked)}/${String(results.length)} disasters`,
+    );
+    const missed = unblockedDisasters(results);
+    if (missed.length > 0) {
+      console.log(
+        formatGuardrailReport(hook.command, results)
+          .split("\n")
+          .map((l) => `  ${l}`)
+          .join("\n"),
+      );
+    }
+  }
+  if (totalRun > 0) {
+    console.log(
+      `  Total: blocks ${String(totalBlocked)}/${String(totalRun)} disasters`,
+    );
+  }
+}
+
+/**
+ * After a single-plugin `audit` report: if the plugin ships model-invocable
+ * skills AND a real model is reachable, surface the real-model `--deep` tier
  * that measures whether those skills actually FIRE. A human at a TTY is offered
  * setup; an agent / CI (non-TTY / `--json` / `--no-interactive` / `--yes`) gets a
- * one-line, non-blocking hint — a `scan` must never hang (`great-agent-flow`).
+ * one-line, non-blocking hint — an `audit` must never hang (`great-agent-flow`).
  */
 async function maybeSuggestTrigger(
   report: ScanReport,
@@ -5262,9 +5291,7 @@ async function promptTriggerSetup(
   console.log(
     "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
   );
-  console.log(
-    `    vigiles audit ${dir} --trigger --prompts=trigger-prompts.json`,
-  );
+  console.log(`    vigiles audit ${dir} --deep --prompts=trigger-prompts.json`);
 }
 
 async function main(): Promise<void> {
@@ -5363,18 +5390,11 @@ async function main(): Promise<void> {
       break;
 
     case "audit": {
-      // Model-gated behavioral column + the deterministic diagnostic, folded into
-      // scan (formerly the `measure` / `explain` verbs): `--trigger` measures
-      // whether each skill FIRES / COLLIDES (real model), `--explain` is the
-      // free WHY-a-surface-underperforms + the fix.
-      if (args.includes("--trigger")) {
-        await handleMeasure(restArgs, args);
-        break;
-      }
-      if (args.includes("--explain")) {
-        handleExplain(restArgs, args);
-        break;
-      }
+      // The Lighthouse run: a default `audit` reports what the harness ships, RUNS
+      // the safety battery, and folds each finding's fix inline — free, zero-config,
+      // safe to run anywhere (audit-side-effect-free). `--deep` is the ONE opt-in
+      // expensive tier (live MCP spawn + model-gated trigger-rate).
+      const deep = args.includes("--deep");
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5429,39 +5449,32 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        if (args.includes("--fix-plan")) {
-          // The deterministic optimization lens on the SAME report: health score
-          // + the ranked free fixes to clear before measuring (the A2 spine).
-          const plan = optimize(report);
-          console.log(
-            json ? JSON.stringify(plan, null, 2) : formatOptimize(plan),
-          );
-        } else {
-          if (!json) {
-            // Surface the structural-health score + grade as a one-line header
-            // before the full report so the most important signal is visible first.
-            const { score } = scoreReport(report);
-            const grade = gradeFor(score);
-            console.log(`Harness health: ${grade} (${String(score)}/100)`);
-            console.log("");
-          }
-          console.log(
-            json ? JSON.stringify(report, null, 2) : formatScanReport(report),
-          );
-          if (!json) {
-            // Opt-in hint toward the safety battery (keeping default scan
-            // execution-free per the scan-side-effect-free rule).
-            if (!args.includes("--check-hooks")) {
-              console.log(
-                `\n(run \`vigiles audit --check-hooks\` to test your safety hooks against the disaster battery)`,
-              );
-            }
-          }
+        if (!json) {
+          // Surface the structural-health score + grade as a one-line header
+          // before the full report so the most important signal is visible first.
+          const { score } = scoreReport(report);
+          const grade = gradeFor(score);
+          console.log(`Harness health: ${grade} (${String(score)}/100)`);
+          console.log("");
         }
-        if (args.includes("--verify-mcp")) {
-          // Opt-in LIVE MCP tool resolution: starts each declared server and checks
-          // the agent's mcp__server__tool refs actually exist (the dynamic check no
-          // static linter can do). Side-effecting (spawns servers) → opt-in only.
+        console.log(
+          json ? JSON.stringify(report, null, 2) : formatScanReport(report),
+        );
+        if (!json) {
+          // Fold each finding's fix inline (replaces the former --fix-plan/--explain
+          // flags): the deterministic, free recommendation list under the report.
+          const fixes = formatRecommendations(optimize(report));
+          if (fixes) console.log("\n" + fixes);
+        }
+        // The safety battery runs by DEFAULT (the differentiated "we RUN your
+        // harness" finding) — own-repo hooks direct, foreign sandboxed-or-skipped.
+        // JSON/CI output stays the structured report for now (the unified
+        // category JSON lands with scoring).
+        if (!json) runSafetyBattery(report, root);
+        if (deep) {
+          // The ONE opt-in expensive tier (audit-side-effect-free): LIVE MCP tool
+          // resolution (spawns each declared server — the dynamic check no static
+          // linter can do) + the model-gated trigger-rate.
           const mcpErrs = await verifyLiveMcpTools(
             report,
             adapter.layout,
@@ -5472,65 +5485,14 @@ async function main(): Promise<void> {
               ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
               : "\n" + formatMcpContractReport(mcpErrs),
           );
-        }
-        if (args.includes("--check-hooks")) {
-          // Opt-in disaster battery: run each ok hook against the DISASTER_CATALOG
-          // to prove (or disprove) it actually blocks. It EXECUTES hooks, so per the
-          // scan-side-effect-free rule it is opt-in AND confinement-aware: the user's
-          // OWN repo (scanned dir === cwd) runs direct — their code, like their tests —
-          // but a FOREIGN plugin (a non-cwd dir, e.g. you're evaluating a stranger's
-          // plugin) runs SANDBOXED, and AUTO-SKIPS with a loud note where no sandbox
-          // (bubblewrap) is available. Never a stranger's hooks unconfined.
-          const isForeign = resolve(root) !== process.cwd();
-          const runnableHooks = report.hooks.filter(
-            (h) => h.status === "ok" && h.command.trim() !== "",
-          );
-          if (runnableHooks.length === 0) {
-            console.log("\nSafety battery: no runnable safety hooks found");
-          } else {
+          // Model-gated trigger-rate. Until zero-setup auto-prompts land, it needs
+          // an explicit --prompts file; without one, say so rather than erroring.
+          if (flagValue(args, "--prompts")) {
+            await handleMeasure([targets[0]], args);
+          } else if (!json) {
             console.log(
-              `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
+              "\nℹ --deep trigger-rate needs --prompts=<file> for now (zero-setup auto-prompts are coming).",
             );
-            let totalBlocked = 0;
-            let totalRun = 0;
-            for (const hook of runnableHooks) {
-              let results;
-              try {
-                results = isForeign
-                  ? verifyGuardrail(hook.command, {
-                      cwd: root,
-                      sandbox: "auto",
-                    })
-                  : verifyGuardrail(hook.command, { cwd: root });
-              } catch {
-                // Foreign plugin + no sandbox available → skip loudly, never run
-                // a stranger's hooks unconfined (the scan-side-effect-free rule).
-                console.log(
-                  `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
-                );
-                continue;
-              }
-              const blocked = results.filter((r) => r.blocked).length;
-              totalBlocked += blocked;
-              totalRun += results.length;
-              console.log(
-                `  ${hook.script}: blocks ${String(blocked)}/${String(results.length)} disasters`,
-              );
-              const missed = unblockedDisasters(results);
-              if (missed.length > 0) {
-                console.log(
-                  formatGuardrailReport(hook.command, results)
-                    .split("\n")
-                    .map((l) => `  ${l}`)
-                    .join("\n"),
-                );
-              }
-            }
-            if (totalRun > 0) {
-              console.log(
-                `  Total: blocks ${String(totalBlocked)}/${String(totalRun)} disasters`,
-              );
-            }
           }
         }
         const capBase = flagValue(args, "--capability-diff");
@@ -5555,9 +5517,10 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
-        // Nudge toward the real-model trigger tier when a model is reachable and
-        // the plugin ships model-invocable skills (hint for agents, offer for humans).
-        await maybeSuggestTrigger(report, targets[0], json, args);
+        // Nudge toward the real-model `--deep` tier when a model is reachable and
+        // the plugin ships model-invocable skills (hint for agents, offer for
+        // humans) — but not when the user already ran --deep.
+        if (!deep) await maybeSuggestTrigger(report, targets[0], json, args);
       }
       break;
     }

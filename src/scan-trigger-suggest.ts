@@ -1,10 +1,10 @@
 /**
- * scan → trigger-tier nudge. When a plugin ships model-invocable skills AND a
- * real model is reachable, surface the (real-model) `scan --trigger` tier that
+ * audit → deep-tier nudge. When a plugin ships model-invocable skills AND a
+ * real model is reachable, surface the (real-model) `audit --deep` tier that
  * measures whether those skills actually FIRE (recall + precision). Pure
  * decision + helpers; the IO (prompt / scaffold write / running the measure)
  * lives in the CLI. Honors `great-agent-flow`: an agent (non-TTY / `--json` /
- * `--no-interactive`) is HINTED, never prompted — a `scan` must never hang.
+ * `--no-interactive`) is HINTED, never prompted — an `audit` must never hang.
  */
 
 /** Only the env vars that signal a reachable model (parse, don't validate). */
@@ -67,7 +67,7 @@ export function formatTriggerHint(
   return (
     `ℹ ${String(n)} model-invocable skill${n === 1 ? "" : "s"} + model access detected — ` +
     `measure whether they actually FIRE (recall + precision) with:\n` +
-    `    vigiles audit ${dir} --trigger --prompts=trigger-prompts.json`
+    `    vigiles audit ${dir} --deep`
   );
 }
 
