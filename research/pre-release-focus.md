@@ -14,7 +14,7 @@ the public product; everything else is supporting infra, parked depth, or polish
 - **VERIFY** — the cross-reference engine (`lint` / `audit`): free, instant,
   deterministic. The credible backbone.
 - **MEASURE** — the harness-testing tiers + trigger-rate + the ecosystem benchmark
-  (`test` / `eval` / `audit --measure`): the interesting, fundable, on-the-sub story.
+  (`test` / `eval` / the `audit` trigger tier): the interesting, fundable, on-the-sub story.
 
 The launch is **article-led** (measurement at scale — "what actually works"), repo as
 the destination. The pitch: the **deterministic shift-left guardrail + private,
@@ -30,7 +30,7 @@ keep working, un-headline, don't freeze. Is it experimental / half-built / dilut
 | Cluster                                                                                                               | Call                        | Why                                                                         |
 | --------------------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
 | `lint` cross-ref engine (7 catalogs, refs, marks)                                                                     | **POLISH + FREEZE**         | The VERIFY backbone; the credible free wedge                                |
-| `audit` (Lighthouse: rings + battery + fixes + HTML) + leaderboard + the model trigger tier (`--measure`)             | **POLISH + FREEZE**         | Free report + the viral hook                                                |
+| `audit` (Lighthouse: rings + fixes + HTML; battery/MCP/trigger interactive) + leaderboard                             | **POLISH + FREEZE**         | Free report + the viral hook                                                |
 | `test` / `eval` tiers (`runHook`/`runHarnessTest`/`runEval`/`measureTriggerRate`/`measure`)                           | **POLISH + FREEZE**         | The MEASURE story; the public testing API                                   |
 | `init` + GitHub Action + the 8 CLI verbs + exit codes                                                                 | **POLISH + FREEZE**         | Delivery surface; what 90% of launch users touch                            |
 | `compile` (spec→markdown) + `generate types/schema`                                                                   | **POLISH (basic) + FREEZE** | The authoring loop under VERIFY                                             |

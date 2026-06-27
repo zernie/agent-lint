@@ -43,7 +43,6 @@ describe("decideExecute", () => {
     hasExecutable: true,
     isTTY: true,
     json: false,
-    forceMeasure: false,
     noInteractive: false,
   };
 
@@ -56,18 +55,6 @@ describe("decideExecute", () => {
       kind: "skip",
       reason: "nothing",
     });
-  });
-
-  it("--measure RUNS anywhere — the headless yes (even non-interactive / --json)", () => {
-    expect(
-      decideExecute({
-        ...base,
-        forceMeasure: true,
-        isTTY: false,
-        json: true,
-        noInteractive: true,
-      }),
-    ).toEqual({ kind: "run" });
   });
 
   it("headless (non-TTY / --json / --no-interactive) stays a read → skip 'headless'", () => {
@@ -85,7 +72,7 @@ describe("decideExecute", () => {
     });
   });
 
-  it("headless does NOT auto-run a remembered yes — CI must opt in with --measure", () => {
+  it("headless never executes — not even a remembered yes (audit is a local report, not CI)", () => {
     expect(decideExecute({ ...base, isTTY: false, remembered: true })).toEqual({
       kind: "skip",
       reason: "headless",
@@ -105,15 +92,21 @@ describe("decideExecute", () => {
 
 describe("formatExecuteSkip", () => {
   it("'nothing' → no nudge (a clean read)", () => {
-    expect(formatExecuteSkip("nothing", "./p")).toBeNull();
+    expect(formatExecuteSkip("nothing")).toBeNull();
   });
 
-  it("headless + remembered-no point at the --measure escape", () => {
-    for (const reason of ["headless", "remembered-no"] as const) {
-      const note = formatExecuteSkip(reason, "./plugin");
-      expect(note).toContain("Executing checks not run");
-      expect(note).toContain("vigiles audit ./plugin --measure");
-    }
+  it("headless points at interactive + the testing API (no execution flag exists)", () => {
+    const note = formatExecuteSkip("headless");
+    expect(note).toContain("skipped");
+    expect(note).toContain("interactively");
+    expect(note).toContain("vigiles/testing");
+    expect(note).not.toContain("--measure");
+  });
+
+  it("remembered-no points at the config, not a flag", () => {
+    const note = formatExecuteSkip("remembered-no");
+    expect(note).toContain("audit.measure");
+    expect(note).not.toContain("--measure`");
   });
 });
 

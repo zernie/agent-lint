@@ -11,13 +11,14 @@
 ## RESUME HERE — `claude/lint-inline-mode-go56av` — Lighthouse `audit` + read-vs-run consent DONE; PR not opened
 
 **⚠ ONE PR FOR THE WHOLE BRANCH.** Everything below ships together off
-`claude/lint-inline-mode-go56av` as one big `refactor!` (breaking — dropped flags,
-`--deep`/`--fast` removed, battery no longer a default). **PR is NOT opened yet** —
-the README/front-door reframe is sensitive; **ask the founder before opening.**
+`claude/lint-inline-mode-go56av` as one big `refactor!` (breaking — `--deep`,
+`--measure`, `--fast`, `--no-measure` ALL removed; battery no longer a default).
+**PR is NOT opened yet** — the README/front-door reframe is sensitive; **ask the
+founder before opening.**
 
 **State:** all committed + green locally (build incl. report, fmt, lint 0 errors,
-1703 vitest pass; only the env-only `dialect-drift` fails here — container has
-claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
+~1700 vitest pass; only the env-only `dialect-drift` fails here — container has
+claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed.
 
 ### What this branch is (in order)
 
@@ -33,16 +34,19 @@ claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
 
 ### The audit model (FINAL — read this before touching audit)
 
-- **A plain `audit` is a DETERMINISTIC READ** — rings + fixes + report. Nothing
-  executes. Identical on every OS. Safe even on a prod-wired repo.
+- **`audit` is a Lighthouse-style LOCAL report, NOT a CI step.** CI uses `vigiles
+lint` (the deterministic gate). A plain `audit` is a DETERMINISTIC READ — rings +
+  fixes + report. Nothing executes. Identical on every OS. Safe even on a prod-wired repo.
 - **Three executing checks** — safety battery (do hooks block?) · live MCP resolution
   (do referenced tools resolve on the real server?) · trigger-rate (do skills FIRE?)
   — share **ONE consent** (`decideExecute`, `src/scan-trigger-suggest.ts`): at a TTY
   `audit` **asks once** (bundled prompt, discloses confinement + cost) and **remembers**
   in `.vigilesrc.json` (`audit.measure`); headless (`--json`/CI/non-interactive/agent)
   it stays a read + a one-line nudge. Never hangs.
-- **`--measure`** is the lone flag (the headless "yes" / skip-the-prompt). **`--fast`
-  and `--no-measure` are DELETED** — the default IS the read, nothing to opt out of.
+- **There is NO execution flag.** `--deep`/`--measure`/`--fast`/`--no-measure` are
+  ALL gone (the founder arc: inversion → one consent → drop the flag, since audit
+  isn't CI). The executing checks run ONLY on the interactive prompt; **automation
+  tests the harness via the `vigiles/testing` API + skills** (the layered tiers).
 - **Why execution is opt-in UNIFORMLY** (not Linux-confined/Mac-unconfined): a
   hook/server can hit a real Postgres/API and confinement (bubblewrap) is Linux-only.
   On consent: battery runs each hook **network-confined** where a sandbox exists (else
@@ -51,6 +55,9 @@ claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
   `tools/list`); trigger-rate **stubs skill bodies** so no procedure runs.
 - **Safety RING reads n/a (not a false 0)** when no hook blocks any disaster (none is
   evidently a Bash guard — a 0 cried wolf, tanked the grade). Fixed in `src/audit-score.ts`.
+- **`runSafetyBattery` moved to `src/audit-battery.ts`** (+ unit-tested there): the CLI
+  can't run the battery headless anymore (no TTY in tests), so its coverage lives in
+  `src/audit-battery.test.ts`; the scan-cli e2e only asserts the read-vs-run boundary.
 - `hasModelAccess`/`isMeteredAccess` (env: `ANTHROPIC_API_KEY`=metered vs
   `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT`=sub) now only shape the **disclosure wording**.
 
@@ -58,7 +65,7 @@ claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
 
 - **OSS FP sweep is NOT done** — can't run here (git scoped to `zernie/vigiles`, 403
   on external clones). Run on an open-network machine: `VIGILES="node dist/cli.js"
-  scripts/fp-sweep.sh` (the stale `scan`→`audit` verb in it is fixed). The in-repo
+scripts/fp-sweep.sh` (the stale `scan`→`audit` verb in it is fixed). The in-repo
   vendored-plugin proxy passed (4 plugins), but that's NOT the real sweep.
 - **The "better way" that re-promotes the battery to a default** (the exit criterion):
   an **env-scrub ephemeral floor** (strip DB/API creds before running a hook — no
@@ -84,8 +91,8 @@ claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
 - **GIT IS REPO-SCOPED HERE** — clones reach only `zernie/vigiles` (403 elsewhere) →
   the FP sweep is a LOCAL task. npm registry IS reachable.
 - **No bubblewrap in THIS container** → `sandboxAvailable()` is false here, so the
-  battery (under `--measure`) runs own-direct + the loud "no network confinement"
-  warning. That's the intended degrade, not a bug.
+  battery (when you consent at the prompt) runs own-direct + the loud "no network
+  confinement" warning. That's the intended degrade, not a bug.
 - **`src/dialect-drift.test.ts` fails in THIS container only** (CC version). CI pins it.
 - `CLAUDE.md` + `src/CLAUDE.md` are COMPILED from `.spec.ts` — edit the spec, recompile
   (`node dist/cli.js compile CLAUDE.md.spec.ts`); never hand-edit the md.
@@ -95,8 +102,10 @@ claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
 
 ### Decisions of record (don't relitigate)
 
-- **`audit` reads; `--measure` runs.** ONE consent for all execution, asked-once at a
-  TTY (remembered). NO `--fast`/`--no-measure`/`--deep`. Battery is opt-in, not default.
+- **`audit` reads; the prompt runs.** `audit` is a LOCAL report (Lighthouse), NOT a
+  CI step — CI uses `lint`. ONE consent for all execution, asked-once at a TTY
+  (remembered in `.vigilesrc.json`). NO execution flag at all (`--deep`/`--measure`/
+  `--fast`/`--no-measure` all gone); automation uses the `vigiles/testing` API.
 - **Execution is opt-in UNIFORMLY across OSes** until one confinement is cross-platform
   (state-safety > the "we run it by default" wow). Provenance protects the HOST;
   confinement protects external STATE — two axes.

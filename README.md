@@ -86,11 +86,12 @@ not just reads them — scores five categories, and writes a shareable HTML repo
 | **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
 | **🧪 Tested**       | Every surface ships a test                                            |
 
-A plain `audit` is a **deterministic read** — safe on any repo, even one wired to
-prod, identical on every OS. The **executing checks** (run your hooks against the
-disaster battery · resolve MCP live · **do your skills fire?**) are opt-in: `audit`
-**asks once** at a terminal and remembers, or run them headless with `--measure`.
-**[Audit a harness →](docs/for-plugin-authors.md)**
+Like Lighthouse, `audit` is a **local report you run on your machine** — a
+deterministic read, safe on any repo (even one wired to prod), identical on every
+OS. **Not a CI step** (CI uses `lint`, the deterministic gate). The **executing
+checks** (run your hooks against the disaster battery · resolve MCP live · **do your
+skills fire?**) run only when there's a human to consent: `audit` **asks once** at a
+terminal and remembers. **[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and

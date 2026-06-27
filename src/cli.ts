@@ -107,15 +107,10 @@ import {
   formatLeaderboard,
   formatLeaderboardMarkdown,
 } from "./leaderboard.js";
-import {
-  verifyGuardrail,
-  unblockedDisasters,
-  formatGuardrailReport,
-  DISASTER_CATALOG,
-} from "./guardrail-check.js";
+import { runSafetyBattery, runnableSafetyHooks } from "./audit-battery.js";
 import { optimize, formatRecommendations } from "./optimize.js";
 import { sandboxAvailable } from "./sandbox.js";
-import { formatAuditScore, type BatterySummary } from "./audit-score.js";
+import { formatAuditScore } from "./audit-score.js";
 import {
   autoTriggerPrompts,
   AUTO_RECALL_COUNT,
@@ -3576,7 +3571,7 @@ function flagValue(args: string[], name: string): string | undefined {
  * (does one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles audit ./plugin --measure --prompts=p.json`.
+ * `vigiles audit ./plugin --prompts=p.json` (interactive — say yes when asked).
  */
 async function handleMeasure(
   restArgs: string[],
@@ -4186,13 +4181,13 @@ function printUsage(command: string | undefined): void {
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
-    "  vigiles audit [dir...]          Audit a harness: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
+    "  vigiles audit [dir...]          Lighthouse for your harness — a LOCAL report: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json (CI)",
+    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json for machine output. NOT a CI step — use `vigiles lint` in CI.",
   );
   console.log(
-    "                                 the executing checks (run your hooks · live MCP · do skills fire?) are opt-in: asked once at a TTY (remembered), or --measure to run them headless",
+    "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -5153,114 +5148,6 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
- * The hooks the safety battery tests — only those that can actually BLOCK a tool
- * call (PreToolUse guards). A SessionStart / PostToolUse / Stop hook can't (and
- * shouldn't) block the disaster catalog, so testing it would unfairly tank Safety
- * (a cry-wolf). An unknown-event hook (non-object config shape) is included
- * best-effort. ONE predicate, reused by the executable-surface check + the
- * battery so they can't drift (one-detector-no-drift).
- */
-function runnableSafetyHooks(report: ScanReport): ScanReport["hooks"] {
-  return report.hooks.filter(
-    (h) =>
-      h.status === "ok" &&
-      h.command.trim() !== "" &&
-      (h.event === undefined || h.event === "PreToolUse"),
-  );
-}
-
-/**
- * The safety battery — run each runnable hook against the DISASTER_CATALOG to
- * prove (or disprove) it actually blocks. An OPT-IN executing check (not a
- * default): reached only when the user consents (the interactive prompt or
- * `--measure`), so a plain `audit` never executes a hook.
- *
- * STATE-SAFE by default (audit-side-effect-free): a hook is arbitrary code that
- * could reach a real Postgres / API, so where bubblewrap is available the battery
- * runs EVERY hook under `sandbox:"auto"` — a no-egress network namespace, so a
- * hook can't touch your DB/network during the probe (own-repo AND foreign alike;
- * provenance protects the host, confinement protects your external state). Where
- * no sandbox exists (macOS / hardened CI): a FOREIGN plugin's hooks are SKIPPED
- * loudly (never a stranger's code unconfined), and the user's OWN hooks run
- * DIRECT with a LOUD warning that they executed WITHOUT network confinement (so a
- * hook that hits your DB/API would have). `--fast` skips the battery entirely.
- *
- * Returns the human-readable lines AND the aggregate `summary` (the Safety
- * category's input) so the caller can both feed the rings and print the detail.
- * `summary` is null when there's no runnable hook to test (Safety → n/a).
- */
-function runSafetyBattery(
-  report: ScanReport,
-  root: string,
-): { lines: string[]; summary: BatterySummary | null } {
-  const isForeign = resolve(root) !== process.cwd();
-  const confined = sandboxAvailable();
-  const runnableHooks = runnableSafetyHooks(report);
-  if (runnableHooks.length === 0) {
-    return {
-      lines: ["\nSafety battery: no PreToolUse safety hooks to test"],
-      summary: null,
-    };
-  }
-  const lines: string[] = [
-    `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
-  ];
-  if (!confined && !isForeign) {
-    lines.push(
-      `  ⚠ no sandbox (bubblewrap) here — running YOUR hooks WITHOUT network ` +
-        `confinement. A hook that reaches a DB/API would do so now; use --fast to skip.`,
-    );
-  }
-  let totalBlocked = 0;
-  let totalRun = 0;
-  let hooksSkipped = 0;
-  for (const hook of runnableHooks) {
-    // Confine network when we can (own + foreign); only fall through to a direct
-    // run for the user's OWN hooks when no sandbox exists (warned above).
-    if (!confined && isForeign) {
-      hooksSkipped += 1;
-      lines.push(
-        `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
-      );
-      continue;
-    }
-    let results;
-    try {
-      results = confined
-        ? verifyGuardrail(hook.command, { cwd: root, sandbox: "auto" })
-        : verifyGuardrail(hook.command, { cwd: root });
-    } catch {
-      hooksSkipped += 1;
-      lines.push(
-        `  ⊘ ${hook.script}: skipped — could not confine the hook run (sandbox error)`,
-      );
-      continue;
-    }
-    const blocked = results.filter((r) => r.blocked).length;
-    totalBlocked += blocked;
-    totalRun += results.length;
-    lines.push(
-      `  ${hook.script}: blocks ${String(blocked)}/${String(results.length)} disasters`,
-    );
-    const missed = unblockedDisasters(results);
-    if (missed.length > 0) {
-      lines.push(
-        formatGuardrailReport(hook.command, results)
-          .split("\n")
-          .map((l) => `  ${l}`)
-          .join("\n"),
-      );
-    }
-  }
-  if (totalRun > 0) {
-    lines.push(
-      `  Total: blocks ${String(totalBlocked)}/${String(totalRun)} disasters`,
-    );
-  }
-  return { lines, summary: { totalBlocked, totalRun, hooksSkipped } };
-}
-
-/**
  * Write the versioned JSON artifact (`vigiles-report.json`) — the upload/CI
  * boundary a hosted dashboard ingests. Stamps `meta.generatedAt` here (at write
  * time, not in the pure builder, so the HTML-embedded form stays deterministic).
@@ -5374,7 +5261,6 @@ async function runAutoTrigger(
  * — used to decide whether there's anything to run, and to disclose it at consent.
  */
 interface ExecutableSurfaces {
-  readonly dir: string;
   readonly hasBattery: boolean; // ≥1 runnable PreToolUse hook
   readonly hasMcp: boolean; // own-repo + declares MCP server(s)
   readonly triggerableSkills: number; // model-invocable, described skills
@@ -5403,7 +5289,6 @@ async function resolveExecution(
     // pipelines) must NOT block on a read that never gets input.
     isTTY: process.stdout.isTTY && process.stdin.isTTY,
     json,
-    forceMeasure: args.includes("--measure"),
     noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
     remembered: loadConfig().audit?.measure,
   });
@@ -5411,7 +5296,7 @@ async function resolveExecution(
   if (decision.kind === "skip")
     return {
       execute: false,
-      note: json ? null : formatExecuteSkip(decision.reason, s.dir),
+      note: json ? null : formatExecuteSkip(decision.reason),
     };
   // ask — prompt once (early, so a yes lets the battery feed the Safety ring),
   // then remember the answer.
@@ -5422,9 +5307,7 @@ async function resolveExecution(
     execute: yes,
     note: yes
       ? null
-      : "  Skipped (remembered). Run later with `vigiles audit " +
-        s.dir +
-        " --measure`.",
+      : "  Skipped (remembered — edit .vigilesrc.json `audit.measure` to change).",
   };
 }
 
@@ -5615,12 +5498,12 @@ async function main(): Promise<void> {
     case "audit": {
       // The Lighthouse run: a plain `audit` is a deterministic READ — rings, each
       // finding's fix inline, HTML/JSON report — safe + identical on every OS,
-      // nothing executes. The executing checks (safety battery + live MCP + skill
-      // firing) are opt-in via ONE consent: at a TTY `audit` asks once (remembered
-      // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. The one
-      // flag, `--measure`, is the headless "yes" (and a human's skip-the-prompt) —
-      // there is no `--fast`/`--no-measure`: the default IS the read. See the
-      // `audit-side-effect-free` rule.
+      // nothing executes. Like Lighthouse it's a LOCAL report, NOT a CI step (CI
+      // uses `vigiles lint`). The executing checks (safety battery + live MCP +
+      // skill firing) run only on consent: at a TTY `audit` asks once (remembered
+      // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. There
+      // is NO execution flag — automation tests the harness via the vigiles/testing
+      // API + skills, not the report verb. See the `audit-side-effect-free` rule.
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5676,13 +5559,13 @@ async function main(): Promise<void> {
           console.log("");
         }
         // ONE read-vs-run decision. A plain `audit` is a deterministic READ; the
-        // executing checks (safety battery + live MCP + skill-firing) are opt-in
-        // via a single consent — ASK once at a TTY (remembered), `--measure` is
-        // the headless yes, headless stays a read + a nudge. Resolve it EARLY so a
-        // yes lets the battery feed the Safety ring; the nudge prints at the end.
+        // executing checks (safety battery + live MCP + skill-firing) run only on
+        // consent — ASK once at a TTY (remembered); headless stays a read + a
+        // nudge (no execution flag — automation uses the vigiles/testing API).
+        // Resolve it EARLY so a yes lets the battery feed the Safety ring; the
+        // nudge prints at the end.
         const isForeign = root !== process.cwd();
         const surfaces: ExecutableSurfaces = {
-          dir: targets[0],
           hasBattery: runnableSafetyHooks(report).length > 0,
           hasMcp: report.mcp && !isForeign,
           triggerableSkills: report.skills.filter(

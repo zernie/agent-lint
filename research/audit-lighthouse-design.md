@@ -191,13 +191,23 @@ Resolved into the shipped shape — **one read-vs-run axis, consent-first:**
   **asks once** — a bundled prompt that **discloses** confinement + cost — and
   **remembers** in `.vigilesrc.json` (`audit.measure`); headless it stays a read + a
   one-line nudge.
-- **`--fast` and `--no-measure` are DELETED.** The default is the read, so there's
-  nothing to opt out of. The lone flag `--measure` is just the headless "yes."
+- **`--fast`, `--no-measure`, AND `--measure` are ALL deleted — no execution flag.**
+  The founder's last point landed it: "why a flag, not an interactive choice? — and
+  audit isn't run in CI anyway." Right — we'd already established `lint` is the CI
+  gate and `audit` is the human-facing local report. So `audit` is **Lighthouse-style:
+  a local report you run on your machine, NOT a CI step.** It runs the executing
+  checks only when a human can consent (the prompt); **automation tests the harness
+  through the `vigiles/testing` API + skills** (the layered tiers), never the report
+  verb. The lone remaining audit knob is the remembered `.vigilesrc.json`
+  `audit.measure` (yes/no), set by the prompt.
 - **Battery demoted from default → consent** (uniform): execution is opt-in
   everywhere until one confinement works the same on macOS + Linux. Exit criterion /
   the "better way" that re-promotes it: an **env-scrub ephemeral floor** (strip
   DB/API creds before running a hook — no kernel features, cross-platform) and/or a
   **macOS `sandbox-exec`** backend to match bubblewrap.
+- **Testability consequence:** since the CLI can't run the battery headless (no TTY
+  in tests), `runSafetyBattery` moved to `src/audit-battery.ts` and is unit-tested
+  there directly; the CLI e2e only asserts the read-vs-run boundary.
 
 **Follow-ups (not yet done):** the env-scrub ephemeral floor + macOS sandbox backend
 (the exit criterion above); the hosted dashboard itself; an `audit --upload`

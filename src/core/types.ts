@@ -299,11 +299,12 @@ export interface VigilesConfig {
 
   /**
    * `vigiles audit` preferences. `measure` is the sticky remembered answer to the
-   * "also measure whether your skills FIRE? (real model)" prompt — `audit` asks
-   * once on an interactive run with model access, then records the choice here so
-   * it never asks again. `true` auto-runs the trigger tier on every interactive
-   * run, `false` keeps it off; `--measure`/`--fast` override per-run. Written by
-   * the audit consent prompt, not `init`.
+   * "run the executing checks against your harness?" prompt — at a TTY `audit`
+   * asks once, then records the choice here so it never asks again. `true` runs
+   * the executing checks (safety battery · live MCP · skill firing) on every
+   * interactive run, `false` keeps them off (edit this key to change). Written by
+   * the audit consent prompt, not `init`. Headless runs never execute regardless
+   * (audit is a local report, not a CI step — there is no execution flag).
    */
   audit?: { measure?: boolean };
 }

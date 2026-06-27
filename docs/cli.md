@@ -14,7 +14,7 @@ npx vigiles lint [files...]         # Verify references + integrity + symbols + 
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
 npx vigiles audit [dir]              # Lighthouse for your harness: category rings + fixes (a deterministic read); writes vigiles-report.html + .json
-npx vigiles audit <dir> --measure    # Run the executing checks (your hooks · live MCP · do skills FIRE?) headless — at a TTY a plain audit asks once instead
+                                     # the executing checks (your hooks · live MCP · do skills FIRE?) run only interactively — a plain audit asks once
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
 npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
@@ -281,8 +281,8 @@ Under the rings, the detailed report lists per-skill description + user-invoked
 flag + **description-script** detection (a description whose dominant script differs
 from the expected one — **default Latin, configurable** — carries a cross-language
 trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
-under-fire on English prompts; a RISK flag, not a defect — measure it with
-`--measure`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
+under-fire on English prompts; a RISK flag, not a defect — measure it with the
+trigger tier), per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
 detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
 report file.
@@ -353,7 +353,14 @@ plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 (The leaderboard is the multi-dir form and does not run the per-hook safety battery
 or write an HTML report — those are the single-dir audit.)
 
-#### The executing checks — one consent (`audit` asks, or `--measure`)
+#### `audit` is a local report, not a CI step
+
+Like Lighthouse, `audit` is something you **run on your machine** to see your
+harness's health — not a build gate. **CI uses [`vigiles lint`](#lint-files)**
+(deterministic, stable exit codes 0/1/2); `audit` is the human-facing read +
+report. (You _can_ pipe `audit --json` somewhere, but it's not a pass/fail gate.)
+
+#### The executing checks — `audit` asks (interactive only)
 
 A plain `audit` is a deterministic **read**. Three checks actually _run_ your
 harness, and they share **one** consent:
@@ -370,21 +377,23 @@ harness, and they share **one** consent:
    Probes are **auto-generated from each skill's description** (zero setup);
    `--prompts=<file>` supplies a curated set + the selection-collision matrix.
 
-**How the consent works** — `audit` is a read by default and identical on every OS;
-the executing checks are opt-in:
+**How the consent works** — `audit` is a read by default; the executing checks need
+a human to consent (there's **no execution flag** — see below):
 
 - **At a terminal (TTY)** → `audit` **asks once** ("Run the executing checks against
   your harness?" — with a confinement + cost disclosure) and **remembers** the answer
   in `.vigilesrc.json` (`audit.measure`).
 - **Headless** (`--json` / CI / non-interactive / an agent) → stays a read + a
   one-line nudge; never hangs, never silently executes.
-- **`--measure`** is the headless "yes" (and a human's skip-the-prompt). There is no
-  `--fast`/`--no-measure`: the default _is_ the read, so there's nothing to opt out of.
+- **No execution flag.** `audit` is a local report — it runs the executing checks
+  only when a human can consent. For automation, test the harness through the
+  [`vigiles/testing` API](harness-testing.md) (`measureTriggerRate`, `guardrail-check`)
+  - skills — the layered tiers that exist for exactly that. The deterministic read is
+    identical on every OS; there's deliberately no `--measure`/`--fast`.
 
 ```bash
-npx vigiles audit ./some-plugin                                # read; asks at a TTY
-npx vigiles audit ./some-plugin --measure                      # run the executing checks (headless yes)
-npx vigiles audit ./some-plugin --measure --prompts=./probes.json --model=sonnet
+npx vigiles audit ./some-plugin                                # read; asks to run the checks at a TTY
+npx vigiles audit ./some-plugin --prompts=./probes.json       # curated trigger set (used when you say yes)
 ```
 
 The trigger tier needs the harness CLI + model auth; it **degrades honestly**
@@ -552,26 +561,26 @@ deterministic + every-commit).
 
 **What each does:**
 
-| Check                                                       |  `lint`  |  `audit`  | `audit --measure`  |
-| ----------------------------------------------------------- | :------: | :-------: | :----------------: |
-| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |         –          |
-| Marked file/script ref verification                         |    ✓     |     –     |         –          |
-| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |         –          |
-| Untested surface                                            |  ✓ gate  |  ✓ ring   |         –          |
-| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |         –          |
-| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |         –          |
-| Category rings + weighted health score                      |    –     |     ✓     |         –          |
-| Safety battery (does a hook actually block?)                |    –     |     –     |         ✓¹         |
-| HTML report                                                 |    –     | ✓ default |     ✓ default      |
-| Leaderboard (rank a marketplace)                            |    –     |     ✓     |         –          |
-| MCP tool exists on **live** server                          |    –     |     –     |    ✓ own-repo²     |
-| Trigger recall/precision (does a skill fire?)               |    –     |     –     |         ✓³         |
-| Config severities + CI exit codes                           |    ✓     | read-only |     read-only      |
-| **Cost tier**                                               | free/det | free/det  | **exec+model/sub** |
+| Check                                                       |  `lint`  |  `audit`  | `audit` (interactive) |
+| ----------------------------------------------------------- | :------: | :-------: | :-------------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |           –           |
+| Marked file/script ref verification                         |    ✓     |     –     |           –           |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |           –           |
+| Untested surface                                            |  ✓ gate  |  ✓ ring   |           –           |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |           –           |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |           –           |
+| Category rings + weighted health score                      |    –     |     ✓     |           –           |
+| Safety battery (does a hook actually block?)                |    –     |     –     |          ✓¹           |
+| HTML report                                                 |    –     | ✓ default |       ✓ default       |
+| Leaderboard (rank a marketplace)                            |    –     |     ✓     |           –           |
+| MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo²      |
+| Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓³           |
+| Config severities + CI exit codes                           |    ✓     | read-only |       read-only       |
+| **Cost tier**                                               | free/det | free/det  |  **exec+model/sub**   |
 
 The three executing checks share **one consent**: a plain `audit` is a read; at a
-TTY it **asks once** (remembered in `.vigilesrc.json`), and `--measure` is the
-headless "yes". There is no `--fast` — the default already is the read.
+TTY it **asks once** (remembered in `.vigilesrc.json`). There is no execution flag
+— for automation use the `vigiles/testing` API, not the report verb.
 
 ¹ The safety battery runs every hook under a **no-egress sandbox** where one
 exists (so a hook can't reach your DB/API during the probe); where none does
@@ -584,12 +593,12 @@ absent and runs on your subscription (or a metered key).
 
 **Where each runs:**
 
-| Target             |        `lint`        |        `audit`        |  `audit --measure`  |
-| ------------------ | :------------------: | :-------------------: | :-----------------: |
-| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)⁴ |   n/a (no skills)   |
-| Claude Code plugin |          ✓           |           ✓           |          ✓          |
-| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
-| Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
+| Target             |        `lint`        |        `audit`        | `audit` (interactive) |
+| ------------------ | :------------------: | :-------------------: | :-------------------: |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)⁴ |    n/a (no skills)    |
+| Claude Code plugin |          ✓           |           ✓           |           ✓           |
+| Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) |  ✓ `--harness=codex`  |
+| Marketplace (many) |       per-file       |     ✓ leaderboard     |    per-plugin only    |
 
 ⁴ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
 `AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference

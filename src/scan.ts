@@ -91,8 +91,8 @@ export interface ScanSkill {
    * (default `"Latin"`), else null. The model's skill-selection context is
    * English-centric, so a description in another script carries a cross-language
    * trigger risk — it may under-fire on English prompts. A RISK flag, not a
-   * defect (a language-matched audience is fine); measure the real gap with
-   * `audit --measure`.
+   * defect (a language-matched audience is fine); measure the real gap with the
+   * `audit` trigger tier / `measureTriggerRate`.
    */
   readonly descriptionScript: Script | null;
 }

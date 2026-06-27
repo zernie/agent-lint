@@ -148,7 +148,8 @@ folds each finding's **fix inline**, and writes a **self-contained HTML report**
 harness" is THREE executing checks (safety battery · live MCP · trigger-rate)
 behind **one consent** (`decideExecute`): at a TTY `audit` **asks once** (remembered
 in `.vigilesrc.json` `audit.measure`); headless it stays a read + a one-line nudge;
-the one flag `--measure` is the headless yes (no `--fast` — the default IS the read).
+there is NO execution flag — `audit` is a local report (Lighthouse-style), not a CI
+step (CI uses `lint`); automation tests the harness via the `vigiles/testing` API.
 State-safe per `audit-side-effect-free`: execution is opt-in UNIFORMLY (not
 confined-on-Linux/unconfined-on-Mac) because confinement is Linux-only; on consent
 the battery runs **network-confined** where a sandbox exists (else own hooks direct

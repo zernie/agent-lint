@@ -656,7 +656,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
   (~20 stubbed runs) to confirm the curve is real + model-dependent before any
   matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
-- **Plugin selection-collision matrix** — **SHIPPED (core + CLI `audit --measure --prompts=`).**
+- **Plugin selection-collision matrix** — **SHIPPED (core + CLI `audit --prompts=`, interactive).**
   The behavioral CONFIRMATION of the deterministic `description-overlap` rule: run
   each model-invocable skill's own prompts against the whole installed plugin and
   record WHICH skills fired (N×N matrix; diagonal = recall, off-diagonal = a sibling
