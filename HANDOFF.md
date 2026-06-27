@@ -53,25 +53,40 @@ competitive research + launch-readiness pass. ~14 commits, all green locally
   (ToxicSkills) on the SECURITY axis → **our ecosystem-benchmark must be on the
   CORRECTNESS/PERFORMANCE axis ("what works vs hype"), not security.**
 
-**SHIPPED this session — the first gateway increment (`feat(scan)`):** `scan` now
-prints a **health score + A–F grade** in default output (absent under `--json`) + an
-opt-in **`scan --check-hooks`** disaster-battery ("we RUN your harness"). Flag, not a
-verb. Confinement-aware per `scan-side-effect-free`: own repo direct, foreign
-sandbox-or-auto-skip. 111 affected tests pass; only the known env-only `dialect-drift`
-fails locally. NOTE: the build subagent first ran hooks UNCONFINED ("trusted bc opt-in")
-— I caught + fixed that to honor the rule (own vs foreign). Lesson: review subagent
-diffs against the rules, don't trust the green-gate alone.
+**BIG PIVOT (founder, 2026-06-27): go full "Lighthouse for your harness."** The
+flag-per-check `scan` surface was sprawl (the founder called it out — flags clear the
+same heavy bar as verbs). Locked design in **`research/audit-lighthouse-design.md`**
+(READ IT): verb `audit`, **category rings** (Truthfulness/Safety/Triggering/Structure/
+Tested), **battery by default**, ONE **`--deep`** tier (live MCP + model trigger) with
+**auto-generated probe prompts** (zero-setup), **HTML report written by default + open**,
+README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=FULL.
 
-**DO NEXT (ranked):**
+**SHIPPED this session:**
 
-1. **Open the PR** for this branch — BUT note it carries the whole #38–#48 batch + this
-   session, NOT a small patch; review scope before opening.
-2. **Badge** (README markdown + URL — the distribution flywheel) + **lead the casual
-   surfaces** (README, `init` output, GH Action PR comment) with the score + scariest
-   true finding. The gateway is built; now make it VISIBLE.
-3. **Ecosystem-benchmark v0** — THE gating launch build; correctness/performance axis
-   (Snyk owns security — see the checkup doc).
-4. Run `scripts/fp-sweep.sh` locally; triage FPs.
+- (earlier) gateway increment: health score header + the `--check-hooks` battery
+  (own-direct / foreign-sandbox-or-skip — I caught+fixed a subagent running hooks
+  UNCONFINED; lesson: review subagent diffs vs the rules, not just the green gate).
+- **`refactor!`: renamed the `scan` verb → `audit`** (Lighthouse framing; scan=read
+  fought the "we RUN it" thesis + Snyk collision). Clean break, no alias. Swept ~114
+  refs; self-command-refs enforces it. Internal `scanPlugin`/`scan.ts` (gather layer)
+  keep their names. 1677 tests pass; only env-only `dialect-drift` fails locally.
+
+**DO NEXT — the remaining Lighthouse increments (each green+committed; see the design doc §build sequence):**
+
+1. **Battery default + `--deep` collapse** — battery runs in default single-dir `audit`
+   (drop `--check-hooks`); fold `--verify-mcp`+`--trigger` → one `--deep`; reword+rename
+   the `scan-side-effect-free` rule → `audit-side-effect-free` (edit CLAUDE.md.spec.ts,
+   recompile). Fold `--fix-plan`/`--explain` into the report.
+2. **Category scoring** — per-category 0–100 + weighted overall; terminal renders rings
+   (new `src/audit-score.ts` bucketing scoreReport penalties).
+3. **`--deep` auto-prompts** — generate diverse probe prompts from skill descriptions
+   (must pass the prompt-diversity gate). The hard part; deterministic first.
+4. **HTML report** (`src/audit-html.ts`) — self-contained, write-by-default + best-effort
+   open. THE wow artifact.
+5. **README reframe** — "Lighthouse for your harness"; `audit` flagship; HTML screenshot.
+
+Then: open the PR (carries #38–#48 + this session — big, review scope); ecosystem-benchmark
+v0 (correctness axis); run `scripts/fp-sweep.sh` locally.
 
 **Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
 — surface-freeze + STABILITY + auto-adopt batch. Re-check its live state if returning.
