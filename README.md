@@ -60,8 +60,8 @@
 ---
 
 **You installed a bunch of plugins and wrote a few skills — but do they actually work?**
-A skill that never fires, a safety hook that blocks nothing, a CLAUDE.md full of dead
-references — your harness fails **silently**, and you find out mid-task.
+A skill that never fires, a subagent wired to a tool that doesn't exist, a CLAUDE.md
+full of dead references — your harness fails **silently**, and you find out mid-task.
 
 **It's a library with no tests.**
 
@@ -71,8 +71,8 @@ references — your harness fails **silently**, and you find out mid-task.
 npx vigiles audit          # no key, no config, safe to run anywhere
 ```
 
-It **runs** your harness — fires your safety hooks against a real disaster battery,
-not just reads them — scores five categories, and writes a shareable HTML report:
+It **reads** your harness deterministically — every reference checked, four categories
+scored, each finding's fix inline — and writes a shareable HTML report:
 
 <p align="center">
   <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall score with four category rings — Truthfulness, Triggering, Structure, Tested — and fix cards" />
