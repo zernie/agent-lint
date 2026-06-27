@@ -88,9 +88,9 @@ scored, each finding's fix inline — and writes a shareable HTML report:
 Like Lighthouse, `audit` is a **local report you run on your machine** — a
 deterministic read, safe on any repo (even one wired to prod), identical on every
 OS. **Not a CI step** (CI uses `lint`, the deterministic gate). The **executing
-checks** (resolve MCP live · **do your skills fire?**) run only when there's a human
-to consent: `audit` **asks once** at a
-terminal and remembers. **[Audit a harness →](docs/for-plugin-authors.md)**
+checks** (resolve MCP live · **do your skills fire?** · **what would vigiles
+catch in your repo?**) run only when there's a human to consent: `audit` **asks
+once** at a terminal and remembers. **[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and
