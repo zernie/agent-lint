@@ -603,10 +603,12 @@ describe("scan --capability-diff e2e", () => {
 });
 
 // ---------------------------------------------------------------------------
-// scan → trigger-tier nudge (env-gated; deterministic via explicit env)
+// audit → model trigger tier (env-gated; deterministic via explicit env).
+// These run non-TTY (execSync pipes), so the tier never PROMPTS — it skips with
+// a loud note. The interactive ask-once path is unit-tested via decideMeasure.
 // ---------------------------------------------------------------------------
 
-describe("scan: trigger-tier nudge", () => {
+describe("audit: model trigger tier", () => {
   let dir: string;
   const MODEL_ENV_KEYS = [
     "ANTHROPIC_API_KEY",
@@ -653,27 +655,32 @@ describe("scan: trigger-tier nudge", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
+  it("notes (non-blocking) when a model is reachable but the run is non-interactive", () => {
     const out = runEnv("audit .", { CLAUDECODE: "1" });
-    assert.ok(out.includes("model access detected"), "hint shown");
-    assert.ok(out.includes("--deep"), "names the deep command");
+    assert.ok(out.includes("model access detected"), "note shown");
+    assert.ok(out.includes("--measure"), "names the --measure escape");
   });
 
-  it("stays silent with no model access", () => {
+  it("notes 'no model access' when none is reachable", () => {
     const out = runEnv("audit .", {}); // all model signals stripped
-    assert.ok(!out.includes("model access detected"), "no hint without access");
+    assert.ok(out.includes("no model access"), "no-model note shown");
+    assert.ok(
+      !out.includes("model access detected"),
+      "not the reachable-model note",
+    );
   });
 
   it("stays silent under --json even with model access (machine output)", () => {
     const out = runEnv("audit . --json", { CLAUDECODE: "1" });
-    assert.ok(!out.includes("model access detected"), "no hint in json mode");
+    assert.ok(!out.includes("Triggering not measured"), "no note in json mode");
+    assert.ok(!out.includes("model access detected"), "no note in json mode");
   });
 
-  it("--no-interactive never prompts (hint only)", () => {
+  it("--no-interactive never prompts (loud note only)", () => {
     const out = runEnv("audit . --no-interactive", { CLAUDECODE: "1" });
     assert.ok(
       out.includes("model access detected"),
-      "hint shown, not a prompt",
+      "note shown, not a prompt",
     );
   });
 });

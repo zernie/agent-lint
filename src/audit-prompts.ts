@@ -1,10 +1,10 @@
 /**
- * Auto-generated trigger probes for `vigiles audit --deep`.
+ * Auto-generated trigger probes for `vigiles audit`'s model trigger tier.
  *
  * The trigger-rate eval needs a per-skill prompt set (does the description FIRE?
  * — recall + precision). Authoring that set by hand was the friction that made
- * the eval un-wowable. `--deep` removes it: derive a small, DIVERSE probe set
- * from each skill's own description — zero setup. `--prompts=<file>` still
+ * the eval un-wowable. The trigger tier removes it: derive a small, DIVERSE probe
+ * set from each skill's own description — zero setup. `--prompts=<file>` still
  * overrides for a rigorous, curated benchmark.
  *
  * Deterministic by design (no model needed to AUTHOR the probes — the model is
@@ -91,7 +91,7 @@ export function recallPrompts(
 }
 
 /**
- * Build a {@link TriggerPromptSet} from skill descriptions — zero-setup `--deep`
+ * Build a {@link TriggerPromptSet} from skill descriptions — zero-setup trigger
  * probes. Each skill gets `recallPrompts` derived from its description plus the
  * shared irrelevant bank for precision. Skills with an empty description are
  * skipped (nothing to derive a topic from).

@@ -1,7 +1,7 @@
 /**
  * Auto-prompt generator suite (vitest, no model): topic extraction caps + strips
  * lead-ins, the recall set CLEARS the diversity gate it ships with (the
- * load-bearing property — a too-similar set would crash --deep per skill), and
+ * load-bearing property — a too-similar set would crash the tier per skill), and
  * autoTriggerPrompts builds the right TriggerPromptSet shape.
  */
 import { describe, it, expect } from "vitest";
@@ -44,7 +44,7 @@ describe("topicOf", () => {
 
 describe("recallPrompts diversity (the load-bearing property)", () => {
   // The generated recall set must clear the gate it ships with, or every skill's
-  // --deep probe would throw the diversity error and report unmeasured.
+  // trigger probe would throw the diversity error and report unmeasured.
   const cases = [
     "Greets the user warmly with a personalised message",
     "Reviews code changes for correctness and style across the whole repo",

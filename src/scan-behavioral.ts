@@ -1,8 +1,8 @@
 /**
- * `vigiles audit --deep` — the BEHAVIORAL column of the audit report.
+ * `vigiles audit` model trigger tier — the BEHAVIORAL column of the audit report.
  *
  * Structural `scan`/`scanPlugin` is deterministic, no-model, CI-free — and stays
- * that way. This is the opt-in, model-gated column that stacks on top: for each
+ * that way. This is the model-gated column that stacks on top: for each
  * model-invocable skill in a plugin, it measures how reliably the description
  * actually FIRES (recall, + precision when irrelevant prompts are supplied),
  * reusing `measureTriggerRate`. It degrades honestly when the `claude` CLI / auth

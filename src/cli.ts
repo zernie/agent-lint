@@ -77,9 +77,9 @@ import {
 import type { ScanReport } from "./scan.js";
 import {
   hasModelAccess,
-  decideTriggerSuggestion,
-  formatTriggerHint,
-  scaffoldTriggerPrompts,
+  isMeteredAccess,
+  decideMeasure,
+  formatMeasureSkip,
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
@@ -3568,14 +3568,14 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * The MODEL-GATED behavioral half of `vigiles audit --deep` (the paid tier; a
- * default `audit` stays free/deterministic). Loads the author-supplied per-skill
+ * The MODEL-GATED behavioral half of `vigiles audit` (the model trigger tier; the
+ * deterministic core of `audit` stays free). Loads the author-supplied per-skill
  * prompt sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does
  * each skill actually FIRE — recall + precision) and the selection-collision matrix
  * (does one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles audit ./plugin --deep --prompts=p.json`.
+ * `vigiles audit ./plugin --measure --prompts=p.json`.
  */
 async function handleMeasure(
   restArgs: string[],
@@ -4188,10 +4188,10 @@ function printUsage(command: string | undefined): void {
     "  vigiles audit [dir...]          Audit a harness: what it ships, what's broken, + the safety battery (free; 2+ dirs → leaderboard)",
   );
   console.log(
-    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --deep: live MCP + do skills fire? (real model) · --json (CI)",
+    "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json (CI)",
   );
   console.log(
-    "                                 with model access + a TTY, audit offers to measure firing; --no-interactive/--yes/--json hint instead (agents)",
+    "                                 measures whether skills fire (real model) for an interactive human on a subscription — asked once, remembered · --measure forces it · --fast skips it",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -5293,11 +5293,12 @@ function writeAuditHtml(report: AuditReport): void {
 }
 
 /**
- * `--deep` with no `--prompts`: auto-generate diverse probe prompts from each
- * skill's description and measure trigger-rate (recall + precision) — zero-setup.
- * `--prompts=<file>` (handled by handleMeasure) overrides for a curated benchmark
- * + the collision matrix. Model-gated: the probes are deterministic, but RUNNING
- * them needs the harness CLI + model auth (degrades to "unavailable" otherwise).
+ * Run the model trigger tier with no `--prompts`: auto-generate diverse probe
+ * prompts from each skill's description and measure trigger-rate (recall +
+ * precision) — zero-setup. `--prompts=<file>` (handled by handleMeasure)
+ * overrides for a curated benchmark + the collision matrix. Model-gated: the
+ * probes are deterministic, but RUNNING them needs the harness CLI + model auth
+ * (degrades to "unavailable" otherwise).
  */
 async function runAutoTrigger(
   dir: string,
@@ -5314,7 +5315,7 @@ async function runAutoTrigger(
   if (skills.length === 0) {
     if (!json) {
       console.log(
-        "\nℹ --deep: no model-invocable skills with a description to measure.",
+        "\nℹ no model-invocable skills with a description to measure.",
       );
     }
     return;
@@ -5322,7 +5323,7 @@ async function runAutoTrigger(
   const promptSet = autoTriggerPrompts(skills);
   if (!json) {
     console.log(
-      "\nℹ --deep: auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
+      "\nℹ auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
     );
   }
   const trigger = await probePluginTriggers(dir, promptSet, {
@@ -5339,38 +5340,65 @@ async function runAutoTrigger(
 }
 
 /**
- * After a single-plugin `audit` report: if the plugin ships model-invocable
- * skills AND a real model is reachable, surface the real-model `--deep` tier
- * that measures whether those skills actually FIRE. A human at a TTY is offered
- * setup; an agent / CI (non-TTY / `--json` / `--no-interactive` / `--yes`) gets a
- * one-line, non-blocking hint — an `audit` must never hang (`great-agent-flow`).
+ * The model trigger tier of a single-plugin `audit` (Lighthouse: run what you
+ * can, degrade loudly). Decides via `decideMeasure` whether to RUN the trigger-
+ * rate now, ASK an interactive human first (then remember the answer), or SKIP
+ * with a loud "Triggering not measured — …" note. Never hangs an agent / CI run
+ * (`great-agent-flow`): only an interactive human at a TTY is ever prompted.
  */
-async function maybeSuggestTrigger(
+async function runMeasureTier(
   report: ScanReport,
   dir: string,
+  adapter: HarnessAdapter,
   json: boolean,
+  remembered: boolean | undefined,
   args: string[],
 ): Promise<void> {
   const triggerable = report.skills.filter(
     (s) => s.hasDescription && !s.userInvoked,
   );
-  const decision = decideTriggerSuggestion({
+  const decision = decideMeasure({
     modelAccess: hasModelAccess(process.env),
-    // Prompt only when BOTH streams are a terminal — `askOnce` reads stdin, so a
-    // TTY stdout with piped/redirected stdin (agents, shell pipelines) must take
-    // the non-blocking hint path, not block on a read that never gets input.
-    // `isTTY` is `undefined` at runtime when not a terminal (falsy → hint path).
+    metered: isMeteredAccess(process.env),
+    // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
+    // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
+    // pipelines) must NOT block on a read that never gets input. `isTTY` is
+    // `undefined` at runtime when not a terminal (falsy → the skip path).
     isTTY: process.stdout.isTTY && process.stdin.isTTY,
     triggerableSkills: triggerable.length,
     json,
+    forceMeasure: args.includes("--measure"),
+    noMeasure: args.includes("--fast") || args.includes("--no-measure"),
     noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
+    remembered,
   });
-  if (decision === "none") return;
-  if (decision === "hint") {
-    console.log("\n" + formatTriggerHint(dir, triggerable.length));
-    return;
+  switch (decision.kind) {
+    case "skip": {
+      const note = formatMeasureSkip(decision.reason, dir, triggerable.length);
+      if (note && !json) console.log(note);
+      return;
+    }
+    case "ask":
+      await promptMeasure(report, dir, adapter, triggerable.length, args);
+      return;
+    case "run":
+      await runMeasure(dir, report, adapter, args);
+      return;
   }
-  await promptTriggerSetup(report, dir, triggerable.length, args);
+}
+
+/** Run the trigger tier: a curated `--prompts` file, else auto-generated probes. */
+async function runMeasure(
+  dir: string,
+  report: ScanReport,
+  adapter: HarnessAdapter,
+  args: string[],
+): Promise<void> {
+  if (flagValue(args, "--prompts")) {
+    await handleMeasure([dir], args);
+  } else {
+    await runAutoTrigger(dir, report, adapter, args);
+  }
 }
 
 /** Ask one question on a fresh readline, closing it after (the codebase pattern). */
@@ -5391,41 +5419,68 @@ async function askOnce(q: string): Promise<string> {
   }
 }
 
-/** Interactive (TTY) trigger-tier setup: run an existing prompts file now, or
- *  scaffold one to fill in. The real-model run stays an explicit confirmation so
- *  a plain `scan` never spends a token without a yes. */
-async function promptTriggerSetup(
+/**
+ * Interactive (TTY) consent for the model trigger tier — ASK ONCE, then REMEMBER
+ * (`audit.measure` in `.vigilesrc.json`). Default-YES (Lighthouse runs what it
+ * can): an empty answer runs it. On yes it measures NOW (auto-probes, or a
+ * curated `--prompts`/scaffolded file); on no it records the choice so we never
+ * ask again. The subscription cost ($0 metered) is named so the yes is informed.
+ */
+async function promptMeasure(
   report: ScanReport,
   dir: string,
+  adapter: HarnessAdapter,
   n: number,
   args: string[],
 ): Promise<void> {
-  const promptsPath = resolve(process.cwd(), "trigger-prompts.json");
-  const exists = existsSync(promptsPath);
-  const q = exists
-    ? `\nℹ Model access detected. Measure whether your ${String(n)} skill(s) FIRE now using trigger-prompts.json (real model)? [y/N] `
-    : `\nℹ ${String(n)} model-invocable skill(s) + model access detected. Scaffold trigger-prompts.json to measure firing? [y/N] `;
-  const answer = await askOnce(q);
-  if (!/^y(es)?$/i.test(answer)) {
-    console.log("  Skipped. " + formatTriggerHint(dir, n));
+  const s = n === 1 ? "" : "s";
+  const answer = await askOnce(
+    `\nℹ ${String(n)} model-invocable skill${s} + model access on your subscription detected.\n` +
+      `  Also measure whether they FIRE (recall + precision)? Takes a few minutes, runs on\n` +
+      `  your subscription ($0 metered). Asked once — remembered in .vigilesrc.json. [Y/n] `,
+  );
+  const yes = answer === "" || /^y(es)?$/i.test(answer);
+  rememberAuditMeasure(yes);
+  if (!yes) {
+    console.log(
+      "  Skipped (remembered). Re-enable with `vigiles audit " +
+        dir +
+        " --measure`.",
+    );
     return;
   }
-  if (exists) {
-    await handleMeasure([dir], [...args, "--prompts=trigger-prompts.json"]);
-    return;
+  await runMeasure(dir, report, adapter, args);
+}
+
+/**
+ * Persist the audit consent (`audit.measure`) into `.vigilesrc.json` without
+ * clobbering existing keys — the "ask once, remember" sticky choice. Best-effort:
+ * a malformed user config is left untouched, a write error is non-fatal (the
+ * measurement already ran / was skipped; only the memory is lost).
+ */
+function rememberAuditMeasure(value: boolean): void {
+  const configPath = resolve(process.cwd(), ".vigilesrc.json");
+  let existing: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    try {
+      existing = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return; // user-owned malformed config — never clobber it
+    }
   }
-  writeFileSync(
-    promptsPath,
-    scaffoldTriggerPrompts(
-      report.skills
-        .filter((s) => s.hasDescription && !s.userInvoked)
-        .map((s) => s.name),
-    ),
-  );
-  console.log(
-    "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
-  );
-  console.log(`    vigiles audit ${dir} --deep --prompts=trigger-prompts.json`);
+  const prevAudit =
+    typeof existing.audit === "object" && existing.audit !== null
+      ? (existing.audit as Record<string, unknown>)
+      : {};
+  const merged = { ...existing, audit: { ...prevAudit, measure: value } };
+  try {
+    writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
+  } catch {
+    /* non-fatal — the run already happened; only the remembered choice is lost */
+  }
 }
 
 async function main(): Promise<void> {
@@ -5525,10 +5580,14 @@ async function main(): Promise<void> {
 
     case "audit": {
       // The Lighthouse run: a default `audit` reports what the harness ships, RUNS
-      // the safety battery, and folds each finding's fix inline — free, zero-config,
-      // safe to run anywhere (audit-side-effect-free). `--deep` is the ONE opt-in
-      // expensive tier (live MCP spawn + model-gated trigger-rate).
-      const deep = args.includes("--deep");
+      // the safety battery + (own-repo) live MCP resolution, folds each finding's
+      // fix inline, and MEASURES whether skills fire when it can — run what you
+      // can, degrade loudly. Safe to run anywhere (audit-side-effect-free): the
+      // deterministic core is free; the model trigger tier auto-runs only for an
+      // interactive human on a subscription (ask-once, remember), and is skipped
+      // with a loud note in `--json`/CI/non-interactive. `--measure` forces it on,
+      // `--fast` forces the spawning/model tiers off (the pure-deterministic path).
+      const fast = args.includes("--fast") || args.includes("--no-measure");
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5617,27 +5676,30 @@ async function main(): Promise<void> {
           if (fixes) console.log("\n" + fixes);
         }
         if (battery) console.log(battery.lines.join("\n"));
-        if (deep) {
-          // The ONE opt-in expensive tier (audit-side-effect-free): LIVE MCP tool
-          // resolution (spawns each declared server — the dynamic check no static
-          // linter can do) + the model-gated trigger-rate.
-          const mcpErrs = await verifyLiveMcpTools(
-            report,
-            adapter.layout,
-            adapter.dialect,
-          );
-          console.log(
-            json
-              ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
-              : "\n" + formatMcpContractReport(mcpErrs),
-          );
-          // Model-gated trigger-rate. An explicit --prompts file runs the full
-          // measure (recall + precision + collisions); without one, auto-generate
-          // diverse probes from the skill descriptions (zero-setup).
-          if (flagValue(args, "--prompts")) {
-            await handleMeasure([targets[0]], args);
+        // LIVE MCP tool resolution (spawns each declared server — the dynamic
+        // check no static linter can do) folds into the DEFAULT: it's
+        // deterministic, fast, and needs no model. Safe-by-provenance
+        // (audit-side-effect-free): own-repo only (root === cwd, like running
+        // your own tools); a FOREIGN plugin's servers are never spawned (loud
+        // skip), and `--fast` opts out of all spawning.
+        if (!fast && report.mcp) {
+          const isForeign = root !== process.cwd();
+          if (isForeign) {
+            if (!json)
+              console.log(
+                "\n⊘ Live MCP check skipped — won't spawn a non-cwd plugin's servers (run from the plugin's own repo, or --fast to silence).",
+              );
           } else {
-            await runAutoTrigger(targets[0], report, adapter, args);
+            const mcpErrs = await verifyLiveMcpTools(
+              report,
+              adapter.layout,
+              adapter.dialect,
+            );
+            console.log(
+              json
+                ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
+                : "\n" + formatMcpContractReport(mcpErrs),
+            );
           }
         }
         const capBase = flagValue(args, "--capability-diff");
@@ -5662,10 +5724,19 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
-        // Nudge toward the real-model `--deep` tier when a model is reachable and
-        // the plugin ships model-invocable skills (hint for agents, offer for
-        // humans) — but not when the user already ran --deep.
-        if (!deep) await maybeSuggestTrigger(report, targets[0], json, args);
+        // The model trigger tier — "do your skills actually FIRE?" Run-what-you-can:
+        // auto-runs for an interactive human on a subscription (ask-once, then
+        // remembered in .vigilesrc.json), forced by --measure, skipped with a loud
+        // note in --json/CI/non-interactive or --fast. Never auto-spends a metered
+        // API key.
+        await runMeasureTier(
+          report,
+          targets[0],
+          adapter,
+          json,
+          config.audit?.measure,
+          args,
+        );
         // The shareable HTML report — written by default (--no-html to skip), and
         // opened best-effort only for a human at a TTY (never spawn a browser for
         // an agent / CI run).

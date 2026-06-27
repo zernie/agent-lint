@@ -2,7 +2,7 @@
 # fp-sweep.sh — launch-readiness "don't cry wolf" sweep.
 #
 # Clones a list of popular Claude Code plugins/marketplaces and runs `vigiles
-# scan` over each, surfacing any HIGH-PRECISION rule flag (a candidate false
+# audit` over each, surfacing any HIGH-PRECISION rule flag (a candidate false
 # positive). A cry-wolf on a famous plugin on launch day is fatal; this catches
 # it first. Run on a machine with open network (the CC-web container scopes git
 # to zernie/vigiles only, so this can't run there).
@@ -45,9 +45,9 @@ for url in "${PLUGINS[@]}"; do
     echo "  ⚠ clone failed (see $name.clone.log) — skipping"
     continue
   fi
-  $VIGILES scan "$dir" >"$WORK/$name.scan.log" 2>&1
+  $VIGILES audit "$dir" --no-html --no-json >"$WORK/$name.scan.log" 2>&1
   flags="$(grep -c "✗" "$WORK/$name.scan.log" 2>/dev/null || echo 0)"
-  echo "  scan exit=$? · ✗ flags=$flags · log: $WORK/$name.scan.log"
+  echo "  audit exit=$? · ✗ flags=$flags · log: $WORK/$name.scan.log"
 done
 
 echo

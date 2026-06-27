@@ -86,8 +86,9 @@ not just reads them — scores five categories, and writes a shareable HTML repo
 | **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
 | **🧪 Tested**       | Every surface ships a test                                            |
 
-`--deep` adds the real-model checks (live MCP + do skills actually fire) on your own
-subscription. **[Audit a harness →](docs/for-plugin-authors.md)**
+Live MCP resolution runs by default on your own repo; **do your skills actually
+fire?** is measured on your own subscription — offered by default, asked once
+(`--measure` to force, `--fast` to skip). **[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and

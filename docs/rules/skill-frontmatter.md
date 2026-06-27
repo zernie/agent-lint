@@ -48,7 +48,7 @@ to hold your skills to the explicit-metadata standard.
 The fallback description is what the model selects on — and an accidental one (a
 `# Heading` or a boilerplate first line) is exactly how a structurally-fine skill
 ends up never firing. Whether a description _actually_ triggers is the behavioral
-`audit --deep` question; this rule is the cheap, deterministic upstream nudge to
+`audit --measure` question; this rule is the cheap, deterministic upstream nudge to
 write a real one in the first place.
 
 ## See also
