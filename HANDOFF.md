@@ -8,152 +8,107 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you at
 > ≥5 commits without a refresh.
 
-## RESUME HERE — `claude/lint-inline-mode-go56av` — full "Lighthouse for your harness" build DONE; PR not yet opened
+## RESUME HERE — `claude/lint-inline-mode-go56av` — Lighthouse `audit` + read-vs-run consent DONE; PR not opened
 
-**⚠ ONE PR FOR THE WHOLE BRANCH.** The `audit` rename + all 5 Lighthouse increments
-ship together off `claude/lint-inline-mode-go56av`. It's a big `refactor!` (breaking —
-dropped flags), so the PR title needs `!`. **PR is NOT opened yet** — left for an
-explicit go (the README reframe is a sensitive front-door change worth a founder look
-first; ask before opening).
+**⚠ ONE PR FOR THE WHOLE BRANCH.** Everything below ships together off
+`claude/lint-inline-mode-go56av` as one big `refactor!` (breaking — dropped flags,
+`--deep`/`--fast` removed, battery no longer a default). **PR is NOT opened yet** —
+the README/front-door reframe is sensitive; **ask the founder before opening.**
 
-**State:** Lighthouse build COMPLETE — all 5 increments committed + green locally
-(build/tsc, fmt, lint 0 errors, ~1700 tests; only env-only `dialect-drift` fails here,
-green in CI). Branch pushed.
+**State:** all committed + green locally (build incl. report, fmt, lint 0 errors,
+1703 vitest pass; only the env-only `dialect-drift` fails here — container has
+claude-code 2.1.42 vs baseline 2.1.187, CI pins it). Branch pushed (`edb82d4`).
 
-**Lighthouse build — SHIPPED this session (increments 1–5, each its own commit):**
+### What this branch is (in order)
 
-1. `refactor!`: safety battery runs by DEFAULT in single-dir `audit` (own-direct /
-   foreign-sandbox-or-skip); collapsed `--verify-mcp`+`--trigger` → one `--deep`;
-   folded `--fix-plan`/`--explain` inline; renamed rule `scan-side-effect-free` →
-   `audit-side-effect-free` (recompiled CLAUDE.md). DROPPED flags: --check-hooks,
-   --verify-mcp, --trigger, --fix-plan, --explain.
-2. `feat`: category RINGS — `src/audit-score.ts` buckets findings into Truthfulness/
-   Safety/Triggering/Structure/Tested (0–100 + weighted overall; n/a excluded). Battery
-   scoped to PreToolUse hooks (ScanHook now carries `event`) so session hooks don't
-   tank Safety. `runSafetyBattery` returns {lines, summary}.
-3. `feat`: `--deep` AUTO-PROMPTS — `src/audit-prompts.ts` derives diverse probes from
-   skill descriptions (topicOf caps 8 words; clears a relaxed 0.2-NCD gate). ScanSkill
-   now carries `description`.
-4. `feat`: HTML report — `src/audit-html.ts` (inline SVG rings), written by default to
-   `vigiles-report.html` (--no-html), opened best-effort TTY-only. gitignored.
-5. `docs`: README reframe (audit gateway + real screenshot `vigiles-audit.png` + ring
-   table) + docs/cli.md rewrite + swept `scan --trigger`→`audit --deep` across docs.
+1. **Lighthouse `audit`** (renamed from `scan`): five category RINGS
+   (Truthfulness/Safety/Triggering/Structure/Tested, weighted A–F) + inline fixes +
+   a shareable **HTML report** + the **versioned `AuditReport` JSON** (`src/audit-report.ts`,
+   `schemaVersion`) that everything renders from (HTML / `--json` / future upload).
+2. **Report stack** = a real Vite + React + shadcn single-file app (`report/`), built
+   to `dist/audit-report.template.html` (`scripts/build-report.mjs`, wired into
+   `npm run build`); CLI injects the JSON. Pure shadcn/Tailwind, no inline styles.
+3. **`--deep` INVERSION → then collapsed to ONE CONSENT** (this session's arc, driven
+   by the founder over several turns). Final shape below.
 
-**THEN re-architected the report around MONETIZATION (founder, 2026-06-27) — "JSON
-is the product, not the HTML":**
+### The audit model (FINAL — read this before touching audit)
 
-6. `feat`: **AuditReport JSON contract** (`src/audit-report.ts`, `schemaVersion`) — the
-   versioned wire format everything renders from. `audit --json` emits it; a default
-   `audit` writes `vigiles-report.json` (`--no-json`), the upload/CI artifact.
-7. `feat`: **React + shadcn single-file report** (`report/`, a SEPARATE Vite package;
-   `vite-plugin-singlefile`). CLI injects the JSON into the built template
-   (`dist/audit-report.template.html` via `scripts/build-report.mjs`, wired into
-   `npm run build`). React runs in the browser; CLI stays runtime-dep-light. PURE
-   shadcn/Tailwind (band colors as theme utilities, no inline styles/`[var()]`; auto
-   light/dark). ONE renderer — no inline-CSS fallback (`--simple` removed); the
-   build fails loud so the template always ships, and if it's missing the CLI skips
-   the HTML (JSON + terminal still work). Components presentational → reusable by a
-   future hosted dashboard.
+- **A plain `audit` is a DETERMINISTIC READ** — rings + fixes + report. Nothing
+  executes. Identical on every OS. Safe even on a prod-wired repo.
+- **Three executing checks** — safety battery (do hooks block?) · live MCP resolution
+  (do referenced tools resolve on the real server?) · trigger-rate (do skills FIRE?)
+  — share **ONE consent** (`decideExecute`, `src/scan-trigger-suggest.ts`): at a TTY
+  `audit` **asks once** (bundled prompt, discloses confinement + cost) and **remembers**
+  in `.vigilesrc.json` (`audit.measure`); headless (`--json`/CI/non-interactive/agent)
+  it stays a read + a one-line nudge. Never hangs.
+- **`--measure`** is the lone flag (the headless "yes" / skip-the-prompt). **`--fast`
+  and `--no-measure` are DELETED** — the default IS the read, nothing to opt out of.
+- **Why execution is opt-in UNIFORMLY** (not Linux-confined/Mac-unconfined): a
+  hook/server can hit a real Postgres/API and confinement (bubblewrap) is Linux-only.
+  On consent: battery runs each hook **network-confined** where a sandbox exists (else
+  own-direct + LOUD warning, foreign skip); live MCP is **own-repo only** (never a
+  stranger's server — starting one connects to a backend, deny-all-net would break its
+  `tools/list`); trigger-rate **stubs skill bodies** so no procedure runs.
+- **Safety RING reads n/a (not a false 0)** when no hook blocks any disaster (none is
+  evidently a Bash guard — a 0 cried wolf, tanked the grade). Fixed in `src/audit-score.ts`.
+- `hasModelAccess`/`isMeteredAccess` (env: `ANTHROPIC_API_KEY`=metered vs
+  `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT`=sub) now only shape the **disclosure wording**.
 
-**Stack decision (in `research/audit-lighthouse-design.md` + CLAUDE.md positioning):**
-Vite single-file for the LOCAL report; **TanStack Start** for the future HOSTED
-dashboard (SSR/auth/Stripe — the paid tier), both over the SAME `AuditReport` JSON +
-shared components. Private docs UPDATED (CLAUDE.md keyFiles + positioning, the design
-doc) per the founder's request.
+### DO NEXT (none blocks the PR; ask before opening it)
 
-**State:** all committed + green locally (build/tsc, fmt, lint 0 errors, ~1715 tests;
-only env-only `dialect-drift`). Branch pushed. PR still NOT opened (founder okay pending).
+- **OSS FP sweep is NOT done** — can't run here (git scoped to `zernie/vigiles`, 403
+  on external clones). Run on an open-network machine: `VIGILES="node dist/cli.js"
+  scripts/fp-sweep.sh` (the stale `scan`→`audit` verb in it is fixed). The in-repo
+  vendored-plugin proxy passed (4 plugins), but that's NOT the real sweep.
+- **The "better way" that re-promotes the battery to a default** (the exit criterion):
+  an **env-scrub ephemeral floor** (strip DB/API creds before running a hook — no
+  kernel features, cross-platform) and/or a **macOS `sandbox-exec`** backend. Until
+  one lands, execution stays uniformly opt-in.
+- Open follow-ups (not blockers): hosted dashboard + `audit --upload`; cross-package
+  schema-parity guard (`report/src/schema.ts` mirrors `src/audit-report.ts` by hand);
+  ecosystem-benchmark v0.
 
-**DO NEXT:** open the ONE `refactor!` PR for the whole branch (carries #38–#48 + the
-earlier session work + the Lighthouse build + the report stack) **once the founder okays
-it**. Open follow-ups (not blockers): the hosted dashboard + `audit --upload`; a
-cross-package schema-parity guard (report/src/schema.ts mirrors src/audit-report.ts by
-hand today). Also: ecosystem-benchmark v0; run `scripts/fp-sweep.sh` locally.
+### Key files touched this arc
 
-**Code/doc changes (shipped on the branch):**
-
-- **Spec-first made consistent** end-to-end: README ① Lint + ② Test, the lint guide,
-  AND the root `CLAUDE.md` positioning ("markdown-first" → "spec-first with a markdown
-  on-ramp"). README hero trimmed; demo GIF regenerated mode-neutral.
-- **`fix(inline)`** quoted `vigiles:file "path"` (`unquote()` + test). **`refactor`**
-  `init()` helper → `scaffoldSpec()` (verb unchanged).
-- **Clean-install smoke = GREEN** (npm pack → fresh dir → init/lint/scan). `*.tgz`
-  gitignored. `scripts/fp-sweep.sh` = the fresh-plugin FP sweep to run LOCALLY.
-- **TWO new rules in `CLAUDE.md`:** `doc-tiers` (public / internal / vault-locked
-  split) and `scan-side-effect-free` (scan is pure or sandboxed; executing checks are
-  opt-in + sandboxed).
-
-**THE BIG OUTPUT — `research/harness-checkup-and-lanes.md` (read this):**
-
-- **DECISION: `scan` is the GATEWAY** (iPhone — ONE front door, no new subcommand):
-  runs the cross-ref LINT + canned TESTS (disaster-battery "does your hook actually
-  block?", skill over-fire) + a score, FREE/zero-config. Authored tests/evals + the
-  `vigiles/testing` API = the DEPTH (funnel, not a 2nd product). The sideways move
-  past agnix: don't compete on rule-count — compete on **"we RUN your harness, not
-  just read it."** This is the proposed pre-release positioning (also in
-  `pre-release-focus.md` positioning lock).
-- **Lead the free report with the TEST finding ("blocks 2/7"), NOT the score** — the
-  score is commoditizing (agnix ~250-300★ lint leader; AgentLinter the scorecard-UX
-  leader); the cross-ref correctness + testing layer is what NObody else has.
-- **Ref-checking decision:** do NOT heuristically guess refs in `scan` (unreliable,
-  cry-wolf). Reliable refs = **adopt a spec** (auto-generated, reviewed, ejectable —
-  keep it = the gateway drug into spec-first). `scan` free value = tests + structural
-  (no spec needed); refs are the adopt upgrade.
-- **Competitive landscape (4-angle fan-out + Snyk deep dive):** the zero-config SCORE
-  surface is crowded but shallow; cross-ref correctness + harness TESTING is unclaimed
-  by everyone (funded + OSS + adjacent). **Snyk Agent Scan** (~2.7k★, $8B, expanding
-  to CLAUDE.md via issue #301) is the one to watch but is pure SECURITY ("is this
-  malicious?") — a perfectly broken harness passes it completely; no correctness
-  signal → clean air. THREAT: MEDIUM. Snyk already ran the viral ecosystem-scan play
-  (ToxicSkills) on the SECURITY axis → **our ecosystem-benchmark must be on the
-  CORRECTNESS/PERFORMANCE axis ("what works vs hype"), not security.**
-
-**BIG PIVOT (founder, 2026-06-27): go full "Lighthouse for your harness."** The
-flag-per-check `scan` surface was sprawl (the founder called it out — flags clear the
-same heavy bar as verbs). Locked design in **`research/audit-lighthouse-design.md`**
-(READ IT): verb `audit`, **category rings** (Truthfulness/Safety/Triggering/Structure/
-Tested), **battery by default**, ONE **`--deep`** tier (live MCP + model trigger) with
-**auto-generated probe prompts** (zero-setup), **HTML report written by default + open**,
-README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=FULL.
-
-(The earlier "renamed the `scan` verb → `audit`" + gateway-increment work from the
-prior session is now subsumed by increments 1–5 above.)
-
-**Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
-— surface-freeze + STABILITY + auto-adopt batch. Re-check its live state if returning.
+- `src/scan-trigger-suggest.ts` — `decideExecute` (the read-vs-run decision) +
+  `formatExecuteSkip` + `hasModelAccess`/`isMeteredAccess`.
+- `src/cli.ts` — `audit` case (resolveExecution + buildExecuteDisclosure + the
+  consent prompt + `runSafetyBattery` confine-or-warn + `runnableSafetyHooks`).
+- `src/audit-score.ts` — Safety n/a on zero-blocks. `src/core/types.ts` — `audit.measure`.
+- Docs: `README.md`, `docs/cli.md`, `CLAUDE.md.spec.ts` (positioning +
+  `audit-side-effect-free` rule, recompiled), `research/audit-lighthouse-design.md`
+  (full decision record), `research/harness-checkup-and-lanes.md`.
 
 ### Gotchas
 
-- **GIT IS REPO-SCOPED HERE** — `git clone`/GitHub MCP reach only `zernie/vigiles`
-  (403 elsewhere) → the fresh-plugin FP sweep is a LOCAL task. npm registry IS reachable.
-- **REAL-MODEL TIERS RUN HERE** — no API key, but `claude` CLI is OAuth-authed; use
-  `eval`/`audit --deep`/`measureTriggerRate` to dogfood.
-- **Background research agents kept returning PLACEHOLDERS** (spawned children, didn't
-  deliver) — re-poke via SendMessage to the agentId for the real output; the children
-  delivered the substance.
-- **`src/dialect-drift.test.ts` fails in THIS container only** (env CC version). CI pins it.
-- `CLAUDE.md` + `src/CLAUDE.md` are COMPILED from `.spec.ts` — edit the spec; never hand-edit the md.
-- `npm pack` drops a `*.tgz` in root (gitignored) — don't commit it.
+- **GIT IS REPO-SCOPED HERE** — clones reach only `zernie/vigiles` (403 elsewhere) →
+  the FP sweep is a LOCAL task. npm registry IS reachable.
+- **No bubblewrap in THIS container** → `sandboxAvailable()` is false here, so the
+  battery (under `--measure`) runs own-direct + the loud "no network confinement"
+  warning. That's the intended degrade, not a bug.
+- **`src/dialect-drift.test.ts` fails in THIS container only** (CC version). CI pins it.
+- `CLAUDE.md` + `src/CLAUDE.md` are COMPILED from `.spec.ts` — edit the spec, recompile
+  (`node dist/cli.js compile CLAUDE.md.spec.ts`); never hand-edit the md.
+- **Commits: NO session links / NO model IDs** (the auto-classifier blocks them; the
+  default trailers violate the repo's `no-session-links` + model-identity rules).
+- `npm pack` / report build drop artifacts — gitignored; don't commit them.
 
 ### Decisions of record (don't relitigate)
 
-- **The wedge:** author-time / deterministic / pre-run + typed-spec. NOT a linter; don't
-  fight agnix for the linting crown. The moat = cross-ref CORRECTNESS + the TESTING layer.
-- **`audit` is the gateway** (Lighthouse: rings + battery + fixes + HTML, free/zero-config);
-  `--deep` = the one paid tier; API/authored tests = depth.
-- **Spec-first with a markdown on-ramp;** markdown = zero-TS floor, not the default.
-  Reliable refs come via adopt-a-spec (ejectable; keep = gateway drug), never heuristics.
-- **`audit` is side-effect-free or sandboxed** (`audit-side-effect-free` rule; battery
-  is default but own-direct/foreign-sandboxed). No new CLI verbs unless truly needed
-  (`cohesive-cli-surface` / `high-bar-for-new-commands`).
-- **3 doc tiers** (`doc-tiers` rule): public (benefits only) / internal (`research/`+CLAUDE.md)
-  / vault (`startup/`, git-crypt, LOCKED — unlock only if a task needs it; it's a leak rail).
+- **`audit` reads; `--measure` runs.** ONE consent for all execution, asked-once at a
+  TTY (remembered). NO `--fast`/`--no-measure`/`--deep`. Battery is opt-in, not default.
+- **Execution is opt-in UNIFORMLY across OSes** until one confinement is cross-platform
+  (state-safety > the "we run it by default" wow). Provenance protects the HOST;
+  confinement protects external STATE — two axes.
+- **`audit` is the gateway** (rings + fixes + report, free/zero-config/safe-anywhere);
+  the executing checks are the depth, behind consent.
 - **Ecosystem-benchmark axis = correctness/performance**, NOT security (Snyk owns that).
 - Public docs name the USER BENEFIT (no `moat`/`flywheel`, no `research/` links, no VC names).
+- `startup/` git-crypt vault stays LOCKED unless a task needs it (leak rail).
 
 ## Don't re-read unless the task needs it
 
-- `research/harness-checkup-and-lanes.md` — the gateway decision + competitive landscape + Snyk.
-- `research/pre-release-focus.md` — launch sequence + positioning lock.
+- `research/audit-lighthouse-design.md` — the full audit design + every decision in this arc.
+- `research/harness-checkup-and-lanes.md` — gateway decision + competitive landscape + Snyk.
 - `research/roadmap.md` — `🚀 Launch readiness` front door.
 - `startup/` — git-crypt vault (LOCKED).
