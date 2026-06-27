@@ -135,10 +135,11 @@ half you own. `audit` is the dashboard — these fix and prove what it finds.
 
 Every path, script, symbol & linter rule resolved against reality (the catches
 above). **You don't write any of it** — `npx vigiles init` **adopts your existing
-CLAUDE.md into a verified spec**, non-destructively (untouched until you `compile`;
-`eject` reverses). After that, plain-English asks edit it for you. Prefer zero new
-files? Plain markdown + one inline `<!-- vigiles:enforce -->` comment lints too — no
-TypeScript. **[How →](docs/verifying-instruction-files.md)**
+CLAUDE.md _and every skill and subagent_ into verified specs**, non-destructively
+(untouched until you `compile`; `eject` reverses). After that, plain-English asks
+edit them for you. Prefer zero new files? Plain markdown + one inline
+`<!-- vigiles:enforce -->` comment lints too — no TypeScript.
+**[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
 
@@ -205,7 +206,7 @@ model-invocable skills, so a plain-English ask does the work:
 <summary>What <code>init</code> sets up</summary>
 
 - **Both lint and test** by default; scope with `--lint` / `--test`.
-- **Already have a CLAUDE.md / AGENTS.md? `init` adopts it** into a spec faithfully and **non-destructively** — untouched until you `compile` (and `eject` undoes it).
+- **Already have a CLAUDE.md / AGENTS.md, skills, or subagents? `init` adopts them all** into specs faithfully and **non-destructively** — untouched until you `compile` (and `eject` undoes it).
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
 - Wires CI as a `zernie/vigiles@v1` workflow that posts a sticky PR comment + a `valid` output.
 
