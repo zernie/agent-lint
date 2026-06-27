@@ -3,22 +3,22 @@
  *
  * A single structural-health number (the leaderboard's `scoreReport`) ranks
  * plugins, but it hides WHERE a harness is weak. This buckets the SAME
- * deterministic findings into five categories — Truthfulness, Safety,
- * Triggering, Structure, Tested — each a 0–100 ring, with a weighted overall.
- * Same detectors, no re-detection (one-detector-no-drift); the only NEW input is
- * the safety battery's aggregate (Safety), fed in by the runner since it
- * executes hooks.
+ * deterministic findings into four categories — Truthfulness, Triggering,
+ * Structure, Tested — each a 0–100 ring, with a weighted overall. Same
+ * detectors, no re-detection (one-detector-no-drift); all deterministic, no
+ * execution. (Safety — "do your hooks actually block?" — is NOT an `audit` ring:
+ * it requires executing your hooks, which needs cross-platform confinement
+ * that isn't shipped yet, so it lives in the `vigiles/testing` API via
+ * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.)
  *
- * A category that can't be assessed (e.g. Safety when the harness ships no
- * hooks) scores `null` (n/a) and is EXCLUDED from the overall — never a false
- * 0. Pure over the `ScanReport` (+ optional battery), so it's fully testable.
+ * A category that can't be assessed scores `null` (n/a) and is EXCLUDED from the
+ * overall — never a false 0. Pure over the `ScanReport`, so it's fully testable.
  */
 import { gradeFor, type PluginScore } from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
 
 export type CategoryKey =
   | "Truthfulness"
-  | "Safety"
   | "Triggering"
   | "Structure"
   | "Tested";
@@ -40,14 +40,6 @@ export interface AuditScore {
   readonly categories: readonly CategoryScore[];
   /** No loadable surface at all — overall 0, every category n/a. */
   readonly empty: boolean;
-}
-
-/** The safety battery's aggregate (the Safety category's input, fed from the runner). */
-export interface BatterySummary {
-  readonly totalBlocked: number;
-  readonly totalRun: number;
-  /** Hooks that couldn't be tested (foreign + no sandbox) — a coverage gap, not a fail. */
-  readonly hooksSkipped: number;
 }
 
 // Per-item penalties — mirror the leaderboard's weights so the category view and
@@ -100,46 +92,6 @@ function truthfulness(r: ScanReport): CategoryScore {
     },
   ]);
   return { key: "Truthfulness", score, weight: 1, findings };
-}
-
-function safety(battery: BatterySummary | undefined): CategoryScore {
-  // Safety is the battery: it's only assessable if a hook was actually tested.
-  if (!battery || battery.totalRun === 0) {
-    const note =
-      battery && battery.hooksSkipped > 0
-        ? `${String(battery.hooksSkipped)} hook(s) not tested (no sandbox)`
-        : "no safety hooks to test";
-    return { key: "Safety", score: null, weight: 1, findings: [note] };
-  }
-  // If NOT ONE hook blocked ANY disaster, we have no evidence the harness even
-  // SHIPS a Bash safety guard — every PreToolUse hook may be a non-Bash gate
-  // (our own pre-edit.sh blocks .md edits, not `rm -rf`). Scoring that 0 would be
-  // a cry-wolf (a false red that tanks the grade). Report n/a instead; a hook
-  // that's MEANT to block proves it via assertBlocksDisasters (declared intent).
-  if (battery.totalBlocked === 0) {
-    return {
-      key: "Safety",
-      score: null,
-      weight: 1,
-      findings: [
-        "no hook blocked any disaster — none appears to be a Bash safety guard (n/a, not a fail)",
-      ],
-    };
-  }
-  const score = Math.round((battery.totalBlocked / battery.totalRun) * 100);
-  const findings: string[] = [];
-  const slipping = battery.totalRun - battery.totalBlocked;
-  if (slipping > 0) {
-    findings.push(
-      `${String(slipping)}/${String(battery.totalRun)} disaster(s) slip through your hooks`,
-    );
-  }
-  if (battery.hooksSkipped > 0) {
-    findings.push(
-      `${String(battery.hooksSkipped)} hook(s) not tested (no sandbox)`,
-    );
-  }
-  return { key: "Safety", score, weight: 1, findings };
 }
 
 function triggering(r: ScanReport): CategoryScore {
@@ -227,22 +179,21 @@ function tested(r: ScanReport): CategoryScore {
 function isEmptyMachine(r: ScanReport): boolean {
   const surfaces =
     r.skills.length + r.agents.length + r.hooks.length + r.commands;
-  return surfaces === 0 && !r.mcp;
+  // An instruction-only repo (just a CLAUDE.md/AGENTS.md, no plugin surface) is
+  // NOT empty — the scan records `instructions` precisely so it isn't graded
+  // F/0 "no loadable surface". Only a dir with NO instruction file AND no
+  // surface is the empty machine.
+  return surfaces === 0 && !r.mcp && !r.instructions;
 }
 
 /**
- * Bucket a scan report (+ the optional safety-battery aggregate) into the five
- * Lighthouse categories with a weighted overall. n/a categories are excluded
- * from the overall, never scored 0.
+ * Bucket a scan report into the four deterministic Lighthouse categories with a
+ * weighted overall. n/a categories are excluded from the overall, never scored 0.
  */
-export function auditScore(
-  report: ScanReport,
-  battery?: BatterySummary,
-): AuditScore {
+export function auditScore(report: ScanReport): AuditScore {
   if (isEmptyMachine(report)) {
     const categories: CategoryKey[] = [
       "Truthfulness",
-      "Safety",
       "Triggering",
       "Structure",
       "Tested",
@@ -261,7 +212,6 @@ export function auditScore(
   }
   const categories: CategoryScore[] = [
     truthfulness(report),
-    safety(battery),
     triggering(report),
     structure(report),
     tested(report),

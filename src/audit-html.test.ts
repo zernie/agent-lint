@@ -26,12 +26,6 @@ const report: AuditReport = {
     empty: false,
     categories: [
       { key: "Truthfulness", score: 100, weight: 1, findings: [] },
-      {
-        key: "Safety",
-        score: 0,
-        weight: 1,
-        findings: ["7/7 disaster(s) slip"],
-      },
       { key: "Triggering", score: 100, weight: 1, findings: [] },
       { key: "Structure", score: 92, weight: 1, findings: ["1 dead tool"] },
       { key: "Tested", score: null, weight: 1, findings: ["n/a"] },

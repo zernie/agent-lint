@@ -54,7 +54,7 @@ describe("buildAuditReport", () => {
       makeReport({ untested: 3, commands: 2, mcp: true }),
       { harness: "codex", vigilesVersion: "1.0.0" },
     );
-    expect(r.score.categories.length).toBe(5);
+    expect(r.score.categories.length).toBe(4); // four deterministic rings
     expect(typeof r.score.overall).toBe("number");
     expect(r.inventory).toEqual({
       skills: 0,
@@ -92,16 +92,6 @@ describe("buildAuditReport", () => {
       vigilesVersion: "1.0.0",
     });
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);
-  });
-
-  it("Safety is folded in when a battery summary is supplied", () => {
-    const withBattery = buildAuditReport(makeReport(), {
-      harness: "claude-code",
-      vigilesVersion: "1.0.0",
-      battery: { totalBlocked: 7, totalRun: 7, hooksSkipped: 0 },
-    });
-    const safety = withBattery.score.categories.find((c) => c.key === "Safety");
-    expect(safety?.score).toBe(100);
   });
 
   // Contract pin — the report app (report/src/schema.ts) mirrors this shape by

@@ -24,7 +24,6 @@ import {
   readdirSync,
   existsSync,
   rmSync,
-  chmodSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -720,56 +719,15 @@ describe("scan default output — health score header", () => {
     assert.ok(report.meta.dir, "json has meta.dir");
   });
 
-  it("does NOT run the safety battery on a plain (headless) audit — it's opt-in", () => {
-    // A plain audit is a deterministic READ; the executing checks are opt-in. A
-    // headless run never executes — no battery section, just the read + a nudge.
+  it("a plain (headless) audit is a deterministic read — nothing executes", () => {
+    // A plain audit is a READ; the executing checks (live MCP + skill firing) are
+    // opt-in. `root` ships a skill, so a headless run nudges toward them but runs
+    // nothing. There is no safety battery in `audit` at all (it's a testing-API
+    // capability now), so its section never appears.
     const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
     assert.doesNotMatch(r.stdout, /Safety battery/);
     assert.match(r.stdout, /Executing checks/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// the safety battery never runs on a headless `audit` (it's a local report, not a
-// CI step — execution is TTY-consent only). The battery's block/allow + confine
-// logic is unit-tested directly in src/audit-battery.test.ts (no TTY needed).
-// Here we assert the CLI BOUNDARY: a headless audit over a hooks-bearing plugin
-// stays a read and never executes.
-// ---------------------------------------------------------------------------
-
-describe("audit safety battery — headless never executes", () => {
-  let pluginWithHook: string;
-
-  beforeAll(() => {
-    pluginWithHook = mkdtempSync(join(tmpdir(), "scan-battery-boundary-"));
-    writeFileSync(join(pluginWithHook, "CLAUDE.md"), "# Has a hook\n");
-    const guard = join(pluginWithHook, "guard.sh");
-    writeFileSync(guard, "#!/usr/bin/env bash\nexit 2\n");
-    chmodSync(guard, 0o755);
-    mkdirSync(join(pluginWithHook, ".claude"), { recursive: true });
-    writeFileSync(
-      join(pluginWithHook, ".claude", "settings.json"),
-      JSON.stringify({
-        hooks: {
-          PreToolUse: [
-            { matcher: "Bash", hooks: [{ type: "command", command: guard }] },
-          ],
-        },
-      }),
-    );
-  });
-
-  afterAll(() => {
-    rmSync(pluginWithHook, { recursive: true, force: true });
-  });
-
-  it("a headless audit over a plugin with hooks runs NO battery — just the read + nudge", () => {
-    // execSync is non-TTY → headless → execution is skipped; the battery never runs.
-    const r = run(`audit ${pluginWithHook}`);
-    assert.equal(r.exitCode, 0);
-    assert.doesNotMatch(r.stdout, /Safety battery/);
-    assert.match(r.stdout, /Executing checks .* skipped/);
   });
 });
 
