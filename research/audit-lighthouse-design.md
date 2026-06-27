@@ -27,8 +27,12 @@ skills actually fire.
   sandbox-or-skip-loudly). No `--check-hooks` flag. The differentiated finding leads.
   Single-dir audit only (not the multi-dir leaderboard — too noisy/all-foreign).
 - **`--deep`** = the ONE opt-in expensive tier: live MCP spawn + model-gated
-  trigger-rate. Replaces `--verify-mcp` + `--trigger`.
-- **`--deep` auto-generates probe prompts** from each skill's description (zero-setup
+  trigger-rate. Replaces `--verify-mcp` + `--trigger`. **⚠ SUPERSEDED 2026-06-27 by
+  the `--deep` INVERSION (see the section at the bottom):** live-MCP folded into the
+  default (own-repo), the model tier now runs-what-it-can (default for an interactive
+  human on a sub, asked-once/remembered, skipped-loud in CI/`--json`/metered), and
+  `--deep` is replaced by `--measure` (force on) / `--fast` (force off).
+- **Auto-generated probe prompts** from each skill's description (zero-setup
   trigger-rate — kills the `--prompts` friction that made the eval un-wowable).
   `--prompts=` stays as an override.
 - **HTML written by DEFAULT** to `vigiles-report.html` + offer to open (`--no-html` to
@@ -107,6 +111,43 @@ need (the build guarantees the template; a 236KB self-contained React file is
 already fine). Dropped → one renderer, pure shadcn/Tailwind. `build-report.mjs`
 now fails loud so the template always ships; if it's ever missing the CLI skips
 the HTML (JSON + terminal still work).
+
+## The `--deep` INVERSION (2026-06-27) — run what you can, degrade loudly
+
+The founder pushed on `--deep` across three turns and knocked out **both** stated
+reasons for gating the model tier behind an opt-in flag:
+
+1. **"deep should be folded if it's safe/sandboxed."** → Safety isn't the gate:
+   trigger-rate **stubs skill bodies** (procedures never run), `audit` doesn't run
+   agents end-to-end, the battery is provenance-gated, live-MCP is the user's own
+   server. So "it's dangerous" was never the reason.
+2. **"why opt in for model if it runs on subscription… do we check sub vs API?"**
+   → We already detect it: `hasModelAccess`/`isMeteredAccess` read the env
+   (`ANTHROPIC_API_KEY` = metered; `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` = sub,
+   $0 metered). No need to ask. So on a subscription the **cost** objection is weak.
+3. **"Lighthouse isn't deterministic."** → Decisive. Lighthouse runs its **noisy**
+   performance audit by default and just shows the number ± variance; it has no
+   `--deep` for the flaky part. So "non-deterministic → must be opt-in" doesn't
+   survive the analogy either.
+
+**What's actually left** is the ONE thing Lighthouse never faces: it always has its
+engine (a browser); we might not have ours (a reachable model). So the gate is
+**capability**, not safety/determinism/cost — plus wall-clock + a quota-consent
+courtesy. The honest conclusion is the **inversion**: don't make people opt _in_ to
+a safe, ~free measurement — **run what you can by default, degrade loudly.**
+
+**Shipped:**
+
+- **Live-MCP folds into the default** (deterministic + fast + needs no model),
+  provenance-gated: own-repo only; a foreign plugin's servers are never spawned;
+  `--fast` opts out.
+- **Model trigger-rate** via `decideMeasure` (`src/scan-trigger-suggest.ts`):
+  interactive human + subscription → **offered by default, asked once, remembered**
+  in `.vigilesrc.json` (`audit.measure`); `--json`/CI/non-interactive/metered →
+  **skipped with a loud "Triggering not measured — …" note**; `--measure` forces,
+  `--fast` skips. Metered API keys are never auto-spent.
+- `--deep` is **removed** (clean break, pre-release). `--measure` (force on) +
+  `--fast` (force off) replace it.
 
 **Follow-ups (not yet done):** the hosted dashboard itself; an `audit --upload`
 that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`

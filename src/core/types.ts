@@ -296,6 +296,16 @@ export interface VigilesConfig {
    * `"claude-code"`. See research/multi-harness-compile.md.
    */
   harness?: string | string[];
+
+  /**
+   * `vigiles audit` preferences. `measure` is the sticky remembered answer to the
+   * "also measure whether your skills FIRE? (real model)" prompt — `audit` asks
+   * once on an interactive run with model access, then records the choice here so
+   * it never asks again. `true` auto-runs the trigger tier on every interactive
+   * run, `false` keeps it off; `--measure`/`--fast` override per-run. Written by
+   * the audit consent prompt, not `init`.
+   */
+  audit?: { measure?: boolean };
 }
 
 /** Valid marker types for rule detection. */

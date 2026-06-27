@@ -13,8 +13,8 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles audit [dir]              # Lighthouse for your harness: category rings + safety battery + fixes; writes vigiles-report.html + .json (no model)
-npx vigiles audit <dir> --deep       # + the real-model tier: live MCP resolution + do skills actually FIRE (auto-generated probes)
+npx vigiles audit [dir]              # Lighthouse for your harness: category rings + safety battery + fixes + (own-repo) live MCP; writes vigiles-report.html + .json
+npx vigiles audit <dir> --measure    # Force the real-model tier: do skills actually FIRE? (auto-generated probes) · --fast skips all spawning + the model tier
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
 npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
@@ -282,7 +282,7 @@ flag + **description-script** detection (a description whose dominant script dif
 from the expected one — **default Latin, configurable** — carries a cross-language
 trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
 under-fire on English prompts; a RISK flag, not a defect — measure it with
-`--deep`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
+`--measure`), per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
 detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
 report file.
@@ -353,39 +353,53 @@ plugins lives in `bench/leaderboard/` (`run.mjs` + the generated `RESULTS.md`).
 (The leaderboard is the multi-dir form and does not run the per-hook safety battery
 or write an HTML report — those are the single-dir audit.)
 
-#### `--deep` — the real-model tier
+#### Live MCP resolution — on by default (own repo)
 
-The one opt-in expensive tier (everything above is free + deterministic). `--deep`
-adds two checks that genuinely need to run things:
+`audit` **starts each declared MCP server** and checks every `mcp__server__tool`
+the agents reference actually **exists** on it (`tools/list`), catching the silent
+"rename rot" no static linter can see (a server consolidating or removing a tool).
+`server-unreachable` is informational; only a `tool-missing` (server started, tool
+genuinely absent) is a real finding. It's deterministic and needs no model, so it
+runs **by default** — but only for **your own repo** (the audited dir is the cwd,
+like running your own tools). A **foreign** plugin's servers are never spawned (a
+loud skip), and `--fast` opts out of all spawning. (See the
+[`audit-side-effect-free`](../README.md) posture below.)
 
-- **Live MCP resolution** — starts each declared MCP server and checks every
-  `mcp__server__tool` the agents reference actually **exists** on it (`tools/list`),
-  catching the silent "rename rot" no static linter can see (a server consolidating
-  or removing a tool). `server-unreachable` is informational; only a `tool-missing`
-  (server started, tool genuinely absent) is a real finding.
-- **Trigger-rate** — how reliably each model-invocable skill's description actually
-  **FIRES** (recall) and stays quiet on unrelated prompts (precision). The probes are
-  **auto-generated from each skill's own description** — zero setup. Supply
-  `--prompts=<file>` (a JSON map of skill name → `{ prompts, irrelevant }`) to use a
-  curated benchmark instead, which also adds the **selection-collision** matrix (does
-  one skill HIJACK a sibling's prompt — the behavioral confirmation of
-  `description-overlap`).
+#### The model trigger tier — run what you can, degrade loudly
+
+The one model-gated tier (everything else is free + deterministic). It measures
+**trigger-rate** — how reliably each model-invocable skill's description actually
+**FIRES** (recall) and stays quiet on unrelated prompts (precision). The probes are
+**auto-generated from each skill's own description** — zero setup. Supply
+`--prompts=<file>` (a JSON map of skill name → `{ prompts, irrelevant }`) for a
+curated benchmark instead, which also adds the **selection-collision** matrix (does
+one skill HIJACK a sibling's prompt — the behavioral confirmation of
+`description-overlap`).
+
+Like Lighthouse runs its (noisy) performance audit by default, `audit` **runs this
+tier when it can and degrades loudly when it can't** — it is _not_ a buried opt-in:
+
+- **Interactive human + a subscription** → it's **offered by default** ("also measure
+  whether your skills fire? ~a few minutes, runs on your subscription, $0 metered").
+  **Asked once, then remembered** in `.vigilesrc.json` (`audit.measure`) so it never
+  asks again.
+- **No model reachable / `--json` / CI / non-interactive** → **skipped with a loud
+  note** ("Triggering not measured — …"), never a hang, never a silent gap.
+- **A paid `ANTHROPIC_API_KEY` (metered)** → never auto-run (it bills per token); use
+  `--measure` to force it.
+- **`--measure`** forces it on anywhere (even CI, if a model is reachable);
+  **`--fast`** forces it off (the pure-deterministic path).
 
 ```bash
-npx vigiles audit ./some-plugin --deep                     # auto-generated probes
-npx vigiles audit ./some-plugin --deep --prompts=./probes.json --model=sonnet
+npx vigiles audit ./some-plugin --measure                      # force it, auto-generated probes
+npx vigiles audit ./some-plugin --measure --prompts=./probes.json --model=sonnet
+npx vigiles audit ./some-plugin --fast                         # deterministic only, no spawning/model
 ```
 
 Needs the harness CLI + model auth; **degrades honestly** ("unavailable") when
 absent. Runs on your own Claude Pro/Max subscription (or `ANTHROPIC_API_KEY`).
 `--harness=codex` routes the trigger probe through the native Codex driver. See
 [`docs/harness-testing.md`](harness-testing.md).
-
-**You don't have to remember it exists.** When a plain `audit` finds model-invocable
-skills **and** a model is reachable (an `ANTHROPIC_API_KEY`, or an authenticated
-Claude Code session), it nudges you toward `--deep` — a human at a terminal is
-**offered** it; an agent or CI run gets a **one-line, non-blocking hint** instead
-(`--no-interactive` / `--yes` / `--json` force the hint), so `audit` never hangs.
 
 #### Capability diff — `audit <after> --capability-diff=<before>`
 
@@ -529,57 +543,66 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
 - **`audit` is the report.** Zero config, harness-aware, works on **any** plugin
   (including third-party ones with no spec). It scores the five category rings,
-  runs the safety battery, ranks a whole marketplace (leaderboard), writes the
-  HTML report, and — with `--deep` — adds the model-gated behavioural column. It's
+  runs the safety battery + (own-repo) live MCP resolution, ranks a whole
+  marketplace (leaderboard), writes the HTML report, and **measures whether skills
+  fire** (the model tier) when it can — run what you can, degrade loudly. It's
   safe-to-run-anywhere by default (the `audit-side-effect-free` rule): the only
-  things that execute are your own hooks (or a foreign plugin's, sandboxed).
+  things that execute are your own hooks/servers (or a foreign plugin's, sandboxed
+  or skipped).
 
 They deliberately **share one implementation** of the few deterministic
 structural detectors they have in common (untested-surface, dangling-ref,
 description-script), per the `one-detector-no-drift` rule, so the two surfaces can
 never disagree. The asymmetry everywhere else is intentional: some checks need
-inputs only the gate has (your catalogs, your compiled output), and the paid
-`--deep` column must **never** become a `lint` rule (lint stays free +
+inputs only the gate has (your catalogs, your compiled output), and the
+**model-gated trigger column must never become a `lint` rule** (lint stays free +
 deterministic + every-commit).
 
 **What each does:**
 
-| Check                                                       |  `lint`  |  `audit`  | `audit --deep` |
-| ----------------------------------------------------------- | :------: | :-------: | :------------: |
-| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |     –     |       –        |
-| Marked file/script ref verification                         |    ✓     |     –     |       –        |
-| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |     –     |       –        |
-| Untested surface                                            |  ✓ gate  |  ✓ ring   |       –        |
-| Dangling ref · description-script _(shared detectors)_      |    ✓     |     ✓     |       –        |
-| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |     ✓     |       –        |
-| Category rings + weighted health score                      |    –     |     ✓     |       –        |
-| Safety battery (does a hook actually block?)                |    –     | ✓ default |       –        |
-| HTML report                                                 |    –     | ✓ default |   ✓ default    |
-| Leaderboard (rank a marketplace)                            |    –     |     ✓     |       –        |
-| MCP tool exists on **live** server                          |    –     |     –     |       ✓        |
-| Trigger recall/precision (does a skill fire?)               |    –     |     –     |       ✓        |
-| Config severities + CI exit codes                           |    ✓     | read-only |   read-only    |
-| **Cost tier**                                               | free/det | free/det  | **paid/model** |
+| Check                                                       |  `lint`  |   `audit`   | `audit` (model tier) |
+| ----------------------------------------------------------- | :------: | :---------: | :------------------: |
+| Linter-rule cross-ref (7 catalogs, exists **+ enabled**)    |    ✓     |      –      |          –           |
+| Marked file/script ref verification                         |    ✓     |      –      |          –           |
+| Integrity/hash · duplicate-NCD · coverage · orphan docs     |    ✓     |      –      |          –           |
+| Untested surface                                            |  ✓ gate  |   ✓ ring    |          –           |
+| Dangling ref · description-script _(shared detectors)_      |    ✓     |      ✓      |          –           |
+| Instruction file · tool-contract/inherits-all · hooks · MCP |    –     |      ✓      |          –           |
+| Category rings + weighted health score                      |    –     |      ✓      |          –           |
+| Safety battery (does a hook actually block?)                |    –     |  ✓ default  |          –           |
+| MCP tool exists on **live** server                          |    –     | ✓ own-repo¹ |          –           |
+| HTML report                                                 |    –     |  ✓ default  |      ✓ default       |
+| Leaderboard (rank a marketplace)                            |    –     |      ✓      |          –           |
+| Trigger recall/precision (does a skill fire?)               |    –     |      –      |   ✓ when capable²    |
+| Config severities + CI exit codes                           |    ✓     |  read-only  |      read-only       |
+| **Cost tier**                                               | free/det |  free/det   |    **model/sub**     |
+
+¹ Live MCP runs by default only for your **own** repo (audited dir = cwd); a
+foreign plugin's servers are never spawned, and `--fast` opts out.
+² The model tier runs by default for an **interactive human on a subscription**
+(asked once, remembered), is **forced** by `--measure`, and is **skipped with a
+loud note** under `--json`/CI/non-interactive/`--fast` or a metered API key.
 
 **Where each runs:**
 
-| Target             |        `lint`        |        `audit`        |   `audit --deep`    |
+| Target             |        `lint`        |        `audit`        | `audit` model tier  |
 | ------------------ | :------------------: | :-------------------: | :-----------------: |
-| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)¹ |   n/a (no skills)   |
+| Normal app repo    |   ✓ (marked refs)    | ✓ (instruction file)³ |   n/a (no skills)   |
 | Claude Code plugin |          ✓           |           ✓           |          ✓          |
 | Codex plugin/repo  | ✓ (harness-agnostic) | ✓ (auto-detect, TOML) | ✓ `--harness=codex` |
 | Marketplace (many) |       per-file       |     ✓ leaderboard     |   per-plugin only   |
 
-¹ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
+³ On a plain repo `audit` reports the detected instruction file (`CLAUDE.md` /
 `AGENTS.md`, spec-managed vs hand-written) but no plugin surface; reference
 _verification_ of that file is `lint`'s job (and needs marks — inline,
 frontmatter, or a spec; plain prose isn't auto-parsed).
 
-The safety battery runs by default but is **confinement-aware**: own-repo hooks
-run directly (like your tests), a foreign plugin's run sandboxed (`sandbox:
-"auto"`) or skip with a loud note. `--deep` is the only **opt-in, paid** tier
-(live MCP spawn + the model-gated trigger-rate); see the `audit --deep` section
-above.
+The safety battery + live MCP run by default but are **confinement-aware**:
+own-repo hooks/servers run directly (like your tests), a foreign plugin's hooks
+run sandboxed (`sandbox: "auto"`) or skip with a loud note and its servers are
+never spawned. The model trigger-rate is the one **model-gated** tier — run when
+capable, `--measure` to force, `--fast` to skip; see the model trigger tier
+section above.
 
 ## GitHub Action
 

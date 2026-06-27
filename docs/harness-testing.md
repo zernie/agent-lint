@@ -241,9 +241,10 @@ copy-pasted prompt set before spending a token, and it runs on the realistic
 selector model (`sonnet`). Every knob — `fixture`, `installSet`, `concurrency`,
 `minModel` — is in the **[reference](testing-api.md#measuretriggerrate-options)**.
 
-> **Whole plugin at once:** `vigiles audit <plugin> --deep` measures recall /
-> precision for every model-invocable skill (auto-generated probes) and prints it
-> as the behavioral column of the audit report. Same engine, batch front-end.
+> **Whole plugin at once:** `vigiles audit <plugin>` measures recall / precision
+> for every model-invocable skill (auto-generated probes) and prints it as the
+> behavioral column of the audit report — run when capable, `--measure` to force.
+> Same engine, batch front-end.
 
 ## Test a change moves behaviour (`runEval`)
 

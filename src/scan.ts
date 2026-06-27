@@ -82,7 +82,7 @@ export interface ScanSkill {
   /**
    * The skill's effective description (frontmatter `description`, else the first
    * body paragraph — the same text the selector keys on), trimmed; `undefined`
-   * when neither exists. Feeds `--deep`'s auto-generated trigger probes.
+   * when neither exists. Feeds the model trigger tier's auto-generated probes.
    */
   readonly description?: string;
   readonly userInvoked: boolean;
@@ -92,7 +92,7 @@ export interface ScanSkill {
    * English-centric, so a description in another script carries a cross-language
    * trigger risk — it may under-fire on English prompts. A RISK flag, not a
    * defect (a language-matched audience is fine); measure the real gap with
-   * `audit --deep`.
+   * `audit --measure`.
    */
   readonly descriptionScript: Script | null;
 }
@@ -908,14 +908,16 @@ export function scanPlugin(
 }
 
 /**
- * LIVE MCP tool resolution for a scanned plugin — the opt-in (`audit --deep`)
- * dynamic check no static linter can do: it STARTS each declared MCP server and
- * checks every `mcp__server__tool` the plugin's agents reference actually exists on
- * it (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the
+ * LIVE MCP tool resolution for a scanned plugin — the dynamic check no static
+ * linter can do: it STARTS each declared MCP server and checks every
+ * `mcp__server__tool` the plugin's agents reference actually exists on it
+ * (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the
  * already-computed `report` (its agents' tool lists) + the declared server configs;
  * returns `[]` when the plugin declares no MCP servers (nothing to start). Async +
- * side-effecting (spawns servers) — which is exactly why it's opt-in, not a default
- * lint rule. See `verifyMcpContractTools` (core/mcp.ts).
+ * side-effecting (spawns servers) — so `audit` runs it by default only for the
+ * user's OWN repo (own-repo, like running your own tools); a FOREIGN plugin's
+ * servers are never spawned, and `--fast` opts out. See `verifyMcpContractTools`
+ * (core/mcp.ts).
  */
 export async function verifyLiveMcpTools(
   report: ScanReport,
