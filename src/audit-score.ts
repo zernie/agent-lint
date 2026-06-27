@@ -178,7 +178,11 @@ function tested(r: ScanReport): CategoryScore {
 
 function isEmptyMachine(r: ScanReport): boolean {
   const surfaces =
-    r.skills.length + r.agents.length + r.hooks.length + r.commands;
+    r.skills.length +
+    r.agents.length +
+    r.hooks.length +
+    r.inlineHooks +
+    r.commands;
   // An instruction-only repo (just a CLAUDE.md/AGENTS.md, no plugin surface) is
   // NOT empty — the scan records `instructions` precisely so it isn't graded
   // F/0 "no loadable surface". Only a dir with NO instruction file AND no

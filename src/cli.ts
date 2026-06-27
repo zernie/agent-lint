@@ -5632,7 +5632,14 @@ async function main(): Promise<void> {
         // of the same consent (`execute`), and only when a model is reachable;
         // otherwise it's a one-line note (never a hang).
         if (execute && surfaces.triggerableSkills > 0) {
-          if (hasModelAccess(process.env)) {
+          // Model-access detection is per-harness: `hasModelAccess` reads Claude
+          // env (claude CLI / ANTHROPIC_API_KEY). A Codex repo authenticates the
+          // codex CLI instead, so we DON'T gate it on a Claude var — the Codex
+          // probe checks `codexDriver.available()` internally and self-reports
+          // unavailable. (harness-parity: never block Codex behind a CC check.)
+          const modelReachable =
+            adapter.name === "codex" || hasModelAccess(process.env);
+          if (modelReachable) {
             await runTriggerTier(targets[0], report, adapter, args);
           } else if (!json) {
             console.log(

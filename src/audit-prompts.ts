@@ -46,11 +46,18 @@ const RECALL_FRAMES: readonly ((t: string) => string)[] = [
 // Unrelated requests for the precision arm — varied, clearly off-topic, so a
 // well-scoped skill should NOT fire on them (a too-broad description that hijacks
 // these fails precision). Generic on purpose, distant from any one skill's topic.
+// Count is load-bearing: the auto trigger tier applies the diversity gate's
+// `minPrompts` floor (= AUTO_RECALL_COUNT) to BOTH arms, so the bank must hold at
+// least AUTO_RECALL_COUNT entries or the precision arm fails preflight and every
+// skill reports "unmeasured" instead of running.
 const IRRELEVANT_BANK: readonly string[] = [
   "What's the weather forecast for Tokyo this weekend?",
   "Summarize the plot of Hamlet in two sentences.",
   "Convert 100 US dollars to euros at today's rate.",
   "Recommend a good pasta recipe for dinner tonight.",
+  "Who won the most Olympic gold medals in swimming?",
+  "Explain how photosynthesis works in plants.",
+  "Suggest a weekend hiking trail near Seattle.",
 ];
 
 // Boilerplate lead-in words that carry no topical signal (skill descriptions
