@@ -107,7 +107,22 @@ a capability it thinks it has. vigiles flags it _and_ hands you the one-line fix
 **free, no model.** That's the difference from a markdown linter: it checks your
 harness against **reality**, not style.
 
-## Proof 3 — rank a whole marketplace
+## Proof 3 — even the official plugins
+
+Not cherry-picked community repos — **Anthropic's own official `pr-review-toolkit`**:
+
+```text
+Harness health: B (88/100)
+  ● Structure   70   └ 6 agent(s) inherit all tools (no contract)
+  ℹ silent-failure-hunter.md — frontmatter isn't valid YAML
+```
+
+Six **code-review** agents that inherit **all** tools — a reviewer with `Write` and
+`Bash` it never needs — plus a subagent whose YAML doesn't parse. Real findings on a
+first-party plugin. _(We name Anthropic's own; community plugins below stay anonymous —
+punch up, don't shame volunteers.)_
+
+## Proof 4 — rank a whole marketplace
 
 Point it at a folder of plugins and get a ranking, **worst issues first** — no key:
 
