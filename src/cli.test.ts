@@ -1532,6 +1532,36 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("bare init adopts every skill + subagent surface, not just the instruction file", () => {
+    const dir = freshProject();
+    try {
+      writeFileSync(join(dir, "CLAUDE.md"), "# CLAUDE.md\n\n## Notes\n\nHi.\n");
+      mkdirSync(join(dir, "skills", "greet"), { recursive: true });
+      writeFileSync(
+        join(dir, "skills", "greet", "SKILL.md"),
+        "---\nname: greet\ndescription: Greet warmly\n---\n\nSay hi.\n",
+      );
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      writeFileSync(
+        join(dir, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews code\n---\n\nYou review code.\n",
+      );
+      const { stdout } = run("init --lint --no-plugin --no-gha", dir);
+      assert.match(stdout, /Adopted skill/);
+      assert.match(stdout, /Adopted subagent/);
+      assert.ok(
+        existsSync(join(dir, "skills", "greet", "SKILL.md.spec.ts")),
+        "skill spec created",
+      );
+      assert.ok(
+        existsSync(join(dir, "agents", "reviewer.md.spec.ts")),
+        "subagent spec created",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("warns loudly on a stale old-API CI workflow, doesn't clobber it", () => {
     const dir = freshProject();
     try {
