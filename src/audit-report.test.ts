@@ -103,4 +103,66 @@ describe("buildAuditReport", () => {
     const safety = withBattery.score.categories.find((c) => c.key === "Safety");
     expect(safety?.score).toBe(100);
   });
+
+  // Contract pin — the report app (report/src/schema.ts) mirrors this shape by
+  // hand and builds independently, so a field added/removed here without updating
+  // the mirror would silently break the report. This pins the wire shape so the
+  // change is CAUGHT; when it fails, update report/src/schema.ts too.
+  it("pins the AuditReport wire shape (mirror report/src/schema.ts on change)", () => {
+    const r = buildAuditReport(
+      makeReport({
+        agents: [
+          {
+            name: "a",
+            tools: ["X"],
+            toolIssues: [{ tool: "X", suggestion: "Y" }],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+          },
+        ] as unknown as ScanReport["agents"],
+      }),
+      { harness: "claude-code", vigilesVersion: "1.0.0" },
+    );
+    expect(Object.keys(r).sort()).toEqual([
+      "inventory",
+      "meta",
+      "recommendations",
+      "score",
+    ]);
+    expect(Object.keys(r.meta).sort()).toEqual([
+      "dir",
+      "harness",
+      "schemaVersion",
+      "tool",
+      "vigilesVersion",
+    ]);
+    expect(Object.keys(r.score).sort()).toEqual([
+      "categories",
+      "empty",
+      "grade",
+      "overall",
+    ]);
+    expect(Object.keys(r.score.categories[0]).sort()).toEqual([
+      "findings",
+      "key",
+      "score",
+      "weight",
+    ]);
+    expect(Object.keys(r.recommendations[0]).sort()).toEqual([
+      "action",
+      "confidence",
+      "detector",
+      "fix",
+      "rationale",
+      "surface",
+    ]);
+    expect(Object.keys(r.inventory).sort()).toEqual([
+      "agents",
+      "commands",
+      "hooks",
+      "mcp",
+      "skills",
+      "untested",
+    ]);
+  });
 });
