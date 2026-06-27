@@ -138,9 +138,6 @@ a safe, ~free measurement — **run what you can by default, degrade loudly.**
 
 **Shipped:**
 
-- **Live-MCP folds into the default** (deterministic + fast + needs no model),
-  provenance-gated: own-repo only; a foreign plugin's servers are never spawned;
-  `--fast` opts out.
 - **Model trigger-rate** via `decideMeasure` (`src/scan-trigger-suggest.ts`):
   interactive human + subscription → **offered by default, asked once, remembered**
   in `.vigilesrc.json` (`audit.measure`); `--json`/CI/non-interactive/metered →
@@ -148,6 +145,35 @@ a safe, ~free measurement — **run what you can by default, degrade loudly.**
   `--fast` skips. Metered API keys are never auto-spent.
 - `--deep` is **removed** (clean break, pre-release). `--measure` (force on) +
   `--fast` (force off) replace it.
+
+### State-safety correction (same day) — "what if a hook/server hits Postgres?"
+
+A first pass folded **live-MCP into the default** ("deterministic + fast +
+own-repo-safe"). The founder caught the hole: **sandboxing protects the HOST from
+foreign code; it does nothing for your EXTERNAL STATE** — your _own_ hook or MCP
+server, pointed at prod, will reach a real Postgres / API. Provenance is the wrong
+axis for state. Two distinct threats:
+
+- **HOST protection** — provenance-keyed (foreign → bubblewrap-or-skip). Shipped.
+- **STATE protection** — "does running this _mutate my world_?" Independent of
+  provenance; the unconditional-ephemeral-env idea, not fully shipped.
+
+Per-surface blast radius: **live-MCP = HIGH** (starting a DB/API-backed server
+_connects on boot_, before `tools/list`), **battery = MODERATE** (a hook that does
+I/O per-invocation does it ×7), **trigger-rate = LOW** (bodies stubbed). The apex
+"run the agent end-to-end and it DROPs a table" is **not done at all**.
+
+So (decision **A**, chosen):
+
+- **Live-MCP reverted to opt-in** (`--measure`, own-repo, never `--fast`/foreign).
+  Confinement can't save it — deny-all-net breaks the `tools/list` it performs — so
+  it must be explicit. A plain `audit` only NAMES the opt-in.
+- **Battery runs network-confined** (`sandbox:'auto'`) where bubblewrap exists, own
+  AND foreign; where it doesn't, foreign skips and own runs direct **with a loud
+  "no network confinement" warning**. `--fast` skips it.
+- **Safety ring → n/a (not 0) when no hook blocks any disaster** (none is evidently
+  a Bash guard — scoring 0 was a cry-wolf that tanked the grade; fixed in
+  `src/audit-score.ts`).
 
 **Follow-ups (not yet done):** the hosted dashboard itself; an `audit --upload`
 that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`

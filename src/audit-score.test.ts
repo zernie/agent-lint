@@ -101,6 +101,20 @@ describe("auditScore", () => {
     expect(s.overall).toBe(100);
   });
 
+  it("a battery where NO hook blocks anything is Safety n/a, not a false 0 (don't cry wolf)", () => {
+    // A repo whose only PreToolUse hook isn't a Bash guard (e.g. it gates .md
+    // edits) blocks 0/7 — that's not a broken safety guard, it's not one at all.
+    const s = auditScore(makeReport(), {
+      totalBlocked: 0,
+      totalRun: 7,
+      hooksSkipped: 0,
+    });
+    expect(cat(s, "Safety")?.score).toBeNull(); // n/a, NOT 0
+    expect(cat(s, "Safety")?.findings[0]).toMatch(/Bash safety guard/);
+    // n/a is excluded from the overall, so the grade isn't tanked.
+    expect(s.overall).toBe(100);
+  });
+
   it("untested surfaces only dent the Tested category", () => {
     const s = auditScore(makeReport({ untested: 3 }));
     expect(cat(s, "Tested")?.score).toBe(91); // -9

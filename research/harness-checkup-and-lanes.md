@@ -145,14 +145,16 @@ build:** the verb is `audit`; a default run prints **five category rings**
 (Truthfulness/Safety/Triggering/Structure/Tested) + a weighted A–F health score, RUNS
 the **safety battery by default** against each `PreToolUse` hook (blocks-vs-allows —
 "we RUN your harness"), folds each finding's **fix inline**, and writes a
-**self-contained HTML report** (`vigiles-report.html`). Live MCP resolution folds into
-the default (own-repo); the one model-gated tier is the **trigger-rate** (with
-**auto-generated probe prompts** from skill descriptions), which RUNS-WHAT-IT-CAN — by
-default for an interactive human on a subscription (asked once, remembered), skipped
-with a loud note in `--json`/CI/non-interactive/metered, `--measure` to force / `--fast`
-to skip (the 2026-06-27 `--deep` inversion). Confinement-aware per
-`audit-side-effect-free`: own repo runs hooks/servers direct, a foreign plugin
-sandboxes or auto-skips. The dropped flags
+**self-contained HTML report** (`vigiles-report.html`). The model-gated tier is the
+**trigger-rate** (with **auto-generated probe prompts** from skill descriptions),
+which RUNS-WHAT-IT-CAN — by default for an interactive human on a subscription (asked
+once, remembered), skipped with a loud note in `--json`/CI/non-interactive/metered,
+`--measure` to force / `--fast` to skip (the 2026-06-27 `--deep` inversion).
+State-safe per `audit-side-effect-free`: the safety battery runs every hook
+**network-confined** (a no-egress sandbox; where none exists, own hooks run direct
+with a loud warning, foreign skip), and **live MCP resolution is opt-in**
+(`--measure`, own-repo) because starting a server connects to real backends. The
+dropped flags
 (`--check-hooks`/`--verify-mcp`/`--trigger`/`--fix-plan`/`--explain`/`--deep`) all
 collapsed into this surface. See `research/audit-lighthouse-design.md` for the design
 record. The flag-per-check surface below is superseded.

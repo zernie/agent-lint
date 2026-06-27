@@ -114,6 +114,7 @@ import {
   DISASTER_CATALOG,
 } from "./guardrail-check.js";
 import { optimize, formatRecommendations } from "./optimize.js";
+import { sandboxAvailable } from "./sandbox.js";
 import { formatAuditScore, type BatterySummary } from "./audit-score.js";
 import {
   autoTriggerPrompts,
@@ -5154,11 +5155,17 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 /**
  * The safety battery — run each runnable hook against the DISASTER_CATALOG to
  * prove (or disprove) it actually blocks. Runs by DEFAULT in a single-dir audit
- * (the differentiated "we RUN your harness" finding). Confinement-aware per the
- * audit-side-effect-free rule: the user's OWN repo (scanned dir === cwd) runs its
- * hooks DIRECT (their code, like running their own tests); a FOREIGN plugin (a
- * non-cwd dir) runs SANDBOXED, and AUTO-SKIPS with a loud note where no sandbox
- * (bubblewrap) is available. Never a stranger's hooks unconfined.
+ * (the differentiated "we RUN your harness" finding).
+ *
+ * STATE-SAFE by default (audit-side-effect-free): a hook is arbitrary code that
+ * could reach a real Postgres / API, so where bubblewrap is available the battery
+ * runs EVERY hook under `sandbox:"auto"` — a no-egress network namespace, so a
+ * hook can't touch your DB/network during the probe (own-repo AND foreign alike;
+ * provenance protects the host, confinement protects your external state). Where
+ * no sandbox exists (macOS / hardened CI): a FOREIGN plugin's hooks are SKIPPED
+ * loudly (never a stranger's code unconfined), and the user's OWN hooks run
+ * DIRECT with a LOUD warning that they executed WITHOUT network confinement (so a
+ * hook that hits your DB/API would have). `--fast` skips the battery entirely.
  *
  * Returns the human-readable lines AND the aggregate `summary` (the Safety
  * category's input) so the caller can both feed the rings and print the detail.
@@ -5169,6 +5176,7 @@ function runSafetyBattery(
   root: string,
 ): { lines: string[]; summary: BatterySummary | null } {
   const isForeign = resolve(root) !== process.cwd();
+  const confined = sandboxAvailable();
   // Only test hooks that can actually BLOCK a tool call — PreToolUse guards. A
   // SessionStart / PostToolUse / Stop hook can't (and shouldn't) block the
   // disaster catalog, so testing it would unfairly tank Safety (a cry-wolf). An
@@ -5188,21 +5196,34 @@ function runSafetyBattery(
   const lines: string[] = [
     `\nSafety battery (${String(runnableHooks.length)} hook(s) × ${String(DISASTER_CATALOG.length)} disasters):`,
   ];
+  if (!confined && !isForeign) {
+    lines.push(
+      `  ⚠ no sandbox (bubblewrap) here — running YOUR hooks WITHOUT network ` +
+        `confinement. A hook that reaches a DB/API would do so now; use --fast to skip.`,
+    );
+  }
   let totalBlocked = 0;
   let totalRun = 0;
   let hooksSkipped = 0;
   for (const hook of runnableHooks) {
-    let results;
-    try {
-      results = isForeign
-        ? verifyGuardrail(hook.command, { cwd: root, sandbox: "auto" })
-        : verifyGuardrail(hook.command, { cwd: root });
-    } catch {
-      // Foreign plugin + no sandbox available → skip loudly, never run a
-      // stranger's hooks unconfined (the audit-side-effect-free rule).
+    // Confine network when we can (own + foreign); only fall through to a direct
+    // run for the user's OWN hooks when no sandbox exists (warned above).
+    if (!confined && isForeign) {
       hooksSkipped += 1;
       lines.push(
         `  ⊘ ${hook.script}: skipped — testing a non-cwd plugin's hooks needs a sandbox (bubblewrap), not available`,
+      );
+      continue;
+    }
+    let results;
+    try {
+      results = confined
+        ? verifyGuardrail(hook.command, { cwd: root, sandbox: "auto" })
+        : verifyGuardrail(hook.command, { cwd: root });
+    } catch {
+      hooksSkipped += 1;
+      lines.push(
+        `  ⊘ ${hook.script}: skipped — could not confine the hook run (sandbox error)`,
       );
       continue;
     }
@@ -5588,6 +5609,7 @@ async function main(): Promise<void> {
       // with a loud note in `--json`/CI/non-interactive. `--measure` forces it on,
       // `--fast` forces the spawning/model tiers off (the pure-deterministic path).
       const fast = args.includes("--fast") || args.includes("--no-measure");
+      const forceMeasure = args.includes("--measure");
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5676,20 +5698,15 @@ async function main(): Promise<void> {
           if (fixes) console.log("\n" + fixes);
         }
         if (battery) console.log(battery.lines.join("\n"));
-        // LIVE MCP tool resolution (spawns each declared server — the dynamic
-        // check no static linter can do) folds into the DEFAULT: it's
-        // deterministic, fast, and needs no model. Safe-by-provenance
-        // (audit-side-effect-free): own-repo only (root === cwd, like running
-        // your own tools); a FOREIGN plugin's servers are never spawned (loud
-        // skip), and `--fast` opts out of all spawning.
-        if (!fast && report.mcp) {
+        // LIVE MCP tool resolution STARTS each declared MCP server — and a server
+        // is exactly the thing that connects to a real Postgres / authenticates a
+        // real API on boot. Confinement can't save it (deny-all-net breaks the very
+        // `tools/list` it performs), so it is NOT a default — it runs only under an
+        // explicit `--measure`, own-repo only (never spawn a stranger's server),
+        // never under `--fast`. A plain audit just NAMES the opt-in.
+        if (report.mcp) {
           const isForeign = root !== process.cwd();
-          if (isForeign) {
-            if (!json)
-              console.log(
-                "\n⊘ Live MCP check skipped — won't spawn a non-cwd plugin's servers (run from the plugin's own repo, or --fast to silence).",
-              );
-          } else {
+          if (forceMeasure && !fast && !isForeign) {
             const mcpErrs = await verifyLiveMcpTools(
               report,
               adapter.layout,
@@ -5699,6 +5716,15 @@ async function main(): Promise<void> {
               json
                 ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
                 : "\n" + formatMcpContractReport(mcpErrs),
+            );
+          } else if (forceMeasure && !fast && isForeign) {
+            if (!json)
+              console.log(
+                "\n⊘ Live MCP check skipped — won't spawn a non-cwd plugin's servers (run from the plugin's own repo).",
+              );
+          } else if (!fast && !json) {
+            console.log(
+              "\nℹ MCP server(s) declared — resolve them live (this STARTS your servers, which may connect to your DB/APIs) with: vigiles audit . --measure",
             );
           }
         }
