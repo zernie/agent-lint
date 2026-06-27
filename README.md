@@ -6,9 +6,14 @@
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/ (superpowers missing SKILL.md, madappgang AskUserQuestion
-  never-available, the 4-plugin leaderboard, the 100/100 self-audit, the runHook
-  pass). NEVER replace a real catch with a fabricated one.
+  research/dogfood/ (a missing SKILL.md, an AskUserQuestion-never-available subagent
+  tool, the 4-plugin leaderboard, the 100/100 self-audit, the runHook pass). NEVER
+  replace a real catch with a fabricated one.
+
+  DON'T SHAME OSS: the catches are real but the upstream plugins are ANONYMIZED in
+  public copy (no obra/superpowers, madappgang, etc. by name) — the real names live
+  only in research/dogfood/ (internal). Punching up at official/vendor plugins is
+  fine; naming a volunteer's repo to show its bug is not. Keep it anonymized here.
 
   1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
      competitor. A bolded lead-in is the first thing read — make it the hook/win.
@@ -77,12 +82,11 @@ repo (even one wired to prod), identical on every OS. **Not a CI step** (CI uses
 
 ```text
 ● Truthfulness   92
-    └ ✗ skills/using-superpowers/SKILL.md  (referenced but MISSING)
+    └ ✗ skills/using-debugging/SKILL.md  (referenced but MISSING)
 ```
 
-That's **obra/superpowers**, a plugin with thousands of installs. Its instructions
-send the agent to a skill file that **isn't there**. Valid markdown — but not _true_,
-and your agent trusts it anyway.
+A real, widely-installed plugin — its instructions send the agent to a skill file
+that **isn't there**. Valid markdown, but not _true_, and your agent trusts it anyway.
 
 <p align="center">
   <img src="vigiles-demo.gif" width="720" alt="vigiles catching a file that moved and a script that was renamed" />
@@ -109,11 +113,13 @@ Point it at a folder of plugins and get a ranking, **worst issues first** — no
 
 ```text
   #   score  grade  plugin
-   1   89    B      madappgang-frontend  — 1 agent tool that doesn't exist; 1 untested surface
-   2   86    B      accessibility        — 3 untested surfaces; 1 agent inherits all tools
-   3   86    B      superpowers          — 2 untested surfaces; 1 broken reference
-   4   78    C      oh-my-claudecode     — 4 untested surfaces; 2 agents inherit all tools
+   1   89    B      frontend-plugin       — 1 agent tool that doesn't exist; 1 untested surface
+   2   86    B      accessibility-plugin  — 3 untested surfaces; 1 agent inherits all tools
+   3   86    B      debugging-plugin      — 2 untested surfaces; 1 broken reference
+   4   78    C      workflow-plugin       — 4 untested surfaces; 2 agents inherit all tools
 ```
+
+<sub>Real plugins, anonymized — `audit` names them in your own report; we won't shame OSS authors here.</sub>
 
 **[Plugin-author guide →](docs/for-plugin-authors.md)**
 
