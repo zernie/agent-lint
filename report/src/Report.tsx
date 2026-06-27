@@ -8,6 +8,7 @@ import type { AuditReport, CategoryScore, Recommendation } from "@/schema";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
+import { Adoptability } from "@/components/Adoptability";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,7 @@ function Stat({ n, label }: { n: number | string; label: string }) {
 }
 
 export function Report({ data }: { data: AuditReport }) {
-  const { score, recommendations, inventory, meta } = data;
+  const { score, recommendations, inventory, meta, adoptability } = data;
   const overall = score.empty ? null : score.overall;
   const b = band(overall);
   return (
@@ -113,6 +114,20 @@ export function Report({ data }: { data: AuditReport }) {
           <CheckCircle2 size={16} /> No deterministic fixes — the structure is
           clean.
         </Card>
+      )}
+
+      {adoptability && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Adoptability
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            What vigiles would catch in your repo — machine-verifiable
+            references in your instruction file checked against your actual
+            config.
+          </p>
+          <Adoptability data={adoptability} />
+        </>
       )}
 
       <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">

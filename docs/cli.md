@@ -377,6 +377,22 @@ harness, and they share **one** consent:
    Probes are **auto-generated from each skill's description** (zero setup);
    `--prompts=<file>` supplies a curated set + the selection-collision matrix.
 
+4. **Adoptability preview** — see what vigiles would catch **before you adopt it**.
+   `audit` uses a model to draft a spec from your `CLAUDE.md`, then
+   deterministically verifies every reference it found — linter rules, file paths,
+   npm scripts, directories — and reports how many are broken right now. This is a
+   **read-only preview**: it never writes anything; `vigiles init` is what adopts
+   the spec. Claude Code only in v1.
+
+   ```
+   Adoptability — what vigiles would lock in
+     vigiles drafted a spec from CLAUDE.md: 23 verifiable reference(s) found
+      3 broken right now:
+        ✗ eslint rule "import/no-cycle" is referenced but not enabled
+        ✗ `npm run typecheck` referenced — no such script in package.json
+     → run `vigiles init` to adopt the spec and catch these at edit time.
+   ```
+
 **How the consent works** — `audit` is a read by default; the executing checks need
 a human to consent (there's **no execution flag** — see below):
 
@@ -573,7 +589,8 @@ deterministic + every-commit).
 | Leaderboard (rank a marketplace)                            |    –     |     ✓     |           –           |
 | MCP tool exists on **live** server                          |    –     |     –     |      ✓ own-repo¹      |
 | Trigger recall/precision (does a skill fire?)               |    –     |     –     |          ✓²           |
-| Safety battery (does a hook block?) — `vigiles/testing`     |    –     |     –     |          –³           |
+| Adoptability preview (broken refs in your instruction file) |    –     |     –     |          ✓⁴           |
+| Safety battery (does a hook block?) — `vigiles/testing`     |    –     |     –     |          –⁵           |
 | Config severities + CI exit codes                           |    ✓     | read-only |       read-only       |
 | **Cost tier**                                               | free/det | free/det  |     **model/sub**     |
 
@@ -585,7 +602,10 @@ TTY it **asks once** (remembered in `.vigilesrc.json`). There is no execution fl
 only**; a foreign plugin's servers are never spawned.
 ² The trigger tier needs model auth; it **degrades honestly** ("unavailable") when
 absent and runs on your subscription (or a metered key).
-³ The safety battery (run your hooks against the disaster catalog) is **not** an
+⁴ The adoptability preview uses a model to draft a spec from your instruction file and
+then verifies every reference deterministically. Claude Code only in v1; never writes
+anything to the repo. Runs on your subscription ($0 metered).
+⁵ The safety battery (run your hooks against the disaster catalog) is **not** an
 `audit` check — it needs cross-platform confinement that isn't shipped, so it lives
 in the `vigiles/testing` API (`guardrail-check`/`assertBlocksDisasters`).
 
