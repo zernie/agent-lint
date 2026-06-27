@@ -234,7 +234,7 @@ import {
   parseIntegrityHeader,
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./core/integrity.js";
-import { adoptMarkdown } from "./core/adopt.js";
+import { adoptMarkdown, adoptSkill, adoptAgent } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
@@ -1708,6 +1708,32 @@ function targetHasHash(absPath: string): boolean {
  * target by `setupPillar1`. The full onboarding (both layers, deps, CI, plugin)
  * is `setup()`.
  */
+/** Classify an adoption target by its path: a `SKILL.md` is a skill, a file under
+ * an `agents/` dir is a subagent, everything else is an instruction file. Used to
+ * pick the right adopt function so `init --target=skills/x/SKILL.md` (the
+ * per-surface path the audit report points at) makes a `skill()`/`agent()` spec. */
+function surfaceKind(target: string): "skill" | "agent" | "instruction" {
+  if (/^SKILL\.md$/i.test(basename(target))) return "skill";
+  if (/(^|[/\\])agents[/\\]/.test(target)) return "agent";
+  return "instruction";
+}
+
+function logAdoptedSurface(
+  target: string,
+  specPath: string,
+  label: string,
+  unmappedKeys: string[],
+): void {
+  const note =
+    unmappedKeys.length > 0
+      ? ` (review the // NOTE — unmapped frontmatter: ${unmappedKeys.join(", ")})`
+      : "";
+  console.log(
+    `Adopted ${label} ${target} → ${specPath}${note}. ` +
+      `Run \`vigiles compile\` and review the diff.`,
+  );
+}
+
 function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
@@ -1728,13 +1754,30 @@ function scaffoldSpec(args: string[]): void {
   const targetAbs = resolve(process.cwd(), target);
   if (existsSync(targetAbs) && !targetHasHash(targetAbs)) {
     const md = readFileSync(targetAbs, "utf-8");
-    const { source, tier, sectionCount } = adoptMarkdown(md, basename(target));
     mkdirSync(dirname(specAbs), { recursive: true });
-    writeFileSync(specAbs, source);
-    console.log(
-      `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
-        `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
-    );
+    const kind = surfaceKind(target);
+    if (kind === "skill") {
+      const { source, unmappedKeys } = adoptSkill(
+        md,
+        basename(dirname(target)),
+      );
+      writeFileSync(specAbs, source);
+      logAdoptedSurface(target, specPath, "skill", unmappedKeys);
+    } else if (kind === "agent") {
+      const { source, unmappedKeys } = adoptAgent(md, basename(target, ".md"));
+      writeFileSync(specAbs, source);
+      logAdoptedSurface(target, specPath, "subagent", unmappedKeys);
+    } else {
+      const { source, tier, sectionCount } = adoptMarkdown(
+        md,
+        basename(target),
+      );
+      writeFileSync(specAbs, source);
+      console.log(
+        `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
+          `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
+      );
+    }
     return;
   }
 

@@ -1484,6 +1484,54 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
+  it("adopts an existing SKILL.md into a skill() spec via init --target", () => {
+    const dir = freshProject();
+    try {
+      mkdirSync(join(dir, "skills", "greet"), { recursive: true });
+      writeFileSync(
+        join(dir, "skills", "greet", "SKILL.md"),
+        "---\nname: greet\ndescription: Greet warmly\n---\n\n# Greet\n\nSay hi.\n",
+      );
+      const { stdout } = run("init --target=skills/greet/SKILL.md", dir);
+      assert.match(stdout, /Adopted skill/);
+      const spec = readFileSync(
+        join(dir, "skills", "greet", "SKILL.md.spec.ts"),
+        "utf-8",
+      );
+      assert.ok(spec.includes("skill({"), "skill() spec written");
+      assert.ok(spec.includes('name: "greet"'));
+      assert.ok(spec.includes("Say hi."), "body captured verbatim");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adopts an existing subagent into an agent() spec (unmapped key noted)", () => {
+    const dir = freshProject();
+    try {
+      mkdirSync(join(dir, "agents"), { recursive: true });
+      writeFileSync(
+        join(dir, "agents", "reviewer.md"),
+        "---\nname: reviewer\ndescription: Reviews code\nmodel: sonnet\nlevel: 3\n---\n\nYou review code.\n\n## Method\n\nRead the diff.\n",
+      );
+      const { stdout } = run("init --target=agents/reviewer.md", dir);
+      assert.match(stdout, /Adopted subagent/);
+      const spec = readFileSync(
+        join(dir, "agents", "reviewer.md.spec.ts"),
+        "utf-8",
+      );
+      assert.ok(spec.includes("agent({"), "agent() spec written");
+      assert.ok(spec.includes('name: "reviewer"'));
+      assert.ok(spec.includes("Read the diff."), "## section captured");
+      assert.ok(
+        spec.includes("NOTE:") && spec.includes("level"),
+        "unmapped frontmatter key surfaced, not dropped",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("warns loudly on a stale old-API CI workflow, doesn't clobber it", () => {
     const dir = freshProject();
     try {
