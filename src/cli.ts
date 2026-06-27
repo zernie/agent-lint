@@ -78,8 +78,8 @@ import type { ScanReport } from "./scan.js";
 import {
   hasModelAccess,
   isMeteredAccess,
-  decideMeasure,
-  formatMeasureSkip,
+  decideExecute,
+  formatExecuteSkip,
 } from "./scan-trigger-suggest.js";
 import { checkDialectDrift, formatDialectDrift } from "./dialect-drift.js";
 import {
@@ -4186,13 +4186,13 @@ function printUsage(command: string | undefined): void {
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
-    "  vigiles audit [dir...]          Audit a harness: what it ships, what's broken, + the safety battery (free; 2+ dirs → leaderboard)",
+    "  vigiles audit [dir...]          Audit a harness: rings + what's broken + fixes (a deterministic read; 2+ dirs → leaderboard)",
   );
   console.log(
     "                                 writes vigiles-report.html + vigiles-report.json (--no-html/--no-json) · --json (CI)",
   );
   console.log(
-    "                                 measures whether skills fire (real model) for an interactive human on a subscription — asked once, remembered · --measure forces it · --fast skips it",
+    "                                 the executing checks (run your hooks · live MCP · do skills fire?) are opt-in: asked once at a TTY (remembered), or --measure to run them headless",
   );
   console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
@@ -5153,9 +5153,27 @@ async function runHookProgramCommand(file: string | undefined): Promise<void> {
 }
 
 /**
+ * The hooks the safety battery tests — only those that can actually BLOCK a tool
+ * call (PreToolUse guards). A SessionStart / PostToolUse / Stop hook can't (and
+ * shouldn't) block the disaster catalog, so testing it would unfairly tank Safety
+ * (a cry-wolf). An unknown-event hook (non-object config shape) is included
+ * best-effort. ONE predicate, reused by the executable-surface check + the
+ * battery so they can't drift (one-detector-no-drift).
+ */
+function runnableSafetyHooks(report: ScanReport): ScanReport["hooks"] {
+  return report.hooks.filter(
+    (h) =>
+      h.status === "ok" &&
+      h.command.trim() !== "" &&
+      (h.event === undefined || h.event === "PreToolUse"),
+  );
+}
+
+/**
  * The safety battery — run each runnable hook against the DISASTER_CATALOG to
- * prove (or disprove) it actually blocks. Runs by DEFAULT in a single-dir audit
- * (the differentiated "we RUN your harness" finding).
+ * prove (or disprove) it actually blocks. An OPT-IN executing check (not a
+ * default): reached only when the user consents (the interactive prompt or
+ * `--measure`), so a plain `audit` never executes a hook.
  *
  * STATE-SAFE by default (audit-side-effect-free): a hook is arbitrary code that
  * could reach a real Postgres / API, so where bubblewrap is available the battery
@@ -5177,16 +5195,7 @@ function runSafetyBattery(
 ): { lines: string[]; summary: BatterySummary | null } {
   const isForeign = resolve(root) !== process.cwd();
   const confined = sandboxAvailable();
-  // Only test hooks that can actually BLOCK a tool call — PreToolUse guards. A
-  // SessionStart / PostToolUse / Stop hook can't (and shouldn't) block the
-  // disaster catalog, so testing it would unfairly tank Safety (a cry-wolf). An
-  // unknown-event hook (non-object config shape) is included best-effort.
-  const runnableHooks = report.hooks.filter(
-    (h) =>
-      h.status === "ok" &&
-      h.command.trim() !== "" &&
-      (h.event === undefined || h.event === "PreToolUse"),
-  );
+  const runnableHooks = runnableSafetyHooks(report);
   if (runnableHooks.length === 0) {
     return {
       lines: ["\nSafety battery: no PreToolUse safety hooks to test"],
@@ -5361,55 +5370,92 @@ async function runAutoTrigger(
 }
 
 /**
- * The model trigger tier of a single-plugin `audit` (Lighthouse: run what you
- * can, degrade loudly). Decides via `decideMeasure` whether to RUN the trigger-
- * rate now, ASK an interactive human first (then remember the answer), or SKIP
- * with a loud "Triggering not measured — …" note. Never hangs an agent / CI run
- * (`great-agent-flow`): only an interactive human at a TTY is ever prompted.
+ * What `audit`'s executing checks (safety battery + live MCP + trigger-rate) need
+ * — used to decide whether there's anything to run, and to disclose it at consent.
  */
-async function runMeasureTier(
-  report: ScanReport,
-  dir: string,
-  adapter: HarnessAdapter,
+interface ExecutableSurfaces {
+  readonly dir: string;
+  readonly hasBattery: boolean; // ≥1 runnable PreToolUse hook
+  readonly hasMcp: boolean; // own-repo + declares MCP server(s)
+  readonly triggerableSkills: number; // model-invocable, described skills
+  readonly confined: boolean; // a sandbox (bubblewrap) is available
+}
+
+/**
+ * The ONE read-vs-run decision for a single-plugin `audit`. A plain `audit` is a
+ * deterministic READ; the executing checks are opt-in via a single consent —
+ * `decideExecute` resolves it (run / ask / skip). At a TTY we ASK ONCE (bundled,
+ * with a confinement + cost DISCLOSURE) and remember the answer in `.vigilesrc.json`;
+ * headless we stay a read (the `note` is the loud nudge, printed by the caller
+ * AFTER the report). Never hangs an agent / CI run (`great-agent-flow`).
+ *
+ * Returns `execute` (run the executing checks?) + a `note` to print at the end.
+ */
+async function resolveExecution(
+  s: ExecutableSurfaces,
   json: boolean,
-  remembered: boolean | undefined,
   args: string[],
-): Promise<void> {
-  const triggerable = report.skills.filter(
-    (s) => s.hasDescription && !s.userInvoked,
-  );
-  const decision = decideMeasure({
-    modelAccess: hasModelAccess(process.env),
-    metered: isMeteredAccess(process.env),
+): Promise<{ execute: boolean; note: string | null }> {
+  const decision = decideExecute({
+    hasExecutable: s.hasBattery || s.hasMcp || s.triggerableSkills > 0,
     // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
     // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
-    // pipelines) must NOT block on a read that never gets input. `isTTY` is
-    // `undefined` at runtime when not a terminal (falsy → the skip path).
+    // pipelines) must NOT block on a read that never gets input.
     isTTY: process.stdout.isTTY && process.stdin.isTTY,
-    triggerableSkills: triggerable.length,
     json,
     forceMeasure: args.includes("--measure"),
-    noMeasure: args.includes("--fast") || args.includes("--no-measure"),
     noInteractive: args.includes("--no-interactive") || args.includes("--yes"),
-    remembered,
+    remembered: loadConfig().audit?.measure,
   });
-  switch (decision.kind) {
-    case "skip": {
-      const note = formatMeasureSkip(decision.reason, dir, triggerable.length);
-      if (note && !json) console.log(note);
-      return;
-    }
-    case "ask":
-      await promptMeasure(report, dir, adapter, triggerable.length, args);
-      return;
-    case "run":
-      await runMeasure(dir, report, adapter, args);
-      return;
+  if (decision.kind === "run") return { execute: true, note: null };
+  if (decision.kind === "skip")
+    return {
+      execute: false,
+      note: json ? null : formatExecuteSkip(decision.reason, s.dir),
+    };
+  // ask — prompt once (early, so a yes lets the battery feed the Safety ring),
+  // then remember the answer.
+  const answer = await askOnce(buildExecuteDisclosure(s));
+  const yes = /^y(es)?$/i.test(answer); // default NO (executes your hooks / servers)
+  rememberAuditMeasure(yes);
+  return {
+    execute: yes,
+    note: yes
+      ? null
+      : "  Skipped (remembered). Run later with `vigiles audit " +
+        s.dir +
+        " --measure`.",
+  };
+}
+
+/** The bundled consent prompt — discloses exactly what will execute (and whether
+ *  it's confined / what it costs) so the yes is informed. Default NO. */
+function buildExecuteDisclosure(s: ExecutableSurfaces): string {
+  const lines = ["\nRun the executing checks against your harness?"];
+  if (s.hasBattery)
+    lines.push(
+      `  · execute your hooks against the disaster battery ${
+        s.confined
+          ? "(network-confined)"
+          : "(⚠ WITHOUT network confinement on this OS)"
+      }`,
+    );
+  if (s.hasMcp)
+    lines.push("  · start your MCP servers — connects to their backends");
+  if (s.triggerableSkills > 0) {
+    const cost = !hasModelAccess(process.env)
+      ? "needs model access — none detected, will skip"
+      : isMeteredAccess(process.env)
+        ? "⚠ spends API credits"
+        : "your subscription, $0 metered";
+    lines.push(`  · measure whether skills fire (${cost})`);
   }
+  lines.push("Asked once — remembered in .vigilesrc.json. [y/N] ");
+  return lines.join("\n");
 }
 
 /** Run the trigger tier: a curated `--prompts` file, else auto-generated probes. */
-async function runMeasure(
+async function runTriggerTier(
   dir: string,
   report: ScanReport,
   adapter: HarnessAdapter,
@@ -5438,39 +5484,6 @@ async function askOnce(q: string): Promise<string> {
   } finally {
     rl.close();
   }
-}
-
-/**
- * Interactive (TTY) consent for the model trigger tier — ASK ONCE, then REMEMBER
- * (`audit.measure` in `.vigilesrc.json`). Default-YES (Lighthouse runs what it
- * can): an empty answer runs it. On yes it measures NOW (auto-probes, or a
- * curated `--prompts`/scaffolded file); on no it records the choice so we never
- * ask again. The subscription cost ($0 metered) is named so the yes is informed.
- */
-async function promptMeasure(
-  report: ScanReport,
-  dir: string,
-  adapter: HarnessAdapter,
-  n: number,
-  args: string[],
-): Promise<void> {
-  const s = n === 1 ? "" : "s";
-  const answer = await askOnce(
-    `\nℹ ${String(n)} model-invocable skill${s} + model access on your subscription detected.\n` +
-      `  Also measure whether they FIRE (recall + precision)? Takes a few minutes, runs on\n` +
-      `  your subscription ($0 metered). Asked once — remembered in .vigilesrc.json. [Y/n] `,
-  );
-  const yes = answer === "" || /^y(es)?$/i.test(answer);
-  rememberAuditMeasure(yes);
-  if (!yes) {
-    console.log(
-      "  Skipped (remembered). Re-enable with `vigiles audit " +
-        dir +
-        " --measure`.",
-    );
-    return;
-  }
-  await runMeasure(dir, report, adapter, args);
 }
 
 /**
@@ -5600,16 +5613,14 @@ async function main(): Promise<void> {
       break;
 
     case "audit": {
-      // The Lighthouse run: a default `audit` reports what the harness ships, RUNS
-      // the safety battery + (own-repo) live MCP resolution, folds each finding's
-      // fix inline, and MEASURES whether skills fire when it can — run what you
-      // can, degrade loudly. Safe to run anywhere (audit-side-effect-free): the
-      // deterministic core is free; the model trigger tier auto-runs only for an
-      // interactive human on a subscription (ask-once, remember), and is skipped
-      // with a loud note in `--json`/CI/non-interactive. `--measure` forces it on,
-      // `--fast` forces the spawning/model tiers off (the pure-deterministic path).
-      const fast = args.includes("--fast") || args.includes("--no-measure");
-      const forceMeasure = args.includes("--measure");
+      // The Lighthouse run: a plain `audit` is a deterministic READ — rings, each
+      // finding's fix inline, HTML/JSON report — safe + identical on every OS,
+      // nothing executes. The executing checks (safety battery + live MCP + skill
+      // firing) are opt-in via ONE consent: at a TTY `audit` asks once (remembered
+      // in `.vigilesrc.json`), headless it stays a read + a one-line nudge. The one
+      // flag, `--measure`, is the headless "yes" (and a human's skip-the-prompt) —
+      // there is no `--fast`/`--no-measure`: the default IS the read. See the
+      // `audit-side-effect-free` rule.
       const dirs = restArgs.length > 0 ? restArgs : ["."];
       const json = args.includes("--json");
       // A single dir that's a marketplace (e.g. wshobson/agents' 80+ plugins
@@ -5664,12 +5675,30 @@ async function main(): Promise<void> {
           }
           console.log("");
         }
-        // Run the safety battery FIRST so its result feeds the Safety ring — but
-        // print the detail AFTER the report. It runs by DEFAULT (the
-        // differentiated "we RUN your harness" finding) — own-repo hooks direct,
-        // foreign sandboxed-or-skipped. JSON/CI output stays the structured
-        // report for now (the unified category JSON is a later increment).
-        const battery = json ? null : runSafetyBattery(report, root);
+        // ONE read-vs-run decision. A plain `audit` is a deterministic READ; the
+        // executing checks (safety battery + live MCP + skill-firing) are opt-in
+        // via a single consent — ASK once at a TTY (remembered), `--measure` is
+        // the headless yes, headless stays a read + a nudge. Resolve it EARLY so a
+        // yes lets the battery feed the Safety ring; the nudge prints at the end.
+        const isForeign = root !== process.cwd();
+        const surfaces: ExecutableSurfaces = {
+          dir: targets[0],
+          hasBattery: runnableSafetyHooks(report).length > 0,
+          hasMcp: report.mcp && !isForeign,
+          triggerableSkills: report.skills.filter(
+            (s) => s.hasDescription && !s.userInvoked,
+          ).length,
+          confined: sandboxAvailable(),
+        };
+        const { execute, note: execNote } = await resolveExecution(
+          surfaces,
+          json,
+          args,
+        );
+        // The safety battery runs only on consent (own-repo direct or, where a
+        // sandbox exists, network-confined; foreign always confined-or-skipped).
+        // runSafetyBattery itself reports "no hooks to test" when there are none.
+        const battery = execute ? runSafetyBattery(report, root) : null;
         // The versioned AuditReport is the product boundary — the same JSON the
         // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
         // Built ONCE; the rings + fix list are read off it.
@@ -5698,35 +5727,22 @@ async function main(): Promise<void> {
           if (fixes) console.log("\n" + fixes);
         }
         if (battery) console.log(battery.lines.join("\n"));
-        // LIVE MCP tool resolution STARTS each declared MCP server — and a server
-        // is exactly the thing that connects to a real Postgres / authenticates a
-        // real API on boot. Confinement can't save it (deny-all-net breaks the very
-        // `tools/list` it performs), so it is NOT a default — it runs only under an
-        // explicit `--measure`, own-repo only (never spawn a stranger's server),
-        // never under `--fast`. A plain audit just NAMES the opt-in.
-        if (report.mcp) {
-          const isForeign = root !== process.cwd();
-          if (forceMeasure && !fast && !isForeign) {
-            const mcpErrs = await verifyLiveMcpTools(
-              report,
-              adapter.layout,
-              adapter.dialect,
-            );
-            console.log(
-              json
-                ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
-                : "\n" + formatMcpContractReport(mcpErrs),
-            );
-          } else if (forceMeasure && !fast && isForeign) {
-            if (!json)
-              console.log(
-                "\n⊘ Live MCP check skipped — won't spawn a non-cwd plugin's servers (run from the plugin's own repo).",
-              );
-          } else if (!fast && !json) {
-            console.log(
-              "\nℹ MCP server(s) declared — resolve them live (this STARTS your servers, which may connect to your DB/APIs) with: vigiles audit . --measure",
-            );
-          }
+        // LIVE MCP tool resolution STARTS each declared MCP server — a server is
+        // exactly what connects to a real Postgres / authenticates a real API on
+        // boot, and confinement can't save it (deny-all-net breaks the `tools/list`
+        // it performs). So it runs only under consent (`execute`) AND own-repo
+        // (never spawn a stranger's server).
+        if (execute && surfaces.hasMcp) {
+          const mcpErrs = await verifyLiveMcpTools(
+            report,
+            adapter.layout,
+            adapter.dialect,
+          );
+          console.log(
+            json
+              ? JSON.stringify({ mcpContractTools: mcpErrs }, null, 2)
+              : "\n" + formatMcpContractReport(mcpErrs),
+          );
         }
         const capBase = flagValue(args, "--capability-diff");
         if (capBase) {
@@ -5750,19 +5766,21 @@ async function main(): Promise<void> {
           if (args.includes("--fail-on-widen") && diff.widened)
             process.exitCode = 1;
         }
-        // The model trigger tier — "do your skills actually FIRE?" Run-what-you-can:
-        // auto-runs for an interactive human on a subscription (ask-once, then
-        // remembered in .vigilesrc.json), forced by --measure, skipped with a loud
-        // note in --json/CI/non-interactive or --fast. Never auto-spends a metered
-        // API key.
-        await runMeasureTier(
-          report,
-          targets[0],
-          adapter,
-          json,
-          config.audit?.measure,
-          args,
-        );
+        // The model trigger tier — "do your skills actually FIRE?" — runs as part
+        // of the same consent (`execute`), and only when a model is reachable;
+        // otherwise it's a one-line note (never a hang).
+        if (execute && surfaces.triggerableSkills > 0) {
+          if (hasModelAccess(process.env)) {
+            await runTriggerTier(targets[0], report, adapter, args);
+          } else if (!json) {
+            console.log(
+              "\nℹ skill firing not measured — no model access (authenticate the `claude` CLI or set ANTHROPIC_API_KEY).",
+            );
+          }
+        }
+        // The loud read-vs-run nudge for a headless / remembered-no skip — printed
+        // AFTER the report so the deterministic read leads.
+        if (execNote) console.log(execNote);
         // The shareable HTML report — written by default (--no-html to skip), and
         // opened best-effort only for a human at a TTY (never spawn a browser for
         // an agent / CI run).
