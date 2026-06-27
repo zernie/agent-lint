@@ -17,6 +17,8 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { scanPlugin } from "./scan.js";
+import type { PluginLayout } from "./core/layout.js";
+import type { HarnessDialect } from "./core/dialect.js";
 import {
   measureTriggerRate,
   claudeEvalDriver,
@@ -68,6 +70,10 @@ export interface ProbeOptions {
   readonly minDistance?: number;
   /** Which harness to drive (default `"claude-code"`). */
   readonly harness?: ProbeHarness;
+  /** Layout + dialect for candidate discovery — so a Codex repo's skills (under
+   *  the Codex layout) are found, not silently missed by the default CC layout. */
+  readonly layout?: PluginLayout;
+  readonly dialect?: HarnessDialect;
 }
 
 /**
@@ -213,8 +219,10 @@ export async function probePluginTriggersWith(
 ): Promise<BehavioralReport> {
   const ctx: ProbeCtx = { dir, opts, probe };
   // Only model-invocable, describable skills can auto-trigger; user-invoked and
-  // description-less ones can't, so they're not behavioral candidates.
-  const candidates = scanPlugin(dir).skills.filter(
+  // description-less ones can't, so they're not behavioral candidates. Discover
+  // them with the resolved layout/dialect (default CC) so a Codex repo's skills
+  // aren't missed by the wrong layout.
+  const candidates = scanPlugin(dir, opts.layout, opts.dialect).skills.filter(
     (s) => !s.userInvoked && s.hasDescription,
   );
   const results: SkillTriggerResult[] = [];

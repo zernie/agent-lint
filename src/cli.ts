@@ -1981,7 +1981,7 @@ function workflowUsesStaleApi(content: string): boolean {
  * the bare-API heuristic above, which an Action reference short-circuits.
  */
 const REMOVED_SUBCOMMANDS: Record<string, string> = {
-  audit: "lint", // v3 → v4 rename
+  scan: "audit", // renamed: the Lighthouse report verb is `audit`
 };
 
 /** The first removed/renamed `vigiles <sub>` a workflow still calls, if any. */
@@ -1995,7 +1995,7 @@ function workflowRemovedSubcommand(
   return null;
 }
 
-/** Rewrite removed/renamed `vigiles <sub>` invocations in place (audit → lint).
+/** Rewrite removed/renamed `vigiles <sub>` invocations in place (scan → audit).
  * Surgical — preserves the rest of the user's workflow. */
 function rewriteRemovedSubcommands(content: string): string {
   let out = content;
@@ -5246,6 +5246,10 @@ async function runAutoTrigger(
     minDistance: AUTO_MIN_DISTANCE,
     model: flagValue(args, "--model"),
     harness,
+    // Discover candidates with the resolved adapter's layout/dialect — a Codex
+    // repo's skills live under the Codex layout, not the default CC one.
+    layout: adapter.layout,
+    dialect: adapter.dialect,
   });
   console.log(
     json

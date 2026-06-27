@@ -1501,22 +1501,22 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("flags a workflow calling a renamed subcommand (audit→lint), even with the Action present", () => {
+  it("flags a workflow calling a renamed subcommand (scan→audit), even with the Action present", () => {
     const dir = freshProject();
     try {
       const wfDir = join(dir, ".github", "workflows");
       mkdirSync(wfDir, { recursive: true });
-      // The v3→v4 trap: an Action reference (so the bare-API heuristic passes)
-      // PLUS a leftover `npx vigiles audit` step that v4 no longer has. (vigiles:ignore-cmd)
+      // The rename trap: an Action reference (so the bare-API heuristic passes)
+      // PLUS a leftover `npx vigiles scan` step renamed to `audit`. (vigiles:ignore-cmd)
       const stale =
         "name: vigiles\njobs:\n  v:\n    steps:\n" +
         "      - uses: zernie/vigiles@v1\n" +
-        "      - run: npx vigiles audit\n"; // vigiles:ignore-cmd (intentional stale fixture)
+        "      - run: npx vigiles scan\n"; // vigiles:ignore-cmd (intentional stale fixture)
       writeFileSync(join(wfDir, "vigiles.yml"), stale);
       const { stdout } = run("init --no-plugin", dir);
       assert.match(stdout, /STALE/);
+      assert.match(stdout, /vigiles scan/);
       assert.match(stdout, /vigiles audit/);
-      assert.match(stdout, /vigiles lint/);
       assert.ok(
         !/already exists \(up to date\)/.test(stdout),
         "must not claim the stale workflow is up to date",
@@ -1528,7 +1528,7 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
     }
   });
 
-  it("--force rewrites a renamed-subcommand workflow in place (audit→lint), preserving the rest", () => {
+  it("--force rewrites a renamed-subcommand workflow in place (scan→audit), preserving the rest", () => {
     const dir = freshProject();
     try {
       const wfDir = join(dir, ".github", "workflows");
@@ -1536,13 +1536,13 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const stale =
         "name: vigiles\njobs:\n  v:\n    steps:\n" +
         "      - uses: actions/checkout@v4\n" +
-        "      - run: npx vigiles audit\n"; // vigiles:ignore-cmd (intentional stale fixture)
+        "      - run: npx vigiles scan\n"; // vigiles:ignore-cmd (intentional stale fixture)
       writeFileSync(join(wfDir, "vigiles.yml"), stale);
       const { stdout } = run("init --no-plugin --force", dir);
       assert.match(stdout, /Rewrote/);
       const after = readFileSync(join(wfDir, "vigiles.yml"), "utf-8");
-      assert.ok(after.includes("npx vigiles lint"), "audit → lint");
-      assert.ok(!after.includes("vigiles audit"), "no stale audit left");
+      assert.ok(after.includes("npx vigiles audit"), "scan → audit");
+      assert.ok(!after.includes("vigiles scan"), "no stale scan left");
       // Surgical: the rest of the user's workflow is preserved.
       assert.ok(after.includes("actions/checkout@v4"));
     } finally {
