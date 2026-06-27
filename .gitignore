@@ -20,3 +20,6 @@ api-reference/
 
 # npm pack artifacts (smoke tests)
 *.tgz
+
+# Generated audit report
+vigiles-report.html
