@@ -11,10 +11,10 @@
 where it can be, on your own subscription where it can't."** Two pillars survive as
 the public product; everything else is supporting infra, parked depth, or polish:
 
-- **VERIFY** — the cross-reference engine (`lint` / `scan`): free, instant,
+- **VERIFY** — the cross-reference engine (`lint` / `audit`): free, instant,
   deterministic. The credible backbone.
 - **MEASURE** — the harness-testing tiers + trigger-rate + the ecosystem benchmark
-  (`test` / `eval` / `scan --trigger`): the interesting, fundable, on-the-sub story.
+  (`test` / `eval` / `audit --deep`): the interesting, fundable, on-the-sub story.
 
 The launch is **article-led** (measurement at scale — "what actually works"), repo as
 the destination. The pitch: the **deterministic shift-left guardrail + private,
@@ -30,7 +30,7 @@ keep working, un-headline, don't freeze. Is it experimental / half-built / dilut
 | Cluster                                                                                                               | Call                        | Why                                                                         |
 | --------------------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
 | `lint` cross-ref engine (7 catalogs, refs, marks)                                                                     | **POLISH + FREEZE**         | The VERIFY backbone; the credible free wedge                                |
-| `scan` + leaderboard + `--trigger` / `--fix-plan`                                                                     | **POLISH + FREEZE**         | Free report + the viral hook                                                |
+| `audit` (Lighthouse: rings + battery + fixes + HTML) + leaderboard + `--deep`                                         | **POLISH + FREEZE**         | Free report + the viral hook                                                |
 | `test` / `eval` tiers (`runHook`/`runHarnessTest`/`runEval`/`measureTriggerRate`/`measure`)                           | **POLISH + FREEZE**         | The MEASURE story; the public testing API                                   |
 | `init` + GitHub Action + the 8 CLI verbs + exit codes                                                                 | **POLISH + FREEZE**         | Delivery surface; what 90% of launch users touch                            |
 | `compile` (spec→markdown) + `generate types/schema`                                                                   | **POLISH (basic) + FREEZE** | The authoring loop under VERIFY                                             |
@@ -125,7 +125,7 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
 - **Category line:** the **deterministic shift-left guardrail + private measurement for
   your agent harness.**
 - **THE GATEWAY SHARPENING (2026-06-26, from CC-user feedback + the competitive sweep —
-  see `harness-checkup-and-lanes.md`):** `scan` is the ONE simple front door (the iPhone
+  see `harness-checkup-and-lanes.md`):** `audit` is the ONE simple front door (the iPhone
   principle — NO second subcommand, NO env to configure) that runs BOTH the
   cross-reference LINT _and_ canned TESTS (the disaster-battery "does your safety hook
   actually block?", skill over-fire) and prints a score. The SIDEWAYS move past agnix:
@@ -135,7 +135,7 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
   product). The competitive sweep confirmed: the score surface is commoditizing
   (agnix ~250–300★ lint leader, AgentLinter the scorecard-UX leader), but
   cross-reference correctness + the testing layer is unclaimed by everyone — that
-  intersection IS the wedge, so `scan` must lead with the canned-TEST finding
+  intersection IS the wedge, so `audit` must lead with the canned-TEST finding
   ("blocks 2/7"), not the score.
 - **The differentiator (author-time vs runtime — THE one-line wedge):** every other
   player catches drift at **runtime, after the fact** (observability / post-hoc) or lints
