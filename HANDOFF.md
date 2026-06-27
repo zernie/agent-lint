@@ -8,17 +8,41 @@
 > request). A **Stop hook** (`.claude/hooks/session-handoff-check.sh`) nudges you at
 > ≥5 commits without a refresh.
 
-## RESUME HERE — `claude/lint-inline-mode-go56av` — full "Lighthouse for your harness" build IN PROGRESS
+## RESUME HERE — `claude/lint-inline-mode-go56av` — full "Lighthouse for your harness" build DONE; PR not yet opened
 
-**⚠ FINISH THE WHOLE BUILD ON THIS BRANCH = ONE PR.** Do NOT open a new branch/PR for
-the remaining increments — the `audit` rename + every Lighthouse increment below ship
-together as one PR off `claude/lint-inline-mode-go56av`. Open the PR only once the build
-(increments 1–5) is done. It's already a big `refactor!` (breaking), so the PR title
-needs `!`.
+**⚠ ONE PR FOR THE WHOLE BRANCH.** The `audit` rename + all 5 Lighthouse increments
+ship together off `claude/lint-inline-mode-go56av`. It's a big `refactor!` (breaking —
+dropped flags), so the PR title needs `!`. **PR is NOT opened yet** — left for an
+explicit go (the README reframe is a sensitive front-door change worth a founder look
+first; ask before opening).
 
-**State:** Long multi-theme session — README/positioning pass + competitive research +
-the Lighthouse pivot. All green locally (build/tsc, fmt, lint 0 errors, 1677 tests; only
-env-only `dialect-drift` fails here). No PR yet — by design, finishing the build first.
+**State:** Lighthouse build COMPLETE — all 5 increments committed + green locally
+(build/tsc, fmt, lint 0 errors, ~1700 tests; only env-only `dialect-drift` fails here,
+green in CI). Branch pushed.
+
+**Lighthouse build — SHIPPED this session (increments 1–5, each its own commit):**
+
+1. `refactor!`: safety battery runs by DEFAULT in single-dir `audit` (own-direct /
+   foreign-sandbox-or-skip); collapsed `--verify-mcp`+`--trigger` → one `--deep`;
+   folded `--fix-plan`/`--explain` inline; renamed rule `scan-side-effect-free` →
+   `audit-side-effect-free` (recompiled CLAUDE.md). DROPPED flags: --check-hooks,
+   --verify-mcp, --trigger, --fix-plan, --explain.
+2. `feat`: category RINGS — `src/audit-score.ts` buckets findings into Truthfulness/
+   Safety/Triggering/Structure/Tested (0–100 + weighted overall; n/a excluded). Battery
+   scoped to PreToolUse hooks (ScanHook now carries `event`) so session hooks don't
+   tank Safety. `runSafetyBattery` returns {lines, summary}.
+3. `feat`: `--deep` AUTO-PROMPTS — `src/audit-prompts.ts` derives diverse probes from
+   skill descriptions (topicOf caps 8 words; clears a relaxed 0.2-NCD gate). ScanSkill
+   now carries `description`.
+4. `feat`: HTML report — `src/audit-html.ts` (inline SVG rings), written by default to
+   `vigiles-report.html` (--no-html), opened best-effort TTY-only. gitignored.
+5. `docs`: README reframe (audit gateway + real screenshot `vigiles-audit.png` + ring
+   table) + docs/cli.md rewrite + swept `scan --trigger`→`audit --deep` across docs.
+
+**DO NEXT:** open the ONE `refactor!` PR for the whole branch (carries #38–#48 + the
+earlier session work + this Lighthouse build) **once the founder okays it**. Then:
+ecosystem-benchmark v0 (correctness axis); run `scripts/fp-sweep.sh` locally; optional
+live `--deep` validation run (auto-prompts → real model) gated on quota.
 
 **Code/doc changes (shipped on the branch):**
 
@@ -66,33 +90,8 @@ Tested), **battery by default**, ONE **`--deep`** tier (live MCP + model trigger
 **auto-generated probe prompts** (zero-setup), **HTML report written by default + open**,
 README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=FULL.
 
-**SHIPPED this session:**
-
-- (earlier) gateway increment: health score header + the `--check-hooks` battery
-  (own-direct / foreign-sandbox-or-skip — I caught+fixed a subagent running hooks
-  UNCONFINED; lesson: review subagent diffs vs the rules, not just the green gate).
-- **`refactor!`: renamed the `scan` verb → `audit`** (Lighthouse framing; scan=read
-  fought the "we RUN it" thesis + Snyk collision). Clean break, no alias. Swept ~114
-  refs; self-command-refs enforces it. Internal `scanPlugin`/`scan.ts` (gather layer)
-  keep their names. 1677 tests pass; only env-only `dialect-drift` fails locally.
-
-**DO NEXT — the remaining Lighthouse increments (each green+committed; see the design doc §build sequence):**
-
-1. **Battery default + `--deep` collapse** — battery runs in default single-dir `audit`
-   (drop `--check-hooks`); fold `--verify-mcp`+`--trigger` → one `--deep`; reword+rename
-   the `scan-side-effect-free` rule → `audit-side-effect-free` (edit CLAUDE.md.spec.ts,
-   recompile). Fold `--fix-plan`/`--explain` into the report.
-2. **Category scoring** — per-category 0–100 + weighted overall; terminal renders rings
-   (new `src/audit-score.ts` bucketing scoreReport penalties).
-3. **`--deep` auto-prompts** — generate diverse probe prompts from skill descriptions
-   (must pass the prompt-diversity gate). The hard part; deterministic first.
-4. **HTML report** (`src/audit-html.ts`) — self-contained, write-by-default + best-effort
-   open. THE wow artifact.
-5. **README reframe** — "Lighthouse for your harness"; `audit` flagship; HTML screenshot.
-
-**Only after 1–5 are all green on this branch:** open ONE PR for the whole branch
-(carries #38–#48 + this session + the full Lighthouse build — big; `refactor!` title with
-`!`). Then: ecosystem-benchmark v0 (correctness axis); run `scripts/fp-sweep.sh` locally.
+(The earlier "renamed the `scan` verb → `audit`" + gateway-increment work from the
+prior session is now subsumed by increments 1–5 above.)
 
 **Prior in-flight (SEPARATE branch, untouched):** PR **#48** (`claude/handoff-mylfen`)
 — surface-freeze + STABILITY + auto-adopt batch. Re-check its live state if returning.
@@ -102,7 +101,7 @@ README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=F
 - **GIT IS REPO-SCOPED HERE** — `git clone`/GitHub MCP reach only `zernie/vigiles`
   (403 elsewhere) → the fresh-plugin FP sweep is a LOCAL task. npm registry IS reachable.
 - **REAL-MODEL TIERS RUN HERE** — no API key, but `claude` CLI is OAuth-authed; use
-  `eval`/`scan --trigger`/`measureTriggerRate` to dogfood.
+  `eval`/`audit --deep`/`measureTriggerRate` to dogfood.
 - **Background research agents kept returning PLACEHOLDERS** (spawned children, didn't
   deliver) — re-poke via SendMessage to the agentId for the real output; the children
   delivered the substance.
@@ -114,11 +113,13 @@ README reframe. Founder forks: name=`audit`, HTML=write-by-default+open, scope=F
 
 - **The wedge:** author-time / deterministic / pre-run + typed-spec. NOT a linter; don't
   fight agnix for the linting crown. The moat = cross-ref CORRECTNESS + the TESTING layer.
-- **`scan` is the gateway** (free: lint + canned tests + score); API/authored tests = depth.
+- **`audit` is the gateway** (Lighthouse: rings + battery + fixes + HTML, free/zero-config);
+  `--deep` = the one paid tier; API/authored tests = depth.
 - **Spec-first with a markdown on-ramp;** markdown = zero-TS floor, not the default.
   Reliable refs come via adopt-a-spec (ejectable; keep = gateway drug), never heuristics.
-- **`scan` is side-effect-free or sandboxed** (the new rule). No new CLI verbs unless
-  truly needed (`cohesive-cli-surface` / `high-bar-for-new-commands`).
+- **`audit` is side-effect-free or sandboxed** (`audit-side-effect-free` rule; battery
+  is default but own-direct/foreign-sandboxed). No new CLI verbs unless truly needed
+  (`cohesive-cli-surface` / `high-bar-for-new-commands`).
 - **3 doc tiers** (`doc-tiers` rule): public (benefits only) / internal (`research/`+CLAUDE.md)
   / vault (`startup/`, git-crypt, LOCKED — unlock only if a task needs it; it's a leak rail).
 - **Ecosystem-benchmark axis = correctness/performance**, NOT security (Snyk owns that).
