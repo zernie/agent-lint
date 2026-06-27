@@ -79,6 +79,12 @@ export interface ScanSkill {
   readonly name: string;
   readonly path: string;
   readonly hasDescription: boolean;
+  /**
+   * The skill's effective description (frontmatter `description`, else the first
+   * body paragraph — the same text the selector keys on), trimmed; `undefined`
+   * when neither exists. Feeds `--deep`'s auto-generated trigger probes.
+   */
+  readonly description?: string;
   readonly userInvoked: boolean;
   /**
    * The description's dominant script when it DIFFERS from the expected one
@@ -399,6 +405,7 @@ function scanSkills(
       name: fm.name ?? skillName(path),
       path,
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
+      description: effectiveDesc?.trim(),
       userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
       descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
     });
