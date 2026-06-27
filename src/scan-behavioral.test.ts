@@ -1,5 +1,5 @@
 /**
- * `audit --trigger` behavioral-column test suite. Builds a tiny real plugin dir
+ * `audit --deep` behavioral-column test suite. Builds a tiny real plugin dir
  * (so the stub-bodies path works) and drives `probePluginTriggersWith` with an
  * injected fake runner — no model. Asserts: only model-invocable+described skills
  * are probed, missing prompts → unmeasured, recall/precision aggregate, a thin

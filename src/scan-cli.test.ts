@@ -257,13 +257,13 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 });
 
-// --- `vigiles explain` — the deterministic WHY (C4) over the real CLI ----------
+// --- folded deterministic fixes in the default `audit` report (was --explain/--fix-plan)
 
-describe("explain e2e — deterministic cause + fix", () => {
+describe("audit default — folds the deterministic fix into the report", () => {
   let root: string;
 
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "explain-e2e-"));
+    root = mkdtempSync(join(tmpdir(), "audit-fixes-e2e-"));
     mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
     writeFileSync(
       join(root, "demo", ".claude-plugin", "plugin.json"),
@@ -271,8 +271,8 @@ describe("explain e2e — deterministic cause + fix", () => {
     );
     mkdirSync(join(root, "demo", "agents"), { recursive: true });
     // A subagent whose `tools:` names "Reed" — a close typo of the real "Read",
-    // so it's silently dropped: the subagent-tool-contract cause of an
-    // agent-underperforms symptom, with a did-you-mean fix.
+    // so it's silently dropped: the subagent-tool-contract cause, with a
+    // did-you-mean fix the default report now surfaces inline.
     writeFileSync(
       join(root, "demo", "agents", "rev.md"),
       `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
@@ -283,91 +283,21 @@ describe("explain e2e — deterministic cause + fix", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("names the deterministic cause, the symptom, and the one-line fix", () => {
-    const r = run(`audit ${join(root, "demo")} --explain`);
+  it("the default report carries the health score + the ranked FIX with the detector + one-line fix", () => {
+    const r = run(`audit ${join(root, "demo")}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /the subagent loses a declared tool/);
-    assert.match(r.stdout, /\[subagent-tool-contract\]/);
-    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
-  });
-
-  it("a surface name filters to that one underperformer", () => {
-    const r = run(`audit ${join(root, "demo")} --explain rev`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Explaining "rev":/);
-    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
-  });
-
-  it("--json emits the structured explanation array", () => {
-    const r = run(`audit ${join(root, "demo")} --explain --json`);
-    assert.equal(r.exitCode, 0);
-    const exps = JSON.parse(r.stdout) as {
-      surface: string;
-      symptom: string;
-      detector: string;
-      fix: string;
-      confidence: string;
-    }[];
-    assert.equal(exps.length, 1);
-    assert.equal(exps[0].symptom, "agent-underperforms");
-    assert.equal(exps[0].detector, "subagent-tool-contract");
-    assert.equal(exps[0].confidence, "likely");
-    assert.match(exps[0].fix, /Read/);
-  });
-
-  it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
-    const r = run(`audit ${join(root, "demo")} --explain absent`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /No deterministic cause found/);
-  });
-});
-
-describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => {
-  let root: string;
-
-  beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "fix-plan-e2e-"));
-    mkdirSync(join(root, "demo", ".claude-plugin"), { recursive: true });
-    writeFileSync(
-      join(root, "demo", ".claude-plugin", "plugin.json"),
-      '{"name":"demo"}\n',
-    );
-    mkdirSync(join(root, "demo", "agents"), { recursive: true });
-    // Same typo'd-tool subagent as the explain fixture: a deterministic FIX.
-    writeFileSync(
-      join(root, "demo", "agents", "rev.md"),
-      `---\nname: rev\ndescription: Reviews code changes for correctness and style across the whole repo here\ntools: Reed\n---\n# rev\nReview stuff.\n`,
-    );
-  });
-
-  afterAll(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
-    const r = run(`audit ${join(root, "demo")} --fix-plan`);
-    assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /Harness health: \d+\/100/);
+    assert.match(r.stdout, /Harness health: [A-F] \(\d+\/100\)/);
     assert.match(r.stdout, /\[FIX\] rev/);
     assert.match(r.stdout, /\[subagent-tool-contract\]/);
-    // The whole point: hand off the behavioral question to the measured layer.
-    assert.match(r.stdout, /vigiles measure/);
+    assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
-  it("--fix-plan --json emits the structured plan (score, grade, recommendations)", () => {
-    const r = run(`audit ${join(root, "demo")} --fix-plan --json`);
+  it("--json stays the plain machine-readable report (no fix decoration)", () => {
+    const r = run(`audit ${join(root, "demo")} --json`);
     assert.equal(r.exitCode, 0);
-    const plan = JSON.parse(r.stdout) as {
-      score: number;
-      grade: string;
-      empty: boolean;
-      recommendations: { surface: string; action: string; detector: string }[];
-    };
-    assert.equal(plan.empty, false);
-    assert.equal(plan.recommendations.length, 1);
-    assert.equal(plan.recommendations[0].action, "fix");
-    assert.equal(plan.recommendations[0].surface, "rev");
-    assert.equal(plan.recommendations[0].detector, "subagent-tool-contract");
+    const report = JSON.parse(r.stdout) as { dir: string };
+    assert.ok(report.dir, "json parses as a scan report");
+    assert.doesNotMatch(r.stdout, /\[FIX\]/);
   });
 });
 
@@ -712,7 +642,7 @@ describe("scan: trigger-tier nudge", () => {
   it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
     const out = runEnv("audit .", { CLAUDECODE: "1" });
     assert.ok(out.includes("model access detected"), "hint shown");
-    assert.ok(out.includes("--trigger"), "names the trigger command");
+    assert.ok(out.includes("--deep"), "names the deep command");
   });
 
   it("stays silent with no model access", () => {
@@ -774,25 +704,20 @@ describe("scan default output — health score header", () => {
     assert.ok(report.dir, "json has dir field");
   });
 
-  it("score header is absent under --fix-plan (that branch has its own score line)", () => {
-    const r = run(`audit ${root} --fix-plan`);
-    assert.equal(r.exitCode, 0);
-    // --fix-plan prints "Harness health: N/100" via formatOptimize, NOT our header
-    assert.match(r.stdout, /Harness health:/);
-  });
-
-  it("prints the --check-hooks hint when the flag is absent", () => {
+  it("runs the safety battery by default (no flag) — reports no runnable hooks here", () => {
+    // This fixture ships no hooks, so the default battery reports that — proving
+    // it runs without an opt-in flag (the differentiated finding leads).
     const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /vigiles audit --check-hooks/);
+    assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// --check-hooks: disaster battery against hook scripts
+// the safety battery runs by default (own-direct / foreign-sandbox-or-skip)
 // ---------------------------------------------------------------------------
 
-describe("scan --check-hooks e2e", () => {
+describe("audit safety battery e2e (runs by default)", () => {
   let root: string;
   let blockingPlugin: string;
   let permissivePlugin: string;
@@ -865,7 +790,7 @@ describe("scan --check-hooks e2e", () => {
   // executes DIRECT (trusted) — the deterministic path. A non-cwd ("foreign")
   // scan is sandbox-or-skip (env-dependent), covered separately below.
   it("blocking hook (own repo): reports all disasters blocked", () => {
-    const r = run(`audit . --check-hooks`, blockingPlugin);
+    const r = run(`audit .`, blockingPlugin);
     assert.equal(r.exitCode, 0);
     // Must show a Safety battery section.
     assert.match(r.stdout, /Safety battery/);
@@ -876,7 +801,7 @@ describe("scan --check-hooks e2e", () => {
   });
 
   it("permissive hook (own repo): reports disasters slipping through", () => {
-    const r = run(`audit . --check-hooks`, permissivePlugin);
+    const r = run(`audit .`, permissivePlugin);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
     // The permissive hook (exit 0) blocks nothing.
@@ -889,25 +814,14 @@ describe("scan --check-hooks e2e", () => {
     // Scanning a NON-cwd dir runs from the repo root (cwd) → the plugin is
     // foreign → it must sandbox or skip-with-a-loud-note, never run unconfined.
     // Env-robust: pass either way as long as it doesn't crash and the section shows.
-    const r = run(`audit ${blockingPlugin} --check-hooks`);
+    const r = run(`audit ${blockingPlugin}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
   });
 
   it("no-hooks plugin: reports no runnable safety hooks found", () => {
-    const r = run(`audit ${noHooksPlugin} --check-hooks`);
+    const r = run(`audit ${noHooksPlugin}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
-  });
-
-  it("does NOT print the --check-hooks hint when the flag is passed", () => {
-    // The hint is suppressed when the user is already using --check-hooks.
-    const r = run(`audit ${noHooksPlugin} --check-hooks`);
-    assert.equal(r.exitCode, 0);
-    // The hint should not appear (user already opted in).
-    assert.doesNotMatch(
-      r.stdout,
-      /run `vigiles audit --check-hooks` to test your safety hooks/,
-    );
   });
 });

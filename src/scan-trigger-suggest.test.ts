@@ -64,7 +64,7 @@ describe("formatTriggerHint", () => {
   it("names the count + the runnable command, pluralized", () => {
     const one = formatTriggerHint("./plugin", 1);
     expect(one).toContain("1 model-invocable skill ");
-    expect(one).toContain("vigiles audit ./plugin --trigger --prompts=");
+    expect(one).toContain("vigiles audit ./plugin --deep");
     expect(formatTriggerHint("./plugin", 3)).toContain(
       "3 model-invocable skills",
     );

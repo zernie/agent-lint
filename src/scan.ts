@@ -86,7 +86,7 @@ export interface ScanSkill {
    * English-centric, so a description in another script carries a cross-language
    * trigger risk — it may under-fire on English prompts. A RISK flag, not a
    * defect (a language-matched audience is fine); measure the real gap with
-   * `scan --trigger`.
+   * `audit --deep`.
    */
   readonly descriptionScript: Script | null;
 }
@@ -862,7 +862,7 @@ export function scanPlugin(
 }
 
 /**
- * LIVE MCP tool resolution for a scanned plugin — the opt-in (`scan --verify-mcp`)
+ * LIVE MCP tool resolution for a scanned plugin — the opt-in (`audit --deep`)
  * dynamic check no static linter can do: it STARTS each declared MCP server and
  * checks every `mcp__server__tool` the plugin's agents reference actually exists on
  * it (catching rename/removal rot, e.g. `create_issue`→`issue_write`). Reuses the

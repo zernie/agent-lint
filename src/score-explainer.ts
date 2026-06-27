@@ -43,7 +43,7 @@ export type BehavioralSymptom =
  *   never-available tool can't be called); the cause is near-certain.
  * - `"possible"` — a high-precision PROXY for a behavioral risk (a description
  *   overlap / a foreign-script description); deterministic to detect, but whether
- *   it actually moved behaviour is confirmed by `scan --trigger`.
+ *   it actually moved behaviour is confirmed by `audit --deep`.
  */
 export type ExplanationConfidence = "likely" | "possible";
 
