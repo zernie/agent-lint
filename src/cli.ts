@@ -117,6 +117,11 @@ import {
 } from "./audit-prompts.js";
 import { renderAuditHtml } from "./audit-html.js";
 import { buildAuditReport, type AuditReport } from "./audit-report.js";
+import {
+  runAdoptabilityTier,
+  formatAdoptability,
+  type AdoptabilityResult,
+} from "./adoptability.js";
 
 import {
   compileClaude,
@@ -5265,6 +5270,11 @@ async function runAutoTrigger(
 interface ExecutableSurfaces {
   readonly hasMcp: boolean; // own-repo + declares MCP server(s)
   readonly triggerableSkills: number; // model-invocable, described skills
+  // An instruction file whose refs the adoption preview can draft+verify. Harness-
+  // aware: Claude Code only in v1 (drafting drives the `claude` CLI), so a bare
+  // CLAUDE.md repo is consent-eligible but a Codex AGENTS.md repo isn't (it gets a
+  // loud deferral note instead).
+  readonly adoptableRefs: boolean;
 }
 
 /**
@@ -5284,7 +5294,7 @@ async function resolveExecution(
   harness: string,
 ): Promise<{ execute: boolean; note: string | null }> {
   const decision = decideExecute({
-    hasExecutable: s.hasMcp || s.triggerableSkills > 0,
+    hasExecutable: s.hasMcp || s.triggerableSkills > 0 || s.adoptableRefs,
     // A human is "interactive" only when BOTH streams are a terminal — `askOnce`
     // reads stdin, so a TTY stdout with piped/redirected stdin (agents, shell
     // pipelines) must NOT block on a read that never gets input.
@@ -5325,6 +5335,11 @@ function buildExecuteDisclosure(
   if (s.triggerableSkills > 0) {
     lines.push(
       `  · measure whether skills fire (${triggerCostWording(harness)})`,
+    );
+  }
+  if (s.adoptableRefs) {
+    lines.push(
+      `  · draft + verify your instruction file's references (${triggerCostWording(harness)})`,
     );
   }
   lines.push("Asked once — remembered in .vigilesrc.json. [y/N] ");
@@ -5603,6 +5618,9 @@ async function main(): Promise<void> {
           triggerableSkills: report.skills.filter(
             (s) => s.hasDescription && !s.userInvoked,
           ).length,
+          adoptableRefs:
+            adapter.name === "claude-code" &&
+            existsSync(resolve(root, adapter.layout.instructionFile)),
         };
         const { execute, note: execNote } = await resolveExecution(
           surfaces,
@@ -5667,19 +5685,67 @@ async function main(): Promise<void> {
             );
           }
         }
+        // The adoption preview — "what would vigiles catch in YOUR repo?" The model
+        // DRAFTS the verifiable refs in the instruction file; the cross-ref engine
+        // VERIFIES each, so "M broken right now" is trustworthy though the extraction
+        // is probabilistic. Same consent as the trigger tier (`surfaces.adoptableRefs`
+        // makes a bare instruction-file repo consent-eligible — the prime adoption
+        // target). v1: instruction-file only; drafting drives the `claude` CLI, so
+        // `adoptableRefs` is Claude Code only (the Codex deferral note is printed
+        // below as a LOUD harness-parity deferral, never a silent CC-only path).
+        let adoptabilityResult: AdoptabilityResult | undefined;
+        if (execute && surfaces.adoptableRefs) {
+          if (hasModelAccess(process.env)) {
+            const instrPath = resolve(root, adapter.layout.instructionFile);
+            adoptabilityResult = await runAdoptabilityTier({
+              instructionContent: readFileSync(instrPath, "utf-8"),
+              basePath: root,
+            });
+            if (!json)
+              console.log(
+                "\n" +
+                  formatAdoptability(
+                    adoptabilityResult,
+                    adapter.layout.instructionFile,
+                  ),
+              );
+          } else if (!json && surfaces.triggerableSkills === 0) {
+            // Only when the trigger tier didn't already print the same note.
+            console.log(
+              "\nℹ adoptability not measured — no model access (authenticate the `claude` CLI or set ANTHROPIC_API_KEY).",
+            );
+          }
+        }
+        // LOUD harness-parity deferral: adoptability drafting drives the `claude`
+        // CLI, so a Codex repo with an instruction file is told it's a follow-up,
+        // never silently skipped (research/adoption-gateway-preview.md, increment 4).
+        if (
+          !json &&
+          adapter.name === "codex" &&
+          existsSync(resolve(root, adapter.layout.instructionFile))
+        ) {
+          console.log(
+            "\nℹ adoptability preview (what vigiles would catch in your repo) is Claude Code only for now — Codex support is a follow-up.",
+          );
+        }
         // The loud read-vs-run nudge for a headless / remembered-no skip — printed
         // AFTER the report so the deterministic read leads.
         if (execNote) console.log(execNote);
+        // The final report folds in the adoptability preview (when the model-gated
+        // tier ran) so the written HTML/JSON carry it; a deterministic read omits it.
+        const finalReport: AuditReport = adoptabilityResult
+          ? { ...auditReport, adoptability: adoptabilityResult }
+          : auditReport;
         // The shareable HTML report — written by default (--no-html to skip), and
         // opened best-effort only for a human at a TTY (never spawn a browser for
         // an agent / CI run).
         if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(auditReport);
+          writeAuditHtml(finalReport);
         }
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
         if (!json && !args.includes("--no-json")) {
-          writeAuditJson(auditReport);
+          writeAuditJson(finalReport);
         }
       }
       break;

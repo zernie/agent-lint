@@ -45,6 +45,18 @@ export interface AuditInventory {
   untested: number;
 }
 
+export interface BrokenRef {
+  kind: "enforce" | "file" | "cmd" | "dir";
+  ref: string;
+  issue: string;
+}
+
+export interface AdoptabilityResult {
+  total: number;
+  broken: number;
+  brokenRefs: BrokenRef[];
+}
+
 export interface AuditReport {
   meta: {
     schemaVersion: number;
@@ -57,4 +69,6 @@ export interface AuditReport {
   score: AuditScore;
   recommendations: Recommendation[];
   inventory: AuditInventory;
+  /** The adoption preview — present only when the model-gated tier ran. */
+  adoptability?: AdoptabilityResult;
 }
