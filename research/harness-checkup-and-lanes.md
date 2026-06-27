@@ -148,7 +148,11 @@ No new verb (a flag). Confinement-aware per `scan-side-effect-free`: own repo ru
 direct, foreign plugin sandboxes or auto-skips. Over-fire (description-overlap) was
 already in `scan`. So the differentiated free finding is live.
 
-**Next:**
+**Next — the full Lighthouse build (locked 2026-06-27):** see
+`research/audit-lighthouse-design.md` for the concrete shape — rename the verb to
+`audit`, category rings, battery-by-default, one `--deep` tier with auto-generated
+trigger prompts, and a write-by-default HTML report. Supersedes the
+flag-per-check surface below.
 
 - The **badge** (README markdown + URL) — the distribution flywheel, not yet built.
 - Lead the casual surfaces (README, `init` output, GH Action PR comment) with the

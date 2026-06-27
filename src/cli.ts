@@ -1971,7 +1971,7 @@ function workflowUsesStaleApi(content: string): boolean {
   if (content.includes("zernie/vigiles@")) return false; // uses the Action — fine
   if (!/\bvigiles\b/.test(content)) return false; // not a vigiles workflow
   const hasModernCmd =
-    /vigiles\s+(lint|test|eval|compile|scan|generate-types|generate-schema|init)\b/.test(
+    /vigiles\s+(lint|test|eval|compile|audit|generate-types|generate-schema|init)\b/.test(
       content,
     );
   return !hasModernCmd;
@@ -3566,14 +3566,14 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * `vigiles scan <dir> --trigger` — the MODEL-GATED behavioral report on a plugin (the paid
+ * `vigiles audit <dir> --trigger` — the MODEL-GATED behavioral report on a plugin (the paid
  * tier; `scan` stays free/deterministic). Loads the author-supplied per-skill prompt
  * sets (`--prompts`) and reports BOTH behavioral columns: trigger-rate (does each
  * skill actually FIRE — recall + precision) and the selection-collision matrix (does
  * one skill HIJACK a sibling's prompt — the behavioral confirmation of the
  * deterministic `description-overlap` rule). Needs the harness CLI + model auth;
  * degrades honestly ("unavailable") when absent. The OSS-testing front door:
- * `vigiles scan ./plugin --trigger --prompts=p.json`.
+ * `vigiles audit ./plugin --trigger --prompts=p.json`.
  */
 async function handleMeasure(
   restArgs: string[],
@@ -4010,7 +4010,7 @@ function harnessFlagFrom(argv: string[]): string | undefined {
 }
 
 /**
- * `vigiles scan <dir> --explain [name]` — the deterministic WHY behind a low score (C4):
+ * `vigiles audit <dir> --explain [name]` — the deterministic WHY behind a low score (C4):
  * scan a plugin and surface the structural CAUSE of a behavioral symptom + the
  * one-line fix. No model — it reads the same `ScanReport` `scan` computes. An
  * optional surface name narrows to one underperforming skill/agent (the
@@ -4209,7 +4209,7 @@ function printUsage(command: string | undefined): void {
     "  vigiles lint [files...]        Verify references, find gaps in instruction files",
   );
   console.log(
-    "  vigiles scan [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
+    "  vigiles audit [dir...]          Report what a plugin ships + what's broken (free; 2+ dirs → leaderboard)",
   );
   console.log(
     "                                 --trigger: do skills fire/collide? (real model) · --explain: why a surface underperforms · --fix-plan",
@@ -5263,7 +5263,7 @@ async function promptTriggerSetup(
     "  ✓ Wrote trigger-prompts.json — fill in the placeholders, then run:",
   );
   console.log(
-    `    vigiles scan ${dir} --trigger --prompts=trigger-prompts.json`,
+    `    vigiles audit ${dir} --trigger --prompts=trigger-prompts.json`,
   );
 }
 
@@ -5362,7 +5362,7 @@ async function main(): Promise<void> {
       handleRunScripts("eval", args, restArgs);
       break;
 
-    case "scan": {
+    case "audit": {
       // Model-gated behavioral column + the deterministic diagnostic, folded into
       // scan (formerly the `measure` / `explain` verbs): `--trigger` measures
       // whether each skill FIRES / COLLIDES (real model), `--explain` is the
@@ -5453,7 +5453,7 @@ async function main(): Promise<void> {
             // execution-free per the scan-side-effect-free rule).
             if (!args.includes("--check-hooks")) {
               console.log(
-                `\n(run \`vigiles scan --check-hooks\` to test your safety hooks against the disaster battery)`,
+                `\n(run \`vigiles audit --check-hooks\` to test your safety hooks against the disaster battery)`,
               );
             }
           }

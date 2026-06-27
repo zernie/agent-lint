@@ -13,13 +13,13 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
-npx vigiles scan [dir]              # Report what a plugin/repo ships + what's broken (no model); prints health score
-npx vigiles scan <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
-npx vigiles scan <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
-npx vigiles scan <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
-npx vigiles scan <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
-npx vigiles scan <dir> --check-hooks # Run the disaster battery against every ok hook (opt-in, executes hooks, sandboxed for foreign plugins)
-npx vigiles scan <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
+npx vigiles audit [dir]              # Report what a plugin/repo ships + what's broken (no model); prints health score
+npx vigiles audit <dir> --fix-plan   # Harness health score + ranked free fixes, before measuring (no model)
+npx vigiles audit <dir> --explain [name]  # The deterministic WHY a skill/agent underperforms + the fix (no model)
+npx vigiles audit <dir> --trigger --prompts=p.json  # Does each skill FIRE / COLLIDE? recall + precision + collisions (real model)
+npx vigiles audit <dir> --verify-mcp # LIVE-check mcp__server__tool refs resolve on the real server (opt-in, no model)
+npx vigiles audit <dir> --check-hooks # Run the disaster battery against every ok hook (opt-in, executes hooks, sandboxed for foreign plugins)
+npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
 npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
 npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (--check to verify)
@@ -284,12 +284,12 @@ may be due. It reads only your own install (nothing is sent or vendored), never
 throws, and stays silent on a mere version bump with no surface change.
 
 ```bash
-npx vigiles scan ./some-plugin          # human-readable report for one plugin
-npx vigiles scan ./some-plugin --json   # structured, for pipelines
-npx vigiles scan ./plugins/*/           # ≥2 targets → ranked health leaderboard
-npx vigiles scan ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
-npx vigiles scan ./marketplace-repo     # a marketplace.json root → ranks every member
-npx vigiles scan ./repo --harness=codex # override harness detection
+npx vigiles audit ./some-plugin          # human-readable report for one plugin
+npx vigiles audit ./some-plugin --json   # structured, for pipelines
+npx vigiles audit ./plugins/*/           # ≥2 targets → ranked health leaderboard
+npx vigiles audit ./plugins/*/ --md      # ranked leaderboard as a Markdown table (publishable)
+npx vigiles audit ./marketplace-repo     # a marketplace.json root → ranks every member
+npx vigiles audit ./repo --harness=codex # override harness detection
 ```
 
 Pass **more than one directory** — or a single **marketplace** root (a
@@ -325,8 +325,8 @@ collapsing `emulate_cpu` + `emulate_network` into a single `emulate`), which lea
 dead reference no static linter can see.
 
 ```bash
-npx vigiles scan ./some-plugin --verify-mcp          # human-readable; did-you-mean on a miss
-npx vigiles scan ./some-plugin --verify-mcp --json   # { "mcpContractTools": [...] }
+npx vigiles audit ./some-plugin --verify-mcp          # human-readable; did-you-mean on a miss
+npx vigiles audit ./some-plugin --verify-mcp --json   # { "mcpContractTools": [...] }
 ```
 
 Three things to know:
@@ -358,7 +358,7 @@ doesn't (exit 1 ≠ 2, wrong JSON field, a missed compound command). The battery
 the hook's **logic**, not just its presence.
 
 ```bash
-npx vigiles scan ./my-plugin --check-hooks   # runs every ok hook against 7 disasters
+npx vigiles audit ./my-plugin --check-hooks   # runs every ok hook against 7 disasters
 ```
 
 Output example:
@@ -394,9 +394,9 @@ to make a widening a non-zero exit (the opt-in CI gate — don't cry wolf, since
 widening is often intended).
 
 ```bash
-npx vigiles scan ./head --capability-diff=./base                  # report (exit 0)
-npx vigiles scan ./head --capability-diff=./base --fail-on-widen  # exit 1 if widened
-npx vigiles scan ./head --capability-diff=./base --json           # structured diff
+npx vigiles audit ./head --capability-diff=./base                  # report (exit 0)
+npx vigiles audit ./head --capability-diff=./base --fail-on-widen  # exit 1 if widened
+npx vigiles audit ./head --capability-diff=./base --json           # structured diff
 ```
 
 This is the **capability-diff** check: the capability surface is the typed
@@ -421,8 +421,8 @@ Prompts are **author-supplied** (a path in prose is undecidable): a JSON map of 
 name → `{ prompts, irrelevant }`.
 
 ```bash
-npx vigiles scan ./some-plugin --trigger --prompts=./probes.json
-npx vigiles scan ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
+npx vigiles audit ./some-plugin --trigger --prompts=./probes.json
+npx vigiles audit ./some-plugin --trigger --prompts=./probes.json --concurrency=5 --model=sonnet
 ```
 
 ```jsonc
@@ -467,10 +467,10 @@ finding to the behavioural symptom it accounts for:
 | the subagent won't register        | missing `name`/`description` frontmatter (`subagent-frontmatter`)                                         |
 
 ```bash
-npx vigiles scan ./some-plugin --explain          # every cause found, likely-first
-npx vigiles scan ./some-plugin --explain caveman  # narrow to one underperformer
-npx vigiles scan ./some-plugin --explain --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
-npx vigiles scan ./repo --explain --harness=codex # override harness detection
+npx vigiles audit ./some-plugin --explain          # every cause found, likely-first
+npx vigiles audit ./some-plugin --explain caveman  # narrow to one underperformer
+npx vigiles audit ./some-plugin --explain --json   # the agent-consumable array of {symptom, cause, detector, fix, confidence}
+npx vigiles audit ./repo --explain --harness=codex # override harness detection
 ```
 
 `confidence` is `likely` (a hard dead-end — a missing script can't run) or
@@ -520,9 +520,9 @@ carries the cause, the one-line fix, and an action verb — `FIX` (a structural
 dead-end) or `DIFFERENTIATE` (a description-overlap pair).
 
 ```bash
-npx vigiles scan ./my-plugin --fix-plan          # health score + ranked free fixes, likely-first
-npx vigiles scan ./my-plugin --fix-plan --json   # the agent-consumable plan {score, grade, empty, recommendations}
-npx vigiles scan ./repo --fix-plan --harness=codex
+npx vigiles audit ./my-plugin --fix-plan          # health score + ranked free fixes, likely-first
+npx vigiles audit ./my-plugin --fix-plan --json   # the agent-consumable plan {score, grade, empty, recommendations}
+npx vigiles audit ./repo --fix-plan --harness=codex
 ```
 
 This is the **"linting as a free pre-filter to measurement"** thesis: clear the

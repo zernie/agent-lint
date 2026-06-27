@@ -4,7 +4,7 @@ Cross-reference a `type: "mcp_tool"` **hook action** against the plugin's declar
 MCP servers. Claude Code hooks support five action types (command / http /
 mcp_tool / prompt / agent); an `mcp_tool` action calls a tool on an
 already-connected MCP server and **requires** a `server` + `tool` field. This rule
-flags two ways it silently never dispatches. Same detector `vigiles scan` uses
+flags two ways it silently never dispatches. Same detector `vigiles audit` uses
 (`verifyMcpHookTargets` in `src/core/mcp-hook.ts`).
 
 It extends the tool cross-reference to the **hook** surface — sibling of

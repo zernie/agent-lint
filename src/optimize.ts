@@ -1,6 +1,6 @@
 /**
  * The per-repo harness optimizer's DETERMINISTIC spine — shipped as the
- * `vigiles scan --fix-plan` lens (NOT its own `optimize` verb: until the measured
+ * `vigiles audit --fix-plan` lens (NOT its own `optimize` verb: until the measured
  * A/B half lands, an "optimizer" that only re-prints scan's findings doesn't earn
  * a separate command, so it's folded into scan as one more view on the same
  * report; see research/roadmap.md §P2 "reconsider an `optimize` verb").

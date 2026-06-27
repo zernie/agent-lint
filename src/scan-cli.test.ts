@@ -1,6 +1,6 @@
 /**
- * End-to-end `vigiles scan` over the repo-shape matrix — driving the REAL built
- * CLI (`node dist/cli.js scan …`) the way a user does, across Claude Code,
+ * End-to-end `vigiles audit` over the repo-shape matrix — driving the REAL built
+ * CLI (`node dist/cli.js audit …`) the way a user does, across Claude Code,
  * Codex, mixed, instruction-only, and marketplace repos.
  *
  * Two fixture sources, by design:
@@ -62,7 +62,7 @@ function vendored(prefix: string): string {
 
 describe("scan e2e — Claude Code (dogfood real OSS)", () => {
   it("reports a real multi-surface plugin (oh-my-claudecode)", () => {
-    const r = run(`scan ${vendored("oh-my-claudecode")}`);
+    const r = run(`audit ${vendored("oh-my-claudecode")}`);
     assert.equal(r.exitCode, 0, "scan is read-only — always exits 0");
     assert.match(r.stdout, /Detected harness: claude-code/);
     assert.match(r.stdout, /Skills \(\d+\)/);
@@ -70,7 +70,7 @@ describe("scan e2e — Claude Code (dogfood real OSS)", () => {
   });
 
   it("flags an inherits-all agent in a real plugin (wshobson-accessibility)", () => {
-    const r = run(`scan ${vendored("wshobson-accessibility")}`);
+    const r = run(`audit ${vendored("wshobson-accessibility")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: claude-code/);
     // ships an agent with no `tools:` line → the inherits-all footgun
@@ -155,7 +155,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("CC instruction-only repo: detects claude-code + reports the instruction file", () => {
-    const r = run(`scan ${join(root, "normal")}`);
+    const r = run(`audit ${join(root, "normal")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: claude-code/);
     assert.match(
@@ -166,7 +166,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("Codex repo: detects codex, reports AGENTS.md + skill + TOML MCP", () => {
-    const r = run(`scan ${join(root, "codex")}`);
+    const r = run(`audit ${join(root, "codex")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Detected harness: codex/);
     assert.match(
@@ -199,18 +199,18 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("mixed repo: warns it matches both harnesses, and --harness overrides", () => {
-    const auto = run(`scan ${join(root, "mixed")}`);
+    const auto = run(`audit ${join(root, "mixed")}`);
     assert.equal(auto.exitCode, 0);
     assert.match(auto.stdout, /Detected harness: claude-code/);
     assert.match(auto.stdout, /repo also matches: codex/);
 
-    const forced = run(`scan ${join(root, "mixed")} --harness=codex`);
+    const forced = run(`audit ${join(root, "mixed")} --harness=codex`);
     assert.match(forced.stdout, /Detected harness: codex/);
     assert.doesNotMatch(forced.stdout, /repo also matches/); // override silences it
   });
 
   it("marketplace root: expands members into a ranked leaderboard", () => {
-    const r = run(`scan ${join(root, "mp")}`);
+    const r = run(`audit ${join(root, "mp")}`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Plugin health leaderboard \(2 scanned\)/);
     assert.match(r.stdout, /alpha/);
@@ -230,7 +230,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
         ],
       }),
     );
-    const r = run(`scan ${join(root, "curated")}`);
+    const r = run(`audit ${join(root, "curated")}`);
     assert.equal(r.exitCode, 0);
     assert.match(
       r.stdout,
@@ -241,7 +241,7 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
   });
 
   it("--json emits a parseable report with the instruction file", () => {
-    const r = run(`scan ${join(root, "codex")} --json`);
+    const r = run(`audit ${join(root, "codex")} --json`);
     assert.equal(r.exitCode, 0);
     const report = JSON.parse(r.stdout) as {
       instructions: { file: string; hasSpec: boolean } | null;
@@ -284,7 +284,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("names the deterministic cause, the symptom, and the one-line fix", () => {
-    const r = run(`scan ${join(root, "demo")} --explain`);
+    const r = run(`audit ${join(root, "demo")} --explain`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /the subagent loses a declared tool/);
     assert.match(r.stdout, /\[subagent-tool-contract\]/);
@@ -292,14 +292,14 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a surface name filters to that one underperformer", () => {
-    const r = run(`scan ${join(root, "demo")} --explain rev`);
+    const r = run(`audit ${join(root, "demo")} --explain rev`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Explaining "rev":/);
     assert.match(r.stdout, /change the tool "Reed" to "Read"/);
   });
 
   it("--json emits the structured explanation array", () => {
-    const r = run(`scan ${join(root, "demo")} --explain --json`);
+    const r = run(`audit ${join(root, "demo")} --explain --json`);
     assert.equal(r.exitCode, 0);
     const exps = JSON.parse(r.stdout) as {
       surface: string;
@@ -316,7 +316,7 @@ describe("explain e2e — deterministic cause + fix", () => {
   });
 
   it("a clean surface reports no deterministic cause (behavioral fallthrough)", () => {
-    const r = run(`scan ${join(root, "demo")} --explain absent`);
+    const r = run(`audit ${join(root, "demo")} --explain absent`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /No deterministic cause found/);
   });
@@ -345,7 +345,7 @@ describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => 
   });
 
   it("prints the health score and a ranked FIX with the hand-off to measurement", () => {
-    const r = run(`scan ${join(root, "demo")} --fix-plan`);
+    const r = run(`audit ${join(root, "demo")} --fix-plan`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Harness health: \d+\/100/);
     assert.match(r.stdout, /\[FIX\] rev/);
@@ -355,7 +355,7 @@ describe("scan --fix-plan e2e — health score + ranked free fixes (A2)", () => 
   });
 
   it("--fix-plan --json emits the structured plan (score, grade, recommendations)", () => {
-    const r = run(`scan ${join(root, "demo")} --fix-plan --json`);
+    const r = run(`audit ${join(root, "demo")} --fix-plan --json`);
     assert.equal(r.exitCode, 0);
     const plan = JSON.parse(r.stdout) as {
       score: number;
@@ -623,7 +623,7 @@ describe("scan --capability-diff e2e", () => {
   it("flags a widened blast radius and exits 0 by default (informational)", () => {
     const { before, after, root } = versions();
     try {
-      const r = run(`scan ${after} --capability-diff=${before}`);
+      const r = run(`audit ${after} --capability-diff=${before}`);
       assert.equal(r.exitCode, 0, "widening is informational by default");
       assert.match(r.stdout, /WIDENED/);
       assert.match(r.stdout, /side-effecting: Bash/);
@@ -636,7 +636,7 @@ describe("scan --capability-diff e2e", () => {
     const { before, after, root } = versions();
     try {
       const r = run(
-        `scan ${after} --capability-diff=${before} --fail-on-widen`,
+        `audit ${after} --capability-diff=${before} --fail-on-widen`,
       );
       assert.equal(r.exitCode, 1);
     } finally {
@@ -647,7 +647,9 @@ describe("scan --capability-diff e2e", () => {
   it("reports no change when the surface is identical", () => {
     const { after, root } = versions();
     try {
-      const r = run(`scan ${after} --capability-diff=${after} --fail-on-widen`);
+      const r = run(
+        `audit ${after} --capability-diff=${after} --fail-on-widen`,
+      );
       assert.equal(r.exitCode, 0, "no widening → no gate trip");
       assert.match(r.stdout, /unchanged/);
     } finally {
@@ -708,23 +710,23 @@ describe("scan: trigger-tier nudge", () => {
   });
 
   it("hints (non-blocking) when a model is reachable + skills are model-invocable", () => {
-    const out = runEnv("scan .", { CLAUDECODE: "1" });
+    const out = runEnv("audit .", { CLAUDECODE: "1" });
     assert.ok(out.includes("model access detected"), "hint shown");
     assert.ok(out.includes("--trigger"), "names the trigger command");
   });
 
   it("stays silent with no model access", () => {
-    const out = runEnv("scan .", {}); // all model signals stripped
+    const out = runEnv("audit .", {}); // all model signals stripped
     assert.ok(!out.includes("model access detected"), "no hint without access");
   });
 
   it("stays silent under --json even with model access (machine output)", () => {
-    const out = runEnv("scan . --json", { CLAUDECODE: "1" });
+    const out = runEnv("audit . --json", { CLAUDECODE: "1" });
     assert.ok(!out.includes("model access detected"), "no hint in json mode");
   });
 
   it("--no-interactive never prompts (hint only)", () => {
-    const out = runEnv("scan . --no-interactive", { CLAUDECODE: "1" });
+    const out = runEnv("audit . --no-interactive", { CLAUDECODE: "1" });
     assert.ok(
       out.includes("model access detected"),
       "hint shown, not a prompt",
@@ -755,7 +757,7 @@ describe("scan default output — health score header", () => {
   });
 
   it("prints a Harness health: <grade> (<score>/100) line before the report", () => {
-    const r = run(`scan ${root}`);
+    const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
     // The score header must appear.
     assert.match(r.stdout, /Harness health: [A-F] \(\d+\/100\)/);
@@ -764,7 +766,7 @@ describe("scan default output — health score header", () => {
   });
 
   it("score header is absent under --json (machine output)", () => {
-    const r = run(`scan ${root} --json`);
+    const r = run(`audit ${root} --json`);
     assert.equal(r.exitCode, 0);
     assert.doesNotMatch(r.stdout, /Harness health:/);
     // But the JSON still parses as a report.
@@ -773,16 +775,16 @@ describe("scan default output — health score header", () => {
   });
 
   it("score header is absent under --fix-plan (that branch has its own score line)", () => {
-    const r = run(`scan ${root} --fix-plan`);
+    const r = run(`audit ${root} --fix-plan`);
     assert.equal(r.exitCode, 0);
     // --fix-plan prints "Harness health: N/100" via formatOptimize, NOT our header
     assert.match(r.stdout, /Harness health:/);
   });
 
   it("prints the --check-hooks hint when the flag is absent", () => {
-    const r = run(`scan ${root}`);
+    const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
-    assert.match(r.stdout, /vigiles scan --check-hooks/);
+    assert.match(r.stdout, /vigiles audit --check-hooks/);
   });
 });
 
@@ -863,7 +865,7 @@ describe("scan --check-hooks e2e", () => {
   // executes DIRECT (trusted) — the deterministic path. A non-cwd ("foreign")
   // scan is sandbox-or-skip (env-dependent), covered separately below.
   it("blocking hook (own repo): reports all disasters blocked", () => {
-    const r = run(`scan . --check-hooks`, blockingPlugin);
+    const r = run(`audit . --check-hooks`, blockingPlugin);
     assert.equal(r.exitCode, 0);
     // Must show a Safety battery section.
     assert.match(r.stdout, /Safety battery/);
@@ -874,7 +876,7 @@ describe("scan --check-hooks e2e", () => {
   });
 
   it("permissive hook (own repo): reports disasters slipping through", () => {
-    const r = run(`scan . --check-hooks`, permissivePlugin);
+    const r = run(`audit . --check-hooks`, permissivePlugin);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
     // The permissive hook (exit 0) blocks nothing.
@@ -887,25 +889,25 @@ describe("scan --check-hooks e2e", () => {
     // Scanning a NON-cwd dir runs from the repo root (cwd) → the plugin is
     // foreign → it must sandbox or skip-with-a-loud-note, never run unconfined.
     // Env-robust: pass either way as long as it doesn't crash and the section shows.
-    const r = run(`scan ${blockingPlugin} --check-hooks`);
+    const r = run(`audit ${blockingPlugin} --check-hooks`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
   });
 
   it("no-hooks plugin: reports no runnable safety hooks found", () => {
-    const r = run(`scan ${noHooksPlugin} --check-hooks`);
+    const r = run(`audit ${noHooksPlugin} --check-hooks`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery: no runnable safety hooks found/);
   });
 
   it("does NOT print the --check-hooks hint when the flag is passed", () => {
     // The hint is suppressed when the user is already using --check-hooks.
-    const r = run(`scan ${noHooksPlugin} --check-hooks`);
+    const r = run(`audit ${noHooksPlugin} --check-hooks`);
     assert.equal(r.exitCode, 0);
     // The hint should not appear (user already opted in).
     assert.doesNotMatch(
       r.stdout,
-      /run `vigiles scan --check-hooks` to test your safety hooks/,
+      /run `vigiles audit --check-hooks` to test your safety hooks/,
     );
   });
 });

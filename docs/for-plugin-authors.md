@@ -30,7 +30,7 @@ Point `scan` at your plugin directory. It's deterministic — no model, no API k
 and reports what you ship and what's broken:
 
 ```bash
-npx vigiles scan ./my-plugin
+npx vigiles audit ./my-plugin
 ```
 
 It surfaces the defects that quietly break a plugin for everyone who installs it,
@@ -71,7 +71,7 @@ either. This is the one model-gated step, measured on your own subscription:
 # --trigger needs a prompts file: a map of skill name → realistic prompts to
 # fire it (+ optional `irrelevant` prompts that should NOT, to score precision):
 #   { "my-skill": { "prompts": ["how do I …", "…"], "irrelevant": ["…"] } }
-npx vigiles scan ./my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./my-plugin --trigger --prompts=prompts.json
 ```
 
 For per-skill thresholds in a test, drive `measureTriggerRate` directly — it
@@ -86,11 +86,11 @@ Give `scan` more than one plugin and it ranks every one by structural health —
 
 ```bash
 # 1) Pass several plugin directories explicitly:
-npx vigiles scan ./plugin-a ./plugin-b ./plugin-c
+npx vigiles audit ./plugin-a ./plugin-b ./plugin-c
 
 # 2) Point it at a repo that ships a marketplace.json (e.g.
 #    .claude-plugin/marketplace.json) — scan expands it into its members:
-npx vigiles scan ./marketplace
+npx vigiles audit ./marketplace
 ```
 
 A single plain folder with no `marketplace.json` is scanned as **one** plugin (its
@@ -105,7 +105,7 @@ operation: point it at an individual plugin directory, not the marketplace root.
 Run it on the member dirs you care about:
 
 ```bash
-npx vigiles scan ./marketplace/my-plugin --trigger --prompts=prompts.json
+npx vigiles audit ./marketplace/my-plugin --trigger --prompts=prompts.json
 ```
 
 ## 5. Test and gate it in CI

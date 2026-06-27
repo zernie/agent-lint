@@ -139,7 +139,7 @@ reads `codex exec`'s plain text into `output` only. The **eval** tier reads
 runner, and skill-firing predicate (`parseCodexEvalRun` / `codexEvalAgentRunner` /
 `codexSkillFired`) are validated against the real binary, and the public dispatch
 is wired: `measureTriggerRate(spec, { evalDriver: codexEvalDriver })` and, through
-the CLI, `vigiles scan --trigger --harness=codex`. It's fake-tested end-to-end
+the CLI, `vigiles audit --trigger --harness=codex`. It's fake-tested end-to-end
 (an injected driver, no binary); the one remaining step is a live native eval run,
 gated on Codex quota. One thing worth knowing as a user: **Codex has no "skill
 selected" event** the way Claude does, so a skill trigger is detected by the model
