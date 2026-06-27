@@ -1,32 +1,72 @@
 /**
- * The shareable HTML audit report — the Lighthouse artifact nobody in
- * agent-tooling ships. Self-contained (inline CSS + inline SVG rings, zero deps,
- * works offline by double-click), written by default so a `vigiles audit` leaves
- * a report you can open, screenshot, or attach to a PR.
+ * The shareable HTML audit report. Two renderers, one entry:
  *
- * Pure: a render function over the already-computed pieces (category score, the
- * deterministic fix list, the safety-battery aggregate, the surface inventory) —
- * no fs, no model. The CLI computes those once and both prints them and renders
- * this. Tested with a constructed input (no model, no browser).
+ * - `renderAuditHtml(report)` — the DEFAULT: injects the {@link AuditReport} JSON
+ *   into the prebuilt **Vite + React + shadcn** template (`report/`, built to one
+ *   self-contained file at `dist/audit-report.template.html`). The React app runs
+ *   in the reader's browser; the CLI just string-injects the data, so the CLI
+ *   stays runtime-dependency-light and the output is still a single offline file.
+ * - `renderAuditHtmlSimple(report)` — a zero-dep inline-CSS fallback (used by
+ *   `--simple`, and automatically when the built template isn't present, e.g. a
+ *   dev checkout that hasn't run the report build). Pure string, no fs.
+ *
+ * The data is the versioned {@link AuditReport} either way — the same contract a
+ * hosted dashboard ingests. `<`/`>`/`&` are escaped on injection so report text
+ * can never break out of the `<script>`.
  */
-import type { AuditScore, CategoryScore } from "./audit-score.js";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import type { AuditReport } from "./audit-report.js";
+import type { CategoryScore } from "./audit-score.js";
 import type { Recommendation } from "./optimize.js";
 
-export interface AuditHtmlInput {
-  readonly dir: string;
-  readonly harness: string;
-  readonly score: AuditScore;
-  readonly recommendations: readonly Recommendation[];
-  /** Surface inventory for the "what it ships" section. */
-  readonly inventory: {
-    readonly skills: number;
-    readonly agents: number;
-    readonly hooks: number;
-    readonly commands: number;
-    readonly mcp: boolean;
-    readonly untested: number;
-  };
+const PLACEHOLDER = "__VIGILES_DATA_PLACEHOLDER__";
+
+/**
+ * Candidate locations for the built template, relative to this module (`__dirname`
+ * is the compiled `dist/` at runtime, or `src/` under vitest). CommonJS output, so
+ * we use `__dirname`, not `import.meta`.
+ */
+function templatePath(): string | null {
+  const candidates = [
+    resolve(__dirname, "audit-report.template.html"), // dist/ (shipped)
+    resolve(__dirname, "..", "dist", "audit-report.template.html"), // src/ under vitest
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
 }
+
+/** Escape a JSON string for safe embedding inside a `<script>` (no `</script>` breakout). */
+function embedJson(report: AuditReport): string {
+  // Escape <, >, & so report text can never break out of the <script>.
+  return JSON.stringify(report).replace(
+    /[<>&]/g,
+    (ch) => "\\u00" + ch.charCodeAt(0).toString(16).padStart(2, "0"),
+  );
+}
+
+/**
+ * Render via the built React/shadcn template when available (the default), else
+ * fall back to the zero-dep inline renderer. `opts.simple` forces the fallback.
+ */
+export function renderAuditHtml(
+  report: AuditReport,
+  opts: { simple?: boolean } = {},
+): string {
+  if (!opts.simple) {
+    const p = templatePath();
+    if (p) {
+      const tpl = readFileSync(p, "utf-8");
+      // Replace the quoted placeholder string with the JSON object literal.
+      const re = new RegExp(`(["'])${PLACEHOLDER}\\1`);
+      if (re.test(tpl)) return tpl.replace(re, embedJson(report));
+    }
+  }
+  return renderAuditHtmlSimple(report);
+}
+
+// ---------------------------------------------------------------------------
+// The zero-dep inline-CSS fallback (`--simple`)
+// ---------------------------------------------------------------------------
 
 function esc(s: string): string {
   return s
@@ -39,9 +79,9 @@ function esc(s: string): string {
 // Band colors — green/amber/red by score, grey for n/a. Match the terminal glyphs.
 function bandColor(score: number | null): string {
   if (score === null) return "#9aa0a6";
-  if (score >= 90) return "#0cce6b"; // Lighthouse green
-  if (score >= 70) return "#ffa400"; // amber
-  return "#ff4e42"; // red
+  if (score >= 90) return "#0cce6b";
+  if (score >= 70) return "#ffa400";
+  return "#ff4e42";
 }
 
 /** An inline SVG donut ring with the score in the center + a label beneath. */
@@ -82,17 +122,16 @@ function fixCard(r: Recommendation): string {
 </div>`;
 }
 
-function inventoryRow(input: AuditHtmlInput): string {
-  const i = input.inventory;
+function inventoryRow(inv: AuditReport["inventory"]): string {
   const cell = (n: number | string, label: string): string =>
     `<div class="stat"><div class="stat-n">${esc(String(n))}</div><div class="stat-l">${esc(label)}</div></div>`;
   return `<div class="inventory">
-  ${cell(i.skills, "skills")}
-  ${cell(i.agents, "agents")}
-  ${cell(i.hooks, "hooks")}
-  ${cell(i.commands, "commands")}
-  ${cell(i.mcp ? "yes" : "no", "MCP")}
-  ${cell(i.untested, "untested")}
+  ${cell(inv.skills, "skills")}
+  ${cell(inv.agents, "agents")}
+  ${cell(inv.hooks, "hooks")}
+  ${cell(inv.commands, "commands")}
+  ${cell(inv.mcp ? "yes" : "no", "MCP")}
+  ${cell(inv.untested, "untested")}
 </div>`;
 }
 
@@ -125,21 +164,21 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: #
 footer { margin-top: 40px; color: #80868b; font-size: 12px; text-align: center; }
 `;
 
-/** Render the full self-contained HTML report. */
-export function renderAuditHtml(input: AuditHtmlInput): string {
-  const s = input.score;
+/** The zero-dep, single-file fallback report (pure string; no template, no fs). */
+export function renderAuditHtmlSimple(report: AuditReport): string {
+  const s = report.score;
   const overallColor = bandColor(s.empty ? null : s.overall);
   const cats = s.categories.map(categoryCard).join("\n");
   const fixes =
-    input.recommendations.length > 0
-      ? `<h2>Fixes (${String(input.recommendations.length)})</h2>${input.recommendations.map(fixCard).join("\n")}`
+    report.recommendations.length > 0
+      ? `<h2>Fixes (${String(report.recommendations.length)})</h2>${report.recommendations.map(fixCard).join("\n")}`
       : `<h2>Fixes</h2><p class="clean">✓ no deterministic fixes — the structure is clean.</p>`;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>vigiles audit — ${esc(input.dir)}</title>
+<title>vigiles audit — ${esc(report.meta.dir)}</title>
 <style>${STYLE}</style>
 </head>
 <body>
@@ -148,7 +187,7 @@ export function renderAuditHtml(input: AuditHtmlInput): string {
     ${ring(s.empty ? null : s.overall, "overall", 132)}
     <div class="meta">
       <h1>Harness audit</h1>
-      <div class="sub">${esc(input.dir)} · ${esc(input.harness)}</div>
+      <div class="sub">${esc(report.meta.dir)} · ${esc(report.meta.harness)}</div>
       <div class="grade" style="color:${overallColor}">Harness health: <strong>${esc(s.grade)}</strong> (${String(s.overall)}/100)</div>
     </div>
   </header>
@@ -159,7 +198,7 @@ export function renderAuditHtml(input: AuditHtmlInput): string {
   ${fixes}
 
   <h2>What it ships</h2>
-  ${inventoryRow(input)}
+  ${inventoryRow(report.inventory)}
 
   <footer>Generated by vigiles — we run your harness, not just read it.</footer>
 </div>
