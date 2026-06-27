@@ -1,17 +1,18 @@
 /**
- * audit model-tier (trigger-rate) decision tests — the pure `decideMeasure` that
- * makes the model-gated measurement run-by-default-when-capable (Lighthouse:
- * run what you can, degrade loudly) instead of a buried opt-in, plus the loud
- * "not measured" notes and the prompts scaffold.
+ * audit read-vs-run decision tests — the pure `decideExecute` that makes a plain
+ * `audit` a deterministic READ and gates ALL execution (safety battery + live MCP
+ * + trigger-rate) behind one consent: ask at a TTY (remembered), `--measure` is
+ * the headless yes, headless stays a read + a loud nudge. Plus the model-access
+ * helpers (disclosure wording) and the prompts scaffold.
  */
 import { describe, it, expect } from "vitest";
 import {
   hasModelAccess,
   isMeteredAccess,
-  decideMeasure,
-  formatMeasureSkip,
+  decideExecute,
+  formatExecuteSkip,
   scaffoldTriggerPrompts,
-  type MeasureEnv,
+  type ExecuteEnv,
 } from "./scan-trigger-suggest.js";
 
 describe("hasModelAccess", () => {
@@ -36,131 +37,83 @@ describe("isMeteredAccess", () => {
   });
 });
 
-describe("decideMeasure", () => {
-  // The default: an interactive human on a subscription with skills to measure.
-  const base: MeasureEnv = {
-    modelAccess: true,
-    metered: false,
+describe("decideExecute", () => {
+  // The default: an interactive human, something executable present, no sticky.
+  const base: ExecuteEnv = {
+    hasExecutable: true,
     isTTY: true,
-    triggerableSkills: 2,
     json: false,
     forceMeasure: false,
-    noMeasure: false,
     noInteractive: false,
   };
 
-  it("ASKS (default-yes) an interactive human on a subscription — run-what-you-can", () => {
-    expect(decideMeasure(base)).toEqual({ kind: "ask" });
+  it("ASKS once at a TTY when there's something to run and no sticky choice", () => {
+    expect(decideExecute(base)).toEqual({ kind: "ask" });
   });
 
-  it("RUNS without asking when a sticky yes is remembered", () => {
-    expect(decideMeasure({ ...base, remembered: true })).toEqual({
-      kind: "run",
-    });
-  });
-
-  it("skips 'remembered-no' when a sticky no is remembered", () => {
-    expect(decideMeasure({ ...base, remembered: false })).toEqual({
+  it("nothing executable → skip 'nothing' (a clean read, no nudge)", () => {
+    expect(decideExecute({ ...base, hasExecutable: false })).toEqual({
       kind: "skip",
-      reason: "remembered-no",
+      reason: "nothing",
     });
   });
 
-  it("--measure FORCES a run, even non-interactive / under --json / metered", () => {
+  it("--measure RUNS anywhere — the headless yes (even non-interactive / --json)", () => {
     expect(
-      decideMeasure({
+      decideExecute({
         ...base,
         forceMeasure: true,
         isTTY: false,
         json: true,
-        metered: true,
         noInteractive: true,
       }),
     ).toEqual({ kind: "run" });
   });
 
-  it("--measure with no model can't run → skip 'no-model'", () => {
-    expect(
-      decideMeasure({ ...base, forceMeasure: true, modelAccess: false }),
-    ).toEqual({ kind: "skip", reason: "no-model" });
-  });
-
-  it("--fast forces it OFF (beats everything but no-skills)", () => {
-    expect(decideMeasure({ ...base, noMeasure: true })).toEqual({
+  it("headless (non-TTY / --json / --no-interactive) stays a read → skip 'headless'", () => {
+    expect(decideExecute({ ...base, isTTY: false })).toEqual({
       kind: "skip",
-      reason: "fast",
+      reason: "headless",
+    });
+    expect(decideExecute({ ...base, json: true })).toEqual({
+      kind: "skip",
+      reason: "headless",
+    });
+    expect(decideExecute({ ...base, noInteractive: true })).toEqual({
+      kind: "skip",
+      reason: "headless",
     });
   });
 
-  it("no skills → skip 'no-skills' (nothing to measure)", () => {
-    expect(decideMeasure({ ...base, triggerableSkills: 0 })).toEqual({
+  it("headless does NOT auto-run a remembered yes — CI must opt in with --measure", () => {
+    expect(decideExecute({ ...base, isTTY: false, remembered: true })).toEqual({
       kind: "skip",
-      reason: "no-skills",
+      reason: "headless",
     });
   });
 
-  it("no model → skip 'no-model'", () => {
-    expect(decideMeasure({ ...base, modelAccess: false })).toEqual({
-      kind: "skip",
-      reason: "no-model",
+  it("interactive honors the sticky choice (no re-ask)", () => {
+    expect(decideExecute({ ...base, remembered: true })).toEqual({
+      kind: "run",
     });
-  });
-
-  it("a metered API key is NEVER auto-run → skip 'metered' (--measure to force)", () => {
-    expect(decideMeasure({ ...base, metered: true })).toEqual({
+    expect(decideExecute({ ...base, remembered: false })).toEqual({
       kind: "skip",
-      reason: "metered",
-    });
-  });
-
-  it("--json (no --measure) → skip 'json' (machine output, never hang/spend)", () => {
-    expect(decideMeasure({ ...base, json: true })).toEqual({
-      kind: "skip",
-      reason: "json",
-    });
-  });
-
-  it("non-interactive (agent/CI) → skip 'non-interactive', never ask", () => {
-    expect(decideMeasure({ ...base, isTTY: false })).toEqual({
-      kind: "skip",
-      reason: "non-interactive",
-    });
-    expect(decideMeasure({ ...base, noInteractive: true })).toEqual({
-      kind: "skip",
-      reason: "non-interactive",
+      reason: "remembered-no",
     });
   });
 });
 
-describe("formatMeasureSkip", () => {
-  it("no-skills / json → no note (not a gap / machine output)", () => {
-    expect(formatMeasureSkip("no-skills", "./p", 2)).toBeNull();
-    expect(formatMeasureSkip("json", "./p", 2)).toBeNull();
+describe("formatExecuteSkip", () => {
+  it("'nothing' → no nudge (a clean read)", () => {
+    expect(formatExecuteSkip("nothing", "./p")).toBeNull();
   });
 
-  it("every printed note points at the --measure escape", () => {
-    for (const reason of [
-      "fast",
-      "no-model",
-      "metered",
-      "remembered-no",
-      "non-interactive",
-    ] as const) {
-      const note = formatMeasureSkip(reason, "./plugin", 3);
-      expect(note).toContain("Triggering not measured");
+  it("headless + remembered-no point at the --measure escape", () => {
+    for (const reason of ["headless", "remembered-no"] as const) {
+      const note = formatExecuteSkip(reason, "./plugin");
+      expect(note).toContain("Executing checks not run");
+      expect(note).toContain("vigiles audit ./plugin --measure");
     }
-    expect(formatMeasureSkip("no-model", "./plugin", 3)).toContain(
-      "vigiles audit ./plugin --measure",
-    );
-  });
-
-  it("the non-interactive note pluralizes the skill count", () => {
-    expect(formatMeasureSkip("non-interactive", "./p", 1)).toContain(
-      "1 model-invocable skill ",
-    );
-    expect(formatMeasureSkip("non-interactive", "./p", 3)).toContain(
-      "3 model-invocable skills",
-    );
   });
 });
 
@@ -175,7 +128,6 @@ describe("scaffoldTriggerPrompts", () => {
     expect(Array.isArray(parsed.alpha.prompts)).toBe(true);
     expect(parsed.alpha.prompts.length).toBeGreaterThan(0);
     expect(Array.isArray(parsed.alpha.irrelevant)).toBe(true);
-    // Each entry names its skill so the placeholders are self-documenting.
     expect(parsed.beta.prompts[0]).toContain("beta");
   });
 });

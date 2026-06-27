@@ -86,11 +86,11 @@ not just reads them — scores five categories, and writes a shareable HTML repo
 | **🔧 Structure**    | Tool contracts, MCP servers & frontmatter are sound                   |
 | **🧪 Tested**       | Every surface ships a test                                            |
 
-**Do your skills actually fire?** is measured on your own subscription — offered by
-default, asked once (`--measure` to force, `--fast` to skip). The safety battery
-runs your hooks **network-confined**, and live MCP resolution (which starts your
-servers) is opt-in via `--measure` — so a plain `audit` is safe on any repo, even
-one wired to prod. **[Audit a harness →](docs/for-plugin-authors.md)**
+A plain `audit` is a **deterministic read** — safe on any repo, even one wired to
+prod, identical on every OS. The **executing checks** (run your hooks against the
+disaster battery · resolve MCP live · **do your skills fire?**) are opt-in: `audit`
+**asks once** at a terminal and remembers, or run them headless with `--measure`.
+**[Audit a harness →](docs/for-plugin-authors.md)**
 
 `Agent = Model + Harness` — the model gets the headlines, the harness is the half you
 own. vigiles[^name] is how you make it prove itself: `audit` is the dashboard, and

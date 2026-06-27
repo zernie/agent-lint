@@ -175,6 +175,31 @@ So (decision **A**, chosen):
   a Bash guard — scoring 0 was a cry-wolf that tanked the grade; fixed in
   `src/audit-score.ts`).
 
-**Follow-ups (not yet done):** the hosted dashboard itself; an `audit --upload`
+### Final shape (same day) — uniform consent, `--fast` deleted
+
+The founder pushed twice more: (1) **no platform divergence** — "our solution
+either works the same or we choose a different one," so don't run-confined-on-Linux
+/ unconfined-on-Mac. (2) **too many subcommands** — `--measure`/`--fast`/`--no-measure`
+for one binary axis is sprawl. (3) **"why a flag, not an interactive choice?"**
+
+Resolved into the shipped shape — **one read-vs-run axis, consent-first:**
+
+- A plain `audit` is a **deterministic READ** (rings + fixes + report) — uniform on
+  every OS, nothing executes, safe on a prod-wired repo.
+- **All three** executing checks (battery + live-MCP + trigger-rate) share **one
+  consent** (`decideExecute`, `src/scan-trigger-suggest.ts`): at a TTY `audit`
+  **asks once** — a bundled prompt that **discloses** confinement + cost — and
+  **remembers** in `.vigilesrc.json` (`audit.measure`); headless it stays a read + a
+  one-line nudge.
+- **`--fast` and `--no-measure` are DELETED.** The default is the read, so there's
+  nothing to opt out of. The lone flag `--measure` is just the headless "yes."
+- **Battery demoted from default → consent** (uniform): execution is opt-in
+  everywhere until one confinement works the same on macOS + Linux. Exit criterion /
+  the "better way" that re-promotes it: an **env-scrub ephemeral floor** (strip
+  DB/API creds before running a hook — no kernel features, cross-platform) and/or a
+  **macOS `sandbox-exec`** backend to match bubblewrap.
+
+**Follow-ups (not yet done):** the env-scrub ephemeral floor + macOS sandbox backend
+(the exit criterion above); the hosted dashboard itself; an `audit --upload`
 that POSTs the JSON; a cross-package schema-parity guard (today `report/src/schema.ts`
 mirrors `src/audit-report.ts` by hand + the `audit-report.test.ts` shape tests).

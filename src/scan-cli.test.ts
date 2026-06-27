@@ -603,12 +603,14 @@ describe("scan --capability-diff e2e", () => {
 });
 
 // ---------------------------------------------------------------------------
-// audit → model trigger tier (env-gated; deterministic via explicit env).
-// These run non-TTY (execSync pipes), so the tier never PROMPTS — it skips with
-// a loud note. The interactive ask-once path is unit-tested via decideMeasure.
+// audit → read-vs-run (env-gated; deterministic via explicit env). A plain
+// `audit` is a deterministic READ; the executing checks are opt-in. These run
+// non-TTY (execSync pipes), so they're headless — `audit` never PROMPTS, it
+// stays a read + a loud nudge. The interactive ask-once path is unit-tested via
+// decideExecute.
 // ---------------------------------------------------------------------------
 
-describe("audit: model trigger tier", () => {
+describe("audit: read-vs-run (executing checks are opt-in)", () => {
   let dir: string;
   const MODEL_ENV_KEYS = [
     "ANTHROPIC_API_KEY",
@@ -655,32 +657,30 @@ describe("audit: model trigger tier", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("notes (non-blocking) when a model is reachable but the run is non-interactive", () => {
+  it("a headless run stays a READ + a loud nudge to --measure (never executes)", () => {
     const out = runEnv("audit .", { CLAUDECODE: "1" });
-    assert.ok(out.includes("model access detected"), "note shown");
+    assert.ok(out.includes("Executing checks not run"), "read-vs-run nudge");
     assert.ok(out.includes("--measure"), "names the --measure escape");
   });
 
-  it("notes 'no model access' when none is reachable", () => {
+  it("the nudge is model-agnostic — it's about execution, shown with or without a model", () => {
     const out = runEnv("audit .", {}); // all model signals stripped
-    assert.ok(out.includes("no model access"), "no-model note shown");
+    assert.ok(out.includes("Executing checks not run"), "nudge still shown");
+  });
+
+  it("stays silent under --json (machine output — no human nudge)", () => {
+    const out = runEnv("audit . --json", { CLAUDECODE: "1" });
     assert.ok(
-      !out.includes("model access detected"),
-      "not the reachable-model note",
+      !out.includes("Executing checks not run"),
+      "no nudge in json mode",
     );
   });
 
-  it("stays silent under --json even with model access (machine output)", () => {
-    const out = runEnv("audit . --json", { CLAUDECODE: "1" });
-    assert.ok(!out.includes("Triggering not measured"), "no note in json mode");
-    assert.ok(!out.includes("model access detected"), "no note in json mode");
-  });
-
-  it("--no-interactive never prompts (loud note only)", () => {
+  it("--no-interactive never prompts (loud nudge only)", () => {
     const out = runEnv("audit . --no-interactive", { CLAUDECODE: "1" });
     assert.ok(
-      out.includes("model access detected"),
-      "note shown, not a prompt",
+      out.includes("Executing checks not run"),
+      "nudge shown, not a prompt",
     );
   });
 });
@@ -725,23 +725,22 @@ describe("scan default output — health score header", () => {
     assert.ok(report.meta.dir, "json has meta.dir");
   });
 
-  it("runs the safety battery by default (no flag) — reports no hooks here", () => {
-    // This fixture ships no hooks, so the default battery reports that — proving
-    // it runs without an opt-in flag (the differentiated finding leads).
+  it("does NOT run the safety battery on a plain (headless) audit — it's opt-in", () => {
+    // A plain audit is a deterministic READ; the executing checks are opt-in. A
+    // headless run never executes — no battery section, just the read + a nudge.
     const r = run(`audit ${root}`);
     assert.equal(r.exitCode, 0);
-    assert.match(
-      r.stdout,
-      /Safety battery: no PreToolUse safety hooks to test/,
-    );
+    assert.doesNotMatch(r.stdout, /Safety battery/);
+    assert.match(r.stdout, /Executing checks not run/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// the safety battery runs by default (own-direct / foreign-sandbox-or-skip)
+// the safety battery is opt-in via --measure (own-direct/confined; foreign
+// sandbox-or-skip). A plain audit never runs it (covered above).
 // ---------------------------------------------------------------------------
 
-describe("audit safety battery e2e (runs by default)", () => {
+describe("audit safety battery e2e (--measure)", () => {
   let root: string;
   let blockingPlugin: string;
   let permissivePlugin: string;
@@ -814,7 +813,7 @@ describe("audit safety battery e2e (runs by default)", () => {
   // executes DIRECT (trusted) — the deterministic path. A non-cwd ("foreign")
   // scan is sandbox-or-skip (env-dependent), covered separately below.
   it("blocking hook (own repo): reports all disasters blocked", () => {
-    const r = run(`audit .`, blockingPlugin);
+    const r = run(`audit . --measure`, blockingPlugin);
     assert.equal(r.exitCode, 0);
     // Must show a Safety battery section.
     assert.match(r.stdout, /Safety battery/);
@@ -825,7 +824,7 @@ describe("audit safety battery e2e (runs by default)", () => {
   });
 
   it("permissive hook (own repo): reports disasters slipping through", () => {
-    const r = run(`audit .`, permissivePlugin);
+    const r = run(`audit . --measure`, permissivePlugin);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
     // The permissive hook (exit 0) blocks nothing.
@@ -838,18 +837,17 @@ describe("audit safety battery e2e (runs by default)", () => {
     // Scanning a NON-cwd dir runs from the repo root (cwd) → the plugin is
     // foreign → it must sandbox or skip-with-a-loud-note, never run unconfined.
     // Env-robust: pass either way as long as it doesn't crash and the section shows.
-    const r = run(`audit ${blockingPlugin}`);
+    const r = run(`audit ${blockingPlugin} --measure`);
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout, /Safety battery/);
   });
 
-  it("no-hooks plugin: reports no PreToolUse safety hooks to test", () => {
-    const r = run(`audit ${noHooksPlugin}`);
+  it("no-hooks/no-skills plugin: --measure has nothing to run → a clean read", () => {
+    // Nothing executable (no hooks, MCP, or skills) → --measure is a no-op; the
+    // audit is just the deterministic read, no battery section, no crash.
+    const r = run(`audit ${noHooksPlugin} --measure`);
     assert.equal(r.exitCode, 0);
-    assert.match(
-      r.stdout,
-      /Safety battery: no PreToolUse safety hooks to test/,
-    );
+    assert.doesNotMatch(r.stdout, /Safety battery/);
   });
 });
 
