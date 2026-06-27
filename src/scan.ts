@@ -157,6 +157,15 @@ export interface ScanHook {
   readonly command: string;
   readonly script: string;
   readonly status: HookStatus;
+  /**
+   * The hook EVENT this script is registered under (`PreToolUse`, `PostToolUse`,
+   * `SessionStart`, …), when it can be determined from the canonical
+   * object-keyed-by-event settings shape; `undefined` for a non-object/array
+   * config. The safety battery uses it to test only the blocking-capable
+   * `PreToolUse` guards — so a `SessionStart`/`PostToolUse` hook isn't unfairly
+   * scored against "does it block rm -rf".
+   */
+  readonly event?: string;
 }
 
 /**
@@ -537,6 +546,34 @@ export function preferCompiledHooksMessage(count: number): string {
 }
 
 /** Pull script-file hook commands out of the resolved settings; count inline ones. */
+/**
+ * Best-effort map of each script token → the hook EVENT it's registered under,
+ * by walking the canonical object-keyed-by-event settings shape
+ * (`{ PreToolUse: [{ hooks: [{ command }] }], … }`). Lets the safety battery
+ * scope itself to `PreToolUse` (the only event that can block a tool call), so a
+ * `SessionStart`/`PostToolUse`/`Stop` hook isn't tested against the disaster
+ * catalog. Returns an empty map for a non-object/array config (event → unknown).
+ */
+function eventsByScript(hooks: unknown): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return map;
+  for (const [event, arr] of Object.entries(hooks as Record<string, unknown>)) {
+    if (!Array.isArray(arr)) continue;
+    for (const entry of arr) {
+      const hookList = (entry as { hooks?: unknown }).hooks;
+      if (!Array.isArray(hookList)) continue;
+      for (const h of hookList) {
+        const cmd = (h as { command?: unknown }).command;
+        if (typeof cmd !== "string") continue;
+        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
+          if (!map.has(tok)) map.set(tok, event);
+        }
+      }
+    }
+  }
+  return map;
+}
+
 function scanHooks(
   settings: { hooks?: unknown },
   root: string,
@@ -546,6 +583,7 @@ function scanHooks(
   const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
     (m) => m[1],
   );
+  const evMap = eventsByScript(settings.hooks);
   // A hand-written hook is any non-empty command that isn't a vigiles-managed
   // (compiled) hook-runtime invocation — the basis for the prefer-compiled-hooks nudge.
   const manual = commands.filter((c) => {
@@ -569,7 +607,8 @@ function scanHooks(
     }
     for (const tok of found) {
       const hook = resolveScript(tok, root, pluginRootToken, unescaped);
-      byScript.set(hook.script, hook);
+      const event = evMap.get(tok);
+      byScript.set(hook.script, event ? { ...hook, event } : hook);
     }
   }
   const hooks = [...byScript.values()].sort((a, b) =>
