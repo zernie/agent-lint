@@ -22,10 +22,15 @@ merge HELD pending founder.** Don't merge without an explicit go. (Details below
 1. **README = full proof-led rewrite (Concept 5).** Tagline "The tests your AI agent
    harness never had." Leads with REAL audit catches → then the 3 instruments as the
    mechanism. Picked from 5 concepts in `research/readme-revamp-concepts.md`.
-   - **OSS NOT shamed**: proofs are real but upstreams ANONYMIZED in public copy
-     (real names only in `research/dogfood/`). Rule baked into the README direction comment.
-   - Dogfood corpus saved in `research/dogfood/` (real `audit`/`lint`/`runHook` output:
-     missing-SKILL.md, AskUserQuestion-never-available, the 4-plugin leaderboard, 100/100 self-audit).
+   - **OSS NOT shamed**: community upstreams ANONYMIZED in public copy (real names only
+     in `research/dogfood/`). But **Anthropic's OWN official plugin is NAMED** (punch up,
+     don't shame volunteers): README "Proof 3" features `pr-review-toolkit` (official) —
+     B/88, 6 review agents inherit all tools + `silent-failure-hunter.md` malformed YAML.
+   - Dogfood corpus in `research/dogfood/` (real output): community catches + the official
+     `audit-official-pr-review-toolkit.txt`. **How official plugins were sourced** (API +
+     git-clone are BLOCKED here; only raw + HTML work): marketplace = `anthropics/claude-
+plugins-official`, Anthropic plugins live in-repo at `plugins/<name>`; list a subdir
+     via WebFetch on the github tree HTML, then `curl raw.githubusercontent.com/.../<file>`.
 2. **Skill/subagent spec adoption — SHIPPED (the founder's "super important for pre-release").**
    - Engine: `adoptSkill`/`adoptAgent` in `src/core/adopt.ts` — SKILL.md → `skill()`,
      agents/x.md → `agent()` (lead→body, `##`→sections). Verbatim body + standard
@@ -51,9 +56,10 @@ merge HELD pending founder.** Don't merge without an explicit go. (Details below
 - **README asset refresh**: recapture `vigiles-audit.png` from
   `research/dogfood/audit-superpowers.html` on a PINNED-CC machine (this container's
   2.1.42-vs-2.1.187 drift banner must not be in the screenshot).
-- **Official plugins in README** (founder: "best to use official plugins"): needs to
-  vendor/fetch official Anthropic plugins — git here is scoped to `zernie/vigiles`
-  (clone 403s); curl/raw fetch is the only path. Lets us de-anonymize the proofs.
+- **Official plugins in README — STARTED** (founder: "best to use official plugins"):
+  `pr-review-toolkit` (official) is audited + featured. NEXT: audit a few MORE official
+  plugins (code-review, feature-dev, skill-creator…) for a NAMED official leaderboard to
+  replace the anonymized one (Proof 4). Method in "how official plugins were sourced" above.
 - **OSS FP sweep** (founder enabled "auto mode" for it): needs an open-net machine to
   gather many plugins; git-scoped here. HTTPS/curl works, git clone of others doesn't.
 - Live real-model spike for the adoption-gateway draft recall (gated on model auth).
