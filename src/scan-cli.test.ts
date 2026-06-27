@@ -35,8 +35,17 @@ const CLI = resolve(__dirname, "..", "dist", "cli.js");
 const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
 
 function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
+  // A default `audit` writes vigiles-report.html into cwd — suppress it here so
+  // the test run never drops an artifact in the repo root. The dedicated HTML
+  // test below exercises the write path explicitly in a tmp cwd.
+  const a =
+    args.startsWith("audit ") &&
+    !args.includes("--json") &&
+    !args.includes("--no-html")
+      ? `${args} --no-html`
+      : args;
   try {
-    const stdout = execSync(`node ${CLI} ${args}`, {
+    const stdout = execSync(`node ${CLI} ${a}`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,

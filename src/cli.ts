@@ -125,6 +125,7 @@ import {
   AUTO_MIN_DISTANCE,
   type PromptSkill,
 } from "./audit-prompts.js";
+import { renderAuditHtml } from "./audit-html.js";
 
 import {
   compileClaude,
@@ -5232,6 +5233,64 @@ function runSafetyBattery(
   return { lines, summary: { totalBlocked, totalRun, hooksSkipped } };
 }
 
+/** Best-effort open the report in the default browser (TTY-only caller). */
+function openBestEffort(file: string): void {
+  const cmd =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+  void import("node:child_process")
+    .then(({ spawn }) => {
+      const child = spawn(cmd, [file], {
+        stdio: "ignore",
+        detached: true,
+        shell: process.platform === "win32",
+      });
+      child.on("error", () => undefined);
+      child.unref();
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * Write the self-contained HTML audit report to `vigiles-report.html` (cwd) and,
+ * for a human at a TTY, open it best-effort. The shareable Lighthouse artifact;
+ * never spawns a browser for an agent / CI run.
+ */
+function writeAuditHtml(
+  harness: string,
+  sc: ReturnType<typeof auditScore>,
+  plan: ReturnType<typeof optimize>,
+  report: ScanReport,
+): void {
+  const htmlPath = resolve(process.cwd(), "vigiles-report.html");
+  const html = renderAuditHtml({
+    dir: report.dir,
+    harness,
+    score: sc,
+    recommendations: plan.recommendations,
+    inventory: {
+      skills: report.skills.length,
+      agents: report.agents.length,
+      hooks: report.hooks.length,
+      commands: report.commands,
+      mcp: report.mcp,
+      untested: report.untested,
+    },
+  });
+  try {
+    writeFileSync(htmlPath, html);
+    console.log("\n✓ Wrote vigiles-report.html — open it for the full report");
+    if (process.stdout.isTTY) openBestEffort(htmlPath);
+  } catch (e) {
+    console.log(
+      `\n⚠ could not write vigiles-report.html: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
 /**
  * `--deep` with no `--prompts`: auto-generate diverse probe prompts from each
  * skill's description and measure trigger-rate (recall + precision) — zero-setup.
@@ -5529,12 +5588,14 @@ async function main(): Promise<void> {
         // foreign sandboxed-or-skipped. JSON/CI output stays the structured
         // report for now (the unified category JSON is a later increment).
         const battery = json ? null : runSafetyBattery(report, root);
+        // Compute the rings + the fix plan ONCE — reused by the terminal output
+        // AND the HTML report.
+        const sc = auditScore(report, battery?.summary ?? undefined);
+        const plan = optimize(report);
         if (!json) {
           // The Lighthouse rings: per-category 0–100 + the weighted overall,
           // shown before the detailed report so the headline signal leads.
-          console.log(
-            formatAuditScore(auditScore(report, battery?.summary ?? undefined)),
-          );
+          console.log(formatAuditScore(sc));
           console.log("");
         }
         console.log(
@@ -5543,7 +5604,7 @@ async function main(): Promise<void> {
         if (!json) {
           // Fold each finding's fix inline (replaces the former --fix-plan/--explain
           // flags): the deterministic, free recommendation list under the report.
-          const fixes = formatRecommendations(optimize(report));
+          const fixes = formatRecommendations(plan);
           if (fixes) console.log("\n" + fixes);
         }
         if (battery) console.log(battery.lines.join("\n"));
@@ -5596,6 +5657,12 @@ async function main(): Promise<void> {
         // the plugin ships model-invocable skills (hint for agents, offer for
         // humans) — but not when the user already ran --deep.
         if (!deep) await maybeSuggestTrigger(report, targets[0], json, args);
+        // The shareable HTML report — written by default (--no-html to skip), and
+        // opened best-effort only for a human at a TTY (never spawn a browser for
+        // an agent / CI run).
+        if (!json && !args.includes("--no-html")) {
+          writeAuditHtml(adapter.name, sc, plan, report);
+        }
       }
       break;
     }
