@@ -184,13 +184,24 @@ function structure(r: ScanReport): CategoryScore {
       weight: W_NO_CONTRACT,
       label: "disallowedTools typo(s) that block nothing",
     },
-    {
-      n: noContract,
-      weight: W_NO_CONTRACT,
-      label: "agent(s) inherit all tools (no contract)",
-    },
   ]);
-  return { key: "Structure", score, weight: 1, findings };
+  // inherit-all (no `tools:` line) is ADVISORY, not graded: it's surfaced as a
+  // least-privilege NUDGE but never lowers the Structure ring. WHY: omitting the
+  // tool contract is a near-universal, legitimate authoring style (a measured OSS
+  // sweep of 122 real plugins found 109 whose only finding was this), so grading
+  // it would make `audit` cry wolf on idiomatic subagents. See reportDeductions.
+  const advisory =
+    noContract > 0
+      ? [
+          `${String(noContract)} agent(s) inherit all tools (no contract) (advisory)`,
+        ]
+      : [];
+  return {
+    key: "Structure",
+    score,
+    weight: 1,
+    findings: [...findings, ...advisory],
+  };
 }
 
 function tested(r: ScanReport): CategoryScore {
