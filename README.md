@@ -6,18 +6,24 @@
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/. HYBRID proof source (decided 2026-06-28): Proofs 1-2 are
-  COMMUNITY catches, anonymized (a missing SKILL.md, an AskUserQuestion-never-
-  available tool) — official plugins don't have those silent-failure bugs. Proofs
-  3-4 are OFFICIAL + NAMED: pr-review-toolkit (unrestricted review agents + an
-  advisory malformed-YAML note) and the all-25 Anthropic-official leaderboard
-  (A→F, LSP stubs excluded). NEVER replace a real catch with a fabricated one.
+  research/dogfood/. TWO COMMUNITY catches, anonymized (a missing SKILL.md, an
+  AskUserQuestion-never-available tool) — both real GRADED defects. NEVER replace a
+  real catch with a fabricated one.
+
+  WHY ONLY TWO (decided 2026-06-28): the earlier Proofs 3-4 leaned on
+  pr-review-toolkit's "review agents inherit all tools" as an official-plugin
+  defect. But inherit-all (a subagent with no `tools:` line) is now ADVISORY, not a
+  graded penalty — omitting the tool contract is a near-universal, legitimate
+  authoring style (an OSS sweep of 122 plugins found 109 whose only finding was
+  this), so penalizing it cried wolf. With that change the official plugins are all
+  a clean A, so a "even Anthropic has bugs" proof would be dishonest — Proofs 3-4
+  were DROPPED rather than reframed. The leaderboard feature still exists; it just
+  isn't a headline proof.
 
   DON'T SHAME OSS: community catches are real but ANONYMIZED in public copy (no
   obra/superpowers, madappgang by name) — real names live only in research/dogfood/.
-  Punch UP at official/vendor plugins (Anthropic's own are NAMED); never name a
-  volunteer's repo to show its bug. Proof 3 shows pr-review-toolkit's findings (not a
-  score); Proof 4 shows its leaderboard score (70 C) — so the two never clash.
+  If an official/vendor proof returns, punch UP (name Anthropic's own); never name a
+  volunteer's repo to show its bug.
 
   1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
      competitor. A bolded lead-in is the first thing read — make it the hook/win.
@@ -109,35 +115,8 @@ a capability it thinks it has. vigiles flags it _and_ hands you the one-line fix
 **free, no model.** That's the difference from a markdown linter: it checks your
 harness against **reality**, not style.
 
-## Proof 3 — even the official plugins
-
-Not cherry-picked community repos — **Anthropic's own official `pr-review-toolkit`**:
-
-```text
-⚠ 6 review agents inherit ALL tools — a code-reviewer with Write + Bash
-ℹ 1 file's frontmatter isn't valid YAML — fields may not parse as intended
-```
-
-Six review agents holding far more power than a reviewer needs, plus a frontmatter
-block that may not parse cleanly — real findings on a first-party plugin. _(We name
-Anthropic's own; the community plugins above stay anonymous — punch up, don't shame
-volunteers.)_
-
-## Proof 4 — rank a whole marketplace
-
-`audit` ranks a folder of plugins by what's actually **broken** — no key. Across
-**all 25 of Anthropic's official plugins**, only **one drops below an A** — no
-false-positive noise (untested surfaces are advisory):
-
-```text
-  #   score  grade  plugin
-   1  100    A      claude-code-setup     ← 24 of 25 come back grade A
-  25   70    C      pr-review-toolkit  — 6 agents inherit all tools (a reviewer with Write + Bash)
-```
-
-<sub>Real scores on Anthropic's own marketplace — a fair tool flags the one real outlier, not noise (empty LSP stubs excluded).</sub>
-
-**[Plugin-author guide →](docs/for-plugin-authors.md)**
+Two real catches, both **free and model-less** — and audit ranks a whole
+marketplace the same way. **[Audit a marketplace →](docs/for-plugin-authors.md)**
 
 > **And it grades itself: 100/100, A, all four rings green** — and CI gates every
 > commit with `lint` + `test`. We eat what we cook.
