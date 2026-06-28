@@ -30,9 +30,11 @@
      Push depth into docs/ and LINK it.
   6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
      research/ links — name the user benefit.
-  7. ASSETS: vigiles-audit.png (hero) + vigiles-demo.gif (lint) must be REFRESHED
-     from real runs (research/dogfood/audit-superpowers.html) without the dialect
-     drift banner before launch. Placeholders point at the current images.
+  7. ASSETS: the hero vigiles-audit.png must be REFRESHED from a real run
+     (research/dogfood/audit-superpowers.html) without the dialect drift banner
+     before launch. (vigiles-demo.gif was removed from Proof 1 — it rendered as a
+     frozen half-typed terminal and was redundant with the code block; if a lint
+     demo returns, it belongs in the Lint section with a non-frozen asset.)
 -->
 
 <p align="center">
@@ -64,7 +66,7 @@ any repo:
 npx vigiles audit
 ```
 
-Here's what it found on real, popular plugins. **Not mockups — actual output.** ↓
+Here's what it found on real, popular plugins. ↓
 
 ## The report
 
@@ -87,10 +89,6 @@ repo (even one wired to prod), identical on every OS. **Not a CI step** (CI uses
 
 A real, widely-installed plugin — its instructions send the agent to a skill file
 that **isn't there**. Valid markdown, but not _true_, and your agent trusts it anyway.
-
-<p align="center">
-  <img src="vigiles-demo.gif" width="720" alt="vigiles catching a file that moved and a script that was renamed" />
-</p>
 
 File paths, scripts, code symbols — plus linter rules across **7 linters** (ESLint,
 Ruff, Clippy + four more): each one **exists _and_ is enabled**. **[Full guide →](docs/verifying-instruction-files.md)**
