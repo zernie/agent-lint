@@ -1,0 +1,45 @@
+# Captured 2026-06-27 by running the built CLI against SHA-pinned upstream
+# plugins in examples/harness/vendor/. The 'dialect freshness' banner (this
+# container runs CC 2.1.42 vs vigiles's validated 2.1.187) is an ENV artifact and
+# is filtered out here — it would not appear on a pinned-CC machine.
+
+$ node dist/cli.js audit examples/harness/vendor/madappgang-frontend@6097ad4
+
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ● Triggering     100  ██████████████████████
+  ● Structure       92  ████████████████████░░
+       └ 1 agent tool(s) that don't exist (typo / never-available)
+  ● Tested          97  █████████████████████░
+       └ 1 untested surface(s)
+
+Harness health: A (97/100)
+
+Scan: examples/harness/vendor/madappgang-frontend@6097ad4
+
+Agents (1):
+  ✗ tester — tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TaskCreate, TaskUpdate, TaskList, TaskGet, WebSearch, BashOutput, KillShell, AskUserQuestion, Skill, SlashCommand, mcp__chrome-devtools__click, mcp__chrome-devtools__close_page, mcp__chrome-devtools__drag, mcp__chrome-devtools__emulate_cpu, mcp__chrome-devtools__emulate_network, mcp__chrome-devtools__evaluate_script, mcp__chrome-devtools__fill, mcp__chrome-devtools__fill_form, mcp__chrome-devtools__get_console_message, mcp__chrome-devtools__get_network_request, mcp__chrome-devtools__handle_dialog, mcp__chrome-devtools__hover, mcp__chrome-devtools__list_console_messages, mcp__chrome-devtools__list_network_requests, mcp__chrome-devtools__list_pages, mcp__chrome-devtools__navigate_page, mcp__chrome-devtools__navigate_page_history, mcp__chrome-devtools__new_page, mcp__chrome-devtools__performance_analyze_insight, mcp__chrome-devtools__performance_start_trace, mcp__chrome-devtools__performance_stop_trace, mcp__chrome-devtools__resize_page, mcp__chrome-devtools__select_page, mcp__chrome-devtools__take_screenshot, mcp__chrome-devtools__take_snapshot, mcp__chrome-devtools__upload_file, mcp__chrome-devtools__wait_for [unrestricted]
+      ✗ Tool "AskUserQuestion" is never available to a subagent — remove it from the tools list.
+
+MCP servers: no
+Untested surfaces: 1
+Effect surface: 0 pure · 0 bounded · 1 unrestricted
+
+Warnings:
+  - plugin defines 1 subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.
+
+ℹ 1 file(s) have frontmatter that isn't valid YAML — fields may not parse as intended (verify before enforcing `frontmatter-valid`)
+
+⚠ 1 structural issue(s) — see ✗/⚠ above
+
+1 deterministic fix(es) — free, no model:
+
+✗ [FIX] tester
+    why: Tool "AskUserQuestion" is never available to a subagent — remove it from the tools list.  [subagent-tool-contract]
+    →    In "tester", remove or correct the tool "AskUserQuestion" — it isn't an available tool, so it's silently dropped from the contract.
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

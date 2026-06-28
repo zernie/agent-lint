@@ -1,0 +1,50 @@
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ● Triggering     100  ██████████████████████
+  ✗ Structure       55  ████████████░░░░░░░░░░
+       └ 3 surface(s) missing required frontmatter; 3 agent(s) inherit all tools (no contract)
+  ● Tested          97  █████████████████████░
+       └ 1 untested surface(s)
+
+Harness health: B (88/100)
+
+Scan: /tmp/claude-0/-home-user-vigiles/8a778b7f-db3c-5510-8f66-56e196b476af/scratchpad/official/claude-plugins-official-main/plugins/skill-creator
+
+Skills (1):
+  ✓ skill-creator
+
+Agents (3):
+  ⚠ analyzer — tools: (inherits all — no contract) [unrestricted]
+  ⚠ comparator — tools: (inherits all — no contract) [unrestricted]
+  ⚠ grader — tools: (inherits all — no contract) [unrestricted]
+
+Frontmatter (3):
+  ✗ agent .claude/skills/skill-creator/agents/analyzer.md is missing required frontmatter: name, description — it won't register.
+  ✗ agent .claude/skills/skill-creator/agents/comparator.md is missing required frontmatter: name, description — it won't register.
+  ✗ agent .claude/skills/skill-creator/agents/grader.md is missing required frontmatter: name, description — it won't register.
+
+MCP servers: no
+Untested surfaces: 1
+Effect surface: 0 pure · 0 bounded · 3 unrestricted
+
+⚠ 3 structural issue(s) — see ✗/⚠ above
+
+3 deterministic fix(es) — free, no model:
+
+✗ [FIX] .claude/skills/skill-creator/agents/analyzer.md
+    why: agent .claude/skills/skill-creator/agents/analyzer.md is missing required frontmatter: name, description — it won't register.  [subagent-frontmatter]
+    →    Add the missing name + description to ".claude/skills/skill-creator/agents/analyzer.md" — a subagent without it won't register, so it can never be dispatched.
+✗ [FIX] .claude/skills/skill-creator/agents/comparator.md
+    why: agent .claude/skills/skill-creator/agents/comparator.md is missing required frontmatter: name, description — it won't register.  [subagent-frontmatter]
+    →    Add the missing name + description to ".claude/skills/skill-creator/agents/comparator.md" — a subagent without it won't register, so it can never be dispatched.
+✗ [FIX] .claude/skills/skill-creator/agents/grader.md
+    why: agent .claude/skills/skill-creator/agents/grader.md is missing required frontmatter: name, description — it won't register.  [subagent-frontmatter]
+    →    Add the missing name + description to ".claude/skills/skill-creator/agents/grader.md" — a subagent without it won't register, so it can never be dispatched.
+
+ℹ Executing checks (safety battery · live MCP · skill firing) skipped — `audit` runs them only interactively (a terminal). For automation, test the harness with the `vigiles/testing` API.
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

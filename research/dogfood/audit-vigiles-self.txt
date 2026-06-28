@@ -1,0 +1,39 @@
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ● Triggering     100  ██████████████████████
+  ● Structure      100  ██████████████████████
+  ● Tested         100  ██████████████████████
+
+Harness health: A (100/100)
+
+Scan: /home/user/vigiles
+
+Instructions: CLAUDE.md (spec-managed)
+
+Skills (5):
+  ✓ adopt-spec (user-invoked)
+  ✓ edit-spec
+  ✓ linter-docs (user-invoked)
+  ✓ strengthen
+  ✓ test-harness
+
+Hooks (4):
+  ✓ /home/user/vigiles/hooks/post-edit.sh
+  ✓ /home/user/vigiles/hooks/pre-edit.sh
+  ✓ /home/user/vigiles/hooks/refs-nudge.sh
+  ✓ /home/user/vigiles/hooks/session-start.sh
+
+MCP servers: no
+Untested surfaces: 0
+
+ℹ 4 hand-written hook command(s) — if any gate the agent (a block/deny decision), compiled hooks (`vigiles/hook`) make whole hook bug classes unrepresentable at authoring time, and `guardrail-check` proves an existing one blocks. See docs/compiled-hooks.md.
+
+✓ no structural issues found
+
+ℹ Executing checks (safety battery · live MCP · skill firing) skipped — `audit` runs them only interactively (a terminal). For automation, test the harness with the `vigiles/testing` API.
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

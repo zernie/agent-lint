@@ -1,0 +1,43 @@
+# Captured 2026-06-27 by running the built CLI against SHA-pinned upstream
+# plugins in examples/harness/vendor/. The 'dialect freshness' banner (this
+# container runs CC 2.1.42 vs vigiles's validated 2.1.187) is an ENV artifact and
+# is filtered out here — it would not appear on a pinned-CC machine.
+
+$ node dist/cli.js audit examples/harness/vendor/superpowers@6fd4507
+
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness    92  ████████████████████░░
+       └ 1 broken intra-plugin reference(s)
+  ● Triggering     100  ██████████████████████
+  ● Structure      100  ██████████████████████
+  ● Tested          94  █████████████████████░
+       └ 2 untested surface(s)
+
+Harness health: A (97/100)
+
+Scan: examples/harness/vendor/superpowers@6fd4507
+
+Skills (2):
+  ✓ systematic-debugging
+  ✓ test-driven-development
+
+Hooks (1):
+  · 1 inline hook(s) (no script file)
+
+Broken references (1):
+  ✗ skills/using-superpowers/SKILL.md (referenced but MISSING)
+
+MCP servers: no
+Untested surfaces: 2
+
+ℹ 1 hand-written hook command(s) — if any gate the agent (a block/deny decision), compiled hooks (`vigiles/hook`) make whole hook bug classes unrepresentable at authoring time, and `guardrail-check` proves an existing one blocks. See docs/compiled-hooks.md.
+
+⚠ 1 structural issue(s) — see ✗/⚠ above
+
+ℹ Executing checks (safety battery · live MCP · skill firing) skipped — `audit` runs them only interactively (a terminal). For automation, test the harness with the `vigiles/testing` API.
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

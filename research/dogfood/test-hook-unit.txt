@@ -1,0 +1,9 @@
+Running 1 test file(s):
+
+  ✓ guard blocks --no-verify and allows a clean commit (no claude needed)
+
+2 passed.
+
+  ✓ examples/harness/hook-unit.harness.mjs
+
+1 passed.

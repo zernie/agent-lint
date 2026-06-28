@@ -1,0 +1,32 @@
+Plugin health leaderboard (25 scanned)
+
+  #   score  grade  plugin
+   1  100    A      claude-code-setup — 1 untested surface(s) (advisory)
+   2  100    A      claude-md-management — 1 untested surface(s) (advisory)
+   3  100    A      code-modernization — 7 untested surface(s) (advisory)
+   4  100    A      code-review
+   5  100    A      commit-commands
+   6  100    A      cwc-makers — 2 untested surface(s) (advisory)
+   7  100    A      example-plugin — 2 untested surface(s) (advisory)
+   8  100    A      explanatory-output-style
+   9  100    A      feature-dev — 3 untested surface(s) (advisory)
+  10  100    A      frontend-design — 1 untested surface(s) (advisory)
+  11  100    A      hookify — 2 untested surface(s) (advisory)
+  12  100    A      learning-output-style
+  13  100    A      math-olympiad — 1 untested surface(s) (advisory)
+  14  100    A      mcp-server-dev — 3 untested surface(s) (advisory)
+  15  100    A      mcp-tunnels
+  16  100    A      playground — 1 untested surface(s) (advisory)
+  17  100    A      plugin-dev — 10 untested surface(s) (advisory)
+  18  100    A      project-artifact — 1 untested surface(s) (advisory)
+  19  100    A      ralph-loop
+  20  100    A      security-guidance
+  21  100    A      session-report — 1 untested surface(s) (advisory)
+  22  100    A      skill-creator — 1 untested surface(s) (advisory)
+  23   95    A      code-simplifier — 1 agent(s) inherit all tools (no contract); 1 untested surface(s) (advisory)
+  24   90    A      agent-sdk-dev — 2 agent(s) inherit all tools (no contract); 2 untested surface(s) (advisory)
+  25   70    C      pr-review-toolkit — 6 agent(s) inherit all tools (no contract); 6 untested surface(s) (advisory)
+
+Structural health only (no model). Weights: missing hook -15, no-description
+skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5.
+Untested surfaces are advisory — shown, but they don't affect the score.

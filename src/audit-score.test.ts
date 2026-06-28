@@ -56,13 +56,16 @@ describe("auditScore", () => {
     expect(keys).toEqual(["Truthfulness", "Triggering", "Structure", "Tested"]);
   });
 
-  it("buckets a dangling ref into Truthfulness", () => {
+  it("buckets a dangling ref into Truthfulness; overall is the summed score", () => {
     const s = auditScore(makeReport({ danglingRefs: ["hooks/missing.sh"] }));
-    expect(cat(s, "Truthfulness")?.score).toBe(92); // -8
+    expect(cat(s, "Truthfulness")?.score).toBe(92); // -8, ring
     expect(cat(s, "Structure")?.score).toBe(100);
+    // headline = 100 - Σ penalties = 92 (NOT the average of the rings), so the
+    // single dangling ref shows up undiluted in the overall.
+    expect(s.overall).toBe(92);
   });
 
-  it("buckets a description overlap + no-description into Triggering", () => {
+  it("buckets a description overlap + no-description into Triggering; overall summed", () => {
     const s = auditScore(
       makeReport({
         skills: [
@@ -73,15 +76,49 @@ describe("auditScore", () => {
         ] as unknown as ScanReport["descriptionOverlaps"],
       }),
     );
-    // -10 (no-desc) -8 (overlap) = 82
+    // -10 (no-desc) -8 (overlap) = 82, in the ring AND the headline overall.
     expect(cat(s, "Triggering")?.score).toBe(82);
     expect(cat(s, "Triggering")?.findings.length).toBe(2);
+    expect(s.overall).toBe(82);
   });
 
-  it("untested surfaces only dent the Tested category", () => {
+  it("the headline overall is SUMMED across categories, not the ring average", () => {
+    // A plugin whose only issue is Structure −30 (six agents inherit all tools)
+    // shows Structure 70 in the breakdown AND overall 70 — averaging the four
+    // rings would dilute that to ~93 and hide the real blast-radius problem.
+    const agent = {
+      name: "a",
+      path: "p",
+      tools: null,
+      toolIssues: [],
+      mcpToolIssues: [],
+      disallowedToolIssues: [],
+      purity: "unrestricted" as const,
+      effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+    };
+    const s = auditScore(
+      makeReport({
+        agents: Array.from(
+          { length: 6 },
+          () => agent,
+        ) as unknown as ScanReport["agents"],
+      }),
+    );
+    expect(cat(s, "Structure")?.score).toBe(70); // -6*5
+    expect(cat(s, "Truthfulness")?.score).toBe(100);
+    expect(cat(s, "Triggering")?.score).toBe(100);
+    expect(s.overall).toBe(70); // summed, NOT averaged to ~93
+    expect(s.grade).toBe("C");
+  });
+
+  it("untested surfaces are ADVISORY — shown on Tested, but never drag the grade", () => {
     const s = auditScore(makeReport({ untested: 3 }));
-    expect(cat(s, "Tested")?.score).toBe(91); // -9
+    expect(cat(s, "Tested")?.score).toBe(91); // -9, shown
+    expect(cat(s, "Tested")?.advisory).toBe(true);
     expect(cat(s, "Structure")?.score).toBe(100);
+    // the overall ignores the advisory Tested ring — a clean-but-untested repo is A
+    expect(s.overall).toBe(100);
+    expect(s.grade).toBe("A");
   });
 
   it("an empty machine (no surface, no instructions) is empty — overall 0, all n/a", () => {

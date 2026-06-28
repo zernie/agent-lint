@@ -1,0 +1,36 @@
+Detected harness: claude-code
+
+Harness audit
+
+  ● Truthfulness   100  ██████████████████████
+  ● Triggering     100  ██████████████████████
+  ◑ Structure       70  ███████████████░░░░░░░
+       └ 6 agent(s) inherit all tools (no contract)
+  ◑ Tested          82  ██████████████████░░░░
+       └ 6 untested surface(s)
+
+Harness health: B (88/100)
+
+Scan: /tmp/tmp.Fy4jSltO70/pr-review-toolkit
+
+Agents (6):
+  ⚠ code-reviewer — tools: (inherits all — no contract) [unrestricted]
+  ⚠ code-simplifier — tools: (inherits all — no contract) [unrestricted]
+  ⚠ comment-analyzer — tools: (inherits all — no contract) [unrestricted]
+  ⚠ pr-test-analyzer — tools: (inherits all — no contract) [unrestricted]
+  ⚠ silent-failure-hunter — tools: (inherits all — no contract) [unrestricted]
+  ⚠ type-design-analyzer — tools: (inherits all — no contract) [unrestricted]
+
+MCP servers: no
+Untested surfaces: 6
+Effect surface: 0 pure · 0 bounded · 6 unrestricted
+
+Warnings:
+  - plugin defines 6 subagent file(s) under agents/ — these run only under a real model; test them at the eval tier (runEval), not the deterministic mock.
+
+ℹ 1 file(s) have frontmatter that isn't valid YAML — fields may not parse as intended (verify before enforcing `frontmatter-valid`)
+
+✓ no structural issues found
+
+✓ Wrote vigiles-report.html — open it for the full report
+✓ Wrote vigiles-report.json — the upload/CI artifact

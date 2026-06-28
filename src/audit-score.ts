@@ -4,9 +4,12 @@
  * A single structural-health number (the leaderboard's `scoreReport`) ranks
  * plugins, but it hides WHERE a harness is weak. This buckets the SAME
  * deterministic findings into four categories — Truthfulness, Triggering,
- * Structure, Tested — each a 0–100 ring, with a weighted overall. Same
- * detectors, no re-detection (one-detector-no-drift); all deterministic, no
- * execution. (Safety — "do your hooks actually block?" — is NOT an `audit` ring:
+ * Structure, Tested — each a 0–100 ring, as a DIAGNOSTIC breakdown beneath one
+ * headline `overall` = `100 − Σ(all graded penalties)` (the SAME summed model as
+ * the leaderboard's single health number, via the shared `computeIntegrityScore`
+ * — so the two surfaces never disagree). Same detectors, no re-detection
+ * (one-detector-no-drift); all deterministic, no execution. (Safety — "do your
+ * hooks actually block?" — is NOT an `audit` ring:
  * it requires executing your hooks, which needs cross-platform confinement
  * that isn't shipped yet, so it lives in the `vigiles/testing` API via
  * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.)
@@ -14,7 +17,18 @@
  * A category that can't be assessed scores `null` (n/a) and is EXCLUDED from the
  * overall — never a false 0. Pure over the `ScanReport`, so it's fully testable.
  */
-import { gradeFor, type PluginScore } from "./leaderboard.js";
+import {
+  gradeFor,
+  computeIntegrityScore,
+  reportDeductions,
+  isEmptyMachine,
+  W_MISSING_HOOK,
+  W_NO_DESCRIPTION,
+  W_DANGLING_REF,
+  W_OVERLAP,
+  W_NO_CONTRACT,
+  type PluginScore,
+} from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
 
 export type CategoryKey =
@@ -29,12 +43,26 @@ export interface CategoryScore {
   readonly score: number | null;
   /** Relative weight in the overall (equal by default — tune later). */
   readonly weight: number;
+  /**
+   * Advisory categories are shown but EXCLUDED from the overall grade. An untested
+   * surface (or any best-practice gap) is a HARDENING signal, not a broken harness
+   * — it must never drag the grade down, so `audit` doesn't read as F on a clean
+   * repo that simply hasn't written tests yet. The grade reflects what's BROKEN.
+   */
+  readonly advisory?: boolean;
   /** Human-readable deductions / notes, worst first; empty when clean. */
   readonly findings: readonly string[];
 }
 
 export interface AuditScore {
-  /** Weighted average over the ASSESSABLE categories (n/a excluded). 0 when empty. */
+  /**
+   * The headline score — `100 − Σ(all graded penalties)`, clamped to [0,100]
+   * (the SAME summed model as the leaderboard's single health number, computed by
+   * the shared {@link computeIntegrityScore}, so the two surfaces never disagree).
+   * The per-category rings below are a DIAGNOSTIC breakdown, not the headline: a
+   * plugin whose only issue is Structure −30 shows Structure 70 in the breakdown
+   * AND overall 70 (averaging the rings would dilute that to ~90). 0 when empty.
+   */
   readonly overall: number;
   readonly grade: PluginScore["grade"];
   readonly categories: readonly CategoryScore[];
@@ -42,13 +70,9 @@ export interface AuditScore {
   readonly empty: boolean;
 }
 
-// Per-item penalties — mirror the leaderboard's weights so the category view and
-// the single health number stay consistent (broken-at-runtime costs most).
-const W_MISSING_HOOK = 15;
-const W_NO_DESCRIPTION = 10;
-const W_DANGLING_REF = 8;
-const W_OVERLAP = 8; // a description collision → the wrong skill fires
-const W_NO_CONTRACT = 5;
+// Per-item penalties are the SHARED leaderboard weights (imported above) so the
+// category rings and the single health number can never drift. W_UNTESTED is
+// audit-only — untested surfaces are advisory (shown, never scored into overall).
 const W_UNTESTED = 3;
 
 /** One deduction: a count, its per-item weight, and the label if non-zero. */
@@ -173,29 +197,31 @@ function tested(r: ScanReport): CategoryScore {
   const { score, findings } = scoreFrom([
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
   ]);
-  return { key: "Tested", score, weight: 1, findings };
-}
-
-function isEmptyMachine(r: ScanReport): boolean {
-  const surfaces =
-    r.skills.length +
-    r.agents.length +
-    r.hooks.length +
-    r.inlineHooks +
-    r.commands;
-  // An instruction-only repo (just a CLAUDE.md/AGENTS.md, no plugin surface) is
-  // NOT empty — the scan records `instructions` precisely so it isn't graded
-  // F/0 "no loadable surface". Only a dir with NO instruction file AND no
-  // surface is the empty machine.
-  return surfaces === 0 && !r.mcp && !r.instructions;
+  // ADVISORY: untested surfaces are a hardening gap, not breakage — shown, but
+  // excluded from the overall grade (so a clean-but-untested repo isn't graded F).
+  return { key: "Tested", score, weight: 1, advisory: true, findings };
 }
 
 /**
- * Bucket a scan report into the four deterministic Lighthouse categories with a
- * weighted overall. n/a categories are excluded from the overall, never scored 0.
+ * An instruction-only repo (just a CLAUDE.md/AGENTS.md, no plugin surface) is NOT
+ * empty — the scan records `instructions` precisely so it isn't graded F/0 "no
+ * loadable surface". Only a dir with NO instruction file AND no surface is empty.
+ * (The shared `isEmptyMachine` ignores `instructions`; audit additionally treats
+ * an instruction file as a surface.)
+ */
+function isEmptyAudit(r: ScanReport): boolean {
+  return isEmptyMachine(r) && !r.instructions;
+}
+
+/**
+ * Bucket a scan report into the four deterministic Lighthouse categories as a
+ * DIAGNOSTIC breakdown, with the headline `overall` = `100 − Σ(all graded
+ * penalties)` (the shared summed model — NOT the average of the rings — so it
+ * equals the leaderboard's single health number). The advisory Tested ring and
+ * any n/a ring are shown but excluded from the headline.
  */
 export function auditScore(report: ScanReport): AuditScore {
-  if (isEmptyMachine(report)) {
+  if (isEmptyAudit(report)) {
     const categories: CategoryKey[] = [
       "Truthfulness",
       "Triggering",
@@ -220,16 +246,11 @@ export function auditScore(report: ScanReport): AuditScore {
     structure(report),
     tested(report),
   ];
-  const assessable = categories.filter(
-    (c): c is CategoryScore & { score: number } => c.score !== null,
-  );
-  const totalWeight = assessable.reduce((s, c) => s + c.weight, 0);
-  const overall =
-    totalWeight === 0
-      ? 0
-      : Math.round(
-          assessable.reduce((s, c) => s + c.score * c.weight, 0) / totalWeight,
-        );
+  // The headline is the SUMMED model (the shared integrity score), NOT the average
+  // of the rings — averaging would let a real problem in one category be diluted
+  // by clean siblings. The rings above stay a diagnostic breakdown; Tested
+  // (advisory) is never summed in (untested surfaces don't drag the grade).
+  const { score: overall } = computeIntegrityScore(reportDeductions(report));
   return { overall, grade: gradeFor(overall), categories, empty: false };
 }
 
@@ -250,14 +271,15 @@ function bar(score: number | null): string {
   return "█".repeat(filled) + "░".repeat(BAR_CELLS - filled);
 }
 
-/** Render the category rings + the weighted overall for the terminal. */
+/** Render the category rings (diagnostic) + the summed overall for the terminal. */
 export function formatAuditScore(s: AuditScore): string {
   const lines: string[] = ["Harness audit", ""];
   for (const c of s.categories) {
     const glyph = bandGlyph(c.score);
     const label = c.key.padEnd(13);
     const num = (c.score === null ? "n/a" : String(c.score)).padStart(4);
-    lines.push(`  ${glyph} ${label} ${num}  ${bar(c.score)}`);
+    const tag = c.advisory ? "  · advisory (not graded)" : "";
+    lines.push(`  ${glyph} ${label} ${num}  ${bar(c.score)}${tag}`);
     if (c.findings.length > 0) {
       lines.push(`       └ ${c.findings.join("; ")}`);
     }

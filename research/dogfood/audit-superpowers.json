@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "schemaVersion": 1,
+    "tool": "vigiles",
+    "vigilesVersion": "0.0.0-semantically-released",
+    "harness": "claude-code",
+    "dir": "examples/harness/vendor/superpowers@6fd4507"
+  },
+  "score": {
+    "overall": 97,
+    "grade": "A",
+    "categories": [
+      {
+        "key": "Truthfulness",
+        "score": 92,
+        "weight": 1,
+        "findings": [
+          "1 broken intra-plugin reference(s)"
+        ]
+      },
+      {
+        "key": "Triggering",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Structure",
+        "score": 100,
+        "weight": 1,
+        "findings": []
+      },
+      {
+        "key": "Tested",
+        "score": 94,
+        "weight": 1,
+        "findings": [
+          "2 untested surface(s)"
+        ]
+      }
+    ],
+    "empty": false
+  },
+  "recommendations": [],
+  "inventory": {
+    "skills": 2,
+    "agents": 0,
+    "hooks": 1,
+    "commands": 0,
+    "mcp": false,
+    "untested": 2
+  }
+}

@@ -314,6 +314,71 @@ describe("audit default — folds the deterministic fix into the report", () => 
   });
 });
 
+describe("audit → adoption — adoptable-surfaces nudge + JSON data", () => {
+  let root: string;
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "audit-adopt-e2e-"));
+    const demo = join(root, "demo");
+    mkdirSync(join(demo, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(demo, ".claude-plugin", "plugin.json"),
+      '{"name":"demo"}\n',
+    );
+    // A model-invocable skill with NO spec → both adoptable (no .spec.ts) and a
+    // triggerable surface (described, not user-invoked) → the two nudges fire.
+    mkdirSync(join(demo, "skills", "deploy"), { recursive: true });
+    writeFileSync(
+      join(demo, "skills", "deploy", "SKILL.md"),
+      `---\nname: deploy\ndescription: Deploys the application to production environments reliably and safely here\n---\n# deploy\nDeploy stuff.\n`,
+    );
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("the terminal audit prints the adoptable-surfaces nudge + a behavioral nudge", () => {
+    const r = run(`audit ${join(root, "demo")}`);
+    assert.equal(r.exitCode, 0);
+    // The adoption nudge with the create-all + per-surface command.
+    assert.match(r.stdout, /not yet spec-managed/);
+    assert.match(r.stdout, /npx vigiles init/);
+    assert.match(r.stdout, /--target=skills\/deploy\/SKILL\.md/);
+    // The small behavioral "do your skills fire?" nudge.
+    assert.match(r.stdout, /actually fire/);
+    assert.match(r.stdout, /measureTriggerRate/);
+  });
+
+  it("--json carries adoptable surfaces + commands (no nudge text)", () => {
+    const r = run(`audit ${join(root, "demo")} --json`);
+    assert.equal(r.exitCode, 0);
+    const report = JSON.parse(r.stdout) as {
+      adoptable?: {
+        createAllCommand: string;
+        surfaces: { path: string; command: string }[];
+      };
+    };
+    assert.ok(report.adoptable, "adoptable present in JSON");
+    assert.equal(report.adoptable?.createAllCommand, "npx vigiles init");
+    const paths = report.adoptable?.surfaces.map((s) => s.path) ?? [];
+    assert.ok(
+      paths.includes("skills/deploy/SKILL.md"),
+      "the un-spec'd skill is adoptable",
+    );
+    const deploy = report.adoptable?.surfaces.find(
+      (s) => s.path === "skills/deploy/SKILL.md",
+    );
+    assert.equal(
+      deploy?.command,
+      "npx vigiles init --target=skills/deploy/SKILL.md",
+    );
+    // JSON stays machine-clean — no human nudge text.
+    assert.doesNotMatch(r.stdout, /not yet spec-managed/);
+    assert.doesNotMatch(r.stdout, /actually fire/);
+  });
+});
+
 describe("scaffold-test e2e — test-gen for untested surfaces (B1)", () => {
   let root: string;
   let plugin: string;
