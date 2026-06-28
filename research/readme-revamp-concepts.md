@@ -16,11 +16,12 @@
 ## Concept 1 — "The Loop" (See → Fix → Prove)
 
 **The bet:** unify audit + the instruments into ONE motion. Audit isn't a separate
-product from Lint/Test/Eval — it's the *first beat* of a loop the agent drives.
+product from Lint/Test/Eval — it's the _first beat_ of a loop the agent drives.
 
-**Tagline:** *The tests your AI harness never had.*
+**Tagline:** _The tests your AI harness never had._
 
 **Hero (sample):**
+
 > You installed a bunch of plugins and wrote a few skills — but do they actually
 > work? A skill that never fires, a subagent wired to a tool that doesn't exist, a
 > CLAUDE.md full of dead references — your harness fails **silently**, mid-task.
@@ -31,6 +32,7 @@ product from Lint/Test/Eval — it's the *first beat* of a loop the agent drives
 > it works. You write nothing.
 
 **Structure:**
+
 1. Hero (pain + the loop sentence)
 2. **① See** — `npx vigiles audit` + screenshot + rings table + "Lighthouse, local, asks-once" note
 3. **Quick start** — paste-prompt + `init` (install above the fold)
@@ -40,7 +42,7 @@ product from Lint/Test/Eval — it's the *first beat* of a loop the agent drives
 
 **Wins:** kills the two-taxonomy problem (rings = what audit scores; See/Fix/Prove =
 the depth). Audit and instruments stop competing. Spec/adopt finally has one home
-(in Fix). Reads as a *workflow*, which is what people actually do.
+(in Fix). Reads as a _workflow_, which is what people actually do.
 **Costs:** "See/Fix/Prove" is three custom verbs to learn; mildly abstract until the
 screenshot lands.
 **Best for:** the cohesive, default-safe choice. Lowest risk, highest coherence.
@@ -49,19 +51,21 @@ screenshot lands.
 
 ## Concept 2 — "The Lighthouse" (score-led, audit IS the product)
 
-**The bet:** lean all the way into the dashboard. The product is *your harness health
-score*; everything else is "how to move each ring." Matches the current founder bet
+**The bet:** lean all the way into the dashboard. The product is _your harness health
+score_; everything else is "how to move each ring." Matches the current founder bet
 that audit is THE front door — just executed without apology.
 
-**Tagline:** *Lighthouse for your AI agent harness.*
+**Tagline:** _Lighthouse for your AI agent harness._
 
 **Hero (sample):**
+
 > Run one command. Get a grade. `npx vigiles audit` reads your harness
 > deterministically — no key, safe on any repo — and scores it A–F across four
 > categories, with every fix inline. Then watch the score climb as your agent fixes
 > what it found.
 
 **Structure:**
+
 1. Hero = the screenshot + the score, immediately
 2. `npx vigiles audit` one-liner + "safe anywhere / asks once" note
 3. **One section per ring**, each ending in the tool that moves it:
@@ -72,9 +76,9 @@ that audit is THE front door — just executed without apology.
 4. Quick start (init) + "your agent does the fixing"
 5. FAQ · More · License
 
-**Wins:** maximally concrete and visual; the score is *shareable* (people post
+**Wins:** maximally concrete and visual; the score is _shareable_ (people post
 Lighthouse scores). Tightest possible "what is this in 5 seconds." Resolves the
-two-table problem by making rings the *only* taxonomy (instruments live inside rings).
+two-table problem by making rings the _only_ taxonomy (instruments live inside rings).
 **Costs:** risks reading as a one-shot report card, underselling the deep Test/Eval
 library and the spec-first adoption magic; "score" can feel gimmicky to power users;
 Eval (does-it-help) doesn't map to a ring cleanly.
@@ -88,19 +92,21 @@ Eval (does-it-help) doesn't map to a ring cleanly.
 README like a testing framework's docs (jest/vitest energy). vigiles = the test
 runner for your agent setup.
 
-**Tagline:** *Your AI harness is a library with no tests. Here's the test suite.*
+**Tagline:** _Your AI harness is a library with no tests. Here's the test suite._
 
 **Hero (sample):**
+
 > You'd never ship a library with no tests. But that's exactly what your agent
 > harness is — a pile of plugins, skills, hooks and a CLAUDE.md, none of it verified.
 > A skill that never fires. A hook that blocks nothing. A subagent wired to a tool
 > that doesn't exist. vigiles is the test suite you've been missing.
 
 **Structure:**
+
 1. Hero (the analogy, hard)
 2. **What you can test** — a tight table: instruction files · hooks · skills ·
    subagents · "does it even help" — each row a one-liner + link
-3. Then organized *by what you test*, cheapest first:
+3. Then organized _by what you test_, cheapest first:
    - **Your CLAUDE.md is true** (Lint, no key)
    - **Your hooks block** (runHook, no key)
    - **Your skills fire** (measureTriggerRate — recall + precision)
@@ -110,7 +116,7 @@ runner for your agent setup.
 5. Quick start (init adopts your CLAUDE.md) · FAQ · More
 
 **Wins:** instantly legible to every engineer; emotionally strong; positions vigiles
-as *infrastructure*, not a gadget. The "tests your harness never had" hook is native
+as _infrastructure_, not a gadget. The "tests your harness never had" hook is native
 here. Cheapest-tier-first mirrors how testing libs earn trust.
 **Costs:** demotes audit (the easiest, most viral front door) to a mid-page mention;
 the spec-first adoption story competes with the testing story for the spotlight.
@@ -124,24 +130,26 @@ the spec-first adoption story competes with the testing story for the spotlight.
 frozen, the harness is yours and unmeasured — and own "harness reliability" as a
 discipline. Manifesto energy, built for HN / thought-leadership.
 
-**Tagline:** *You can't fix the model. You can fix the harness.*
+**Tagline:** _You can't fix the model. You can fix the harness._
 
 **Hero (sample):**
+
 > Everyone's tuning prompts and swapping models. But `Agent = Model + Harness`, and
 > the harness — your CLAUDE.md, skills, hooks, subagents — is the half you actually
 > control. It's also the half nobody verifies. vigiles is the discipline for it:
 > verify every reference, test every surface, measure what helps.
 
 **Structure:**
+
 1. Thesis hero (frame + the pain it implies)
-2. The problem, made concrete (the silent-failure trio) — *land the pain fast so it's
-   not just vocabulary*
+2. The problem, made concrete (the silent-failure trio) — _land the pain fast so it's
+   not just vocabulary_
 3. **The three instruments** as the disciplined answer: Lint / Test / Eval (each a
    tight beat)
 4. `audit` as "the one-command entry into the discipline" + screenshot
 5. Quick start · FAQ · More
 
-**Wins:** aspirational and ownable; gives vigiles a *category* not just a feature
+**Wins:** aspirational and ownable; gives vigiles a _category_ not just a feature
 list; resonates hard with the harness-engineering crowd; great share text.
 **Costs:** highest "lead with benefit, not jargon" risk — must front-load the pain or
 it reads as abstract; slower to "what do I actually run." Against the README rule
@@ -157,20 +165,22 @@ than a feature.
 "here's a silent failure → here's vigiles catching it." Skeptic-proof, screenshot-
 heavy, built for social.
 
-**Tagline:** *See what your harness is hiding.*
+**Tagline:** _See what your harness is hiding._
 
 **Hero (sample):**
+
 > Three real failures, caught in seconds — no setup, no key:
 > (then three tight proof blocks)
 
 **Structure:**
+
 1. Hero = one killer proof, immediately (the audit screenshot, or the lint stale-ref
    catch)
 2. **Proof 1 — the lying CLAUDE.md:** the `✗ src/auth/login.ts — no such file` block
 3. **Proof 2 — the skill that never fires:** a measureTriggerRate before/after
 4. **Proof 3 — the whole-harness scorecard:** the audit screenshot + rings
-5. *(post-launch: the 2/7 → 7/7 safety-hook battery — currently PARKED for launch, so
-   it can't be the hero yet; slot it in when Guard ships)*
+5. _(post-launch: the 2/7 → 7/7 safety-hook battery — currently PARKED for launch, so
+   it can't be the hero yet; slot it in when Guard ships)_
 6. Then a compact "how it works" (Lint/Test/Eval) + Quick start · FAQ · More
 
 **Wins:** undeniable; converts skeptics; every block is screenshotable for Twitter/HN.
@@ -193,7 +203,7 @@ unifying narrative; leans on having polished visual assets.
   anchor from Concept 3 (it's the best dev hook — make it the tagline, which Concept 1
   already does).
 - **Hold 4 and 5 for a launch moment:** Concept 4 is the HN-post POV; Concept 5 is the
-  visual relaunch once Guard is unparked and assets are ready. They're *campaign*
+  visual relaunch once Guard is unparked and assets are ready. They're _campaign_
   framings, not the everyday README.
 
 **Decision when you wake:** pick a number (or "1 + steal from 2/3") and I'll write the
@@ -210,14 +220,14 @@ full file. If you say nothing, I'll draft Concept 1.
 
 ### Proof inventory — what's REAL and ready
 
-| Concept-5 block | Real proof we now have | Source | Status |
-| --- | --- | --- | --- |
-| **The lying instruction file** (Truthfulness) | obra/**superpowers** points at `skills/using-superpowers/SKILL.md` — **referenced but MISSING**. Truthfulness drops to **92**. A real dead ref in a popular plugin. | `audit superpowers@6fd4507` | ✅ REAL |
-| **Valid ≠ true** (Structure) | **madappgang**'s `tester` agent lists `AskUserQuestion` — **never available to a subagent, silently dropped**. Free inline fix. (+ malformed-YAML frontmatter note.) | `audit madappgang-frontend@6097ad4` | ✅ REAL |
-| **The scorecard** (the hero screenshot) | A 97/100 **A** audit with the four rings on a real plugin; rings actually move (Structure 92, Tested 97). | `audit <any vendored>` | ✅ REAL |
-| **Marketplace ranking** (plugin authors) | Real 4-plugin leaderboard: madappgang **89 B**, accessibility **86 B**, superpowers **86 B**, oh-my-claudecode **78 C** — each with its worst issue named. | `audit examples/harness/vendor/*@*` | ✅ REAL |
-| **Inherits-all-tools footgun** (Structure) | oh-my-claudecode's `code-reviewer` + `critic` agents inherit ALL tools (no contract). | `audit oh-my-claudecode@deee3a4` | ✅ REAL |
-| **The skill that never fires** (Triggering) | NOT capturable here — needs a model (trigger-rate / `measureTriggerRate`). Deterministic proxy available: description-overlap. | — | ⚠ NEEDS MODEL — live spike when auth available |
+| Concept-5 block                               | Real proof we now have                                                                                                                                               | Source                              | Status                                         |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------- |
+| **The lying instruction file** (Truthfulness) | obra/**superpowers** points at `skills/using-superpowers/SKILL.md` — **referenced but MISSING**. Truthfulness drops to **92**. A real dead ref in a popular plugin.  | `audit superpowers@6fd4507`         | ✅ REAL                                        |
+| **Valid ≠ true** (Structure)                  | **madappgang**'s `tester` agent lists `AskUserQuestion` — **never available to a subagent, silently dropped**. Free inline fix. (+ malformed-YAML frontmatter note.) | `audit madappgang-frontend@6097ad4` | ✅ REAL                                        |
+| **The scorecard** (the hero screenshot)       | A 97/100 **A** audit with the four rings on a real plugin; rings actually move (Structure 92, Tested 97).                                                            | `audit <any vendored>`              | ✅ REAL                                        |
+| **Marketplace ranking** (plugin authors)      | Real 4-plugin leaderboard: madappgang **89 B**, accessibility **86 B**, superpowers **86 B**, oh-my-claudecode **78 C** — each with its worst issue named.           | `audit examples/harness/vendor/*@*` | ✅ REAL                                        |
+| **Inherits-all-tools footgun** (Structure)    | oh-my-claudecode's `code-reviewer` + `critic` agents inherit ALL tools (no contract).                                                                                | `audit oh-my-claudecode@deee3a4`    | ✅ REAL                                        |
+| **The skill that never fires** (Triggering)   | NOT capturable here — needs a model (trigger-rate / `measureTriggerRate`). Deterministic proxy available: description-overlap.                                       | —                                   | ⚠ NEEDS MODEL — live spike when auth available |
 
 ### Caveats before capturing assets
 
@@ -260,8 +270,8 @@ full file. If you say nothing, I'll draft Concept 1.
 ### flue cross-check (parallel research, same day)
 
 Confirms the thesis, no overlap: **flue** (withastro / Fred Schott) is a framework to
-*build & run* headless agents — `defineAgent()`, sandbox, deploy targets; verbs are
+_build & run_ headless agents — `defineAgent()`, sandbox, deploy targets; verbs are
 dev/build/run, **never test/eval**. Built on the same "Agent = Model + Harness" frame
-(*"if you're not the model, you're the harness"*) — validation, not competition. It
-*produces* the harness vigiles *tests*. Usable README line later: "the test layer for
+(_"if you're not the model, you're the harness"_) — validation, not competition. It
+_produces_ the harness vigiles _tests_. Usable README line later: "the test layer for
 your harness — built with Claude Code, Codex, flue, or your own."
