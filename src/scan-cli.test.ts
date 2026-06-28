@@ -229,7 +229,10 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     // versioned object with a `kind:"leaderboard"` discriminant + `plugins[]`.
     const r = run(`audit ${join(root, "mp")} --json`);
     assert.equal(r.exitCode, 0);
-    const j = JSON.parse(r.stdout);
+    const j = JSON.parse(r.stdout) as {
+      meta: { tool: string; kind: string; schemaVersion: number };
+      plugins: unknown[];
+    };
     assert.equal(Array.isArray(j), false);
     assert.equal(j.meta.tool, "vigiles");
     assert.equal(j.meta.kind, "leaderboard");
