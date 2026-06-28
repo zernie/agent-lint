@@ -44,6 +44,31 @@ export interface AuditInventory {
 }
 
 /**
+ * A surface (skill / subagent / instruction file) that EXISTS but doesn't yet
+ * have a `.spec.ts` — so it can be adopted into a typed spec. The report can't
+ * write files (it's a browser app), so it EMITS the exact CLI command instead.
+ */
+export interface AdoptableSurface {
+  /** The repo-relative path of the surface (e.g. `skills/foo/SKILL.md`). */
+  readonly path: string;
+  /** The exact command that adopts this one surface. */
+  readonly command: string;
+}
+
+/**
+ * The adoptable-surfaces list + the "create all" command — the data the report's
+ * "Create spec" / "Create all specs" affordances copy to the clipboard. Present
+ * only when there's at least one un-spec'd surface; the CLI computes the surface
+ * paths (the layout-aware `discoverAdoptableSurfaces`) and passes them in, so the
+ * pure builder stays adapter-agnostic.
+ */
+export interface Adoptable {
+  readonly surfaces: readonly AdoptableSurface[];
+  /** The one command that adopts every surface at once. */
+  readonly createAllCommand: string;
+}
+
+/**
  * The full audit, as the dashboard / CI / HTML all consume it. Self-describing
  * and versioned; additive-only within a `schemaVersion`.
  */
@@ -60,11 +85,48 @@ export interface AuditReport {
    * Additive/optional, so the schema version is unchanged.
    */
   readonly adoptability?: AdoptabilityResult;
+  /**
+   * The surfaces that exist but aren't spec-managed yet, each with the command
+   * that adopts it, plus a "create all" command. Drives the report's "Create
+   * spec" / "Create all specs" command-emit buttons. Present only when there's
+   * at least one adoptable surface. Additive/optional — schema version unchanged.
+   */
+  readonly adoptable?: Adoptable;
 }
 
 export interface BuildAuditReportOptions {
   readonly harness: string;
   readonly vigilesVersion: string;
+  /**
+   * The repo-relative paths of surfaces that exist but have no `.spec.ts` yet,
+   * computed by the CLI's layout-aware `discoverAdoptableSurfaces` (so the pure
+   * builder stays adapter-agnostic — it only formats the commands). Omit/empty
+   * when there's nothing to adopt.
+   */
+  readonly adoptableSurfaces?: readonly string[];
+}
+
+/** The one command that adopts every un-spec'd surface (bare `init`). */
+const CREATE_ALL_COMMAND = "npx vigiles init";
+
+/** The command that adopts ONE surface at a given repo-relative path. */
+function adoptCommand(path: string): string {
+  return `npx vigiles init --target=${path}`;
+}
+
+/**
+ * Build the {@link Adoptable} payload from the layout-aware surface paths — pure,
+ * just formats the per-surface + create-all commands. Returns `undefined` when
+ * there's nothing to adopt (so the field stays absent).
+ */
+function buildAdoptable(
+  surfaces: readonly string[] | undefined,
+): Adoptable | undefined {
+  if (!surfaces || surfaces.length === 0) return undefined;
+  return {
+    surfaces: surfaces.map((path) => ({ path, command: adoptCommand(path) })),
+    createAllCommand: CREATE_ALL_COMMAND,
+  };
 }
 
 /**
@@ -76,6 +138,7 @@ export function buildAuditReport(
   report: ScanReport,
   opts: BuildAuditReportOptions,
 ): AuditReport {
+  const adoptable = buildAdoptable(opts.adoptableSurfaces);
   return {
     meta: {
       schemaVersion: AUDIT_SCHEMA_VERSION,
@@ -97,5 +160,6 @@ export function buildAuditReport(
       mcp: report.mcp,
       untested: report.untested,
     },
+    ...(adoptable ? { adoptable } : {}),
   };
 }

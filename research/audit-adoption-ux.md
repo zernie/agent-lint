@@ -74,13 +74,21 @@ SHIPPED (committed on `claude/pre-release-priorities-pw7myh`):
 
 - The adoption engine (`adoptSkill`/`adoptAgent`) — round-trip tested + dogfooded.
 - `init --target=<skill|subagent>` and the bare-`init` create-all sweep — CLI e2e tested.
+- **Adoptable surfaces in the `AuditReport`** — `buildAuditReport` carries an optional
+  `adoptable` field: every un-spec'd surface (instruction file + skill/subagent sweep,
+  computed by the layout-aware `discoverAdoptableForAudit` in the CLI so the pure
+  builder stays adapter-agnostic) with its `npx vigiles init --target=<path>` command,
+  plus a top-level `createAllCommand` (`npx vigiles init`). Mirrored in
+  `report/src/schema.ts`; additive/optional, no schema bump.
+- **Report UI affordances** — per-surface "Create spec" + header "Create all specs"
+  copy-to-clipboard buttons in the `report/` React app (`Adopt.tsx`), reading
+  `report.adoptable`. Command EMITTERS, not writers (the browser can't write files).
+- **CLI report nudge** — the terminal `audit` output lists adoptable surfaces (up to
+  ~5, then "+K more") with the per-surface command + the one "create all" command, plus
+  a small "do your skills actually fire?" behavioral nudge pointing at `measureTriggerRate`.
+  Suppressed in `--json` (the data lives in `adoptable` instead).
 
 NEXT (not yet built):
 
-1. **Report UI affordances** — per-surface "Create spec" + header "Create all"
-   command-emit buttons in the `report/` React app, reading the surface list from the
-   `AuditReport` inventory (copy-to-clipboard the `init`/`init --target` command).
-2. **CLI report nudge** — the terminal `audit` output lists adoptable surfaces with
-   the per-surface command + the one "create all" command.
-3. **(Optional, deferred)** `audit --serve` one-click backend; greenfield
+1. **(Optional, deferred)** `audit --serve` one-click backend; greenfield
    skill/subagent scaffolding (today the sweep adopts EXISTING surfaces only).

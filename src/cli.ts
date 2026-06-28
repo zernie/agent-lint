@@ -1764,6 +1764,56 @@ function discoverAdoptableSurfaces(cwd: string): string[] {
   return out;
 }
 
+/** The full adoptable-surface list `audit` reports: the instruction file (when it
+ * exists hand-written, no spec) PLUS every skill/subagent surface without a spec.
+ * Same notion `init` adopts; surfaced in the AuditReport + the terminal nudge so
+ * the report's "Create spec" / "Create all specs" affordances have their paths.
+ * Composition-root only — CC paths are intentional here (like discoverAdoptableSurfaces). */
+function discoverAdoptableForAudit(
+  root: string,
+  instructionFile: string,
+): string[] {
+  const out: string[] = [];
+  const instrAbs = resolve(root, instructionFile);
+  if (
+    existsSync(instrAbs) &&
+    !targetHasHash(instrAbs) &&
+    !existsSync(resolve(root, `${instructionFile}.spec.ts`))
+  ) {
+    out.push(instructionFile);
+  }
+  out.push(...discoverAdoptableSurfaces(root));
+  return out;
+}
+
+/** The terminal "adoptable surfaces" nudge — N un-spec'd surfaces + the create-all
+ * command and up to ~5 per-surface commands (then "+K more"). "" when nothing to
+ * adopt (a fully spec-managed repo says nothing). */
+function formatAdoptableNudge(surfaces: readonly string[]): string {
+  if (surfaces.length === 0) return "";
+  const n = surfaces.length;
+  const lines = [
+    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} not yet spec-managed — create specs with \`npx vigiles init\``,
+    `  (or one at a time: \`npx vigiles init --target=<path>\`)`,
+  ];
+  const shown = surfaces.slice(0, 5);
+  for (const s of shown) lines.push(`    • npx vigiles init --target=${s}`);
+  const more = n - shown.length;
+  if (more > 0) lines.push(`    • +${String(more)} more`);
+  return lines.join("\n");
+}
+
+/** A small, terse behavioral nudge — the deterministic read can't tell whether a
+ * skill actually FIRES. "" when there are no model-invocable skills. */
+function formatTriggerNudge(triggerableSkills: number): string {
+  if (triggerableSkills <= 0) return "";
+  const n = triggerableSkills;
+  return (
+    `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
+    `run \`audit\` interactively to measure, or test with \`measureTriggerRate\` (vigiles/testing).`
+  );
+}
+
 function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
@@ -5662,9 +5712,18 @@ async function main(): Promise<void> {
         // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
         // Built ONCE; the rings + fix list are read off it. Pure deterministic —
         // nothing executes to produce it.
+        // Surfaces that exist but aren't spec-managed yet — the same notion
+        // `init` adopts (layout-driven instruction file + skill/subagent sweep).
+        // Surfaced in the AuditReport (the report's "Create spec" command-emit
+        // buttons read it) and the terminal nudge below.
+        const adoptableSurfaces = discoverAdoptableForAudit(
+          root,
+          adapter.layout.instructionFile,
+        );
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
+          adoptableSurfaces,
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -5684,6 +5743,18 @@ async function main(): Promise<void> {
           // flags): the deterministic, free recommendation list under the report.
           const fixes = formatRecommendations(plan);
           if (fixes) console.log("\n" + fixes);
+          // Adoption nudge: surfaces that exist but aren't spec-managed yet, with
+          // the create-all + per-surface `init` commands (the JSON carries the
+          // data in `adoptable` instead — the terminal stays human-readable).
+          const adoptNudge = formatAdoptableNudge(adoptableSurfaces);
+          if (adoptNudge) console.log("\n" + adoptNudge);
+          // A small behavioral nudge — the deterministic read can't tell whether
+          // skills actually FIRE; point at the interactive measure + the API.
+          const fireNudge = formatTriggerNudge(
+            report.skills.filter((s) => s.hasDescription && !s.userInvoked)
+              .length,
+          );
+          if (fireNudge) console.log("\n" + fireNudge);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
         // firing). A plain `audit` is a deterministic READ; these run only on
