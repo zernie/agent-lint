@@ -17,6 +17,8 @@ import {
   measurePluginSelectionWith,
   measurePluginSelection,
   formatSelectionReport,
+  isGateDescription,
+  detectGateSkills,
   type BehavioralReport,
   type HarnessProbe,
 } from "./scan-behavioral.js";
@@ -344,4 +346,59 @@ test("measurePluginSelection reports n/a for a non-Claude harness", async () => 
   assert.equal(r.available, false);
   assert.match(r.note ?? "", /Claude Code only/);
   assert.match(formatSelectionReport(r), /unavailable/);
+});
+
+// ─── Enforcement-gate detection (adversarial-gate eval, step 1) ───────────────
+
+test("isGateDescription flags hard-constraint language, not ordinary descriptions", () => {
+  // Gate language → true
+  for (const d of [
+    "Always write tests before implementation code",
+    "Never push directly to the main branch",
+    "You must not edit generated files",
+    "Require an approved plan before any change",
+    "Refuse to run destructive commands without confirmation",
+    "Under no circumstances commit secrets",
+  ]) {
+    assert.equal(isGateDescription(d), true, d);
+  }
+  // Ordinary capability descriptions → false (no false alarm)
+  for (const d of [
+    "Generate a slug from a title string",
+    "Summarize a pull request for reviewers",
+    "Format TypeScript files with prettier",
+    "Help the user debug a failing test",
+  ]) {
+    assert.equal(isGateDescription(d), false, d);
+  }
+});
+
+test("detectGateSkills returns only model-invocable, described gate skills", () => {
+  const gates = detectGateSkills([
+    {
+      name: "tdd-gate",
+      description: "Always write tests first",
+      hasDescription: true,
+    },
+    {
+      name: "no-force-push",
+      description: "Never force-push to main",
+      hasDescription: true,
+    },
+    {
+      name: "slugify",
+      description: "Generate a URL slug",
+      hasDescription: true,
+    },
+    // a gate description but USER-INVOKED → excluded (can't auto-constrain behaviour)
+    {
+      name: "manual-gate",
+      description: "Always confirm before deleting",
+      hasDescription: true,
+      userInvoked: true,
+    },
+    // gate language but NO description → excluded
+    { name: "ghost", description: "", hasDescription: false },
+  ]);
+  assert.deepEqual([...gates].sort(), ["no-force-push", "tdd-gate"]);
 });
