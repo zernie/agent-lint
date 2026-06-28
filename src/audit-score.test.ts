@@ -78,10 +78,14 @@ describe("auditScore", () => {
     expect(cat(s, "Triggering")?.findings.length).toBe(2);
   });
 
-  it("untested surfaces only dent the Tested category", () => {
+  it("untested surfaces are ADVISORY — shown on Tested, but never drag the grade", () => {
     const s = auditScore(makeReport({ untested: 3 }));
-    expect(cat(s, "Tested")?.score).toBe(91); // -9
+    expect(cat(s, "Tested")?.score).toBe(91); // -9, shown
+    expect(cat(s, "Tested")?.advisory).toBe(true);
     expect(cat(s, "Structure")?.score).toBe(100);
+    // the overall ignores the advisory Tested ring — a clean-but-untested repo is A
+    expect(s.overall).toBe(100);
+    expect(s.grade).toBe("A");
   });
 
   it("an empty machine (no surface, no instructions) is empty — overall 0, all n/a", () => {
