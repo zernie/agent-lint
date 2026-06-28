@@ -6,9 +6,13 @@
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/. TWO COMMUNITY catches, anonymized (a missing SKILL.md, an
-  AskUserQuestion-never-available tool) — both real GRADED defects. NEVER replace a
-  real catch with a fabricated one.
+  research/dogfood/. TWO COMMUNITY catches, anonymized (a skill-description collision
+  → wrong-skill-fires (claude-flow, Triggering F), an AskUserQuestion-never-available
+  tool) — both real GRADED defects that REPRODUCE on current main. NEVER replace a
+  real catch with a fabricated one. (Proof 1 was a missing-SKILL.md/Truthfulness
+  catch, swapped 2026-06-28: its source (superpowers) is clean on current main and NO
+  reproducible dead-file-ref exists in popular OSS — those are an adopt+strengthen
+  payoff, see research/oss-audit-render-findings.md.)
 
   WHY ONLY TWO (decided 2026-06-28): the earlier Proofs 3-4 leaned on
   pr-review-toolkit's "review agents inherit all tools" as an official-plugin
@@ -66,8 +70,8 @@
 ---
 
 **You installed a bunch of plugins and wrote a few skills — but do they actually work?**
-A skill that never fires, a subagent wired to a tool that doesn't exist, a CLAUDE.md
-full of dead references — your harness fails **silently**, and you find out mid-task.
+A skill that never fires, two skills the agent can't tell apart, a subagent wired to
+a tool that doesn't exist — your harness fails **silently**, and you find out mid-task.
 
 **It's a library with no tests.** One command runs them — no key, no config, safe on
 any repo:
@@ -90,18 +94,18 @@ Like Lighthouse, `audit` is a **local report you run on your machine** — safe 
 repo (even one wired to prod), identical on every OS. **Not a CI step** (CI uses
 `lint`). **[Audit a harness →](docs/for-plugin-authors.md)**
 
-## Proof 1 — your CLAUDE.md is lying to your agent
+## Proof 1 — two skills your agent can't tell apart
 
 ```text
-● Truthfulness   92
-    └ ✗ skills/using-debugging/SKILL.md  (referenced but MISSING)
+✗ Triggering   0
+    └ 45 near-identical skill descriptions — the selector can't tell them apart,
+      so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
 ```
 
-A real, widely-installed plugin — its instructions send the agent to a skill file
-that **isn't there**. Valid markdown, but not _true_, and your agent trusts it anyway.
-
-File paths, scripts, code symbols — plus linter rules across **7 linters** (ESLint,
-Ruff, Clippy + four more): each one **exists _and_ is enabled**. **[Full guide →](docs/verifying-instruction-files.md)**
+A real, popular plugin ships **45 skill pairs** described so similarly the model
+can't reliably pick between them — so it fires the **wrong** skill. Valid markdown;
+the selector chooses by description, and near-identical text collides.
+**[How triggering works →](docs/measuring-skills.md)**
 
 ## Proof 2 — a tool your subagent silently can't call
 
@@ -113,7 +117,9 @@ Ruff, Clippy + four more): each one **exists _and_ is enabled**. **[Full guide �
 A real upstream subagent declares a tool the harness **silently drops**, so it loses
 a capability it thinks it has. vigiles flags it _and_ hands you the one-line fix —
 **free, no model.** That's the difference from a markdown linter: it checks your
-harness against **reality**, not style.
+harness against **reality**, not style — every file path, script, code symbol, and
+linter rule across **7 catalogs** (ESLint, Ruff, Clippy + four more), each verified
+to **exist _and_ be enabled**. **[Full guide →](docs/verifying-instruction-files.md)**
 
 Two real catches, both **free and model-less** — and audit ranks a whole
 marketplace the same way. **[Audit a marketplace →](docs/for-plugin-authors.md)**
