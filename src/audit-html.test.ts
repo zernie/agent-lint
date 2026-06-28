@@ -80,4 +80,15 @@ describe("injectReportData", () => {
       injectReportData("<html>no placeholder</html>", report),
     ).toThrow(/placeholder/);
   });
+
+  it("injects the serve token only in --serve mode (absent for a static report)", () => {
+    const staticHtml = injectReportData(TEMPLATE, report);
+    expect(staticHtml).not.toContain("__VIGILES_SERVE__");
+
+    const liveHtml = injectReportData(TEMPLATE, report, { token: "deadbeef" });
+    expect(liveHtml).toContain("window.__VIGILES_SERVE__");
+    expect(liveHtml).toContain("deadbeef");
+    // the data global is still set (serve is prepended onto the same statement)
+    expect(liveHtml).toContain("window.__VIGILES_DATA__");
+  });
 });
