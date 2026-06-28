@@ -80,3 +80,29 @@ new layout observation (#6)._
   not a raw-plugin headline. Keep that honest in copy.
 - "How to act on this" report card read as weird/top-of-report preachy — pending a
   move-down/condense/remove decision (see chat).
+
+## Recommendations / decisions (next session, start here)
+
+1. **README examples — do NOT go artificial.** Fabricating a real-looking "catch"
+   violates the README's own rule ("every proof traces to a real dogfood run; NEVER
+   replace a real catch with a fabricated one") AND is a credibility bomb for an
+   Anthropic-savvy audience (they'll smell a mockup; "not mockups" was a selling
+   point). And it's UNNECESSARY — we now have a strong bank of REAL catches:
+   - **claude-flow → F, 45 description overlaps** (Triggering 0) — the dramatic one.
+   - **disler hooks-mastery → B, a `Setup` hook event that never fires.**
+   - **wshobson `agent-teams` → A, a `team-lead` `Agent` tool never available.**
+   - (older obra/superpowers had a missing `using-superpowers/SKILL.md` — but latest
+     main is clean, so don't rely on it.)
+     Use these, ANONYMIZED per don't-shame-OSS (real names only here / `research/dogfood/`).
+     A clearly-LABELLED illustrative snippet is OK for clarity, but ANCHOR on a real catch.
+2. **Be honest about what audit catches on a RAW plugin:** tool-contract + hook-event
+   - description-overlap + hygiene — NOT "your CLAUDE.md is lying" (file/rule cross-ref
+     needs adopt+strengthen). Tune the README headline accordingly.
+3. **The real lever for "reports look toothless on typical plugins" is the inherit-all
+   GRADING decision, not finding messier plugins.** Demoting inherit-all to advisory
+   is why the corpus reads mostly-A. If we want audit to bite on ordinary plugins,
+   reconsider grading inherit-all (or a sharper variant — e.g. a _reviewer/review_
+   agent inheriting Write+Bash graded, others advisory). Decision pending; show the
+   leaderboard both ways before deciding.
+4. **Pending UI/PR:** the "How to act on this" card (move-down/condense/remove) + open
+   the branch PR (`fix!:` — frontmatter disable is breaking).
