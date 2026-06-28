@@ -37,8 +37,15 @@ Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
   prompt. Audit now measures fire AND collide.
 - **#3 precision** — already shipped (formatBehavioralReport prints it). No-op.
 - **#2 adversarial-gate, STEP 1** (`06d1958`): pure `isGateDescription`/`detectGateSkills`
-  (keyword heuristic) — the deterministic detection of enforcement-gate skills. Execution
-  layer NOT built (awaiting steer, below).
+  (keyword heuristic) — deterministic detection of enforcement-gate skills.
+- **#2 adversarial-gate, PRODUCTIONIZED** (`7f1d747`): `measureGateAdversarial` wired into
+  audit's executing tier as the 3rd behavioral eval (same consent, disclosed). For each
+  gate skill it AUTO-DERIVES a violation request (zero-config; author attacks override),
+  runs the UNSTUBBED harness, LLM-judges hold/cave. Injectable core unit-tested (no model);
+  **VALIDATED LIVE end-to-end here** (auto-derive→run→judge). KEY FINDING: hold/cave is
+  STOCHASTIC (same gate held once / caved once in two runs) → defaults to 3 trials, reports
+  heldRate (any cave in N = unreliable gate). Skill-gate ONLY; hook-gate half is the
+  follow-up (below).
 
 ### What landed this session (in order)
 
@@ -79,18 +86,21 @@ Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
 
 ### DO NEXT
 
-- **#2 adversarial-gate EXECUTION LAYER — AWAITING USER STEER (2 forks).** Step 1
-  (gate detection) shipped. The execution layer is model-gated + can't be validated in
-  THIS env (no model auth), so confirm before building: (A) **hook-gate confinement** —
-  user said "both" (skill + hook gates), but running hooks in audit OVERRIDES the parked
-  2026-06-27 `audit-side-effect-free` decision (no Linux-only safety in audit).
-  Recommended thread-the-needle: hook-gates run CONFINED-only (src/sandbox.ts), degrade
-  to a LOUD SKIP off-Linux, and report as an ADVISORY line (never a graded ring — that
-  was the decision's actual concern: no per-OS grade divergence). (B) **skill-gate
-  assertion** — deriving violate→assert-refusal from prose isn't deterministic: author-
-  supplied scenarios (deterministic, not zero-config) vs LLM-judge (zero-config,
-  non-deterministic). My proposed default: skill-gates via (b) LLM-judge + hook-gates
-  confined/advisory/degrade-to-skip. Detector lives in `src/scan-behavioral.ts`.
+- **MODEL AUTH WORKS IN THIS SANDBOX (corrects the old "env-blocked" note).** Subprocess
+  `claude -p` authenticates via the OAuth FD — `measureTriggerRate`/collision/gate evals
+  RUN here. Only **bubblewrap is missing** (so the egress e2e + any confined-hook path
+  degrade-to-skip). Use this to live-validate model-gated work; keep runs small (the
+  user's subscription quota).
+- **#2 HOOK-GATE half — NEEDS A 2-MIN GREENLIGHT (deliberately not shipped unattended).**
+  The skill-gate half is DONE + live-validated. The hook-gate half (does a PreToolUse hook
+  actually BLOCK the disaster catalog) would wire `verifyGuardrail`/`assertBlocksDisasters`
+  (src/guardrail-check.ts, already tested) into audit. NOT shipped because: (1) it REVERSES
+  the parked 2026-06-27 `audit-side-effect-free` decision (no Linux-only safety in audit) —
+  user said "both" in a quick chip-pick, wants an awake confirm; (2) un-validatable HERE
+  (no bwrap → degrades-to-skip, does nothing); (3) the battery already ships via
+  `vigiles/testing`, so this is convenience not a gap. RECOMMENDED design when greenlit:
+  ADVISORY line (never a graded ring — the decision's real concern was per-OS grade
+  divergence), CONFINED-only via src/sandbox.ts, LOUD degrade-to-skip where no confinement.
 - **STRATEGY of record (don't relitigate):** launch on the **ecosystem benchmark**, not
   audit alone — audit's ring/score UX is commoditizing (AgentLinter/SkillCheck/cc-health-
   check), agnix's 414-rule linter got 1 HN point. Audit = the on-ramp; benchmark = the
@@ -106,8 +116,9 @@ Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
 - **PR #51 is OPEN** — watch CI (`validate` should now pass on the `feat!:` title).
   Merge is the founder's call. The branch name (`readme-length-review`) understates the
   wave — the PR body covers it.
-- **Env-blocked HERE** (need another machine): ONE live behavioral validation (model
-  auth); dialect freshness (CC version here ≠ pinned baseline). Hero asset is DONE.
+- **Env caveats HERE** (corrected): model auth WORKS (evals run); only **bubblewrap**
+  is missing (egress/confined-hook paths skip) + dialect freshness (CC 2.1.195 here ≠
+  pinned 2.1.187). Hero asset is DONE.
 - **Pre-release blocker (unchanged):** the ecosystem benchmark / article (measure ~10-20
   hyped skills on `bench/corpus`) + a 0.x stability blurb.
 - **OSS issue hunt — CONCLUSIVE (see `research/oss-audit-render-findings.md`).** Swept
