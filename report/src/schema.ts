@@ -78,6 +78,7 @@ export interface AuditReport {
   meta: {
     schemaVersion: number;
     tool: string;
+    kind: "audit";
     vigilesVersion: string;
     harness: string;
     dir: string;
