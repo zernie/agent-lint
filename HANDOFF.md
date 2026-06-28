@@ -9,12 +9,36 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN** (title fixed to
-`feat!:` — the frontmatter disable is breaking; the `validate` CI job checks the
-TITLE; body cleaned of the session-link the UI flow injected). ~20 commits, pushed.
+**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN** (title `feat!:` — the
+frontmatter disable is breaking; `validate` checks the TITLE). ~27 commits, pushed.
 Started as a README brevity pass; became a large **audit / adoption / lint coherence +
-features** wave. All committed + pushed; build + targeted suites green (the only failing
-test is the env-only `dialect-drift` — CC version here ≠ validated baseline; CI pins it).
+features** wave, then an **audit-eval-thickening** wave (below). CI was red three times
+in a row from MASKED failures (each fix surfaced the next step): skill-pipeline test →
+scan-cli lint → fmt:check. All fixed; `prettier --check .` + lint + targeted suites green
+(only env-only `dialect-drift` fails here — CC version ≠ pinned baseline; CI pins it).
+
+### CI fixes (Codex review caught the first) — all pushed
+
+- **api-report stale** (`5767a2d`): the new `warnings` field on CompileSkill/AgentResult
+  changed the public surface; regenerated `etc/vigiles-linting.api.md`.
+- **skill-pipeline test** (`30b4cfc`): asserted the inline-code guard in `errors`; it's a
+  WARNING now → assert `warnings`.
+- **scan-cli lint** (`c116482`): typed the parsed leaderboard JSON (no-unsafe-any).
+- **fmt:check** (`9aa2240`): pre-existing MAIN breakage (#50 shipped 3 unformatted
+  research files) — ignore `research/dogfood/` (captures), format readme-revamp-concepts.
+
+### Audit-eval-thickening (the "add more evals to audit" ask)
+
+Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
+
+- **#1 selection-collision IN AUDIT** (`ace9b40`): the collision matrix existed
+  (`measurePluginSelection`) but audit never ran it — only the standalone `measure` cmd
+  did. Now `runAutoTrigger` runs it under the SAME consent (≥2 skills), disclosed in the
+  prompt. Audit now measures fire AND collide.
+- **#3 precision** — already shipped (formatBehavioralReport prints it). No-op.
+- **#2 adversarial-gate, STEP 1** (`06d1958`): pure `isGateDescription`/`detectGateSkills`
+  (keyword heuristic) — the deterministic detection of enforcement-gate skills. Execution
+  layer NOT built (awaiting steer, below).
 
 ### What landed this session (in order)
 
@@ -55,6 +79,24 @@ test is the env-only `dialect-drift` — CC version here ≠ validated baseline;
 
 ### DO NEXT
 
+- **#2 adversarial-gate EXECUTION LAYER — AWAITING USER STEER (2 forks).** Step 1
+  (gate detection) shipped. The execution layer is model-gated + can't be validated in
+  THIS env (no model auth), so confirm before building: (A) **hook-gate confinement** —
+  user said "both" (skill + hook gates), but running hooks in audit OVERRIDES the parked
+  2026-06-27 `audit-side-effect-free` decision (no Linux-only safety in audit).
+  Recommended thread-the-needle: hook-gates run CONFINED-only (src/sandbox.ts), degrade
+  to a LOUD SKIP off-Linux, and report as an ADVISORY line (never a graded ring — that
+  was the decision's actual concern: no per-OS grade divergence). (B) **skill-gate
+  assertion** — deriving violate→assert-refusal from prose isn't deterministic: author-
+  supplied scenarios (deterministic, not zero-config) vs LLM-judge (zero-config,
+  non-deterministic). My proposed default: skill-gates via (b) LLM-judge + hook-gates
+  confined/advisory/degrade-to-skip. Detector lives in `src/scan-behavioral.ts`.
+- **STRATEGY of record (don't relitigate):** launch on the **ecosystem benchmark**, not
+  audit alone — audit's ring/score UX is commoditizing (AgentLinter/SkillCheck/cc-health-
+  check), agnix's 414-rule linter got 1 HN point. Audit = the on-ramp; benchmark = the
+  hook. BUT one eval (caveman) ≠ a benchmark → the near-term work the user chose is
+  THICKENING AUDIT's eval tier (above), not the benchmark yet. Competitor + OSS research
+  is in the two completed agent briefs (this session) + `research/skill-eval-landscape.md`.
 - **Feature "audit previews what lint would find" — DECISION PENDING.** Finding: it's
   ALREADY shipped model-gated as the **adoptability preview** (`src/adoptability.ts` +
   the report Adoptability section, behind the executing-checks consent — "LLM proposes
