@@ -105,7 +105,8 @@ export interface CompileError {
     | "invalid-railway"
     | "purity-violation"
     | "output-without-fork"
-    | "effect-in-skill";
+    | "effect-in-skill"
+    | "inline-code-too-long";
   message: string;
   path?: string;
 }
@@ -844,10 +845,16 @@ function renderSkillSections(spec: SkillSpec): string {
 
 const DEFAULT_MAX_INLINE_CODE_LINES = 20;
 
-/** Flag inline fenced code blocks longer than `max` lines (0 = disabled). */
+/**
+ * Flag inline fenced code blocks longer than `max` lines (0 = disabled). These
+ * are WARNINGS, not errors: a big inline code block is an authoring smell worth
+ * surfacing ("extract it to a file"), but it never breaks the harness — and a
+ * faithful adoption of an existing skill/subagent (`init`) must still compile.
+ * Callers route the result into a result's `warnings` channel, never `errors`.
+ */
 function checkInlineCode(markdown: string, max: number): CompileError[] {
   if (max <= 0) return [];
-  const errs: CompileError[] = [];
+  const warns: CompileError[] = [];
   const lines = markdown.split("\n");
   let start = -1;
   let lang = "";
@@ -860,21 +867,23 @@ function checkInlineCode(markdown: string, max: number): CompileError[] {
     } else {
       const len = i - start - 1;
       if (len > max) {
-        errs.push({
-          type: "section-too-long",
-          message: `Inline ${lang || "code"} block is ${String(len)} lines (max ${String(max)}); extract it to a file and reference it with file().`,
+        warns.push({
+          type: "inline-code-too-long",
+          message: `Inline ${lang || "code"} block is ${String(len)} lines (max ${String(max)}); consider extracting it to a file and referencing it with file().`,
         });
       }
       start = -1;
       lang = "";
     }
   }
-  return errs;
+  return warns;
 }
 
 export interface CompileSkillResult {
   markdown: string;
   errors: CompileError[];
+  /** Non-blocking advisories (e.g. an over-long inline code block). */
+  warnings: CompileError[];
 }
 
 /**
@@ -966,11 +975,11 @@ export function compileSkill(
   }
 
   const sections = renderSkillSections(spec);
-  errors.push(
-    ...checkInlineCode(
-      sections,
-      spec.maxInlineCodeLines ?? DEFAULT_MAX_INLINE_CODE_LINES,
-    ),
+  // Over-long inline code blocks are WARNINGS, not errors — they don't block
+  // compilation (so adoption always compiles), just nudge toward file().
+  const warnings = checkInlineCode(
+    sections,
+    spec.maxInlineCodeLines ?? DEFAULT_MAX_INLINE_CODE_LINES,
   );
 
   const marker = purityMarker(spec.purity);
@@ -980,7 +989,7 @@ export function compileSkill(
     (marker ? marker + "\n\n" : "") +
     sections.trim() +
     "\n";
-  return { markdown: addHash(content, specFile), errors };
+  return { markdown: addHash(content, specFile), errors, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -1120,6 +1129,8 @@ function renderAgentRules(rules: Record<string, Rule>): string {
 export interface CompileAgentResult {
   markdown: string;
   errors: CompileError[];
+  /** Non-blocking advisories (e.g. an over-long inline code block). */
+  warnings: CompileError[];
 }
 
 /**
@@ -1190,7 +1201,8 @@ export function compileAgent(
   }
   if (spec.output) sections.push(renderOutputContract(spec.output));
   const body = sections.join("\n\n");
-  errors.push(...checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES));
+  // Over-long inline code blocks are WARNINGS, not errors (see checkInlineCode).
+  const warnings = checkInlineCode(body, DEFAULT_MAX_INLINE_CODE_LINES);
 
   const marker = purityMarker(spec.purity);
   const content =
@@ -1199,7 +1211,7 @@ export function compileAgent(
     (marker ? marker + "\n\n" : "") +
     body.trim() +
     "\n";
-  return { markdown: addHash(content, specFile), errors };
+  return { markdown: addHash(content, specFile), errors, warnings };
 }
 
 // ---------------------------------------------------------------------------

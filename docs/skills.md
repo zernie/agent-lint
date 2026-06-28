@@ -129,8 +129,10 @@ at compile time — the exact "the skill silently references a script that doesn
 exist" rot that breaks real skills.
 
 **`maxInlineCodeLines`** (default 20): an inline fenced code block longer than
-this is a compile error, forcing the script into a file referenced by `file()` —
-keeping big scripts out of the body (token budget + progressive disclosure).
+this raises a non-blocking **warning** nudging you to move the script into a
+file referenced by `file()`, keeping big scripts out of the body for token
+budget and progressive disclosure. It's advisory, not an error — so adopting a
+code-heavy skill always compiles.
 
 ## Running and enforcing a skill
 

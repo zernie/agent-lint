@@ -341,6 +341,15 @@ function printErrors(specFile: string, errors: CompileError[]): void {
   }
 }
 
+/** Non-blocking advisories — printed, but never fail the compile. */
+function printWarnings(specFile: string, warnings: CompileError[]): void {
+  for (const w of warnings) {
+    const pathInfo = w.path ? ` (${w.path})` : "";
+    console.log(`  ⚠ [${w.type}] ${w.message}${pathInfo}`);
+    console.log(`::warning file=${specFile}::${w.message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -453,7 +462,7 @@ function compileSkillToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileSkill(spec, {
+  const { markdown, errors, warnings } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     // The SKILL.md frontmatter profile comes from the resolved harness — a Codex
@@ -463,10 +472,12 @@ function compileSkillToFile(
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
+    printWarnings(specPath, warnings);
     return true;
   }
   console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
   printErrors(specPath, errors);
+  printWarnings(specPath, warnings);
   return false;
 }
 
@@ -477,7 +488,7 @@ function compileAgentToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileAgent(spec, {
+  const { markdown, errors, warnings } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     dialect,
@@ -485,10 +496,12 @@ function compileAgentToFile(
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
+    printWarnings(specPath, warnings);
     return true;
   }
   console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
   printErrors(specPath, errors);
+  printWarnings(specPath, warnings);
   return false;
 }
 
