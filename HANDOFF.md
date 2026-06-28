@@ -9,10 +9,12 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-length-review-3vnx5h` — pushed, ~10 commits, NO PR yet.**
+**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN** (title fixed to
+`feat!:` — the frontmatter disable is breaking; the `validate` CI job checks the
+TITLE; body cleaned of the session-link the UI flow injected). ~20 commits, pushed.
 Started as a README brevity pass; became a large **audit / adoption / lint coherence +
 features** wave. All committed + pushed; build + targeted suites green (the only failing
-test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI pins it).
+test is the env-only `dialect-drift` — CC version here ≠ validated baseline; CI pins it).
 
 ### What landed this session (in order)
 
@@ -40,7 +42,16 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
    - in-process `init` + own-repo only. Opt-in (TTY prompt / `--serve` / `--no-serve`);
      plain audit stays a terminating headless-safe READ. Security unit tests + real-HTTP
      e2e. Report buttons POST when live, copy when static. `research/audit-serve-design.md`.
-9. **Adopt-flow explainer in the report UI** (`ec52ba0`) — `report/src/components/Flow.tsx`.
+9. **Adopt-flow explainer in the report UI** (`ec52ba0`) — then REMOVED (`bdef434`,
+   founder call: read preachy above the findings; per-fix cards carry the action).
+   `report/src/components/Flow.tsx` deleted. (The audit→init→strengthen→lint _doc_ in
+   `docs/for-plugin-authors.md` STAYS — only the report UI card went.)
+10. **Hero `vigiles-audit.png` REFRESHED** (`159fd21`→`bdef434`) — re-rendered from a
+    REAL current report (agent-teams shown as `my-plugin` to anonymize): A 92, four
+    rings, inline `subagent-tool-contract` fix. No flow card, no drift banner.
+    Re-render recipe: copy a plugin to `my-plugin/`, `node dist/cli.js audit my-plugin
+--no-json --no-serve`, headless Chromium `--window-size=1240,1300 --screenshot`
+    on `vigiles-report.html`, then `rm -rf my-plugin vigiles-report.html`.
 
 ### DO NEXT
 
@@ -50,12 +61,11 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
   refs, deterministic verifies"). Don't build a duplicate. Options offered to founder:
   **A** consider done + make it more discoverable (lean); **B** add a free DETERMINISTIC
   unmarked-refs preview (modest value, narrow detector); **C** other. Awaiting pick.
-- **Open the PR** (none yet). Title must be `fix!:` or carry `!` — the frontmatter
-  disable is BREAKING. Cover README + the FP/scoring fixes + audit --serve, so the
-  `readme-length-review` branch name isn't surprising.
-- **Env-blocked HERE** (need another machine): asset refresh (`vigiles-audit.png` on a
-  pinned-CC box — this container is CC 2.1.42 → drift banner); ONE live behavioral
-  validation (model auth); dialect freshness.
+- **PR #51 is OPEN** — watch CI (`validate` should now pass on the `feat!:` title).
+  Merge is the founder's call. The branch name (`readme-length-review`) understates the
+  wave — the PR body covers it.
+- **Env-blocked HERE** (need another machine): ONE live behavioral validation (model
+  auth); dialect freshness (CC version here ≠ pinned baseline). Hero asset is DONE.
 - **Pre-release blocker (unchanged):** the ecosystem benchmark / article (measure ~10-20
   hyped skills on `bench/corpus`) + a 0.x stability blurb.
 - **OSS issue hunt — CONCLUSIVE (see `research/oss-audit-render-findings.md`).** Swept
@@ -93,6 +103,8 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
   tight (own-repo, interactive, token-guarded, reversible local write). Plain `audit`
   (no `--serve`) is STILL a safe terminating read; `lint` is the CI gate, not audit.
 - **"What would vigiles catch" = the model-gated adoptability preview** (already shipped).
+- **The report's "how to act" flow CARD is REMOVED** (founder call) — the doc-level flow
+  explainer in `docs/for-plugin-authors.md` stays; only the in-report UI card went.
 - **README has TWO proofs** (anonymized community catches); official-plugin proofs dropped.
 - Public docs name USER BENEFIT (no `moat`/`flywheel`, no `research/` links). `startup/` vault LOCKED.
 

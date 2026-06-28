@@ -117,5 +117,8 @@ new layout observation (#6)._
      could surface a soft "over-powered reviewer" note, but never the deterministic score.
      Corollary: a raw-plugin report's real teeth ARE the structural catches (tool typos,
      dead hook events, description overlaps) — feature THOSE.
-4. **Pending UI/PR:** the "How to act on this" card (move-down/condense/remove) + open
-   the branch PR (`fix!:` — frontmatter disable is breaking).
+4. **RESOLVED:** the "How to act on this" report card was REMOVED (founder call — it
+   read preachy above the findings; per-fix cards carry the action). The branch PR is
+   open as **#51** with a `feat!:` title (frontmatter disable is breaking). Hero
+   `vigiles-audit.png` re-rendered from a real current report (agent-teams as
+   `my-plugin`, A 92, inline `subagent-tool-contract` fix).
