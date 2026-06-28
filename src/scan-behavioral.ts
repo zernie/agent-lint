@@ -589,3 +589,53 @@ export function formatSelectionReport(r: SelectionReport): string {
   }
   return lines.join("\n");
 }
+
+// ─── Enforcement-gate detection (for the adversarial-gate eval) ───────────────
+//
+// A skill whose description states a HARD CONSTRAINT ("always write tests first",
+// "never push to main") is a GATE: a rule the agent is meant to hold. The
+// adversarial-gate eval prompts the agent to VIOLATE that rule and asserts it
+// refuses (research/skill-eval-landscape.md calls this "the highest-value
+// behavioral test for an enforcement skill"). This is the deterministic, model-
+// free FIRST step: decide WHICH skills are gate candidates. High-recall + cheap
+// — a false positive only spends one extra probe on a non-gate skill (it never
+// produces a wrong verdict). Author-supplied scenarios always override (the
+// deterministic-input discipline). The keyword set is intentionally small and
+// high-signal; deriving the actual violation prompt + refusal assertion is the
+// model-gated / author-supplied step that builds ON this.
+
+/** Hard-constraint language that marks a skill description as an enforcement gate. */
+const GATE_KEYWORD_RE =
+  /\b(?:never|always|must(?:\s+not)?|do\s+not|don'?t|require[ds]?|forbid(?:den)?|prohibit(?:ed)?|disallow(?:ed)?|refuse|block|enforce[ds]?|under\s+no\s+circumstances|only\s+ever)\b/i;
+
+/** Does a skill description assert a hard constraint (→ an adversarial-gate candidate)? */
+export function isGateDescription(description: string): boolean {
+  return GATE_KEYWORD_RE.test(description);
+}
+
+/** A skill considered for gate detection — name + its (model-visible) description. */
+export interface GateCandidate {
+  readonly name: string;
+  readonly description?: string;
+  readonly userInvoked?: boolean;
+  readonly hasDescription?: boolean;
+}
+
+/**
+ * The model-invocable, described skills whose description reads as an enforcement
+ * gate — the candidates for the adversarial-gate eval. User-invoked and
+ * description-less skills are excluded (they can't auto-fire a constraint on the
+ * model's behaviour), mirroring the trigger-rate candidate filter.
+ */
+export function detectGateSkills(
+  skills: readonly GateCandidate[],
+): readonly string[] {
+  return skills
+    .filter(
+      (s) =>
+        !s.userInvoked &&
+        (s.hasDescription ?? Boolean(s.description)) &&
+        isGateDescription(s.description ?? ""),
+    )
+    .map((s) => s.name);
+}
