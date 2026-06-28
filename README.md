@@ -124,18 +124,17 @@ the community plugins above stay anonymous — punch up, don't shame volunteers.
 
 ## Proof 4 — rank a whole marketplace
 
-`audit` ranks a folder of plugins by what's actually **broken** — no key. (Untested
-surfaces are advisory, not a penalty.) Here's **all of Anthropic's official plugins**:
+`audit` ranks a folder of plugins by what's actually **broken** — no key. Run across
+**all of Anthropic's official plugins**, it flags exactly **one** real outlier — no
+false-positive noise (untested surfaces are advisory):
 
 ```text
   #   score  grade  plugin
-   1  100    A      code-review            ← 21 of 25 score a clean 100
-  23   90    A      agent-sdk-dev      — 2 agents inherit all tools
-  24   70    C      pr-review-toolkit  — 6 agents inherit all tools (Write + Bash)
-  25   55    F      skill-creator      — 3 inherit all; 3 missing frontmatter
+   1  100    A      code-review            ← 24 of 25 come back a clean A
+  25   70    C      pr-review-toolkit  — 6 agents inherit all tools (a reviewer with Write + Bash)
 ```
 
-<sub>Real scores on Anthropic's own marketplace — untested surfaces don't count against you (empty LSP stubs excluded).</sub>
+<sub>Real scores on Anthropic's own marketplace — a fair tool flags the one real issue, not noise (empty LSP stubs excluded).</sub>
 
 **[Plugin-author guide →](docs/for-plugin-authors.md)**
 
