@@ -63,9 +63,12 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
   (anonymized): **claude-flow → F (45 desc-overlaps)**, **disler → B (`Setup` dead hook
   event)**, **agent-teams → A (`Agent` tool never-available)**. README examples: **do NOT
   fabricate** (breaks the never-fabricate rule + credibility) — use these REAL catches.
-  The real lever for "reports look toothless on typical plugins" = reconsider the
-  **inherit-all GRADING** decision (it's advisory now → corpus reads mostly-A), NOT more
-  searching. Screenshots were ephemeral (scratchpad); re-render via headless Chromium.
+  inherit-all stays **ADVISORY — SETTLED** (don't re-propose grading it): pure-graded
+  cries wolf (32/124 drop below A for the idiomatic no-`tools:` style), and a
+  name-heuristic ("grade reviewer-role agents") is NOT deterministic (guesses intent).
+  "Dangerous inherit-all?" is unknowable on raw markdown; the deterministic over-power
+  check is the typed-spec `purity` floor (adopt→strengthen payoff), already shipped.
+  Screenshots were ephemeral (scratchpad); re-render via headless Chromium.
 
 ### Gotchas
 
