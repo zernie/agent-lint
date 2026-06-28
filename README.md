@@ -44,11 +44,14 @@
      Push depth into docs/ and LINK it.
   6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
      research/ links — name the user benefit.
-  7. ASSETS: the hero vigiles-audit.png must be REFRESHED from a real run
-     (research/dogfood/audit-superpowers.html) without the dialect drift banner
-     before launch. (vigiles-demo.gif was removed from Proof 1 — it rendered as a
-     frozen half-typed terminal and was redundant with the code block; if a lint
-     demo returns, it belongs in the Lint section with a non-frozen asset.)
+  7. ASSETS: the hero vigiles-audit.png is a REAL current report (a community
+     plugin rendered as "my-plugin" to anonymize) — A 92 with the how-to-act flow,
+     four rings, and an inline subagent-tool-contract fix; no dialect-drift banner
+     (HTML report is terminal-banner-free by design). Re-render via headless
+     Chromium on the React report if the UI changes. (vigiles-demo.gif was removed
+     from Proof 1 — it rendered as a frozen half-typed terminal and was redundant
+     with the code block; if a lint demo returns, it belongs in the Lint section
+     with a non-frozen asset.)
 -->
 
 <p align="center">
@@ -85,9 +88,8 @@ Here's what it found on real, popular plugins. ↓
 ## The report
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall score with four category rings — Truthfulness, Triggering, Structure, Tested — and fix cards" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall A (92/100) score with four category rings — Truthfulness, Triggering, Structure, Tested — a how-to-act flow, and an inline fix card for a subagent declaring a tool that doesn't exist" />
 </p>
-<!-- REFRESH before launch from research/dogfood/audit-superpowers.html (a real catch, no drift banner). -->
 
 Four deterministic rings, **each finding's fix inline**, and a shareable HTML report.
 Like Lighthouse, `audit` is a **local report you run on your machine** — safe on any
