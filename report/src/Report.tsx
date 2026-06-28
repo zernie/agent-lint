@@ -15,10 +15,22 @@ import { cn } from "@/lib/utils";
 function CategoryCard({ c }: { c: CategoryScore }) {
   return (
     <Card className="flex flex-col items-center gap-3 p-5 text-center">
-      <Ring score={c.score} />
+      {/* Advisory categories (e.g. Tested) don't gate the grade, so they read as
+          neutral (na band) — never a failing/red ring that implies they drag it. */}
+      <Ring score={c.score} advisory={c.advisory} />
       <div>
-        <div className="text-sm font-semibold">{c.key}</div>
+        <div className="flex items-center justify-center gap-1.5 text-sm font-semibold">
+          {c.key}
+          {c.advisory && (
+            <Badge variant="outline" className="text-na">
+              advisory
+            </Badge>
+          )}
+        </div>
         <div className="mt-1 min-h-8 text-xs text-muted-foreground">
+          {c.advisory && (
+            <div className="text-na">not graded — hardening signal</div>
+          )}
           {c.findings.length > 0 ? (
             c.findings.join("; ")
           ) : (
