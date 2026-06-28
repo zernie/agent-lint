@@ -17,6 +17,11 @@
   obra/superpowers, disler hooks repos, gmickel/flow-next, davila7/claude-code-
   templates, anthropics/claude-code. Fetched via codeload tarballs.
 
+_Expanded 2026-06-28: also swept the big community subagent COLLECTIONS
+(contains-studio/agents, davepoon, vijaythecoder, lst97, dl-ezo, iannuttall,
+VoltAgent) — ~300+ plugin dirs across ~18 repos total. Findings unchanged + one
+new layout observation (#6)._
+
 ## Headline findings
 
 1. **Official plugins are CLEAN — 0 of 39 have a graded issue.** The only findings
@@ -56,6 +61,15 @@
    also has `PermissionRequest`/`SubagentStart`/`PostToolUseFailure` (seen registered
    in disler's settings). High-precision (close-typo only) meant we did NOT false-flag
    them — good — but the "Valid events:" list in a fix is outdated. Refresh candidate.
+
+6. **The messiest community content isn't CC-plugin-shaped.** The big subagent
+   collections store agents in `design/x.md`, `agents/<category>/x.md`,
+   `categories/.../x.md` — NOT `agents/*.md`. audit (like CC, which loads agents
+   non-recursively from `agents/`/`.claude/agents/`) doesn't scan them as plugins,
+   so their varied-quality content never reaches a graded report. This is the
+   structural reason a "way more issues" CC plugin is hard to find: the mess lives
+   in copy-paste libraries, not installable plugins. (NOT an audit gap — matching
+   CC's own non-recursive load is correct.)
 
 ## Implications
 
