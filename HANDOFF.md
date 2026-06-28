@@ -37,9 +37,9 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
    copy-vs-run clarification) + stale `scan`→`audit` / CI-line fixes.
 8. **`audit --serve`** (`d051984`) — one-click-local spec adoption. Hardened loopback
    server (`src/audit-serve.ts`): 127.0.0.1 + per-run token + Origin + allowlist-not-path
-   + in-process `init` + own-repo only. Opt-in (TTY prompt / `--serve` / `--no-serve`);
-   plain audit stays a terminating headless-safe READ. Security unit tests + real-HTTP
-   e2e. Report buttons POST when live, copy when static. `research/audit-serve-design.md`.
+   - in-process `init` + own-repo only. Opt-in (TTY prompt / `--serve` / `--no-serve`);
+     plain audit stays a terminating headless-safe READ. Security unit tests + real-HTTP
+     e2e. Report buttons POST when live, copy when static. `research/audit-serve-design.md`.
 9. **Adopt-flow explainer in the report UI** (`ec52ba0`) — `report/src/components/Flow.tsx`.
 
 ### DO NEXT
@@ -58,6 +58,14 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
   validation (model auth); dialect freshness.
 - **Pre-release blocker (unchanged):** the ecosystem benchmark / article (measure ~10-20
   hyped skills on `bench/corpus`) + a 0.x stability blurb.
+- **OSS issue hunt — CONCLUSIVE (see `research/oss-audit-render-findings.md`).** Swept
+  ~300+ plugins / ~18 repos. Official CLEAN (0/39 graded). Real catches for README/demo
+  (anonymized): **claude-flow → F (45 desc-overlaps)**, **disler → B (`Setup` dead hook
+  event)**, **agent-teams → A (`Agent` tool never-available)**. README examples: **do NOT
+  fabricate** (breaks the never-fabricate rule + credibility) — use these REAL catches.
+  The real lever for "reports look toothless on typical plugins" = reconsider the
+  **inherit-all GRADING** decision (it's advisory now → corpus reads mostly-A), NOT more
+  searching. Screenshots were ephemeral (scratchpad); re-render via headless Chromium.
 
 ### Gotchas
 
@@ -87,6 +95,8 @@ test is the env-only `dialect-drift` — CC 2.1.42 here vs validated 2.1.187; CI
 
 ## Don't re-read unless the task needs it
 
+- `research/oss-audit-render-findings.md` — what audit catches in the wild (official
+  clean; real catches; the inherit-all-grading lever; README "don't fabricate" call).
 - `research/audit-serve-design.md` — the `--serve` security model + prior-art survey.
 - `research/audit-adoption-ux.md` — how the report creates specs (copy vs live).
 - `research/pre-release-focus.md` — the markdown-mode / frontmatter-disable decision.
