@@ -22,15 +22,11 @@ merge HELD pending founder.** Don't merge without an explicit go. (Details below
 1. **README = full proof-led rewrite (Concept 5).** Tagline "The tests your AI agent
    harness never had." Leads with REAL audit catches → then the 3 instruments as the
    mechanism. Picked from 5 concepts in `research/readme-revamp-concepts.md`.
-   - **OSS NOT shamed**: community upstreams ANONYMIZED in public copy (real names only
-     in `research/dogfood/`). But **Anthropic's OWN official plugin is NAMED** (punch up,
-     don't shame volunteers): README "Proof 3" features `pr-review-toolkit` (official) —
-     B/88, 6 review agents inherit all tools + `silent-failure-hunter.md` malformed YAML.
-   - Dogfood corpus in `research/dogfood/` (real output): community catches + the official
-     `audit-official-pr-review-toolkit.txt`. **How official plugins were sourced** (API +
-     git-clone are BLOCKED here; only raw + HTML work): marketplace = `anthropics/claude-
-plugins-official`, Anthropic plugins live in-repo at `plugins/<name>`; list a subdir
-     via WebFetch on the github tree HTML, then `curl raw.githubusercontent.com/.../<file>`.
+   - **HYBRID proof source** (founder-chosen): Proofs 1-2 = community catches ANONYMIZED
+     (real names only in `research/dogfood/`); Proofs 3-4 = OFFICIAL + NAMED (punch up).
+     See the "Official plugins — DONE" item in DO NEXT for the full detail + sourcing.
+   - Demo gif REMOVED from Proof 1 (rendered as a frozen half-typed terminal); "Not
+     mockups" TMI removed; screenshots rendered + sent to founder (markdown-it + Chromium).
 2. **Skill/subagent spec adoption — SHIPPED (the founder's "super important for pre-release").**
    - Engine: `adoptSkill`/`adoptAgent` in `src/core/adopt.ts` — SKILL.md → `skill()`,
      agents/x.md → `agent()` (lead→body, `##`→sections). Verbatim body + standard
