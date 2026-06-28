@@ -62,7 +62,7 @@ test("a structurally clean plugin scores 100", () => {
   assert.equal(issues.length, 0);
 });
 
-test("penalties: missing hook -15, no-desc -10, no-contract -5; untested advisory (not scored)", () => {
+test("penalties: missing hook -15, no-desc -10; inherit-all + untested advisory (not scored)", () => {
   assert.equal(
     scoreReport(
       report({
@@ -87,24 +87,31 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5; untested advisor
     ).score,
     90,
   );
-  assert.equal(
-    scoreReport(
-      report({
-        agents: [
-          {
-            name: "a",
-            path: "p",
-            tools: null,
-            toolIssues: [],
-            mcpToolIssues: [],
-            disallowedToolIssues: [],
-            purity: "unrestricted" as const,
-            effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
-          },
-        ],
-      }),
-    ).score,
-    95,
+  // inherit-all (no `tools:` line) is ADVISORY — it does NOT affect the score
+  // (omitting the contract is idiomatic, not breakage), but it's still surfaced as
+  // an advisory note. See reportDeductions for the rationale.
+  const inheritAll = scoreReport(
+    report({
+      agents: [
+        {
+          name: "a",
+          path: "p",
+          tools: null,
+          toolIssues: [],
+          mcpToolIssues: [],
+          disallowedToolIssues: [],
+          purity: "unrestricted" as const,
+          effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+        },
+      ],
+    }),
+  );
+  assert.equal(inheritAll.score, 100);
+  assert.ok(
+    inheritAll.issues.some(
+      (i) => i.includes("inherit all tools") && i.includes("advisory"),
+    ),
+    "inherit-all still surfaced as an advisory note",
   );
   // Untested surfaces are ADVISORY — they do NOT affect the score (a hardening
   // gap is not breakage), but they're still surfaced as an advisory issue.

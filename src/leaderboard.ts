@@ -50,8 +50,10 @@ export const W_MISSING_HOOK = 15; // a hook script that doesn't exist → never 
 export const W_NO_DESCRIPTION = 10; // a skill with no usable description → can't trigger
 export const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 export const W_OVERLAP = 8; // a description collision → the wrong skill fires
-export const W_NO_CONTRACT = 5; // an agent with no `tools:` line → inherits everything
-// (untested surfaces are advisory, not a penalty — see scoreReport)
+export const W_NO_CONTRACT = 5; // generic small-footgun weight (disallowedTools typo, invalid model/color)
+// Two things are advisory, NOT graded penalties (shown, never scored — see scoreReport):
+//   - untested surfaces — a hardening gap, not breakage.
+//   - an agent that inherits all tools (no `tools:` line) — see reportDeductions for why.
 
 /** Map a 0–100 structural-health score to its letter grade (A ≥90 … F <60). */
 export function gradeFor(score: number): PluginScore["grade"] {
@@ -79,7 +81,6 @@ export interface Deduction {
 export function reportDeductions(r: ScanReport): Deduction[] {
   const missingHooks = r.hooks.filter((h) => h.status === "missing").length;
   const noDesc = r.skills.filter((s) => !s.hasDescription).length;
-  const noContract = r.agents.filter((a) => a.tools === null).length;
   const deadTools = r.agents.reduce((n, a) => n + a.toolIssues.length, 0);
   const deadMcpTools = r.agents.reduce((n, a) => n + a.mcpToolIssues.length, 0);
   const deadDisallowed = r.agents.reduce(
@@ -128,11 +129,14 @@ export function reportDeductions(r: ScanReport): Deduction[] {
       weight: W_NO_CONTRACT,
       label: "agent disallowedTools typo(s) that block nothing",
     },
-    {
-      n: noContract,
-      weight: W_NO_CONTRACT,
-      label: "agent(s) inherit all tools (no contract)",
-    },
+    // NB: an agent that inherits all tools (no `tools:` line) is ADVISORY, not a
+    // graded penalty — it's surfaced by scoreReport / the Structure ring but never
+    // drags the score. WHY: omitting the `tools:` line is a near-universal,
+    // legitimate authoring style (a measured OSS sweep of 122 real plugins found
+    // 109 whose ONLY finding was this), so penalizing it makes the grade cry wolf
+    // on idiomatic subagents. A health score should mean "something is BROKEN", and
+    // a broad-by-default tool surface is a hardening/least-privilege NUDGE, not
+    // breakage. The count is re-derived where the advisory note is built.
     {
       n: r.frontmatterIssues.length,
       weight: W_NO_DESCRIPTION,
@@ -214,8 +218,17 @@ export function scoreReport(r: ScanReport): {
   }
   // Sort issues by cost (worst first) so the report leads with what matters.
   issues.sort((a, b) => Number(b.split(" ")[0]) - Number(a.split(" ")[0]));
-  // Untested surfaces are advisory — surfaced for visibility, but they don't
-  // affect the score, so they come AFTER the real (score-affecting) issues.
+  // Advisory notes are surfaced for visibility but DON'T affect the score, so they
+  // come AFTER the real (score-affecting) issues:
+  //   - inherit-all (no tool contract): a least-privilege NUDGE, not breakage —
+  //     see reportDeductions for the full rationale.
+  //   - untested surfaces: a hardening gap, not breakage.
+  const noContract = r.agents.filter((a) => a.tools === null).length;
+  if (noContract > 0) {
+    issues.push(
+      `${String(noContract)} agent(s) inherit all tools (no contract) (advisory)`,
+    );
+  }
   if (r.untested > 0) {
     issues.push(`${String(r.untested)} untested surface(s) (advisory)`);
   }
@@ -257,16 +270,16 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
   out.push(
     "",
     "Structural health only (no model). Weights: missing hook -15, no-description",
-    "skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5.",
-    "Untested surfaces are advisory — shown, but they don't affect the score.",
+    "skill -10, broken intra-plugin ref -8, dead tool/MCP ref -8.",
+    "Inherit-all subagents and untested surfaces are advisory — shown, not scored.",
   );
   return out.join("\n");
 }
 
 const LEADERBOARD_METHOD =
   "_Structural health only (deterministic, no model): missing hook −15, " +
-  "no-description skill −10, broken intra-plugin ref −8, " +
-  "agent-without-tool-contract −5. Untested surfaces are advisory (shown, not " +
+  "no-description skill −10, broken intra-plugin / dead-tool ref −8. " +
+  "Inherit-all subagents and untested surfaces are advisory (shown, not " +
   "scored). Behavioural columns (trigger-rate, collisions, egress) stack on top._";
 
 /**
