@@ -6,14 +6,18 @@
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/ (a missing SKILL.md, an AskUserQuestion-never-available subagent
-  tool, the 4-plugin leaderboard, the 100/100 self-audit, the runHook pass). NEVER
-  replace a real catch with a fabricated one.
+  research/dogfood/. HYBRID proof source (decided 2026-06-28): Proofs 1-2 are
+  COMMUNITY catches, anonymized (a missing SKILL.md, an AskUserQuestion-never-
+  available tool) — official plugins don't have those silent-failure bugs. Proofs
+  3-4 are OFFICIAL + NAMED: pr-review-toolkit (malformed YAML + unrestricted review
+  agents) and the all-37 Anthropic-official leaderboard (A→F, LSP stubs excluded).
+  NEVER replace a real catch with a fabricated one.
 
-  DON'T SHAME OSS: the catches are real but the upstream plugins are ANONYMIZED in
-  public copy (no obra/superpowers, madappgang, etc. by name) — the real names live
-  only in research/dogfood/ (internal). Punching up at official/vendor plugins is
-  fine; naming a volunteer's repo to show its bug is not. Keep it anonymized here.
+  DON'T SHAME OSS: community catches are real but ANONYMIZED in public copy (no
+  obra/superpowers, madappgang by name) — real names live only in research/dogfood/.
+  Punch UP at official/vendor plugins (Anthropic's own are NAMED); never name a
+  volunteer's repo to show its bug. Proof 3/4 don't show pr-review-toolkit's audit-
+  RING score (88) — only the leaderboard score (52 F) — so the two never clash.
 
   1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
      competitor. A bolded lead-in is the first thing read — make it the hook/win.
@@ -110,29 +114,29 @@ harness against **reality**, not style.
 Not cherry-picked community repos — **Anthropic's own official `pr-review-toolkit`**:
 
 ```text
-Harness health: B (88/100)
-  ● Structure   70   └ 6 agent(s) inherit all tools (no contract)
-  ℹ silent-failure-hunter.md — frontmatter isn't valid YAML
+✗ silent-failure-hunter.md — frontmatter isn't valid YAML (won't parse)
+⚠ 6 review agents inherit ALL tools — a code-reviewer with Write + Bash
 ```
 
-Six **code-review** agents that inherit **all** tools — a reviewer with `Write` and
-`Bash` it never needs — plus a subagent whose YAML doesn't parse. Real findings on a
-first-party plugin. _(We name Anthropic's own; community plugins below stay anonymous —
-punch up, don't shame volunteers.)_
+A subagent whose YAML doesn't parse, and six review agents holding far more power than
+a reviewer needs — real findings on a first-party plugin. _(We name Anthropic's own;
+the community plugins above stay anonymous — punch up, don't shame volunteers.)_
 
 ## Proof 4 — rank a whole marketplace
 
-Point it at a folder of plugins and get a ranking, **worst issues first** — no key:
+`audit` ranks a folder of plugins, **worst issues first** — no key. Here's **all of
+Anthropic's official plugins**:
 
 ```text
   #   score  grade  plugin
-   1   89    B      frontend-plugin       — 1 agent tool that doesn't exist; 1 untested surface
-   2   86    B      accessibility-plugin  — 3 untested surfaces; 1 agent inherits all tools
-   3   86    B      debugging-plugin      — 2 untested surfaces; 1 broken reference
-   4   78    C      workflow-plugin       — 4 untested surfaces; 2 agents inherit all tools
+   1  100    A      code-review
+   7  100    A      security-guidance      ← 7 score a clean 100
+  21   84    B      agent-sdk-dev      — 2 agents inherit all tools; 2 untested
+  24   52    F      pr-review-toolkit  — 6 agents inherit all tools; 6 untested
+  25   52    F      skill-creator      — 3 agents inherit all; 3 missing frontmatter
 ```
 
-<sub>Real plugins, anonymized — `audit` names them in your own report; we won't shame OSS authors here.</sub>
+<sub>Real scores on Anthropic's own marketplace (empty LSP stubs excluded).</sub>
 
 **[Plugin-author guide →](docs/for-plugin-authors.md)**
 
