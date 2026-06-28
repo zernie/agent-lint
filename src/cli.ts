@@ -116,7 +116,12 @@ import {
   type PromptSkill,
 } from "./audit-prompts.js";
 import { renderAuditHtml } from "./audit-html.js";
-import { buildAuditReport, type AuditReport } from "./audit-report.js";
+import {
+  buildAuditReport,
+  buildLeaderboardReport,
+  buildMarketplaceReport,
+  type AuditReport,
+} from "./audit-report.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -5668,7 +5673,16 @@ async function main(): Promise<void> {
         // through to a misleading "empty machine / no structural issues" report
         // (obra/superpowers-marketplace, anthropics/claude-plugins-community).
         if (json) {
-          console.log(JSON.stringify(market, null, 2));
+          console.log(
+            JSON.stringify(
+              buildMarketplaceReport(market, {
+                vigilesVersion: getVersion(),
+                dir: resolve(dirs[0]),
+              }),
+              null,
+              2,
+            ),
+          );
         } else {
           console.log(
             `Marketplace "${market.name}": ${String(market.total)} plugin(s), all external ` +
@@ -5684,7 +5698,18 @@ async function main(): Promise<void> {
         const text = args.includes("--md")
           ? formatLeaderboardMarkdown(scores)
           : formatLeaderboard(scores);
-        console.log(json ? JSON.stringify(scores, null, 2) : text);
+        console.log(
+          json
+            ? JSON.stringify(
+                buildLeaderboardReport(scores, {
+                  vigilesVersion: getVersion(),
+                  dir: resolve(dirs[0]),
+                }),
+                null,
+                2,
+              )
+            : text,
+        );
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);

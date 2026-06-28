@@ -16,6 +16,7 @@ const report: AuditReport = {
   meta: {
     schemaVersion: 1,
     tool: "vigiles",
+    kind: "audit",
     vigilesVersion: "1.0.0",
     harness: "claude-code",
     dir: "/x/demo",
