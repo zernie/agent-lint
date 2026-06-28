@@ -66,13 +66,16 @@ merge HELD pending founder.** Don't merge without an explicit go. (Details below
 
 ### DO NEXT (pre-release-priorities)
 
-- **AUDIT 2nd WAVE (not started)** — the remaining pre-release audit items after the trust
-  fixes: (1) "inherits all tools" severity is still a graded −5 (DECISION OF RECORD: kept
-  graded, it's capability/blast-radius not test-coverage — only untested is advisory); a
-  future call could make it advisory too (would push pr-review-toolkit to A). (2) report
-  adoption buttons + CLI adoptable-surface nudge (research/audit-adoption-ux.md §next).
-  (3) behavioral-tier "do skills fire?" nudge + one live validation (needs model auth).
-  (4) asset refresh (pinned-CC screenshot) + dialect freshness.
+- **AUDIT 2nd WAVE** — (2) report adoption buttons + CLI adoptable-surface nudge +
+  behavioral "do skills fire?" nudge = **DONE** (`c007352`): `AuditReport.adoptable` carries
+  per-surface `npx vigiles init --target=` + create-all commands; `report/src/components/
+Adopt.tsx` renders copy-to-clipboard buttons; CLI prints both nudges (non-`--json` only).
+  REMAINING (env-blocked HERE — need a different machine): (1) "inherits all tools" severity
+  is still a graded −5 (DECISION OF RECORD: kept graded — capability/blast-radius, not
+  test-coverage; only untested is advisory; a future call could make it advisory → pushes
+  pr-review-toolkit to A). (3) ONE live behavioral validation (needs model auth). (4) asset
+  refresh (pinned-CC screenshot, this container is CC 2.1.42) + dialect freshness (needs
+  current CC installed).
 
 - **Founder review of the README** (it's a marketing asset — wants a wordsmith pass).
   Then decide: open a PR for this branch? (no PR opened yet.)
