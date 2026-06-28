@@ -5484,21 +5484,38 @@ async function runAutoTrigger(
       "\nℹ auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
     );
   }
+  const model = flagValue(args, "--model");
   const trigger = await probePluginTriggers(dir, promptSet, {
     minPrompts: AUTO_RECALL_COUNT,
     minDistance: AUTO_MIN_DISTANCE,
-    model: flagValue(args, "--model"),
+    model,
     harness,
     // Discover candidates with the resolved adapter's layout/dialect — a Codex
     // repo's skills live under the Codex layout, not the default CC one.
     layout: adapter.layout,
     dialect: adapter.dialect,
   });
-  console.log(
-    json
-      ? JSON.stringify({ trigger }, null, 2)
-      : "\n" + formatBehavioralReport(trigger),
-  );
+  // Second behavioral eval (same consent): the selection-collision matrix — does
+  // one skill HIJACK a sibling's prompt? This is the MEASURED confirmation of the
+  // deterministic description-overlap proxy (the Triggering ring flags look-alikes;
+  // this proves the wrong one actually fires). Only meaningful with ≥2 model-
+  // invocable skills (a lone skill can't collide); reuses the same auto prompts.
+  const collisions =
+    skills.length >= 2
+      ? await measurePluginSelection(dir, promptSet, { model, harness })
+      : null;
+  if (json) {
+    console.log(
+      JSON.stringify(
+        collisions ? { trigger, collisions } : { trigger },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log("\n" + formatBehavioralReport(trigger));
+    if (collisions) console.log("\n" + formatSelectionReport(collisions));
+  }
 }
 
 /**
@@ -5571,9 +5588,13 @@ function buildExecuteDisclosure(
   if (s.hasMcp)
     lines.push("  · start your MCP servers — connects to their backends");
   if (s.triggerableSkills > 0) {
-    lines.push(
-      `  · measure whether skills fire (${triggerCostWording(harness)})`,
-    );
+    // ≥2 model-invocable skills also get the selection-collision matrix (does one
+    // skill hijack a sibling's prompt) — disclose it so the consent stays honest.
+    const what =
+      s.triggerableSkills >= 2
+        ? "measure whether skills fire and collide"
+        : "measure whether skills fire";
+    lines.push(`  · ${what} (${triggerCostWording(harness)})`);
   }
   if (s.adoptableRefs) {
     lines.push(
