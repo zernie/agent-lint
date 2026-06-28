@@ -86,6 +86,40 @@ describe("buildAuditReport", () => {
     expect(r.recommendations[0].surface).toBe("rev");
   });
 
+  it("omits `adoptable` when there are no un-spec'd surfaces", () => {
+    const r = buildAuditReport(makeReport(), {
+      harness: "claude-code",
+      vigilesVersion: "1.0.0",
+    });
+    expect(r.adoptable).toBeUndefined();
+    const r2 = buildAuditReport(makeReport(), {
+      harness: "claude-code",
+      vigilesVersion: "1.0.0",
+      adoptableSurfaces: [],
+    });
+    expect(r2.adoptable).toBeUndefined();
+  });
+
+  it("carries adoptable surfaces + the create-all + per-surface commands", () => {
+    const r = buildAuditReport(makeReport(), {
+      harness: "claude-code",
+      vigilesVersion: "1.0.0",
+      adoptableSurfaces: ["skills/foo/SKILL.md", "agents/bar.md"],
+    });
+    expect(r.adoptable).toBeDefined();
+    expect(r.adoptable?.createAllCommand).toBe("npx vigiles init");
+    expect(r.adoptable?.surfaces).toEqual([
+      {
+        path: "skills/foo/SKILL.md",
+        command: "npx vigiles init --target=skills/foo/SKILL.md",
+      },
+      {
+        path: "agents/bar.md",
+        command: "npx vigiles init --target=agents/bar.md",
+      },
+    ]);
+  });
+
   it("is JSON-serializable round-trip (it IS the wire format)", () => {
     const r = buildAuditReport(makeReport(), {
       harness: "claude-code",

@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
+import { Adopt } from "@/components/Adopt";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
@@ -77,7 +78,8 @@ function Stat({ n, label }: { n: number | string; label: string }) {
 }
 
 export function Report({ data }: { data: AuditReport }) {
-  const { score, recommendations, inventory, meta, adoptability } = data;
+  const { score, recommendations, inventory, meta, adoptability, adoptable } =
+    data;
   const overall = score.empty ? null : score.overall;
   const b = band(overall);
   return (
@@ -126,6 +128,19 @@ export function Report({ data }: { data: AuditReport }) {
           <CheckCircle2 size={16} /> No deterministic fixes — the structure is
           clean.
         </Card>
+      )}
+
+      {adoptable && adoptable.surfaces.length > 0 && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Create specs
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Turn these surfaces into typed specs so vigiles can verify their
+            references — fully, or one at a time.
+          </p>
+          <Adopt data={adoptable} />
+        </>
       )}
 
       {adoptability && (
