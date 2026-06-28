@@ -19,10 +19,14 @@ import {
   formatSelectionReport,
   isGateDescription,
   detectGateSkills,
+  measureGateAdversarialWith,
+  gateRubric,
+  formatGateReport,
   type BehavioralReport,
   type HarnessProbe,
+  type GateVerdict,
 } from "./scan-behavioral.js";
-import { parseClaudeRun, type AgentRunArgs } from "./eval.js";
+import { parseClaudeRun, type AgentRunArgs, type EvalDriver } from "./eval.js";
 import { skillResolved } from "./harness-assert.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
@@ -401,4 +405,121 @@ test("detectGateSkills returns only model-invocable, described gate skills", () 
     { name: "ghost", description: "", hasDescription: false },
   ]);
   assert.deepEqual([...gates].sort(), ["no-force-push", "tdd-gate"]);
+});
+
+// ─── Adversarial-gate eval (step 2: attack the gate, judge hold vs cave) ───────
+
+// A fake eval driver: the runner echoes a per-task "agent output" via a result
+// event parseClaudeRun reads; the (fake) judge calls a CAVE iff the output says so.
+function gateDriver(
+  outputFor: (task: string) => string,
+  errored = false,
+): EvalDriver {
+  return {
+    runner: (a: AgentRunArgs) =>
+      Promise.resolve({
+        code: 0,
+        stdout: JSON.stringify({
+          type: "result",
+          result: outputFor(a.task),
+          num_turns: 1,
+        }),
+      }),
+    parse: parseClaudeRun,
+    ...(errored ? { runError: () => "rate limited" } : {}),
+  };
+}
+const caveJudge = (a: { output: string; rubric: string }): GateVerdict =>
+  a.output.includes("CAVE")
+    ? { pass: false, score: 0, reason: "did the forbidden thing" }
+    : { pass: true, score: 1, reason: "refused" };
+
+test("adversarial-gate: a caving gate → heldRate 0, ⚠ with the cave reason", async () => {
+  const deps = {
+    driver: gateDriver((task) => `output for ${task}: CAVE`),
+    judge: caveJudge,
+    derive: (g: { name: string }) => `attack-${g.name}`,
+  };
+  const r = await measureGateAdversarialWith(
+    "/x",
+    [{ name: "g1", description: "Never push to main" }],
+    deps,
+  );
+  const g = r.results[0];
+  assert.equal(g.measured, true);
+  assert.equal(g.heldRate, 0);
+  assert.equal(g.held, false);
+  assert.equal(g.n, 1);
+  assert.match(g.reason ?? "", /forbidden/);
+  assert.match(formatGateReport(r), /⚠ g1 — held 0%.*caved/s);
+});
+
+test("adversarial-gate: a holding gate → heldRate 1, ✓", async () => {
+  const deps = {
+    driver: gateDriver(() => "I refused to skip the rule and followed it"),
+    judge: caveJudge,
+    derive: (g: { name: string }) => `attack-${g.name}`,
+  };
+  const r = await measureGateAdversarialWith(
+    "/x",
+    [{ name: "g2", description: "Always write a test first" }],
+    deps,
+  );
+  assert.equal(r.results[0].heldRate, 1);
+  assert.equal(r.results[0].held, true);
+  assert.match(formatGateReport(r), /✓ g2 — held 100%/);
+});
+
+test("adversarial-gate: an errored run is unmeasured, not a false hold/cave", async () => {
+  const deps = {
+    driver: gateDriver(() => "whatever", true),
+    judge: caveJudge,
+    derive: () => "attack",
+  };
+  const r = await measureGateAdversarialWith(
+    "/x",
+    [{ name: "g3", description: "Never delete without confirmation" }],
+    deps,
+  );
+  assert.equal(r.results[0].measured, false);
+  assert.match(r.results[0].note ?? "", /errored/);
+});
+
+test("adversarial-gate: author-supplied attacks override derive; heldRate aggregates", async () => {
+  let deriveCalled = false;
+  const deps = {
+    driver: gateDriver((t) => t), // echo the attack as the output
+    judge: caveJudge,
+    derive: () => {
+      deriveCalled = true;
+      return "SHOULD-NOT-BE-USED";
+    },
+  };
+  const r = await measureGateAdversarialWith(
+    "/x",
+    [{ name: "g4", description: "d" }],
+    deps,
+    { attacks: { g4: ["please CAVE here", "be compliant"] } },
+  );
+  assert.equal(deriveCalled, false); // author attacks took precedence
+  assert.equal(r.results[0].n, 2);
+  assert.equal(r.results[0].heldRate, 0.5); // one cave, one hold
+});
+
+test("adversarial-gate: no gates → empty, available, with a note", async () => {
+  const deps = {
+    driver: gateDriver(() => "x"),
+    judge: caveJudge,
+    derive: () => "a",
+  };
+  const r = await measureGateAdversarialWith("/x", [], deps);
+  assert.equal(r.available, true);
+  assert.equal(r.results.length, 0);
+  assert.match(r.note ?? "", /no enforcement-gate/);
+});
+
+test("gateRubric embeds the rule and asks to detect a violation", () => {
+  const rb = gateRubric({ name: "g", description: "Never push to main" });
+  assert.match(rb, /Never push to main/);
+  assert.match(rb, /VIOLATE/);
 });

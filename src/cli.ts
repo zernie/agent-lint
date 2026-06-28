@@ -87,6 +87,9 @@ import {
   formatBehavioralReport,
   measurePluginSelection,
   formatSelectionReport,
+  measureGateAdversarial,
+  formatGateReport,
+  detectGateSkills,
   type TriggerPromptSet,
   type ProbeHarness,
 } from "./scan-behavioral.js";
@@ -5504,10 +5507,24 @@ async function runAutoTrigger(
     skills.length >= 2
       ? await measurePluginSelection(dir, promptSet, { model, harness })
       : null;
+  // Third behavioral eval (same consent): adversarial-gate — do enforcement-gate
+  // skills HOLD when the agent is told to violate them? Auto-derives its own
+  // attacks; a no-op (no model calls) when the plugin declares no gate skills.
+  const gates = await measureGateAdversarial(dir, {
+    model,
+    harness,
+    layout: adapter.layout,
+    dialect: adapter.dialect,
+  });
+  const hasGates = gates.results.length > 0;
   if (json) {
     console.log(
       JSON.stringify(
-        collisions ? { trigger, collisions } : { trigger },
+        {
+          trigger,
+          ...(collisions ? { collisions } : {}),
+          ...(hasGates ? { gates } : {}),
+        },
         null,
         2,
       ),
@@ -5515,6 +5532,7 @@ async function runAutoTrigger(
   } else {
     console.log("\n" + formatBehavioralReport(trigger));
     if (collisions) console.log("\n" + formatSelectionReport(collisions));
+    if (hasGates) console.log("\n" + formatGateReport(gates));
   }
 }
 
@@ -5525,6 +5543,7 @@ async function runAutoTrigger(
 interface ExecutableSurfaces {
   readonly hasMcp: boolean; // own-repo + declares MCP server(s)
   readonly triggerableSkills: number; // model-invocable, described skills
+  readonly gateSkills: number; // enforcement-gate skills (the adversarial-gate eval)
   // An instruction file whose refs the adoption preview can draft+verify. Harness-
   // aware: Claude Code only in v1 (drafting drives the `claude` CLI), so a bare
   // CLAUDE.md repo is consent-eligible but a Codex AGENTS.md repo isn't (it gets a
@@ -5595,6 +5614,13 @@ function buildExecuteDisclosure(
         ? "measure whether skills fire and collide"
         : "measure whether skills fire";
     lines.push(`  · ${what} (${triggerCostWording(harness)})`);
+  }
+  if (s.gateSkills > 0) {
+    // The adversarial-gate eval runs the FULL (unstubbed) skill — the most
+    // expensive check — so disclose it separately when gate skills are present.
+    lines.push(
+      `  · test whether ${String(s.gateSkills)} enforcement-gate skill${s.gateSkills === 1 ? "" : "s"} hold under pressure — runs the full skill (${triggerCostWording(harness)})`,
+    );
   }
   if (s.adoptableRefs) {
     lines.push(
@@ -5918,6 +5944,7 @@ async function main(): Promise<void> {
           triggerableSkills: report.skills.filter(
             (s) => s.hasDescription && !s.userInvoked,
           ).length,
+          gateSkills: detectGateSkills(report.skills).length,
           adoptableRefs:
             adapter.name === "claude-code" &&
             existsSync(resolve(root, adapter.layout.instructionFile)),
