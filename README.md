@@ -9,15 +9,15 @@
   research/dogfood/. HYBRID proof source (decided 2026-06-28): Proofs 1-2 are
   COMMUNITY catches, anonymized (a missing SKILL.md, an AskUserQuestion-never-
   available tool) — official plugins don't have those silent-failure bugs. Proofs
-  3-4 are OFFICIAL + NAMED: pr-review-toolkit (malformed YAML + unrestricted review
-  agents) and the all-37 Anthropic-official leaderboard (A→F, LSP stubs excluded).
-  NEVER replace a real catch with a fabricated one.
+  3-4 are OFFICIAL + NAMED: pr-review-toolkit (unrestricted review agents + an
+  advisory malformed-YAML note) and the all-25 Anthropic-official leaderboard
+  (A→F, LSP stubs excluded). NEVER replace a real catch with a fabricated one.
 
   DON'T SHAME OSS: community catches are real but ANONYMIZED in public copy (no
   obra/superpowers, madappgang by name) — real names live only in research/dogfood/.
   Punch UP at official/vendor plugins (Anthropic's own are NAMED); never name a
-  volunteer's repo to show its bug. Proof 3/4 don't show pr-review-toolkit's audit-
-  RING score (88) — only the leaderboard score (52 F) — so the two never clash.
+  volunteer's repo to show its bug. Proof 3 shows pr-review-toolkit's findings (not a
+  score); Proof 4 shows its leaderboard score (70 C) — so the two never clash.
 
   1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
      competitor. A bolded lead-in is the first thing read — make it the hook/win.
@@ -114,27 +114,28 @@ harness against **reality**, not style.
 Not cherry-picked community repos — **Anthropic's own official `pr-review-toolkit`**:
 
 ```text
-✗ silent-failure-hunter.md — frontmatter isn't valid YAML (won't parse)
 ⚠ 6 review agents inherit ALL tools — a code-reviewer with Write + Bash
+ℹ 1 file's frontmatter isn't valid YAML — fields may not parse as intended
 ```
 
-A subagent whose YAML doesn't parse, and six review agents holding far more power than
-a reviewer needs — real findings on a first-party plugin. _(We name Anthropic's own;
-the community plugins above stay anonymous — punch up, don't shame volunteers.)_
+Six review agents holding far more power than a reviewer needs, plus a frontmatter
+block that may not parse cleanly — real findings on a first-party plugin. _(We name
+Anthropic's own; the community plugins above stay anonymous — punch up, don't shame
+volunteers.)_
 
 ## Proof 4 — rank a whole marketplace
 
-`audit` ranks a folder of plugins by what's actually **broken** — no key. Run across
-**all of Anthropic's official plugins**, it flags exactly **one** real outlier — no
+`audit` ranks a folder of plugins by what's actually **broken** — no key. Across
+**all 25 of Anthropic's official plugins**, only **one drops below an A** — no
 false-positive noise (untested surfaces are advisory):
 
 ```text
   #   score  grade  plugin
-   1  100    A      code-review            ← 24 of 25 come back a clean A
+   1  100    A      claude-code-setup     ← 24 of 25 come back grade A
   25   70    C      pr-review-toolkit  — 6 agents inherit all tools (a reviewer with Write + Bash)
 ```
 
-<sub>Real scores on Anthropic's own marketplace — a fair tool flags the one real issue, not noise (empty LSP stubs excluded).</sub>
+<sub>Real scores on Anthropic's own marketplace — a fair tool flags the one real outlier, not noise (empty LSP stubs excluded).</sub>
 
 **[Plugin-author guide →](docs/for-plugin-authors.md)**
 
