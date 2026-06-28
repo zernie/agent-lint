@@ -98,11 +98,24 @@ new layout observation (#6)._
 2. **Be honest about what audit catches on a RAW plugin:** tool-contract + hook-event
    - description-overlap + hygiene — NOT "your CLAUDE.md is lying" (file/rule cross-ref
      needs adopt+strengthen). Tune the README headline accordingly.
-3. **The real lever for "reports look toothless on typical plugins" is the inherit-all
-   GRADING decision, not finding messier plugins.** Demoting inherit-all to advisory
-   is why the corpus reads mostly-A. If we want audit to bite on ordinary plugins,
-   reconsider grading inherit-all (or a sharper variant — e.g. a _reviewer/review_
-   agent inheriting Write+Bash graded, others advisory). Decision pending; show the
-   leaderboard both ways before deciding.
+3. **inherit-all stays ADVISORY — SETTLED (don't re-propose a grading change).**
+   We explored grading it (teeth) and a "sharp" name-heuristic (grade only
+   reviewer/analyzer-role agents). BOTH rejected:
+   - Pure-graded cries wolf — 32/124 community plugins drop below A purely for the
+     idiomatic no-`tools:` style (backend-development → D 60 for 8 implementer agents).
+   - The name-heuristic is **NOT deterministic** — it infers an agent's _intended_
+     role from its name (`review`/`analyz`), i.e. guesses intent. That's a semantic
+     judgment, not a structural fact; it would cry wolf unpredictably (a `code-reviewer`
+     may legitimately need Bash). Fails vigiles's deterministic/high-precision bar.
+     The KEY INSIGHT: "is this inherit-all dangerous?" depends on the agent's intended
+     tool scope, which a RAW markdown plugin never declares — so it is UNKNOWABLE
+     deterministically. Advisory is therefore the correct deterministic call. The
+     deterministic "blast-radius too wide" check DOES exist, but only once intent is
+     declared: a typed-spec `purity: 'pure'/'bounded'` floor + a looser tool = a compile
+     error (`purityViolations`, already shipped). So over-power teeth are an
+     adopt→strengthen / typed-spec payoff, NOT a raw-plugin grade. The model-gated tier
+     could surface a soft "over-powered reviewer" note, but never the deterministic score.
+     Corollary: a raw-plugin report's real teeth ARE the structural catches (tool typos,
+     dead hook events, description overlaps) — feature THOSE.
 4. **Pending UI/PR:** the "How to act on this" card (move-down/condense/remove) + open
    the branch PR (`fix!:` — frontmatter disable is breaking).
