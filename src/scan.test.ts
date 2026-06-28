@@ -743,6 +743,62 @@ test("scanPlugin does not misclassify a '-agents' skill dir as an agent", () => 
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin does not treat a skill-internal agents/ dir as subagents", () => {
+  // Regression: Anthropic's official skill-creator ships skill-internal worker
+  // docs at skills/skill-creator/agents/{analyzer,comparator,grader}.md with NO
+  // frontmatter. Those are NOT dispatchable Claude Code subagents (CC loads
+  // subagents only from the plugin's TOP-LEVEL agents/ — recursively WITHIN it,
+  // never nested under a skill). The old classifier matched `agents/` anywhere in
+  // the path, so it flagged them as subagents missing name/description + with no
+  // tool contract → mis-graded a first-party plugin F. They must be ignored.
+  const dir = makeTmpDir("scan-nested-agents");
+  write(
+    dir,
+    "skills/skill-creator/SKILL.md",
+    "---\nname: skill-creator\ndescription: Create new skills end to end\n---\n# x\n",
+  );
+  // No frontmatter — would be flagged if misclassified as a subagent.
+  write(dir, "skills/skill-creator/agents/analyzer.md", "# Analyzer\nprose\n");
+  write(
+    dir,
+    "skills/skill-creator/agents/comparator.md",
+    "# Comparator\nprose\n",
+  );
+  write(dir, "skills/skill-creator/agents/grader.md", "# Grader\nprose\n");
+  // A genuine TOP-LEVEL subagent must still be discovered AND checked.
+  write(
+    dir,
+    "agents/reviewer.md",
+    "---\nname: reviewer\ndescription: Review a diff for correctness\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  // Only the real top-level subagent registers; the nested files are ignored.
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["reviewer"],
+  );
+  // No frontmatter penalty: the real agent is complete and the nested
+  // skill-internal docs (no frontmatter) are not subagents at all.
+  assert.equal(r.frontmatterIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin still flags a real top-level subagent missing frontmatter", () => {
+  // Guard the other direction: the nested-agents exclusion must NOT silence a
+  // genuine top-level agents/ file that really is missing name/description.
+  const dir = makeTmpDir("scan-real-agent-missing-fm");
+  write(dir, "agents/broken.md", "# Broken\nno frontmatter at all\n");
+  const r = scanPlugin(dir);
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["broken"],
+  );
+  assert.ok(
+    r.frontmatterIssues.some((i) => i.path.endsWith("agents/broken.md")),
+  );
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin resolves hook scripts: ok / missing / unresolved", () => {
   const dir = fixture();
   const r = scanPlugin(dir);
