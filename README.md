@@ -138,8 +138,8 @@ false-positive noise (untested surfaces are advisory):
 
 **[Plugin-author guide →](docs/for-plugin-authors.md)**
 
-> **And it grades itself: 100/100, A, all four rings green.** vigiles runs `audit` on
-> its own harness in CI. We eat what we cook.
+> **And it grades itself: 100/100, A, all four rings green** — and CI gates every
+> commit with `lint` + `test`. We eat what we cook.
 
 ## How it does it — three instruments
 
@@ -152,9 +152,7 @@ Every path, script, symbol & linter rule resolved against reality (the catches
 above). **You don't write any of it** — `npx vigiles init` **adopts your existing
 CLAUDE.md _and every skill and subagent_ into verified specs**, non-destructively
 (untouched until you `compile`; `eject` reverses). After that, plain-English asks
-edit them for you. Prefer zero new files? Plain markdown + one inline
-`<!-- vigiles:enforce -->` comment lints too — no TypeScript.
-**[How →](docs/verifying-instruction-files.md)**
+edit them for you. **[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
 
@@ -234,9 +232,7 @@ JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 ## FAQ
 
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one). Prefer zero new files? Plain markdown lints too. Deeper compiler-grade guarantees are gradual and opt-in, like TS's `strict`.
-- **Does it overwrite my files?** No. `init` adopts an existing CLAUDE.md _non-destructively_ — untouched until you `compile`, and `eject` reverses it.
-- **Need an API key?** No for almost everything (free, every commit). Real-model evals run on your Claude Pro/Max subscription — $0 metered tokens.
+- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict`.
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**
