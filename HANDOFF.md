@@ -79,9 +79,6 @@ Adopt.tsx` renders copy-to-clipboard buttons; CLI prints both nudges (non-`--jso
 
 - **Founder review of the README** (it's a marketing asset — wants a wordsmith pass).
   Then decide: open a PR for this branch? (no PR opened yet.)
-- **Audit-adoption UX, not-yet-built** (see `research/audit-adoption-ux.md` §next):
-  (1) report UI "Create spec"/"Create all" copy-command buttons in `report/`;
-  (2) CLI `audit` output lists adoptable surfaces + the commands.
 - **README asset refresh**: recapture `vigiles-audit.png` from
   `research/dogfood/audit-superpowers.html` on a PINNED-CC machine (this container's
   2.1.42-vs-2.1.187 drift banner must not be in the screenshot).
@@ -95,8 +92,8 @@ Adopt.tsx` renders copy-to-clipboard buttons; CLI prints both nudges (non-`--jso
   official marketplace: `curl -L codeload.github.com/anthropics/claude-plugins-official/
 tar.gz/refs/heads/main` works (API + git-clone are blocked, but codeload tarball isn't).**
   Saved: research/dogfood/audit-official-{leaderboard,skill-creator,pr-review-toolkit}.txt.
-  NB the audit-RING score (pr-review-toolkit 88 B) ≠ the leaderboard score (52 F) — two
-  different metrics; README shows only the leaderboard number so they never clash.
+  (POST-TRUST-FIX numbers now: 24/25 clean A, pr-review-toolkit 70 C — the rings and the
+  leaderboard AGREE since the scorers were unified in `fb72e27`. The old 88-vs-52 split is gone.)
 - **OSS FP sweep** (founder enabled "auto mode" for it): needs an open-net machine to
   gather many plugins; git-scoped here. HTTPS/curl works, git clone of others doesn't.
 - Live real-model spike for the adoption-gateway draft recall (gated on model auth).
