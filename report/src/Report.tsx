@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
 import { Adopt } from "@/components/Adopt";
+import { Flow } from "@/components/Flow";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,10 @@ export function Report({ data }: { data: AuditReport }) {
           </div>
         </div>
       </Card>
+
+      <div className="mt-6">
+        <Flow />
+      </div>
 
       <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         Categories
