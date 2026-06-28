@@ -15,6 +15,13 @@ export interface CategoryScore {
   key: CategoryKey;
   score: number | null;
   weight: number;
+  /**
+   * Advisory categories (e.g. Tested) are shown but EXCLUDED from the overall
+   * grade — an untested surface is a hardening signal, not breakage. The report
+   * renders an advisory ring neutrally (a muted "advisory" label), never as a
+   * failing/red ring that appears to drag the grade.
+   */
+  advisory?: boolean;
   findings: string[];
 }
 
