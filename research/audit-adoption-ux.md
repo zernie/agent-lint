@@ -64,9 +64,12 @@ directly: fully = `init`, per-surface = `init --target=`. Both call the SAME shi
 engine. No new runtime, no localhost server, no stash — the report stays a static,
 shareable, safe-anywhere artifact; the CLI does the writing.
 
-(A future `vigiles audit --serve` with a localhost backend could make the buttons
-one-click-no-paste, but that trades away the static-file model and adds a server +
-security surface — deferred, not needed for launch.)
+(`vigiles audit --serve` with a localhost backend makes the buttons
+one-click-no-paste — it adds a server + security surface, so it stays OPT-IN (a
+TTY prompt or `--serve`), own-repo only, and Jupyter-grade token/Origin-hardened.
+SHIPPED 2026-06-28 — full design + threat model in
+[`audit-serve-design.md`](audit-serve-design.md). The static copy-command path
+stays the default.)
 
 ## What's shipped vs next
 

@@ -117,6 +117,12 @@ import {
 } from "./audit-prompts.js";
 import { renderAuditHtml } from "./audit-html.js";
 import {
+  serveAudit,
+  decideServeGate,
+  newToken,
+  type AdoptOutcome,
+} from "./audit-serve.js";
+import {
   buildAuditReport,
   buildLeaderboardReport,
   buildMarketplaceReport,
@@ -4363,6 +4369,9 @@ function printUsage(command: string | undefined): void {
     "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
   );
   console.log(
+    "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
+  );
+  console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
@@ -5383,6 +5392,65 @@ function writeAuditHtml(report: AuditReport): void {
 }
 
 /**
+ * Start the live (`--serve`) adoption server: render the report with a per-run
+ * token, serve it on loopback, and run `init` in-process when a button POSTs. The
+ * security model lives in src/audit-serve.ts (token + Origin + allowlist). Blocks
+ * until the user stops it (Ctrl-C or the page's Done). Own-repo only — the caller
+ * gates this via decideServeGate, so adopt always writes into the current repo.
+ */
+async function runAuditServe(
+  report: AuditReport,
+  adoptable: AuditReport["adoptable"],
+  cliErr: (e: unknown) => string,
+): Promise<void> {
+  const token = newToken();
+  const surfaces = new Set((adoptable?.surfaces ?? []).map((s) => s.path));
+  let html: string;
+  try {
+    html = renderAuditHtml(report, { token });
+  } catch (e) {
+    console.log(`\n⚠ can't serve the live report: ${cliErr(e)}`);
+    return;
+  }
+  const adoptOne = (target: string): Promise<AdoptOutcome> => {
+    try {
+      scaffoldSpec(["--target=" + target]); // in-process; writes into cwd (own repo)
+      return Promise.resolve({
+        ok: true,
+        message: `created spec for ${target}`,
+      });
+    } catch (e) {
+      return Promise.resolve({ ok: false, message: cliErr(e) });
+    }
+  };
+  console.log(
+    "\n  Live report — create specs with one click. Ctrl-C to stop.\n",
+  );
+  await serveAudit({
+    token,
+    surfaces,
+    html,
+    runAdopt: adoptOne,
+    runAdoptAll: () => {
+      try {
+        for (const p of surfaces) scaffoldSpec(["--target=" + p]);
+        return Promise.resolve({
+          ok: true,
+          message: `created ${String(surfaces.size)} spec(s)`,
+        });
+      } catch (e) {
+        return Promise.resolve({ ok: false, message: cliErr(e) });
+      }
+    },
+    onListening: (url) => {
+      console.log(`  ${url}`);
+      if (process.stdout.isTTY) openBestEffort(url);
+    },
+  });
+  console.log("\n✓ live report closed");
+}
+
+/**
  * Run the model trigger tier with no `--prompts`: auto-generate diverse probe
  * prompts from each skill's description and measure trigger-rate (recall +
  * precision) — zero-setup. `--prompts=<file>` (handled by handleMeasure)
@@ -5947,16 +6015,39 @@ async function main(): Promise<void> {
         const finalReport: AuditReport = adoptabilityResult
           ? { ...auditReport, adoptability: adoptabilityResult }
           : auditReport;
-        // The shareable HTML report — written by default (--no-html to skip), and
-        // opened best-effort only for a human at a TTY (never spawn a browser for
-        // an agent / CI run).
-        if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(finalReport);
-        }
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
         if (!json && !args.includes("--no-json")) {
           writeAuditJson(finalReport);
+        }
+        // The HTML report has two deliveries. STATIC (default): write the
+        // shareable file whose buttons copy the `init` command. LIVE (`--serve`,
+        // or a TTY "yes"): start a loopback server whose buttons run `init` for
+        // you. The gate keeps the default a terminating, headless-safe read and
+        // restricts the write-server to your own repo (decideServeGate).
+        const serveGate = decideServeGate({
+          serveFlag: args.includes("--serve"),
+          noServeFlag: args.includes("--no-serve"),
+          json,
+          isTTY: process.stdout.isTTY && process.stdin.isTTY,
+          ownRepo: !isForeign,
+          adoptableCount: finalReport.adoptable?.surfaces.length ?? 0,
+        });
+        let serveLive = serveGate === "serve";
+        if (serveGate === "ask") {
+          const ans = (
+            await askOnce(
+              "\nOpen the live report to create specs with one click? [y/N] ",
+            )
+          ).toLowerCase();
+          serveLive = ans === "y" || ans === "yes";
+        }
+        const errMsg = (e: unknown): string =>
+          e instanceof Error ? e.message : String(e);
+        if (serveLive) {
+          await runAuditServe(finalReport, finalReport.adoptable, errMsg);
+        } else if (!json && !args.includes("--no-html")) {
+          writeAuditHtml(finalReport);
         }
       }
       break;
