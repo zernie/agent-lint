@@ -1233,8 +1233,27 @@ interface MarkdownModeTotals {
 }
 
 /**
- * Verify inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML
- * frontmatter in instruction files that aren't managed by a spec.
+ * Frontmatter mode (Level 1 — a `vigiles:` YAML block) is DISABLED in lint:
+ * KEPT IN CODE (`src/core/frontmatter.ts`, `verifyFrontmatterRules`,
+ * `vigiles generate schema`), but INERT — lint no longer reads or verifies a
+ * `vigiles:` block, so it never fires and never fails a build.
+ *
+ * WHY disabled-not-removed: the three-rung adoption ladder (inline / frontmatter
+ * / typed spec) collapsed to TWO on-ramps — inline comments (the zero-TS floor)
+ * and the typed `.spec.ts` (the source of truth). Frontmatter mode was the
+ * weakest middle rung and an undocumented-but-live surface that muddied the
+ * spec-first story (it literally confused a review). With ~no users to break,
+ * gating it off makes lint coherent (verify compiled output + inline marks +
+ * specs, nothing else) while preserving the code so the decision is reversible:
+ * flip this to `true` to re-enable. See `research/pre-release-focus.md` and the
+ * parked note in `docs/markdown-mode.md`.
+ */
+const FRONTMATTER_MODE_ENABLED: boolean = false;
+
+/**
+ * Verify inline `<!-- vigiles:enforce -->` comments (and, when
+ * {@link FRONTMATTER_MODE_ENABLED}, `vigiles:` YAML frontmatter) in instruction
+ * files that aren't managed by a spec.
  *
  * Spec mode is the source of truth when it exists, so a literal
  * `<!-- vigiles:enforce ... -->` snippet that survived into compiled
@@ -1277,14 +1296,18 @@ function verifyMarkdownModeRules(
     const inline = verifyInlineRules(filePath, silent, linterOptions);
     totals.inlineErrors += inline.errorCount;
     totals.inlineRules += inline.ruleCount;
-    const fm = verifyFrontmatterRules(
-      filePath,
-      silent,
-      new Set(inline.ruleNames),
-      linterOptions,
-    );
-    totals.frontmatterErrors += fm.errorCount;
-    totals.frontmatterRules += fm.ruleCount;
+    // Frontmatter mode is DISABLED (kept in code, inert in lint) — a `vigiles:`
+    // block is ignored, never verified. See FRONTMATTER_MODE_ENABLED.
+    if (FRONTMATTER_MODE_ENABLED) {
+      const fm = verifyFrontmatterRules(
+        filePath,
+        silent,
+        new Set(inline.ruleNames),
+        linterOptions,
+      );
+      totals.frontmatterErrors += fm.errorCount;
+      totals.frontmatterRules += fm.ruleCount;
+    }
   }
   if (
     !silent &&
