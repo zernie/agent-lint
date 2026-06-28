@@ -10,9 +10,9 @@
 
 ## RESUME HERE — TWO live branches
 
-**(1) `claude/pre-release-priorities-pw7myh` — THIS session (autonomous, founder asleep).
-Pushed, NO PR yet.** README revamp + skill/subagent spec adoption. Full vitest:
-**1726 pass / 1 fail (only env-only `dialect-drift`, CI pins it) / 11 skip.**
+**(1) `claude/pre-release-priorities-pw7myh` — THIS session (autonomous). Pushed, NO PR
+yet.** README revamp + skill/subagent spec adoption + AUDIT TRUST-FIX WAVE. Full vitest:
+**1729 pass / 1 fail (only env-only `dialect-drift`, CI pins it) / 11 skip.**
 
 **(2) `claude/lint-inline-mode-go56av` — PR #49 (Lighthouse `audit` refactor) — OPEN,
 merge HELD pending founder.** Don't merge without an explicit go. (Details below.)
@@ -41,8 +41,38 @@ merge HELD pending founder.** Don't merge without an explicit go. (Details below
    hijacks stash stack, can't run from report). NOT a contradiction of the "deterministic
    spec-creation is OUT" decision below — that was about inferring RULES; this is faithful
    TRANSCRIPTION (no rule inference), exactly what `adopt.ts` already does for CLAUDE.md.
+4. **AUDIT TRUST-FIX WAVE (3 subagents, all pushed)** — made the score trustworthy:
+   - **(a) untested = advisory, not graded** (`f4f302d`): a clean-but-untested repo is no
+     longer F. `Tested` ring is advisory (shown, excluded from overall); leaderboard appends
+     untested as a score-neutral "(advisory)" note.
+   - **(b) unified the two scorers** (`fb72e27`): `audit-score.ts` averaged 4 capped rings,
+     `leaderboard.ts` summed → SAME plugin got two grades (88 vs 52). Now ONE shared
+     `reportDeductions`+`computeIntegrityScore` in `leaderboard.ts` (weights exported); both
+     use the SUMMED model. Rings are a diagnostic breakdown; overall = 100−Σpenalties.
+   - **(c) fixed the nested-agent FALSE POSITIVE** (`c8e915f`): `scan.ts` `makeClassifier`
+     `isAgent` regex matched `agents/` ANYWHERE → `skills/<x>/agents/*.md` (skill-internal
+     docs) wrongly flagged as subagents → mis-graded Anthropic's `skill-creator` F. Now
+     excludes `skillDir/.../agentDir` (read from layout, adapter-agnostic). Verified via CC
+     docs: subagents load ONLY from top-level `agents/`+`.claude/agents/`, never under skills/.
+     Regression-tested both directions.
+   - **(d) report advisory parity** (`dcf873f`): `report/` renders the advisory Tested ring
+     neutrally (na band + "not graded — hardening signal" badge); `advisory` flows through
+     the AuditReport JSON (additive, no schemaVersion bump). `npm run build` clean.
+   - NET on the official leaderboard (`e51f865`): now **24/25 clean A, pr-review-toolkit the
+     lone 70 C** (6 real top-level agents inherit all tools). README Proof 4 reframed from
+     "even Anthropic scores F" → "a fair tool flags the ONE real outlier, not noise" (a
+     precision/trust message). FOUNDER MAY WANT TO REVISIT: Proof 4 is now near-all-A; option
+     (b) was to drop the leaderboard from the proof stack (Proofs 1-3 carry the catches).
 
 ### DO NEXT (pre-release-priorities)
+
+- **AUDIT 2nd WAVE (not started)** — the remaining pre-release audit items after the trust
+  fixes: (1) "inherits all tools" severity is still a graded −5 (DECISION OF RECORD: kept
+  graded, it's capability/blast-radius not test-coverage — only untested is advisory); a
+  future call could make it advisory too (would push pr-review-toolkit to A). (2) report
+  adoption buttons + CLI adoptable-surface nudge (research/audit-adoption-ux.md §next).
+  (3) behavioral-tier "do skills fire?" nudge + one live validation (needs model auth).
+  (4) asset refresh (pinned-CC screenshot) + dialect freshness.
 
 - **Founder review of the README** (it's a marketing asset — wants a wordsmith pass).
   Then decide: open a PR for this branch? (no PR opened yet.)
