@@ -29,6 +29,13 @@ export interface CategoryScore {
   readonly score: number | null;
   /** Relative weight in the overall (equal by default — tune later). */
   readonly weight: number;
+  /**
+   * Advisory categories are shown but EXCLUDED from the overall grade. An untested
+   * surface (or any best-practice gap) is a HARDENING signal, not a broken harness
+   * — it must never drag the grade down, so `audit` doesn't read as F on a clean
+   * repo that simply hasn't written tests yet. The grade reflects what's BROKEN.
+   */
+  readonly advisory?: boolean;
   /** Human-readable deductions / notes, worst first; empty when clean. */
   readonly findings: readonly string[];
 }
@@ -173,7 +180,9 @@ function tested(r: ScanReport): CategoryScore {
   const { score, findings } = scoreFrom([
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
   ]);
-  return { key: "Tested", score, weight: 1, findings };
+  // ADVISORY: untested surfaces are a hardening gap, not breakage — shown, but
+  // excluded from the overall grade (so a clean-but-untested repo isn't graded F).
+  return { key: "Tested", score, weight: 1, advisory: true, findings };
 }
 
 function isEmptyMachine(r: ScanReport): boolean {
@@ -220,8 +229,11 @@ export function auditScore(report: ScanReport): AuditScore {
     structure(report),
     tested(report),
   ];
+  // The grade reflects what's BROKEN: advisory categories (Tested) are shown but
+  // excluded from the overall, alongside the n/a (null) ones.
   const assessable = categories.filter(
-    (c): c is CategoryScore & { score: number } => c.score !== null,
+    (c): c is CategoryScore & { score: number } =>
+      c.score !== null && !c.advisory,
   );
   const totalWeight = assessable.reduce((s, c) => s + c.weight, 0);
   const overall =
@@ -257,7 +269,8 @@ export function formatAuditScore(s: AuditScore): string {
     const glyph = bandGlyph(c.score);
     const label = c.key.padEnd(13);
     const num = (c.score === null ? "n/a" : String(c.score)).padStart(4);
-    lines.push(`  ${glyph} ${label} ${num}  ${bar(c.score)}`);
+    const tag = c.advisory ? "  · advisory (not graded)" : "";
+    lines.push(`  ${glyph} ${label} ${num}  ${bar(c.score)}${tag}`);
     if (c.findings.length > 0) {
       lines.push(`       └ ${c.findings.join("; ")}`);
     }

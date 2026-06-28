@@ -48,7 +48,7 @@ const W_MISSING_HOOK = 15; // a hook script that doesn't exist → never runs
 const W_NO_DESCRIPTION = 10; // a skill with no usable description → can't trigger
 const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 const W_NO_CONTRACT = 5; // an agent with no `tools:` line → inherits everything
-const W_UNTESTED = 3; // a surface with no test/eval → warning-tier
+// (untested surfaces are advisory, not a penalty — see scoreReport)
 
 /** Map a 0–100 structural-health score to its letter grade (A ≥90 … F <60). */
 export function gradeFor(score: number): PluginScore["grade"] {
@@ -150,7 +150,9 @@ export function scoreReport(r: ScanReport): {
       weight: W_DANGLING_REF,
       label: "mcp_tool hook(s) incomplete / targeting an undeclared server",
     },
-    { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
+    // NB: untested surfaces are NOT a penalty — an untested surface is a hardening
+    // gap, not breakage, so it never drags the health score (it's appended as an
+    // advisory note below). The score ranks what's BROKEN.
   ];
 
   let penalty = 0;
@@ -162,6 +164,11 @@ export function scoreReport(r: ScanReport): {
   }
   // Sort issues by cost (worst first) so the report leads with what matters.
   issues.sort((a, b) => Number(b.split(" ")[0]) - Number(a.split(" ")[0]));
+  // Untested surfaces are advisory — surfaced for visibility, but they don't
+  // affect the score, so they come AFTER the real (score-affecting) issues.
+  if (r.untested > 0) {
+    issues.push(`${String(r.untested)} untested surface(s) (advisory)`);
+  }
   return { score: Math.max(0, 100 - penalty), issues };
 }
 
@@ -200,8 +207,8 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
   out.push(
     "",
     "Structural health only (no model). Weights: missing hook -15, no-description",
-    "skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5,",
-    "untested surface -3.",
+    "skill -10, broken intra-plugin ref -8, agent-without-tool-contract -5.",
+    "Untested surfaces are advisory — shown, but they don't affect the score.",
   );
   return out.join("\n");
 }
@@ -209,8 +216,8 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
 const LEADERBOARD_METHOD =
   "_Structural health only (deterministic, no model): missing hook −15, " +
   "no-description skill −10, broken intra-plugin ref −8, " +
-  "agent-without-tool-contract −5, untested surface −3. " +
-  "Behavioural columns (trigger-rate, collisions, egress) stack on top._";
+  "agent-without-tool-contract −5. Untested surfaces are advisory (shown, not " +
+  "scored). Behavioural columns (trigger-rate, collisions, egress) stack on top._";
 
 /**
  * Format a ranked leaderboard as a Markdown table — the PUBLISHABLE form (a README,
