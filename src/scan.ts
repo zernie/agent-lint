@@ -297,9 +297,25 @@ function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
   const agentRe = agent ? new RegExp(`${agent}[^/]+\\.md$`) : null;
   const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
+  // A subagent lives at the plugin's TOP-LEVEL `agents/` dir, never recursively
+  // under a skill (`skills/<x>/agents/`). Those nested files are skill-internal
+  // worker docs (e.g. Anthropic's own skill-creator), NOT dispatchable Claude
+  // Code subagents — flagging them is a false positive. The agent dir nested
+  // under the skill dir is excluded; a genuine top-level `agents/foo.md` still
+  // matches. See scan.test.ts for the regression.
+  const nestedAgentRe =
+    layout.skillDir && layout.agentDir
+      ? new RegExp(
+          `(?:^|/)${escapeRe(layout.skillDir)}/.+/${escapeRe(layout.agentDir)}/`,
+        )
+      : null;
+  const isAgent = (f: string): boolean =>
+    (agentRe?.test(f) ?? false) &&
+    !f.endsWith(".spec.ts") &&
+    !(nestedAgentRe?.test(f) ?? false);
   return {
     isSkill: (f) => skillRe?.test(f) ?? false,
-    isAgent: (f) => (agentRe?.test(f) ?? false) && !f.endsWith(".spec.ts"),
+    isAgent,
     isCommand: (f) => commandRe?.test(f) ?? false,
   };
 }

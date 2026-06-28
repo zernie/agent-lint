@@ -62,7 +62,7 @@ test("a structurally clean plugin scores 100", () => {
   assert.equal(issues.length, 0);
 });
 
-test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", () => {
+test("penalties: missing hook -15, no-desc -10, no-contract -5; untested advisory (not scored)", () => {
   assert.equal(
     scoreReport(
       report({
@@ -106,22 +106,28 @@ test("penalties: missing hook -15, no-desc -10, no-contract -5, untested -3", ()
     ).score,
     95,
   );
-  assert.equal(
-    scoreReport(
-      report({
-        skills: [
-          {
-            name: "s",
-            path: "p",
-            hasDescription: true,
-            userInvoked: false,
-            descriptionScript: null,
-          },
-        ],
-        untested: 4,
-      }),
-    ).score,
-    88,
+  // Untested surfaces are ADVISORY — they do NOT affect the score (a hardening
+  // gap is not breakage), but they're still surfaced as an advisory issue.
+  const untestedResult = scoreReport(
+    report({
+      skills: [
+        {
+          name: "s",
+          path: "p",
+          hasDescription: true,
+          userInvoked: false,
+          descriptionScript: null,
+        },
+      ],
+      untested: 4,
+    }),
+  );
+  assert.equal(untestedResult.score, 100);
+  assert.ok(
+    untestedResult.issues.some(
+      (i) => i.includes("untested") && i.includes("advisory"),
+    ),
+    "untested surfaces still surfaced as an advisory note",
   );
 });
 

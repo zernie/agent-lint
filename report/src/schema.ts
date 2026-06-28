@@ -15,6 +15,13 @@ export interface CategoryScore {
   key: CategoryKey;
   score: number | null;
   weight: number;
+  /**
+   * Advisory categories (e.g. Tested) are shown but EXCLUDED from the overall
+   * grade — an untested surface is a hardening signal, not breakage. The report
+   * renders an advisory ring neutrally (a muted "advisory" label), never as a
+   * failing/red ring that appears to drag the grade.
+   */
+  advisory?: boolean;
   findings: string[];
 }
 
@@ -57,6 +64,16 @@ export interface AdoptabilityResult {
   brokenRefs: BrokenRef[];
 }
 
+export interface AdoptableSurface {
+  path: string;
+  command: string;
+}
+
+export interface Adoptable {
+  surfaces: AdoptableSurface[];
+  createAllCommand: string;
+}
+
 export interface AuditReport {
   meta: {
     schemaVersion: number;
@@ -71,4 +88,10 @@ export interface AuditReport {
   inventory: AuditInventory;
   /** The adoption preview — present only when the model-gated tier ran. */
   adoptability?: AdoptabilityResult;
+  /**
+   * Surfaces that exist but aren't spec-managed yet, each with its adopt command,
+   * plus a "create all" command. Drives the "Create spec" / "Create all specs"
+   * command-emit affordances. Present only when there's something to adopt.
+   */
+  adoptable?: Adoptable;
 }

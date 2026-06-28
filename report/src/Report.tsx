@@ -9,16 +9,29 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
+import { Adopt } from "@/components/Adopt";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
 function CategoryCard({ c }: { c: CategoryScore }) {
   return (
     <Card className="flex flex-col items-center gap-3 p-5 text-center">
-      <Ring score={c.score} />
+      {/* Advisory categories (e.g. Tested) don't gate the grade, so they read as
+          neutral (na band) — never a failing/red ring that implies they drag it. */}
+      <Ring score={c.score} advisory={c.advisory} />
       <div>
-        <div className="text-sm font-semibold">{c.key}</div>
+        <div className="flex items-center justify-center gap-1.5 text-sm font-semibold">
+          {c.key}
+          {c.advisory && (
+            <Badge variant="outline" className="text-na">
+              advisory
+            </Badge>
+          )}
+        </div>
         <div className="mt-1 min-h-8 text-xs text-muted-foreground">
+          {c.advisory && (
+            <div className="text-na">not graded — hardening signal</div>
+          )}
           {c.findings.length > 0 ? (
             c.findings.join("; ")
           ) : (
@@ -65,7 +78,8 @@ function Stat({ n, label }: { n: number | string; label: string }) {
 }
 
 export function Report({ data }: { data: AuditReport }) {
-  const { score, recommendations, inventory, meta, adoptability } = data;
+  const { score, recommendations, inventory, meta, adoptability, adoptable } =
+    data;
   const overall = score.empty ? null : score.overall;
   const b = band(overall);
   return (
@@ -114,6 +128,19 @@ export function Report({ data }: { data: AuditReport }) {
           <CheckCircle2 size={16} /> No deterministic fixes — the structure is
           clean.
         </Card>
+      )}
+
+      {adoptable && adoptable.surfaces.length > 0 && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Create specs
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Turn these surfaces into typed specs so vigiles can verify their
+            references — fully, or one at a time.
+          </p>
+          <Adopt data={adoptable} />
+        </>
       )}
 
       {adoptability && (

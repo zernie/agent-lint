@@ -234,7 +234,7 @@ import {
   parseIntegrityHeader,
   REQUIRE_INSTRUCTIONS_SPEC_DISABLE,
 } from "./core/integrity.js";
-import { adoptMarkdown } from "./core/adopt.js";
+import { adoptMarkdown, adoptSkill, adoptAgent } from "./core/adopt.js";
 import { computeScriptCoverage } from "./core/coverage.js";
 import { findOrphanDocs, formatOrphanReport } from "./core/orphans.js";
 import { findDocRefs, formatDocRefReport } from "./core/doc-refs.js";
@@ -1708,6 +1708,112 @@ function targetHasHash(absPath: string): boolean {
  * target by `setupPillar1`. The full onboarding (both layers, deps, CI, plugin)
  * is `setup()`.
  */
+/** Classify an adoption target by its path: a `SKILL.md` is a skill, a file under
+ * an `agents/` dir is a subagent, everything else is an instruction file. Used to
+ * pick the right adopt function so `init --target=skills/x/SKILL.md` (the
+ * per-surface path the audit report points at) makes a `skill()`/`agent()` spec. */
+function surfaceKind(target: string): "skill" | "agent" | "instruction" {
+  if (/^SKILL\.md$/i.test(basename(target))) return "skill";
+  if (/(^|[/\\])agents[/\\]/.test(target)) return "agent";
+  return "instruction";
+}
+
+function logAdoptedSurface(
+  target: string,
+  specPath: string,
+  label: string,
+  unmappedKeys: string[],
+): void {
+  const note =
+    unmappedKeys.length > 0
+      ? ` (review the // NOTE — unmapped frontmatter: ${unmappedKeys.join(", ")})`
+      : "";
+  console.log(
+    `Adopted ${label} ${target} → ${specPath}${note}. ` +
+      `Run \`vigiles compile\` and review the diff.`,
+  );
+}
+
+/** Discover existing skill (`skills/<x>/SKILL.md`) and subagent (`agents/<x>.md`)
+ * surfaces — under the bare or `.claude/` roots — that don't yet have a spec, so
+ * bare `vigiles init` creates a spec for EVERY surface it can, not just the
+ * instruction file. Shallow (top-level only) so it never walks node_modules or a
+ * vendored plugin. CC paths are intentional here — `init` is the one composition
+ * point allowed to know them (see adapter-aware-lint-rules). */
+function discoverAdoptableSurfaces(cwd: string): string[] {
+  const out: string[] = [];
+  const unspecced = (rel: string): boolean =>
+    existsSync(resolve(cwd, rel)) &&
+    !existsSync(resolve(cwd, `${rel}.spec.ts`));
+  for (const root of ["skills", ".claude/skills"]) {
+    const abs = resolve(cwd, root);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${root}/${e.name}/SKILL.md`;
+      if (e.isDirectory() && unspecced(rel)) out.push(rel);
+    }
+  }
+  for (const root of ["agents", ".claude/agents"]) {
+    const abs = resolve(cwd, root);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${root}/${e.name}`;
+      if (e.isFile() && e.name.endsWith(".md") && unspecced(rel)) out.push(rel);
+    }
+  }
+  return out;
+}
+
+/** The full adoptable-surface list `audit` reports: the instruction file (when it
+ * exists hand-written, no spec) PLUS every skill/subagent surface without a spec.
+ * Same notion `init` adopts; surfaced in the AuditReport + the terminal nudge so
+ * the report's "Create spec" / "Create all specs" affordances have their paths.
+ * Composition-root only — CC paths are intentional here (like discoverAdoptableSurfaces). */
+function discoverAdoptableForAudit(
+  root: string,
+  instructionFile: string,
+): string[] {
+  const out: string[] = [];
+  const instrAbs = resolve(root, instructionFile);
+  if (
+    existsSync(instrAbs) &&
+    !targetHasHash(instrAbs) &&
+    !existsSync(resolve(root, `${instructionFile}.spec.ts`))
+  ) {
+    out.push(instructionFile);
+  }
+  out.push(...discoverAdoptableSurfaces(root));
+  return out;
+}
+
+/** The terminal "adoptable surfaces" nudge — N un-spec'd surfaces + the create-all
+ * command and up to ~5 per-surface commands (then "+K more"). "" when nothing to
+ * adopt (a fully spec-managed repo says nothing). */
+function formatAdoptableNudge(surfaces: readonly string[]): string {
+  if (surfaces.length === 0) return "";
+  const n = surfaces.length;
+  const lines = [
+    `ℹ ${String(n)} surface${n === 1 ? "" : "s"} not yet spec-managed — create specs with \`npx vigiles init\``,
+    `  (or one at a time: \`npx vigiles init --target=<path>\`)`,
+  ];
+  const shown = surfaces.slice(0, 5);
+  for (const s of shown) lines.push(`    • npx vigiles init --target=${s}`);
+  const more = n - shown.length;
+  if (more > 0) lines.push(`    • +${String(more)} more`);
+  return lines.join("\n");
+}
+
+/** A small, terse behavioral nudge — the deterministic read can't tell whether a
+ * skill actually FIRES. "" when there are no model-invocable skills. */
+function formatTriggerNudge(triggerableSkills: number): string {
+  if (triggerableSkills <= 0) return "";
+  const n = triggerableSkills;
+  return (
+    `ℹ Do your ${String(n)} skill${n === 1 ? "" : "s"} actually fire? The deterministic read can't tell — ` +
+    `run \`audit\` interactively to measure, or test with \`measureTriggerRate\` (vigiles/testing).`
+  );
+}
+
 function scaffoldSpec(args: string[]): void {
   const targetFlag = args.find((a) => a.startsWith("--target="));
   const target = targetFlag ? targetFlag.split("=")[1] : "CLAUDE.md";
@@ -1728,13 +1834,30 @@ function scaffoldSpec(args: string[]): void {
   const targetAbs = resolve(process.cwd(), target);
   if (existsSync(targetAbs) && !targetHasHash(targetAbs)) {
     const md = readFileSync(targetAbs, "utf-8");
-    const { source, tier, sectionCount } = adoptMarkdown(md, basename(target));
     mkdirSync(dirname(specAbs), { recursive: true });
-    writeFileSync(specAbs, source);
-    console.log(
-      `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
-        `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
-    );
+    const kind = surfaceKind(target);
+    if (kind === "skill") {
+      const { source, unmappedKeys } = adoptSkill(
+        md,
+        basename(dirname(target)),
+      );
+      writeFileSync(specAbs, source);
+      logAdoptedSurface(target, specPath, "skill", unmappedKeys);
+    } else if (kind === "agent") {
+      const { source, unmappedKeys } = adoptAgent(md, basename(target, ".md"));
+      writeFileSync(specAbs, source);
+      logAdoptedSurface(target, specPath, "subagent", unmappedKeys);
+    } else {
+      const { source, tier, sectionCount } = adoptMarkdown(
+        md,
+        basename(target),
+      );
+      writeFileSync(specAbs, source);
+      console.log(
+        `Adopted ${target} → ${specPath} (${tier}, ${String(sectionCount)} section${sectionCount === 1 ? "" : "s"}). ` +
+          `Run \`vigiles compile\` and review the diff; the \`/strengthen\` skill upgrades prose to verified rules.`,
+      );
+    }
     return;
   }
 
@@ -2340,7 +2463,7 @@ async function setupPillar1(
   // An explicit --target is honoured as-is; otherwise collapse a CLAUDE.md⇄
   // AGENTS.md mirror (symlink or synced) to one canonical spec, then redirect
   // into a sync tool's source slot when one would own the output.
-  const targets = targetValue
+  const instructionTargets = targetValue
     ? determineTargets(detected, targetValue, harnesses)
     : redirectSyncToolTargets(
         cwd,
@@ -2349,6 +2472,12 @@ async function setupPillar1(
           detectInstructionMirror(cwd),
         ),
       );
+  // Bare `init` (no explicit --target) also adopts every existing skill +
+  // subagent surface — "create all the specs it can", not just the instruction
+  // file. An explicit --target stays scoped to that one surface.
+  const targets = targetValue
+    ? instructionTargets
+    : [...instructionTargets, ...discoverAdoptableSurfaces(cwd)];
 
   // Create specs. An existing hand-written target is faithfully ADOPTED into a
   // spec (scaffoldSpec() does the convert), not clobbered with a blank one — so the
@@ -5583,9 +5712,18 @@ async function main(): Promise<void> {
         // HTML renders, `--json` emits, and (later) a hosted dashboard ingests.
         // Built ONCE; the rings + fix list are read off it. Pure deterministic —
         // nothing executes to produce it.
+        // Surfaces that exist but aren't spec-managed yet — the same notion
+        // `init` adopts (layout-driven instruction file + skill/subagent sweep).
+        // Surfaced in the AuditReport (the report's "Create spec" command-emit
+        // buttons read it) and the terminal nudge below.
+        const adoptableSurfaces = discoverAdoptableForAudit(
+          root,
+          adapter.layout.instructionFile,
+        );
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
+          adoptableSurfaces,
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -5605,6 +5743,18 @@ async function main(): Promise<void> {
           // flags): the deterministic, free recommendation list under the report.
           const fixes = formatRecommendations(plan);
           if (fixes) console.log("\n" + fixes);
+          // Adoption nudge: surfaces that exist but aren't spec-managed yet, with
+          // the create-all + per-surface `init` commands (the JSON carries the
+          // data in `adoptable` instead — the terminal stays human-readable).
+          const adoptNudge = formatAdoptableNudge(adoptableSurfaces);
+          if (adoptNudge) console.log("\n" + adoptNudge);
+          // A small behavioral nudge — the deterministic read can't tell whether
+          // skills actually FIRE; point at the interactive measure + the API.
+          const fireNudge = formatTriggerNudge(
+            report.skills.filter((s) => s.hasDescription && !s.userInvoked)
+              .length,
+          );
+          if (fireNudge) console.log("\n" + fireNudge);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
         // firing). A plain `audit` is a deterministic READ; these run only on

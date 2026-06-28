@@ -63,6 +63,19 @@ export const SAMPLE: AuditReport = {
     mcp: false,
     untested: 4,
   },
+  adoptable: {
+    createAllCommand: "npx vigiles init",
+    surfaces: [
+      {
+        path: "skills/deploy/SKILL.md",
+        command: "npx vigiles init --target=skills/deploy/SKILL.md",
+      },
+      {
+        path: "agents/reviewer.md",
+        command: "npx vigiles init --target=agents/reviewer.md",
+      },
+    ],
+  },
   adoptability: {
     total: 5,
     broken: 2,
