@@ -56,10 +56,18 @@ plugins-official`, Anthropic plugins live in-repo at `plugins/<name>`; list a su
 - **README asset refresh**: recapture `vigiles-audit.png` from
   `research/dogfood/audit-superpowers.html` on a PINNED-CC machine (this container's
   2.1.42-vs-2.1.187 drift banner must not be in the screenshot).
-- **Official plugins in README — STARTED** (founder: "best to use official plugins"):
-  `pr-review-toolkit` (official) is audited + featured. NEXT: audit a few MORE official
-  plugins (code-review, feature-dev, skill-creator…) for a NAMED official leaderboard to
-  replace the anonymized one (Proof 4). Method in "how official plugins were sourced" above.
+- **Official plugins in README — DONE (HYBRID, founder-chosen)**: Proofs 1-2 = community
+  catches anonymized (dead ref, dropped tool — official plugins DON'T have those); Proofs
+  3-4 = OFFICIAL + NAMED (pr-review-toolkit malformed-YAML + unrestricted review agents;
+  the all-37 Anthropic leaderboard A→F, LSP stubs excluded). KEY FACT for next session:
+  official plugins are well-formed — no dead-ref / never-available-tool / dropped-tool
+  bugs exist in them, and skill-creator's "won't register" is a LIKELY FALSE POSITIVE
+  (skill-internal agent docs, not subagents) so it was NOT featured. **Sourcing the whole
+  official marketplace: `curl -L codeload.github.com/anthropics/claude-plugins-official/
+tar.gz/refs/heads/main` works (API + git-clone are blocked, but codeload tarball isn't).**
+  Saved: research/dogfood/audit-official-{leaderboard,skill-creator,pr-review-toolkit}.txt.
+  NB the audit-RING score (pr-review-toolkit 88 B) ≠ the leaderboard score (52 F) — two
+  different metrics; README shows only the leaderboard number so they never clash.
 - **OSS FP sweep** (founder enabled "auto mode" for it): needs an open-net machine to
   gather many plugins; git-scoped here. HTTPS/curl works, git clone of others doesn't.
 - Live real-model spike for the adoption-gateway draft recall (gated on model auth).
