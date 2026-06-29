@@ -9,6 +9,7 @@ export type CategoryKey =
   | "Truthfulness"
   | "Triggering"
   | "Structure"
+  | "Safety"
   | "Tested";
 
 export interface CategoryScore {

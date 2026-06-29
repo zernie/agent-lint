@@ -51,6 +51,7 @@ export const W_NO_DESCRIPTION = 10; // a skill with no usable description → ca
 export const W_DANGLING_REF = 8; // a referenced intra-plugin file that's missing → broken path
 export const W_OVERLAP = 8; // a description collision → the wrong skill fires
 export const W_NO_CONTRACT = 5; // generic small-footgun weight (disallowedTools typo, invalid model/color)
+export const W_TRIFECTA = 20; // a HARD lethal-trifecta contract (all three legs, explicit) → a declared prompt-injection exfil path
 // Two things are advisory, NOT graded penalties (shown, never scored — see scoreReport):
 //   - untested surfaces — a hardening gap, not breakage.
 //   - an agent that inherits all tools (no `tools:` line) — see reportDeductions for why.
@@ -87,8 +88,21 @@ export function reportDeductions(r: ScanReport): Deduction[] {
     (n, a) => n + a.disallowedToolIssues.length,
     0,
   );
+  // HARD lethal-trifecta findings only — an EXPLICIT contract naming all three
+  // legs (a declared exfil path). Advisory (inherits-all) trifecta findings are
+  // surfaced but NEVER graded (aligned with the inherits-all stance), so they're
+  // excluded here.
+  const hardTrifecta = r.trifectaFindings.filter(
+    (f) => f.finding.severity === "hard",
+  ).length;
 
   return [
+    {
+      n: hardTrifecta,
+      weight: W_TRIFECTA,
+      label:
+        "unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+    },
     {
       n: missingHooks,
       weight: W_MISSING_HOOK,
@@ -269,16 +283,17 @@ export function formatLeaderboard(scores: readonly PluginScore[]): string {
   });
   out.push(
     "",
-    "Structural health only (no model). Weights: missing hook -15, no-description",
-    "skill -10, broken intra-plugin ref -8, dead tool/MCP ref -8.",
-    "Inherit-all subagents and untested surfaces are advisory — shown, not scored.",
+    "Structural health only (no model). Weights: lethal-trifecta unit -20, missing",
+    "hook -15, no-description skill -10, broken intra-plugin ref -8, dead tool/MCP",
+    "ref -8. Inherit-all subagents and untested surfaces are advisory — shown, not",
+    "scored.",
   );
   return out.join("\n");
 }
 
 const LEADERBOARD_METHOD =
-  "_Structural health only (deterministic, no model): missing hook −15, " +
-  "no-description skill −10, broken intra-plugin / dead-tool ref −8. " +
+  "_Structural health only (deterministic, no model): lethal-trifecta unit −20, " +
+  "missing hook −15, no-description skill −10, broken intra-plugin / dead-tool ref −8. " +
   "Inherit-all subagents and untested surfaces are advisory (shown, not " +
   "scored). Behavioural columns (trigger-rate, collisions, egress) stack on top._";
 

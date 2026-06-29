@@ -62,7 +62,7 @@ describe("buildAuditReport", () => {
       makeReport({ untested: 3, commands: 2, mcp: true }),
       { harness: "codex", vigilesVersion: "1.0.0" },
     );
-    expect(r.score.categories.length).toBe(4); // four deterministic rings
+    expect(r.score.categories.length).toBe(5); // five deterministic rings
     expect(typeof r.score.overall).toBe("number");
     expect(r.inventory).toEqual({
       skills: 0,
