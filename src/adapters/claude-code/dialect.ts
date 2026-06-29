@@ -89,16 +89,16 @@ export const claudeCodeDialect: HarnessDialect = {
     "SessionStart",
     "SessionEnd",
   ],
-  // Events whose hook can actually VETO. A block on any other event (PostToolUse,
-  // SessionStart, …) is ignored — the action already ran (#19009). PostToolUse is
-  // deliberately EXCLUDED: its `decision:block` only feeds the model a reason, it
-  // does NOT prevent the tool that already executed, so an author who exits 2
-  // there expecting a gate has false confidence.
-  blockingHookEvents: [
-    "PreToolUse",
-    "UserPromptSubmit",
-    "Stop",
-    "SubagentStop",
+  // Events where a block decision is silently ignored ENTIRELY — no veto AND no
+  // model feedback (exit 2 there writes stderr only to the user). These are the
+  // ONLY events hook-block-ineffective flags as wrong-event. PostToolUse is NOT
+  // here: its exit 2 feeds stderr back to the model (a legitimate nudge/feedback
+  // channel), so flagging it would cry wolf (e.g. vigiles's own refs-nudge.sh).
+  noEffectHookEvents: [
+    "SessionStart",
+    "SessionEnd",
+    "Notification",
+    "PreCompact",
   ],
   // PreToolUse is the one event whose deny needs the structured
   // `hookSpecificOutput.permissionDecision:"deny"`; the legacy top-level

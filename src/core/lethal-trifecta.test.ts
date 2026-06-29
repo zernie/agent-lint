@@ -58,11 +58,10 @@ test("a Tool(restriction) suffix is stripped before classifying", () => {
   assert.ok(finding && finding.legs.private.includes("Bash"));
 });
 
-test("inherits-all (empty contract) → an advisory finding", () => {
-  const finding = lethalTrifectaIssues([], claudeCodeDialect);
-  assert.notEqual(finding, null);
-  assert.equal(finding?.severity, "advisory");
-  assert.match(finding?.message ?? "", /Inherits-all/);
+test("EXPLICIT empty contract ([]) → NO finding (zero tools can't hold a leg)", () => {
+  // The caller passes `["*"]` for inherits-all; a literal `[]` means the unit
+  // declared zero tools, so it cannot form a trifecta (don't collapse the two).
+  assert.equal(lethalTrifectaIssues([], claudeCodeDialect), null);
 });
 
 test("inherits-all (wildcard '*') → an advisory finding", () => {

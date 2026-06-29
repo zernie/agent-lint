@@ -599,9 +599,11 @@ function scanSkills(
     // invocable skill can be hijacked by attacker content, so a user-invoked one is
     // excluded. A skill with no `allowed-tools` line inherits all → advisory.
     const skillTools = parseAgentToolList(md, "allowed-tools");
+    // No `allowed-tools:` line (null) → inherits all → wildcard sentinel; an
+    // EXPLICIT empty `[]` means zero tools → no trifecta (don't collapse them).
     const trifecta = userInvoked
       ? null
-      : lethalTrifectaIssues(skillTools ?? [], dialect);
+      : lethalTrifectaIssues(skillTools ?? ["*"], dialect);
     out.push({
       name: fm.name ?? skillName(path),
       path,
@@ -687,9 +689,10 @@ function scanAgents(
         unknown: surface.unknown,
       },
       // The lethal trifecta: a subagent whose contract grants all three legs. An
-      // inherits-all agent (tools === null → empty list here) is the advisory case
-      // that `lethalTrifectaIssues` handles. One detector, no drift.
-      trifecta: lethalTrifectaIssues(tools ?? [], dialect),
+      // inherits-all agent (no `tools:` line → tools === null) is the advisory
+      // case — pass the wildcard sentinel so it's distinguished from an EXPLICIT
+      // empty `tools: []` (zero tools → no trifecta). One detector, no drift.
+      trifecta: lethalTrifectaIssues(tools ?? ["*"], dialect),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1122,18 +1125,51 @@ function collectDelegationTrifecta(
 }
 
 /**
- * Build `hookBlockIssues` entries from the resolved hook list. Only hooks with a
- * known EVENT are inspected — a hooks-array format we don't parse events for is
- * skipped (an undefined event would falsely read as "non-blocking").
+ * Build `hookBlockIssues` entries by walking the canonical object-keyed-by-event
+ * settings shape PER REGISTRATION — so a script registered under several events
+ * is inspected under EACH (no de-dup by script path), inline one-liners are
+ * included (script token → null, inspect the command), and a script token is
+ * resolved to its ABSOLUTE on-disk path against the plugin root (not the caller's
+ * cwd). Addresses the gaps a de-duplicated `ScanHook[]` would miss.
  */
-function hookScriptEntries(hooks: readonly ScanHook[]): HookScriptEntry[] {
-  return hooks
-    .filter((h) => typeof h.event === "string" && h.event.length > 0)
-    .map((h) => ({
-      event: h.event as string,
-      command: h.command,
-      scriptPath: h.status === "ok" ? h.script : null,
-    }));
+function collectHookBlockEntries(
+  hooksObj: unknown,
+  root: string,
+  pluginRootToken: string,
+): HookScriptEntry[] {
+  if (
+    hooksObj === null ||
+    typeof hooksObj !== "object" ||
+    Array.isArray(hooksObj)
+  ) {
+    return [];
+  }
+  const out: HookScriptEntry[] = [];
+  for (const [event, arr] of Object.entries(
+    hooksObj as Record<string, unknown>,
+  )) {
+    if (!Array.isArray(arr)) continue;
+    for (const entry of arr) {
+      const hookList = (entry as { hooks?: unknown }).hooks;
+      if (!Array.isArray(hookList)) continue;
+      for (const h of hookList) {
+        const cmd = (h as { command?: unknown }).command;
+        if (typeof cmd !== "string" || cmd.length === 0) continue;
+        const tok = (cmd.match(SCRIPT_RE) ?? [])[0];
+        let scriptPath: string | null = null;
+        if (tok !== undefined) {
+          const resolved = resolveScript(tok, root, pluginRootToken, cmd);
+          if (resolved.status === "ok") {
+            scriptPath = isAbsolute(resolved.script)
+              ? resolved.script
+              : resolve(root, resolved.script);
+          }
+        }
+        out.push({ event, command: cmd, scriptPath });
+      }
+    }
+  }
+  return out;
 }
 
 /** Extract (event, matcher) pairs from the canonical object-keyed hooks settings. */
@@ -1256,13 +1292,20 @@ export function scanPlugin(
       lay.surfaceDirs,
     ),
     delegationTrifecta: collectDelegationTrifecta(agents, dialect),
-    hookBlockFindings: dialect.blockingHookEvents
-      ? hookBlockIssues(hookScriptEntries(hooks), {
-          blockingEvents: new Set(dialect.blockingHookEvents),
-          permissionDecisionEvents: new Set(
-            dialect.permissionDecisionHookEvents ?? [],
+    hookBlockFindings: dialect.noEffectHookEvents
+      ? hookBlockIssues(
+          collectHookBlockEntries(
+            loaded.settings.hooks,
+            resolve(dir),
+            lay.pluginRootToken,
           ),
-        })
+          {
+            noEffectEvents: new Set(dialect.noEffectHookEvents),
+            permissionDecisionEvents: new Set(
+              dialect.permissionDecisionHookEvents ?? [],
+            ),
+          },
+        )
       : [],
     hookMatcherFindings: hookMatcherIssues(
       collectHookMatchers(loaded.settings.hooks),
@@ -1677,7 +1720,14 @@ export function formatScanReport(r: ScanReport): string {
     r.frontmatterIssues.length +
     r.frontmatterValueIssues.length +
     r.mcpIssues.length +
-    r.mcpHookIssues.length;
+    r.mcpHookIssues.length +
+    r.skillResourceIssues.length +
+    r.skillFenceIssues.length +
+    r.pluginLayoutIssues.length +
+    r.hookBlockFindings.length +
+    r.hookMatcherFindings.length;
+  // NB delegationTrifecta (like the per-unit trifecta) is an advisory ⚠ RISK, not
+  // a ✗ structural defect, so — consistent with trifectaFindings — it isn't summed.
   out.push(
     broken === 0
       ? "✓ no structural issues found"

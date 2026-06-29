@@ -5,11 +5,13 @@
  *
  * 1. **wrong-event** — the script tries to block (contains `exit 2`, a legacy
  *    `"decision":"block"` JSON, or a `"permissionDecision":"deny"`) but is
- *    registered on an event that CANNOT block (the action has already run, or
- *    the harness ignores the deny field on that event). Real bug #19009: authors
- *    copied a blocking template onto a PostToolUse hook and believed the gate was
- *    in place, but PostToolUse fires AFTER the tool runs — exit 2 there is a
- *    "blocking error" in the logs, not an actual veto.
+ *    registered on an event where a block is SILENTLY IGNORED ENTIRELY —
+ *    SessionStart / SessionEnd / Notification / PreCompact, where exit 2 writes
+ *    stderr only to the user (no veto, no model feedback). The author believes a
+ *    gate is in place; nothing happens. (#19009 names the class.) NB `PostToolUse`
+ *    is deliberately NOT flagged: there exit 2 feeds stderr back to the model — a
+ *    legitimate FEEDBACK channel (a nudge/lint hook), not a failed block, and the
+ *    block-vs-feedback intent isn't deterministically separable.
  *
  * 2. **wrong-field** — the hook IS on a permission-gated event (e.g. PreToolUse)
  *    but emits the LEGACY top-level `"decision":"block"` field instead of the
@@ -71,11 +73,20 @@ export interface HookScriptEntry {
 /** Options for {@link hookBlockIssues}. All fields are injectable for testability. */
 export interface HookBlockOptions {
   /**
-   * Events on this harness whose hooks CAN veto/block (injected from the dialect).
-   * A hook on any OTHER event cannot block — exit 2 or a deny field there is a
-   * "blocking error" at best, a silent no-op at worst.
+   * Events on this harness where a block decision (`exit 2` / a deny field) is
+   * SILENTLY IGNORED ENTIRELY — no veto AND no feedback to the model (Claude
+   * Code's `SessionStart`/`SessionEnd`/`Notification`/`PreCompact`: exit 2 there
+   * only writes stderr to the user). These are the ONLY events the "wrong-event"
+   * check fires on, so it stays FP-safe.
+   *
+   * Deliberately EXCLUDES `PostToolUse`: a `PostToolUse` exit 2 feeds stderr back
+   * to the model — a legitimate FEEDBACK channel, NOT a failed block — so flagging
+   * it would cry wolf on every nudge/lint hook (the dogfood lesson: vigiles's own
+   * `refs-nudge.sh` is exactly that shape). A hook that exits 2 on `PostToolUse`
+   * intending to BLOCK is misguided, but that intent is not deterministically
+   * distinguishable from feedback, so we don't flag it.
    */
-  readonly blockingEvents: ReadonlySet<string>;
+  readonly noEffectEvents: ReadonlySet<string>;
   /**
    * Events that require the structured `permissionDecision` field for a deny
    * (e.g. `PreToolUse`). On these events the legacy top-level `"decision":"block"`
@@ -101,7 +112,7 @@ export interface HookBlockOptions {
  * `;`, `&`, `|`) and word-boundary / separator after `2` — so `exit 200` and
  * `--exit-code 2` are NOT matched.
  */
-const EXIT_2 = /(^|[\s;&|])exit\s+2(\s|;|$)/m;
+const EXIT_2 = /(^|[\s;&|])exit\s+2(\s|;|$|['")])/m;
 
 /**
  * A legacy top-level `"decision":"block"` or `"decision":"deny"` JSON field.
@@ -144,7 +155,7 @@ export function hookBlockIssues(
   entries: readonly HookScriptEntry[],
   opts: HookBlockOptions,
 ): HookBlockFinding[] {
-  const { blockingEvents, permissionDecisionEvents } = opts;
+  const { noEffectEvents, permissionDecisionEvents } = opts;
   const readFile = opts.readFileSync ?? defaultReadFile;
   const findings: HookBlockFinding[] = [];
   const seen = new Set<string>();
@@ -163,22 +174,24 @@ export function hookBlockIssues(
     const triesBlock = hasExit2 || hasDecisionBlock || hasPermissionDeny;
     if (!triesBlock) continue;
 
-    const isBlockingEvent = blockingEvents.has(entry.event);
-    const isPermissionEvent = permissionDecisionEvents.has(entry.event);
-
     let kind: HookBlockKind | null = null;
     let message = "";
 
-    if (!isBlockingEvent) {
-      // wrong-event: the hook tries to block on an event that cannot block.
+    if (noEffectEvents.has(entry.event)) {
+      // wrong-event: a block on an event where it's silently ignored entirely
+      // (no veto AND no feedback — stderr goes to the user, not the model).
       kind = "wrong-event";
       message =
         `This hook tries to block (exit 2 / "decision" / "permissionDecision") ` +
-        `but "${entry.event}" hooks cannot veto — the action already ran and the ` +
-        `block is silently ignored (the harness may print a "blocking error" to ` +
-        `logs, but nothing is prevented). Move the gate to a blocking event ` +
-        `(e.g. PreToolUse) so the deny fires BEFORE the action.`;
-    } else if (isPermissionEvent && hasDecisionBlock && !hasPermissionDeny) {
+        `but on "${entry.event}" a block decision is silently ignored — it can ` +
+        `neither veto nor feed the model back (stderr goes only to the user). ` +
+        `Nothing is prevented. Move the gate to a blocking event (e.g. PreToolUse) ` +
+        `so the deny fires BEFORE the action.`;
+    } else if (
+      permissionDecisionEvents.has(entry.event) &&
+      hasDecisionBlock &&
+      !hasPermissionDeny
+    ) {
       // wrong-field: on a permission-gated event, uses the legacy field.
       kind = "wrong-field";
       message =

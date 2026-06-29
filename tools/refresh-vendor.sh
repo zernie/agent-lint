@@ -6,7 +6,7 @@
 # Usage:  bash tools/refresh-vendor.sh
 #
 # To bump a plugin: change its SHA below, run this, then update the matching
-# `./vendor/<name>@<short>` path in the real-*.harness.mjs test and commit.
+# `../../test/dogfood/<name>@<short>` path in the real-*.harness.mjs test and commit.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,8 +34,13 @@ fetch() { # repo sha -> $TMP/<name>
   echo "$TMP/$name"
 }
 
-rm -rf "$VENDOR"
+# Refresh ONLY the three regenerated plugin dirs — NEVER wipe the whole corpus.
+# test/dogfood/ also holds README.md, the *.COVERAGE.md files, and the
+# madappgang/davila7 true-positive fixtures (consumed by src/scan-vendor.test.ts)
+# that this script does not recreate.
 mkdir -p "$VENDOR"
+rm -rf "$VENDOR"/superpowers@* "$VENDOR"/wshobson-accessibility@* \
+  "$VENDOR"/oh-my-claudecode@*
 
 # --- obra/superpowers: hooks/hooks.json convention + 2 skills ---------------
 SP="$(fetch "$SUPERPOWERS_REPO" "$SUPERPOWERS_SHA")"

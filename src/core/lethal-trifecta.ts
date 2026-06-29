@@ -253,8 +253,11 @@ export function lethalTrifectaIssues(
   dialect: HarnessDialect,
 ): TrifectaFinding | null {
   const hasWildcard = tools.some((t) => isWildcard(baseTool(t)));
-  // An empty contract is inherits-all too (no `tools:` line → every tool).
-  if (tools.length === 0 || hasWildcard) {
+  // Inherits-all is signalled by a WILDCARD (the caller passes `["*"]` for an
+  // absent `tools:` line). An EXPLICIT empty `[]` is the opposite — zero tools,
+  // so it cannot hold any leg; it falls through to classify as no-trifecta. (The
+  // caller must distinguish: `tools ?? ["*"]`, never `tools ?? []`.)
+  if (hasWildcard) {
     const legs: TrifectaLegs = {
       private: ["*"],
       untrusted: ["*"],

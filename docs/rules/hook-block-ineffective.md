@@ -8,34 +8,31 @@ Two distinct failure shapes are detected:
 
 ## What it flags
 
-### wrong-event — blocking mechanism on a non-blocking event
+### wrong-event — blocking mechanism on a NO-EFFECT event
 
-A hook registered on `PostToolUse`, `SessionStart`, `Notification`, or
-`SessionEnd` that contains a blocking mechanism (`exit 2`, `"decision":"block"`,
-`"permissionDecision":"deny"`). Those events fire **after** the action has
-already happened — the harness ignores any attempt to veto them:
-
-```jsonc
-"hooks": {
-  "PostToolUse": [{
-    "hooks": [{ "type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh" }]
-  }]
-}
-```
-
-with `guard.sh` containing:
+A hook registered on `SessionStart`, `SessionEnd`, `Notification`, or
+`PreCompact` that contains a blocking mechanism (`exit 2`, `"decision":"block"`,
+`"permissionDecision":"deny"`). On these events a block decision is **silently
+ignored entirely** — it can neither veto nor feed the model back (`exit 2` there
+writes stderr only to the user). The author believes a gate is in place; nothing
+happens.
 
 ```sh
 #!/bin/sh
-# Tries to block — but PostToolUse already ran. This exit 2 is a
-# "blocking error" in logs, not an actual veto.
+# Registered on SessionStart — this exit 2 does nothing (stderr → user only).
 exit 2
 ```
 
-→ flagged as `wrong-event`: `PostToolUse` hooks cannot veto.
+→ flagged as `wrong-event`. Move the gate to a **blocking event** (`PreToolUse`,
+`UserPromptSubmit`, `Stop`, or `SubagentStop`) so the deny fires before the action.
 
-Move the gate to a **blocking event** (`PreToolUse`, `UserPromptSubmit`, `Stop`,
-or `SubagentStop`) so the deny fires before the action.
+> **`PostToolUse` is deliberately NOT flagged.** There, `exit 2` feeds stderr
+> back to the model — a legitimate **feedback** channel (a nudge/lint hook), not
+> a failed block. A hook that exits 2 on `PostToolUse` _intending_ to block is
+> misguided, but that intent isn't deterministically distinguishable from
+> feedback, so flagging it would cry wolf on every nudge hook (including
+> vigiles's own `refs-nudge.sh`). The don't-cry-wolf line: flag only events where
+> a block does **nothing at all**.
 
 ### wrong-field — correct event, legacy JSON field
 
@@ -67,12 +64,14 @@ The detector is **conservative by design** — default severity is `warn`, never
   `--exit-code 2` as an argument are NOT matched.
 - **JSON patterns** (`"decision":"block"`, `"permissionDecision":"deny"`) are
   matched as literal substrings — no partial JSON walking.
-- An **unknown event** (not in the dialect's blocking or non-blocking catalog)
-  is **never flagged** — only events the injected sets positively classify are
-  acted on.
-- The **harness event sets are injected** from the dialect (never hard-coded):
-  a Codex adapter injects its own sets, so the detector is harness-neutral
-  (same `core ⊄ adapter` pattern as `verifyHookEvents` and `verifyToolContract`).
+- Only events in the dialect's **no-effect set** (`SessionStart` / `SessionEnd` /
+  `Notification` / `PreCompact`) are flagged for `wrong-event`; everything else —
+  including `PostToolUse` (feedback) and the genuinely-blocking events — is left
+  alone.
+- The **no-effect event set is injected** from the dialect (`noEffectHookEvents`,
+  never hard-coded): a Codex adapter injects its own, so the detector is
+  harness-neutral (same `core ⊄ adapter` pattern as `verifyHookEvents`). Absent ⇒
+  the check doesn't run for that harness.
 
 Same detector used by `vigiles audit` (`scan`) and the `hook-block-ineffective`
 lint rule — one detector, two callers, no drift.

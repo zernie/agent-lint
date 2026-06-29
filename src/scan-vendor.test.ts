@@ -95,17 +95,17 @@ test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + mal
   );
 });
 
-// TRUE-POSITIVE — a real MIT hook component (davila7/claude-code-templates) whose
-// own description says it "blocks deployments", implemented as a PostToolUse hook
-// that `exit 2` — which CANNOT veto (the build already ran). The canonical #19009
-// false-confidence bug, locked against the wild. See SOURCES.md.
-test("true-positive: davila7 perf-budget 'guard' exit-2s on PostToolUse (false confidence)", () => {
+// FP-GUARD (calibration) — a real MIT hook component (davila7/claude-code-templates)
+// whose description says it "blocks deployments" but is a PostToolUse hook that
+// `exit 2`s. On PostToolUse, exit 2 FEEDS stderr back to the model (a legitimate
+// channel), so the detector must NOT flag it — block-vs-feedback intent isn't
+// deterministically separable, and flagging would cry wolf on every nudge/lint
+// hook (incl. vigiles's own refs-nudge.sh). See test/dogfood/README.md.
+test("calibration: davila7 PostToolUse exit-2 hook is NOT flagged (feedback, not a failed block)", () => {
   const r = scanPlugin(vendored("davila7-perf-guard"));
-  const wrongEvent = r.hookBlockFindings.find(
-    (f) => f.event === "PostToolUse" && f.kind === "wrong-event",
-  );
-  assert.ok(
-    wrongEvent,
-    "a PostToolUse hook that exits 2 must fire hook-block-ineffective (wrong-event)",
+  assert.deepEqual(
+    r.hookBlockFindings,
+    [],
+    "a PostToolUse exit-2 hook must not fire hook-block-ineffective (it's a feedback channel)",
   );
 });
