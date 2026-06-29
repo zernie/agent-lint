@@ -11,7 +11,10 @@
 
 **Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN, `mergeable_state: CLEAN`**
 (all 6 checks GREEN incl. e2e — the egress red was flaky; merge is the founder's call).
-Title `feat!:` (frontmatter disable is breaking; `validate` checks the TITLE). ~37 commits.
+Title `feat!:` (frontmatter disable is breaking; `validate` checks the TITLE). ~43 commits.
+NEXT DECISION (founder): the benchmark "does it help" breadth needs a KNOWN-HARD task
+source (SWE-bench-style) — OR lead now with the findings we HAVE (compression debunk +
+planning-is-overhead = "most hyped skills are cost, not benefit"). See benchmark §3.
 Started as a README brevity pass; became a large **audit / adoption / lint coherence +
 features** wave, then **audit-eval-thickening**, then **ecosystem-benchmark pilots**
 (below). CI was red three times from MASKED failures (each fix surfaced the next):
@@ -60,13 +63,19 @@ Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
   harness; verify proves each discriminates good/bad, no model). For the NON-compression
   "makes-it-better" claims, which need a baseline that FAILS.
 - **Headroom benchmark** (`bench/evals/headroom-pilot.eval.mjs`) — A/B of an
-  edge-case-first planning skill. KEY FINDING: textbook algos (merge-intervals, roman)
-  have NO headroom — haiku aces them 100% (memorized) → 0pp lift unmeasurable. Added a
-  multi-requirement `parse-query` task (naive parser drops 3/6 rules) to create real
-  headroom; its A/B was RUNNING at session end (see `/tmp/bench/headroom2.log` — ephemeral;
-  re-run `VIGILES_TASKS=parse-query node bench/evals/headroom-pilot.eval.mjs`). LESSON:
-  hand-crafting tasks a capable model fails is HARD; a credible "does planning help"
-  benchmark likely needs a known-hard task source (SWE-bench-style) — a founder call.
+  edge-case-first planning skill. CONCLUSIVE FINDING: all THREE hand-crafted tasks
+  (merge-intervals, roman, AND the 6-rule parse-query) hit 100% baseline on haiku — it's
+  a capable coder, so NO headroom and 0pp lift everywhere. The real signal: on parse-query
+  the planning skill spent ~88% MORE output (2584→4850 tok) for ZERO gain → on solvable
+  tasks a "do-more" skill is PURE OVERHEAD (the compression debunk's shape). LESSON: hand-
+  crafting tasks a capable model fails is unreliable; measuring "does planning HELP" needs
+  a KNOWN-HARD source (SWE-bench-lite-style) — a founder call, not more quota. The pipeline
+  - executing checks all WORK; the gap is the task source. Full record: `research/audit-
+eval-thickening-and-gate.md` §3 PILOT RESULTS.
+- **Codex P2 fix** (post-benchmark): `runAutoTrigger` omitted the gate section when the
+  eval was UNAVAILABLE (Codex / no `claude` CLI) — read as "no gate skills" though consent
+  advertised them. Now shows it when gate skills were DETECTED (loud "unavailable" note;
+  no-silent-skips).
 
 ### What landed this session (in order)
 
