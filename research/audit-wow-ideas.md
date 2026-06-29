@@ -267,3 +267,80 @@ false-confidence hook audit (#2/#3/#6)**, shipped as a new **Safety ring**. All 
 side-effect-free, high-precision, and structurally impossible for the 432-rule linters — and they
 turn a green A into "your agent can read your secrets and exfiltrate them, and your safety hook
 doesn't fire." That is the "oh shit."
+
+---
+
+# Appendix D — Flue poach (2026-06-29): a typed TS harness validates the bet + opens surfaces
+
+Flue (flueframework.com, withastro/flue — Fred Schott / the Astro team, "The Open Agent
+Framework", 1.0 beta) is a **programmable TypeScript agent harness**: you author
+`defineAgent()` / `defineTool()` / `defineSkill()` / `defineWorkflow()` / `defineAgentProfile()`
+(subagents) in TYPED TS, with **Valibot input/output schemas** on tools and workflows, and it
+ALSO **imports existing Claude Code `SKILL.md` directories** (same progressive-disclosure
+activation). Layout: `agents/{name}.ts`, `src/workflows/`, `flue.config.ts`, `.env`; model
+specifiers are `provider/model` (`anthropic/claude-sonnet-4-6`). Code-module harness (in-process,
+no shell hooks) — the OpenCode capability row. Powered by "Pi" harness; runs on Node/Cloudflare.
+
+**Why it matters:** Flue is a RUNTIME framework (it RUNS agents); vigiles is the PRE-RUN
+verifier/compiler (it CHECKS them). Complementary, not competitive — and Flue independently chose
+**typed authoring + typed handoffs**, which is exactly vigiles's typed-spec + Supplies/pipe moat.
+A second team betting on "the harness is a typed program, not prose" is validation. Flue also adds
+a 4th adapter candidate, and because it imports CC `SKILL.md`, vigiles ALREADY partially verifies a
+Flue repo (the SKILL.md half) today.
+
+## Poached ideas, ranked by on-moat × novelty
+
+**Sharpest (on-moat, deterministic, linter-impossible):**
+
+- **F1 — Capability-diff across the SUBAGENT INHERITANCE TREE ★.** Flue subagents "inherit model
+  - tools from the parent, add their own." So a child's EFFECTIVE capability = parent ∪ own, and
+    the **lethal trifecta can straddle the delegation boundary** (parent grants Read+WebFetch, child
+    adds Bash → exfil across the edge) — invisible to a per-unit check. Extends the trifecta detector
+    I'm shipping now from one unit to the capability UNION over a delegation/inheritance tree. This IS
+    the "capability-diff at PR time / blast-radius" moat (#2 of the typed-spec moat) made concrete.
+    Applies to CC skill→agent chains too (effective union), not just Flue. NEW, FP-safe-able, nobody
+    does it.
+- **F2 — Typed tool/workflow I/O handoff verification ★.** Flue tools + workflows carry Valibot
+  input/output schemas; a delegation that passes a shape the callee's input schema rejects is a
+  runtime Valibot throw. vigiles's pipe()/Supplies does this at COMPILE time — so verify a Flue (or
+  CC railway) handoff chain's schemas line up PRE-RUN (the whole positioning: pre-run > runtime
+  throw). Flue choosing typed I/O is the market signal the typed-composition moat is real.
+- **F3 — Model-specifier resolution (provider/model) ★.** Flue/Codex/multi-provider use
+  `provider/model` ids. Generalize vigiles's existing close-typo `model:` check to verify a
+  `provider/model` specifier resolves to a real, non-deprecated model across providers — a typo'd or
+  retired model is a silent failure. One detector, extends the frontmatter-value rule.
+
+**New SURFACES (the user invited these — "new ones are interesting too"):**
+
+- **F4 — Workflows as a first-class audit surface.** vigiles audits skills/agents/hooks/MCP/commands
+  but not WORKFLOWS, which Flue (and LangGraph/CrewAI/Agent SDK) make central. We already have
+  `validateRailway` (unknown delegate target, empty railway, bounded recovery) — PRODUCTIZE it as a
+  `workflow` audit surface: input/output schema present, every step handoff lines up (F2), every
+  delegate resolves, no dead branch. Maps to Flue `defineWorkflow` AND our own railway().
+- **F5 — Tool DEFINITIONS as a surface.** vigiles checks a subagent's tool CONTRACT (which tools it
+  may use) but not tool DEFINITIONS. Flue makes `defineTool` first-class + typed. New surface: a
+  tool's I/O schema is well-formed, its run-handler effects match its declared permission/effect
+  floor (the effect-surface moat applied to a tool body), names don't collide.
+- **F6 — Harness-portability lint ("write once, deploy anywhere").** Flue's pitch is portability;
+  vigiles's CLAUDE.md⇄AGENTS.md mirror + skillFrontmatter profiles are the verification analog. Flag
+  a skill/agent relying on a harness-ONLY frontmatter key (inert under another targeted harness) when
+  a repo targets several — "this won't behave the same on Codex/Flue."
+
+**Adapter / strategic:**
+
+- **F7 — A `vigiles/flue` adapter (4th harness).** 5 ports; code-module (shellHooks:false, like
+  OpenCode). Low-hanging FIRST STEP: detect `flue.config.ts` and verify the SKILL.md dirs it imports
+  - `agents/*.ts` model specifiers + MCP — vigiles already does the SKILL.md half. The TS-defined
+    skills/tools need AST parsing (not frontmatter) — the bigger lift.
+- **F8 — Workflow event-history as a Trace source (test tier).** Flue workflows expose
+  `runId` + `client.runs.events(runId)` — a deterministic event history. vigiles's Trace check
+  vocabulary could ASSERT over a Flue run's events (new transport, same checks). Confirms the
+  observability bridge (OTel-GenAI spans from the test tiers, runtime-guardrails-observability.md).
+
+**Confirmations (not new, but Flue validates direction):** typed-as-source-of-truth (the whole
+spec→compile thesis), the sandbox/confinement direction (Flue ships a Sandbox API), OTel/Braintrust
+observability demand.
+
+**Top pick to build:** **F1 (capability-diff across the inheritance/delegation tree)** — it's the
+direct next increment on the trifecta work in flight, deterministic, linter-impossible, and it's the
+blast-radius moat made shippable. F3 (model-specifier) is the cheapest quick win.
