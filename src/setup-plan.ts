@@ -160,6 +160,11 @@ export const NUDGE_RULES = [
   "unmarked-refs",
   "lethal-trifecta",
   "skill-resource-resolves",
+  "skill-missing-fence",
+  "plugin-dir-layout",
+  "delegation-trifecta",
+  "hook-block-ineffective",
+  "hook-matcher",
 ] as const;
 
 export function mergeProjectConfig(

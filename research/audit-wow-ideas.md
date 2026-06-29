@@ -248,13 +248,22 @@ in a typed spec. That overlap is the adoption ladder (markdown floor → typed s
 concrete: a user starts at DETECT (zero adoption, audit on any repo) and graduates to
 PREVENT as they adopt specs/compiled hooks.
 
-PLANNED (the OSS-scan harvest, all DETECT-mode, mostly S-effort, deterministic, FP-safe):
-the static false-confidence hook detect (the audit half of what compiled hooks already
-PREVENT — needed because audit runs on strangers' hand-written hooks with zero adoption),
-invisible-skill (missing `---`), secrets-in-config / settings.local-not-gitignored,
-dangerous-default-permissions, `.env`-deny-Bash-bypass, `@import` resolution, instruction-
-file truncation limit, skill-description >250-char cap. Build each detector → audit + lint,
-fix message points at the PREVENT path (compiled hook / typed spec) where one exists.
+SHIPPED since (all DETECT-mode, deterministic, FP-safe, audit + lint, one-detector-no-drift):
+`skill-missing-fence` (the invisible-skill / missing-`---` check), `plugin-dir-layout`
+(functional dirs misplaced inside `.claude-plugin/`), and `delegation-trifecta` (the
+capability-diff across the subagent delegation tree — a lethal trifecta that emerges across an
+edge though no single unit trips it; the F1 idea from the Flue poach, Appendix D), plus the two
+hook false-confidence detectors: `hook-block-ineffective` (block-on-non-blocking-event #19009 +
+the legacy-`decision`-field-on-PreToolUse case) and `hook-matcher` (tool-name typo / malformed or
+undeclared MCP matcher form). The `hook-block` blocking-event semantics live on the dialect
+(`blockingHookEvents` / `permissionDecisionHookEvents`), so the check runs only where a harness
+declares them (Claude Code today; Codex when added).
+
+PLANNED (the remaining OSS-scan harvest, all DETECT-mode, mostly S-effort, deterministic,
+FP-safe): secrets-in-config / settings.local-not-gitignored, dangerous-default-permissions,
+`.env`-deny-Bash-bypass, `@import` resolution, instruction-file truncation limit,
+skill-description >250-char cap. Build each detector → audit + lint, fix message points at the
+PREVENT path (compiled hook / typed spec) where one exists.
 
 KEY HONESTY for the public table: only SHIPPED handling goes in the matrix cells; planned
 checks live in a clearly-marked "On the roadmap" list (never claim vaporware as a current

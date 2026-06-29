@@ -89,6 +89,21 @@ export const claudeCodeDialect: HarnessDialect = {
     "SessionStart",
     "SessionEnd",
   ],
+  // Events whose hook can actually VETO. A block on any other event (PostToolUse,
+  // SessionStart, …) is ignored — the action already ran (#19009). PostToolUse is
+  // deliberately EXCLUDED: its `decision:block` only feeds the model a reason, it
+  // does NOT prevent the tool that already executed, so an author who exits 2
+  // there expecting a gate has false confidence.
+  blockingHookEvents: [
+    "PreToolUse",
+    "UserPromptSubmit",
+    "Stop",
+    "SubagentStop",
+  ],
+  // PreToolUse is the one event whose deny needs the structured
+  // `hookSpecificOutput.permissionDecision:"deny"`; the legacy top-level
+  // `decision` field is ignored there.
+  permissionDecisionHookEvents: ["PreToolUse"],
   // Claude Code natively reads CLAUDE.md only — it does NOT auto-load AGENTS.md
   // (anthropics/claude-code#34235 is open; AGENTS.md works solely via an
   // `@AGENTS.md` import inside CLAUDE.md or a symlink). AGENTS.md is the

@@ -466,6 +466,11 @@ describe("loadConfig", () => {
       "mcp-hook-target-resolves": "warn",
       "lethal-trifecta": "warn",
       "skill-resource-resolves": "warn",
+      "skill-missing-fence": "warn",
+      "plugin-dir-layout": "warn",
+      "delegation-trifecta": "warn",
+      "hook-block-ineffective": "warn",
+      "hook-matcher": "warn",
     });
   });
 

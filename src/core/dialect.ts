@@ -43,6 +43,22 @@ export interface HarnessDialect {
   readonly knownMcpServers?: readonly string[];
   /** Hook event names the harness fires. */
   readonly hookEvents: readonly string[];
+  /**
+   * The subset of `hookEvents` whose hooks can actually VETO/BLOCK an action (a
+   * deny is respected). A block decision (`exit 2` / a deny field) on any OTHER
+   * event is silently ignored — the action already ran. The basis for the
+   * `hook-block-ineffective` "wrong-event" check. Optional (additive,
+   * non-breaking) — absent ⇒ the harness's blocking semantics are undeclared and
+   * the check does not run for it.
+   */
+  readonly blockingHookEvents?: readonly string[];
+  /**
+   * The subset of blocking events whose deny REQUIRES the structured
+   * `permissionDecision` field (e.g. Claude Code's `PreToolUse`), where the
+   * legacy top-level `decision` field is silently ignored. The basis for the
+   * `hook-block-ineffective` "wrong-field" check. Optional (additive).
+   */
+  readonly permissionDecisionHookEvents?: readonly string[];
   /** Instruction-file targets the harness reads (also the h1 heading). */
   readonly instructionTargets: readonly string[];
   /** The env token expanded to the plugin root in hook commands. */

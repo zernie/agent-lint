@@ -56,6 +56,29 @@ import {
   type SkillResourceFinding,
 } from "./core/skill-resources.js";
 import {
+  skillMissingFence,
+  type SkillFenceFinding,
+} from "./core/skill-missing-fence.js";
+import {
+  pluginDirLayoutIssues,
+  type PluginLayoutFinding,
+} from "./core/plugin-dir-layout.js";
+import {
+  delegationTrifectaIssues,
+  type CapabilityNode,
+  type DelegationTrifectaFinding,
+} from "./core/delegation-trifecta.js";
+import {
+  hookBlockIssues,
+  type HookBlockFinding,
+  type HookScriptEntry,
+} from "./core/hook-block-ineffective.js";
+import {
+  hookMatcherIssues,
+  type HookMatcherFinding,
+  type HookMatcherEntry,
+} from "./core/hook-matcher.js";
+import {
   parseAgentTools,
   parseAgentToolList,
 } from "./adapters/claude-code/agent-runtime.js";
@@ -117,6 +140,13 @@ export interface ScanSkill {
    * Computed by `lethalTrifectaIssues()` (one detector, no drift).
    */
   readonly trifecta: TrifectaFinding | null;
+  /**
+   * Set when the SKILL.md opens with frontmatter-looking keys (`name:`, …) but
+   * has NO opening `---` fence, so the whole file loads as body — no name, no
+   * description, no trigger (the skill is invisible). Computed by
+   * `skillMissingFence()` (one detector, no drift).
+   */
+  readonly fenceIssue: SkillFenceFinding | null;
 }
 
 export interface ScanAgent {
@@ -168,6 +198,19 @@ export interface ScanSkillResourceFinding {
   readonly path: string;
   readonly name: string;
   readonly finding: SkillResourceFinding;
+}
+
+/** A missing-frontmatter-fence finding tagged with the skill path. */
+export interface ScanSkillFenceFinding {
+  readonly path: string;
+  readonly name: string;
+  readonly finding: SkillFenceFinding;
+}
+
+/** A delegation-trifecta finding tagged with the subagent path that holds it. */
+export interface ScanDelegationFinding {
+  readonly path: string;
+  readonly finding: DelegationTrifectaFinding;
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -283,6 +326,39 @@ export interface ScanReport {
    * drift).
    */
   readonly skillResourceIssues: readonly ScanSkillResourceFinding[];
+  /**
+   * Skills whose frontmatter-looking opening has NO `---` fence, so they load as
+   * pure body (invisible — no name/description/trigger). Shared by `scan` and the
+   * `skill-missing-fence` lint rule (one detector, no drift).
+   */
+  readonly skillFenceIssues: readonly ScanSkillFenceFinding[];
+  /**
+   * Functional surface dirs (skills/agents/commands) nested INSIDE the manifest
+   * dir (`.claude-plugin/`) where the harness can't see them. Shared by `scan`
+   * and the `plugin-dir-layout` lint rule (one detector, no drift).
+   */
+  readonly pluginLayoutIssues: readonly PluginLayoutFinding[];
+  /**
+   * Lethal trifectas that EMERGE across a delegation edge — a subagent whose
+   * effective (own ∪ delegated-to) capability holds all three legs though no
+   * single unit does. Shared by `scan` and the `delegation-trifecta` lint rule
+   * (one detector, no drift).
+   */
+  readonly delegationTrifecta: readonly ScanDelegationFinding[];
+  /**
+   * Hooks that LOOK like they block but silently don't — a block decision on a
+   * non-blocking event, or the legacy `decision` field on a permission-gated
+   * event (#19009, the #1 verified hook pain). Shared by `scan` and the
+   * `hook-block-ineffective` lint rule (one detector, no drift). Empty when the
+   * dialect doesn't declare its blocking-event semantics.
+   */
+  readonly hookBlockFindings: readonly HookBlockFinding[];
+  /**
+   * Hook `matcher` strings that silently never fire — a tool-name typo or a
+   * malformed/undeclared MCP form. Shared by `scan` and the `hook-matcher` lint
+   * rule (one detector, no drift).
+   */
+  readonly hookMatcherFindings: readonly HookMatcherFinding[];
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
   readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
@@ -535,6 +611,10 @@ function scanSkills(
       descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
       resourceIssues,
       trifecta,
+      // A SKILL.md opening with `name:`/`description:` but no `---` fence loads
+      // as plain body → the skill is invisible. Inspect the RAW md (not the
+      // frontmatter-stripped body) so the unfenced keys are visible.
+      fenceIssue: skillMissingFence(md),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -970,6 +1050,7 @@ function collectSurfaceFindings(
 ): {
   trifectaFindings: ScanTrifectaFinding[];
   skillResourceFindings: ScanSkillResourceFinding[];
+  skillFenceFindings: ScanSkillFenceFinding[];
 } {
   const trifectaFindings: ScanTrifectaFinding[] = [];
   for (const a of agents) {
@@ -1000,7 +1081,84 @@ function collectSurfaceFindings(
         finding,
       })),
   );
-  return { trifectaFindings, skillResourceFindings };
+  const skillFenceFindings: ScanSkillFenceFinding[] = skills.flatMap((s) =>
+    s.fenceIssue ? [{ path: s.path, name: s.name, finding: s.fenceIssue }] : [],
+  );
+  return { trifectaFindings, skillResourceFindings, skillFenceFindings };
+}
+
+/**
+ * Build the subagent delegation graph and flag a lethal trifecta that EMERGES
+ * across an edge (own ∪ delegated-to capability) though no single unit trips it.
+ *
+ * Edge source (deterministic, audit-available): a subagent that lists the `Task`
+ * tool can dispatch any sibling subagent, so it `delegatesTo` every OTHER agent.
+ * An inherits-all agent (`tools === null`) carries the wildcard, which the
+ * detector's FP-safe guard skips (that maximal-blast case is the per-unit
+ * advisory's job). One detector, no drift. (Richer edge sources — a typed
+ * railway's `delegate()` chain, a Flue subagent inheritance tree — plug in here.)
+ */
+function collectDelegationTrifecta(
+  agents: readonly ScanAgent[],
+  dialect: HarnessDialect,
+): ScanDelegationFinding[] {
+  const allNames = agents.map((a) => a.name);
+  const nodes: CapabilityNode[] = agents.map((a) => {
+    const canDispatch =
+      a.tools === null ||
+      a.tools.some((t) => t === "Task" || t.startsWith("Task("));
+    return {
+      name: a.name,
+      kind: "agent",
+      tools: a.tools ?? ["*"],
+      delegatesTo: canDispatch ? allNames.filter((n) => n !== a.name) : [],
+    };
+  });
+  const pathByName = new Map(agents.map((a) => [a.name, a.path]));
+  return delegationTrifectaIssues(nodes, dialect).map((finding) => ({
+    path: pathByName.get(finding.name) ?? "",
+    finding,
+  }));
+}
+
+/**
+ * Build `hookBlockIssues` entries from the resolved hook list. Only hooks with a
+ * known EVENT are inspected — a hooks-array format we don't parse events for is
+ * skipped (an undefined event would falsely read as "non-blocking").
+ */
+function hookScriptEntries(hooks: readonly ScanHook[]): HookScriptEntry[] {
+  return hooks
+    .filter((h) => typeof h.event === "string" && h.event.length > 0)
+    .map((h) => ({
+      event: h.event as string,
+      command: h.command,
+      scriptPath: h.status === "ok" ? h.script : null,
+    }));
+}
+
+/** Extract (event, matcher) pairs from the canonical object-keyed hooks settings. */
+function collectHookMatchers(hooksObj: unknown): HookMatcherEntry[] {
+  if (
+    hooksObj === null ||
+    typeof hooksObj !== "object" ||
+    Array.isArray(hooksObj)
+  ) {
+    return [];
+  }
+  const out: HookMatcherEntry[] = [];
+  for (const [event, groups] of Object.entries(
+    hooksObj as Record<string, unknown>,
+  )) {
+    if (!Array.isArray(groups)) continue;
+    for (const g of groups) {
+      if (g === null || typeof g !== "object") continue;
+      const matcher = (g as { matcher?: unknown }).matcher;
+      if (typeof matcher === "string" && matcher.length > 0) {
+        out.push({ event, matcher });
+      }
+    }
+  }
+  return out;
 }
 
 /** Tally how many scanned agents fall into each purity rung (effectSurface). */
@@ -1066,10 +1224,8 @@ export function scanPlugin(
     dialect,
   });
   const puritySummary = summarizePurity(agents);
-  const { trifectaFindings, skillResourceFindings } = collectSurfaceFindings(
-    agents,
-    skills,
-  );
+  const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
+    collectSurfaceFindings(agents, skills);
   return {
     dir,
     instructions,
@@ -1094,6 +1250,25 @@ export function scanPlugin(
     descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
     trifectaFindings,
     skillResourceIssues: skillResourceFindings,
+    skillFenceIssues: skillFenceFindings,
+    pluginLayoutIssues: pluginDirLayoutIssues(
+      resolve(dir, dirname(lay.manifestPath)),
+      lay.surfaceDirs,
+    ),
+    delegationTrifecta: collectDelegationTrifecta(agents, dialect),
+    hookBlockFindings: dialect.blockingHookEvents
+      ? hookBlockIssues(hookScriptEntries(hooks), {
+          blockingEvents: new Set(dialect.blockingHookEvents),
+          permissionDecisionEvents: new Set(
+            dialect.permissionDecisionHookEvents ?? [],
+          ),
+        })
+      : [],
+    hookMatcherFindings: hookMatcherIssues(
+      collectHookMatchers(loaded.settings.hooks),
+      declaredServers,
+      dialect,
+    ),
     malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
@@ -1380,6 +1555,48 @@ export function formatScanReport(r: ScanReport): string {
         (s) =>
           `  ✗ ${s.name}: ${s.finding.ref} (line ${String(s.finding.line)}) — bundled resource not found`,
       ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Invisible skills (missing frontmatter fence)",
+      r.skillFenceIssues.map(
+        (s) =>
+          `  ✗ ${s.name} (${s.path}): opens with \`${s.finding.key}:\` but no \`---\` fence — loads as body, never fires`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Misplaced plugin directories",
+      r.pluginLayoutIssues.map((p) => `  ✗ ${p.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Lethal trifecta across delegation (blast radius)",
+      r.delegationTrifecta.map(
+        (d) => `  ⚠ ${d.finding.name} (${d.path}): ${d.finding.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Ineffective hook guards (false confidence)",
+      r.hookBlockFindings.map(
+        (h) => `  ✗ [${h.event}] ${h.scriptPath ?? "(inline)"}: ${h.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Hook matchers that never fire",
+      r.hookMatcherFindings.map((m) => `  ✗ ${m.message}`),
     ),
   );
 

@@ -919,6 +919,16 @@ interface LintReport {
   lethalTrifectaErrors: number;
   skillResourceIssues: number;
   skillResourceErrors: number;
+  skillFenceIssues: number;
+  skillFenceErrors: number;
+  pluginLayoutIssues: number;
+  pluginLayoutErrors: number;
+  delegationTrifectaIssues: number;
+  delegationTrifectaErrors: number;
+  hookBlockIssues: number;
+  hookBlockErrors: number;
+  hookMatcherIssues: number;
+  hookMatcherErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -1026,6 +1036,11 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.preferCompiledHookErrors > 0 ||
     report.lethalTrifectaErrors > 0 ||
     report.skillResourceErrors > 0 ||
+    report.skillFenceErrors > 0 ||
+    report.pluginLayoutErrors > 0 ||
+    report.delegationTrifectaErrors > 0 ||
+    report.hookBlockErrors > 0 ||
+    report.hookMatcherErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1498,6 +1513,27 @@ async function runLint(
   // exist on disk under the skill dir (the agent gets nothing). FP-safe.
   const skillResources = checkSkillResourceResolves(config, silent, adapter);
 
+  // 7q. Skill-missing-fence — a SKILL.md opening with `name:`/`description:` but no
+  // `---` fence loads as plain body (invisible — no name/description/trigger).
+  const skillFence = checkSkillMissingFence(config, silent, adapter);
+
+  // 7r. Plugin-dir-layout — functional surface dirs (skills/agents/commands) nested
+  // inside the `.claude-plugin/` manifest dir where the harness can't see them.
+  const pluginLayout = checkPluginDirLayout(config, silent, adapter);
+
+  // 7s. Delegation-trifecta — a lethal trifecta that emerges across a delegation
+  // edge (a subagent's own ∪ delegated-to capability) though no single unit trips it.
+  const delegationTrifecta = checkDelegationTrifecta(config, silent, adapter);
+
+  // 7t. Hook-block-ineffective — a hook that looks like it blocks but silently
+  // doesn't (block decision on a non-blocking event, or the legacy `decision`
+  // field on a permission-gated event). The #1 verified hook pain (#19009).
+  const hookBlock = checkHookBlockIneffective(config, silent, adapter);
+
+  // 7u. Hook-matcher — a hook `matcher` that never fires (tool-name typo, or a
+  // malformed/undeclared MCP form).
+  const hookMatcher = checkHookMatcher(config, silent, adapter);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1576,6 +1612,16 @@ async function runLint(
     lethalTrifectaErrors: lethalTrifecta.errors,
     skillResourceIssues: skillResources.issues,
     skillResourceErrors: skillResources.errors,
+    skillFenceIssues: skillFence.issues,
+    skillFenceErrors: skillFence.errors,
+    pluginLayoutIssues: pluginLayout.issues,
+    pluginLayoutErrors: pluginLayout.errors,
+    delegationTrifectaIssues: delegationTrifecta.issues,
+    delegationTrifectaErrors: delegationTrifecta.errors,
+    hookBlockIssues: hookBlock.issues,
+    hookBlockErrors: hookBlock.errors,
+    hookMatcherIssues: hookMatcher.issues,
+    hookMatcherErrors: hookMatcher.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -3577,6 +3623,203 @@ function checkSkillResourceResolves(
       const msg = `${s.name}: bundled resource "${s.finding.ref}" (line ${String(s.finding.line)}) is referenced but missing — the agent reads the instruction and gets nothing.`;
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${s.path}: ${msg}`);
       ghAnnotate(sev === "error" ? "error" : "warning", msg, s.path);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `skill-missing-fence` rule: a SKILL.md that opens with
+ * frontmatter-looking keys (`name:`/`description:`) but no `---` fence loads as
+ * pure body — no name, no description, no trigger (the skill is invisible).
+ * Reuses `scanPlugin`'s `skillFenceIssues` (one detector, no drift). Warning by
+ * default; "error" gates CI.
+ */
+function checkSkillMissingFence(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["skill-missing-fence"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly {
+    path: string;
+    name: string;
+    finding: { key: string; message: string };
+  }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).skillFenceIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSkill-missing-fence check:\n");
+    for (const s of found) {
+      const msg = `${s.name}: ${s.finding.message}`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${s.path}: ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg, s.path);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `plugin-dir-layout` rule: functional surface dirs (skills/agents/
+ * commands) nested inside the `.claude-plugin/` manifest dir where the harness
+ * can't see them (the #1 plugin-author mistake). Reuses `scanPlugin`'s
+ * `pluginLayoutIssues` (one detector, no drift). Warning by default; "error"
+ * gates CI.
+ */
+function checkPluginDirLayout(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["plugin-dir-layout"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { dir: string; message: string }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).pluginLayoutIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nPlugin-dir-layout check:\n");
+    for (const p of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${p.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", p.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `delegation-trifecta` rule: a lethal trifecta that EMERGES across a
+ * delegation edge — a subagent whose effective (own ∪ delegated-to) capability
+ * holds all three legs though no single unit does. Reuses `scanPlugin`'s
+ * `delegationTrifecta` (one detector, no drift). Warning by default; "error"
+ * gates CI. Surfaces across the subagent graph, so it is NOT gated on a
+ * capability the way a surface-specific rule is.
+ */
+function checkDelegationTrifecta(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["delegation-trifecta"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly {
+    path: string;
+    finding: { name: string; message: string };
+  }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).delegationTrifecta;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nDelegation-trifecta check:\n");
+    for (const d of found) {
+      const msg = `${d.finding.name}: ${d.finding.message}`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${d.path}: ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg, d.path);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `hook-block-ineffective` rule: a hook that LOOKS like it blocks but
+ * silently doesn't — a block decision (`exit 2` / `decision` / `permissionDecision`)
+ * on a non-blocking event, or the legacy top-level `decision` field on a
+ * permission-gated event (#19009, the #1 verified hook pain). Reuses `scanPlugin`'s
+ * `hookBlockFindings` (one detector, no drift). Warning by default; "error" gates CI.
+ */
+function checkHookBlockIneffective(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-block-ineffective"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable("Hook-block check", "shell hooks", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
+  let found: readonly {
+    event: string;
+    scriptPath: string | null;
+    message: string;
+  }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hookBlockFindings;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nHook-block check:\n");
+    for (const h of found) {
+      const where = h.scriptPath ?? "(inline)";
+      const msg = `[${h.event}] ${where}: ${h.message}`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${msg}`);
+      ghAnnotate(
+        sev === "error" ? "error" : "warning",
+        msg,
+        h.scriptPath ?? undefined,
+      );
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `hook-matcher` rule: a hook `matcher` string that silently never
+ * fires — a tool-name typo (`bash`→`Bash`) or a malformed/undeclared MCP form.
+ * Reuses `scanPlugin`'s `hookMatcherFindings` (one detector, no drift). Warning
+ * by default; "error" gates CI.
+ */
+function checkHookMatcher(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["hook-matcher"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  if (!adapter.capabilities.shellHooks) {
+    reportNotApplicable("Hook-matcher check", "shell hooks", adapter, silent);
+    return { issues: 0, errors: 0 };
+  }
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).hookMatcherFindings;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nHook-matcher check:\n");
+    for (const m of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${m.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", m.message);
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };
