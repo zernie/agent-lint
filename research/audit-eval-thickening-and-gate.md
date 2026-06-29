@@ -132,7 +132,27 @@ constraint that shapes what's measurable NOW:
 
 So: the pilot is the compression cluster (proves the multi-skill pipeline + a
 second/third data point); the COMPELLING "what works vs hype" breadth needs the
-headroom corpus first. (Pilot launched 2026-06-28; results to be appended.)
+headroom corpus first.
+
+**PILOT RESULTS (2026-06-28, haiku, all committed under `bench/`).**
+
+- _Compression cluster_ (`bench/evals/ecosystem-pilot.eval.mjs`, 2 trials, 3 tasks):
+  caveman -13% output (the debunk holds — output went UP), minify -29% output + a
+  CORRECTNESS REGRESSION (dropped a required answer), bullets +43% but INFLATED by
+  a near-empty-output artifact on bigO (→ added an `ARTIFACT_FLOOR` guard). Output
+  share ~1% across all three — even a real output cut barely moves the bill.
+- _Headroom_ (`bench/evals/headroom-pilot.eval.mjs`, 3 trials): the BIGGER finding
+  is a NEGATIVE one about METHOD. Three hand-crafted tasks — merge-intervals,
+  roman-numerals (textbook → memorized), and a 6-rule parse-query spec — ALL hit
+  100% baseline. Haiku is a capable coder on well-specified tasks, so there was no
+  headroom and the planning skill showed 0pp lift everywhere. BUT on parse-query the
+  skill arm spent ~88% MORE output (2584→4850 tok) for ZERO gain: on solvable tasks
+  a "do-more" planning skill is PURE OVERHEAD (the compression debunk's shape —
+  cost without benefit). CONCLUSION: measuring whether planning HELPS needs tasks
+  the model FAILS, and hand-crafting those against a capable model is unreliable —
+  the credible path is a KNOWN-HARD source (SWE-bench-lite-style), a founder call,
+  not more quota. The pipeline + executing checks (run the artifact via `ctx.sh`,
+  verified to discriminate good/bad) all WORK; the gap is the task source.
 
 Strategic caveat of record (`eval-startups-positioning.md` /
 `measurement-authority.md`): the benchmark is an ACQUISITION FLYWHEEL, not the
