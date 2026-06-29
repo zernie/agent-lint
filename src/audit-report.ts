@@ -14,7 +14,8 @@
 import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
 import type { AdoptabilityResult } from "./adoptability.js";
-import type { ScanReport } from "./scan.js";
+import type { ScanReport, MarketplaceInfo } from "./scan.js";
+import type { PluginScore } from "./leaderboard.js";
 
 /** The current schema version. Bump only on a BREAKING change to the shape. */
 export const AUDIT_SCHEMA_VERSION = 1;
@@ -23,6 +24,14 @@ export interface AuditReportMeta {
   /** Wire-format version — consumers gate on this. */
   readonly schemaVersion: typeof AUDIT_SCHEMA_VERSION;
   readonly tool: "vigiles";
+  /**
+   * Discriminates the three `audit --json` shapes a consumer may receive:
+   * `audit` (one plugin → {@link AuditReport}), `leaderboard` (a marketplace /
+   * multiple dirs → {@link LeaderboardReport}), `marketplace` (a curated,
+   * all-external marketplace → {@link MarketplaceReport}). Always present so the
+   * JSON is self-describing.
+   */
+  readonly kind: "audit";
   /** The vigiles version that produced the report. */
   readonly vigilesVersion: string;
   /** The detected/selected harness (`claude-code`, `codex`, …). */
@@ -143,6 +152,7 @@ export function buildAuditReport(
     meta: {
       schemaVersion: AUDIT_SCHEMA_VERSION,
       tool: "vigiles",
+      kind: "audit",
       vigilesVersion: opts.vigilesVersion,
       harness: opts.harness,
       dir: report.dir,
@@ -161,5 +171,78 @@ export function buildAuditReport(
       untested: report.untested,
     },
     ...(adoptable ? { adoptable } : {}),
+  };
+}
+
+/**
+ * The versioned envelope for a `audit --json` run over MULTIPLE plugins (a
+ * marketplace expanded into its members, or several dirs) — the leaderboard.
+ * Shares the same `meta.schemaVersion`/`tool`/`kind` self-description as
+ * {@link AuditReport} so every `audit --json` shape is a versioned object, never
+ * a bare array. `kind:"leaderboard"` is the discriminant; `plugins` carries the
+ * ranked per-plugin scores.
+ */
+export interface LeaderboardReport {
+  readonly meta: {
+    readonly schemaVersion: typeof AUDIT_SCHEMA_VERSION;
+    readonly tool: "vigiles";
+    readonly kind: "leaderboard";
+    readonly vigilesVersion: string;
+    /** The marketplace / parent dir that was expanded and ranked. */
+    readonly dir: string;
+    readonly generatedAt?: string;
+  };
+  readonly plugins: readonly PluginScore[];
+}
+
+/** Assemble the versioned {@link LeaderboardReport} — pure, no clock. */
+export function buildLeaderboardReport(
+  plugins: readonly PluginScore[],
+  opts: { vigilesVersion: string; dir: string },
+): LeaderboardReport {
+  return {
+    meta: {
+      schemaVersion: AUDIT_SCHEMA_VERSION,
+      tool: "vigiles",
+      kind: "leaderboard",
+      vigilesVersion: opts.vigilesVersion,
+      dir: opts.dir,
+    },
+    plugins,
+  };
+}
+
+/**
+ * The versioned envelope for a `audit --json` run on a CURATED marketplace whose
+ * members are all external (git/url, nothing on disk to scan). Wraps the
+ * {@link MarketplaceInfo} inventory so this path, too, emits a versioned object
+ * rather than a raw, unversioned struct. `kind:"marketplace"` is the discriminant.
+ */
+export interface MarketplaceReport {
+  readonly meta: {
+    readonly schemaVersion: typeof AUDIT_SCHEMA_VERSION;
+    readonly tool: "vigiles";
+    readonly kind: "marketplace";
+    readonly vigilesVersion: string;
+    readonly dir: string;
+    readonly generatedAt?: string;
+  };
+  readonly marketplace: MarketplaceInfo;
+}
+
+/** Assemble the versioned {@link MarketplaceReport} — pure, no clock. */
+export function buildMarketplaceReport(
+  marketplace: MarketplaceInfo,
+  opts: { vigilesVersion: string; dir: string },
+): MarketplaceReport {
+  return {
+    meta: {
+      schemaVersion: AUDIT_SCHEMA_VERSION,
+      tool: "vigiles",
+      kind: "marketplace",
+      vigilesVersion: opts.vigilesVersion,
+      dir: opts.dir,
+    },
+    marketplace,
   };
 }

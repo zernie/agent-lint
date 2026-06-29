@@ -97,6 +97,19 @@ private `startup/` vault) so they're not lost — all **post-launch**, ranked:
 Net: don't kill markdown mode — kill the **"Level 0/1/2 ladder"** framing. Market ONE
 on-ramp ("lint works on plain markdown; add a typed spec when you want enforcement").
 
+**UPDATE (2026-06-28) — frontmatter mode is now DISABLED, not just un-marketed.**
+The "kept but un-marketed" state proved to be a real smell: a mode that _works_ but
+isn't documented silently muddies the spec-first story (it confused a code review —
+"why does lint still act on `vigiles:` frontmatter if we dropped it?"). Since vigiles
+has ~no users, the cost of fully turning it off is ~nil, so lint now GATES it behind
+`FRONTMATTER_MODE_ENABLED = false` (`src/cli.ts`): a `vigiles:` block is **inert** —
+not read, not verified, never fails a build. The code is KEPT (`src/core/frontmatter.ts`,
+`verifyFrontmatterRules`, `vigiles generate schema`) so the decision is one-line
+reversible (flip the flag), but lint's behavior is now coherent with the two-on-ramp
+story: **verify compiled output + inline `<!-- vigiles:enforce -->` marks + typed
+specs — nothing else.** Inline mode (Level 0) stays fully active. Tests assert the
+inert behavior (`src/cli.test.ts`, the "frontmatter mode is DISABLED" describe).
+
 ## Locking the API surface (the "stop breaking things" plan)
 
 The fix isn't "freeze everything" — it's **shrink the public surface to the stable

@@ -6,18 +6,28 @@
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/. HYBRID proof source (decided 2026-06-28): Proofs 1-2 are
-  COMMUNITY catches, anonymized (a missing SKILL.md, an AskUserQuestion-never-
-  available tool) — official plugins don't have those silent-failure bugs. Proofs
-  3-4 are OFFICIAL + NAMED: pr-review-toolkit (malformed YAML + unrestricted review
-  agents) and the all-37 Anthropic-official leaderboard (A→F, LSP stubs excluded).
-  NEVER replace a real catch with a fabricated one.
+  research/dogfood/. TWO COMMUNITY catches, anonymized (a skill-description collision
+  → wrong-skill-fires (claude-flow, Triggering F), an AskUserQuestion-never-available
+  tool) — both real GRADED defects that REPRODUCE on current main. NEVER replace a
+  real catch with a fabricated one. (Proof 1 was a missing-SKILL.md/Truthfulness
+  catch, swapped 2026-06-28: its source (superpowers) is clean on current main and NO
+  reproducible dead-file-ref exists in popular OSS — those are an adopt+strengthen
+  payoff, see research/oss-audit-render-findings.md.)
+
+  WHY ONLY TWO (decided 2026-06-28): the earlier Proofs 3-4 leaned on
+  pr-review-toolkit's "review agents inherit all tools" as an official-plugin
+  defect. But inherit-all (a subagent with no `tools:` line) is now ADVISORY, not a
+  graded penalty — omitting the tool contract is a near-universal, legitimate
+  authoring style (an OSS sweep of 122 plugins found 109 whose only finding was
+  this), so penalizing it cried wolf. With that change the official plugins are all
+  a clean A, so a "even Anthropic has bugs" proof would be dishonest — Proofs 3-4
+  were DROPPED rather than reframed. The leaderboard feature still exists; it just
+  isn't a headline proof.
 
   DON'T SHAME OSS: community catches are real but ANONYMIZED in public copy (no
   obra/superpowers, madappgang by name) — real names live only in research/dogfood/.
-  Punch UP at official/vendor plugins (Anthropic's own are NAMED); never name a
-  volunteer's repo to show its bug. Proof 3/4 don't show pr-review-toolkit's audit-
-  RING score (88) — only the leaderboard score (52 F) — so the two never clash.
+  If an official/vendor proof returns, punch UP (name Anthropic's own); never name a
+  volunteer's repo to show its bug.
 
   1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
      competitor. A bolded lead-in is the first thing read — make it the hook/win.
@@ -34,11 +44,14 @@
      Push depth into docs/ and LINK it.
   6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
      research/ links — name the user benefit.
-  7. ASSETS: the hero vigiles-audit.png must be REFRESHED from a real run
-     (research/dogfood/audit-superpowers.html) without the dialect drift banner
-     before launch. (vigiles-demo.gif was removed from Proof 1 — it rendered as a
-     frozen half-typed terminal and was redundant with the code block; if a lint
-     demo returns, it belongs in the Lint section with a non-frozen asset.)
+  7. ASSETS: the hero vigiles-audit.png is a REAL current report (a community
+     plugin rendered as "my-plugin" to anonymize) — A 92 with four rings and an
+     inline subagent-tool-contract fix; no dialect-drift banner (HTML report is
+     terminal-banner-free by design). Re-render via headless Chromium on the React
+     report if the UI changes. (vigiles-demo.gif was removed
+     from Proof 1 — it rendered as a frozen half-typed terminal and was redundant
+     with the code block; if a lint demo returns, it belongs in the Lint section
+     with a non-frozen asset.)
 -->
 
 <p align="center">
@@ -60,8 +73,8 @@
 ---
 
 **You installed a bunch of plugins and wrote a few skills — but do they actually work?**
-A skill that never fires, a subagent wired to a tool that doesn't exist, a CLAUDE.md
-full of dead references — your harness fails **silently**, and you find out mid-task.
+A skill that never fires, two skills the agent can't tell apart, a subagent wired to
+a tool that doesn't exist — your harness fails **silently**, and you find out mid-task.
 
 **It's a library with no tests.** One command runs them — no key, no config, safe on
 any repo:
@@ -75,27 +88,26 @@ Here's what it found on real, popular plugins. ↓
 ## The report
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall score with four category rings — Truthfulness, Triggering, Structure, Tested — and fix cards" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall A (92/100) score with four category rings — Truthfulness, Triggering, Structure, Tested — and an inline fix card for a subagent declaring a tool that doesn't exist" />
 </p>
-<!-- REFRESH before launch from research/dogfood/audit-superpowers.html (a real catch, no drift banner). -->
 
 Four deterministic rings, **each finding's fix inline**, and a shareable HTML report.
 Like Lighthouse, `audit` is a **local report you run on your machine** — safe on any
 repo (even one wired to prod), identical on every OS. **Not a CI step** (CI uses
 `lint`). **[Audit a harness →](docs/for-plugin-authors.md)**
 
-## Proof 1 — your CLAUDE.md is lying to your agent
+## Proof 1 — two skills your agent can't tell apart
 
 ```text
-● Truthfulness   92
-    └ ✗ skills/using-debugging/SKILL.md  (referenced but MISSING)
+✗ Triggering   0
+    └ 45 near-identical skill descriptions — the selector can't tell them apart,
+      so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
 ```
 
-A real, widely-installed plugin — its instructions send the agent to a skill file
-that **isn't there**. Valid markdown, but not _true_, and your agent trusts it anyway.
-
-File paths, scripts, code symbols — plus linter rules across **7 linters** (ESLint,
-Ruff, Clippy + four more): each one **exists _and_ is enabled**. **[Full guide →](docs/verifying-instruction-files.md)**
+A real, popular plugin ships **45 skill pairs** described so similarly the model
+can't reliably pick between them — so it fires the **wrong** skill. Valid markdown;
+the selector chooses by description, and near-identical text collides.
+**[How triggering works →](docs/measuring-skills.md)**
 
 ## Proof 2 — a tool your subagent silently can't call
 
@@ -107,39 +119,15 @@ Ruff, Clippy + four more): each one **exists _and_ is enabled**. **[Full guide �
 A real upstream subagent declares a tool the harness **silently drops**, so it loses
 a capability it thinks it has. vigiles flags it _and_ hands you the one-line fix —
 **free, no model.** That's the difference from a markdown linter: it checks your
-harness against **reality**, not style.
+harness against **reality**, not style — every file path, script, code symbol, and
+linter rule across **7 catalogs** (ESLint, Ruff, Clippy + four more), each verified
+to **exist _and_ be enabled**. **[Full guide →](docs/verifying-instruction-files.md)**
 
-## Proof 3 — even the official plugins
+Two real catches, both **free and model-less** — and audit ranks a whole
+marketplace the same way. **[Audit a marketplace →](docs/for-plugin-authors.md)**
 
-Not cherry-picked community repos — **Anthropic's own official `pr-review-toolkit`**:
-
-```text
-✗ silent-failure-hunter.md — frontmatter isn't valid YAML (won't parse)
-⚠ 6 review agents inherit ALL tools — a code-reviewer with Write + Bash
-```
-
-A subagent whose YAML doesn't parse, and six review agents holding far more power than
-a reviewer needs — real findings on a first-party plugin. _(We name Anthropic's own;
-the community plugins above stay anonymous — punch up, don't shame volunteers.)_
-
-## Proof 4 — rank a whole marketplace
-
-`audit` ranks a folder of plugins by what's actually **broken** — no key. Run across
-**all of Anthropic's official plugins**, it flags exactly **one** real outlier — no
-false-positive noise (untested surfaces are advisory):
-
-```text
-  #   score  grade  plugin
-   1  100    A      code-review            ← 24 of 25 come back a clean A
-  25   70    C      pr-review-toolkit  — 6 agents inherit all tools (a reviewer with Write + Bash)
-```
-
-<sub>Real scores on Anthropic's own marketplace — a fair tool flags the one real issue, not noise (empty LSP stubs excluded).</sub>
-
-**[Plugin-author guide →](docs/for-plugin-authors.md)**
-
-> **And it grades itself: 100/100, A, all four rings green.** vigiles runs `audit` on
-> its own harness in CI. We eat what we cook.
+> **And it grades itself: 100/100, A, all four rings green** — and CI gates every
+> commit with `lint` + `test`. We eat what we cook.
 
 ## How it does it — three instruments
 
@@ -152,9 +140,7 @@ Every path, script, symbol & linter rule resolved against reality (the catches
 above). **You don't write any of it** — `npx vigiles init` **adopts your existing
 CLAUDE.md _and every skill and subagent_ into verified specs**, non-destructively
 (untouched until you `compile`; `eject` reverses). After that, plain-English asks
-edit them for you. Prefer zero new files? Plain markdown + one inline
-`<!-- vigiles:enforce -->` comment lints too — no TypeScript.
-**[How →](docs/verifying-instruction-files.md)**
+edit them for you. **[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
 
@@ -234,9 +220,7 @@ JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 ## FAQ
 
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one). Prefer zero new files? Plain markdown lints too. Deeper compiler-grade guarantees are gradual and opt-in, like TS's `strict`.
-- **Does it overwrite my files?** No. `init` adopts an existing CLAUDE.md _non-destructively_ — untouched until you `compile`, and `eject` reverses it.
-- **Need an API key?** No for almost everything (free, every commit). Real-model evals run on your Claude Pro/Max subscription — $0 metered tokens.
+- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict`.
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**

@@ -83,9 +83,40 @@ describe("auditScore", () => {
   });
 
   it("the headline overall is SUMMED across categories, not the ring average", () => {
-    // A plugin whose only issue is Structure −30 (six agents inherit all tools)
-    // shows Structure 70 in the breakdown AND overall 70 — averaging the four
-    // rings would dilute that to ~93 and hide the real blast-radius problem.
+    // A plugin whose only issues are in Structure (six agents each referencing a
+    // tool that doesn't exist, −8 apiece = −48) shows Structure 52 in the breakdown
+    // AND overall 52 — averaging the four rings would dilute that to ~88 and hide
+    // the real broken-contract problem.
+    const agent = {
+      name: "a",
+      path: "p",
+      tools: ["Ghost"],
+      toolIssues: [{ tool: "Ghost", suggestion: "Glob" }],
+      mcpToolIssues: [],
+      disallowedToolIssues: [],
+      purity: "unrestricted" as const,
+      effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+    };
+    const s = auditScore(
+      makeReport({
+        agents: Array.from(
+          { length: 6 },
+          () => agent,
+        ) as unknown as ScanReport["agents"],
+      }),
+    );
+    expect(cat(s, "Structure")?.score).toBe(52); // -6*8
+    expect(cat(s, "Truthfulness")?.score).toBe(100);
+    expect(cat(s, "Triggering")?.score).toBe(100);
+    expect(s.overall).toBe(52); // summed, NOT averaged to ~88
+    expect(s.grade).toBe("F");
+  });
+
+  it("inherit-all (no tool contract) is ADVISORY — shown on Structure, never graded", () => {
+    // Decision (2026-06-28): omitting the `tools:` line is a near-universal,
+    // legitimate authoring style (an OSS sweep of 122 real plugins found 109 whose
+    // ONLY finding was this), so it must not drag the grade — a least-privilege
+    // NUDGE, not breakage. See reportDeductions / scoreReport for the rationale.
     const agent = {
       name: "a",
       path: "p",
@@ -104,11 +135,15 @@ describe("auditScore", () => {
         ) as unknown as ScanReport["agents"],
       }),
     );
-    expect(cat(s, "Structure")?.score).toBe(70); // -6*5
-    expect(cat(s, "Truthfulness")?.score).toBe(100);
-    expect(cat(s, "Triggering")?.score).toBe(100);
-    expect(s.overall).toBe(70); // summed, NOT averaged to ~93
-    expect(s.grade).toBe("C");
+    // Structure stays clean (not graded) but the note is still surfaced.
+    expect(cat(s, "Structure")?.score).toBe(100);
+    expect(
+      cat(s, "Structure")?.findings.some(
+        (f) => f.includes("inherit all tools") && f.includes("advisory"),
+      ),
+    ).toBe(true);
+    expect(s.overall).toBe(100);
+    expect(s.grade).toBe("A");
   });
 
   it("untested surfaces are ADVISORY — shown on Tested, but never drag the grade", () => {

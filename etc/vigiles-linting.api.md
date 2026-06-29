@@ -85,6 +85,7 @@ export interface CompileAgentResult {
     errors: CompileError[];
     // (undocumented)
     markdown: string;
+    warnings: CompileError[];
 }
 
 // @public
@@ -127,7 +128,7 @@ export interface CompileError {
     // (undocumented)
     path?: string;
     // (undocumented)
-    type: "stale-file" | "stale-command" | "stale-ref" | "invalid-rule" | "budget-exceeded" | "section-too-long" | "section-has-header" | "reserved-section-key" | "spec-name-mismatch" | "unknown-tool" | "invalid-railway" | "purity-violation" | "output-without-fork" | "effect-in-skill";
+    type: "stale-file" | "stale-command" | "stale-ref" | "invalid-rule" | "budget-exceeded" | "section-too-long" | "section-has-header" | "reserved-section-key" | "spec-name-mismatch" | "unknown-tool" | "invalid-railway" | "purity-violation" | "output-without-fork" | "effect-in-skill" | "inline-code-too-long";
 }
 
 // @public
@@ -161,6 +162,7 @@ export interface CompileSkillResult {
     errors: CompileError[];
     // (undocumented)
     markdown: string;
+    warnings: CompileError[];
 }
 
 // @public (undocumented)

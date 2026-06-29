@@ -297,17 +297,25 @@ function makeClassifier(layout: PluginLayout): SurfaceClassifier {
   const skillRe = skill ? new RegExp(`${skill}[^/]+/SKILL\\.md$`) : null;
   const agentRe = agent ? new RegExp(`${agent}[^/]+\\.md$`) : null;
   const commandRe = command ? new RegExp(`${command}.+\\.md$`) : null;
-  // A subagent lives at the plugin's TOP-LEVEL `agents/` dir, never recursively
-  // under a skill (`skills/<x>/agents/`). Those nested files are skill-internal
-  // worker docs (e.g. Anthropic's own skill-creator), NOT dispatchable Claude
-  // Code subagents — flagging them is a false positive. The agent dir nested
-  // under the skill dir is excluded; a genuine top-level `agents/foo.md` still
-  // matches. See scan.test.ts for the regression.
+  // A subagent lives at the plugin's TOP-LEVEL `agents/` dir (e.g. `agents/foo.md`
+  // or `.claude/agents/foo.md`), never recursively under ANOTHER surface dir. Two
+  // real-world nesting traps are excluded as false positives:
+  //   - `skills/<x>/agents/…` — skill-internal worker docs (Anthropic's skill-creator)
+  //   - `commands/agents/…`   — a COMMAND namespaced `/agents:…` (ruvnet/claude-flow),
+  //     incl. a `README.md`; these are commands, not dispatchable subagents.
+  // Flagging either as a subagent missing frontmatter is a false positive (it
+  // mis-graded a real plugin F). A genuine top-level `agents/foo.md` still
+  // matches. Both excluded dirs are read from the layout (adapter-agnostic). See
+  // scan.test.ts for the regressions.
+  const nestedUnder = [
+    layout.skillDir &&
+      `${escapeRe(layout.skillDir)}/.+/${escapeRe(layout.agentDir)}/`,
+    layout.commandDir &&
+      `${escapeRe(layout.commandDir)}/(?:.+/)?${escapeRe(layout.agentDir)}/`,
+  ].filter((x): x is string => Boolean(x));
   const nestedAgentRe =
-    layout.skillDir && layout.agentDir
-      ? new RegExp(
-          `(?:^|/)${escapeRe(layout.skillDir)}/.+/${escapeRe(layout.agentDir)}/`,
-        )
+    layout.agentDir && nestedUnder.length
+      ? new RegExp(`(?:^|/)(?:${nestedUnder.join("|")})`)
       : null;
   const isAgent = (f: string): boolean =>
     (agentRe?.test(f) ?? false) &&

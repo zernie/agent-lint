@@ -783,6 +783,35 @@ test("scanPlugin does not treat a skill-internal agents/ dir as subagents", () =
   cleanupTmpDir(dir);
 });
 
+test("scanPlugin does not treat a commands/agents/ dir as subagents", () => {
+  // Regression (found by the OSS sweep on ruvnet/claude-flow): a plugin ships
+  // commands namespaced `/agents:…` at `.claude/commands/agents/{spawn,status,…}.md`
+  // plus a `README.md`. CC loads subagents only from the TOP-LEVEL agents/ dir,
+  // never under commands/ — so these are COMMANDS, not dispatchable subagents.
+  // The old classifier matched `agents/` anywhere, so it flagged each command
+  // (and the README) as a subagent missing name/description → mis-graded the
+  // plugin F (Structure 0). They must be ignored.
+  const dir = makeTmpDir("scan-command-agents");
+  write(dir, "commands/agents/spawn.md", "# spawn\nSpawn an agent.\n");
+  write(dir, "commands/agents/status.md", "# status\nShow agent status.\n");
+  write(dir, "commands/agents/README.md", "# Agents Commands\nprose\n");
+  // A genuine TOP-LEVEL subagent must still be discovered AND checked.
+  write(
+    dir,
+    "agents/reviewer.md",
+    "---\nname: reviewer\ndescription: Review a diff for correctness\ntools: Read\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  // Only the real top-level subagent registers; the commands are not subagents.
+  assert.deepEqual(
+    r.agents.map((a) => a.name),
+    ["reviewer"],
+  );
+  // No frontmatter penalty: the commands (incl. README) are not subagents.
+  assert.equal(r.frontmatterIssues.length, 0);
+  cleanupTmpDir(dir);
+});
+
 test("scanPlugin still flags a real top-level subagent missing frontmatter", () => {
   // Guard the other direction: the nested-agents exclusion must NOT silence a
   // genuine top-level agents/ file that really is missing name/description.

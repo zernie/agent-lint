@@ -98,41 +98,45 @@ test("a knowledge body composes with gated steps (both render, body first)", () 
   assert.ok(markdown.indexOf("## Reference") < markdown.indexOf("## Steps"));
 });
 
-test("a large inline code block errors, forcing extraction to a file", () => {
+test("a large inline code block warns (non-blocking), nudging extraction to a file", () => {
   const big = "```bash\n" + Array(25).fill("echo line").join("\n") + "\n```";
-  const { errors } = compileSkill(
+  const { errors, warnings } = compileSkill(
     skill({ name: "x", description: "...", body: big }),
     opts,
   );
+  // It's a WARNING, not an error — adoption must still compile.
+  assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.ok(
-    errors.some(
+    warnings.some(
       (e) =>
-        e.type === "section-too-long" && /extract it to a file/.test(e.message),
+        e.type === "inline-code-too-long" &&
+        /extracting it to a file/.test(e.message),
     ),
-    "expected a too-long inline code block error",
+    "expected a too-long inline code block warning",
   );
 });
 
 test("small code blocks pass; maxInlineCodeLines:0 disables the check", () => {
   const small = "```bash\necho a\necho b\n```";
-  assert.equal(
-    compileSkill(skill({ name: "x", description: "...", body: small }), opts)
-      .errors.length,
-    0,
+  const smallRes = compileSkill(
+    skill({ name: "x", description: "...", body: small }),
+    opts,
   );
+  assert.equal(smallRes.errors.length, 0);
+  assert.equal(smallRes.warnings.length, 0, JSON.stringify(smallRes.warnings));
+  // A big block normally warns; maxInlineCodeLines:0 turns the check off entirely.
   const big = "```bash\n" + Array(50).fill("echo x").join("\n") + "\n```";
-  assert.equal(
-    compileSkill(
-      skill({
-        name: "x",
-        description: "...",
-        body: big,
-        maxInlineCodeLines: 0,
-      }),
-      opts,
-    ).errors.length,
-    0,
+  const offRes = compileSkill(
+    skill({
+      name: "x",
+      description: "...",
+      body: big,
+      maxInlineCodeLines: 0,
+    }),
+    opts,
   );
+  assert.equal(offRes.errors.length, 0);
+  assert.equal(offRes.warnings.length, 0, JSON.stringify(offRes.warnings));
 });
 
 test("a script-runner gate verifies the referenced script file exists", () => {

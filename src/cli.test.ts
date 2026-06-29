@@ -559,7 +559,7 @@ Real rule:
 // Frontmatter mode E2E
 // ---------------------------------------------------------------------------
 
-describe("E2E: frontmatter enforcement", () => {
+describe("E2E: frontmatter mode is DISABLED (kept in code, inert in lint)", () => {
   let fmDir: string;
 
   before(() => {
@@ -582,116 +582,43 @@ describe("E2E: frontmatter enforcement", () => {
     rmSync(fmDir, { recursive: true, force: true });
   });
 
-  it("verifies a valid frontmatter enforce rule and exits clean", () => {
-    writeFileSync(
-      join(fmDir, "CLAUDE.md"),
-      `---
-vigiles:
-  enforce:
-    - rule: eslint/no-console
-      why: Use the logger
----
-
-# Project
-`,
-    );
-    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
-    assert.ok(
-      stdout.includes("eslint/no-console"),
-      `Expected rule in output, got: ${stdout.slice(0, 600)}`,
-    );
-    assert.equal(exitCode, 0, `Expected clean exit, got ${String(exitCode)}`);
-  });
-
-  it("flags a typo'd frontmatter rule with a closest-match suggestion", () => {
-    writeFileSync(
-      join(fmDir, "CLAUDE.md"),
-      `---
-vigiles:
-  enforce:
-    - rule: eslint/no-consol
-      why: Typo check
----
-`,
-    );
-    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
-    assert.ok(
-      stdout.includes("no-consol"),
-      `Expected typo'd rule in output, got: ${stdout.slice(0, 600)}`,
-    );
-    assert.ok(
-      stdout.includes("Did you mean"),
-      `Expected closest-match suggestion, got: ${stdout.slice(0, 600)}`,
-    );
-    assert.equal(exitCode, 2, "Expected exit 2 on frontmatter error");
-  });
-
-  it("reports a stale ref in frontmatter (manual-verification case)", () => {
+  it("a `vigiles:` frontmatter block is INERT — not verified, never fails lint", () => {
+    // Frontmatter mode is DISABLED (FRONTMATTER_MODE_ENABLED=false): a `vigiles:`
+    // block is ignored, so even a fake rule that WOULD have failed lint under the
+    // old mode is now inert — no frontmatter rules read, no frontmatter errors.
     writeFileSync(
       join(fmDir, "CLAUDE.md"),
       `---
 vigiles:
   enforce:
     - rule: eslint/fake-rule-xyz
-      why: This rule does not exist
+      why: would have failed lint under the old mode
 ---
 
 # Project
 `,
     );
-    const { stdout, exitCode } = run("lint --json CLAUDE.md", fmDir);
+    const { stdout } = run("lint --json CLAUDE.md", fmDir);
     const report = JSON.parse(stdout) as {
       frontmatterErrors: number;
       frontmatterRules: number;
     };
-    assert.ok(report.frontmatterErrors > 0, "Expected frontmatterErrors > 0");
-    assert.ok(report.frontmatterRules > 0, "Expected frontmatterRules > 0");
-    assert.equal(exitCode, 2);
-  });
-
-  it("reports frontmatter rules in --summary output", () => {
-    writeFileSync(
-      join(fmDir, "CLAUDE.md"),
-      `---
-vigiles:
-  enforce:
-    - rule: eslint/fake-rule-xyz
-      why: bad
----
-`,
+    assert.equal(report.frontmatterRules, 0, "frontmatter rules are not read");
+    assert.equal(
+      report.frontmatterErrors,
+      0,
+      "a fake frontmatter rule is inert, not an error",
     );
-    const { stdout, exitCode } = run("lint --summary CLAUDE.md", fmDir);
     assert.ok(
-      stdout.includes("frontmatter"),
-      `Expected 'frontmatter' in summary, got: ${stdout}`,
+      !stdout.includes("fake-rule-xyz"),
+      `a disabled-mode rule must not be flagged, got: ${stdout.slice(0, 400)}`,
     );
-    assert.equal(exitCode, 2);
-  });
-
-  it("reports malformed YAML frontmatter without crashing", () => {
-    writeFileSync(
-      join(fmDir, "CLAUDE.md"),
-      `---
-vigiles:
-  enforce:
-    - rule: eslint/no-console
-       why: bad indent :
-      : :
----
-`,
-    );
-    const { stdout, exitCode } = run("lint CLAUDE.md", fmDir);
-    assert.ok(
-      stdout.includes("Malformed YAML frontmatter"),
-      `Expected malformed-YAML report, got: ${stdout.slice(0, 600)}`,
-    );
-    assert.equal(exitCode, 2);
   });
 
   it("does NOT satisfy require-instructions-spec via frontmatter rules (narrow rule)", () => {
-    // Same narrowing as inline mode: a `vigiles:` frontmatter block is a valid
-    // Level-1 on-ramp but does NOT count as a `.spec.ts`, so the narrow
-    // `require-instructions-spec` nudge still fires (default warn).
+    // A `vigiles:` block never counted as a `.spec.ts`, so the narrow
+    // `require-instructions-spec` nudge fires (default warn) — and now even more
+    // so, since frontmatter mode is disabled and the block is inert prose.
     writeFileSync(
       join(fmDir, "CLAUDE.md"),
       `---
@@ -711,14 +638,14 @@ vigiles:
     );
   });
 
-  it("does not double-count a rule declared both inline and in frontmatter", () => {
+  it("inline mode still works while frontmatter is inert", () => {
     writeFileSync(
       join(fmDir, "CLAUDE.md"),
       `---
 vigiles:
   enforce:
     - rule: eslint/no-console
-      why: from frontmatter
+      why: from frontmatter (ignored — mode disabled)
 ---
 
 # Project
@@ -731,7 +658,8 @@ vigiles:
       inlineRules: number;
       frontmatterRules: number;
     };
-    // Inline is the first source; the duplicate frontmatter rule is skipped.
+    // Inline mode (the kept zero-TS on-ramp) verifies its rule; the frontmatter
+    // copy is inert (mode disabled), so only the inline rule is counted.
     assert.equal(report.inlineRules, 1);
     assert.equal(report.frontmatterRules, 0);
     assert.equal(exitCode, 0);
@@ -2219,15 +2147,23 @@ describe("CLI: markdown-mode file/cmd verification", () => {
     }
   });
 
-  it("verifies file/cmd lists declared in frontmatter", () => {
+  it("ignores file/cmd lists declared in frontmatter (mode disabled, inert)", () => {
+    // Frontmatter mode is disabled, so `vigiles: files/commands` lists are inert:
+    // a missing file + bad script in a `vigiles:` block must NOT fail lint. (The
+    // inline `<!-- vigiles:cmd -->` form above stays active — that's the kept
+    // zero-TS on-ramp.)
     const dir = scaffold(
       `---\nvigiles:\n  files:\n    - src/real.ts\n    - src/MISSING.ts\n  commands:\n    - npm run build\n    - npm run ghost\n---\n\n# P\n`,
     );
     try {
       const { stdout, exitCode } = run("lint CLAUDE.md", dir);
-      assert.equal(exitCode, 2);
-      assert.match(stdout, /File not found: "src\/MISSING\.ts"/);
-      assert.match(stdout, /Script "ghost" not found/);
+      assert.notEqual(
+        exitCode,
+        2,
+        "an inert frontmatter block must not fail lint",
+      );
+      assert.doesNotMatch(stdout, /File not found: "src\/MISSING\.ts"/);
+      assert.doesNotMatch(stdout, /Script "ghost" not found/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
