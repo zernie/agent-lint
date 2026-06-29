@@ -2,8 +2,9 @@
  * Category-scoring suite (vitest): pure over a hand-built ScanReport (no fs/model)
  * — each finding buckets into the right deterministic category, the overall
  * excludes n/a categories, an empty machine is empty (but an instruction-only
- * repo is NOT), and the formatter renders rings + the overall. The four rings are
- * all deterministic; Safety (the executing battery) is not an `audit` ring.
+ * repo is NOT), and the formatter renders rings + the overall. The five rings are
+ * all deterministic; Safety is fed by the STATIC lethal-trifecta check (the
+ * EXECUTING disaster-battery is still not an `audit` ring).
  */
 import { describe, it, expect } from "vitest";
 import { auditScore, formatAuditScore } from "./audit-score.js";
@@ -49,13 +50,21 @@ describe("auditScore", () => {
     expect(cat(s, "Triggering")?.score).toBe(100);
     expect(cat(s, "Structure")?.score).toBe(100);
     expect(cat(s, "Tested")?.score).toBe(100);
+    // No tool-bearing surface (no agents, no model-invocable skills) → Safety n/a.
+    expect(cat(s, "Safety")?.score).toBeNull();
     expect(s.overall).toBe(100);
     expect(s.grade).toBe("A");
   });
 
-  it("has four deterministic rings — no Safety ring (the battery isn't an audit check)", () => {
+  it("has five deterministic rings — Safety fed by the static lethal-trifecta check", () => {
     const keys = auditScore(makeReport()).categories.map((c) => c.key);
-    expect(keys).toEqual(["Truthfulness", "Triggering", "Structure", "Tested"]);
+    expect(keys).toEqual([
+      "Truthfulness",
+      "Triggering",
+      "Structure",
+      "Safety",
+      "Tested",
+    ]);
   });
 
   it("buckets a dangling ref into Truthfulness; overall is the summed score", () => {
@@ -158,11 +167,132 @@ describe("auditScore", () => {
     expect(s.grade).toBe("A");
   });
 
+  it("Safety is clean (100) when there IS a tool-bearing surface but no trifecta", () => {
+    const s = auditScore(
+      makeReport({
+        agents: [
+          {
+            name: "a",
+            path: "p",
+            tools: ["Read"],
+            toolIssues: [],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+            trifecta: null,
+          },
+        ] as unknown as ScanReport["agents"],
+      }),
+    );
+    expect(cat(s, "Safety")?.score).toBe(100);
+    expect(s.overall).toBe(100);
+  });
+
+  it("a HARD trifecta finding grades Safety AND drops the overall by W_TRIFECTA (20)", () => {
+    const s = auditScore(
+      makeReport({
+        agents: [
+          {
+            name: "exfil-bot",
+            path: "agents/exfil-bot.md",
+            tools: ["Bash", "WebFetch"],
+            toolIssues: [],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+            trifecta: { severity: "hard" },
+          },
+        ] as unknown as ScanReport["agents"],
+        trifectaFindings: [
+          {
+            path: "agents/exfil-bot.md",
+            kind: "subagent",
+            name: "exfil-bot",
+            finding: { severity: "hard" },
+          },
+        ] as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    expect(cat(s, "Safety")?.score).toBe(80); // 100 - 20
+    expect(cat(s, "Safety")?.findings.length).toBe(1);
+    // Safety is GRADED into the overall (the summed model) — a clean repo would be
+    // 100, this drops by exactly W_TRIFECTA.
+    expect(s.overall).toBe(80);
+    expect(s.grade).toBe("B");
+  });
+
+  it("an ADVISORY (inherits-all) trifecta is SHOWN on Safety but NOT graded", () => {
+    const s = auditScore(
+      makeReport({
+        agents: [
+          {
+            name: "broad",
+            path: "agents/broad.md",
+            tools: null, // inherits all
+            toolIssues: [],
+            mcpToolIssues: [],
+            disallowedToolIssues: [],
+            trifecta: { severity: "advisory" },
+          },
+        ] as unknown as ScanReport["agents"],
+        trifectaFindings: [
+          {
+            path: "agents/broad.md",
+            kind: "subagent",
+            name: "broad",
+            finding: { severity: "advisory" },
+          },
+        ] as unknown as ScanReport["trifectaFindings"],
+      }),
+    );
+    expect(cat(s, "Safety")?.score).toBe(100); // advisory not graded
+    expect(
+      cat(s, "Safety")?.findings.some(
+        (f) => f.includes("inherits all tools") && f.includes("advisory"),
+      ),
+    ).toBe(true);
+    expect(s.overall).toBe(100);
+  });
+
+  it("Safety is n/a when there's no tool-bearing surface (no agents, no model-invocable skills)", () => {
+    // A user-invoked skill carries no model-driven trifecta risk → not assessable.
+    const s = auditScore(
+      makeReport({
+        skills: [
+          {
+            name: "u",
+            hasDescription: true,
+            userInvoked: true,
+            trifecta: null,
+          },
+        ] as unknown as ScanReport["skills"],
+      }),
+    );
+    expect(cat(s, "Safety")?.score).toBeNull();
+  });
+
+  it("a model-invocable skill IS an assessable Safety surface (clean → 100)", () => {
+    const s = auditScore(
+      makeReport({
+        skills: [
+          {
+            name: "m",
+            hasDescription: true,
+            userInvoked: false,
+            trifecta: null,
+          },
+        ] as unknown as ScanReport["skills"],
+      }),
+    );
+    expect(cat(s, "Safety")?.score).toBe(100);
+  });
+
   it("an empty machine (no surface, no instructions) is empty — overall 0, all n/a", () => {
     const s = auditScore(makeReport({ commands: 0, mcp: false }));
     expect(s.empty).toBe(true);
     expect(s.overall).toBe(0);
     expect(s.categories.every((c) => c.score === null)).toBe(true);
+    // Safety is included in the empty-machine null list (5 categories, all n/a).
+    expect(s.categories.map((c) => c.key)).toContain("Safety");
+    expect(s.categories.length).toBe(5);
   });
 
   it("an inline-hook-only harness is NOT empty (inline hooks are a real surface)", () => {
@@ -198,7 +328,7 @@ describe("formatAuditScore", () => {
     const out = formatAuditScore(auditScore(makeReport()));
     expect(out).toMatch(/Truthfulness/);
     expect(out).toMatch(/Structure/);
-    expect(out).not.toMatch(/Safety/); // no Safety ring
+    expect(out).toMatch(/Safety/); // Safety IS a ring (static lethal-trifecta)
     expect(out).toMatch(/Harness health: A \(100\/100\)/);
   });
 });

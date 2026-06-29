@@ -45,7 +45,8 @@
   6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
      research/ links — name the user benefit.
   7. ASSETS: the hero vigiles-audit.png is a REAL current report (a community
-     plugin rendered as "my-plugin" to anonymize) — A 92 with four rings and an
+     plugin rendered as "my-plugin" to anonymize) — A 92 with five rings (incl.
+     Safety) and an
      inline subagent-tool-contract fix; no dialect-drift banner (HTML report is
      terminal-banner-free by design). Re-render via headless Chromium on the React
      report if the UI changes. (vigiles-demo.gif was removed
@@ -103,10 +104,10 @@ ship. ↓
 ## The report
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall A (92/100) score with four category rings — Truthfulness, Triggering, Structure, Tested — and an inline fix card for a subagent declaring a tool that doesn't exist" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall A (92/100) score with five category rings — Truthfulness, Triggering, Structure, Safety, Tested — and an inline fix card for a subagent declaring a tool that doesn't exist" />
 </p>
 
-**Lighthouse for your agent harness.** Four graded rings, every fix inline, one
+**Lighthouse for your agent harness.** Five graded rings, every fix inline, one
 shareable report.
 
 It runs locally and only reads, so it's safe on any repo and the same on every OS.

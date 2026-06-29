@@ -28,6 +28,14 @@ export const SAMPLE: AuditReport = {
         findings: ["1 agent tool(s) that don't exist (typo / never-available)"],
       },
       {
+        key: "Safety",
+        score: 80,
+        weight: 1,
+        findings: [
+          "1 unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+        ],
+      },
+      {
         key: "Tested",
         score: 88,
         weight: 1,
