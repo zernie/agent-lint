@@ -26,7 +26,7 @@ const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);
 // A real, pinned vendored plugin (no clone at test time). Its TDD skill should
 // activate when a task is about writing/changing code with tests.
 const pluginDir = fileURLToPath(
-  new URL("./vendor/superpowers@6fd4507", import.meta.url),
+  new URL("../../test/dogfood/superpowers@6fd4507", import.meta.url),
 );
 const skill = "superpowers:test-driven-development";
 

@@ -36,7 +36,7 @@ import { assertRequestContains, skip } from "../../dist/harness-assert.js";
 if (!claudeAvailable()) skip("`claude` CLI not found");
 
 const ROOT = fileURLToPath(
-  new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
+  new URL("../../test/dogfood/oh-my-claudecode@deee3a4", import.meta.url),
 );
 // Throwaway HOME + OMC_STATE_DIR so the hook's state dir never touches the repo
 // (OMC writes <cwd>/.omc unless OMC_STATE_DIR is set).

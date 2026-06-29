@@ -371,10 +371,7 @@ test.skipIf(!sandboxAvailable() || nodeMajor < 22)(
     // fetch()es registry.npmjs.org for an update check on every session start.
     // recordEgress captures it (Node fetch via NODE_USE_ENV_PROXY) and blocks it;
     // assertEgressOnly proves it phones the npm registry and nowhere else.
-    const root = join(
-      process.cwd(),
-      "test/dogfood/oh-my-claudecode@deee3a4",
-    );
+    const root = join(process.cwd(), "test/dogfood/oh-my-claudecode@deee3a4");
     // session-start only runs its full logic in a real workspace (a .git /
     // .omc-workspace marker), so give it a throwaway one as the confined cwd.
     const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
@@ -404,10 +401,7 @@ test.skipIf(!sandboxAvailable())(
     // Run a REAL third-party plugin hook (vendored, pinned) under recordEgress
     // and assert it makes zero network egress — the kind of supply-chain check
     // this capability exists for.
-    const root = join(
-      process.cwd(),
-      "test/dogfood/oh-my-claudecode@deee3a4",
-    );
+    const root = join(process.cwd(), "test/dogfood/oh-my-claudecode@deee3a4");
     const r = runHook(
       `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
       {
@@ -435,10 +429,7 @@ test.skipIf(!sandboxAvailable())(
   () => {
     // Confine the real hook and record what it touches on disk: it should write
     // its keyword-state cache under .omc/ and nothing else.
-    const root = join(
-      process.cwd(),
-      "test/dogfood/oh-my-claudecode@deee3a4",
-    );
+    const root = join(process.cwd(), "test/dogfood/oh-my-claudecode@deee3a4");
     const r = runHook(
       `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
       {

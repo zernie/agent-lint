@@ -33,7 +33,7 @@ if (!sandboxAvailable()) {
 }
 
 const ROOT = fileURLToPath(
-  new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
+  new URL("../../test/dogfood/oh-my-claudecode@deee3a4", import.meta.url),
 );
 
 let failed = 0;

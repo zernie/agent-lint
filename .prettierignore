@@ -7,8 +7,8 @@ coverage/
 .omc/
 
 # Vendored third-party plugin snapshots (dogfood fixtures) — formatted by their
-# upstreams, not us. See examples/harness/vendor/*/SOURCE.
-examples/harness/vendor/
+# upstreams, not us. See test/dogfood/*/SOURCE.
+test/dogfood/
 
 # API Extractor reports (tool-generated, exact format)
 etc/
