@@ -45,11 +45,17 @@
   6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
      research/ links — name the user benefit.
   7. ASSETS: the hero vigiles-audit.png is a REAL current report (a community
-     plugin rendered as "my-plugin" to anonymize) — A 92 with five rings (incl.
-     Safety) and an
-     inline subagent-tool-contract fix; no dialect-drift banner (HTML report is
-     terminal-banner-free by design). Re-render via headless Chromium on the React
-     report if the UI changes. (vigiles-demo.gif was removed
+     plugin rendered as "my-plugin" to anonymize) — C 72 with five rings, the
+     SAFETY ring (80) flagging a subagent holding all three lethal-trifecta legs
+     (a prompt-injection exfil path) + an inline subagent-tool-contract fix; the
+     dramatic Safety catch is the whole point of leading with this report (chose
+     the "bite" over a clean A 92 on 2026-06-29). No dialect-drift banner (HTML
+     report is terminal-banner-free by design). Re-render via headless Chromium on
+     the React report if the UI changes (recipe: copy a trifecta-bearing plugin to
+     my-plugin/, `node dist/cli.js audit my-plugin --no-json --no-serve`,
+     headless_shell `--window-size=820,1180 --force-device-scale-factor=2
+     --screenshot` on vigiles-report.html, then `rm -rf my-plugin
+     vigiles-report.html`). (vigiles-demo.gif was removed
      from Proof 1 — it rendered as a frozen half-typed terminal and was redundant
      with the code block; if a lint demo returns, it belongs in the Lint section
      with a non-frozen asset.)
@@ -104,7 +110,7 @@ ship. ↓
 ## The report
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report: an overall A (92/100) score with five category rings — Truthfulness, Triggering, Structure, Safety, Tested — and an inline fix card for a subagent declaring a tool that doesn't exist" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report scoring my-plugin C (72/100): five category rings — Truthfulness, Triggering, Structure, Safety, Tested — with the Safety ring flagging a subagent that holds all three lethal-trifecta legs (a prompt-injection exfil path), plus an inline fix card for a subagent declaring a tool that doesn't exist" />
 </p>
 
 **Lighthouse for your agent harness.** Five graded rings, every fix inline, one
