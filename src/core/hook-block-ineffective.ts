@@ -115,6 +115,15 @@ export interface HookBlockOptions {
 const EXIT_2 = /(^|[\s;&|])exit\s+2(\s|;|$|['")])/m;
 
 /**
+ * A status-2 exit in a NON-shell hook script (a hook file may be `.js`/`.mjs`/
+ * `.py`/`.rb`): `process.exit(2)` (Node), `sys.exit(2)` / `exit(2)` (Python),
+ * `Process.exit(2)` / `exit(2)` (Ruby), `os._exit(2)`. So a guard written in
+ * Node/Python on a no-effect event isn't shown clean.
+ */
+const EXIT_2_CODE =
+  /\b(?:process\.exit|sys\.exit|os\._exit|Process\.exit|exit)\s*\(\s*2\s*\)/;
+
+/**
  * A legacy top-level `"decision":"block"` or `"decision":"deny"` JSON field.
  * This is the OLD Claude Code hook output format. On permission-gated events
  * (PreToolUse) it is ignored; on non-blocking events it never had any effect.
@@ -167,7 +176,7 @@ export function hookBlockIssues(
       scriptPath !== null ? readFile(scriptPath) : (entry.command ?? "");
 
     // Detect block mechanisms.
-    const hasExit2 = EXIT_2.test(text);
+    const hasExit2 = EXIT_2.test(text) || EXIT_2_CODE.test(text);
     const hasDecisionBlock = DECISION_BLOCK.test(text);
     const hasPermissionDeny = PERMISSION_DENY.test(text);
 

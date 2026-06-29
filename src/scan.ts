@@ -1155,17 +1155,27 @@ function collectHookBlockEntries(
       for (const h of hookList) {
         const cmd = (h as { command?: unknown }).command;
         if (typeof cmd !== "string" || cmd.length === 0) continue;
-        const tok = (cmd.match(SCRIPT_RE) ?? [])[0];
-        let scriptPath: string | null = null;
-        if (tok !== undefined) {
-          const resolved = resolveScript(tok, root, pluginRootToken, cmd);
-          if (resolved.status === "ok") {
-            scriptPath = isAbsolute(resolved.script)
-              ? resolved.script
-              : resolve(root, resolved.script);
+        // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
+        // so resolve EVERY script token and inspect each — reading only the first
+        // (the wrapper) would miss the guard's block logic.
+        const resolvedPaths: string[] = [];
+        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
+          const r = resolveScript(tok, root, pluginRootToken, cmd);
+          if (r.status === "ok") {
+            resolvedPaths.push(
+              isAbsolute(r.script) ? r.script : resolve(root, r.script),
+            );
           }
         }
-        out.push({ event, command: cmd, scriptPath });
+        if (resolvedPaths.length > 0) {
+          // One entry per resolvable script (each is inspected on its own).
+          for (const sp of resolvedPaths) {
+            out.push({ event, command: cmd, scriptPath: sp });
+          }
+        } else {
+          // No script file resolved → inline one-liner; inspect the command text.
+          out.push({ event, command: cmd, scriptPath: null });
+        }
       }
     }
   }
@@ -1725,9 +1735,10 @@ export function formatScanReport(r: ScanReport): string {
     r.skillFenceIssues.length +
     r.pluginLayoutIssues.length +
     r.hookBlockFindings.length +
-    r.hookMatcherFindings.length;
-  // NB delegationTrifecta (like the per-unit trifecta) is an advisory ⚠ RISK, not
-  // a ✗ structural defect, so — consistent with trifectaFindings — it isn't summed.
+    r.hookMatcherFindings.length +
+    // HARD trifectas render ✗ and are graded into the score, so they count; the
+    // ADVISORY (inherits-all) ones and the delegation-trifecta ⚠ risk do NOT.
+    r.trifectaFindings.filter((t) => t.finding.severity === "hard").length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"

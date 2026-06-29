@@ -74,9 +74,9 @@ for (const prefix of [
   });
 }
 
-// TRUE-POSITIVE — the bug fixture (MIT; see test/dogfood/README.md) must keep firing both the
-// tool-contract and frontmatter-valid rules it's vendored to lock.
-test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + malformed YAML", () => {
+// TRUE-POSITIVE — the bug fixture (MIT; see test/dogfood/README.md) reproduces THREE
+// real defects: tool-contract, frontmatter-valid, AND a hard lethal-trifecta.
+test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + malformed YAML + lethal-trifecta", () => {
   const r = scanPlugin(vendored("madappgang-frontend"));
 
   const tester = r.agents.find((a) => a.name === "tester");
@@ -92,6 +92,14 @@ test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + mal
   assert.ok(
     r.malformedFrontmatter.some((m) => m.path.includes("tester.md")),
     "tester.md's one-line description is invalid YAML → frontmatter-valid fires",
+  );
+
+  // The tester's tools grant all three legs (Read/Bash = private, WebFetch/WebSearch
+  // = untrusted, Bash/WebFetch = exfil) — a real, hard lethal-trifecta in the wild.
+  const trifecta = r.trifectaFindings.find((t) => t.name === "tester");
+  assert.ok(
+    trifecta && trifecta.finding.severity === "hard",
+    "tester's tool set must fire a HARD lethal-trifecta (a real exfil path)",
   );
 });
 
