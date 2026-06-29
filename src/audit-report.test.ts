@@ -5,8 +5,14 @@
  * form stays deterministic.
  */
 import { describe, it, expect } from "vitest";
-import { buildAuditReport, AUDIT_SCHEMA_VERSION } from "./audit-report.js";
-import type { ScanReport } from "./scan.js";
+import {
+  buildAuditReport,
+  buildLeaderboardReport,
+  buildMarketplaceReport,
+  AUDIT_SCHEMA_VERSION,
+} from "./audit-report.js";
+import type { ScanReport, MarketplaceInfo } from "./scan.js";
+import type { PluginScore } from "./leaderboard.js";
 
 function makeReport(over: Partial<ScanReport> = {}): ScanReport {
   return {
@@ -156,6 +162,7 @@ describe("buildAuditReport", () => {
     expect(Object.keys(r.meta).sort()).toEqual([
       "dir",
       "harness",
+      "kind",
       "schemaVersion",
       "tool",
       "vigilesVersion",
@@ -188,5 +195,50 @@ describe("buildAuditReport", () => {
       "skills",
       "untested",
     ]);
+  });
+});
+
+describe("buildLeaderboardReport / buildMarketplaceReport", () => {
+  const plugin = (name: string, score: number): PluginScore =>
+    ({
+      dir: `/x/${name}`,
+      name,
+      score,
+      grade: "A",
+      issues: [],
+      report: makeReport(),
+    }) as PluginScore;
+
+  it("wraps leaderboard scores in a versioned, self-describing envelope (not a bare array)", () => {
+    const r = buildLeaderboardReport([plugin("a", 100), plugin("b", 95)], {
+      vigilesVersion: "9.9.9",
+      dir: "/x/market",
+    });
+    // The fix: a multi-plugin `audit --json` is a versioned OBJECT, never a raw array.
+    expect(Array.isArray(r)).toBe(false);
+    expect(r.meta.schemaVersion).toBe(AUDIT_SCHEMA_VERSION);
+    expect(r.meta.tool).toBe("vigiles");
+    expect(r.meta.kind).toBe("leaderboard");
+    expect(r.meta.vigilesVersion).toBe("9.9.9");
+    expect(r.meta.dir).toBe("/x/market");
+    expect(r.meta.generatedAt).toBeUndefined(); // pure builder, no clock
+    expect(r.plugins.map((p) => p.name)).toEqual(["a", "b"]);
+  });
+
+  it("wraps a curated marketplace inventory in a versioned envelope", () => {
+    const mp: MarketplaceInfo = {
+      name: "curated",
+      onDisk: [],
+      external: 2,
+      total: 2,
+    };
+    const r = buildMarketplaceReport(mp, {
+      vigilesVersion: "9.9.9",
+      dir: "/x/curated",
+    });
+    expect(r.meta.kind).toBe("marketplace");
+    expect(r.meta.schemaVersion).toBe(AUDIT_SCHEMA_VERSION);
+    expect(r.marketplace.total).toBe(2);
+    expect(r.marketplace.onDisk).toEqual([]);
   });
 });

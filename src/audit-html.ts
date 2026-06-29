@@ -38,32 +38,57 @@ function escapeForScript(json: string): string {
 }
 
 /**
+ * Live-server info injected into the report when it's served by `audit --serve`
+ * (not a static file): the per-run token the report must send on every adopt
+ * POST. Absent for a plain static report — the buttons fall back to copy-command.
+ */
+export interface ServeInfo {
+  readonly token: string;
+}
+
+/**
  * Inject the report JSON into a template by replacing the quoted placeholder
  * string with the JSON object literal. Pure — the testable core. Throws if the
- * template is missing the placeholder.
+ * template is missing the placeholder. When `serve` is given (the `--serve`
+ * path), also sets `window.__VIGILES_SERVE__` so the report's adopt buttons POST
+ * to the local server instead of copying the command.
  */
 export function injectReportData(
   template: string,
   report: AuditReport,
+  serve?: ServeInfo,
 ): string {
   const re = new RegExp(`(["'])${PLACEHOLDER}\\1`);
   if (!re.test(template)) {
     throw new Error("audit report template is missing the data placeholder");
   }
-  return template.replace(re, escapeForScript(JSON.stringify(report)));
+  let out = template.replace(re, escapeForScript(JSON.stringify(report)));
+  if (serve) {
+    // Prepend the serve global onto the same statement that carries the data, so
+    // it's set before the app bundle reads it. The token is hex, but escape anyway.
+    out = out.replace(
+      "window.__VIGILES_DATA__",
+      `window.__VIGILES_SERVE__=${escapeForScript(JSON.stringify(serve))};window.__VIGILES_DATA__`,
+    );
+  }
+  return out;
 }
 
 /**
  * Render the self-contained HTML report (React template + injected data). Throws
  * if the template hasn't been built — the caller (writeAuditHtml) catches that and
- * skips the HTML, since the JSON + terminal report don't depend on it.
+ * skips the HTML, since the JSON + terminal report don't depend on it. Pass
+ * `serve` to render the live (`--serve`) variant whose buttons POST.
  */
-export function renderAuditHtml(report: AuditReport): string {
+export function renderAuditHtml(
+  report: AuditReport,
+  serve?: ServeInfo,
+): string {
   const p = templatePath();
   if (!p) {
     throw new Error(
       "audit report template not built — run `npm run build` (builds report/), or use --json / --no-html",
     );
   }
-  return injectReportData(readFileSync(p, "utf-8"), report);
+  return injectReportData(readFileSync(p, "utf-8"), report, serve);
 }

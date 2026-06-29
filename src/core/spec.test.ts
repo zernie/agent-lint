@@ -331,6 +331,24 @@ describe("compileSkill()", () => {
     assert.equal(errors.length, 0);
   });
 
+  it("an over-long inline code block is a WARNING, not a blocking error", () => {
+    // A >20-line inline code block is an authoring smell worth surfacing, but it
+    // never breaks the harness — so it's a non-blocking warning, and a faithful
+    // adoption of a code-heavy skill still compiles (errors stay empty).
+    const bigBlock = "```ts\n" + "const x = 1;\n".repeat(25) + "```";
+    const spec = skill({
+      name: "code-heavy",
+      description: "A skill with a big code example",
+      body: `Do the thing.\n\n${bigBlock}\n`,
+    });
+    const { errors, warnings } = compileSkill(spec);
+    assert.equal(errors.length, 0); // does NOT block compilation
+    assert.ok(
+      warnings.some((w) => w.type === "inline-code-too-long"),
+      "the long code block is surfaced as a warning",
+    );
+  });
+
   it("renders context: fork and a forked skill's typed output contract", () => {
     const spec = skill({
       name: "review",

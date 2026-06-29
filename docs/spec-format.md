@@ -159,7 +159,7 @@ export default skill({
 | `context`                | `"fork"`                                            | no       | Run as a forked subagent -- the prerequisite for `output`                                                          |
 | `output`                 | `OutputContract`                                    | no       | A `result(okShape, errShape)` typed outcome -- **requires `context:"fork"`** (see [Railway](railway-subagents.md)) |
 | `body`                   | `string \| InstructionFragment[]`                   | yes\*    | Instruction body -- plain string or tagged template (\*or use `steps`)                                             |
-| `maxInlineCodeLines`     | `number`                                            | no       | Cap an inline fenced code block before it must move to a `file()` (default 20)                                     |
+| `maxInlineCodeLines`     | `number`                                            | no       | Warn (non-blocking) when an inline fenced code block is longer than this, nudging it into a `file()` (default 20)  |
 
 ## Subagent (agent) Specs
 

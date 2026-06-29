@@ -87,6 +87,9 @@ import {
   formatBehavioralReport,
   measurePluginSelection,
   formatSelectionReport,
+  measureGateAdversarial,
+  formatGateReport,
+  detectGateSkills,
   type TriggerPromptSet,
   type ProbeHarness,
 } from "./scan-behavioral.js";
@@ -116,7 +119,18 @@ import {
   type PromptSkill,
 } from "./audit-prompts.js";
 import { renderAuditHtml } from "./audit-html.js";
-import { buildAuditReport, type AuditReport } from "./audit-report.js";
+import {
+  serveAudit,
+  decideServeGate,
+  newToken,
+  type AdoptOutcome,
+} from "./audit-serve.js";
+import {
+  buildAuditReport,
+  buildLeaderboardReport,
+  buildMarketplaceReport,
+  type AuditReport,
+} from "./audit-report.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -336,6 +350,15 @@ function printErrors(specFile: string, errors: CompileError[]): void {
   }
 }
 
+/** Non-blocking advisories — printed, but never fail the compile. */
+function printWarnings(specFile: string, warnings: CompileError[]): void {
+  for (const w of warnings) {
+    const pathInfo = w.path ? ` (${w.path})` : "";
+    console.log(`  ⚠ [${w.type}] ${w.message}${pathInfo}`);
+    console.log(`::warning file=${specFile}::${w.message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -448,7 +471,7 @@ function compileSkillToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileSkill(spec, {
+  const { markdown, errors, warnings } = compileSkill(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     // The SKILL.md frontmatter profile comes from the resolved harness — a Codex
@@ -458,10 +481,12 @@ function compileSkillToFile(
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
+    printWarnings(specPath, warnings);
     return true;
   }
   console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
   printErrors(specPath, errors);
+  printWarnings(specPath, warnings);
   return false;
 }
 
@@ -472,7 +497,7 @@ function compileAgentToFile(
   dialect: HarnessDialect,
 ): boolean {
   const outputPath = specPath.replace(/\.spec\.ts$/, "");
-  const { markdown, errors } = compileAgent(spec, {
+  const { markdown, errors, warnings } = compileAgent(spec, {
     basePath: process.cwd(),
     specFile: specPath,
     dialect,
@@ -480,10 +505,12 @@ function compileAgentToFile(
   writeFileSync(resolve(process.cwd(), outputPath), markdown);
   if (errors.length === 0) {
     console.log(`\n✓ ${specPath} → ${outputPath}`);
+    printWarnings(specPath, warnings);
     return true;
   }
   console.log(`\n✗ ${specPath} — ${String(errors.length)} error(s)`);
   printErrors(specPath, errors);
+  printWarnings(specPath, warnings);
   return false;
 }
 
@@ -1215,8 +1242,27 @@ interface MarkdownModeTotals {
 }
 
 /**
- * Verify inline `<!-- vigiles:enforce -->` comments and `vigiles:` YAML
- * frontmatter in instruction files that aren't managed by a spec.
+ * Frontmatter mode (Level 1 — a `vigiles:` YAML block) is DISABLED in lint:
+ * KEPT IN CODE (`src/core/frontmatter.ts`, `verifyFrontmatterRules`,
+ * `vigiles generate schema`), but INERT — lint no longer reads or verifies a
+ * `vigiles:` block, so it never fires and never fails a build.
+ *
+ * WHY disabled-not-removed: the three-rung adoption ladder (inline / frontmatter
+ * / typed spec) collapsed to TWO on-ramps — inline comments (the zero-TS floor)
+ * and the typed `.spec.ts` (the source of truth). Frontmatter mode was the
+ * weakest middle rung and an undocumented-but-live surface that muddied the
+ * spec-first story (it literally confused a review). With ~no users to break,
+ * gating it off makes lint coherent (verify compiled output + inline marks +
+ * specs, nothing else) while preserving the code so the decision is reversible:
+ * flip this to `true` to re-enable. See `research/pre-release-focus.md` and the
+ * parked note in `docs/markdown-mode.md`.
+ */
+const FRONTMATTER_MODE_ENABLED: boolean = false;
+
+/**
+ * Verify inline `<!-- vigiles:enforce -->` comments (and, when
+ * {@link FRONTMATTER_MODE_ENABLED}, `vigiles:` YAML frontmatter) in instruction
+ * files that aren't managed by a spec.
  *
  * Spec mode is the source of truth when it exists, so a literal
  * `<!-- vigiles:enforce ... -->` snippet that survived into compiled
@@ -1259,14 +1305,18 @@ function verifyMarkdownModeRules(
     const inline = verifyInlineRules(filePath, silent, linterOptions);
     totals.inlineErrors += inline.errorCount;
     totals.inlineRules += inline.ruleCount;
-    const fm = verifyFrontmatterRules(
-      filePath,
-      silent,
-      new Set(inline.ruleNames),
-      linterOptions,
-    );
-    totals.frontmatterErrors += fm.errorCount;
-    totals.frontmatterRules += fm.ruleCount;
+    // Frontmatter mode is DISABLED (kept in code, inert in lint) — a `vigiles:`
+    // block is ignored, never verified. See FRONTMATTER_MODE_ENABLED.
+    if (FRONTMATTER_MODE_ENABLED) {
+      const fm = verifyFrontmatterRules(
+        filePath,
+        silent,
+        new Set(inline.ruleNames),
+        linterOptions,
+      );
+      totals.frontmatterErrors += fm.errorCount;
+      totals.frontmatterRules += fm.ruleCount;
+    }
   }
   if (
     !silent &&
@@ -4322,6 +4372,9 @@ function printUsage(command: string | undefined): void {
     "                                 the executing checks (run your hooks · live MCP · do skills fire?) run only interactively — `audit` asks once (remembered); automation uses the vigiles/testing API",
   );
   console.log(
+    "                                 --serve opens a LIVE local report whose buttons create specs in one click (own repo only; loopback + token-guarded) · --no-serve to skip the prompt",
+  );
+  console.log(
     "  vigiles test [files...]        Run *.harness.mjs deterministic harness tests",
   );
   console.log(
@@ -5342,6 +5395,65 @@ function writeAuditHtml(report: AuditReport): void {
 }
 
 /**
+ * Start the live (`--serve`) adoption server: render the report with a per-run
+ * token, serve it on loopback, and run `init` in-process when a button POSTs. The
+ * security model lives in src/audit-serve.ts (token + Origin + allowlist). Blocks
+ * until the user stops it (Ctrl-C or the page's Done). Own-repo only — the caller
+ * gates this via decideServeGate, so adopt always writes into the current repo.
+ */
+async function runAuditServe(
+  report: AuditReport,
+  adoptable: AuditReport["adoptable"],
+  cliErr: (e: unknown) => string,
+): Promise<void> {
+  const token = newToken();
+  const surfaces = new Set((adoptable?.surfaces ?? []).map((s) => s.path));
+  let html: string;
+  try {
+    html = renderAuditHtml(report, { token });
+  } catch (e) {
+    console.log(`\n⚠ can't serve the live report: ${cliErr(e)}`);
+    return;
+  }
+  const adoptOne = (target: string): Promise<AdoptOutcome> => {
+    try {
+      scaffoldSpec(["--target=" + target]); // in-process; writes into cwd (own repo)
+      return Promise.resolve({
+        ok: true,
+        message: `created spec for ${target}`,
+      });
+    } catch (e) {
+      return Promise.resolve({ ok: false, message: cliErr(e) });
+    }
+  };
+  console.log(
+    "\n  Live report — create specs with one click. Ctrl-C to stop.\n",
+  );
+  await serveAudit({
+    token,
+    surfaces,
+    html,
+    runAdopt: adoptOne,
+    runAdoptAll: () => {
+      try {
+        for (const p of surfaces) scaffoldSpec(["--target=" + p]);
+        return Promise.resolve({
+          ok: true,
+          message: `created ${String(surfaces.size)} spec(s)`,
+        });
+      } catch (e) {
+        return Promise.resolve({ ok: false, message: cliErr(e) });
+      }
+    },
+    onListening: (url) => {
+      console.log(`  ${url}`);
+      if (process.stdout.isTTY) openBestEffort(url);
+    },
+  });
+  console.log("\n✓ live report closed");
+}
+
+/**
  * Run the model trigger tier with no `--prompts`: auto-generate diverse probe
  * prompts from each skill's description and measure trigger-rate (recall +
  * precision) — zero-setup. `--prompts=<file>` (handled by handleMeasure)
@@ -5375,21 +5487,59 @@ async function runAutoTrigger(
       "\nℹ auto-generated probe prompts from skill descriptions (pass --prompts=<file> for a curated set).",
     );
   }
+  const model = flagValue(args, "--model");
   const trigger = await probePluginTriggers(dir, promptSet, {
     minPrompts: AUTO_RECALL_COUNT,
     minDistance: AUTO_MIN_DISTANCE,
-    model: flagValue(args, "--model"),
+    model,
     harness,
     // Discover candidates with the resolved adapter's layout/dialect — a Codex
     // repo's skills live under the Codex layout, not the default CC one.
     layout: adapter.layout,
     dialect: adapter.dialect,
   });
-  console.log(
-    json
-      ? JSON.stringify({ trigger }, null, 2)
-      : "\n" + formatBehavioralReport(trigger),
-  );
+  // Second behavioral eval (same consent): the selection-collision matrix — does
+  // one skill HIJACK a sibling's prompt? This is the MEASURED confirmation of the
+  // deterministic description-overlap proxy (the Triggering ring flags look-alikes;
+  // this proves the wrong one actually fires). Only meaningful with ≥2 model-
+  // invocable skills (a lone skill can't collide); reuses the same auto prompts.
+  const collisions =
+    skills.length >= 2
+      ? await measurePluginSelection(dir, promptSet, { model, harness })
+      : null;
+  // Third behavioral eval (same consent): adversarial-gate — do enforcement-gate
+  // skills HOLD when the agent is told to violate them? Auto-derives its own
+  // attacks; a no-op (no model calls) when the plugin declares no gate skills.
+  const gates = await measureGateAdversarial(dir, {
+    model,
+    harness,
+    layout: adapter.layout,
+    dialect: adapter.dialect,
+  });
+  // Show the gate section when gate skills were DETECTED — even if the eval
+  // couldn't RUN (a Codex audit, or no `claude` CLI) it returns available:false
+  // with empty results, and `formatGateReport` renders the "unavailable" note.
+  // The consent prompt already advertised these gate skills, so a skipped check
+  // must be reported LOUDLY, never silently omitted as if there were none.
+  const hasGates =
+    gates.results.length > 0 || detectGateSkills(report.skills).length > 0;
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          trigger,
+          ...(collisions ? { collisions } : {}),
+          ...(hasGates ? { gates } : {}),
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log("\n" + formatBehavioralReport(trigger));
+    if (collisions) console.log("\n" + formatSelectionReport(collisions));
+    if (hasGates) console.log("\n" + formatGateReport(gates));
+  }
 }
 
 /**
@@ -5399,6 +5549,7 @@ async function runAutoTrigger(
 interface ExecutableSurfaces {
   readonly hasMcp: boolean; // own-repo + declares MCP server(s)
   readonly triggerableSkills: number; // model-invocable, described skills
+  readonly gateSkills: number; // enforcement-gate skills (the adversarial-gate eval)
   // An instruction file whose refs the adoption preview can draft+verify. Harness-
   // aware: Claude Code only in v1 (drafting drives the `claude` CLI), so a bare
   // CLAUDE.md repo is consent-eligible but a Codex AGENTS.md repo isn't (it gets a
@@ -5462,8 +5613,19 @@ function buildExecuteDisclosure(
   if (s.hasMcp)
     lines.push("  · start your MCP servers — connects to their backends");
   if (s.triggerableSkills > 0) {
+    // ≥2 model-invocable skills also get the selection-collision matrix (does one
+    // skill hijack a sibling's prompt) — disclose it so the consent stays honest.
+    const what =
+      s.triggerableSkills >= 2
+        ? "measure whether skills fire and collide"
+        : "measure whether skills fire";
+    lines.push(`  · ${what} (${triggerCostWording(harness)})`);
+  }
+  if (s.gateSkills > 0) {
+    // The adversarial-gate eval runs the FULL (unstubbed) skill — the most
+    // expensive check — so disclose it separately when gate skills are present.
     lines.push(
-      `  · measure whether skills fire (${triggerCostWording(harness)})`,
+      `  · test whether ${String(s.gateSkills)} enforcement-gate skill${s.gateSkills === 1 ? "" : "s"} hold under pressure — runs the full skill (${triggerCostWording(harness)})`,
     );
   }
   if (s.adoptableRefs) {
@@ -5668,7 +5830,16 @@ async function main(): Promise<void> {
         // through to a misleading "empty machine / no structural issues" report
         // (obra/superpowers-marketplace, anthropics/claude-plugins-community).
         if (json) {
-          console.log(JSON.stringify(market, null, 2));
+          console.log(
+            JSON.stringify(
+              buildMarketplaceReport(market, {
+                vigilesVersion: getVersion(),
+                dir: resolve(dirs[0]),
+              }),
+              null,
+              2,
+            ),
+          );
         } else {
           console.log(
             `Marketplace "${market.name}": ${String(market.total)} plugin(s), all external ` +
@@ -5684,7 +5855,18 @@ async function main(): Promise<void> {
         const text = args.includes("--md")
           ? formatLeaderboardMarkdown(scores)
           : formatLeaderboard(scores);
-        console.log(json ? JSON.stringify(scores, null, 2) : text);
+        console.log(
+          json
+            ? JSON.stringify(
+                buildLeaderboardReport(scores, {
+                  vigilesVersion: getVersion(),
+                  dir: resolve(dirs[0]),
+                }),
+                null,
+                2,
+              )
+            : text,
+        );
       } else {
         const root = resolve(targets[0]);
         const harnessFlag = harnessFlagFrom(args);
@@ -5768,6 +5950,7 @@ async function main(): Promise<void> {
           triggerableSkills: report.skills.filter(
             (s) => s.hasDescription && !s.userInvoked,
           ).length,
+          gateSkills: detectGateSkills(report.skills).length,
           adoptableRefs:
             adapter.name === "claude-code" &&
             existsSync(resolve(root, adapter.layout.instructionFile)),
@@ -5886,16 +6069,39 @@ async function main(): Promise<void> {
         const finalReport: AuditReport = adoptabilityResult
           ? { ...auditReport, adoptability: adoptabilityResult }
           : auditReport;
-        // The shareable HTML report — written by default (--no-html to skip), and
-        // opened best-effort only for a human at a TTY (never spawn a browser for
-        // an agent / CI run).
-        if (!json && !args.includes("--no-html")) {
-          writeAuditHtml(finalReport);
-        }
         // The versioned JSON artifact — the upload/CI boundary (a hosted dashboard
         // ingests this). Written by default in the human path; --no-json to skip.
         if (!json && !args.includes("--no-json")) {
           writeAuditJson(finalReport);
+        }
+        // The HTML report has two deliveries. STATIC (default): write the
+        // shareable file whose buttons copy the `init` command. LIVE (`--serve`,
+        // or a TTY "yes"): start a loopback server whose buttons run `init` for
+        // you. The gate keeps the default a terminating, headless-safe read and
+        // restricts the write-server to your own repo (decideServeGate).
+        const serveGate = decideServeGate({
+          serveFlag: args.includes("--serve"),
+          noServeFlag: args.includes("--no-serve"),
+          json,
+          isTTY: process.stdout.isTTY && process.stdin.isTTY,
+          ownRepo: !isForeign,
+          adoptableCount: finalReport.adoptable?.surfaces.length ?? 0,
+        });
+        let serveLive = serveGate === "serve";
+        if (serveGate === "ask") {
+          const ans = (
+            await askOnce(
+              "\nOpen the live report to create specs with one click? [y/N] ",
+            )
+          ).toLowerCase();
+          serveLive = ans === "y" || ans === "yes";
+        }
+        const errMsg = (e: unknown): string =>
+          e instanceof Error ? e.message : String(e);
+        if (serveLive) {
+          await runAuditServe(finalReport, finalReport.adoptable, errMsg);
+        } else if (!json && !args.includes("--no-html")) {
+          writeAuditHtml(finalReport);
         }
       }
       break;

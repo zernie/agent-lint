@@ -223,6 +223,24 @@ describe("scan e2e — artificial cc/codex/mixed/marketplace", () => {
     assert.match(r.stdout, /beta/);
   });
 
+  it("marketplace --json emits a versioned leaderboard envelope (not a bare array)", () => {
+    // Regression: the leaderboard path used to print a raw, unversioned array,
+    // inconsistent with the single-plugin AuditReport contract. Now it's a
+    // versioned object with a `kind:"leaderboard"` discriminant + `plugins[]`.
+    const r = run(`audit ${join(root, "mp")} --json`);
+    assert.equal(r.exitCode, 0);
+    const j = JSON.parse(r.stdout) as {
+      meta: { tool: string; kind: string; schemaVersion: number };
+      plugins: unknown[];
+    };
+    assert.equal(Array.isArray(j), false);
+    assert.equal(j.meta.tool, "vigiles");
+    assert.equal(j.meta.kind, "leaderboard");
+    assert.equal(typeof j.meta.schemaVersion, "number");
+    assert.equal(Array.isArray(j.plugins), true);
+    assert.equal(j.plugins.length, 2);
+  });
+
   it("curated marketplace (all external members): reports honestly, not 'empty'", () => {
     // obra/superpowers-marketplace, anthropics/claude-plugins-community shape —
     // every member is an external git/url plugin, nothing on disk.

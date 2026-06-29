@@ -24,9 +24,33 @@ subscription.
 4. [Rank against the field](#4-rank-against-the-field)
 5. [Test and gate it in CI](#5-test-and-gate-it-in-ci)
 
+## The workflow at a glance
+
+vigiles turns "I have a markdown plugin" into "I have a verified harness" in a few
+distinct moves — lowest-effort first. Each is a separate command; you can stop at
+any step:
+
+1. **`audit` — see.** A read-only report: what you ship, what's broken, and which
+   surfaces aren't spec-managed yet. Safe to run anywhere; it writes nothing.
+2. **`init` — adopt.** Turns your existing `CLAUDE.md` / skills / subagents into
+   typed `.spec.ts` specs, faithfully and non-destructively (`eject` reverses).
+   Adopt everything (`npx vigiles init`) or one surface at a time
+   (`npx vigiles init --target=skills/x/SKILL.md`).
+3. **`strengthen` — deepen (optional).** A skill your agent invokes that upgrades
+   prose guidance into enforced linter rules, so lint can verify your references
+   are real _and enabled_, not just present.
+4. **`lint` — gate.** Runs in CI: every path, script, rule, and tool contract must
+   resolve. The deterministic guardrail.
+
+**About the report's "Create spec" buttons:** the HTML report is a shareable static
+file, so it can't touch your repo. The buttons **copy the exact
+`npx vigiles init …` command to your clipboard** — you paste it, and your local CLI
+writes the spec. A report can hand you the command; only your own machine can run
+it. (The terminal and `--json` outputs print the same commands.)
+
 ## 1. Scan a draft for structural health
 
-Point `scan` at your plugin directory. It's deterministic — no model, no API key —
+Point `audit` at your plugin directory. It's deterministic — no model, no API key —
 and reports what you ship and what's broken:
 
 ```bash
@@ -53,7 +77,7 @@ machine-readable report to wire into your own tooling.
 
 The output is the to-do list: resolve the broken hook paths, give every skill a
 description, correct the tool-contract typos, declare your MCP servers, and
-differentiate any colliding skill descriptions. Re-run `scan` until it's clean —
+differentiate any colliding skill descriptions. Re-run `audit` until it's clean —
 this is the free, fast loop you run before every release.
 
 If your plugin ships an instruction file (`CLAUDE.md` / `AGENTS.md`), run
@@ -84,7 +108,7 @@ designed path for testing skills in a script. See
 
 ## 4. Rank against the field
 
-Give `scan` more than one plugin and it ranks every one by structural health — a
+Give `audit` more than one plugin and it ranks every one by structural health — a
 0–100 score and an A–F grade, worst issues first, **no key**. Two ways to do that:
 
 ```bash
@@ -92,7 +116,7 @@ Give `scan` more than one plugin and it ranks every one by structural health —
 npx vigiles audit ./plugin-a ./plugin-b ./plugin-c
 
 # 2) Point it at a repo that ships a marketplace.json (e.g.
-#    .claude-plugin/marketplace.json) — scan expands it into its members:
+#    .claude-plugin/marketplace.json) — audit expands it into its members:
 npx vigiles audit ./marketplace
 ```
 
@@ -122,9 +146,10 @@ npx vigiles test    # the deterministic tiers — free, no key, every commit
 npx vigiles eval    # the real-model tiers — on your own subscription
 ```
 
-Wire `scan` and `test` into CI via the
-[GitHub Action](github-action.md). The deterministic tiers run on every commit for
-free; the real-model evals stay on a dev's subscription, not a metered CI token.
+Wire `lint` and `test` into CI via the
+[GitHub Action](github-action.md) — `lint` is the deterministic gate (`audit` is a
+local report, not a CI step). The deterministic tiers run on every commit for free;
+the real-model evals stay on a dev's subscription, not a metered CI token.
 
 If your plugin ships **safety hooks**, author them as compiled hooks so they can't
 silently fail open — see [compiled hooks](compiled-hooks.md).
