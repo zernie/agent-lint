@@ -73,7 +73,7 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>The tests your AI agent harness never had.</strong>
+  <strong>The tests your agent's skills and hooks never had.</strong>
 </p>
 
 <p align="center">
@@ -86,8 +86,10 @@
 
 **You installed some plugins and wrote a few skills. Do they actually work?**
 
-A skill that never fires. Two skills the agent confuses. A subagent wired to a tool
-that doesn't exist. Your harness breaks **silently** — and you find out mid-task.
+Your skills, hooks, and instructions are your agent's **harness** — the half you wrote
+and own, and the half nothing checks. A skill that never fires. Two skills the agent
+confuses. A subagent wired to a tool that doesn't exist. It breaks silently, and you
+find out mid-task.
 
 It's a library with no tests. This runs them:
 
@@ -130,9 +132,9 @@ fires the wrong one. The markdown is perfectly valid.
     → remove or correct it — it's silently dropped from the contract.
 ```
 
-This subagent declares a tool that doesn't exist. The harness drops it without a
-word, so the agent quietly loses a capability it thinks it has. vigiles catches it
-and gives you the **one-line fix**.
+This subagent — a helper your main agent hands a task to — declares a tool that
+doesn't exist. The harness drops it silently, so the agent loses a capability it
+thinks it has. vigiles[^name] catches it and gives you the **one-line fix**.
 
 That's the whole idea — it checks your harness against reality, not style. Every path,
 script, code symbol, and linter rule, verified to exist _and_ be enabled across 7
@@ -142,53 +144,33 @@ catalogs (ESLint, Ruff, Clippy + four more).
 Both catches are free and need no model. Point `audit` at a whole marketplace and it
 ranks every plugin the same way. **[Audit a marketplace →](docs/for-plugin-authors.md)**
 
-## How it does it — three instruments
+## How it works
 
-Your agent is the model plus the **harness** around it[^name] — the skills, hooks, and
-instructions you wrote. The model isn't yours to fix. The harness is. `audit` finds
-the problems; these three tools fix and prove them.
+The model isn't yours to fix. Your harness is. `audit` shows you the problems — here's
+what fixes and proves each one, almost all of it with no model and no key.
 
 ### 🔎 Lint — your CLAUDE.md stops lying
 
-Every path, script, symbol, and linter rule, checked against reality — the catches
-above. And **you don't write any of it.** `npx vigiles init` adopts your existing
-CLAUDE.md, skills, and subagents into verified specs. Nothing is touched until you
-`compile`, and `eject` reverses it. After that, a plain-English ask edits them for
-you. **[How →](docs/verifying-instruction-files.md)**
+Every path, script, symbol, and rule verified against reality — the catches above.
+You don't write the checks: `npx vigiles init` turns your CLAUDE.md, skills, and
+subagents into _specs_ (same content, plus a layer vigiles can verify). Non-destructive,
+edited by your agent in plain English, undone by `eject`.
+**[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
 
-A hook that blocks nothing. A skill that hijacks unrelated prompts. Context that
-never reaches the model. Each one passes a naive "did it run?" check.
-
-Start at the cheapest tier — a hook, called directly. **No model, no key:**
-
-```typescript
-import { runHook } from "vigiles/testing";
-
-const r = runHook(guard, {
-  hook_event_name: "PreToolUse",
-  tool_name: "Bash",
-  tool_input: { command: "git commit --no-verify" },
-});
-assert(r.blocked); // a red ✗ means your guard silently lets it through
-```
-
-From there: hooks **block**, skills **trigger**, subagents **finish what they
-promised**, and safety holds — a stray `git push` or paid-API call is caught before
-it happens. Almost every tier runs with no model and no key, on every commit.
+A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never
+reaches the model — each passes a naive "did it run?" check. vigiles tests the real
+thing: hooks **block**, skills **fire**, subagents **finish what they promised**, and a
+stray `git push` is caught before it happens. No model, no key, on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
 ### 📊 Eval — does a skill help, or just cost more?
 
-_"65% fewer tokens." Says who?_ vigiles runs the claim A/B on real coding tasks and
-reports the **token bill**, whether it moved the number it promised, and whether the
-code still works.
-
-And you can afford to run it. promptfoo and DeepEval bill **per token, every run.**
-vigiles answers most questions with no model at all, and runs the rest on your own
-Claude Pro/Max subscription — nothing extra.
-**[Measure a skill →](docs/measuring-skills.md)**
+_"65% fewer tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and reports
+the token bill, whether it hit its target, and whether the code still works. promptfoo
+and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max
+subscription. **[Measure a skill →](docs/measuring-skills.md)**
 
 ## Quick start
 
@@ -205,7 +187,7 @@ eval without asking me first.
 Or do it yourself:
 
 ```bash
-npx vigiles init   # lint + test: spec + harness test + CI + plugin
+npx vigiles init   # one-time setup: adopts your files, adds checks + tests + CI
 ```
 
 Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
