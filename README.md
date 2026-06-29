@@ -165,8 +165,11 @@ script, code symbol, and linter rule, verified to exist _and_ be enabled across 
 catalogs (ESLint, Ruff, Clippy + four more).
 **[Full guide →](docs/verifying-instruction-files.md)**
 
-All three catches are free and need no model. Point `audit` at a whole marketplace and it
-ranks every plugin the same way. **[Audit a marketplace →](docs/for-plugin-authors.md)**
+All three catches are free and need no model — and vigiles **prevents** other whole
+classes of bug by construction (a typed spec or compiled hook just won't compile).
+**[Everything it catches and prevents →](docs/what-vigiles-catches.md)** · point `audit`
+at a whole marketplace and it ranks every plugin the same way.
+**[Audit a marketplace →](docs/for-plugin-authors.md)**
 
 ## How it works
 
@@ -253,6 +256,7 @@ JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 
 ## More
 
+- **[What vigiles catches and prevents →](docs/what-vigiles-catches.md)** — the full matrix of harness problems it handles, biggest first, marked prevent / catch / measure.
 - **[CLI →](docs/cli.md)** · **[GitHub Action →](docs/github-action.md)** · the full **[lint rules matrix →](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)** lives with the linting guide.
 - **[Skills →](docs/skills.md)** — the skills `init` installs, and how the model-invocable ones trigger.
 - **[Ship plugins? The plugin-author guide →](docs/for-plugin-authors.md)** — scan a draft, make your skills fire, rank a whole marketplace — no key.
