@@ -73,6 +73,7 @@ one click away.
 
 ## Runtime enforcement & agent integration
 
+- [`enforcement-model.md`](enforcement-model.md) — **why each rule's severity is what it is** (and why "make it all impossible by construction" is unachievable): prevention is a gradient bounded by decidability; the three buckets (structural-closed / external-decidable / heuristic-behavioral) that set each rule's ceiling. The model behind `src/core/rule-meta.ts` + the `lint-rule-calibration` rule.
 - [`runtime-enforcement.md`](runtime-enforcement.md) — spec-derived runtime enforcement via hooks, skill contracts, session audit.
 - [`agent-integration.md`](agent-integration.md) — the deterministic backstop for AI agents: hooks, proofs, static checks anchored at the spec.
 - [`dynamic-workflows-and-scope.md`](dynamic-workflows-and-scope.md) — dynamic workflows and scope boundaries.

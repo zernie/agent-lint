@@ -581,6 +581,15 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
       (`Bash(*)` / `--dangerously-skip-permissions`), `.env`-deny-Bash-bypass, CLAUDE.md
       `@import` resolution, instruction-file truncation limit, skill-description >250-char cap.
       [audit-wow-ideas](audit-wow-ideas.md) §Tier-1 · **LOW-MED each**
+- [ ] **`adoptHook` — close the hook prevent-layer asymmetry.** Every surface but hooks
+      has a Stage-1 PREVENT on-ramp (`init` auto-adopts CLAUDE.md / skills / subagents into
+      typed specs); hooks have only Stage-3 DETECTION (the `hook-*` lint rules), because
+      there's no `adoptHook` and `prefer-compiled-hooks` defaults off. An `adoptHook` would
+      convert a hand-written shell hook into a compiled `vigiles/hook` program during `init`,
+      making `hook-block-ineffective` / `hook-events` / `hook-script-exists` _prevented by
+      construction_ instead of detect-only. Parked because shell→typed is lossy/undecidable in
+      the general case (best-effort + a loud "couldn't fully translate" is the realistic shape).
+      [enforcement-model](enforcement-model.md) §the-hook-asymmetry · **MED-HIGH**
 - [ ] **"Prove your guardrail actually blocks" — the verify-not-gate killer feature.**
       The #1 verified hook pain is FALSE CONFIDENCE: a safety hook looks like a guardrail and
       silently isn't (exit 1≠exit 2, wrong JSON field, PostToolUse-can't-block, wrong jq path) —
