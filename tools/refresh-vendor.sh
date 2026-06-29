@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VENDOR="$ROOT/examples/harness/vendor"
+VENDOR="$ROOT/test/dogfood"
 TODAY="$(date +%Y-%m-%d)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

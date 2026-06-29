@@ -6,7 +6,7 @@
  *
  * Reliability: the plugin is a VENDORED SNAPSHOT under ./vendor (pinned to a
  * commit, with upstream LICENSE + SOURCE). There is no clone at test time, so
- * this runs offline and deterministically — see ./vendor/<plugin>/SOURCE.
+ * this runs offline and deterministically — see ../../test/dogfood/<plugin>/SOURCE.
  *
  * Safety: `loadPlugin` only PARSES the harness — it never runs a hook. This
  * example verifies superpowers' SessionStart hook is correctly WIRED, key-free.
@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { loadPlugin } from "../../dist/adapters/claude-code/plugin-loader.js";
 
 const dir = fileURLToPath(
-  new URL("./vendor/superpowers@6fd4507", import.meta.url),
+  new URL("../../test/dogfood/superpowers@6fd4507", import.meta.url),
 );
 const loaded = loadPlugin(dir);
 

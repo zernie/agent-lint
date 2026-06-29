@@ -50,7 +50,7 @@ to browser ops, not text compression.
 ## Quality plugins (loaded natively via `--plugin-dir`)
 
 These reuse the SHA-pinned plugin slices already vendored for the loader/scanner
-tests — see `examples/harness/vendor/SOURCES.md` for full attribution & licensing.
+tests — see `test/dogfood/SOURCES.md` for full attribution & licensing.
 
 | Plugin (`id`)            | Slice (`dir@sha`)                | Note                                          |
 | ------------------------ | -------------------------------- | --------------------------------------------- |

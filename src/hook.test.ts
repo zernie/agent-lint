@@ -678,10 +678,7 @@ test("compile (hook): MERGE preserves a real plugin's existing hooks (superpower
   try {
     linkVigiles(dir);
     const seed = readFileSync(
-      resolve(
-        REPO_ROOT,
-        "test/dogfood/superpowers@6fd4507/hooks/hooks.json",
-      ),
+      resolve(REPO_ROOT, "test/dogfood/superpowers@6fd4507/hooks/hooks.json"),
       "utf-8",
     );
     mkdirSync(resolve(dir, ".claude"), { recursive: true });

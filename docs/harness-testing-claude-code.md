@@ -346,8 +346,8 @@ hooks**, and those are confined by default (`sandbox: "auto"`):
   if you trust the code / the outer container.
 
 ```ts
-runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
-runHarnessTest({ pluginDir: "./vendor/linted", model, sandbox: false }); // you vouch for it → direct
+runHarnessTest({ pluginDir: "test/dogfood/some-plugin", model }); // auto: confined, or refuses
+runHarnessTest({ pluginDir: "test/dogfood/linted", model, sandbox: false }); // you vouch for it → direct
 runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
 ```
 

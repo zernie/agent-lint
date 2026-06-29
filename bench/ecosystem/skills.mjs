@@ -8,7 +8,7 @@
  *     with the gap (claimed vs measured — the viral "measured ≪ claimed" debunk);
  *   - the skill text/plugin is sourced reproducibly (a SHA-pinned SKILL.md vendored
  *     under `skills/<id>/`, or a SHA-pinned plugin slice under
- *     `examples/harness/vendor/`), never fabricated. See `SOURCES.md`.
+ *     `test/dogfood/`), never fabricated. See `SOURCES.md`.
  *
  * Each entry's `arm` is the EvalArm that turns the skill ON in the treatment arm
  * (the baseline arm is the same task with nothing added). Two shapes:
@@ -36,7 +36,7 @@ const readSkill = (id) =>
 // actually installs it (caveman = SKILL.md; token-efficient = CLAUDE.md).
 const readSkillFile = (id, file) =>
   readFileSync(here(`./skills/${id}/${file}`), "utf-8");
-const vendor = (slice) => here(`../../examples/harness/vendor/${slice}`);
+const vendor = (slice) => here(`../../test/dogfood/${slice}`);
 
 /**
  * @typedef {Object} Claim
@@ -109,7 +109,7 @@ export const BENCH_SKILLS = [
     },
     arm: { pluginDir: vendor("superpowers@6fd4507") },
     provenance:
-      "SHA-pinned vendored plugin slice (examples/harness/vendor/superpowers@6fd4507). See examples/harness/vendor/SOURCES.md.",
+      "SHA-pinned vendored plugin slice (test/dogfood/superpowers@6fd4507). See test/dogfood/SOURCES.md.",
   },
   {
     id: "oh-my-claudecode",
@@ -124,7 +124,7 @@ export const BENCH_SKILLS = [
     },
     arm: { pluginDir: vendor("oh-my-claudecode@deee3a4") },
     provenance:
-      "SHA-pinned vendored plugin slice (examples/harness/vendor/oh-my-claudecode@deee3a4).",
+      "SHA-pinned vendored plugin slice (test/dogfood/oh-my-claudecode@deee3a4).",
   },
   {
     id: "wshobson-accessibility",
@@ -139,7 +139,7 @@ export const BENCH_SKILLS = [
     },
     arm: { pluginDir: vendor("wshobson-accessibility@cf6059d") },
     provenance:
-      "SHA-pinned vendored plugin slice (examples/harness/vendor/wshobson-accessibility@cf6059d).",
+      "SHA-pinned vendored plugin slice (test/dogfood/wshobson-accessibility@cf6059d).",
   },
 ];
 

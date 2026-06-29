@@ -57,10 +57,7 @@ test.skipIf(!egressOk)(
     // npm registry; this proves the SAME thing through the allowlist path — the
     // fetch actually SUCCEEDS to registry.npmjs.org (allowed), and the drop
     // counter stays 0 (it reached nowhere off the allowlist).
-    const root = join(
-      process.cwd(),
-      "test/dogfood/oh-my-claudecode@deee3a4",
-    );
+    const root = join(process.cwd(), "test/dogfood/oh-my-claudecode@deee3a4");
     const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
     writeFileSync(join(ws, ".omc-workspace"), "");
     const state = mkdtempSync(join(tmpdir(), "omc-state-"));

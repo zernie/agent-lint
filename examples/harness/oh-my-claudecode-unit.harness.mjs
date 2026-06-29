@@ -4,7 +4,7 @@
  * The cheapest tier: hand a hook a synthesized event and check its decision —
  * no `claude`, no model, milliseconds. Here it's a REAL hook from a real,
  * pinned, vendored plugin (Yeachan-Heo/oh-my-claudecode, MIT — see
- * ./vendor/oh-my-claudecode@deee3a4/SOURCE), not a synthetic stand-in.
+ * ../../test/dogfood/oh-my-claudecode@deee3a4/SOURCE), not a synthetic stand-in.
  *
  * The hook is OMC's `keyword-detector`: a `UserPromptSubmit` hook that scans the
  * prompt for a "magic keyword" and, on a hit, injects skill-routing
@@ -26,7 +26,7 @@ import { runHook } from "../../dist/run-hook.js";
 import { assertHookAllowed } from "../../dist/harness-assert.js";
 
 const ROOT = fileURLToPath(
-  new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
+  new URL("../../test/dogfood/oh-my-claudecode@deee3a4", import.meta.url),
 );
 // The shipped hook command: the run.cjs wrapper invokes the detector script.
 const command = `node "${ROOT}/scripts/run.cjs" "${ROOT}/scripts/keyword-detector.mjs"`;
