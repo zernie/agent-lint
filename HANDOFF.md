@@ -94,10 +94,28 @@ CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pu
   STATIC false-confidence hook audit (block-decision on a non-blocking event #19009, wrong
   JSON field), `.env`-deny-bypass, instruction-vs-config contradiction, claim-vs-measured
   ROI. Build the same way: detector → audit + lint (one-detector-no-drift) → docs + matrix.
-- **PR #52 OPEN** — the whole stack: README→5/5, review-docs skill, audit-wow research, the
-  Safety ring, SEVEN detectors (lethal-trifecta, skill-resource, skill-missing-fence,
-  plugin-dir-layout, delegation-trifecta, hook-block-ineffective, hook-matcher), coverage
-  matrix, Flue poach + roadmap, real-OSS dogfood (davila7 true-positive). Watch CI / review.
+- **PR #52 OPEN, CI green, watched** (subscription + hourly cron f6cabeb9). The whole stack:
+  README→5/5, review-docs skill, audit-wow research, Safety ring, SEVEN detectors, coverage
+  matrix, Flue poach + roadmap, dogfood corpus. **Codex reviewed it (~12 P2 comments, ALL
+  addressed; Codex then hit its usage limit so the review loop is done).** Key changes from
+  review: (1) **hook-block-ineffective RECALIBRATED** — `wrong-event` fires ONLY on
+  `noEffectHookEvents` (SessionStart/SessionEnd/Notification/PreCompact), NOT PostToolUse
+  (exit-2 there is FEEDBACK; dogfood caught it crying wolf on our own refs-nudge.sh). davila7
+  flipped true-positive→calibration-FP-guard. (2) per-registration resolved-path hook feeding
+  (inline + wrapper `node run.cjs guard.mjs` + extensionless + non-shell `process.exit(2)`).
+  (3) new findings now SCORED in reportDeductions + counted in the verdict footer. (4) hook-
+  matcher wildcard MCP server. (5) explicit `tools:[]` ≠ inherits-all.
+- **DOGFOOD CORPUS** migrated to `test/dogfood/` (was examples/harness/vendor — broke CI via
+  relative `./vendor` paths in .mjs + stale .prettierignore; all fixed). `test/dogfood/README.md`
+  = policy + sweep manifest. `tools/dogfood-sweep.sh` = reproducible sweep (real `vigiles audit`
+  over a pinned repo list). madappgang now asserts a real lethal-trifecta TP.
+- **RESEARCH REORG done** (729d2a4): research/README.md "💡 ideas" callout + roadmap ideas↔plan
+  cross-links. Flue poach = audit-wow-ideas.md Appendix D (F1 shipped; F2–F8 roadmapped).
+- **OPEN — user's call (asked, awaiting answer):** dogfood true-positive coverage for the NEW
+  detectors is THIN (only lethal-trifecta has a real-world lock; the rest are synthetic-only).
+  Two moves offered: (A) DEEPER Flue/competitor idea-mining (read Flue SOURCE, not a skim) —
+  user was DISAPPOINTED with idea yield; (B) reliable long-tail TP hunt INLINE (subagents hung
+  3× this session — don't use them for this; point dogfood-sweep.sh at messier repos myself).
 - **DOGFOOD CORPUS now lives at `test/dogfood/`** (was `examples/harness/vendor/`, migrated
   with path refs across ~14 files + the spec). `test/dogfood/README.md` documents the POLICY
   (save every MIT/permissive plugin we scan, SHA-pinned; reports → `research/dogfood/`) + a
