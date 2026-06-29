@@ -32,6 +32,11 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     descriptionOverlaps: [],
     trifectaFindings: [],
     skillResourceIssues: [],
+    skillFenceIssues: [],
+    pluginLayoutIssues: [],
+    delegationTrifecta: [],
+    hookBlockFindings: [],
+    hookMatcherFindings: [],
     malformedFrontmatter: [],
     warnings: [],
     untested: 0,
@@ -49,6 +54,7 @@ function skill(over: Partial<ScanSkill> = {}): ScanSkill {
     descriptionScript: null,
     resourceIssues: [],
     trifecta: null,
+    fenceIssue: null,
     ...over,
   };
 }
