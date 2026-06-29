@@ -1156,15 +1156,24 @@ function collectHookBlockEntries(
         const cmd = (h as { command?: unknown }).command;
         if (typeof cmd !== "string" || cmd.length === 0) continue;
         // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
-        // so resolve EVERY script token and inspect each — reading only the first
-        // (the wrapper) would miss the guard's block logic.
+        // so resolve EVERY candidate and inspect each — reading only the first
+        // (the wrapper) would miss the guard's block logic. Candidates: extensioned
+        // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
+        // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
+        const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
+        for (const word of cmd.split(/\s+/)) {
+          const w = word.replace(/^["']+|["']+$/g, "");
+          if (w.startsWith("-")) continue; // a flag, not a path
+          if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
+        }
         const resolvedPaths: string[] = [];
-        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
+        for (const tok of candidates) {
           const r = resolveScript(tok, root, pluginRootToken, cmd);
           if (r.status === "ok") {
-            resolvedPaths.push(
-              isAbsolute(r.script) ? r.script : resolve(root, r.script),
-            );
+            const abs = isAbsolute(r.script)
+              ? r.script
+              : resolve(root, r.script);
+            if (!resolvedPaths.includes(abs)) resolvedPaths.push(abs);
           }
         }
         if (resolvedPaths.length > 0) {
