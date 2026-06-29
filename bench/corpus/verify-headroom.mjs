@@ -41,6 +41,11 @@ const SOLUTIONS = {
     // BAD: doesn't SORT first → fails the unsorted case.
     bad: `module.exports={mergeIntervals:function(iv){const out=[];for(const p of iv){const s=p[0],e=p[1];if(out.length&&s<=out[out.length-1][1])out[out.length-1][1]=Math.max(out[out.length-1][1],e);else out.push([s,e]);}return out;}};`,
   },
+  "parse-query": {
+    good: `module.exports={parseQuery:function(qs){qs=String(qs).replace(/^\\?/,'');const out={};for(const pair of qs.split('&')){if(pair==='')continue;const i=pair.indexOf('=');let k,v;if(i===-1){k=pair;v='';}else{k=pair.slice(0,i);v=pair.slice(i+1);}const dec=(s)=>decodeURIComponent(s.replace(/\\+/g,' '));k=dec(k);v=dec(v);if(Object.prototype.hasOwnProperty.call(out,k)){if(Array.isArray(out[k]))out[k].push(v);else out[k]=[out[k],v];}else out[k]=v;}return out;}};`,
+    // BAD: naive split — overwrites repeated keys (rule 4) AND keeps the empty pair (rule 6).
+    bad: `module.exports={parseQuery:function(qs){qs=String(qs).replace(/^\\?/,'');const out={};for(const pair of qs.split('&')){const parts=pair.split('=');const dec=(s)=>decodeURIComponent(String(s||'').replace(/\\+/g,' '));out[dec(parts[0])]=dec(parts[1]);}return out;}};`,
+  },
   "roman-numerals": {
     good: `module.exports={toRoman:function(n){const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1];const s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];let r='';for(let i=0;i<v.length;i++){while(n>=v[i]){r+=s[i];n-=v[i];}}return r;}};`,
     // BAD: no SUBTRACTIVE forms → 4 becomes IIII, etc.

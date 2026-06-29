@@ -64,6 +64,43 @@ export const HEADROOM_TASKS = [
     },
   },
   {
+    // A MULTI-REQUIREMENT spec (not a textbook algorithm models have memorized):
+    // the "obvious" split-on-&-then-= parser silently drops 3 of the 6 rules
+    // (array-on-repeat, bare-key→'', empty-pair-ignored), so the baseline tends to
+    // miss an edge → real headroom for a planning/edge-case-first skill.
+    name: "parse-query",
+    files: {
+      "in.txt":
+        "Parse a URL query string — the edges are in the spec, not the algorithm.",
+    },
+    task:
+      "Read in.txt. Write `parseQuery(qs)` to sol.js and export it with " +
+      "`module.exports = { parseQuery }`. Parse a URL query string into an object. " +
+      "Handle ALL six rules: (1) strip a leading '?'; (2) '+' decodes to a space; " +
+      "(3) %XX percent-encoding is decoded; (4) a key appearing MORE THAN ONCE " +
+      "collects its values into an ARRAY in order; (5) a key with no '=' gets value " +
+      "'' (empty string); (6) empty pairs (from '&&') are IGNORED. Then briefly " +
+      "explain. Stop.",
+    check: (ctx) => {
+      const { ok, total } = runHarness(
+        ctx,
+        RESOLVE("parseQuery") +
+          "const so=(o)=>o&&typeof o==='object'&&!Array.isArray(o)?Object.keys(o).sort().reduce((m,k)=>(m[k]=so(o[k]),m),{}):o;" +
+          "const deq=(a,b)=>JSON.stringify(so(a))===JSON.stringify(so(b));" +
+          "const T=[" +
+          "['?a=1&b=2',{a:'1',b:'2'}]," +
+          "['a=hello+world',{a:'hello world'}]," +
+          "['a=%26x',{a:'&x'}]," +
+          "['a=1&a=2&a=3',{a:['1','2','3']}]," + // repeat → array
+          "['flag&a=1',{flag:'',a:'1'}]," + // bare key → ''
+          "['a=1&&b=2',{a:'1',b:'2'}]" + // empty pair ignored
+          "];for(const e of T){let r;try{r=f(e[0])}catch(_){r=null}if(deq(r,e[1]))ok++;}" +
+          "console.log(ok+'/'+T.length);",
+      );
+      return ok === total && total > 0 ? 1 : 0;
+    },
+  },
+  {
     name: "roman-numerals",
     files: {
       "in.txt": "Integer to Roman numerals — subtractive notation is the trap.",
