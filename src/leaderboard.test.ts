@@ -169,6 +169,36 @@ test("penalty: broken intra-plugin reference -8 each", () => {
   assert.ok(issues.some((i) => i.includes("broken intra-plugin reference")));
 });
 
+test("the NEW non-advisory detectors are scored (not ranked A/100 while printing ✗)", () => {
+  // Parity: every finding formatScanReport prints with ✗ must deduct, or a broken
+  // plugin would rank clean. One of each new detector → all dent the score.
+  const skillFence = scoreReport(
+    report({
+      skillFenceIssues: [{ path: "p", name: "s", finding: {} as never }],
+    }),
+  ).score;
+  assert.ok(skillFence < 100, "an invisible skill must drag the score");
+  const hookBlock = scoreReport(
+    report({
+      hookBlockFindings: [
+        {
+          event: "SessionStart",
+          kind: "wrong-event",
+          scriptPath: null,
+          message: "x",
+        },
+      ],
+    }),
+  ).score;
+  assert.ok(hookBlock < 100, "an ineffective hook must drag the score");
+  const skillRes = scoreReport(
+    report({
+      skillResourceIssues: [{ path: "p", name: "s", finding: {} as never }],
+    }),
+  ).score;
+  assert.ok(skillRes < 100, "a broken bundled resource must drag the score");
+});
+
 test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not", () => {
   // A hard (explicit all-three) trifecta is a declared exfil path → graded -20.
   const hard = scoreReport(

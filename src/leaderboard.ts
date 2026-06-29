@@ -171,6 +171,33 @@ export function reportDeductions(r: ScanReport): Deduction[] {
       weight: W_DANGLING_REF,
       label: "mcp_tool hook(s) incomplete / targeting an undeclared server",
     },
+    {
+      n: r.skillResourceIssues.length,
+      weight: W_DANGLING_REF,
+      label: "skill bundled-resource ref(s) that don't resolve on disk",
+    },
+    {
+      n: r.skillFenceIssues.length,
+      weight: W_NO_DESCRIPTION,
+      label: "invisible skill(s) (frontmatter with no opening `---` fence)",
+    },
+    {
+      n: r.pluginLayoutIssues.length,
+      weight: W_NO_DESCRIPTION,
+      label: "functional dir(s) misplaced inside `.claude-plugin/` (invisible)",
+    },
+    {
+      n: r.hookBlockFindings.length,
+      weight: W_MISSING_HOOK,
+      label: "hook(s) that look like they block but silently don't",
+    },
+    {
+      n: r.hookMatcherFindings.length,
+      weight: W_MISSING_HOOK,
+      label: "hook matcher(s) that never fire (typo / wrong MCP form)",
+    },
+    // NB: delegationTrifecta (like the advisory per-unit/inherits-all trifecta) is a
+    // ⚠ RISK, surfaced but NOT graded — only the HARD per-unit trifecta above scores.
     // NB: untested surfaces are NOT a penalty — an untested surface is a hardening
     // gap, not breakage, so it never drags the health score (it's appended as an
     // advisory note below). The score ranks what's BROKEN.
