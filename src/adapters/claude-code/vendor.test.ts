@@ -1,5 +1,5 @@
 /**
- * Conformance tests over REAL, vendored plugins (examples/harness/vendor/*).
+ * Conformance tests over REAL, vendored plugins (test/dogfood/*).
  *
  * Model-free and in-gate: loadPlugin parses + materializes each plugin's ACTUAL
  * shipped layout, and we assert invariants that must hold for any well-formed
@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { loadPlugin } from "./plugin-loader.js";
 
 // __dirname is dist/ at runtime; the vendored plugins live at the repo root.
-const VENDOR = "../../../examples/harness/vendor";
+const VENDOR = "../../../test/dogfood";
 
 interface PluginCase {
   readonly label: string;

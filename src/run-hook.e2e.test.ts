@@ -59,7 +59,7 @@ test.skipIf(!egressOk)(
     // counter stays 0 (it reached nowhere off the allowlist).
     const root = join(
       process.cwd(),
-      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+      "test/dogfood/oh-my-claudecode@deee3a4",
     );
     const ws = mkdtempSync(join(tmpdir(), "omc-ws-"));
     writeFileSync(join(ws, ".omc-workspace"), "");

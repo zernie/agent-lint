@@ -98,6 +98,15 @@ CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pu
   Safety ring, SEVEN detectors (lethal-trifecta, skill-resource, skill-missing-fence,
   plugin-dir-layout, delegation-trifecta, hook-block-ineffective, hook-matcher), coverage
   matrix, Flue poach + roadmap, real-OSS dogfood (davila7 true-positive). Watch CI / review.
+- **DOGFOOD CORPUS now lives at `test/dogfood/`** (was `examples/harness/vendor/`, migrated
+  with path refs across ~14 files + the spec). `test/dogfood/README.md` documents the POLICY
+  (save every MIT/permissive plugin we scan, SHA-pinned; reports → `research/dogfood/`) + a
+  SWEEP MANIFEST (8 repos / 156 audit targets this session: 1 true positive davila7, 0 FPs on
+  the new detectors). Add a slice → row in README → assert in `scan-vendor.test.ts`.
+  KNOWN GAP: the hook-block detector under-fired on some davila7 hook-component shapes (1/4
+  exit-2 components flagged) — likely event not parsed from a non-canonical settings shape;
+  under-fire is don't-cry-wolf-safe but worth tightening. davila7 `performance-budget-guard`
+  is a confirmed REAL bug (desc says "blocks deployments") → safe to draft an upstream fix-PR.
 - **MODEL AUTH WORKS HERE** (subprocess `claude -p` via OAuth FD) — model-gated evals RUN;
   only **bubblewrap is missing** (egress/confined-hook paths degrade-to-skip). Keep live
   runs small (subscription quota).
