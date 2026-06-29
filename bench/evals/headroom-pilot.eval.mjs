@@ -18,7 +18,19 @@
  *
  * READING IT: headroom = baseline < 100%. A positive lift means the skill helped;
  * ~0 lift on a failing baseline means the skill is hype; if baseline is already
- * 100% the task has no headroom (make it harder). FINDING appended after the run.
+ * 100% the task has no headroom (make it harder).
+ *
+ * FINDING (2026-06-28, haiku, 3 trials). Three hand-crafted tasks — merge-intervals,
+ * roman-numerals (textbook, memorized), and parse-query (a 6-rule spec) — ALL hit
+ * 100% baseline. Haiku is a capable coder on well-specified tasks, so there was no
+ * headroom and the planning skill could not show a correctness lift (0pp on every
+ * task). BUT the run is not empty: on parse-query the skill arm spent ~88% MORE
+ * output (2584 → 4850 tok) for ZERO correctness gain — on tasks the model already
+ * handles, "edge-case-first planning" is PURE OVERHEAD (the same hype shape as the
+ * compression debunk: cost without benefit). TWO conclusions: (1) measuring whether
+ * planning HELPS needs tasks the model FAILS, and hand-crafting those against a
+ * capable model is unreliable — use a known-hard source (SWE-bench-style); (2) on
+ * solvable tasks, a "do-more" skill is measurable COST, which is itself a finding.
  */
 import { runEval } from "../../dist/eval.js";
 import { HEADROOM_TASKS } from "../corpus/headroom-tasks.mjs";
