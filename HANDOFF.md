@@ -9,7 +9,7 @@
 
 ## RESUME HERE
 
-**Branch `claude/audit-rings-html-report-mh8sf8` — pushed, NO PR yet (founder's call).**
+**Branch `claude/audit-rings-html-report-mh8sf8` — PR #52 OPEN (github.com/zernie/vigiles/pull/52).**
 (Separate from PR #51 / `readme-length-review` — that branch's state is not this one's.)
 
 This session started as a README readability pass and became: a README revamp to 5/5,
@@ -94,8 +94,10 @@ CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pu
   STATIC false-confidence hook audit (block-decision on a non-blocking event #19009, wrong
   JSON field), `.env`-deny-bypass, instruction-vs-config contradiction, claim-vs-measured
   ROI. Build the same way: detector → audit + lint (one-detector-no-drift) → docs + matrix.
-- **NO PR opened on this branch.** Stack: README revamp + review-docs skill + audit-wow
-  research + the two features. Open one when the founder says go.
+- **PR #52 OPEN** — the whole stack: README→5/5, review-docs skill, audit-wow research, the
+  Safety ring, SEVEN detectors (lethal-trifecta, skill-resource, skill-missing-fence,
+  plugin-dir-layout, delegation-trifecta, hook-block-ineffective, hook-matcher), coverage
+  matrix, Flue poach + roadmap, real-OSS dogfood (davila7 true-positive). Watch CI / review.
 - **MODEL AUTH WORKS HERE** (subprocess `claude -p` via OAuth FD) — model-gated evals RUN;
   only **bubblewrap is missing** (egress/confined-hook paths degrade-to-skip). Keep live
   runs small (subscription quota).
