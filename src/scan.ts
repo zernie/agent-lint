@@ -48,6 +48,14 @@ import {
 } from "./core/mcp.js";
 import { verifyMcpHookTargets, type McpHookIssue } from "./core/mcp-hook.js";
 import {
+  lethalTrifectaIssues,
+  type TrifectaFinding,
+} from "./core/lethal-trifecta.js";
+import {
+  skillResourceIssues,
+  type SkillResourceFinding,
+} from "./core/skill-resources.js";
+import {
   parseAgentTools,
   parseAgentToolList,
 } from "./adapters/claude-code/agent-runtime.js";
@@ -95,6 +103,20 @@ export interface ScanSkill {
    * `audit` trigger tier / `measureTriggerRate`.
    */
   readonly descriptionScript: Script | null;
+  /**
+   * SKILL.md body references to a bundled file (`scripts/`/`references/`/`assets/`
+   * or a relative markdown link with an extension) that don't resolve on disk
+   * under the skill dir — the agent reads the instruction and gets nothing.
+   * Computed by `skillResourceIssues()` (one detector, no drift).
+   */
+  readonly resourceIssues: readonly SkillResourceFinding[];
+  /**
+   * Lethal-trifecta finding when a MODEL-INVOCABLE skill's declared `allowed-tools`
+   * hold all three legs (read-private + ingest-untrusted + exfiltrate), else null.
+   * A user-invoked skill is excluded (it can't be selected by attacker content).
+   * Computed by `lethalTrifectaIssues()` (one detector, no drift).
+   */
+  readonly trifecta: TrifectaFinding | null;
 }
 
 export interface ScanAgent {
@@ -124,6 +146,28 @@ export interface ScanAgent {
     EffectSurface,
     "readOnly" | "sideEffecting" | "unknown"
   >;
+  /**
+   * Lethal-trifecta finding when the subagent's declared tools hold all three legs
+   * (read-private + ingest-untrusted + exfiltrate), else null. An inherits-all
+   * agent (no `tools:` line) is the "advisory" case. Computed by
+   * `lethalTrifectaIssues()` (one detector, no drift).
+   */
+  readonly trifecta: TrifectaFinding | null;
+}
+
+/** A lethal-trifecta finding tagged with the surface (subagent/skill) that holds it. */
+export interface ScanTrifectaFinding {
+  readonly path: string;
+  readonly kind: "subagent" | "skill";
+  readonly name: string;
+  readonly finding: TrifectaFinding;
+}
+
+/** A SKILL.md body resource reference that doesn't resolve, tagged with the skill path. */
+export interface ScanSkillResourceFinding {
+  readonly path: string;
+  readonly name: string;
+  readonly finding: SkillResourceFinding;
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -225,6 +269,20 @@ export interface ScanReport {
   readonly mcpHookIssues: readonly McpHookIssue[];
   /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
   readonly descriptionOverlaps: readonly DescriptionOverlap[];
+  /**
+   * Lethal-trifecta findings across subagents + model-invocable skills — a unit
+   * holding all three legs (read-private + ingest-untrusted + exfiltrate). Each
+   * carries the surface path + kind for reporting/annotations. Shared by `scan`
+   * (the report) and the `lethal-trifecta` lint rule (one detector, no drift).
+   */
+  readonly trifectaFindings: readonly ScanTrifectaFinding[];
+  /**
+   * SKILL.md body references to a bundled resource that doesn't resolve on disk,
+   * across all skills — each carries the skill path for reporting/annotations.
+   * Shared by `scan` and the `skill-resource-resolves` lint rule (one detector, no
+   * drift).
+   */
+  readonly skillResourceIssues: readonly ScanSkillResourceFinding[];
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
   readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
@@ -412,10 +470,39 @@ function firstBodyParagraph(md: string): string | undefined {
   return para.join(" ").trim() || undefined;
 }
 
+/** The body of a SKILL.md with the leading `---` frontmatter block stripped. */
+function skillBody(md: string): string {
+  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+}
+
+/**
+ * The on-disk path for a materialized file key. `loadPlugin` prefixes each
+ * surface file with the layout's `materializeRoot` (e.g. `.claude/`), but the file
+ * lives on disk WITHOUT that prefix (under the real surface dir), so a
+ * bundled-resource existence check must strip it back off. Mirrors how
+ * `resolveScript` resolves a hook path against the real plugin root.
+ */
+function onDiskPath(materializedKey: string, materializeRoot: string): string {
+  if (!materializeRoot) return materializedKey;
+  const prefix = `${materializeRoot}/`;
+  return materializedKey.startsWith(prefix)
+    ? materializedKey.slice(prefix.length)
+    : materializedKey;
+}
+
+/** The plugin-root + materialize-root + dialect context skill scanning needs. */
+interface SkillScanContext {
+  readonly root: string;
+  readonly materializeRoot: string;
+  readonly dialect: HarnessDialect;
+}
+
 function scanSkills(
   files: Record<string, string>,
   cls: SurfaceClassifier,
+  ctx: SkillScanContext,
 ): ScanSkill[] {
+  const { root, materializeRoot, dialect } = ctx;
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
@@ -425,13 +512,29 @@ function scanSkills(
     // NEITHER exists is the skill genuinely undescribed (can't be selected). The
     // explicit-frontmatter best-practice is the separate `skill-frontmatter` rule.
     const effectiveDesc = fm.description ?? firstBodyParagraph(md);
+    const userInvoked = /^\s*disable-model-invocation:\s*true\s*$/m.test(md);
+    // Bundled-resource refs resolve against the skill's OWN dir (resources ship
+    // beside the SKILL.md), built from the plugin root + the file's ON-DISK dir
+    // (the materialize-root prefix the loader added is stripped back off).
+    const skillDir = resolve(root, dirname(onDiskPath(path, materializeRoot)));
+    const resourceIssues = skillResourceIssues(skillBody(md), skillDir);
+    // The lethal trifecta is a property of what a unit CAN do, which for a skill is
+    // its declared `allowed-tools` (the CC skill tool contract). Only a model-
+    // invocable skill can be hijacked by attacker content, so a user-invoked one is
+    // excluded. A skill with no `allowed-tools` line inherits all → advisory.
+    const skillTools = parseAgentToolList(md, "allowed-tools");
+    const trifecta = userInvoked
+      ? null
+      : lethalTrifectaIssues(skillTools ?? [], dialect);
     out.push({
       name: fm.name ?? skillName(path),
       path,
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
       description: effectiveDesc?.trim(),
-      userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
+      userInvoked,
       descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
+      resourceIssues,
+      trifecta,
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -503,6 +606,10 @@ function scanAgents(
         sideEffecting: surface.sideEffecting,
         unknown: surface.unknown,
       },
+      // The lethal trifecta: a subagent whose contract grants all three legs. An
+      // inherits-all agent (tools === null → empty list here) is the advisory case
+      // that `lethalTrifectaIssues` handles. One detector, no drift.
+      trifecta: lethalTrifectaIssues(tools ?? [], dialect),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -852,6 +959,65 @@ function collectMcpServers(
   return servers;
 }
 
+/**
+ * Flatten the per-surface lethal-trifecta + skill-resource findings into the
+ * path-tagged report lists the `audit` report AND the `lethal-trifecta` /
+ * `skill-resource-resolves` lint rules both consume (one detector, no drift).
+ */
+function collectSurfaceFindings(
+  agents: readonly ScanAgent[],
+  skills: readonly ScanSkill[],
+): {
+  trifectaFindings: ScanTrifectaFinding[];
+  skillResourceFindings: ScanSkillResourceFinding[];
+} {
+  const trifectaFindings: ScanTrifectaFinding[] = [];
+  for (const a of agents) {
+    if (a.trifecta) {
+      trifectaFindings.push({
+        path: a.path,
+        kind: "subagent",
+        name: a.name,
+        finding: a.trifecta,
+      });
+    }
+  }
+  for (const s of skills) {
+    if (s.trifecta) {
+      trifectaFindings.push({
+        path: s.path,
+        kind: "skill",
+        name: s.name,
+        finding: s.trifecta,
+      });
+    }
+  }
+  const skillResourceFindings: ScanSkillResourceFinding[] = skills.flatMap(
+    (s) =>
+      s.resourceIssues.map((finding) => ({
+        path: s.path,
+        name: s.name,
+        finding,
+      })),
+  );
+  return { trifectaFindings, skillResourceFindings };
+}
+
+/** Tally how many scanned agents fall into each purity rung (effectSurface). */
+function summarizePurity(agents: readonly ScanAgent[]): {
+  pure: number;
+  bounded: number;
+  unrestricted: number;
+} {
+  return agents.reduce(
+    (acc, a) => {
+      acc[a.purity]++;
+      return acc;
+    },
+    { pure: 0, bounded: 0, unrestricted: 0 },
+  );
+}
+
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -894,17 +1060,20 @@ export function scanPlugin(
   const mcpServers = collectMcpServers(resolve(dir), lay);
   const declaredServers = Object.keys(mcpServers);
   const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
-  const puritySummary = agents.reduce(
-    (acc, a) => {
-      acc[a.purity]++;
-      return acc;
-    },
-    { pure: 0, bounded: 0, unrestricted: 0 },
+  const skills = scanSkills(loaded.files, cls, {
+    root: resolve(dir),
+    materializeRoot: lay.materializeRoot,
+    dialect,
+  });
+  const puritySummary = summarizePurity(agents);
+  const { trifectaFindings, skillResourceFindings } = collectSurfaceFindings(
+    agents,
+    skills,
   );
   return {
     dir,
     instructions,
-    skills: scanSkills(loaded.files, cls),
+    skills,
     agents,
     hooks,
     inlineHooks: inline,
@@ -923,6 +1092,8 @@ export function scanPlugin(
       dialect,
     ),
     descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    trifectaFindings,
+    skillResourceIssues: skillResourceFindings,
     malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
@@ -1189,6 +1360,26 @@ export function formatScanReport(r: ScanReport): string {
     ...section(
       "Description overlap (precision risk)",
       r.descriptionOverlaps.map((o) => `  ⚠ ${o.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Lethal trifecta (prompt-injection exfil risk)",
+      r.trifectaFindings.map(
+        (t) =>
+          `  ${t.finding.severity === "hard" ? "✗" : "⚠"} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Skill bundled resources",
+      r.skillResourceIssues.map(
+        (s) =>
+          `  ✗ ${s.name}: ${s.finding.ref} (line ${String(s.finding.line)}) — bundled resource not found`,
+      ),
     ),
   );
 

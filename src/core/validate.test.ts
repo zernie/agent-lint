@@ -464,6 +464,8 @@ describe("loadConfig", () => {
       "description-overlap": "warn",
       "frontmatter-valid": "warn",
       "mcp-hook-target-resolves": "warn",
+      "lethal-trifecta": "warn",
+      "skill-resource-resolves": "warn",
     });
   });
 

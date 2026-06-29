@@ -20,7 +20,10 @@ function existsOnly(...present: string[]): (p: string) => boolean {
   return (p) => set.has(p);
 }
 
-function run(body: string, exists: (p: string) => boolean): SkillResourceFinding[] {
+function run(
+  body: string,
+  exists: (p: string) => boolean,
+): SkillResourceFinding[] {
   return skillResourceIssues(body, SKILL_DIR, { existsSync: exists });
 }
 

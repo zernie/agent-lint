@@ -234,6 +234,28 @@ export interface RulesConfig {
    * as `scan` (mcpHookIssues).
    */
   "mcp-hook-target-resolves"?: RuleSeverity;
+  /**
+   * Flag a unit (subagent / model-invocable skill) whose declared tools hold all
+   * THREE legs of Simon Willison's "lethal trifecta" — read private data, ingest
+   * untrusted content, AND exfiltrate — a prompt-injection exfil path with no
+   * exploit code (Meta's Rule of Two: allow at most two). A capability SET-
+   * intersection over the declared contract, NOT a text scan; high-precision (only
+   * well-known tools map to a leg). An EXPLICIT all-three contract is a "hard"
+   * finding; an inherits-all unit (no contract → every leg) is "advisory". Default
+   * "warn" (don't-cry-wolf rollout); raise to "error" to gate CI. Same detector as
+   * `scan` (lethalTrifectaIssues). See docs/rules/lethal-trifecta.md.
+   */
+  "lethal-trifecta"?: RuleSeverity;
+  /**
+   * Flag a SKILL.md body referencing a bundled file (`scripts/`/`references/`/
+   * `assets/`, or a relative markdown link with an extension) that doesn't exist
+   * on disk under the skill dir — the agent reads the instruction, gets nothing,
+   * and silently continues. The cross-reference moat applied to the SKILL.md body.
+   * High-precision / FP-safe (skips URLs, `$VAR` tokens, `../` escapes, extension-
+   * less mentions). Default "warn"; raise to "error" to gate CI. Same detector as
+   * `scan` (skillResourceIssues). See docs/rules/skill-resource-resolves.md.
+   */
+  "skill-resource-resolves"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

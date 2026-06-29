@@ -116,7 +116,13 @@ const EXFIL_BUILTINS = new Set(["WebFetch", "computer_use", "ComputerUse"]);
  * deliberately small + high-signal.
  */
 const PRIVATE_MCP_SERVERS = ["filesystem", "file", "git", "github", "memory"];
-const UNTRUSTED_MCP_SERVERS = ["fetch", "web", "browser", "puppeteer", "playwright"];
+const UNTRUSTED_MCP_SERVERS = [
+  "fetch",
+  "web",
+  "browser",
+  "puppeteer",
+  "playwright",
+];
 const EXFIL_MCP_SERVERS = ["slack", "email", "gmail", "smtp", "discord"];
 
 /**
@@ -125,7 +131,13 @@ const EXFIL_MCP_SERVERS = ["slack", "email", "gmail", "smtp", "discord"];
  * `create_pull_request`). Matched against the tool segment after the server.
  */
 const PRIVATE_MCP_TOOLS = ["get_file", "read", "search_code", "get_contents"];
-const UNTRUSTED_MCP_TOOLS = ["fetch", "list_issues", "get_issue", "issue_read", "search_issues"];
+const UNTRUSTED_MCP_TOOLS = [
+  "fetch",
+  "list_issues",
+  "get_issue",
+  "issue_read",
+  "search_issues",
+];
 const EXFIL_MCP_TOOLS = [
   "create_pull_request",
   "add_issue_comment",
@@ -204,11 +216,20 @@ export function classifyTrifectaLegs(
     const parts = mcpParts(base, dialect);
     if (parts) {
       const { server, tool } = parts;
-      if (anySubstr(server, PRIVATE_MCP_SERVERS) || anySubstr(tool, PRIVATE_MCP_TOOLS))
+      if (
+        anySubstr(server, PRIVATE_MCP_SERVERS) ||
+        anySubstr(tool, PRIVATE_MCP_TOOLS)
+      )
         priv.add(base);
-      if (anySubstr(server, UNTRUSTED_MCP_SERVERS) || anySubstr(tool, UNTRUSTED_MCP_TOOLS))
+      if (
+        anySubstr(server, UNTRUSTED_MCP_SERVERS) ||
+        anySubstr(tool, UNTRUSTED_MCP_TOOLS)
+      )
         untrusted.add(base);
-      if (anySubstr(server, EXFIL_MCP_SERVERS) || anySubstr(tool, EXFIL_MCP_TOOLS))
+      if (
+        anySubstr(server, EXFIL_MCP_SERVERS) ||
+        anySubstr(tool, EXFIL_MCP_TOOLS)
+      )
         exfil.add(base);
     }
   }
@@ -251,7 +272,11 @@ export function lethalTrifectaIssues(
   }
 
   const legs = classifyTrifectaLegs(tools, dialect);
-  if (legs.private.length > 0 && legs.untrusted.length > 0 && legs.exfil.length > 0) {
+  if (
+    legs.private.length > 0 &&
+    legs.untrusted.length > 0 &&
+    legs.exfil.length > 0
+  ) {
     return {
       severity: "hard",
       legs,
