@@ -59,7 +59,7 @@ const INSTRUCTION_FILES: readonly string[] = ["CLAUDE.md", "AGENTS.md"];
 // The default instruction file to validate when no config names one.
 const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
-const DEFAULT_RULES: Required<RulesConfig> = {
+export const DEFAULT_RULES: Required<RulesConfig> = {
   "require-instructions-spec": "warn",
   // Default OFF — the consistent `require-<surface>-spec` parallel. Skills are
   // legitimately hand-written, so requiring a .spec.ts per SKILL.md is the wrong
