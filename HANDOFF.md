@@ -70,6 +70,18 @@ CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pu
    problem-framed coverage matrices (sharpen-or-add by problem severity, not alphabetical).
    Recompiled CLAUDE.md from spec; doc gates (self-command-refs + orphan-docs, 39) green.
 
+7. **FIVE MORE detectors SHIPPED** (commit `7b88bcb`) — top-3 OSS-issue pains + the Flue
+   poach F1, all FP-safe, audit + lint, default `warn` (NUDGE), one-detector-no-drift:
+   `skill-missing-fence` (invisible skill, no `---`), `plugin-dir-layout` (dirs misplaced in
+   `.claude-plugin/`), `delegation-trifecta` (F1 — a trifecta emerging across a delegation
+   edge; edge source = a `Task`-capable subagent → all siblings), `hook-block-ineffective`
+   (block on non-blocking event #19009 + legacy-`decision`-field-on-PreToolUse; blocking-event
+   sets now on the dialect), `hook-matcher` (tool-typo / malformed-or-undeclared MCP form).
+   Built via parallel subagents (2 stalled → finished by hand); all live-dogfooded + gates green
+   (tsc, eslint 0-err, validate/scan/cli/vendor/orphans/self-command-refs/adapter-contract).
+   **Flue poach** recorded in research/audit-wow-ideas.md Appendix D (F1 done; F2 typed-I/O
+   handoff, F3 model-specifier, F4 workflows-as-surface, F7 vigiles/flue adapter still open).
+
 ### DO NEXT / OPEN DECISIONS
 
 - **SAFETY-RING PROMOTION — PENDING USER YES/NO.** Trifecta currently shows as a FINDING,
