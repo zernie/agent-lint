@@ -5516,7 +5516,13 @@ async function runAutoTrigger(
     layout: adapter.layout,
     dialect: adapter.dialect,
   });
-  const hasGates = gates.results.length > 0;
+  // Show the gate section when gate skills were DETECTED — even if the eval
+  // couldn't RUN (a Codex audit, or no `claude` CLI) it returns available:false
+  // with empty results, and `formatGateReport` renders the "unavailable" note.
+  // The consent prompt already advertised these gate skills, so a skipped check
+  // must be reported LOUDLY, never silently omitted as if there were none.
+  const hasGates =
+    gates.results.length > 0 || detectGateSkills(report.skills).length > 0;
   if (json) {
     console.log(
       JSON.stringify(
