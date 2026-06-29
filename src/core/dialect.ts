@@ -44,14 +44,16 @@ export interface HarnessDialect {
   /** Hook event names the harness fires. */
   readonly hookEvents: readonly string[];
   /**
-   * The subset of `hookEvents` whose hooks can actually VETO/BLOCK an action (a
-   * deny is respected). A block decision (`exit 2` / a deny field) on any OTHER
-   * event is silently ignored — the action already ran. The basis for the
-   * `hook-block-ineffective` "wrong-event" check. Optional (additive,
-   * non-breaking) — absent ⇒ the harness's blocking semantics are undeclared and
-   * the check does not run for it.
+   * The subset of `hookEvents` where a block decision (`exit 2` / a deny field)
+   * is SILENTLY IGNORED ENTIRELY — no veto AND no model feedback (Claude Code's
+   * SessionStart / SessionEnd / Notification / PreCompact: exit 2 there writes
+   * stderr only to the user). The basis for the `hook-block-ineffective`
+   * "wrong-event" check, which fires ONLY on these (so it stays FP-safe and never
+   * cries wolf on a PostToolUse feedback/nudge hook). Optional (additive,
+   * non-breaking) — absent ⇒ the harness's block semantics are undeclared and the
+   * check does not run for it.
    */
-  readonly blockingHookEvents?: readonly string[];
+  readonly noEffectHookEvents?: readonly string[];
   /**
    * The subset of blocking events whose deny REQUIRES the structured
    * `permissionDecision` field (e.g. Claude Code's `PreToolUse`), where the

@@ -110,8 +110,6 @@ test('correctly-formed "mcp__memory__.*" with declaredServers=["memory"] → no 
 
 test('mcp-undeclared: "mcp__ghost__search" with declaredServers=["memory"] → mcp-undeclared', () => {
   // A correctly-formed MCP matcher naming a server the plugin doesn't declare.
-  // (The `mcp__ghost__.*` wildcard form's server isn't extracted by mcpToolServer,
-  // so the undeclared check targets the concrete-tool form — the common shape.)
   const entries: HookMatcherEntry[] = [
     { event: "PreToolUse", matcher: "mcp__ghost__search" },
   ];
@@ -121,6 +119,20 @@ test('mcp-undeclared: "mcp__ghost__search" with declaredServers=["memory"] → m
   assert.equal(findings[0].matcher, "mcp__ghost__search");
   assert.match(findings[0].message, /ghost/);
   assert.match(findings[0].message, /can't fire/);
+});
+
+test('mcp-undeclared: server-wide WILDCARD "mcp__ghost__.*" with declaredServers=["memory"] → flagged', () => {
+  // The wildcard form's server is recovered by the fallback regex (mcpToolServer
+  // only reads the concrete `mcp__server__tool` shape) — so a server-wide matcher
+  // naming an undeclared server is still caught.
+  const findings = hookMatcherIssues(
+    [{ event: "PreToolUse", matcher: "mcp__ghost__.*" }],
+    ["memory"],
+    d,
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].kind, "mcp-undeclared");
+  assert.match(findings[0].message, /ghost/);
 });
 
 test("GUARD 1: no declared set → no mcp-undeclared finding (reaches global servers)", () => {

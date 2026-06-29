@@ -253,11 +253,16 @@ SHIPPED since (all DETECT-mode, deterministic, FP-safe, audit + lint, one-detect
 (functional dirs misplaced inside `.claude-plugin/`), and `delegation-trifecta` (the
 capability-diff across the subagent delegation tree — a lethal trifecta that emerges across an
 edge though no single unit trips it; the F1 idea from the Flue poach, Appendix D), plus the two
-hook false-confidence detectors: `hook-block-ineffective` (block-on-non-blocking-event #19009 +
-the legacy-`decision`-field-on-PreToolUse case) and `hook-matcher` (tool-name typo / malformed or
-undeclared MCP matcher form). The `hook-block` blocking-event semantics live on the dialect
-(`blockingHookEvents` / `permissionDecisionHookEvents`), so the check runs only where a harness
-declares them (Claude Code today; Codex when added).
+hook false-confidence detectors: `hook-block-ineffective` and `hook-matcher` (tool-name typo /
+malformed or undeclared MCP matcher form). CALIBRATION (PR #52 review): `hook-block` `wrong-event`
+fires ONLY on events where a block does NOTHING AT ALL (`noEffectHookEvents` =
+SessionStart/SessionEnd/Notification/PreCompact) — NOT `PostToolUse`, where `exit 2` is a legitimate
+FEEDBACK channel (the dogfood caught it crying wolf on vigiles's own `refs-nudge.sh`); intent isn't
+deterministically separable, so we don't flag it. The davila7 vendored slice flipped from
+true-positive to a calibration FP-guard. Plus `wrong-field` (legacy top-level `decision` on
+PreToolUse). The Codex reviewer also found + we fixed: feed per-registration resolved-path hook
+entries (not a de-duped script list), extract the server from a wildcard MCP matcher, count the new
+findings in the audit verdict footer, and distinguish explicit-empty `tools: []` from inherits-all.
 
 PLANNED (the remaining OSS-scan harvest, all DETECT-mode, mostly S-effort, deterministic,
 FP-safe): secrets-in-config / settings.local-not-gitignored, dangerous-default-permissions,

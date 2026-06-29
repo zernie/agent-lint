@@ -202,8 +202,17 @@ export function hookMatcherIssues(
       // Guard 1: no declared set → skip (reaches global/project servers).
       if (declaredServers.length === 0) continue;
 
-      const server = mcpToolServer(matcher, dialect);
+      // `mcpToolServer` reads the `mcp__server__tool` form; a server-wide WILDCARD
+      // matcher (`mcp__server__.*`) isn't a concrete tool, so fall back to the
+      // wildcard server segment so an undeclared server is still caught.
+      const server =
+        mcpToolServer(matcher, dialect) ??
+        /^mcp__([a-z0-9_-]+)__\.\*$/i.exec(matcher)?.[1] ??
+        null;
       if (server === null) continue; // plugin-namespaced form → guard 3, skip
+      // The plugin-namespaced `mcp__plugin_<plugin>_<server>__` form is the
+      // plugin's OWN server — never an undeclared reference (mirrors mcpToolServer).
+      if (/^plugin_/i.test(server)) continue;
 
       const known = new Set<string>([
         ...declaredServers,
