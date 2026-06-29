@@ -214,6 +214,52 @@ ASI05/MCP05 Code-Execution → the DISASTER battery + CommandView AST (strong); 
 trifecta check is literally LLM02 + ASI02 made static. Framing the Safety ring as "your OWASP
 Agentic exposure, checked statically and free" is a credible, non-hype headline.
 
+## The handling-mode matrix: prevent vs detect vs measure (the construct/verify moat)
+
+The public face of this is `docs/what-vigiles-catches.md` (sanitized, shipped-only,
+benefit-framed). The strategic point it encodes — and the reason it's a defensible
+artifact no competitor can copy — is the PREVENT column.
+
+Every issue is handled in one of three modes, and the differentiator is the first:
+
+- ✦ **PREVENT (construct)** — UNREPRESENTABLE; won't compile. The typed spec / compiled
+  hook makes the mistake impossible to write. **agnix/claudelint/CPV (432/114/190+ rules)
+  STRUCTURALLY CANNOT have this column** — markdown is inert, so all they can ever do is
+  lint-after-the-fact. A `.spec.ts` is a PROGRAM, so the whole PL toolbox (types,
+  totality, effect rows) applies. This is "unsafe harnesses don't compile" made into a
+  user-facing table. Shipped today: compiled-hook protocol (false-confidence exit/field
+  unrepresentable; block-on-no-decision-event = tsc error), typed purity floor
+  (over-power/trifecta-as-type), typed composition (handoff mismatch won't compile),
+  closed hook vocabulary (out-of-vocab import won't compile), generate-harness (dangling
+  delegate = tsc error).
+- ✓ **DETECT (verify)** — deterministic, free, no model; `audit` (report) + `lint` (gate),
+  ONE detector both call (one-detector-no-drift). This column is table-stakes-ish (agnix
+  competes here on rule COUNT) EXCEPT the catalog-grounded cross-reference (rule exists AND
+  enabled across 7 catalogs) + the lethal-trifecta capability set-intersection, which no
+  competitor has. Don't compete on count; compete on the two cross-ref/state checks.
+- ◷ **MEASURE (test/eval)** — model-gated, on the sub. Trigger-rate (fire? recall+precision),
+  claim-vs-measured A/B, the disaster battery, adversarial-gate. The one thing NO linter on
+  earth can do; uniquely affordable because it runs on the user's Claude subscription, not a
+  metered API.
+
+The same logical check can occupy MORE than one mode — the trifecta is DETECT today (Safety
+ring) and PREVENT under a declared purity floor; a reference is DETECT in audit and PREVENT
+in a typed spec. That overlap is the adoption ladder (markdown floor → typed spec) made
+concrete: a user starts at DETECT (zero adoption, audit on any repo) and graduates to
+PREVENT as they adopt specs/compiled hooks.
+
+PLANNED (the OSS-scan harvest, all DETECT-mode, mostly S-effort, deterministic, FP-safe):
+the static false-confidence hook detect (the audit half of what compiled hooks already
+PREVENT — needed because audit runs on strangers' hand-written hooks with zero adoption),
+invisible-skill (missing `---`), secrets-in-config / settings.local-not-gitignored,
+dangerous-default-permissions, `.env`-deny-Bash-bypass, `@import` resolution, instruction-
+file truncation limit, skill-description >250-char cap. Build each detector → audit + lint,
+fix message points at the PREVENT path (compiled hook / typed spec) where one exists.
+
+KEY HONESTY for the public table: only SHIPPED handling goes in the matrix cells; planned
+checks live in a clearly-marked "On the roadmap" list (never claim vaporware as a current
+capability — the never-fabricate/credibility rule extends to the coverage matrix).
+
 ## Highest-conviction next step
 
 If picking ONE thing to build for the launch: **the lethal-trifecta check (#1) + the static
