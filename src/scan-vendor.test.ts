@@ -46,6 +46,11 @@ function ruleFindings(r: ScanReport): Record<string, number> {
     mcpIssues: r.mcpIssues.length,
     descriptionOverlaps: r.descriptionOverlaps.length,
     malformedFrontmatter: r.malformedFrontmatter.length,
+    skillFenceIssues: r.skillFenceIssues.length,
+    pluginLayoutIssues: r.pluginLayoutIssues.length,
+    delegationTrifecta: r.delegationTrifecta.length,
+    hookBlockFindings: r.hookBlockFindings.length,
+    hookMatcherFindings: r.hookMatcherFindings.length,
   };
 }
 
@@ -87,5 +92,20 @@ test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + mal
   assert.ok(
     r.malformedFrontmatter.some((m) => m.path.includes("tester.md")),
     "tester.md's one-line description is invalid YAML → frontmatter-valid fires",
+  );
+});
+
+// TRUE-POSITIVE — a real MIT hook component (davila7/claude-code-templates) whose
+// own description says it "blocks deployments", implemented as a PostToolUse hook
+// that `exit 2` — which CANNOT veto (the build already ran). The canonical #19009
+// false-confidence bug, locked against the wild. See SOURCES.md.
+test("true-positive: davila7 perf-budget 'guard' exit-2s on PostToolUse (false confidence)", () => {
+  const r = scanPlugin(vendored("davila7-perf-guard"));
+  const wrongEvent = r.hookBlockFindings.find(
+    (f) => f.event === "PostToolUse" && f.kind === "wrong-event",
+  );
+  assert.ok(
+    wrongEvent,
+    "a PostToolUse hook that exits 2 must fire hook-block-ineffective (wrong-event)",
   );
 });

@@ -554,6 +554,28 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [~] **Flue poach (2026-06-29) — a typed TS harness validates the typed-spec bet + opens
+  surfaces.** Flue (withastro/flue, the Astro team) is a programmable TypeScript agent
+  harness with Valibot-typed tool/workflow I/O that ALSO imports Claude Code `SKILL.md`
+  dirs — independent confirmation of "the harness is a typed program, not prose."
+  **F1 SHIPPED** (`delegation-trifecta`, commit `7b88bcb` — capability-diff across the
+  subagent delegation tree). Still open, ranked: **F3** model-specifier resolution
+  (`provider/model` ids resolve / not deprecated — cheapest quick win, extends the
+  frontmatter-value rule); **F2** typed tool/workflow I/O handoff verification (the
+  pipe/Supplies moat applied to Valibot schemas — pre-run > runtime throw); **F4**
+  workflows as a first-class audit surface (productize `validateRailway`); **F5** tool
+  DEFINITIONS as a surface (effect-floor on a `defineTool` body); **F6** harness-
+  portability lint (a harness-only frontmatter key inert under another target); **F7** a
+  `vigiles/flue` adapter (4th harness; cheap first step — detect `flue.config.ts`, verify
+  its imported SKILL.md dirs + `agents/*.ts` model specifiers); **F8** Flue workflow
+  event-history as a Trace source for the test tier. [audit-wow-ideas](audit-wow-ideas.md)
+  Appendix D · **F3 = quick win; F2/F4 = on-moat**
+- [ ] **Remaining OSS-issue detector harvest** (all DETECT-mode, deterministic, FP-safe,
+      audit + lint, same one-detector pattern as the five shipped `7b88bcb`):
+      secrets-in-config / `settings.local.json`-not-gitignored, dangerous-default-permissions
+      (`Bash(*)` / `--dangerously-skip-permissions`), `.env`-deny-Bash-bypass, CLAUDE.md
+      `@import` resolution, instruction-file truncation limit, skill-description >250-char cap.
+      [audit-wow-ideas](audit-wow-ideas.md) §Tier-1 · **LOW-MED each**
 - [ ] **"Prove your guardrail actually blocks" — the verify-not-gate killer feature.**
       The #1 verified hook pain is FALSE CONFIDENCE: a safety hook looks like a guardrail and
       silently isn't (exit 1≠exit 2, wrong JSON field, PostToolUse-can't-block, wrong jq path) —
