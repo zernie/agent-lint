@@ -33,6 +33,11 @@ import {
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
+import {
+  normalizeHooks,
+  hookEventNames,
+  type HookRegistration,
+} from "./core/hook-normalize.js";
 import { editDistance } from "./core/linters.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
@@ -775,59 +780,47 @@ export function preferCompiledHooksMessage(count: number): string {
  * `SessionStart`/`PostToolUse`/`Stop` hook isn't tested against the disaster
  * catalog. Returns an empty map for a non-object/array config (event → unknown).
  */
-function eventsByScript(hooks: unknown): Map<string, string> {
+function eventsByScript(
+  regs: readonly HookRegistration[],
+): Map<string, string> {
   const map = new Map<string, string>();
-  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return map;
-  for (const [event, arr] of Object.entries(hooks as Record<string, unknown>)) {
-    if (!Array.isArray(arr)) continue;
-    for (const entry of arr) {
-      const hookList = (entry as { hooks?: unknown }).hooks;
-      if (!Array.isArray(hookList)) continue;
-      for (const h of hookList) {
-        const cmd = (h as { command?: unknown }).command;
-        if (typeof cmd !== "string") continue;
-        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
-          if (!map.has(tok)) map.set(tok, event);
-        }
-      }
+  for (const reg of regs) {
+    for (const tok of reg.command.match(SCRIPT_RE) ?? []) {
+      if (!map.has(tok)) map.set(tok, reg.event);
     }
   }
   return map;
 }
 
 function scanHooks(
-  settings: { hooks?: unknown },
+  regs: readonly HookRegistration[],
   root: string,
   pluginRootToken: string,
 ): { hooks: ScanHook[]; inline: number; manual: number } {
-  const text = JSON.stringify(settings.hooks ?? {});
-  const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
-    (m) => m[1],
-  );
-  const evMap = eventsByScript(settings.hooks);
+  const commands = regs.map((r) => r.command);
+  const evMap = eventsByScript(regs);
   // A hand-written hook is any non-empty command that isn't a vigiles-managed
   // (compiled) hook-runtime invocation — the basis for the prefer-compiled-hooks nudge.
   const manual = commands.filter((c) => {
-    const u = c.replace(/\\(.)/g, "$1").trim();
+    const u = c.trim();
     return u !== "" && !isManagedHookCommand(u);
   }).length;
   const byScript = new Map<string, ScanHook>();
   let inline = 0;
   for (const cmd of commands) {
-    const unescaped = cmd.replace(/\\(.)/g, "$1");
-    const found = unescaped.match(SCRIPT_RE);
+    const found = cmd.match(SCRIPT_RE);
     if (!found || found.length === 0) {
       inline++;
       continue;
     }
     // A guarded command runs its script only if it exists — an optional hook, not
     // a broken one. Treat it as a conditional one-liner (inline), don't path-check.
-    if (EXISTENCE_GUARD.test(unescaped)) {
+    if (EXISTENCE_GUARD.test(cmd)) {
       inline++;
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root, pluginRootToken, unescaped);
+      const hook = resolveScript(tok, root, pluginRootToken, cmd);
       const event = evMap.get(tok);
       byScript.set(hook.script, event ? { ...hook, event } : hook);
     }
@@ -1133,85 +1126,56 @@ function collectDelegationTrifecta(
  * cwd). Addresses the gaps a de-duplicated `ScanHook[]` would miss.
  */
 function collectHookBlockEntries(
-  hooksObj: unknown,
+  regs: readonly HookRegistration[],
   root: string,
   pluginRootToken: string,
 ): HookScriptEntry[] {
-  if (
-    hooksObj === null ||
-    typeof hooksObj !== "object" ||
-    Array.isArray(hooksObj)
-  ) {
-    return [];
-  }
   const out: HookScriptEntry[] = [];
-  for (const [event, arr] of Object.entries(
-    hooksObj as Record<string, unknown>,
-  )) {
-    if (!Array.isArray(arr)) continue;
-    for (const entry of arr) {
-      const hookList = (entry as { hooks?: unknown }).hooks;
-      if (!Array.isArray(hookList)) continue;
-      for (const h of hookList) {
-        const cmd = (h as { command?: unknown }).command;
-        if (typeof cmd !== "string" || cmd.length === 0) continue;
-        // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
-        // so resolve EVERY candidate and inspect each — reading only the first
-        // (the wrapper) would miss the guard's block logic. Candidates: extensioned
-        // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
-        // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
-        const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
-        for (const word of cmd.split(/\s+/)) {
-          const w = word.replace(/^["']+|["']+$/g, "");
-          if (w.startsWith("-")) continue; // a flag, not a path
-          if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
-        }
-        const resolvedPaths: string[] = [];
-        for (const tok of candidates) {
-          const r = resolveScript(tok, root, pluginRootToken, cmd);
-          if (r.status === "ok") {
-            const abs = isAbsolute(r.script)
-              ? r.script
-              : resolve(root, r.script);
-            if (!resolvedPaths.includes(abs)) resolvedPaths.push(abs);
-          }
-        }
-        if (resolvedPaths.length > 0) {
-          // One entry per resolvable script (each is inspected on its own).
-          for (const sp of resolvedPaths) {
-            out.push({ event, command: cmd, scriptPath: sp });
-          }
-        } else {
-          // No script file resolved → inline one-liner; inspect the command text.
-          out.push({ event, command: cmd, scriptPath: null });
-        }
+  for (const { event, command: cmd } of regs) {
+    // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
+    // so resolve EVERY candidate and inspect each — reading only the first
+    // (the wrapper) would miss the guard's block logic. Candidates: extensioned
+    // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
+    // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
+    const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
+    for (const word of cmd.split(/\s+/)) {
+      const w = word.replace(/^["']+|["']+$/g, "");
+      if (w.startsWith("-")) continue; // a flag, not a path
+      if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
+    }
+    const resolvedPaths: string[] = [];
+    for (const tok of candidates) {
+      const r = resolveScript(tok, root, pluginRootToken, cmd);
+      if (r.status === "ok") {
+        const abs = isAbsolute(r.script) ? r.script : resolve(root, r.script);
+        if (!resolvedPaths.includes(abs)) resolvedPaths.push(abs);
       }
+    }
+    if (resolvedPaths.length > 0) {
+      // One entry per resolvable script (each is inspected on its own).
+      for (const sp of resolvedPaths) {
+        out.push({ event, command: cmd, scriptPath: sp });
+      }
+    } else {
+      // No script file resolved → inline one-liner; inspect the command text.
+      out.push({ event, command: cmd, scriptPath: null });
     }
   }
   return out;
 }
 
-/** Extract (event, matcher) pairs from the canonical object-keyed hooks settings. */
-function collectHookMatchers(hooksObj: unknown): HookMatcherEntry[] {
-  if (
-    hooksObj === null ||
-    typeof hooksObj !== "object" ||
-    Array.isArray(hooksObj)
-  ) {
-    return [];
-  }
+/** Extract (event, matcher) pairs from the normalized hook registrations. */
+function collectHookMatchers(
+  regs: readonly HookRegistration[],
+): HookMatcherEntry[] {
+  const seen = new Set<string>();
   const out: HookMatcherEntry[] = [];
-  for (const [event, groups] of Object.entries(
-    hooksObj as Record<string, unknown>,
-  )) {
-    if (!Array.isArray(groups)) continue;
-    for (const g of groups) {
-      if (g === null || typeof g !== "object") continue;
-      const matcher = (g as { matcher?: unknown }).matcher;
-      if (typeof matcher === "string" && matcher.length > 0) {
-        out.push({ event, matcher });
-      }
-    }
+  for (const { event, matcher } of regs) {
+    if (matcher === null) continue;
+    const key = `${event} ${matcher}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ event, matcher });
   }
   return out;
 }
@@ -1240,8 +1204,13 @@ export function scanPlugin(
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
   const loaded = loadPlugin(dir, lay);
+  // Parse the raw `settings.hooks` ONCE at the boundary (parse-don't-validate):
+  // tolerant of the Claude Code nested shape AND the Codex flat shape, so every
+  // hook detector below consumes typed `HookRegistration[]` instead of re-walking
+  // `unknown`. The single seam where the per-harness hook shape is absorbed.
+  const hookRegs = normalizeHooks(loaded.settings.hooks);
   const { hooks, inline, manual } = scanHooks(
-    loaded.settings,
+    hookRegs,
     resolve(dir),
     lay.pluginRootToken,
   );
@@ -1249,15 +1218,10 @@ export function scanPlugin(
   // registration (the hook never fires), so flag every unknown (not just typos).
   // ONLY for the canonical object-keyed-by-event shape: a plugin shipping a
   // hooks ARRAY uses a non-CC/custom format whose events live INSIDE each entry
-  // (e.g. ananddtyagi/sugar's `[{event:"tool-use",…}]`) — Object.keys would read
-  // array INDICES, a false positive. We don't interpret a format we don't own.
-  const hooksObj = loaded.settings.hooks;
-  const eventNames =
-    hooksObj !== null &&
-    typeof hooksObj === "object" &&
-    !Array.isArray(hooksObj)
-      ? Object.keys(hooksObj as Record<string, unknown>)
-      : [];
+  // (e.g. ananddtyagi/sugar's `[{event:"tool-use",…}]`) — `hookEventNames` reads
+  // object keys only and returns [] for an array. We don't interpret a format we
+  // don't own.
+  const eventNames = hookEventNames(loaded.settings.hooks);
   const hookEventIssues = confidentHookEventIssues(
     verifyHookEvents(eventNames, dialect),
   );
@@ -1308,16 +1272,15 @@ export function scanPlugin(
     skillFenceIssues: skillFenceFindings,
     pluginLayoutIssues: pluginDirLayoutIssues(
       resolve(dir, dirname(lay.manifestPath)),
-      lay.surfaceDirs,
+      // The hooks dir is a misplaceable functional surface too, but it lives in
+      // the layout as a convention PATH (`hooks/hooks.json`), not in surfaceDirs
+      // — derive its first segment and dedupe so the detector watches it as well.
+      [...new Set([...lay.surfaceDirs, lay.hooksConventionPath.split("/")[0]])],
     ),
     delegationTrifecta: collectDelegationTrifecta(agents, dialect),
     hookBlockFindings: dialect.noEffectHookEvents
       ? hookBlockIssues(
-          collectHookBlockEntries(
-            loaded.settings.hooks,
-            resolve(dir),
-            lay.pluginRootToken,
-          ),
+          collectHookBlockEntries(hookRegs, resolve(dir), lay.pluginRootToken),
           {
             noEffectEvents: new Set(dialect.noEffectHookEvents),
             permissionDecisionEvents: new Set(
@@ -1327,7 +1290,7 @@ export function scanPlugin(
         )
       : [],
     hookMatcherFindings: hookMatcherIssues(
-      collectHookMatchers(loaded.settings.hooks),
+      collectHookMatchers(hookRegs),
       declaredServers,
       dialect,
     ),

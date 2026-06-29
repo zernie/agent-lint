@@ -163,15 +163,28 @@ function isWildcard(tool: string): boolean {
   return tool === "" || tool === "*";
 }
 
-/** Split a direct `mcp__<server>__<tool>` into `{ server, tool }`, or null. */
+/**
+ * Split an MCP grant into `{ server, tool }`, or null. Handles three forms:
+ * - a concrete `mcp__<server>__<tool>` (tool = the named tool);
+ * - a SERVER-WIDE grant `mcp__<server>` or `mcp__<server>__*` / `__.*` (tool = ""
+ *   → classify by the SERVER alone, since it grants every tool on that server).
+ * Without the server-wide case a contract like `mcp__slack__*` would grant an
+ * exfil-capable server yet contribute no leg (reported clean when it isn't).
+ */
 function mcpParts(
   base: string,
   dialect: HarnessDialect,
 ): { server: string; tool: string } | null {
-  if (!dialect.mcpToolPattern.test(base)) return null;
-  const m = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(base);
-  if (!m) return null;
-  return { server: m[1].toLowerCase(), tool: m[2].toLowerCase() };
+  if (dialect.mcpToolPattern.test(base)) {
+    const m = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(base);
+    if (m) return { server: m[1].toLowerCase(), tool: m[2].toLowerCase() };
+  }
+  // Server-wide: `mcp__server`, `mcp__server__*`, `mcp__server__.*`.
+  const sw = /^mcp__([a-z0-9-]+(?:_[a-z0-9-]+)*?)(?:__(?:\*|\.\*))?$/i.exec(
+    base,
+  );
+  if (sw) return { server: sw[1].toLowerCase(), tool: "" };
+  return null;
 }
 
 function anySubstr(haystack: string, needles: readonly string[]): boolean {
