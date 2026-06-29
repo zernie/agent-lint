@@ -147,14 +147,19 @@ export const WORKFLOW_RULES = [
  * CC's loader), `skill-frontmatter` (skills load without it) and `unmarked-refs`
  * (the undecidable-plaintext nudge) sit at `warn`; `prefer-compiled-hooks` defaults
  * OFF (a recommendation that shouldn't fire unasked — the shell lane stays
- * first-class). `init` does not write these — they keep their own default
- * severities. Named for the group taxonomy (research/install-enforcement-dx.md).
+ * first-class). `lethal-trifecta` + `skill-resource-resolves` are here for now on a
+ * don't-cry-wolf rollout (default `warn`; a team raises either to `error` by hand
+ * once it's confirmed quiet on their corpus). `init` does not write these — they
+ * keep their own default severities. Named for the group taxonomy
+ * (research/install-enforcement-dx.md).
  */
 export const NUDGE_RULES = [
   "frontmatter-valid",
   "skill-frontmatter",
   "prefer-compiled-hooks",
   "unmarked-refs",
+  "lethal-trifecta",
+  "skill-resource-resolves",
 ] as const;
 
 export function mergeProjectConfig(

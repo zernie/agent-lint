@@ -185,13 +185,14 @@ config target Claude Code _and_ Codex without duplicating rules per harness:
 universal rules stay bare and run everywhere; surface rules light up only where
 the surface exists.
 
-| Surface (the gate)          | Rules                                                                                      | Applies to                                |
-| --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`       | all harnesses                             |
-| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
-| MCP                         | `mcp-config`                                                                               | all with MCP                              |
-| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`              | Claude Code, Codex                        |
-| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
+| Surface (the gate)          | Rules                                                                                                        | Applies to                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                         | all harnesses                             |
+| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`, `skill-resource-resolves` | all with skills                           |
+| MCP                         | `mcp-config`                                                                                                 | all with MCP                              |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`                                | Claude Code, Codex                        |
+| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves`                   | Claude Code (n/a on Codex — no subagents) |
+| Safety (skills + subagents) | `lethal-trifecta`                                                                                            | all (subagent half n/a on Codex)          |
 
 The per-family tables below give each rule's default severity and what it checks.
 
@@ -239,11 +240,18 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Skill triggers
 
-| Rule                                                  | Default  | What it checks                                                     |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| [`skill-frontmatter`](rules/skill-frontmatter.md)     | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)   |
-| [`description-overlap`](rules/description-overlap.md) | `"warn"` | No two model-invocable skills have near-identical descriptions     |
-| [`frontmatter-valid`](rules/frontmatter-valid.md)     | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn) |
+| Rule                                                          | Default  | What it checks                                                               |
+| ------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)             | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)             |
+| [`description-overlap`](rules/description-overlap.md)         | `"warn"` | No two model-invocable skills have near-identical descriptions               |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)             | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn)           |
+| [`skill-resource-resolves`](rules/skill-resource-resolves.md) | `"warn"` | A SKILL.md body's bundled-file refs (`scripts/`/`references/`) exist on disk |
+
+### Safety
+
+| Rule                                          | Default  | What it checks                                                                                                                 |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`lethal-trifecta`](rules/lethal-trifecta.md) | `"warn"` | No unit (subagent / model-invocable skill) holds all three lethal-trifecta legs (read-private + ingest-untrusted + exfiltrate) |
 
 ### Docs hygiene
 

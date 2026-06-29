@@ -32,7 +32,7 @@ test("explicit all-three → a hard finding naming each leg", () => {
   assert.ok(finding && finding.legs.private.includes("Read"));
   assert.ok(finding && finding.legs.untrusted.includes("WebSearch"));
   assert.ok(finding && finding.legs.exfil.includes("WebFetch"));
-  assert.match(finding!.message, /Lethal trifecta/);
+  assert.match(finding?.message ?? "", /Lethal trifecta/);
 });
 
 test("Bash is dual (A+C): Bash alone covers two legs, Bash+WebFetch fires", () => {
@@ -43,10 +43,7 @@ test("Bash is dual (A+C): Bash alone covers two legs, Bash+WebFetch fires", () =
   // Bash alone (A+C, no B) → not a trifecta.
   assert.equal(lethalTrifectaIssues(["Bash"], claudeCodeDialect), null);
   // Bash (A+C) + WebFetch (B) → all three.
-  const finding = lethalTrifectaIssues(
-    ["Bash", "WebFetch"],
-    claudeCodeDialect,
-  );
+  const finding = lethalTrifectaIssues(["Bash", "WebFetch"], claudeCodeDialect);
   assert.notEqual(finding, null);
   assert.equal(finding?.severity, "hard");
 });
@@ -65,7 +62,7 @@ test("inherits-all (empty contract) → an advisory finding", () => {
   const finding = lethalTrifectaIssues([], claudeCodeDialect);
   assert.notEqual(finding, null);
   assert.equal(finding?.severity, "advisory");
-  assert.match(finding!.message, /Inherits-all/);
+  assert.match(finding?.message ?? "", /Inherits-all/);
 });
 
 test("inherits-all (wildcard '*') → an advisory finding", () => {

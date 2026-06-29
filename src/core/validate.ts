@@ -101,6 +101,12 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "frontmatter-valid": "warn",
   // A mcp_tool hook incomplete / targeting an undeclared server — on by default at warn.
   "mcp-hook-target-resolves": "warn",
+  // Lethal-trifecta capability set-intersection (read-private + ingest-untrusted +
+  // exfiltrate in one unit) — WARN by default (don't-cry-wolf rollout); raise to error.
+  "lethal-trifecta": "warn",
+  // A SKILL.md body referencing a missing bundled resource — WARN by default
+  // (don't-cry-wolf rollout, FP-safe); raise to error to gate CI.
+  "skill-resource-resolves": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

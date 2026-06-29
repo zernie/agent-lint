@@ -915,6 +915,10 @@ interface LintReport {
   mcpHookErrors: number;
   preferCompiledHookIssues: number;
   preferCompiledHookErrors: number;
+  lethalTrifectaIssues: number;
+  lethalTrifectaErrors: number;
+  skillResourceIssues: number;
+  skillResourceErrors: number;
   docRefErrors: number;
   symbolRefErrors: number;
   mcpRefErrors: number;
@@ -1020,6 +1024,8 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.frontmatterValidErrors > 0 ||
     report.mcpHookErrors > 0 ||
     report.preferCompiledHookErrors > 0 ||
+    report.lethalTrifectaErrors > 0 ||
+    report.skillResourceErrors > 0 ||
     report.symbolRefErrors > 0 ||
     report.mcpRefErrors > 0
   )
@@ -1483,6 +1489,15 @@ async function runLint(
   // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
   const preferCompiledHooks = checkPreferCompiledHooks(config, silent, adapter);
 
+  // 7o. Lethal-trifecta — a unit (subagent / model-invocable skill) whose tools
+  // hold all three legs (read-private + ingest-untrusted + exfiltrate) is a
+  // prompt-injection exfil path (Rule of Two). Capability SET-intersection.
+  const lethalTrifecta = checkLethalTrifecta(config, silent, adapter);
+
+  // 7p. Skill-resource — a SKILL.md body referencing a bundled file that doesn't
+  // exist on disk under the skill dir (the agent gets nothing). FP-safe.
+  const skillResources = checkSkillResourceResolves(config, silent, adapter);
+
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
   // `<!-- vigiles:ignore -->` (single block) or
@@ -1557,6 +1572,10 @@ async function runLint(
     mcpHookErrors: mcpHookTargets.errors,
     preferCompiledHookIssues: preferCompiledHooks.issues,
     preferCompiledHookErrors: preferCompiledHooks.errors,
+    lethalTrifectaIssues: lethalTrifecta.issues,
+    lethalTrifectaErrors: lethalTrifecta.errors,
+    skillResourceIssues: skillResources.issues,
+    skillResourceErrors: skillResources.errors,
     docRefErrors: docRefReport.errors.length,
     symbolRefErrors,
     mcpRefErrors,
@@ -3477,6 +3496,87 @@ function checkDescriptionOverlap(
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `lethal-trifecta` rule: a unit (subagent / model-invocable skill)
+ * whose declared tools hold all three legs (read-private + ingest-untrusted +
+ * exfiltrate) is a prompt-injection exfil path (Meta's Rule of Two). Reuses
+ * `scanPlugin`'s `trifectaFindings` (a capability SET-intersection, one detector,
+ * no drift). Warning by default; "error" gates CI. Surfaces across BOTH subagents
+ * and skills, so it is NOT gated on the `subagents` capability — a skill-only
+ * harness still has the surface.
+ */
+function checkLethalTrifecta(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["lethal-trifecta"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly {
+    path: string;
+    kind: string;
+    name: string;
+    finding: { message: string };
+  }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).trifectaFindings;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nLethal-trifecta check:\n");
+    for (const t of found) {
+      const msg = `${t.kind} ${t.name}: ${t.finding.message}`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${t.path}: ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg, t.path);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `skill-resource-resolves` rule: a SKILL.md body referencing a bundled
+ * file (`scripts/`/`references/`/`assets/` or a relative markdown link with an
+ * extension) that doesn't exist on disk — the agent reads the instruction and gets
+ * nothing. Reuses `scanPlugin`'s `skillResourceIssues` (high-precision / FP-safe,
+ * one detector, no drift). Warning by default; "error" gates CI.
+ */
+function checkSkillResourceResolves(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["skill-resource-resolves"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly {
+    path: string;
+    name: string;
+    finding: { ref: string; line: number };
+  }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).skillResourceIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSkill-resource check:\n");
+    for (const s of found) {
+      const msg = `${s.name}: bundled resource "${s.finding.ref}" (line ${String(s.finding.line)}) is referenced but missing — the agent reads the instruction and gets nothing.`;
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${s.path}: ${msg}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", msg, s.path);
     }
   }
   return { issues: found.length, errors: sev === "error" ? found.length : 0 };

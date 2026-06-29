@@ -1171,3 +1171,151 @@ test("verifyLiveMcpTools: no declared servers → nothing started, no errors", a
   assert.match(formatMcpContractReport(errs), /resolves/);
   cleanupTmpDir(dir);
 });
+
+// ---------------------------------------------------------------------------
+// lethal-trifecta — surfaced through scanPlugin (the shared detector, no drift)
+// ---------------------------------------------------------------------------
+
+test("scanPlugin flags a HARD lethal trifecta on a subagent with all three legs", () => {
+  const dir = makeTmpDir("scan-trifecta-hard");
+  // Read (private) + WebFetch (untrusted in) + WebFetch (exfil out): all 3 legs.
+  write(
+    dir,
+    "agents/exfil.md",
+    "---\nname: exfil\ndescription: Reads code, fetches the web, and posts\ntools: Read, WebFetch\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  const agent = r.agents.find((a) => a.name === "exfil");
+  assert.ok(agent?.trifecta, "the subagent carries a trifecta finding");
+  assert.equal(agent.trifecta?.severity, "hard");
+  // The aggregate report list carries the path-tagged finding for the lint rule.
+  const flat = r.trifectaFindings.find((t) => t.name === "exfil");
+  assert.ok(flat, "the finding lands on the report's flat list");
+  assert.equal(flat.kind, "subagent");
+  // …and it prints in the human report under the trifecta section.
+  assert.match(formatScanReport(r), /Lethal trifecta/);
+  assert.match(formatScanReport(r), /✗ subagent exfil/);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin reports an inherits-all subagent trifecta as ADVISORY", () => {
+  const dir = makeTmpDir("scan-trifecta-advisory");
+  write(
+    dir,
+    "agents/wide.md",
+    "---\nname: wide\ndescription: No tools line\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  const agent = r.agents.find((a) => a.name === "wide");
+  assert.equal(agent?.trifecta?.severity, "advisory");
+  assert.match(formatScanReport(r), /⚠ subagent wide/);
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin flags a model-invocable skill's allowed-tools trifecta; excludes user-invoked", () => {
+  const dir = makeTmpDir("scan-trifecta-skill");
+  write(
+    dir,
+    "skills/leaky/SKILL.md",
+    "---\nname: leaky\ndescription: A model-invocable skill that does many things here\nallowed-tools: Read, WebFetch\n---\n# leaky\n",
+  );
+  // Same dangerous contract but user-invoked → cannot be hijacked → excluded.
+  write(
+    dir,
+    "skills/manual/SKILL.md",
+    "---\nname: manual\ndescription: A user-invoked skill that also has all the legs here\ndisable-model-invocation: true\nallowed-tools: Read, WebFetch\n---\n# manual\n",
+  );
+  const r = scanPlugin(dir);
+  const leaky = r.skills.find((s) => s.name === "leaky");
+  const manual = r.skills.find((s) => s.name === "manual");
+  assert.equal(leaky?.trifecta?.severity, "hard");
+  assert.equal(manual?.trifecta, null, "user-invoked skill is excluded");
+  assert.ok(
+    r.trifectaFindings.some((t) => t.name === "leaky" && t.kind === "skill"),
+  );
+  assert.ok(!r.trifectaFindings.some((t) => t.name === "manual"));
+  cleanupTmpDir(dir);
+});
+
+test("scanPlugin: a two-leg subagent is NOT a trifecta (Rule of Two)", () => {
+  const dir = makeTmpDir("scan-trifecta-two-legs");
+  // Read (private) + WebSearch (untrusted) — no exfil leg → safe.
+  write(
+    dir,
+    "agents/safe.md",
+    "---\nname: safe\ndescription: Reads and searches but cannot exfiltrate\ntools: Read, WebSearch\n---\nbody\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(r.agents.find((a) => a.name === "safe")?.trifecta, null);
+  assert.equal(r.trifectaFindings.length, 0);
+  cleanupTmpDir(dir);
+});
+
+test("trifecta detector is dialect-injected — works under a non-CC layout", () => {
+  // The agnostic path: a custom (non-Claude-Code) subagent dir. No CC literal in
+  // the detector call; the dialect is threaded through scanPlugin.
+  const dir = makeTmpDir("scan-trifecta-agnostic");
+  write(
+    dir,
+    "subagents/wide.md",
+    "---\nname: wide\ndescription: A subagent with no tools line under a custom dir\n---\nbody\n",
+  );
+  const customLayout = {
+    ...claudeCodeLayout,
+    agentDir: "subagents",
+    surfaceDirs: ["subagents"],
+    materializeRoot: "",
+  };
+  const r = scanPlugin(dir, customLayout, claudeCodeDialect);
+  assert.equal(
+    r.agents.find((a) => a.name === "wide")?.trifecta?.severity,
+    "advisory",
+  );
+  cleanupTmpDir(dir);
+});
+
+// ---------------------------------------------------------------------------
+// skill-resource-resolves — surfaced through scanPlugin
+// ---------------------------------------------------------------------------
+
+test("scanPlugin flags a SKILL.md body referencing a missing bundled resource", () => {
+  const dir = makeTmpDir("scan-skill-resource");
+  write(
+    dir,
+    "skills/pdf/SKILL.md",
+    "---\nname: pdf\ndescription: Extracts text from a PDF using a bundled script here\n---\n# pdf\n\nRun `scripts/extract.py` to extract the text.\n\nSee [the API](references/api.md) for details.\n",
+  );
+  // Only scripts/extract.py exists; references/api.md does NOT.
+  write(dir, "skills/pdf/scripts/extract.py", "print('hi')\n");
+  const r = scanPlugin(dir);
+  const pdf = r.skills.find((s) => s.name === "pdf");
+  assert.equal(
+    pdf?.resourceIssues.length,
+    1,
+    "only the missing ref is flagged",
+  );
+  assert.equal(pdf.resourceIssues[0].ref, "references/api.md");
+  // The aggregate list + the printed report both carry it.
+  const flat = r.skillResourceIssues.find((s) => s.name === "pdf");
+  assert.ok(flat);
+  assert.equal(flat.finding.ref, "references/api.md");
+  assert.match(formatScanReport(r), /Skill bundled resources/);
+  assert.match(formatScanReport(r), /pdf: references\/api\.md/);
+  cleanupTmpDir(dir);
+});
+
+test("skill-resource is FP-safe: URLs and $VAR tokens are not flagged", () => {
+  const dir = makeTmpDir("scan-skill-resource-fp");
+  write(
+    dir,
+    "skills/web/SKILL.md",
+    "---\nname: web\ndescription: A skill that links out to docs and runtime paths here\n---\n# web\n\nSee [docs](https://example.test/api.md) and `${CLAUDE_PLUGIN_ROOT}/x.sh` and `../sibling/y.sh`.\n",
+  );
+  const r = scanPlugin(dir);
+  assert.equal(
+    r.skills.find((s) => s.name === "web")?.resourceIssues.length,
+    0,
+  );
+  assert.equal(r.skillResourceIssues.length, 0);
+  cleanupTmpDir(dir);
+});
