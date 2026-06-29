@@ -6,11 +6,16 @@
 > rationale; detail lives there, priority lives here. When you finish or kill an
 > item, move it here first.
 >
-> Two backlogs feed this: [`feature-ideas.md`](feature-ideas.md) (pillar-1
-> user features) and [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
-> (pillar-2 surface coverage). Strategy feeds in from
+> **Idea backlogs feed this** (ideas live there, the ranked plan lives here):
+> [`audit-wow-ideas.md`](audit-wow-ideas.md) (the main one — new audit/lint checks,
+> the **Flue poach F1–F8** in Appendix D, the OSS-issue detector harvest),
+> [`feature-ideas.md`](feature-ideas.md) (pillar-1 user features),
+> [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
+> (pillar-2 surface coverage), [`harness-state-space.md`](harness-state-space.md)
+> (analogical-transfer moats). Strategy from
 > [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) and
-> [`divergent-bets.md`](divergent-bets.md).
+> [`divergent-bets.md`](divergent-bets.md). See also the full index in
+> [`README.md`](README.md).
 
 ## Strategic direction (2026-06-19): measurement authority
 
