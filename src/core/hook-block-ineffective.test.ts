@@ -67,6 +67,36 @@ describe("wrong-event (no-effect events only)", () => {
     assert.equal(findings[0].scriptPath, null); // inline command inspected
   });
 
+  it("Node hook on SessionStart with process.exit(2) → wrong-event (non-shell)", () => {
+    const script = "/hooks/guard.mjs";
+    const entries: HookScriptEntry[] = [
+      { event: "SessionStart", command: `node ${script}`, scriptPath: script },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({ [script]: "if (bad) process.exit(2);\n" }),
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].kind, "wrong-event");
+  });
+
+  it("Python hook on Notification with sys.exit(2) → wrong-event (non-shell)", () => {
+    const script = "/hooks/guard.py";
+    const entries: HookScriptEntry[] = [
+      {
+        event: "Notification",
+        command: `python ${script}`,
+        scriptPath: script,
+      },
+    ];
+    const findings = hookBlockIssues(
+      entries,
+      withFiles({ [script]: "import sys\nsys.exit(2)\n" }),
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].kind, "wrong-event");
+  });
+
   it("inline SessionEnd command containing exit 2 → wrong-event (scriptPath null)", () => {
     const entries: HookScriptEntry[] = [
       { event: "SessionEnd", command: `bash -c 'cleanup; exit 2'` },

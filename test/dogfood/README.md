@@ -44,22 +44,25 @@ These carry their own `*.COVERAGE.md`. They double as **FP-guards**: every
 high-precision rule (including the five newest) must stay at **zero** on them, or
 `scan-vendor.test.ts` fails (the don't-cry-wolf regression).
 
-## Rule fixtures (deliberately carry REAL bugs)
+## Rule fixtures (real-bug true-positives + calibration guards)
 
-Kept **because** they reproduce a real defect, so each deterministic rule has a
-true-positive lock against the wild. Samples for testing, **not** an endorsement;
-frozen at their SHA.
+Kept **because** they pin a detector against reality — either a real defect it
+must keep catching (true-positive) or a real-but-benign shape it must NOT flag
+(calibration FP-guard). Samples for testing, **not** an endorsement; frozen at
+their SHA.
 
 | Slice (`dir@sha`)             | Upstream                                                                                                         | License                                            | Reproduces (verified)                                                                                                                                                                                                                                                                                            |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `madappgang-frontend@6097ad4` | github.com/MadAppGang/claude-code (`plugins/frontend/agents/tester.md`)                                          | MIT — Copyright (c) 2024 MadAppGang - Jack Rudenko | `subagent-tool-contract` (`AskUserQuestion` never available to a subagent) **and** `frontmatter-valid` (the one-line `description:` isn't valid YAML)                                                                                                                                                            |
+| `madappgang-frontend@6097ad4` | github.com/MadAppGang/claude-code (`plugins/frontend/agents/tester.md`)                                          | MIT — Copyright (c) 2024 MadAppGang - Jack Rudenko | **True-positive (×3):** `subagent-tool-contract` (`AskUserQuestion` never available to a subagent), `frontmatter-valid` (the one-line `description:` isn't valid YAML), **and** a hard `lethal-trifecta` (Read/Bash + WebFetch/WebSearch + Bash/WebFetch = read-private ∧ ingest-untrusted ∧ exfiltrate) |
 | `davila7-perf-guard@869640b`  | github.com/davila7/claude-code-templates (`cli-tool/components/hooks/performance/performance-budget-guard.json`) | MIT — Copyright (c) 2025 Daniel (San) Ávila        | **Calibration FP-guard** for `hook-block-ineffective`. Its description says it "blocks deployments" but it's a `PostToolUse` hook that `exit 2`s — which on PostToolUse FEEDS stderr back to the model (a legitimate channel), not a failed block. Since block-vs-feedback intent isn't deterministically separable, the detector must **NOT** flag it (else it cries wolf on every nudge/lint hook, incl. vigiles's own `refs-nudge.sh`). Locks the don't-cry-wolf calibration. Vendored as `.claude/settings.json`. |
 
 ## Sweep manifest — broader scans (verdict saved even where files aren't)
 
 The deterministic `vigiles audit` run across whole repos, recorded so the breadth
-isn't lost when we don't copy every file. ✓ = scanned clean on the new detectors;
-✗ = a real finding (slice vendored above or repro in `oss-pr-drafts.md`).
+isn't lost when we don't copy every file. Re-runnable: **`bash tools/dogfood-sweep.sh`**
+(fetches the pinned repo list, audits every plugin, tallies findings — refresh this
+table from its output). ✓ = scanned clean on the new detectors; ✗ = a real finding
+(slice vendored above or repro in `oss-pr-drafts.md`).
 
 | Repo                                 | License    | Scanned                  | New-detector verdict                                          |
 | ------------------------------------ | ---------- | ------------------------ | ------------------------------------------------------------- |
