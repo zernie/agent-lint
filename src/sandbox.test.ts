@@ -277,7 +277,7 @@ test.skipIf(!sandboxRunnable)(
   async () => {
     const superpowers = join(
       __dirname,
-      "../examples/harness/vendor/superpowers@6fd4507",
+      "../test/dogfood/superpowers@6fd4507",
     );
     const r = await runHarnessTest({
       plugin: superpowers, // external → untrusted → confined (no sandbox:false)

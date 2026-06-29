@@ -176,9 +176,9 @@ You test things.
 
 describe("dogfood: adopt real vendored surfaces", () => {
   const ask =
-    "examples/harness/vendor/oh-my-claudecode@deee3a4/skills/ask/SKILL.md";
+    "test/dogfood/oh-my-claudecode@deee3a4/skills/ask/SKILL.md";
   const critic =
-    "examples/harness/vendor/oh-my-claudecode@deee3a4/agents/critic.md";
+    "test/dogfood/oh-my-claudecode@deee3a4/agents/critic.md";
 
   it.skipIf(!existsSync(ask))(
     "adopts a real SKILL.md that compiles clean",

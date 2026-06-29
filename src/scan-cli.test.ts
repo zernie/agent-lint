@@ -4,7 +4,7 @@
  * Codex, mixed, instruction-only, and marketplace repos.
  *
  * Two fixture sources, by design:
- *   - DOGFOOD on real, SHA-pinned OSS plugins (examples/harness/vendor/*) for the
+ *   - DOGFOOD on real, SHA-pinned OSS plugins (test/dogfood/*) for the
  *     Claude Code surface — the grounded shapes that catch real-world bugs.
  *   - ARTIFICIAL fixtures for Codex / mixed / instruction-only / marketplace,
  *     which we have no vendored example of (built in a tmp dir, torn down after).
@@ -31,7 +31,7 @@ import { execSync } from "node:child_process";
 
 // __dirname is src/ when vitest resolves the .ts source → ".." is the repo root.
 const CLI = resolve(__dirname, "..", "dist", "cli.js");
-const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
+const VENDOR = resolve(__dirname, "..", "test/dogfood");
 
 function run(args: string, cwd?: string): { stdout: string; exitCode: number } {
   // A default `audit` writes vigiles-report.html + vigiles-report.json into cwd —

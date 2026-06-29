@@ -373,7 +373,7 @@ test.skipIf(!sandboxAvailable() || nodeMajor < 22)(
     // assertEgressOnly proves it phones the npm registry and nowhere else.
     const root = join(
       process.cwd(),
-      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+      "test/dogfood/oh-my-claudecode@deee3a4",
     );
     // session-start only runs its full logic in a real workspace (a .git /
     // .omc-workspace marker), so give it a throwaway one as the confined cwd.
@@ -406,7 +406,7 @@ test.skipIf(!sandboxAvailable())(
     // this capability exists for.
     const root = join(
       process.cwd(),
-      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+      "test/dogfood/oh-my-claudecode@deee3a4",
     );
     const r = runHook(
       `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,
@@ -437,7 +437,7 @@ test.skipIf(!sandboxAvailable())(
     // its keyword-state cache under .omc/ and nothing else.
     const root = join(
       process.cwd(),
-      "examples/harness/vendor/oh-my-claudecode@deee3a4",
+      "test/dogfood/oh-my-claudecode@deee3a4",
     );
     const r = runHook(
       `node "${root}/scripts/run.cjs" "${root}/scripts/keyword-detector.mjs"`,

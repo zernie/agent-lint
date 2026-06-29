@@ -1,6 +1,6 @@
 /**
  * Golden scan-verdict conformance over REAL, SHA-pinned vendored plugins
- * (examples/harness/vendor/*). The complement to vendor.test.ts (loader
+ * (test/dogfood/*). The complement to vendor.test.ts (loader
  * invariants): this locks the deterministic RULES against reality, offline and
  * model-free, in the free unit tier.
  *
@@ -10,7 +10,7 @@
  *   high-precision rules may fire on it. This is the regression that catches a
  *   rule going noisy (the whole "don't cry wolf on third-party plugins" bet).
  * - TRUE-POSITIVE: a slice kept BECAUSE it reproduces a real defect must keep
- *   firing the exact rule it's there to lock (see examples/harness/vendor/SOURCES.md).
+ *   firing the exact rule it's there to lock (see test/dogfood/README.md).
  *
  * Snapshots are pinned by commit SHA → deterministic, no network, no key.
  */
@@ -22,7 +22,7 @@ import { resolve } from "node:path";
 import { scanPlugin, type ScanReport } from "./scan.js";
 
 // __dirname is dist/ at runtime; the vendored plugins live at the repo root.
-const VENDOR = resolve(__dirname, "..", "examples/harness/vendor");
+const VENDOR = resolve(__dirname, "..", "test/dogfood");
 
 /** The vendored dir whose name starts with `prefix` (SHA-suffix agnostic). */
 function vendored(prefix: string): string {
@@ -74,7 +74,7 @@ for (const prefix of [
   });
 }
 
-// TRUE-POSITIVE — the bug fixture (MIT; see SOURCES.md) must keep firing both the
+// TRUE-POSITIVE — the bug fixture (MIT; see test/dogfood/README.md) must keep firing both the
 // tool-contract and frontmatter-valid rules it's vendored to lock.
 test("true-positive: madappgang-frontend tester reproduces AskUserQuestion + malformed YAML", () => {
   const r = scanPlugin(vendored("madappgang-frontend"));

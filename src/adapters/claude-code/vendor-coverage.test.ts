@@ -1,5 +1,5 @@
 /**
- * Coverage-dogfood over the THREE real vendored plugins (examples/harness/vendor/*).
+ * Coverage-dogfood over the THREE real vendored plugins (test/dogfood/*).
  *
  * Companion to vendor.test.ts (which asserts loadPlugin INVARIANTS) and to
  * agent-runtime.test.ts / run-hook.test.ts (which already cover the wshobson
@@ -19,7 +19,7 @@
  *
  * Everything here is offline, deterministic, and needs no API key — distinct from
  * the bwrap-gated egress/fs tests in run-hook.test.ts (which skip without a
- * sandbox). The per-plugin scorecards (examples/harness/vendor/*.COVERAGE.md)
+ * sandbox). The per-plugin scorecards (test/dogfood/*.COVERAGE.md)
  * record the full rung breakdown, including the model-gated (trigger/behavior) and
  * R3 (real browser/DB) items these cheap tiers cannot reach.
  */
@@ -42,7 +42,7 @@ import { scanPlugin } from "../../scan.js";
 
 // __dirname is dist/adapters/claude-code at runtime; vendored plugins are at the
 // repo root. Matches the relative climb in vendor.test.ts.
-const VENDOR = "../../../examples/harness/vendor";
+const VENDOR = "../../../test/dogfood";
 const omcRoot = join(__dirname, VENDOR, "oh-my-claudecode@deee3a4");
 const spRoot = join(__dirname, VENDOR, "superpowers@6fd4507");
 const wsRoot = join(__dirname, VENDOR, "wshobson-accessibility@cf6059d");
