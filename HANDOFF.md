@@ -9,13 +9,13 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN** (title `feat!:` — the
-frontmatter disable is breaking; `validate` checks the TITLE). ~27 commits, pushed.
+**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN, `mergeable_state: CLEAN`**
+(all 6 checks GREEN incl. e2e — the egress red was flaky; merge is the founder's call).
+Title `feat!:` (frontmatter disable is breaking; `validate` checks the TITLE). ~37 commits.
 Started as a README brevity pass; became a large **audit / adoption / lint coherence +
-features** wave, then an **audit-eval-thickening** wave (below). CI was red three times
-in a row from MASKED failures (each fix surfaced the next step): skill-pipeline test →
-scan-cli lint → fmt:check. All fixed; `prettier --check .` + lint + targeted suites green
-(only env-only `dialect-drift` fails here — CC version ≠ pinned baseline; CI pins it).
+features** wave, then **audit-eval-thickening**, then **ecosystem-benchmark pilots**
+(below). CI was red three times from MASKED failures (each fix surfaced the next):
+skill-pipeline test → scan-cli lint → fmt:check. All fixed; CI fully green now.
 
 ### CI fixes (Codex review caught the first) — all pushed
 
@@ -46,6 +46,27 @@ Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
   STOCHASTIC (same gate held once / caved once in two runs) → defaults to 3 trials, reports
   heldRate (any cave in N = unreliable gate). Skill-gate ONLY; hook-gate half is the
   follow-up (below).
+
+### Ecosystem-benchmark pilots (auth WORKS here — run live, keep small)
+
+- **Compression cluster** (`bench/evals/ecosystem-pilot.eval.mjs`) — multi-skill
+  generalization of caveman: A/B (skill ON/OFF) over the corpus across caveman/bullets/
+  minify (labeled reconstructions). LIVE pilot (haiku, 2 trials, 3 tasks): caveman -13%
+  out (debunk holds), minify -29% out + a CORRECTNESS REGRESSION, bullets +43% but
+  INFLATED by a near-empty-output artifact on bigO (added an ARTIFACT_FLOOR guard).
+  output-share ~1% across all → output-compression can't move the bill.
+- **Headroom corpus** (`bench/corpus/headroom-tasks.mjs` + `verify-headroom.mjs`) — harder
+  tasks with EXECUTING checks (run the written fn vs edge-case tests via `ctx.sh`, base64
+  harness; verify proves each discriminates good/bad, no model). For the NON-compression
+  "makes-it-better" claims, which need a baseline that FAILS.
+- **Headroom benchmark** (`bench/evals/headroom-pilot.eval.mjs`) — A/B of an
+  edge-case-first planning skill. KEY FINDING: textbook algos (merge-intervals, roman)
+  have NO headroom — haiku aces them 100% (memorized) → 0pp lift unmeasurable. Added a
+  multi-requirement `parse-query` task (naive parser drops 3/6 rules) to create real
+  headroom; its A/B was RUNNING at session end (see `/tmp/bench/headroom2.log` — ephemeral;
+  re-run `VIGILES_TASKS=parse-query node bench/evals/headroom-pilot.eval.mjs`). LESSON:
+  hand-crafting tasks a capable model fails is HARD; a credible "does planning help"
+  benchmark likely needs a known-hard task source (SWE-bench-style) — a founder call.
 
 ### What landed this session (in order)
 
