@@ -13,9 +13,10 @@
 (Separate from PR #51 / `readme-length-review` — that branch's state is not this one's.)
 
 This session started as a README readability pass and became: a README revamp to 5/5,
-a new fan-out doc-review skill, a deep-research menu of NEW audit checks, and the FIRST
+a new fan-out doc-review skill, a deep-research menu of NEW audit checks, the FIRST
 two of those checks SHIPPED (lethal-trifecta + skill-resource resolution, wired into
-audit AND lint). All committed + pushed; gates green.
+audit AND lint), a public coverage matrix (`docs/what-vigiles-catches.md`), and a
+CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pushed.
 
 ### What landed this session (in order)
 
@@ -56,6 +57,18 @@ audit AND lint). All committed + pushed; gates green.
    - VERIFIED LIVE: `audit` flags the vendored madappgang `tester` subagent as a real
      trifecta (Bash+Read / WebFetch+WebSearch / Bash+WebFetch). Gates: build ✓, vitest
      **1792 passed** ✓, lint 0 errors ✓, fmt ✓.
+5. **PUBLIC coverage matrix** (`c330274`): `docs/what-vigiles-catches.md` — 3-mode
+   (✦ Prevented / ✓ Caught / ◷ Measured) biggest-problem-first list of every shipped
+   capability + an "On the roadmap" list of queued OSS-scan checks. Linked from README
+   near the proofs + in More. Internal twin = the "## The handling-mode matrix" section
+   in `research/audit-wow-ideas.md`.
+6. **CLAUDE.md rule** (`1be4f49`): EXTENDED `rules-docs-in-sync` (no new rule — kept lean)
+   so adding/removing/renaming a validation rule now updates FIVE places: RulesConfig type,
+   the per-rule matrix (`docs/verifying-instruction-files.md`), the rule doc, the PUBLIC
+   coverage matrix (`docs/what-vigiles-catches.md`), and the INTERNAL handling-mode matrix
+   (`research/audit-wow-ideas.md`). Distinguishes the 1:1 per-rule matrix from the
+   problem-framed coverage matrices (sharpen-or-add by problem severity, not alphabetical).
+   Recompiled CLAUDE.md from spec; doc gates (self-command-refs + orphan-docs, 39) green.
 
 ### DO NEXT / OPEN DECISIONS
 
