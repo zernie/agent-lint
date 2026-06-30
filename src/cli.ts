@@ -47,6 +47,7 @@ import {
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
   type SetupPlan,
@@ -2808,6 +2809,42 @@ function installPlugins(harnesses: string[]): void {
     console.log("");
     reportInstall(plan, runInstall(plan, exec));
   }
+  // Claude Code gets its hooks from the global marketplace plugin; Codex has no
+  // global store, so wire vigiles's proactive nudge hooks into the repo's
+  // .codex/config.toml directly (the idiomatic, repo-committed place).
+  if (harnesses.includes("codex")) wireCodexHooks();
+}
+
+/**
+ * Wire vigiles's proactive nudge hooks into `.codex/config.toml` (idempotently).
+ * Codex honors `additionalContext` on `PostToolUse`, and these run as direct
+ * `npx vigiles hook-runtime …` commands (no plugin root / vendored script), so a
+ * Codex user gets the same eval-lock + refs nudges a Claude Code user gets from
+ * the marketplace plugin. The pure merge is `applyCodexPluginHooks` (unit-tested
+ * in setup-plan.test.ts) — this only does the read/parse/write IO.
+ */
+function wireCodexHooks(): void {
+  const path = resolve(process.cwd(), ".codex", "config.toml");
+  let config: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      config = parseToml(readFileSync(path, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      console.log(
+        "⚠ .codex/config.toml is not valid TOML — skipping Codex hook wiring (fix it, then re-run `vigiles init`).",
+      );
+      return;
+    }
+  }
+  const merged = applyCodexPluginHooks(config);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, serializeConfig(merged, "toml"));
+  console.log(
+    "✓ Wired the eval-lock + refs nudge hooks into .codex/config.toml (commit it)",
+  );
 }
 
 /** Add/upgrade `vigiles` in the project's `devDependencies` (and move it out of
@@ -5233,8 +5270,8 @@ function isInstructionFile(file: string): boolean {
  * a NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating (silent
  * until a lock is committed), never blocks, never runs an eval — a reminder, not a
  * gate (the gate is `eval --check` in CI). The harness-neutral nudge lives in
- * `evalLockNudge`; CC delivers it as `additionalContext` (Codex inject is a
- * documented follow-on — see docs/harness-testing-codex.md).
+ * `evalLockNudge`; both CC and Codex deliver it as `additionalContext` on
+ * `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
  */
 function evalLockNudgeHookCommand(): void {
   let raw = "";
