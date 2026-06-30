@@ -197,17 +197,16 @@ guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock) for how it wor
 What's different on Codex is **how the reminder reaches the agent.** Here's the
 honest status of each channel:
 
-| Channel                                       | On Codex?                                                                                                                                                            |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `eval --check` staleness gate (CI)            | ✅ identical — the hard gate is fully there                                                                                                                          |
-| `test-harness` **skill** (documents the lock) | ✅ installs via the cross-agent skills CLI                                                                                                                           |
-| `AGENTS.md` one-line note (opt-in)            | ✅ idiomatic on Codex — it's the normal place for tool guidance (not written for you)                                                                                |
-| The PostToolUse **nudge hook**                | ⚠️ the hook fires, but Codex's context-injection output isn't built yet — only the block (`exit 2`) path is shared, so the reminder text doesn't reach the agent yet |
+| Channel                                       | On Codex?                                                                                                                                                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eval --check` staleness gate (CI)            | ✅ identical — the hard gate is fully there                                                                                                                                                                    |
+| `test-harness` **skill** (documents the lock) | ✅ installs via the cross-agent skills CLI                                                                                                                                                                     |
+| `AGENTS.md` one-line note (opt-in)            | ✅ idiomatic on Codex — it's the normal place for tool guidance (not written for you)                                                                                                                          |
+| The PostToolUse **nudge hook**                | ✅ Codex honors `additionalContext` injection on `PostToolUse` (and `SessionStart` / `UserPromptSubmit` / `PreToolUse` / `SubagentStart`), so the reminder reaches the agent — the same channel as Claude Code |
 
-So on Codex today: rely on the **skill** + the optional **`AGENTS.md` note** for the
-reminder. The hook-delivered nudge lands once Codex inject ships (a tracked
-follow-on). The CI gate (`eval --check`) is unaffected — it works the same
-everywhere.
+So on Codex today: the **skill**, the optional **`AGENTS.md` note**, and the
+**hook-delivered nudge** all work. The CI gate (`eval --check`) is unaffected — it
+works the same everywhere.
 
 ## See also
 

@@ -253,15 +253,29 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
     assert.match(config, /\[\[hooks\.PreToolUse\]\]/);
     assert.doesNotMatch(gate.stderr, /only confirmed for Claude Code/);
 
-    // An inject hook still merges, but the inject OUTPUT shape is unconfirmed
-    // on Codex — so it warns loudly instead of silently shipping a maybe-no-op.
+    // An inject hook on a Codex-SUPPORTED event (SessionStart) compiles WITHOUT a
+    // warning — `additionalContext` is confirmed shared with Codex (official docs).
     const inj = spawnSync(
       "node",
       [CLI, "compile", "brief.mjs", "--harness=codex"],
       { cwd: dir, encoding: "utf-8" },
     );
     assert.equal(inj.status, 0, inj.stderr);
-    assert.match(inj.stderr, /inject output is only confirmed for Claude Code/);
+    assert.doesNotMatch(inj.stderr, /does not honor|only confirmed/i);
+
+    // But an inject hook on an event Codex does NOT honor for additionalContext
+    // (Stop) warns LOUDLY — the injected text wouldn't reach the agent.
+    writeFileSync(
+      resolve(dir, "onstop.mjs"),
+      `import { defineInject, inject } from "vigiles/hook";
+export default defineInject({ on: "Stop", produce: () => inject("late") });`,
+    );
+    const bad = spawnSync(
+      "node",
+      [CLI, "compile", "onstop.mjs", "--harness=codex"],
+      { cwd: dir, encoding: "utf-8" },
+    );
+    assert.match(bad.stderr, /does not honor for additionalContext/);
   } finally {
     cleanupTmpDir(dir);
   }

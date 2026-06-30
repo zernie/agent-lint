@@ -106,6 +106,7 @@ export interface HookProtocol {
     readonly blockExitCode: number;
     readonly denyDecisionValues: readonly string[];
     readonly eventEnvVars: readonly string[];
+    readonly injectableEvents: readonly string[];
     readonly matcherStyle?: "exact" | "regex";
     readonly name: string;
 }

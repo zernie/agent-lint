@@ -325,8 +325,8 @@ inputs," not "they reflect today's model." Re-run `--update` when you want fresh
 numbers. In CI it's `command: eval-check` — a green no-op until you commit your
 first lock, and `vigiles init` scaffolds the job.
 
-**How the agent gets reminded** differs per harness (Claude Code injects the nudge;
-Codex is a documented follow-on). See the per-harness guides:
+**How the agent gets reminded** is the same on both harnesses — the hook injects the
+nudge as `additionalContext` (Claude Code and Codex both honor it). See the per-harness guides:
 [Claude Code](harness-testing-claude-code.md#keeping-eval-results-fresh--the-nudge-claude-code)
 · [Codex](harness-testing-codex.md#keeping-eval-results-fresh--the-nudge-codex).
 

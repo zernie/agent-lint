@@ -12,4 +12,8 @@ export const claudeCodeHookProtocol: HookProtocol = {
   blockExitCode: 2,
   denyDecisionValues: ["block", "deny"],
   eventEnvVars: [],
+  // Events that honor `hookSpecificOutput.additionalContext` (developer-context
+  // injection). Covers vigiles's shipped inject hooks: the SessionStart lint
+  // summary and the PostToolUse refs / eval-lock nudges.
+  injectableEvents: ["SessionStart", "UserPromptSubmit", "PostToolUse"],
 };
