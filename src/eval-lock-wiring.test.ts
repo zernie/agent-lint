@@ -486,6 +486,34 @@ test("eval-arm lock with a plugin: ${PLUGIN_ROOT} path is normalized (location-i
   }
 });
 
+test("eval-arm lock with a HOOKLESS plugin: settings:undefined doesn't throw", async () => {
+  // A plugin that ships only a skill (no hooks/settings) → resolveHarness returns
+  // settings:undefined; stripPluginRoot must pass it through, not `.split` it.
+  const root = tmp();
+  const pluginDir = makeSkillPlugin(join(root, "p"));
+  const lockDir = join(root, "locks");
+  const spc = (mode: "update" | "check") =>
+    ({
+      name: "hookless plugin eval",
+      arms: { run: { plugin: pluginDir } },
+      task: "do it",
+      trials: 1,
+      model: MODEL,
+      spacingSec: 0,
+      measure: (ctx: { turns: number }) => ({ turns: ctx.turns }),
+      lock: { mode, dir: lockDir, evalApiVersion: 1 },
+    }) as const;
+  try {
+    // Must not throw (the bug: JSON.stringify(undefined).split(...)).
+    await runEvalWith(spc("update"), countingRunner().run);
+    const chk = countingRunner();
+    await runEvalWith(spc("check"), chk.run);
+    assert.equal(chk.calls(), 0, "same hookless plugin replays");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("lock on but NO name: loud skip — runner runs, no lock written", async () => {
   const dir = tmp();
   try {
