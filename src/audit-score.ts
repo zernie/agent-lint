@@ -3,16 +3,23 @@
  *
  * A single structural-health number (the leaderboard's `scoreReport`) ranks
  * plugins, but it hides WHERE a harness is weak. This buckets the SAME
- * deterministic findings into four categories — Truthfulness, Triggering,
- * Structure, Tested — each a 0–100 ring, as a DIAGNOSTIC breakdown beneath one
- * headline `overall` = `100 − Σ(all graded penalties)` (the SAME summed model as
- * the leaderboard's single health number, via the shared `computeIntegrityScore`
- * — so the two surfaces never disagree). Same detectors, no re-detection
- * (one-detector-no-drift); all deterministic, no execution. (Safety — "do your
- * hooks actually block?" — is NOT an `audit` ring:
- * it requires executing your hooks, which needs cross-platform confinement
- * that isn't shipped yet, so it lives in the `vigiles/testing` API via
- * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.)
+ * deterministic findings into five categories — Truthfulness, Triggering,
+ * Structure, Safety, Tested — each a 0–100 ring, as a DIAGNOSTIC breakdown
+ * beneath one headline `overall` = `100 − Σ(all graded penalties)` (the SAME
+ * summed model as the leaderboard's single health number, via the shared
+ * `computeIntegrityScore` — so the two surfaces never disagree). Same detectors,
+ * no re-detection (one-detector-no-drift); all deterministic, no execution.
+ *
+ * SAFETY is fed by the STATIC lethal-trifecta capability check
+ * (`lethalTrifectaIssues` → `report.trifectaFindings`): a unit holding all three
+ * capability legs is a prompt-injection exfil path detectable from the tool-SET
+ * alone — nothing executes, so it sidesteps the confinement blocker. A `"hard"`
+ * (explicit all-three) finding is GRADED into the overall; a `"advisory"`
+ * (inherits-all) finding is SHOWN in the ring but not graded. NB the EXECUTING
+ * "do your hooks actually block?" disaster-battery is STILL not an `audit` ring:
+ * running arbitrary hooks safely needs cross-platform confinement that isn't
+ * shipped yet, so the battery lives in the `vigiles/testing` API via
+ * `guardrail-check`/`assertBlocksDisasters`, where you opt in explicitly.
  *
  * A category that can't be assessed scores `null` (n/a) and is EXCLUDED from the
  * overall — never a false 0. Pure over the `ScanReport`, so it's fully testable.
@@ -27,6 +34,7 @@ import {
   W_DANGLING_REF,
   W_OVERLAP,
   W_NO_CONTRACT,
+  W_TRIFECTA,
   type PluginScore,
 } from "./leaderboard.js";
 import type { ScanReport } from "./scan.js";
@@ -35,6 +43,7 @@ export type CategoryKey =
   | "Truthfulness"
   | "Triggering"
   | "Structure"
+  | "Safety"
   | "Tested";
 
 export interface CategoryScore {
@@ -204,6 +213,56 @@ function structure(r: ScanReport): CategoryScore {
   };
 }
 
+/**
+ * SAFETY — fed by the STATIC lethal-trifecta check (`report.trifectaFindings`).
+ * A `"hard"` finding (an explicit contract naming all three capability legs) is a
+ * declared prompt-injection exfil path and is GRADED (`W_TRIFECTA` each, the same
+ * weight `reportDeductions` sums into the overall, so the ring and the headline
+ * agree). A `"advisory"` finding (inherits-all) is SHOWN in the ring's findings
+ * but NOT graded — aligned with the inherits-all-is-advisory stance.
+ *
+ * Scores `null` (n/a, excluded from the overall) when there's NO tool-bearing
+ * surface to assess at all — no subagents AND no model-invocable skills. A
+ * user-invoked skill carries no model-driven trifecta risk, so it doesn't count
+ * as an assessable surface. When there ARE assessable surfaces but no trifecta,
+ * the ring is a clean 100.
+ */
+function safety(r: ScanReport): CategoryScore {
+  const modelInvocableSkills = r.skills.filter((s) => !s.userInvoked).length;
+  const assessable = r.agents.length + modelInvocableSkills;
+  if (assessable === 0) {
+    return {
+      key: "Safety",
+      score: null,
+      weight: 1,
+      findings: ["no tool-bearing surface to assess"],
+    };
+  }
+  const hard = r.trifectaFindings.filter((f) => f.finding.severity === "hard");
+  const { score, findings } = scoreFrom([
+    {
+      n: hard.length,
+      weight: W_TRIFECTA,
+      label:
+        "unit(s) holding all three lethal-trifecta legs (prompt-injection exfil path)",
+    },
+  ]);
+  // inherits-all trifecta findings are ADVISORY: surfaced as a maximal-blast-radius
+  // note but never graded (mirrors the Structure inherits-all advisory).
+  const advisory = r.trifectaFindings
+    .filter((f) => f.finding.severity === "advisory")
+    .map(
+      (f) =>
+        `${f.name} inherits all tools — maximal trifecta blast radius (advisory)`,
+    );
+  return {
+    key: "Safety",
+    score,
+    weight: 1,
+    findings: [...findings, ...advisory],
+  };
+}
+
 function tested(r: ScanReport): CategoryScore {
   const { score, findings } = scoreFrom([
     { n: r.untested, weight: W_UNTESTED, label: "untested surface(s)" },
@@ -225,7 +284,7 @@ function isEmptyAudit(r: ScanReport): boolean {
 }
 
 /**
- * Bucket a scan report into the four deterministic Lighthouse categories as a
+ * Bucket a scan report into the five deterministic Lighthouse categories as a
  * DIAGNOSTIC breakdown, with the headline `overall` = `100 − Σ(all graded
  * penalties)` (the shared summed model — NOT the average of the rings — so it
  * equals the leaderboard's single health number). The advisory Tested ring and
@@ -237,6 +296,7 @@ export function auditScore(report: ScanReport): AuditScore {
       "Truthfulness",
       "Triggering",
       "Structure",
+      "Safety",
       "Tested",
     ];
     return {
@@ -255,6 +315,7 @@ export function auditScore(report: ScanReport): AuditScore {
     truthfulness(report),
     triggering(report),
     structure(report),
+    safety(report),
     tested(report),
   ];
   // The headline is the SUMMED model (the shared integrity score), NOT the average

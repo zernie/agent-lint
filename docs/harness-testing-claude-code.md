@@ -36,7 +36,7 @@ plugin** up the tiers — unit → deterministic → eval. The plugin is
 ~36k★), chosen because it ships **all four harness surfaces in one plugin** —
 hooks, skills, agents (subagents), and an MCP server — so a single subject can
 demonstrate everything. It's vendored as a pinned, offline **slice** under
-[`examples/harness/vendor/oh-my-claudecode@deee3a4`](../examples/harness/vendor/oh-my-claudecode@deee3a4)
+[`test/dogfood/oh-my-claudecode@deee3a4`](../test/dogfood/oh-my-claudecode@deee3a4)
 (see its `SOURCE`); every tier below is a **committed, runnable** file.
 
 ### Tier 0 — load the assembled machine
@@ -48,7 +48,7 @@ materializes skills/agents, and flags the surfaces only a real model can drive:
 ```ts
 import { loadPlugin } from "vigiles/claude-code";
 
-const p = loadPlugin("examples/harness/vendor/oh-my-claudecode@deee3a4");
+const p = loadPlugin("test/dogfood/oh-my-claudecode@deee3a4");
 // p.settings.hooks → { UserPromptSubmit: [...] }   (hooks surface)
 // p.files          → .claude/skills/{ask,verify}/SKILL.md + .claude/agents/*  (skills + agents)
 // p.warnings       → "… MCP server(s) …"  +  "… 2 subagent file(s) … test at the eval tier"
@@ -134,7 +134,7 @@ skill fires on prompts about confirming a change works:
 import { measureTriggerRate, skillResolved } from "vigiles/testing";
 
 const report = await measureTriggerRate({
-  pluginDir: "examples/harness/vendor/oh-my-claudecode@deee3a4",
+  pluginDir: "test/dogfood/oh-my-claudecode@deee3a4",
   prompts: [
     "I think the pagination fix is done — can you confirm it actually works?",
     "Before I mark this complete, prove the new endpoint really behaves.",
@@ -325,7 +325,7 @@ expansion) and
 [`real-wshobson.harness.mjs`](../examples/harness/real-wshobson.harness.mjs)
 loads a wshobson/agents sub-plugin (the no-hooks subagents+commands+skills shape,
 where the whole result is the warnings). Both are **pinned, vendored snapshots**
-under [`examples/harness/vendor/`](../examples/harness/vendor) — each carrying the
+under [`test/dogfood/`](../test/dogfood) — each carrying the
 upstream `LICENSE` and a `SOURCE` file recording repo and commit. There is no
 clone at test time, so they run **offline and deterministically**. Refresh
 deliberately with [`tools/refresh-vendor.sh`](../tools/refresh-vendor.sh).
@@ -346,8 +346,8 @@ hooks**, and those are confined by default (`sandbox: "auto"`):
   if you trust the code / the outer container.
 
 ```ts
-runHarnessTest({ pluginDir: "./vendor/some-plugin", model }); // auto: confined, or refuses
-runHarnessTest({ pluginDir: "./vendor/linted", model, sandbox: false }); // you vouch for it → direct
+runHarnessTest({ pluginDir: "test/dogfood/some-plugin", model }); // auto: confined, or refuses
+runHarnessTest({ pluginDir: "test/dogfood/linted", model, sandbox: false }); // you vouch for it → direct
 runHarnessTest({ settings, model, sandbox: "strict" }); // force confinement even for inline
 ```
 

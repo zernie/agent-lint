@@ -27,7 +27,7 @@ import { skillResolved } from "../../dist/harness-assert.js";
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 1);
 
 const pluginDir = fileURLToPath(
-  new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
+  new URL("../../test/dogfood/oh-my-claudecode@deee3a4", import.meta.url),
 );
 const skill = "oh-my-claudecode:verify";
 

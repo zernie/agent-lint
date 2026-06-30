@@ -59,7 +59,7 @@ const INSTRUCTION_FILES: readonly string[] = ["CLAUDE.md", "AGENTS.md"];
 // The default instruction file to validate when no config names one.
 const DEFAULT_FILES: string[] = [INSTRUCTION_FILES[0]];
 
-const DEFAULT_RULES: Required<RulesConfig> = {
+export const DEFAULT_RULES: Required<RulesConfig> = {
   "require-instructions-spec": "warn",
   // Default OFF — the consistent `require-<surface>-spec` parallel. Skills are
   // legitimately hand-written, so requiring a .spec.ts per SKILL.md is the wrong
@@ -101,6 +101,27 @@ const DEFAULT_RULES: Required<RulesConfig> = {
   "frontmatter-valid": "warn",
   // A mcp_tool hook incomplete / targeting an undeclared server — on by default at warn.
   "mcp-hook-target-resolves": "warn",
+  // Lethal-trifecta capability set-intersection (read-private + ingest-untrusted +
+  // exfiltrate in one unit) — WARN by default (don't-cry-wolf rollout); raise to error.
+  "lethal-trifecta": "warn",
+  // A SKILL.md body referencing a missing bundled resource — WARN by default
+  // (don't-cry-wolf rollout, FP-safe); raise to error to gate CI.
+  "skill-resource-resolves": "warn",
+  // A SKILL.md missing its opening `---` fence (invisible skill) — WARN by
+  // default (FP-safe key whitelist); raise to error to gate CI.
+  "skill-missing-fence": "warn",
+  // Functional dirs nested inside `.claude-plugin/` (invisible surfaces) — WARN
+  // by default; raise to error to gate CI.
+  "plugin-dir-layout": "warn",
+  // A lethal trifecta emerging across a delegation edge (combined blast radius) —
+  // WARN by default (don't-cry-wolf rollout); raise to error to gate CI.
+  "delegation-trifecta": "warn",
+  // A hook that looks like it blocks but silently doesn't (#19009) — WARN by
+  // default (FP-safe literal patterns); raise to error to gate CI.
+  "hook-block-ineffective": "warn",
+  // A hook matcher that never fires (tool typo / wrong MCP form) — WARN by
+  // default (high-precision); raise to error to gate CI.
+  "hook-matcher": "warn",
 };
 
 const DEFAULT_CONFIG: VigilesConfig = {

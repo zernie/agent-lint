@@ -271,7 +271,7 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
 // settings — proving the merge is non-destructive on a real-world config, not
 // just the synthetic unit fixtures in hook-install.test.ts. The seed is the
 // REAL superpowers hooks.json (a SessionStart hook), vendored under
-// examples/harness/vendor/ (MIT, SHA-pinned).
+// test/dogfood/ (MIT, SHA-pinned).
 // E2E dogfood — the FILE-GATE role (defineFileGate + PathView.under): block a
 // Write/Edit under a protected path, allow elsewhere. Mirrors the bash-gate
 // E2E; closes the file-gate dogfood gap (was unit-only in hook-program.test.ts).
@@ -678,10 +678,7 @@ test("compile (hook): MERGE preserves a real plugin's existing hooks (superpower
   try {
     linkVigiles(dir);
     const seed = readFileSync(
-      resolve(
-        REPO_ROOT,
-        "examples/harness/vendor/superpowers@6fd4507/hooks/hooks.json",
-      ),
+      resolve(REPO_ROOT, "test/dogfood/superpowers@6fd4507/hooks/hooks.json"),
       "utf-8",
     );
     mkdirSync(resolve(dir, ".claude"), { recursive: true });

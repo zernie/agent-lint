@@ -75,6 +75,8 @@ export interface HarnessDialect {
     readonly mcpToolPattern: RegExp;
     readonly name: string;
     readonly neverAvailableTools: readonly string[];
+    readonly noEffectHookEvents?: readonly string[];
+    readonly permissionDecisionHookEvents?: readonly string[];
     readonly pluginRootToken: string;
     readonly sideEffectingTools?: readonly string[];
     readonly skillFrontmatter: SkillFrontmatterProfile;

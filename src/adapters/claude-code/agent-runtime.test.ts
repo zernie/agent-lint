@@ -605,7 +605,7 @@ test("agent-hook CLI allows on a malformed/empty event (no tool name)", () => {
 // ---------------------------------------------------------------------------
 // Grounded in a REAL vendored subagent (not a synthetic fixture)
 //
-// wshobson's ui-visual-validator is pinned under examples/harness/vendor/. It
+// wshobson's ui-visual-validator is pinned under test/dogfood/. It
 // is the documented footgun in the wild: a "rigorous visual validator" that
 // "bases judgments solely on visual evidence" yet ships with NO `tools:` line —
 // so it inherits EVERY tool, including Edit/Write it has no business holding.
@@ -617,7 +617,7 @@ test("agent-hook CLI allows on a malformed/empty event (no tool name)", () => {
 
 const REAL_AGENT = join(
   __dirname,
-  "../../../examples/harness/vendor/wshobson-accessibility@cf6059d/agents/ui-visual-validator.md",
+  "../../../test/dogfood/wshobson-accessibility@cf6059d/agents/ui-visual-validator.md",
 );
 
 test("real vendored subagent ships no tools: line — the rail correctly reports it inherits all", () => {

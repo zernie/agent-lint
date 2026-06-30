@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const trials = Number(process.env.VIGILES_TRIALS || process.argv[2] || 3);
 
 const pluginDir = fileURLToPath(
-  new URL("./vendor/oh-my-claudecode@deee3a4", import.meta.url),
+  new URL("../../test/dogfood/oh-my-claudecode@deee3a4", import.meta.url),
 );
 
 const report = await measure({

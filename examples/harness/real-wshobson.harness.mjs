@@ -6,7 +6,7 @@
  * MATERIALIZE the surfaces and WARN — never silently pass an empty machine.
  *
  * Reliability + safety: a VENDORED SNAPSHOT under ./vendor (pinned, offline);
- * `loadPlugin` only parses. See ./vendor/<plugin>/SOURCE and the sibling
+ * `loadPlugin` only parses. See ../../test/dogfood/<plugin>/SOURCE and the sibling
  * real-superpowers.harness.mjs header for the full rationale.
  *
  * Pure + key-free: no `claude` CLI, no API key. Run:
@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { loadPlugin } from "../../dist/adapters/claude-code/plugin-loader.js";
 
 const dir = fileURLToPath(
-  new URL("./vendor/wshobson-accessibility@cf6059d", import.meta.url),
+  new URL("../../test/dogfood/wshobson-accessibility@cf6059d", import.meta.url),
 );
 const loaded = loadPlugin(dir);
 

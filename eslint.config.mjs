@@ -63,12 +63,7 @@ export default [
     // type-aware project service can't resolve them — eslint-ignore to match
     // (they're tsx-loaded build inputs, like the root CLAUDE.md.spec.ts, not
     // part of the typed source).
-    ignores: [
-      "dist/",
-      "node_modules/",
-      "examples/harness/vendor/",
-      "src/*.md.spec.ts",
-    ],
+    ignores: ["dist/", "node_modules/", "test/dogfood/", "src/*.md.spec.ts"],
   },
   eslint.configs.recommended,
   {
