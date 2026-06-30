@@ -60,7 +60,10 @@ test.skipIf(!skillsOk)(
     const [plan] = planPluginInstall(["codex"], { hasClaude: false });
     const cmd = plan.commands[0];
     assert.match(cmd, /^npx --yes skills add zernie\/vigiles -a codex -g -y$/);
-    assert.equal(plan.vendors, false);
+    // SKILLS still install globally (asserted below, ~/.agents/skills/), but the
+    // plan now also wires nudge hooks into the repo's .codex/config.toml — so it
+    // touches the repo (vendors: true). The skills-are-global check stands.
+    assert.equal(plan.vendors, true);
 
     // Isolated HOME + cwd so the global install can't touch the real machine.
     const home = mkdtempSync(join(tmpdir(), "vigiles-codex-home-"));
