@@ -1846,6 +1846,46 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
     }
   });
 
+  it("eval lock e2e: --update writes a lock, --check replays green, an input change goes red", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-locke2e-"));
+    try {
+      // A real eval script run by the built CLI, but MODEL-FREE: it drives
+      // `runEvalWith` (from the built dist) with a fake runner, so the whole
+      // --update → --check → stale flow is exercised end to end with no model.
+      const evalJs = resolve(__dirname, "..", "dist", "eval.js");
+      writeFileSync(
+        join(dir, "x.eval.cjs"),
+        `const { runEvalWith } = require(${JSON.stringify(evalJs)});\n` +
+          `const fake = () => Promise.resolve({ code: 0, stdout: JSON.stringify({ type: "result", result: "ok", num_turns: 1 }) });\n` +
+          `runEvalWith({ name: "e2e-eval", arms: { run: {} }, task: process.env.E2E_TASK || "task A", trials: 1, model: "claude-sonnet-4-6-20260101", spacingSec: 0, measure: () => ({ ok: 1 }) }, fake)\n` +
+          `  .then(() => process.exit(0))\n` +
+          `  .catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });\n`,
+      );
+      const lockFile = join(
+        dir,
+        ".vigiles",
+        "eval-locks",
+        "e2e-eval.lock.json",
+      );
+
+      // 1. --update: drives the (fake) run and writes a committed lock.
+      const up = run("eval --update x.eval.cjs", dir, { E2E_TASK: "task A" });
+      assert.equal(up.exitCode, 0);
+      assert.ok(existsSync(lockFile), "a lock is committed");
+
+      // 2. --check with the SAME inputs: replays green, no model.
+      const ok = run("eval --check x.eval.cjs", dir, { E2E_TASK: "task A" });
+      assert.equal(ok.exitCode, 0);
+
+      // 3. --check after an INPUT change (different task): STALE → red.
+      const stale = run("eval --check x.eval.cjs", dir, { E2E_TASK: "task B" });
+      assert.equal(stale.exitCode, 1);
+      assert.match(stale.stdout + stale.stderr, /stale/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("eval-lock-nudge hook: self-gated, non-blocking PostToolUse reminder", () => {
     const dir = mkdtempSync(join(tmpdir(), "vigiles-nudge-"));
     try {
