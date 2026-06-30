@@ -275,10 +275,7 @@ test.skipIf(!sandboxRunnable)(
 test.skipIf(!sandboxRunnable)(
   "dogfood: superpowers' SessionStart runs confined and its real output is captured",
   async () => {
-    const superpowers = join(
-      __dirname,
-      "../examples/harness/vendor/superpowers@6fd4507",
-    );
+    const superpowers = join(__dirname, "../test/dogfood/superpowers@6fd4507");
     const r = await runHarnessTest({
       plugin: superpowers, // external → untrusted → confined (no sandbox:false)
       transcript: true,

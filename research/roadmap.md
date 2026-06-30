@@ -6,11 +6,16 @@
 > rationale; detail lives there, priority lives here. When you finish or kill an
 > item, move it here first.
 >
-> Two backlogs feed this: [`feature-ideas.md`](feature-ideas.md) (pillar-1
-> user features) and [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
-> (pillar-2 surface coverage). Strategy feeds in from
+> **Idea backlogs feed this** (ideas live there, the ranked plan lives here):
+> [`audit-wow-ideas.md`](audit-wow-ideas.md) (the main one — new audit/lint checks,
+> the **Flue poach F1–F8** in Appendix D, the OSS-issue detector harvest),
+> [`feature-ideas.md`](feature-ideas.md) (pillar-1 user features),
+> [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
+> (pillar-2 surface coverage), [`harness-state-space.md`](harness-state-space.md)
+> (analogical-transfer moats). Strategy from
 > [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) and
-> [`divergent-bets.md`](divergent-bets.md).
+> [`divergent-bets.md`](divergent-bets.md). See also the full index in
+> [`README.md`](README.md).
 
 ## Strategic direction (2026-06-19): measurement authority
 
@@ -554,6 +559,37 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 
 ## Next — differentiated, medium effort
 
+- [~] **Flue poach (2026-06-29) — a typed TS harness validates the typed-spec bet + opens
+  surfaces.** Flue (withastro/flue, the Astro team) is a programmable TypeScript agent
+  harness with Valibot-typed tool/workflow I/O that ALSO imports Claude Code `SKILL.md`
+  dirs — independent confirmation of "the harness is a typed program, not prose."
+  **F1 SHIPPED** (`delegation-trifecta`, commit `7b88bcb` — capability-diff across the
+  subagent delegation tree). Still open, ranked: **F3** model-specifier resolution
+  (`provider/model` ids resolve / not deprecated — cheapest quick win, extends the
+  frontmatter-value rule); **F2** typed tool/workflow I/O handoff verification (the
+  pipe/Supplies moat applied to Valibot schemas — pre-run > runtime throw); **F4**
+  workflows as a first-class audit surface (productize `validateRailway`); **F5** tool
+  DEFINITIONS as a surface (effect-floor on a `defineTool` body); **F6** harness-
+  portability lint (a harness-only frontmatter key inert under another target); **F7** a
+  `vigiles/flue` adapter (4th harness; cheap first step — detect `flue.config.ts`, verify
+  its imported SKILL.md dirs + `agents/*.ts` model specifiers); **F8** Flue workflow
+  event-history as a Trace source for the test tier. [audit-wow-ideas](audit-wow-ideas.md)
+  Appendix D · **F3 = quick win; F2/F4 = on-moat**
+- [ ] **Remaining OSS-issue detector harvest** (all DETECT-mode, deterministic, FP-safe,
+      audit + lint, same one-detector pattern as the five shipped `7b88bcb`):
+      secrets-in-config / `settings.local.json`-not-gitignored, dangerous-default-permissions
+      (`Bash(*)` / `--dangerously-skip-permissions`), `.env`-deny-Bash-bypass, CLAUDE.md
+      `@import` resolution, instruction-file truncation limit, skill-description >250-char cap.
+      [audit-wow-ideas](audit-wow-ideas.md) §Tier-1 · **LOW-MED each**
+- [ ] **`adoptHook` — close the hook prevent-layer asymmetry.** Every surface but hooks
+      has a Stage-1 PREVENT on-ramp (`init` auto-adopts CLAUDE.md / skills / subagents into
+      typed specs); hooks have only Stage-3 DETECTION (the `hook-*` lint rules), because
+      there's no `adoptHook` and `prefer-compiled-hooks` defaults off. An `adoptHook` would
+      convert a hand-written shell hook into a compiled `vigiles/hook` program during `init`,
+      making `hook-block-ineffective` / `hook-events` / `hook-script-exists` _prevented by
+      construction_ instead of detect-only. Parked because shell→typed is lossy/undecidable in
+      the general case (best-effort + a loud "couldn't fully translate" is the realistic shape).
+      [enforcement-model](enforcement-model.md) §the-hook-asymmetry · **MED-HIGH**
 - [ ] **"Prove your guardrail actually blocks" — the verify-not-gate killer feature.**
       The #1 verified hook pain is FALSE CONFIDENCE: a safety hook looks like a guardrail and
       silently isn't (exit 1≠exit 2, wrong JSON field, PostToolUse-can't-block, wrong jq path) —

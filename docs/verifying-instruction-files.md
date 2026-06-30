@@ -185,13 +185,15 @@ config target Claude Code _and_ Codex without duplicating rules per harness:
 universal rules stay bare and run everywhere; surface rules light up only where
 the surface exists.
 
-| Surface (the gate)          | Rules                                                                                      | Applies to                                |
-| --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`       | all harnesses                             |
-| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`          | all with skills                           |
-| MCP                         | `mcp-config`                                                                               | all with MCP                              |
-| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `prefer-compiled-hooks`              | Claude Code, Codex                        |
-| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves` | Claude Code (n/a on Codex — no subagents) |
+| Surface (the gate)          | Rules                                                                                                                               | Applies to                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                                                | all harnesses                             |
+| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`, `skill-resource-resolves`, `skill-missing-fence` | all with skills                           |
+| Plugin layout               | `plugin-dir-layout`                                                                                                                 | all with a plugin manifest                |
+| MCP                         | `mcp-config`                                                                                                                        | all with MCP                              |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `hook-matcher`, `hook-block-ineffective`, `prefer-compiled-hooks`             | Claude Code, Codex                        |
+| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves`                                          | Claude Code (n/a on Codex — no subagents) |
+| Safety (skills + subagents) | `lethal-trifecta`, `delegation-trifecta`                                                                                            | all (subagent half n/a on Codex)          |
 
 The per-family tables below give each rule's default severity and what it checks.
 
@@ -231,6 +233,8 @@ The per-family tables below give each rule's default severity and what it checks
 | Rule                                                            | Default  | What it checks                                                                   |
 | --------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
 | [`hook-events`](rules/hook-events.md)                           | `"warn"` | A hook registers under a real event name (a typo never fires)                    |
+| [`hook-matcher`](rules/hook-matcher.md)                         | `"warn"` | A hook `matcher` fires (no tool-name typo / malformed-or-undeclared MCP form)    |
+| [`hook-block-ineffective`](rules/hook-block-ineffective.md)     | `"warn"` | A hook that looks like it blocks actually can (right event + right deny field)   |
 | [`hook-script-exists`](rules/hook-script-exists.md)             | `"warn"` | A hook's referenced script file exists on disk (else it never runs)              |
 | [`mcp-config`](rules/mcp-config.md)                             | `"warn"` | A declared MCP server can start (has a `command` or `url`)                       |
 | [`mcp-tool-resolves`](rules/mcp-tool-resolves.md)               | `"warn"` | A subagent's `mcp__server__tool` names a declared (or built-in) server           |
@@ -239,11 +243,26 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Skill triggers
 
-| Rule                                                  | Default  | What it checks                                                     |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| [`skill-frontmatter`](rules/skill-frontmatter.md)     | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)   |
-| [`description-overlap`](rules/description-overlap.md) | `"warn"` | No two model-invocable skills have near-identical descriptions     |
-| [`frontmatter-valid`](rules/frontmatter-valid.md)     | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn) |
+| Rule                                                          | Default  | What it checks                                                               |
+| ------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)             | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)             |
+| [`description-overlap`](rules/description-overlap.md)         | `"warn"` | No two model-invocable skills have near-identical descriptions               |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)             | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn)           |
+| [`skill-resource-resolves`](rules/skill-resource-resolves.md) | `"warn"` | A SKILL.md body's bundled-file refs (`scripts/`/`references/`) exist on disk |
+| [`skill-missing-fence`](rules/skill-missing-fence.md)         | `"warn"` | A SKILL.md opens with a `---` fence (else it loads as body and never fires)  |
+
+### Structure
+
+| Rule                                              | Default  | What it checks                                                                                    |
+| ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| [`plugin-dir-layout`](rules/plugin-dir-layout.md) | `"warn"` | No functional surface dir (skills/agents/commands) sits inside the `.claude-plugin/` manifest dir |
+
+### Safety
+
+| Rule                                                  | Default  | What it checks                                                                                                                 |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`lethal-trifecta`](rules/lethal-trifecta.md)         | `"warn"` | No unit (subagent / model-invocable skill) holds all three lethal-trifecta legs (read-private + ingest-untrusted + exfiltrate) |
+| [`delegation-trifecta`](rules/delegation-trifecta.md) | `"warn"` | No subagent's _effective_ capability (own ∪ delegated-to) forms a lethal trifecta that no single unit shows                    |
 
 ### Docs hygiene
 

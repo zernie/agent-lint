@@ -256,7 +256,7 @@ type one yourself; `compile` wires them for you.
 
 **Lighthouse for your harness.** Point vigiles at any plugin or repo (defaults to
 `.`) and get a one-command report — **no model, no API key, safe to run
-anywhere**: four deterministic **category rings**, each finding's **fix** inline,
+anywhere**: five deterministic **category rings**, each finding's **fix** inline,
 and a self-contained **HTML report**. It's a local report, not a CI step (CI uses
 [`lint`](#lint-files)).
 
@@ -266,19 +266,23 @@ Harness audit
   ● Truthfulness   100  ██████████████████████
   ◑ Triggering      92  ████████████████████░░
   ● Structure      100  ██████████████████████
+  ● Safety         100  ██████████████████████
   ◑ Tested          88  ███████████████████░░░
 
 Harness health: B (95/100)
 ```
 
-The four categories — **Truthfulness** (refs resolve) · **Triggering** (skills
+The five categories — **Truthfulness** (refs resolve) · **Triggering** (skills
 fire / don't collide) · **Structure** (tool contracts, MCP, frontmatter) ·
-**Tested** (coverage) — are each 0–100, weighted into the overall grade; an n/a
-category is excluded, never a false 0. All four are **deterministic** (no
-execution). (There's no **Safety** ring: "do your hooks actually block?" requires
-executing your hooks, which needs cross-platform confinement that isn't shipped
-yet — so it lives in the [`vigiles/testing` API](harness-testing.md) via
-`guardrail-check` / `assertBlocksDisasters`, where you opt in explicitly.)
+**Safety** (no unit holds all three lethal-trifecta legs — a prompt-injection
+exfil path) · **Tested** (coverage) — are each 0–100, weighted into the overall
+grade; an n/a category is excluded, never a false 0. All five are
+**deterministic** (no execution): **Safety** is the **static** lethal-trifecta
+capability check over a unit's declared tool-set. (The **executing** "do your
+hooks actually block?" disaster-battery is NOT a ring: running arbitrary hooks
+safely needs cross-platform confinement that isn't shipped yet — so it lives in
+the [`vigiles/testing` API](harness-testing.md) via `guardrail-check` /
+`assertBlocksDisasters`, where you opt in explicitly.)
 
 Under the rings, the detailed report lists per-skill description + user-invoked
 flag + **description-script** detection (a description whose dominant script differs
@@ -560,7 +564,7 @@ different contracts** — the classic gate-vs-report split (think `eslint .` /
   severities → stable CI codes (0/1/2)**. It blocks bad commits.
 - **`audit` is the report** (Lighthouse-style, local — not a CI step). Zero config,
   harness-aware, works on **any** plugin (including third-party ones with no spec).
-  It scores the four deterministic category rings, ranks a whole marketplace
+  It scores the five deterministic category rings, ranks a whole marketplace
   (leaderboard), and writes the HTML report — all a safe read. Two **executing**
   checks (live MCP resolution + "do skills fire?") run only on the interactive
   consent (`audit-side-effect-free`); for automation, run those — and the safety

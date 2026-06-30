@@ -43,6 +43,24 @@ export interface HarnessDialect {
   readonly knownMcpServers?: readonly string[];
   /** Hook event names the harness fires. */
   readonly hookEvents: readonly string[];
+  /**
+   * The subset of `hookEvents` where a block decision (`exit 2` / a deny field)
+   * is SILENTLY IGNORED ENTIRELY — no veto AND no model feedback (Claude Code's
+   * SessionStart / SessionEnd / Notification / PreCompact: exit 2 there writes
+   * stderr only to the user). The basis for the `hook-block-ineffective`
+   * "wrong-event" check, which fires ONLY on these (so it stays FP-safe and never
+   * cries wolf on a PostToolUse feedback/nudge hook). Optional (additive,
+   * non-breaking) — absent ⇒ the harness's block semantics are undeclared and the
+   * check does not run for it.
+   */
+  readonly noEffectHookEvents?: readonly string[];
+  /**
+   * The subset of blocking events whose deny REQUIRES the structured
+   * `permissionDecision` field (e.g. Claude Code's `PreToolUse`), where the
+   * legacy top-level `decision` field is silently ignored. The basis for the
+   * `hook-block-ineffective` "wrong-field" check. Optional (additive).
+   */
+  readonly permissionDecisionHookEvents?: readonly string[];
   /** Instruction-file targets the harness reads (also the h1 heading). */
   readonly instructionTargets: readonly string[];
   /** The env token expanded to the plugin root in hook commands. */

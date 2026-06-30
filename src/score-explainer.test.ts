@@ -33,6 +33,13 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     mcpIssues: [],
     mcpHookIssues: [],
     descriptionOverlaps: [],
+    trifectaFindings: [],
+    skillResourceIssues: [],
+    skillFenceIssues: [],
+    pluginLayoutIssues: [],
+    delegationTrifecta: [],
+    hookBlockFindings: [],
+    hookMatcherFindings: [],
     malformedFrontmatter: [],
     warnings: [],
     untested: 0,
@@ -48,6 +55,9 @@ function skill(over: Partial<ScanSkill> = {}): ScanSkill {
     hasDescription: true,
     userInvoked: false,
     descriptionScript: null,
+    resourceIssues: [],
+    trifecta: null,
+    fenceIssue: null,
     ...over,
   };
 }
@@ -62,6 +72,7 @@ function agent(over: Partial<ScanAgent> = {}): ScanAgent {
     disallowedToolIssues: [],
     purity: "bounded",
     effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+    trifecta: null,
     ...over,
   };
 }

@@ -33,6 +33,11 @@ import {
   type HookEventIssue,
 } from "./core/hook-events.js";
 import { verifyMcpServers, type McpIssue } from "./core/mcp-config.js";
+import {
+  normalizeHooks,
+  hookEventNames,
+  type HookRegistration,
+} from "./core/hook-normalize.js";
 import { editDistance } from "./core/linters.js";
 import { readFrontmatter, frontmatterScalar } from "./core/frontmatter-read.js";
 import {
@@ -47,6 +52,37 @@ import {
   type McpServerConfig,
 } from "./core/mcp.js";
 import { verifyMcpHookTargets, type McpHookIssue } from "./core/mcp-hook.js";
+import {
+  lethalTrifectaIssues,
+  type TrifectaFinding,
+} from "./core/lethal-trifecta.js";
+import {
+  skillResourceIssues,
+  type SkillResourceFinding,
+} from "./core/skill-resources.js";
+import {
+  skillMissingFence,
+  type SkillFenceFinding,
+} from "./core/skill-missing-fence.js";
+import {
+  pluginDirLayoutIssues,
+  type PluginLayoutFinding,
+} from "./core/plugin-dir-layout.js";
+import {
+  delegationTrifectaIssues,
+  type CapabilityNode,
+  type DelegationTrifectaFinding,
+} from "./core/delegation-trifecta.js";
+import {
+  hookBlockIssues,
+  type HookBlockFinding,
+  type HookScriptEntry,
+} from "./core/hook-block-ineffective.js";
+import {
+  hookMatcherIssues,
+  type HookMatcherFinding,
+  type HookMatcherEntry,
+} from "./core/hook-matcher.js";
 import {
   parseAgentTools,
   parseAgentToolList,
@@ -95,6 +131,27 @@ export interface ScanSkill {
    * `audit` trigger tier / `measureTriggerRate`.
    */
   readonly descriptionScript: Script | null;
+  /**
+   * SKILL.md body references to a bundled file (`scripts/`/`references/`/`assets/`
+   * or a relative markdown link with an extension) that don't resolve on disk
+   * under the skill dir — the agent reads the instruction and gets nothing.
+   * Computed by `skillResourceIssues()` (one detector, no drift).
+   */
+  readonly resourceIssues: readonly SkillResourceFinding[];
+  /**
+   * Lethal-trifecta finding when a MODEL-INVOCABLE skill's declared `allowed-tools`
+   * hold all three legs (read-private + ingest-untrusted + exfiltrate), else null.
+   * A user-invoked skill is excluded (it can't be selected by attacker content).
+   * Computed by `lethalTrifectaIssues()` (one detector, no drift).
+   */
+  readonly trifecta: TrifectaFinding | null;
+  /**
+   * Set when the SKILL.md opens with frontmatter-looking keys (`name:`, …) but
+   * has NO opening `---` fence, so the whole file loads as body — no name, no
+   * description, no trigger (the skill is invisible). Computed by
+   * `skillMissingFence()` (one detector, no drift).
+   */
+  readonly fenceIssue: SkillFenceFinding | null;
 }
 
 export interface ScanAgent {
@@ -124,6 +181,41 @@ export interface ScanAgent {
     EffectSurface,
     "readOnly" | "sideEffecting" | "unknown"
   >;
+  /**
+   * Lethal-trifecta finding when the subagent's declared tools hold all three legs
+   * (read-private + ingest-untrusted + exfiltrate), else null. An inherits-all
+   * agent (no `tools:` line) is the "advisory" case. Computed by
+   * `lethalTrifectaIssues()` (one detector, no drift).
+   */
+  readonly trifecta: TrifectaFinding | null;
+}
+
+/** A lethal-trifecta finding tagged with the surface (subagent/skill) that holds it. */
+export interface ScanTrifectaFinding {
+  readonly path: string;
+  readonly kind: "subagent" | "skill";
+  readonly name: string;
+  readonly finding: TrifectaFinding;
+}
+
+/** A SKILL.md body resource reference that doesn't resolve, tagged with the skill path. */
+export interface ScanSkillResourceFinding {
+  readonly path: string;
+  readonly name: string;
+  readonly finding: SkillResourceFinding;
+}
+
+/** A missing-frontmatter-fence finding tagged with the skill path. */
+export interface ScanSkillFenceFinding {
+  readonly path: string;
+  readonly name: string;
+  readonly finding: SkillFenceFinding;
+}
+
+/** A delegation-trifecta finding tagged with the subagent path that holds it. */
+export interface ScanDelegationFinding {
+  readonly path: string;
+  readonly finding: DelegationTrifectaFinding;
 }
 
 /** A skill/agent whose frontmatter is missing a required field (name / description). */
@@ -225,6 +317,53 @@ export interface ScanReport {
   readonly mcpHookIssues: readonly McpHookIssue[];
   /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
   readonly descriptionOverlaps: readonly DescriptionOverlap[];
+  /**
+   * Lethal-trifecta findings across subagents + model-invocable skills — a unit
+   * holding all three legs (read-private + ingest-untrusted + exfiltrate). Each
+   * carries the surface path + kind for reporting/annotations. Shared by `scan`
+   * (the report) and the `lethal-trifecta` lint rule (one detector, no drift).
+   */
+  readonly trifectaFindings: readonly ScanTrifectaFinding[];
+  /**
+   * SKILL.md body references to a bundled resource that doesn't resolve on disk,
+   * across all skills — each carries the skill path for reporting/annotations.
+   * Shared by `scan` and the `skill-resource-resolves` lint rule (one detector, no
+   * drift).
+   */
+  readonly skillResourceIssues: readonly ScanSkillResourceFinding[];
+  /**
+   * Skills whose frontmatter-looking opening has NO `---` fence, so they load as
+   * pure body (invisible — no name/description/trigger). Shared by `scan` and the
+   * `skill-missing-fence` lint rule (one detector, no drift).
+   */
+  readonly skillFenceIssues: readonly ScanSkillFenceFinding[];
+  /**
+   * Functional surface dirs (skills/agents/commands) nested INSIDE the manifest
+   * dir (`.claude-plugin/`) where the harness can't see them. Shared by `scan`
+   * and the `plugin-dir-layout` lint rule (one detector, no drift).
+   */
+  readonly pluginLayoutIssues: readonly PluginLayoutFinding[];
+  /**
+   * Lethal trifectas that EMERGE across a delegation edge — a subagent whose
+   * effective (own ∪ delegated-to) capability holds all three legs though no
+   * single unit does. Shared by `scan` and the `delegation-trifecta` lint rule
+   * (one detector, no drift).
+   */
+  readonly delegationTrifecta: readonly ScanDelegationFinding[];
+  /**
+   * Hooks that LOOK like they block but silently don't — a block decision on a
+   * non-blocking event, or the legacy `decision` field on a permission-gated
+   * event (#19009, the #1 verified hook pain). Shared by `scan` and the
+   * `hook-block-ineffective` lint rule (one detector, no drift). Empty when the
+   * dialect doesn't declare its blocking-event semantics.
+   */
+  readonly hookBlockFindings: readonly HookBlockFinding[];
+  /**
+   * Hook `matcher` strings that silently never fire — a tool-name typo or a
+   * malformed/undeclared MCP form. Shared by `scan` and the `hook-matcher` lint
+   * rule (one detector, no drift).
+   */
+  readonly hookMatcherFindings: readonly HookMatcherFinding[];
   /** Skills/agents whose `---` block isn't valid YAML — informational (may still load via salvage). */
   readonly malformedFrontmatter: readonly FrontmatterParseIssue[];
   readonly warnings: readonly string[];
@@ -412,10 +551,39 @@ function firstBodyParagraph(md: string): string | undefined {
   return para.join(" ").trim() || undefined;
 }
 
+/** The body of a SKILL.md with the leading `---` frontmatter block stripped. */
+function skillBody(md: string): string {
+  return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+}
+
+/**
+ * The on-disk path for a materialized file key. `loadPlugin` prefixes each
+ * surface file with the layout's `materializeRoot` (e.g. `.claude/`), but the file
+ * lives on disk WITHOUT that prefix (under the real surface dir), so a
+ * bundled-resource existence check must strip it back off. Mirrors how
+ * `resolveScript` resolves a hook path against the real plugin root.
+ */
+function onDiskPath(materializedKey: string, materializeRoot: string): string {
+  if (!materializeRoot) return materializedKey;
+  const prefix = `${materializeRoot}/`;
+  return materializedKey.startsWith(prefix)
+    ? materializedKey.slice(prefix.length)
+    : materializedKey;
+}
+
+/** The plugin-root + materialize-root + dialect context skill scanning needs. */
+interface SkillScanContext {
+  readonly root: string;
+  readonly materializeRoot: string;
+  readonly dialect: HarnessDialect;
+}
+
 function scanSkills(
   files: Record<string, string>,
   cls: SurfaceClassifier,
+  ctx: SkillScanContext,
 ): ScanSkill[] {
+  const { root, materializeRoot, dialect } = ctx;
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
@@ -425,13 +593,35 @@ function scanSkills(
     // NEITHER exists is the skill genuinely undescribed (can't be selected). The
     // explicit-frontmatter best-practice is the separate `skill-frontmatter` rule.
     const effectiveDesc = fm.description ?? firstBodyParagraph(md);
+    const userInvoked = /^\s*disable-model-invocation:\s*true\s*$/m.test(md);
+    // Bundled-resource refs resolve against the skill's OWN dir (resources ship
+    // beside the SKILL.md), built from the plugin root + the file's ON-DISK dir
+    // (the materialize-root prefix the loader added is stripped back off).
+    const skillDir = resolve(root, dirname(onDiskPath(path, materializeRoot)));
+    const resourceIssues = skillResourceIssues(skillBody(md), skillDir);
+    // The lethal trifecta is a property of what a unit CAN do, which for a skill is
+    // its declared `allowed-tools` (the CC skill tool contract). Only a model-
+    // invocable skill can be hijacked by attacker content, so a user-invoked one is
+    // excluded. A skill with no `allowed-tools` line inherits all → advisory.
+    const skillTools = parseAgentToolList(md, "allowed-tools");
+    // No `allowed-tools:` line (null) → inherits all → wildcard sentinel; an
+    // EXPLICIT empty `[]` means zero tools → no trifecta (don't collapse them).
+    const trifecta = userInvoked
+      ? null
+      : lethalTrifectaIssues(skillTools ?? ["*"], dialect);
     out.push({
       name: fm.name ?? skillName(path),
       path,
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
       description: effectiveDesc?.trim(),
-      userInvoked: /^\s*disable-model-invocation:\s*true\s*$/m.test(md),
+      userInvoked,
       descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
+      resourceIssues,
+      trifecta,
+      // A SKILL.md opening with `name:`/`description:` but no `---` fence loads
+      // as plain body → the skill is invisible. Inspect the RAW md (not the
+      // frontmatter-stripped body) so the unfenced keys are visible.
+      fenceIssue: skillMissingFence(md),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -503,6 +693,11 @@ function scanAgents(
         sideEffecting: surface.sideEffecting,
         unknown: surface.unknown,
       },
+      // The lethal trifecta: a subagent whose contract grants all three legs. An
+      // inherits-all agent (no `tools:` line → tools === null) is the advisory
+      // case — pass the wildcard sentinel so it's distinguished from an EXPLICIT
+      // empty `tools: []` (zero tools → no trifecta). One detector, no drift.
+      trifecta: lethalTrifectaIssues(tools ?? ["*"], dialect),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -585,59 +780,47 @@ export function preferCompiledHooksMessage(count: number): string {
  * `SessionStart`/`PostToolUse`/`Stop` hook isn't tested against the disaster
  * catalog. Returns an empty map for a non-object/array config (event → unknown).
  */
-function eventsByScript(hooks: unknown): Map<string, string> {
+function eventsByScript(
+  regs: readonly HookRegistration[],
+): Map<string, string> {
   const map = new Map<string, string>();
-  if (!hooks || typeof hooks !== "object" || Array.isArray(hooks)) return map;
-  for (const [event, arr] of Object.entries(hooks as Record<string, unknown>)) {
-    if (!Array.isArray(arr)) continue;
-    for (const entry of arr) {
-      const hookList = (entry as { hooks?: unknown }).hooks;
-      if (!Array.isArray(hookList)) continue;
-      for (const h of hookList) {
-        const cmd = (h as { command?: unknown }).command;
-        if (typeof cmd !== "string") continue;
-        for (const tok of cmd.match(SCRIPT_RE) ?? []) {
-          if (!map.has(tok)) map.set(tok, event);
-        }
-      }
+  for (const reg of regs) {
+    for (const tok of reg.command.match(SCRIPT_RE) ?? []) {
+      if (!map.has(tok)) map.set(tok, reg.event);
     }
   }
   return map;
 }
 
 function scanHooks(
-  settings: { hooks?: unknown },
+  regs: readonly HookRegistration[],
   root: string,
   pluginRootToken: string,
 ): { hooks: ScanHook[]; inline: number; manual: number } {
-  const text = JSON.stringify(settings.hooks ?? {});
-  const commands = [...text.matchAll(/"command":\s*"((?:[^"\\]|\\.)*)"/g)].map(
-    (m) => m[1],
-  );
-  const evMap = eventsByScript(settings.hooks);
+  const commands = regs.map((r) => r.command);
+  const evMap = eventsByScript(regs);
   // A hand-written hook is any non-empty command that isn't a vigiles-managed
   // (compiled) hook-runtime invocation — the basis for the prefer-compiled-hooks nudge.
   const manual = commands.filter((c) => {
-    const u = c.replace(/\\(.)/g, "$1").trim();
+    const u = c.trim();
     return u !== "" && !isManagedHookCommand(u);
   }).length;
   const byScript = new Map<string, ScanHook>();
   let inline = 0;
   for (const cmd of commands) {
-    const unescaped = cmd.replace(/\\(.)/g, "$1");
-    const found = unescaped.match(SCRIPT_RE);
+    const found = cmd.match(SCRIPT_RE);
     if (!found || found.length === 0) {
       inline++;
       continue;
     }
     // A guarded command runs its script only if it exists — an optional hook, not
     // a broken one. Treat it as a conditional one-liner (inline), don't path-check.
-    if (EXISTENCE_GUARD.test(unescaped)) {
+    if (EXISTENCE_GUARD.test(cmd)) {
       inline++;
       continue;
     }
     for (const tok of found) {
-      const hook = resolveScript(tok, root, pluginRootToken, unescaped);
+      const hook = resolveScript(tok, root, pluginRootToken, cmd);
       const event = evMap.get(tok);
       byScript.set(hook.script, event ? { ...hook, event } : hook);
     }
@@ -852,6 +1035,166 @@ function collectMcpServers(
   return servers;
 }
 
+/**
+ * Flatten the per-surface lethal-trifecta + skill-resource findings into the
+ * path-tagged report lists the `audit` report AND the `lethal-trifecta` /
+ * `skill-resource-resolves` lint rules both consume (one detector, no drift).
+ */
+function collectSurfaceFindings(
+  agents: readonly ScanAgent[],
+  skills: readonly ScanSkill[],
+): {
+  trifectaFindings: ScanTrifectaFinding[];
+  skillResourceFindings: ScanSkillResourceFinding[];
+  skillFenceFindings: ScanSkillFenceFinding[];
+} {
+  const trifectaFindings: ScanTrifectaFinding[] = [];
+  for (const a of agents) {
+    if (a.trifecta) {
+      trifectaFindings.push({
+        path: a.path,
+        kind: "subagent",
+        name: a.name,
+        finding: a.trifecta,
+      });
+    }
+  }
+  for (const s of skills) {
+    if (s.trifecta) {
+      trifectaFindings.push({
+        path: s.path,
+        kind: "skill",
+        name: s.name,
+        finding: s.trifecta,
+      });
+    }
+  }
+  const skillResourceFindings: ScanSkillResourceFinding[] = skills.flatMap(
+    (s) =>
+      s.resourceIssues.map((finding) => ({
+        path: s.path,
+        name: s.name,
+        finding,
+      })),
+  );
+  const skillFenceFindings: ScanSkillFenceFinding[] = skills.flatMap((s) =>
+    s.fenceIssue ? [{ path: s.path, name: s.name, finding: s.fenceIssue }] : [],
+  );
+  return { trifectaFindings, skillResourceFindings, skillFenceFindings };
+}
+
+/**
+ * Build the subagent delegation graph and flag a lethal trifecta that EMERGES
+ * across an edge (own ∪ delegated-to capability) though no single unit trips it.
+ *
+ * Edge source (deterministic, audit-available): a subagent that lists the `Task`
+ * tool can dispatch any sibling subagent, so it `delegatesTo` every OTHER agent.
+ * An inherits-all agent (`tools === null`) carries the wildcard, which the
+ * detector's FP-safe guard skips (that maximal-blast case is the per-unit
+ * advisory's job). One detector, no drift. (Richer edge sources — a typed
+ * railway's `delegate()` chain, a Flue subagent inheritance tree — plug in here.)
+ */
+function collectDelegationTrifecta(
+  agents: readonly ScanAgent[],
+  dialect: HarnessDialect,
+): ScanDelegationFinding[] {
+  const allNames = agents.map((a) => a.name);
+  const nodes: CapabilityNode[] = agents.map((a) => {
+    const canDispatch =
+      a.tools === null ||
+      a.tools.some((t) => t === "Task" || t.startsWith("Task("));
+    return {
+      name: a.name,
+      kind: "agent",
+      tools: a.tools ?? ["*"],
+      delegatesTo: canDispatch ? allNames.filter((n) => n !== a.name) : [],
+    };
+  });
+  const pathByName = new Map(agents.map((a) => [a.name, a.path]));
+  return delegationTrifectaIssues(nodes, dialect).map((finding) => ({
+    path: pathByName.get(finding.name) ?? "",
+    finding,
+  }));
+}
+
+/**
+ * Build `hookBlockIssues` entries by walking the canonical object-keyed-by-event
+ * settings shape PER REGISTRATION — so a script registered under several events
+ * is inspected under EACH (no de-dup by script path), inline one-liners are
+ * included (script token → null, inspect the command), and a script token is
+ * resolved to its ABSOLUTE on-disk path against the plugin root (not the caller's
+ * cwd). Addresses the gaps a de-duplicated `ScanHook[]` would miss.
+ */
+function collectHookBlockEntries(
+  regs: readonly HookRegistration[],
+  root: string,
+  pluginRootToken: string,
+): HookScriptEntry[] {
+  const out: HookScriptEntry[] = [];
+  for (const { event, command: cmd } of regs) {
+    // A wrapper command runs MORE than one script (`node run.cjs guard.mjs`),
+    // so resolve EVERY candidate and inspect each — reading only the first
+    // (the wrapper) would miss the guard's block logic. Candidates: extensioned
+    // script tokens (SCRIPT_RE) PLUS path-like words with NO extension
+    // (`bash hooks/guard`, `${ROOT}/hooks/session-start`) that resolve to a file.
+    const candidates = new Set<string>(cmd.match(SCRIPT_RE) ?? []);
+    for (const word of cmd.split(/\s+/)) {
+      const w = word.replace(/^["']+|["']+$/g, "");
+      if (w.startsWith("-")) continue; // a flag, not a path
+      if (w.includes("/") || w.includes(pluginRootToken)) candidates.add(w);
+    }
+    const resolvedPaths: string[] = [];
+    for (const tok of candidates) {
+      const r = resolveScript(tok, root, pluginRootToken, cmd);
+      if (r.status === "ok") {
+        const abs = isAbsolute(r.script) ? r.script : resolve(root, r.script);
+        if (!resolvedPaths.includes(abs)) resolvedPaths.push(abs);
+      }
+    }
+    if (resolvedPaths.length > 0) {
+      // One entry per resolvable script (each is inspected on its own).
+      for (const sp of resolvedPaths) {
+        out.push({ event, command: cmd, scriptPath: sp });
+      }
+    } else {
+      // No script file resolved → inline one-liner; inspect the command text.
+      out.push({ event, command: cmd, scriptPath: null });
+    }
+  }
+  return out;
+}
+
+/** Extract (event, matcher) pairs from the normalized hook registrations. */
+function collectHookMatchers(
+  regs: readonly HookRegistration[],
+): HookMatcherEntry[] {
+  const seen = new Set<string>();
+  const out: HookMatcherEntry[] = [];
+  for (const { event, matcher } of regs) {
+    if (matcher === null) continue;
+    const key = `${event} ${matcher}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ event, matcher });
+  }
+  return out;
+}
+
+/** Tally how many scanned agents fall into each purity rung (effectSurface). */
+function summarizePurity(agents: readonly ScanAgent[]): {
+  pure: number;
+  bounded: number;
+  unrestricted: number;
+} {
+  return agents.reduce(
+    (acc, a) => {
+      acc[a.purity]++;
+      return acc;
+    },
+    { pure: 0, bounded: 0, unrestricted: 0 },
+  );
+}
+
 /** Scan a plugin/repo directory and report its surfaces + structural issues. */
 export function scanPlugin(
   dir: string,
@@ -861,8 +1204,13 @@ export function scanPlugin(
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
   const loaded = loadPlugin(dir, lay);
+  // Parse the raw `settings.hooks` ONCE at the boundary (parse-don't-validate):
+  // tolerant of the Claude Code nested shape AND the Codex flat shape, so every
+  // hook detector below consumes typed `HookRegistration[]` instead of re-walking
+  // `unknown`. The single seam where the per-harness hook shape is absorbed.
+  const hookRegs = normalizeHooks(loaded.settings.hooks);
   const { hooks, inline, manual } = scanHooks(
-    loaded.settings,
+    hookRegs,
     resolve(dir),
     lay.pluginRootToken,
   );
@@ -870,15 +1218,10 @@ export function scanPlugin(
   // registration (the hook never fires), so flag every unknown (not just typos).
   // ONLY for the canonical object-keyed-by-event shape: a plugin shipping a
   // hooks ARRAY uses a non-CC/custom format whose events live INSIDE each entry
-  // (e.g. ananddtyagi/sugar's `[{event:"tool-use",…}]`) — Object.keys would read
-  // array INDICES, a false positive. We don't interpret a format we don't own.
-  const hooksObj = loaded.settings.hooks;
-  const eventNames =
-    hooksObj !== null &&
-    typeof hooksObj === "object" &&
-    !Array.isArray(hooksObj)
-      ? Object.keys(hooksObj as Record<string, unknown>)
-      : [];
+  // (e.g. ananddtyagi/sugar's `[{event:"tool-use",…}]`) — `hookEventNames` reads
+  // object keys only and returns [] for an array. We don't interpret a format we
+  // don't own.
+  const eventNames = hookEventNames(loaded.settings.hooks);
   const hookEventIssues = confidentHookEventIssues(
     verifyHookEvents(eventNames, dialect),
   );
@@ -894,17 +1237,18 @@ export function scanPlugin(
   const mcpServers = collectMcpServers(resolve(dir), lay);
   const declaredServers = Object.keys(mcpServers);
   const agents = scanAgents(loaded.files, dialect, declaredServers, cls);
-  const puritySummary = agents.reduce(
-    (acc, a) => {
-      acc[a.purity]++;
-      return acc;
-    },
-    { pure: 0, bounded: 0, unrestricted: 0 },
-  );
+  const skills = scanSkills(loaded.files, cls, {
+    root: resolve(dir),
+    materializeRoot: lay.materializeRoot,
+    dialect,
+  });
+  const puritySummary = summarizePurity(agents);
+  const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
+    collectSurfaceFindings(agents, skills);
   return {
     dir,
     instructions,
-    skills: scanSkills(loaded.files, cls),
+    skills,
     agents,
     hooks,
     inlineHooks: inline,
@@ -923,6 +1267,33 @@ export function scanPlugin(
       dialect,
     ),
     descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    trifectaFindings,
+    skillResourceIssues: skillResourceFindings,
+    skillFenceIssues: skillFenceFindings,
+    pluginLayoutIssues: pluginDirLayoutIssues(
+      resolve(dir, dirname(lay.manifestPath)),
+      // The hooks dir is a misplaceable functional surface too, but it lives in
+      // the layout as a convention PATH (`hooks/hooks.json`), not in surfaceDirs
+      // — derive its first segment and dedupe so the detector watches it as well.
+      [...new Set([...lay.surfaceDirs, lay.hooksConventionPath.split("/")[0]])],
+    ),
+    delegationTrifecta: collectDelegationTrifecta(agents, dialect),
+    hookBlockFindings: dialect.noEffectHookEvents
+      ? hookBlockIssues(
+          collectHookBlockEntries(hookRegs, resolve(dir), lay.pluginRootToken),
+          {
+            noEffectEvents: new Set(dialect.noEffectHookEvents),
+            permissionDecisionEvents: new Set(
+              dialect.permissionDecisionHookEvents ?? [],
+            ),
+          },
+        )
+      : [],
+    hookMatcherFindings: hookMatcherIssues(
+      collectHookMatchers(hookRegs),
+      declaredServers,
+      dialect,
+    ),
     malformedFrontmatter: malformedFrontmatterFor(loaded.files, cls),
     warnings: loaded.warnings,
     untested: findUntestedSurfaces({ basePath: dir, layout: lay }).untested
@@ -1192,6 +1563,68 @@ export function formatScanReport(r: ScanReport): string {
     ),
   );
 
+  out.push(
+    ...section(
+      "Lethal trifecta (prompt-injection exfil risk)",
+      r.trifectaFindings.map(
+        (t) =>
+          `  ${t.finding.severity === "hard" ? "✗" : "⚠"} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Skill bundled resources",
+      r.skillResourceIssues.map(
+        (s) =>
+          `  ✗ ${s.name}: ${s.finding.ref} (line ${String(s.finding.line)}) — bundled resource not found`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Invisible skills (missing frontmatter fence)",
+      r.skillFenceIssues.map(
+        (s) =>
+          `  ✗ ${s.name} (${s.path}): opens with \`${s.finding.key}:\` but no \`---\` fence — loads as body, never fires`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Misplaced plugin directories",
+      r.pluginLayoutIssues.map((p) => `  ✗ ${p.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Lethal trifecta across delegation (blast radius)",
+      r.delegationTrifecta.map(
+        (d) => `  ⚠ ${d.finding.name} (${d.path}): ${d.finding.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Ineffective hook guards (false confidence)",
+      r.hookBlockFindings.map(
+        (h) => `  ✗ [${h.event}] ${h.scriptPath ?? "(inline)"}: ${h.message}`,
+      ),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Hook matchers that never fire",
+      r.hookMatcherFindings.map((m) => `  ✗ ${m.message}`),
+    ),
+  );
+
   const facts: string[] = [];
   if (r.commands > 0) facts.push(`Commands: ${String(r.commands)}`);
   facts.push(`MCP servers: ${r.mcp ? "yes" : "no"}`);
@@ -1269,7 +1702,15 @@ export function formatScanReport(r: ScanReport): string {
     r.frontmatterIssues.length +
     r.frontmatterValueIssues.length +
     r.mcpIssues.length +
-    r.mcpHookIssues.length;
+    r.mcpHookIssues.length +
+    r.skillResourceIssues.length +
+    r.skillFenceIssues.length +
+    r.pluginLayoutIssues.length +
+    r.hookBlockFindings.length +
+    r.hookMatcherFindings.length +
+    // HARD trifectas render ✗ and are graded into the score, so they count; the
+    // ADVISORY (inherits-all) ones and the delegation-trifecta ⚠ risk do NOT.
+    r.trifectaFindings.filter((t) => t.finding.severity === "hard").length;
   out.push(
     broken === 0
       ? "✓ no structural issues found"

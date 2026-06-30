@@ -212,7 +212,7 @@ test("compileAgent flags a bad spec filename", () => {
 
 test("dogfood: a real OSS subagent as a spec, with the tool rail it shipped WITHOUT", () => {
   // Reproduces the shape of wshobson's real `ui-visual-validator` subagent
-  // (examples/harness/vendor/wshobson-accessibility@.../agents/ui-visual-validator.md):
+  // (test/dogfood/wshobson-accessibility@.../agents/ui-visual-validator.md):
   // model: sonnet, a multi-`##`-section role contract, and — critically — it
   // ships with NO `tools:` line, so it inherits EVERY tool (the #1 footgun). A
   // spec ADDS the least-privilege rail (read + run visual tests; never Edit/Write),

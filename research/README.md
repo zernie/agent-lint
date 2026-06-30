@@ -9,12 +9,28 @@ one click away.
 > consolidated, ranked view of what ships next (Now / Next / Later / Backlog /
 > Rejected), each item linking the doc below that holds its rationale.
 
+> **💡 Looking for ideas (not the plan)?** The four idea backlogs, newest first:
+>
+> - [`audit-wow-ideas.md`](audit-wow-ideas.md) — the live menu of new `audit`/lint
+>   checks + the **Flue-framework poach (Appendix D: F1–F8)** + the **OSS-issue
+>   detector harvest** (which of the top OSS-plugin pains are shipped vs queued) +
+>   the prevent/detect/measure handling matrix. **The main idea doc.**
+> - [`divergent-bets.md`](divergent-bets.md) — bolder, beyond-the-layers bets,
+>   triaged with founder reactions.
+> - [`feature-ideas.md`](feature-ideas.md) — the long-tail parked-ideas list.
+> - [`harness-state-space.md`](harness-state-space.md) — the analogical-transfer
+>   moat ideas (CS principles mapped onto the harness).
+>
+> Each is cross-linked from [`roadmap.md`](roadmap.md), where the ones worth doing
+> are ranked into Now/Next/Later. Ideas live here; the **plan** lives there.
+
 ## Positioning & landscape
 
 - [`landscape-mid-2026.md`](landscape-mid-2026.md) — the mid-2026 frame: ContextCov, Harness Engineering, AgentProof, AWS Bedrock + Cedar, Compiled AI. The positioning vigiles sits in.
 - [`competitive-landscape.md`](competitive-landscape.md) — competitive landscape: rule-porter, rulesync, vibe-cli, Ruler, moat analysis.
 - [`pre-release-focus.md`](pre-release-focus.md) — the consolidation: the park/polish/add triage of the WHOLE feature surface, the API-surface freeze plan, the positioning lock, the markdown-mode decision, and the launch sequence. The "what actually ships" lens the roadmap points to. (Investor/competitor strategy lives in the private `startup/` vault, not indexed here.)
 - [`harness-checkup-and-lanes.md`](harness-checkup-and-lanes.md) — the casual-vs-power lane decision (from CC-user feedback: most users won't author tests but want free harness info): ship `scan` as a zero-config "Lighthouse for your harness" (score + score-explainer + predefined disaster-battery/over-fire checks, no authoring), authored tests/evals as discoverable depth — both lanes as ONE funnel. Mostly packaging (vigiles already ships ~80%). Validated against Lighthouse/npm-audit/Snyk/SonarCloud/ESLint/Knip/Codecov + PLG research.
+- [`audit-wow-ideas.md`](audit-wow-ideas.md) — the menu of NEW `audit` checks/measurements that create TENSION (an "oh shit", not a green A), from a 3-stream fan-out (our vault + real OSS failure patterns + the adjacent-tools gap). Verdict: don't add more deterministic markdown checks (agnix ~432 / claudelint 114 / CPV 190+ own that lane); the unique wow is the lethal-trifecta state check + the Safety/blast-radius ring + cross-reference-against-reality + the behavioral tier on the sub. Includes the OWASP Agentic-Top-10 → deterministic-check mapping and the full competitive appendix. **Appendix D = the Flue-framework poach (F1–F8: capability-diff across the delegation tree (F1, shipped), typed I/O handoff, model-specifier resolution, workflows/tool-defs as surfaces, a `vigiles/flue` adapter).** The "SHIPPED since" + "PLANNED" lists track which OSS-issue detectors are live (5 shipped) vs queued + the prevent/detect/measure handling matrix.
 - [`agentic-harness-evolution-poach.md`](agentic-harness-evolution-poach.md) — poach of the arXiv "Agentic Harness Engineering" paper (auto-evolving coding-agent harnesses) for the optimize/measure/evolve line: the falsifiable-prediction-per-edit + auto-rollback loop, and the peer-reviewed validation that structure (tools/hooks/memory) beats prose (enforce > guidance).
 - [`oss-lane-sweep-2026-06.md`](oss-lane-sweep-2026-06.md) — GitHub/npm sweep confirming the cross-reference-verification + harness-testing + skill-eval lane is unoccupied by OSS; the structural-lint surface is crowded with `agnix` (297★) the incumbent to watch (differentiate on capabilities A/B/C/D, not rule count).
 - [`sync-landscape-analysis.md`](sync-landscape-analysis.md) — rule-sync landscape, per-tool breakdown, what's worth absorbing.
@@ -57,6 +73,7 @@ one click away.
 
 ## Runtime enforcement & agent integration
 
+- [`enforcement-model.md`](enforcement-model.md) — **why each rule's severity is what it is** (and why "make it all impossible by construction" is unachievable): prevention is a gradient bounded by decidability; the three buckets (structural-closed / external-decidable / heuristic-behavioral) that set each rule's ceiling. The model behind `src/core/rule-meta.ts` + the `lint-rule-calibration` rule.
 - [`runtime-enforcement.md`](runtime-enforcement.md) — spec-derived runtime enforcement via hooks, skill contracts, session audit.
 - [`agent-integration.md`](agent-integration.md) — the deterministic backstop for AI agents: hooks, proofs, static checks anchored at the spec.
 - [`dynamic-workflows-and-scope.md`](dynamic-workflows-and-scope.md) — dynamic workflows and scope boundaries.

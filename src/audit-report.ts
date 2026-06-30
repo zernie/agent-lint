@@ -83,7 +83,7 @@ export interface Adoptable {
  */
 export interface AuditReport {
   readonly meta: AuditReportMeta;
-  /** The four deterministic category rings + the weighted overall + grade. */
+  /** The five deterministic category rings + the weighted overall + grade. */
   readonly score: AuditScore;
   /** The deterministic, ranked fixes (the inline recommendations). */
   readonly recommendations: readonly Recommendation[];

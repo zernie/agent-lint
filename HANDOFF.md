@@ -9,193 +9,150 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-length-review-3vnx5h` → PR #51 OPEN, `mergeable_state: CLEAN`**
-(all 6 checks GREEN incl. e2e — the egress red was flaky; merge is the founder's call).
-Title `feat!:` (frontmatter disable is breaking; `validate` checks the TITLE). ~43 commits.
-NEXT DECISION (founder): the benchmark "does it help" breadth needs a KNOWN-HARD task
-source (SWE-bench-style) — OR lead now with the findings we HAVE (compression debunk +
-planning-is-overhead = "most hyped skills are cost, not benefit"). See benchmark §3.
-Started as a README brevity pass; became a large **audit / adoption / lint coherence +
-features** wave, then **audit-eval-thickening**, then **ecosystem-benchmark pilots**
-(below). CI was red three times from MASKED failures (each fix surfaced the next):
-skill-pipeline test → scan-cli lint → fmt:check. All fixed; CI fully green now.
+**Branch `claude/audit-rings-html-report-mh8sf8` — PR #52 OPEN (github.com/zernie/vigiles/pull/52).**
+(Separate from PR #51 / `readme-length-review` — that branch's state is not this one's.)
 
-### CI fixes (Codex review caught the first) — all pushed
-
-- **api-report stale** (`5767a2d`): the new `warnings` field on CompileSkill/AgentResult
-  changed the public surface; regenerated `etc/vigiles-linting.api.md`.
-- **skill-pipeline test** (`30b4cfc`): asserted the inline-code guard in `errors`; it's a
-  WARNING now → assert `warnings`.
-- **scan-cli lint** (`c116482`): typed the parsed leaderboard JSON (no-unsafe-any).
-- **fmt:check** (`9aa2240`): pre-existing MAIN breakage (#50 shipped 3 unformatted
-  research files) — ignore `research/dogfood/` (captures), format readme-revamp-concepts.
-
-### Audit-eval-thickening (the "add more evals to audit" ask)
-
-Audit's executing/eval tier ran ONE eval (trigger-rate). Thickening it:
-
-- **#1 selection-collision IN AUDIT** (`ace9b40`): the collision matrix existed
-  (`measurePluginSelection`) but audit never ran it — only the standalone `measure` cmd
-  did. Now `runAutoTrigger` runs it under the SAME consent (≥2 skills), disclosed in the
-  prompt. Audit now measures fire AND collide.
-- **#3 precision** — already shipped (formatBehavioralReport prints it). No-op.
-- **#2 adversarial-gate, STEP 1** (`06d1958`): pure `isGateDescription`/`detectGateSkills`
-  (keyword heuristic) — deterministic detection of enforcement-gate skills.
-- **#2 adversarial-gate, PRODUCTIONIZED** (`7f1d747`): `measureGateAdversarial` wired into
-  audit's executing tier as the 3rd behavioral eval (same consent, disclosed). For each
-  gate skill it AUTO-DERIVES a violation request (zero-config; author attacks override),
-  runs the UNSTUBBED harness, LLM-judges hold/cave. Injectable core unit-tested (no model);
-  **VALIDATED LIVE end-to-end here** (auto-derive→run→judge). KEY FINDING: hold/cave is
-  STOCHASTIC (same gate held once / caved once in two runs) → defaults to 3 trials, reports
-  heldRate (any cave in N = unreliable gate). Skill-gate ONLY; hook-gate half is the
-  follow-up (below).
-
-### Ecosystem-benchmark pilots (auth WORKS here — run live, keep small)
-
-- **Compression cluster** (`bench/evals/ecosystem-pilot.eval.mjs`) — multi-skill
-  generalization of caveman: A/B (skill ON/OFF) over the corpus across caveman/bullets/
-  minify (labeled reconstructions). LIVE pilot (haiku, 2 trials, 3 tasks): caveman -13%
-  out (debunk holds), minify -29% out + a CORRECTNESS REGRESSION, bullets +43% but
-  INFLATED by a near-empty-output artifact on bigO (added an ARTIFACT_FLOOR guard).
-  output-share ~1% across all → output-compression can't move the bill.
-- **Headroom corpus** (`bench/corpus/headroom-tasks.mjs` + `verify-headroom.mjs`) — harder
-  tasks with EXECUTING checks (run the written fn vs edge-case tests via `ctx.sh`, base64
-  harness; verify proves each discriminates good/bad, no model). For the NON-compression
-  "makes-it-better" claims, which need a baseline that FAILS.
-- **Headroom benchmark** (`bench/evals/headroom-pilot.eval.mjs`) — A/B of an
-  edge-case-first planning skill. CONCLUSIVE FINDING: all THREE hand-crafted tasks
-  (merge-intervals, roman, AND the 6-rule parse-query) hit 100% baseline on haiku — it's
-  a capable coder, so NO headroom and 0pp lift everywhere. The real signal: on parse-query
-  the planning skill spent ~88% MORE output (2584→4850 tok) for ZERO gain → on solvable
-  tasks a "do-more" skill is PURE OVERHEAD (the compression debunk's shape). LESSON: hand-
-  crafting tasks a capable model fails is unreliable; measuring "does planning HELP" needs
-  a KNOWN-HARD source (SWE-bench-lite-style) — a founder call, not more quota. The pipeline
-  - executing checks all WORK; the gap is the task source. Full record: `research/audit-
-eval-thickening-and-gate.md` §3 PILOT RESULTS.
-- **Codex P2 fix** (post-benchmark): `runAutoTrigger` omitted the gate section when the
-  eval was UNAVAILABLE (Codex / no `claude` CLI) — read as "no gate skills" though consent
-  advertised them. Now shows it when gate skills were DETECTED (loud "unavailable" note;
-  no-silent-skips).
+This session started as a README readability pass and became: a README revamp to 5/5,
+a new fan-out doc-review skill, a deep-research menu of NEW audit checks, the FIRST
+two of those checks SHIPPED (lethal-trifecta + skill-resource resolution, wired into
+audit AND lint), a public coverage matrix (`docs/what-vigiles-catches.md`), and a
+CLAUDE.md rule keeping that matrix in sync with the rule set. All committed + pushed.
 
 ### What landed this session (in order)
 
-1. **README** — trim (258→~132 body lines) + accuracy fixes (the false "audit in CI"
-   line; a fabricated leaderboard rank; severity inflation) + **dropped Proofs 3-4**
-   (they leaned on inherit-all, now advisory → official plugins are clean A, so the
-   proofs were false/self-contradictory). Kept Proofs 1-2 (real graded defects).
-2. **OSS FP sweep (124 plugin roots via codeload)** → fixed ONE real FP: `commands/agents/*.md`
-   (a command namespaced `/agents:…`) + a README.md misclassified as SUBAGENTS. Extended
-   the `skills/<x>/agents/` classifier exclusion to `commandDir/.../agentDir`.
-3. **Versioned `audit --json`** — marketplace/leaderboard emitted a bare array; now every
-   `audit --json` is a versioned object with `meta.kind` (audit/leaderboard/marketplace).
-4. **inherit-all → ADVISORY, not graded** — sweep showed 109/122 plugins had ONLY this;
-   it cried wolf on an idiomatic style. Grade dist {A:90,B:24,C:5,D:3,F:1} → {A:122,F:1}.
-5. **code-block guard → WARNING** — the >20-line inline-code guard was a compile ERROR
-   that broke faithful adoption (skill adopt 55%→100%, subagent 58%→80%). Now a
-   non-blocking `warnings` channel on CompileSkillResult/CompileAgentResult.
-6. **Frontmatter lint mode DISABLED** (`FRONTMATTER_MODE_ENABLED=false` in cli.ts) — kept
-   in code (frontmatter.ts, generate-schema), inert in lint. Collapses the ladder to
-   inline-comments + typed-spec. `fix!:` (BREAKING).
-7. **Flow doc** in `docs/for-plugin-authors.md` (audit→init→strengthen→lint + the
-   copy-vs-run clarification) + stale `scan`→`audit` / CI-line fixes.
-8. **`audit --serve`** (`d051984`) — one-click-local spec adoption. Hardened loopback
-   server (`src/audit-serve.ts`): 127.0.0.1 + per-run token + Origin + allowlist-not-path
-   - in-process `init` + own-repo only. Opt-in (TTY prompt / `--serve` / `--no-serve`);
-     plain audit stays a terminating headless-safe READ. Security unit tests + real-HTTP
-     e2e. Report buttons POST when live, copy when static. `research/audit-serve-design.md`.
-9. **Adopt-flow explainer in the report UI** (`ec52ba0`) — then REMOVED (`bdef434`,
-   founder call: read preachy above the findings; per-fix cards carry the action).
-   `report/src/components/Flow.tsx` deleted. (The audit→init→strengthen→lint _doc_ in
-   `docs/for-plugin-authors.md` STAYS — only the report UI card went.)
-10. **Hero `vigiles-audit.png` REFRESHED** (`159fd21`→`bdef434`) — re-rendered from a
-    REAL current report (agent-teams shown as `my-plugin` to anonymize): A 92, four
-    rings, inline `subagent-tool-contract` fix. No flow card, no drift banner.
-    Re-render recipe: copy a plugin to `my-plugin/`, `node dist/cli.js audit my-plugin
---no-json --no-serve`, headless Chromium `--window-size=1240,1300 --screenshot`
-    on `vigiles-report.html`, then `rm -rf my-plugin vigiles-report.html`.
+1. **README → 5/5** (commits on this branch): driven by two user-POV persona reviewers
+   (skeptical eng + non-expert plugin author), iterated to 5/5 from both. Dropped jargon
+   from the tagline; DEFINED "harness" in the first paragraph + "subagent" at first use;
+   renamed "three instruments" → "How it works" + made Lint/Test/Eval scannable (moved the
+   runHook code block out); deleted the self-grading "we eat what we cook" blockquote;
+   reframed Proof 2 off "markdown linter" → "reality, not style". Readability principles
+   recorded in the README's top HTML comment.
+2. **NEW skill `.claude/skills/review-docs/SKILL.md`** — auto-triggering project skill
+   (model-invocable) that FANS OUT one parallel subagent per reader persona (CC newcomer /
+   power user / plugin author / skeptic / non-running decision-maker / Codex user), scores
+   x/5, synthesizes cross-cutting fixes, with an opt-in iterate-to-N/5 loop. Supersedes the
+   explicit-only `dev/skills/audience-check` (left in place; not model-invocable, can retire).
+3. **`research/audit-wow-ideas.md`** — 3-stream deep-research fan-out (our vault + real OSS
+   failure patterns from GitHub + adjacent-tools gap). VERDICT: the deterministic markdown-
+   lint lane is SATURATED (agnix ~432 rules, claudelint 114, CPV 190+, SkillCheck, etc.) —
+   don't compete on rule count. Unique wow = (a) lethal-trifecta capability state-check,
+   (b) a Safety/blast-radius ring (false-confidence hooks, the disaster battery, observed-
+   vs-declared egress), (c) cross-reference-against-reality, (d) the behavioral tier on the
+   sub. Every eval vendor (Galileo/Braintrust/promptfoo/DeepEval/Arize…) is runtime/post-hoc
+   - per-token; vigiles is the only PRE-RUN verifier. Includes the OWASP-Agentic-Top-10 →
+     deterministic-check mapping + a full competitive appendix. Indexed from research/README.md.
+4. **SHIPPED audit-wow #1 + #3** (commits `f76502d` detectors, `8bb5280` wiring):
+   - `src/core/lethal-trifecta.ts` — flags a subagent/skill whose declared tool SET holds
+     all three legs {read private ∧ ingest untrusted ∧ exfiltrate}. Capability SET-
+     intersection, NOT a text scan (dodges the ~78%-FP regex tool-poisoning trap). Bash is
+     dual-role (A+C); inherits-all/wildcard → advisory, explicit all-three → hard.
+   - `src/core/skill-resources.ts` — verifies a SKILL.md body's bundled-resource refs
+     (scripts/references/assets) resolve on disk; FP-safe (links + standard bundle dirs only).
+   - Wired into BOTH `audit` (scan.ts findings + --json + formatted report) AND `lint`
+     (cli.ts `checkLethalTrifecta`/`checkSkillResourceResolves`, severity-gated, GH
+     annotations, exit codes) from ONE detector each (one-detector-no-drift). New RulesConfig
+     keys `lethal-trifecta` + `skill-resource-resolves`, default `warn` (NUDGE group,
+     raisable to error). `docs/rules/{lethal-trifecta,skill-resource-resolves}.md` + matrix
+     rows. 8 new scanPlugin tests incl. a non-CC custom-layout case.
+   - VERIFIED LIVE: `audit` flags the vendored madappgang `tester` subagent as a real
+     trifecta (Bash+Read / WebFetch+WebSearch / Bash+WebFetch). Gates: build ✓, vitest
+     **1792 passed** ✓, lint 0 errors ✓, fmt ✓.
+5. **PUBLIC coverage matrix** (`c330274`): `docs/what-vigiles-catches.md` — 3-mode
+   (✦ Prevented / ✓ Caught / ◷ Measured) biggest-problem-first list of every shipped
+   capability + an "On the roadmap" list of queued OSS-scan checks. Linked from README
+   near the proofs + in More. Internal twin = the "## The handling-mode matrix" section
+   in `research/audit-wow-ideas.md`.
+6. **CLAUDE.md rule** (`1be4f49`): EXTENDED `rules-docs-in-sync` (no new rule — kept lean)
+   so adding/removing/renaming a validation rule now updates FIVE places: RulesConfig type,
+   the per-rule matrix (`docs/verifying-instruction-files.md`), the rule doc, the PUBLIC
+   coverage matrix (`docs/what-vigiles-catches.md`), and the INTERNAL handling-mode matrix
+   (`research/audit-wow-ideas.md`). Distinguishes the 1:1 per-rule matrix from the
+   problem-framed coverage matrices (sharpen-or-add by problem severity, not alphabetical).
+   Recompiled CLAUDE.md from spec; doc gates (self-command-refs + orphan-docs, 39) green.
 
-### DO NEXT
+7. **FIVE MORE detectors SHIPPED** (commit `7b88bcb`) — top-3 OSS-issue pains + the Flue
+   poach F1, all FP-safe, audit + lint, default `warn` (NUDGE), one-detector-no-drift:
+   `skill-missing-fence` (invisible skill, no `---`), `plugin-dir-layout` (dirs misplaced in
+   `.claude-plugin/`), `delegation-trifecta` (F1 — a trifecta emerging across a delegation
+   edge; edge source = a `Task`-capable subagent → all siblings), `hook-block-ineffective`
+   (block on non-blocking event #19009 + legacy-`decision`-field-on-PreToolUse; blocking-event
+   sets now on the dialect), `hook-matcher` (tool-typo / malformed-or-undeclared MCP form).
+   Built via parallel subagents (2 stalled → finished by hand); all live-dogfooded + gates green
+   (tsc, eslint 0-err, validate/scan/cli/vendor/orphans/self-command-refs/adapter-contract).
+   **Flue poach** recorded in research/audit-wow-ideas.md Appendix D (F1 done; F2 typed-I/O
+   handoff, F3 model-specifier, F4 workflows-as-surface, F7 vigiles/flue adapter still open).
 
-- **MODEL AUTH WORKS IN THIS SANDBOX (corrects the old "env-blocked" note).** Subprocess
-  `claude -p` authenticates via the OAuth FD — `measureTriggerRate`/collision/gate evals
-  RUN here. Only **bubblewrap is missing** (so the egress e2e + any confined-hook path
-  degrade-to-skip). Use this to live-validate model-gated work; keep runs small (the
-  user's subscription quota).
-- **#2 HOOK-GATE half — NEEDS A 2-MIN GREENLIGHT (deliberately not shipped unattended).**
-  The skill-gate half is DONE + live-validated. The hook-gate half (does a PreToolUse hook
-  actually BLOCK the disaster catalog) would wire `verifyGuardrail`/`assertBlocksDisasters`
-  (src/guardrail-check.ts, already tested) into audit. NOT shipped because: (1) it REVERSES
-  the parked 2026-06-27 `audit-side-effect-free` decision (no Linux-only safety in audit) —
-  user said "both" in a quick chip-pick, wants an awake confirm; (2) un-validatable HERE
-  (no bwrap → degrades-to-skip, does nothing); (3) the battery already ships via
-  `vigiles/testing`, so this is convenience not a gap. RECOMMENDED design when greenlit:
-  ADVISORY line (never a graded ring — the decision's real concern was per-OS grade
-  divergence), CONFINED-only via src/sandbox.ts, LOUD degrade-to-skip where no confinement.
-- **STRATEGY of record (don't relitigate):** launch on the **ecosystem benchmark**, not
-  audit alone — audit's ring/score UX is commoditizing (AgentLinter/SkillCheck/cc-health-
-  check), agnix's 414-rule linter got 1 HN point. Audit = the on-ramp; benchmark = the
-  hook. BUT one eval (caveman) ≠ a benchmark → the near-term work the user chose is
-  THICKENING AUDIT's eval tier (above), not the benchmark yet. Competitor + OSS research
-  is in the two completed agent briefs (this session) + `research/skill-eval-landscape.md`.
-- **Feature "audit previews what lint would find" — DECISION PENDING.** Finding: it's
-  ALREADY shipped model-gated as the **adoptability preview** (`src/adoptability.ts` +
-  the report Adoptability section, behind the executing-checks consent — "LLM proposes
-  refs, deterministic verifies"). Don't build a duplicate. Options offered to founder:
-  **A** consider done + make it more discoverable (lean); **B** add a free DETERMINISTIC
-  unmarked-refs preview (modest value, narrow detector); **C** other. Awaiting pick.
-- **PR #51 is OPEN** — watch CI (`validate` should now pass on the `feat!:` title).
-  Merge is the founder's call. The branch name (`readme-length-review`) understates the
-  wave — the PR body covers it.
-- **Env caveats HERE** (corrected): model auth WORKS (evals run); only **bubblewrap**
-  is missing (egress/confined-hook paths skip) + dialect freshness (CC 2.1.195 here ≠
-  pinned 2.1.187). Hero asset is DONE.
-- **Pre-release blocker (unchanged):** the ecosystem benchmark / article (measure ~10-20
-  hyped skills on `bench/corpus`) + a 0.x stability blurb.
-- **OSS issue hunt — CONCLUSIVE (see `research/oss-audit-render-findings.md`).** Swept
-  ~300+ plugins / ~18 repos. Official CLEAN (0/39 graded). Real catches for README/demo
-  (anonymized): **claude-flow → F (45 desc-overlaps)**, **disler → B (`Setup` dead hook
-  event)**, **agent-teams → A (`Agent` tool never-available)**. README examples: **do NOT
-  fabricate** (breaks the never-fabricate rule + credibility) — use these REAL catches.
-  inherit-all stays **ADVISORY — SETTLED** (don't re-propose grading it): pure-graded
-  cries wolf (32/124 drop below A for the idiomatic no-`tools:` style), and a
-  name-heuristic ("grade reviewer-role agents") is NOT deterministic (guesses intent).
-  "Dangerous inherit-all?" is unknowable on raw markdown; the deterministic over-power
-  check is the typed-spec `purity` floor (adopt→strengthen payoff), already shipped.
-  Screenshots were ephemeral (scratchpad); re-render via headless Chromium.
+### DO NEXT / OPEN DECISIONS
+
+- **SAFETY-RING PROMOTION — PENDING USER YES/NO.** Trifecta currently shows as a FINDING,
+  not a ring (audit's 4-ring model untouched; `audit-score.ts` ring math unchanged). I
+  deliberately did NOT re-promote a Safety ring (the founder narrowed it 2026-06-27 over
+  cross-platform-confinement). BUT the static trifecta check SIDESTEPS that blocker (nothing
+  executes) → it's a clean candidate. Re-promoting is what turns the finding into the
+  visceral red ring. Awaiting the founder's call.
+- **~16 MORE audit ideas** sit in `research/audit-wow-ideas.md` — next candidates: the
+  STATIC false-confidence hook audit (block-decision on a non-blocking event #19009, wrong
+  JSON field), `.env`-deny-bypass, instruction-vs-config contradiction, claim-vs-measured
+  ROI. Build the same way: detector → audit + lint (one-detector-no-drift) → docs + matrix.
+- **PR #52 OPEN, CI green, watched** (subscription + hourly cron f6cabeb9). The whole stack:
+  README→5/5, review-docs skill, audit-wow research, Safety ring, SEVEN detectors, coverage
+  matrix, Flue poach + roadmap, dogfood corpus. **Codex reviewed it (~12 P2 comments, ALL
+  addressed; Codex then hit its usage limit so the review loop is done).** Key changes from
+  review: (1) **hook-block-ineffective RECALIBRATED** — `wrong-event` fires ONLY on
+  `noEffectHookEvents` (SessionStart/SessionEnd/Notification/PreCompact), NOT PostToolUse
+  (exit-2 there is FEEDBACK; dogfood caught it crying wolf on our own refs-nudge.sh). davila7
+  flipped true-positive→calibration-FP-guard. (2) per-registration resolved-path hook feeding
+  (inline + wrapper `node run.cjs guard.mjs` + extensionless + non-shell `process.exit(2)`).
+  (3) new findings now SCORED in reportDeductions + counted in the verdict footer. (4) hook-
+  matcher wildcard MCP server. (5) explicit `tools:[]` ≠ inherits-all.
+- **DOGFOOD CORPUS** migrated to `test/dogfood/` (was examples/harness/vendor — broke CI via
+  relative `./vendor` paths in .mjs + stale .prettierignore; all fixed). `test/dogfood/README.md`
+  = policy + sweep manifest. `tools/dogfood-sweep.sh` = reproducible sweep (real `vigiles audit`
+  over a pinned repo list). madappgang now asserts a real lethal-trifecta TP.
+- **RESEARCH REORG done** (729d2a4): research/README.md "💡 ideas" callout + roadmap ideas↔plan
+  cross-links. Flue poach = audit-wow-ideas.md Appendix D (F1 shipped; F2–F8 roadmapped).
+- **OPEN — user's call (asked, awaiting answer):** dogfood true-positive coverage for the NEW
+  detectors is THIN (only lethal-trifecta has a real-world lock; the rest are synthetic-only).
+  Two moves offered: (A) DEEPER Flue/competitor idea-mining (read Flue SOURCE, not a skim) —
+  user was DISAPPOINTED with idea yield; (B) reliable long-tail TP hunt INLINE (subagents hung
+  3× this session — don't use them for this; point dogfood-sweep.sh at messier repos myself).
+- **DOGFOOD CORPUS now lives at `test/dogfood/`** (was `examples/harness/vendor/`, migrated
+  with path refs across ~14 files + the spec). `test/dogfood/README.md` documents the POLICY
+  (save every MIT/permissive plugin we scan, SHA-pinned; reports → `research/dogfood/`) + a
+  SWEEP MANIFEST (8 repos / 156 audit targets this session: 1 true positive davila7, 0 FPs on
+  the new detectors). Add a slice → row in README → assert in `scan-vendor.test.ts`.
+  KNOWN GAP: the hook-block detector under-fired on some davila7 hook-component shapes (1/4
+  exit-2 components flagged) — likely event not parsed from a non-canonical settings shape;
+  under-fire is don't-cry-wolf-safe but worth tightening. davila7 `performance-budget-guard`
+  is a confirmed REAL bug (desc says "blocks deployments") → safe to draft an upstream fix-PR.
+- **MODEL AUTH WORKS HERE** (subprocess `claude -p` via OAuth FD) — model-gated evals RUN;
+  only **bubblewrap is missing** (egress/confined-hook paths degrade-to-skip). Keep live
+  runs small (subscription quota).
 
 ### Gotchas
 
-- **OSS sweep workaround:** `git clone` of other repos is 403 here, but **codeload
-  tarballs work**: `curl -sSL codeload.github.com/<owner>/<repo>/tar.gz/refs/heads/<main|master>`.
-- **`npm run fmt` reformats `research/`** (huge prettier diff on dogfood html/json) — use
-  `npx prettier --write <files>` and stage ONLY your files; don't bundle fmt noise.
-- **No bubblewrap** → `sandboxAvailable()` false; `dialect-drift.test.ts` fails here only.
-- `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec +
-  recompile. (NB `src/audit-serve.ts` is NOT yet in CLAUDE.md keyFiles — add when convenient.)
+- **`dialect-drift.test.ts` FAILS here** — it asserts the INSTALLED claude-code SDK tool set
+  matches the pinned `VALIDATED_CC_VERSION`; this container runs an OLDER CC (drift banner in
+  audit output). PRE-EXISTING + UNRELATED to any code change; fails on a clean tree too.
+  Fix separately (pin `@anthropic-ai/claude-code` in env or bump the baseline).
+- `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec + recompile.
+- **`npm run fmt` reformats `research/`** (huge prettier diff) — use `npx prettier --write
+<files>` and stage ONLY your files.
 - Commits: **NO session links / NO model IDs** (auto-classifier blocks them).
-- `cli.test.ts` / `agent.test.ts` / `spec.test.ts` are **vitest** despite old node:test
-  labels — run via `npx vitest run`, not `node --test`.
+- `cli.test.ts` / `agent.test.ts` / `spec.test.ts` are **vitest** despite old node:test labels.
+- OSS clone is 403 here; codeload tarballs work
+  (`curl -sSL codeload.github.com/<o>/<r>/tar.gz/refs/heads/<main>`).
 
 ### Decisions of record (don't relitigate)
 
 - **inherit-all is ADVISORY** (subagent with no `tools:` line) — idiomatic, shown not scored.
-- **The >20-line inline-code guard is a WARNING**, not an error — adoption always compiles.
-- **Frontmatter lint mode is DISABLED** (kept/flag-reversible) — two on-ramps: inline + spec.
-- **`audit --json` is ALWAYS a versioned object** (`meta.kind`), never a bare array.
-- **`audit --serve` reverses "audit reads / no execution flag"** — deliberately, scoped
-  tight (own-repo, interactive, token-guarded, reversible local write). Plain `audit`
-  (no `--serve`) is STILL a safe terminating read; `lint` is the CI gate, not audit.
-- **"What would vigiles catch" = the model-gated adoptability preview** (already shipped).
-- **The report's "how to act" flow CARD is REMOVED** (founder call) — the doc-level flow
-  explainer in `docs/for-plugin-authors.md` stays; only the in-report UI card went.
-- **README has TWO proofs** (anonymized community catches); official-plugin proofs dropped.
-- Public docs name USER BENEFIT (no `moat`/`flywheel`, no `research/` links). `startup/` vault LOCKED.
+- **lethal-trifecta + skill-resource-resolves default `warn`** (NUDGE group, raisable to
+  error) — don't-cry-wolf rollout; one detector backs both audit + lint.
+- **NO Safety ring promoted** (deferred to a founder yes/no) — audit's 4-ring model intact.
+- **audit reads / `lint` is the CI gate** — audit findings are risks, not the broken tally.
+- Public docs name USER BENEFIT (no `moat`/`flywheel`, no `research/` links). `startup/` LOCKED.
 
 ## Don't re-read unless the task needs it
 
-- `research/oss-audit-render-findings.md` — what audit catches in the wild (official
-  clean; real catches; the inherit-all-grading lever; README "don't fabricate" call).
-- `research/audit-serve-design.md` — the `--serve` security model + prior-art survey.
-- `research/audit-adoption-ux.md` — how the report creates specs (copy vs live).
-- `research/pre-release-focus.md` — the markdown-mode / frontmatter-disable decision.
+- `research/audit-wow-ideas.md` — the ranked menu of new audit checks + competitive appendix.
 - `research/roadmap.md` — `🚀 Launch readiness`. `startup/` — git-crypt vault (LOCKED).

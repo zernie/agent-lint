@@ -234,6 +234,77 @@ export interface RulesConfig {
    * as `scan` (mcpHookIssues).
    */
   "mcp-hook-target-resolves"?: RuleSeverity;
+  /**
+   * Flag a unit (subagent / model-invocable skill) whose declared tools hold all
+   * THREE legs of Simon Willison's "lethal trifecta" — read private data, ingest
+   * untrusted content, AND exfiltrate — a prompt-injection exfil path with no
+   * exploit code (Meta's Rule of Two: allow at most two). A capability SET-
+   * intersection over the declared contract, NOT a text scan; high-precision (only
+   * well-known tools map to a leg). An EXPLICIT all-three contract is a "hard"
+   * finding; an inherits-all unit (no contract → every leg) is "advisory". Default
+   * "warn" (don't-cry-wolf rollout); raise to "error" to gate CI. Same detector as
+   * `scan` (lethalTrifectaIssues). See docs/rules/lethal-trifecta.md.
+   */
+  "lethal-trifecta"?: RuleSeverity;
+  /**
+   * Flag a SKILL.md body referencing a bundled file (`scripts/`/`references/`/
+   * `assets/`, or a relative markdown link with an extension) that doesn't exist
+   * on disk under the skill dir — the agent reads the instruction, gets nothing,
+   * and silently continues. The cross-reference moat applied to the SKILL.md body.
+   * High-precision / FP-safe (skips URLs, `$VAR` tokens, `../` escapes, extension-
+   * less mentions). Default "warn"; raise to "error" to gate CI. Same detector as
+   * `scan` (skillResourceIssues). See docs/rules/skill-resource-resolves.md.
+   */
+  "skill-resource-resolves"?: RuleSeverity;
+  /**
+   * Flag a SKILL.md that opens with frontmatter-looking keys (`name:`,
+   * `description:`, …) but has NO opening `---` fence — the harness loads the
+   * whole file as body, so the skill has no name/description/trigger and is
+   * invisible (never fires). High-precision (a fixed key whitelist; markdown /
+   * prose lines never match). Default "warn"; raise to "error" to gate CI. Same
+   * detector as `scan` (skillFenceIssues). See docs/rules/skill-missing-fence.md.
+   */
+  "skill-missing-fence"?: RuleSeverity;
+  /**
+   * Flag a functional surface directory (skills/agents/commands) nested INSIDE
+   * the `.claude-plugin/` manifest dir, where only `plugin.json` belongs — the
+   * harness can't see it, so the surface is invisible (the #1 plugin-author
+   * mistake). Pure filesystem check, FP-safe. Default "warn"; raise to "error"
+   * to gate CI. Same detector as `scan` (pluginLayoutIssues). See
+   * docs/rules/plugin-dir-layout.md.
+   */
+  "plugin-dir-layout"?: RuleSeverity;
+  /**
+   * Flag a lethal trifecta that EMERGES across a delegation edge — a subagent
+   * whose effective (own ∪ delegated-to) capability holds all three legs though
+   * no single unit does (the combined blast radius). The capability-diff across
+   * the delegation tree; skips units the per-unit `lethal-trifecta` already
+   * flags (no double-report), FP-safe (explicit edges, wildcard-guarded). Default
+   * "warn"; raise to "error" to gate CI. Same detector as `scan`
+   * (delegationTrifecta). See docs/rules/delegation-trifecta.md.
+   */
+  "delegation-trifecta"?: RuleSeverity;
+  /**
+   * Flag a hook that LOOKS like it blocks but silently doesn't — a block decision
+   * (`exit 2` / `decision` / `permissionDecision`) on an event that can't veto, or
+   * the legacy top-level `decision` field on a permission-gated event where only
+   * `hookSpecificOutput.permissionDecision` works (#19009, the #1 verified hook
+   * pain). FP-safe (conservative literal patterns; the blocking-event sets are
+   * read from the dialect, so it runs only where they're declared). Default "warn";
+   * raise to "error" to gate CI. Same detector as `scan` (hookBlockFindings). See
+   * docs/rules/hook-block-ineffective.md.
+   */
+  "hook-block-ineffective"?: RuleSeverity;
+  /**
+   * Flag a hook `matcher` string that silently never fires — a close typo of a
+   * built-in tool (`bash`→`Bash`), or a malformed/undeclared MCP form
+   * (`mcp_memory_*` instead of `mcp__memory__.*`, or a server the plugin doesn't
+   * declare). High-precision (close-typo only; MCP gated on a declared set,
+   * built-ins allowlisted; wildcards/regex skipped). Default "warn"; raise to
+   * "error" to gate CI. Same detector as `scan` (hookMatcherFindings). See
+   * docs/rules/hook-matcher.md.
+   */
+  "hook-matcher"?: RuleSeverity;
 }
 
 // ---------------------------------------------------------------------------

@@ -328,12 +328,12 @@ maybe(
 for (const [label, dir, skill] of [
   [
     "obra/superpowers",
-    "../examples/harness/vendor/superpowers@6fd4507",
+    "../test/dogfood/superpowers@6fd4507",
     "superpowers:test-driven-development",
   ],
   [
     "wshobson/agents",
-    "../examples/harness/vendor/wshobson-accessibility@cf6059d",
+    "../test/dogfood/wshobson-accessibility@cf6059d",
     "accessibility-compliance:wcag-audit-patterns",
   ],
 ] as const) {

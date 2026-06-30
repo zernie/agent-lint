@@ -13,7 +13,10 @@ import {
   rankPlugins,
   formatLeaderboard,
   formatLeaderboardMarkdown,
+  reportDeductions,
+  computeIntegrityScore,
 } from "./leaderboard.js";
+import { auditScore } from "./audit-score.js";
 import type { ScanReport } from "./scan.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
@@ -36,6 +39,13 @@ function report(over: Partial<ScanReport> = {}): ScanReport {
     mcpIssues: [],
     mcpHookIssues: [],
     descriptionOverlaps: [],
+    trifectaFindings: [],
+    skillResourceIssues: [],
+    skillFenceIssues: [],
+    pluginLayoutIssues: [],
+    delegationTrifecta: [],
+    hookBlockFindings: [],
+    hookMatcherFindings: [],
     malformedFrontmatter: [],
     warnings: [],
     untested: 0,
@@ -53,6 +63,9 @@ test("a structurally clean plugin scores 100", () => {
         hasDescription: true,
         userInvoked: false,
         descriptionScript: null,
+        resourceIssues: [],
+        trifecta: null,
+        fenceIssue: null,
       },
     ],
     hooks: [{ command: "bash h.sh", script: "h.sh", status: "ok" }],
@@ -81,6 +94,9 @@ test("penalties: missing hook -15, no-desc -10; inherit-all + untested advisory 
             hasDescription: false,
             userInvoked: false,
             descriptionScript: null,
+            resourceIssues: [],
+            trifecta: null,
+            fenceIssue: null,
           },
         ],
       }),
@@ -102,6 +118,7 @@ test("penalties: missing hook -15, no-desc -10; inherit-all + untested advisory 
           disallowedToolIssues: [],
           purity: "unrestricted" as const,
           effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+          trifecta: null,
         },
       ],
     }),
@@ -124,6 +141,9 @@ test("penalties: missing hook -15, no-desc -10; inherit-all + untested advisory 
           hasDescription: true,
           userInvoked: false,
           descriptionScript: null,
+          resourceIssues: [],
+          trifecta: null,
+          fenceIssue: null,
         },
       ],
       untested: 4,
@@ -147,6 +167,130 @@ test("penalty: broken intra-plugin reference -8 each", () => {
   );
   assert.equal(score, 84); // 100 - 2*8
   assert.ok(issues.some((i) => i.includes("broken intra-plugin reference")));
+});
+
+test("the NEW non-advisory detectors are scored (not ranked A/100 while printing ✗)", () => {
+  // Parity: every finding formatScanReport prints with ✗ must deduct, or a broken
+  // plugin would rank clean. One of each new detector → all dent the score.
+  const skillFence = scoreReport(
+    report({
+      skillFenceIssues: [{ path: "p", name: "s", finding: {} as never }],
+    }),
+  ).score;
+  assert.ok(skillFence < 100, "an invisible skill must drag the score");
+  const hookBlock = scoreReport(
+    report({
+      hookBlockFindings: [
+        {
+          event: "SessionStart",
+          kind: "wrong-event",
+          scriptPath: null,
+          message: "x",
+        },
+      ],
+    }),
+  ).score;
+  assert.ok(hookBlock < 100, "an ineffective hook must drag the score");
+  const skillRes = scoreReport(
+    report({
+      skillResourceIssues: [{ path: "p", name: "s", finding: {} as never }],
+    }),
+  ).score;
+  assert.ok(skillRes < 100, "a broken bundled resource must drag the score");
+});
+
+test("a HARD lethal-trifecta finding deducts W_TRIFECTA (-20); advisory does not", () => {
+  // A hard (explicit all-three) trifecta is a declared exfil path → graded -20.
+  const hard = scoreReport(
+    report({
+      agents: [
+        {
+          name: "exfil-bot",
+          path: "agents/exfil-bot.md",
+          tools: ["Bash", "WebFetch"],
+          toolIssues: [],
+          mcpToolIssues: [],
+          disallowedToolIssues: [],
+          purity: "unrestricted" as const,
+          effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+          trifecta: { severity: "hard" },
+        },
+      ] as unknown as ScanReport["agents"],
+      trifectaFindings: [
+        {
+          path: "agents/exfil-bot.md",
+          kind: "subagent",
+          name: "exfil-bot",
+          finding: { severity: "hard" },
+        },
+      ] as unknown as ScanReport["trifectaFindings"],
+    }),
+  );
+  assert.equal(hard.score, 80); // 100 - 20
+  assert.ok(hard.issues.some((i) => i.includes("lethal-trifecta")));
+
+  // An advisory (inherits-all) trifecta is NOT graded — it's surfaced elsewhere
+  // (the Safety ring) as an advisory, never a leaderboard penalty.
+  const advisory = scoreReport(
+    report({
+      agents: [
+        {
+          name: "broad",
+          path: "agents/broad.md",
+          tools: null,
+          toolIssues: [],
+          mcpToolIssues: [],
+          disallowedToolIssues: [],
+          purity: "unrestricted" as const,
+          effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+          trifecta: { severity: "advisory" },
+        },
+      ] as unknown as ScanReport["agents"],
+      trifectaFindings: [
+        {
+          path: "agents/broad.md",
+          kind: "subagent",
+          name: "broad",
+          finding: { severity: "advisory" },
+        },
+      ] as unknown as ScanReport["trifectaFindings"],
+    }),
+  );
+  assert.equal(advisory.score, 100); // inherits-all advisory not graded
+});
+
+test("the audit overall == leaderboard health, even with a HARD trifecta", () => {
+  // The invariant: both surfaces read the SAME shared computeIntegrityScore over
+  // reportDeductions — Safety being a graded ring must not break that.
+  const r = report({
+    commands: 1, // a surface (so neither is the empty machine)
+    agents: [
+      {
+        name: "exfil-bot",
+        path: "agents/exfil-bot.md",
+        tools: ["Bash", "WebFetch"],
+        toolIssues: [],
+        mcpToolIssues: [],
+        disallowedToolIssues: [],
+        purity: "unrestricted" as const,
+        effectBuckets: { readOnly: [], sideEffecting: [], unknown: [] },
+        trifecta: { severity: "hard" },
+      },
+    ] as unknown as ScanReport["agents"],
+    trifectaFindings: [
+      {
+        path: "agents/exfil-bot.md",
+        kind: "subagent",
+        name: "exfil-bot",
+        finding: { severity: "hard" },
+      },
+    ] as unknown as ScanReport["trifectaFindings"],
+    hooks: [{ command: "bash h.sh", script: "h.sh", status: "ok" }],
+  });
+  const health = computeIntegrityScore(reportDeductions(r)).score;
+  const audit = auditScore(r);
+  assert.equal(health, 80);
+  assert.equal(audit.overall, health); // the two surfaces never disagree
 });
 
 test("score clamps at 0 and an empty machine is not healthy", () => {
