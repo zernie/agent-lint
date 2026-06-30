@@ -176,3 +176,34 @@ export function resolveHarnessSelection(opts: {
   }
   return { kind: "ok", adapter: det.adapter };
 }
+
+/**
+ * The FULL adapter set a compile-time INSTALL should fan out to. Unlike
+ * `resolveHarnessSelection` (which picks ONE dialect for a single-output compile,
+ * since you emit a markdown file in one harness's format), an install writes the
+ * SAME artifact into EVERY enabled harness's native config — so a repo targeting
+ * both harnesses gets a compiled hook in `.claude/settings.json` AND
+ * `.codex/config.toml`, not just the first. Precedence mirrors the single picker:
+ *
+ *   1. `--harness=` flag → just that one (an explicit override is singular).
+ *   2. config `harness` list → ALL of them (the multi-harness fan-out).
+ *   3. no config → auto-detect → the one detected.
+ *
+ * Returns ≥1 adapter, de-duplicated by name (a config that lists a harness twice,
+ * or an alias + its canonical, collapses to one install).
+ */
+export function resolveHarnessAdapters(opts: {
+  root: string;
+  flag?: string;
+  configHarness?: string | readonly string[];
+}): HarnessAdapter[] {
+  const { root, flag, configHarness } = opts;
+  if (flag !== undefined && flag !== "") return [resolveAdapter(root, flag)];
+  const list = normalizeHarnessList(configHarness);
+  const adapters =
+    list.length > 0
+      ? list.map((h) => resolveAdapter(root, h))
+      : [detectAdapterResult(root).adapter];
+  const seen = new Set<string>();
+  return adapters.filter((a) => !seen.has(a.name) && seen.add(a.name));
+}
