@@ -44,6 +44,10 @@ import {
   findDescriptionOverlaps,
   type DescriptionOverlap,
 } from "./core/description-overlap.js";
+import {
+  findDescriptionBudgetIssues,
+  type DescriptionBudgetIssue,
+} from "./core/skill-description-budget.js";
 import { verifyMcpToolServers, type McpToolIssue } from "./core/mcp-tool.js";
 import {
   verifyMcpContractTools,
@@ -317,6 +321,8 @@ export interface ScanReport {
   readonly mcpHookIssues: readonly McpHookIssue[];
   /** Pairs of model-invocable skills whose descriptions are near-identical (precision collision). */
   readonly descriptionOverlaps: readonly DescriptionOverlap[];
+  /** Model-invocable skills whose description is so long the trigger signal is buried. */
+  readonly descriptionBudgetIssues: readonly DescriptionBudgetIssue[];
   /**
    * Lethal-trifecta findings across subagents + model-invocable skills — a unit
    * holding all three legs (read-private + ingest-untrusted + exfiltrate). Each
@@ -634,10 +640,10 @@ function scanSkills(
  * logic as `scanSkills` (frontmatter `description` ← first body paragraph), then
  * the NCD precision-proxy. See description-overlap.ts.
  */
-function descriptionOverlapsFor(
+function modelInvocableSkillSurfaces(
   files: Record<string, string>,
   cls: SurfaceClassifier,
-): DescriptionOverlap[] {
+): { name: string; description: string }[] {
   const surfaces: { name: string; description: string }[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
@@ -647,7 +653,26 @@ function descriptionOverlapsFor(
     if (!description || description.length < 20) continue;
     surfaces.push({ name: fm.name ?? skillName(path), description });
   }
-  return findDescriptionOverlaps(surfaces);
+  return surfaces;
+}
+
+function descriptionOverlapsFor(
+  files: Record<string, string>,
+  cls: SurfaceClassifier,
+): DescriptionOverlap[] {
+  return findDescriptionOverlaps(modelInvocableSkillSurfaces(files, cls));
+}
+
+/**
+ * Model-invocable skills whose description is so long the trigger signal is
+ * buried (heuristic proxy; degrades recall + precision). Same surfaces as the
+ * overlap check. See skill-description-budget.ts.
+ */
+function descriptionBudgetFor(
+  files: Record<string, string>,
+  cls: SurfaceClassifier,
+): DescriptionBudgetIssue[] {
+  return findDescriptionBudgetIssues(modelInvocableSkillSurfaces(files, cls));
 }
 
 function scanAgents(
@@ -1267,6 +1292,7 @@ export function scanPlugin(
       dialect,
     ),
     descriptionOverlaps: descriptionOverlapsFor(loaded.files, cls),
+    descriptionBudgetIssues: descriptionBudgetFor(loaded.files, cls),
     trifectaFindings,
     skillResourceIssues: skillResourceFindings,
     skillFenceIssues: skillFenceFindings,
@@ -1560,6 +1586,13 @@ export function formatScanReport(r: ScanReport): string {
     ...section(
       "Description overlap (precision risk)",
       r.descriptionOverlaps.map((o) => `  ⚠ ${o.message}`),
+    ),
+  );
+
+  out.push(
+    ...section(
+      "Description budget (trigger-signal risk)",
+      r.descriptionBudgetIssues.map((o) => `  ⚠ ${o.message}`),
     ),
   );
 

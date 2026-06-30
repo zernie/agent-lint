@@ -217,6 +217,15 @@ export interface RulesConfig {
    */
   "description-overlap"?: RuleSeverity;
   /**
+   * Flag a model-invocable skill whose `description` is so long the trigger
+   * signal is buried — the selector weighs the opening most, so a bloated
+   * description hurts recall + precision. A DETERMINISTIC heuristic proxy for a
+   * `--trigger`-class behavioral bug; calibrated FP-safe (generous default
+   * budget, 500 chars). Default "warn" — a proxy, never gates. Same detector as
+   * `scan` (descriptionBudgetIssues).
+   */
+  "skill-description-budget"?: RuleSeverity;
+  /**
    * Flag a skill/agent whose `---` frontmatter block EXISTS but isn't valid YAML
    * — fields may not parse as intended. CAVEAT: a real YAML parser (js-yaml) is
    * stricter than some loaders, so a one-line `description:` containing a `: `
