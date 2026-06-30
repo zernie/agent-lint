@@ -102,6 +102,7 @@ import {
   detectAdapterResult,
   resolveAdapter,
   resolveHarnessSelection,
+  resolveHarnessAdapters,
   normalizeHarnessName,
   normalizeHarnessList,
   getAdapter,
@@ -2163,7 +2164,18 @@ function specReferencedElsewhere(
 /** Full GitHub Actions workflow that wires the production `zernie/vigiles@v1`
  * Action (lint pillar) and, when the test pillar is set up, a deterministic
  * harness job. */
-function vigilesWorkflow(plan: SetupPlan): string {
+/** The npm package(s) that provide each harness's CLI binary — the deterministic
+ * harness tier spawns the real agent CLI against a mock model (no API key). A repo
+ * targeting both harnesses installs both. */
+function harnessTestBinaries(harnesses: string[]): string {
+  const pkgs: string[] = [];
+  if (harnesses.includes("claude")) pkgs.push("@anthropic-ai/claude-code");
+  if (harnesses.includes("codex")) pkgs.push("@openai/codex");
+  // Fall back to Claude Code if the set is somehow empty (back-compatible default).
+  return (pkgs.length > 0 ? pkgs : ["@anthropic-ai/claude-code"]).join(" ");
+}
+
+function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
   const harness = plan.test
     ? `
   harness:
@@ -2177,7 +2189,7 @@ function vigilesWorkflow(plan: SetupPlan): string {
         with:
           node-version: "20"
       - run: npm install
-      - run: npm i -g @anthropic-ai/claude-code # mock tier needs the binary, no API key
+      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
       - run: npx vigiles test
 
   eval-check:
@@ -2275,7 +2287,7 @@ function rewriteRemovedSubcommands(content: string): string {
  * commit hint). An existing workflow is never clobbered unless `--force`, but a
  * STALE one (old bare-`npx vigiles` API, or a removed subcommand) is reported
  * loudly instead of silently skipped — and rewritten in place with `--force`. */
-function wireGha(plan: SetupPlan): string[] {
+function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
   const rel = ".github/workflows/vigiles.yml";
@@ -2299,7 +2311,7 @@ function wireGha(plan: SetupPlan): string[] {
       );
     } else if (workflowUsesStaleApi(content)) {
       if (plan.force) {
-        writeFileSync(path, vigilesWorkflow(plan));
+        writeFileSync(path, vigilesWorkflow(plan, harnesses));
         console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
         return [rel];
       }
@@ -2315,7 +2327,7 @@ function wireGha(plan: SetupPlan): string[] {
     return [];
   }
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, vigilesWorkflow(plan));
+  writeFileSync(path, vigilesWorkflow(plan, harnesses));
   console.log(
     "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
   );
@@ -3004,7 +3016,7 @@ async function setup(args: string[]): Promise<void> {
   // CI — the production Action (+ a harness job when Pillar 2 is on).
   if (plan.gha) {
     console.log("");
-    written.push(...wireGha(plan));
+    written.push(...wireGha(plan, harnesses));
   }
 
   // Plugin/skill install — per-harness (Claude marketplace / Codex direct).
@@ -5499,17 +5511,24 @@ async function installHookFile(
 
 /**
  * Compile + install every hook (explicit paths, else discovered under
- * `.vigiles/hooks/`) into the active harness's config. Returns false if any
- * hook failed to compile.
+ * `.vigiles/hooks/`) into EVERY enabled harness's config. A typed hook is
+ * harness-neutral, so when a repo targets both harnesses the SAME hook is merged
+ * into `.claude/settings.json` AND `.codex/config.toml` (each in its native
+ * format, with per-harness warnings) — never just the first. The harness set is
+ * resolved from the `--harness=` flag, else `config.harness`, else auto-detect.
+ * Returns false if any hook failed to compile for any harness.
  */
 async function installHooks(
   hookFiles: string[],
   harnessFlag: string | undefined,
+  configHarness: string | readonly string[] | undefined,
 ): Promise<boolean> {
   if (hookFiles.length === 0) return true;
-  const adapter = harnessFlag
-    ? resolveAdapter(process.cwd(), harnessFlag)
-    : detectAdapterResult(process.cwd()).adapter;
+  const adapters = resolveHarnessAdapters({
+    root: process.cwd(),
+    flag: harnessFlag,
+    configHarness,
+  });
   // Validate registered providers first → the names a hook's provider() ref may
   // resolve to (an unsafe provider fails the whole compile, like a bad hook).
   let registeredProviders: string[];
@@ -5525,11 +5544,14 @@ async function installHooks(
   let ok = true;
   for (const file of hookFiles) {
     try {
-      const r = await installHookFile(file, adapter, registeredProviders);
-      console.log(
-        `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
-      );
-      if (r.warning) console.warn(`⚠ ${r.warning}`);
+      // Fan out: the same compiled hook lands in each enabled harness's config.
+      for (const adapter of adapters) {
+        const r = await installHookFile(file, adapter, registeredProviders);
+        console.log(
+          `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
+        );
+        if (r.warning) console.warn(`⚠ ${r.warning}`);
+      }
     } catch (e) {
       if (e instanceof HookCompileError) {
         console.error(`✗ ${file} — ${e.message}`);
@@ -6236,7 +6258,7 @@ async function main(): Promise<void> {
       let valid = true;
       if (specs.length > 0)
         valid = (await compile(specs, config, { harnessFlag })) && valid;
-      valid = (await installHooks(hooks, harnessFlag)) && valid;
+      valid = (await installHooks(hooks, harnessFlag, config.harness)) && valid;
       // Keep an existing whole-harness registry in sync (cheap, opt-in) so the
       // user never hand-runs `generate-harness`. Skipped when no harness.gen.ts.
       if (specs.length > 0)

@@ -1209,11 +1209,44 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const yaml = readFileSync(wf, "utf-8");
       assert.match(yaml, /uses: zernie\/vigiles@v1/);
       assert.match(yaml, /npx vigiles test/); // the harness job
+      // The harness test job installs the CC binary (the detected default).
+      assert.match(yaml, /npm i -g @anthropic-ai\/claude-code/);
+      assert.doesNotMatch(yaml, /@openai\/codex/);
       // A greenfield repo (no AGENTS.md) records the default harness.
       const cfg = JSON.parse(
         readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
       ) as { harness?: unknown };
       assert.equal(cfg.harness, "claude-code");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--harness=codex: the CI test job installs the codex binary, not claude", () => {
+    const dir = freshProject();
+    try {
+      run("init --harness=codex --no-plugin", dir);
+      const yaml = readFileSync(
+        join(dir, ".github/workflows/vigiles.yml"),
+        "utf-8",
+      );
+      assert.match(yaml, /npm i -g @openai\/codex/);
+      assert.doesNotMatch(yaml, /@anthropic-ai\/claude-code/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--harness=claude,codex: the CI test job installs BOTH binaries", () => {
+    const dir = freshProject();
+    try {
+      run("init --harness=claude,codex --no-plugin", dir);
+      const yaml = readFileSync(
+        join(dir, ".github/workflows/vigiles.yml"),
+        "utf-8",
+      );
+      assert.match(yaml, /@anthropic-ai\/claude-code/);
+      assert.match(yaml, /@openai\/codex/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

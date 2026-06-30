@@ -53,6 +53,19 @@ pushed to the branch above.
    **react** output stays the one CC-confirmed-only piece. Corrected every "Codex
    inject deferred" ref across docs/research/CLAUDE.md + documented `injectableEvents`
    in the adapter API + authoring guides.
+8. **MULTI-HARNESS HOOK FAN-OUT** (user spotted it: "shouldn't compile compile for
+   both since both can be enabled?"). Instruction files already mirror to both, but
+   hooks installed into ONE harness only (`installHooks` ignored `config.harness`,
+   auto-detected one). Fix: `resolveHarnessAdapters` (adapter-registry.ts) returns
+   the FULL declared set (flag→one, config list→all, else detect→one); `installHooks`
+   loops, merging the SAME compiled hook into `.claude/settings.json` AND
+   `.codex/config.toml`, each native format, per-harness warnings. Plus the `init` CI
+   workflow is now harness-aware — the test job installs `@anthropic-ai/claude-code`
+   and/or `@openai/codex` per declared harness (`harnessTestBinaries`). Skills compile
+   byte-identical across harnesses; subagents are CC-only by design — so hooks + the
+   CI binary were the real fan-out gaps. Tests: resolveHarnessAdapters units, a
+   both-harness hook-install e2e (hook.test.ts), harness-aware workflow e2e
+   (cli.test.ts). Research §4 in multi-harness-compile.md.
 
 ### DO NEXT / OPEN DECISIONS
 
@@ -73,7 +86,7 @@ pushed to the branch above.
 - `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec +
   `node dist/cli.js compile CLAUDE.md.spec.ts` (44 rules).
 - **`npm run fmt` reformats `research/`** (huge prettier diff) — use `npx prettier
-  --write <files>` and stage ONLY your files. (`npm run fmt:check` was clean here.)
+--write <files>` and stage ONLY your files. (`npm run fmt:check` was clean here.)
 - Commits: **NO session links / NO model IDs** (auto-classifier blocks them).
 - Breaking port changes are `feat!` — the CI `validate` job checks the PR TITLE, and
   the release version comes from it.

@@ -281,6 +281,41 @@ export default defineInject({ on: "Stop", produce: () => inject("late") });`,
   }
 });
 
+test("compile (hook): a repo targeting BOTH harnesses installs the SAME hook into both configs", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    // The repo declares both harnesses — no --harness flag, so the install must
+    // fan out to EVERY enabled harness, not pick the first (the gap: hooks used
+    // to install into one harness while instruction files mirrored to both).
+    writeFileSync(
+      resolve(dir, ".vigilesrc.json"),
+      JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+    );
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    const r = spawnSync("node", [CLI, "compile", "guard.mjs"], {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    // The SAME compiled gate lands in BOTH harnesses' native config formats.
+    const ccSettings = JSON.parse(
+      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+    ) as { hooks?: { PreToolUse?: unknown[] } };
+    assert.ok(ccSettings.hooks?.PreToolUse, "CC settings has the hook");
+    const codexConfig = readFileSync(
+      resolve(dir, ".codex/config.toml"),
+      "utf-8",
+    );
+    assert.match(codexConfig, /\[\[hooks\.PreToolUse\]\]/);
+    // The output names both harnesses (one install line each).
+    assert.match(r.stdout, /harness: claude-code/);
+    assert.match(r.stdout, /harness: codex/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 // OSS merge dogfood: compile a vigiles hook INTO a real plugin's existing
 // settings — proving the merge is non-destructive on a real-world config, not
 // just the synthetic unit fixtures in hook-install.test.ts. The seed is the
