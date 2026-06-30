@@ -183,8 +183,9 @@ test("codexPluginHooks: the two PostToolUse nudges run as direct npx hook-runtim
   assert.ok(
     hooks.every((h) => h.command.startsWith("npx --no-install vigiles")),
   );
-  // Anchored-regex matcher (the Codex dialect convention).
-  assert.ok(hooks.every((h) => h.matcher === "^(Edit|Write)$"));
+  // Codex's edit tool is `apply_patch` (NOT Claude's Edit/Write) — a CC-named
+  // matcher would never fire on Codex.
+  assert.ok(hooks.every((h) => h.matcher === "^apply_patch$"));
 });
 
 test("applyCodexPluginHooks: adds the nudges, is idempotent, preserves the user's config", () => {

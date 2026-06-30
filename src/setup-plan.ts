@@ -411,16 +411,21 @@ export interface CodexPluginHook {
  * harness-neutral `hook-runtime` entrypoint yet). Those stay manual on Codex.
  */
 export function codexPluginHooks(): CodexPluginHook[] {
+  // Codex's file-edit tool is `apply_patch` (its dialect vocabulary —
+  // src/adapters/codex/dialect.ts), NOT Claude's `Edit`/`Write`. A PostToolUse
+  // matcher keyed on CC tool names would never fire on Codex, so the nudges must
+  // match the Codex tool name. (Both nudge entrypoints also self-gate on the
+  // edited file, so a non-edit event no-ops regardless.)
   return [
     {
       event: "PostToolUse",
-      matcher: "^(Edit|Write)$",
+      matcher: "^apply_patch$",
       command: "npx --no-install vigiles hook-runtime eval-lock-nudge",
       key: "hook-runtime eval-lock-nudge",
     },
     {
       event: "PostToolUse",
-      matcher: "^(Edit|Write)$",
+      matcher: "^apply_patch$",
       command: "npx --no-install vigiles hook-runtime refs",
       key: "hook-runtime refs",
     },

@@ -1647,6 +1647,21 @@ async function withEvalLock<R>(
 }
 
 /**
+ * Strip the machine-specific plugin-root prefix from a resolved value before it
+ * enters the lock hash. `resolveHarness` expands `${PLUGIN_ROOT}` in a plugin's
+ * hook commands to the checkout's ABSOLUTE path, so a lock recorded at
+ * `/home/dev/...` would be falsely STALE when `--check` recomputes it at
+ * `/home/runner/...` in CI (or any other machine). Normalizing the prefix back to
+ * a token makes the hash location-independent. No-op when there's no plugin root.
+ */
+function stripPluginRoot(value: unknown, absRoot: string): unknown {
+  if (absRoot === "") return value;
+  return JSON.parse(
+    JSON.stringify(value).split(absRoot).join("${PLUGIN_ROOT}"),
+  );
+}
+
+/**
  * Resolve each arm's model-affecting inputs into a canonical object for the lock
  * hash — WITHOUT running the model (it reads files + hashes plugin dirs only). The
  * trial count is excluded (a sample-size knob, not a behavior input); `measure` is
@@ -1663,11 +1678,16 @@ function evalArmsInputs<M extends Metrics>(
       settings: arm.settings,
       files: { ...spec.fixture, ...arm.files },
     });
+    // The plugin root `resolveHarness` expanded into the resolved files/settings
+    // is this checkout's absolute path — normalize it out so the hash is the same
+    // on the dev's machine and in CI (else every plugin-with-root-hooks eval is
+    // falsely stale across machines).
+    const absRoot = arm.plugin ? resolve(process.cwd(), arm.plugin) : "";
     arms[name] = {
       model: arm.model ?? cfg.model,
       tools: [...cfg.tools].sort(),
-      files: resolved.files,
-      settings: resolved.settings,
+      files: stripPluginRoot(resolved.files, absRoot),
+      settings: stripPluginRoot(resolved.settings, absRoot),
       pluginDirHash: arm.pluginDir ? hashDir(arm.pluginDir) : undefined,
       interceptTools: arm.interceptTools
         ? serializeIntercepts(arm.interceptTools)
