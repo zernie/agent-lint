@@ -65,6 +65,23 @@ can't inject fails conformance, so the gap can't recur silently (the original mi
 was a prose deferral, not a tested contract). The remaining CC-only piece is
 **react** output (`compiled-hooks-codex.md` §4).
 
+**How the nudge is DELIVERED on Codex (now wired, not manual):** Claude Code gets
+these hooks from its global marketplace plugin (`~/.claude/plugins/`, no repo
+files). Codex has **no global plugin store**, so `vigiles init` writes the two
+nudge hooks (eval-lock + refs) into the repo's **`.codex/config.toml`**
+(`codexPluginHooks` / `applyCodexPluginHooks` → `wireCodexHooks` in cli.ts) — the
+idiomatic, repo-committed place for Codex config. They run as **direct
+`npx vigiles hook-runtime …` commands** (no plugin root / vendored bash script):
+the runtime entrypoint reads the event JSON on stdin and prints the
+`hookSpecificOutput.additionalContext` shape. Safety: only an _intentional_ `exit
+2` blocks an edit (the refs nudge under `unmarked-refs: error`); an npx-resolution
+failure exits non-2, so a missing dep never blocks. The merge is idempotent and
+preserves the user's own Codex hooks + every other config key. STILL manual on
+Codex (a loud, documented deferral — no-silent-skips): the SessionStart lint
+**summary** (CC delivers it as plain stdout, whose SessionStart prepend is
+unconfirmed on Codex) and the **compile-on-edit / pre-edit-block guards**
+(filename-gated bash with no harness-neutral `hook-runtime` entrypoint yet).
+
 ## The portable decision (what this means for any vigiles feature)
 
 1. **Never edit the user's CLAUDE.md/AGENTS.md from a plugin/`init`** to convey a

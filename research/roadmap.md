@@ -102,6 +102,18 @@
 >   `require-instructions-spec` error). The create-react-app move that dissolves the two spec objections
 >   (TypeScript friction — the agent writes it; lock-in — you eject). Reframe Lint as "your
 >   spec's references are real," never "lint my markdown." Detail in `pre-release-focus.md`.
+> - **PROMOTED — Codex parity is launch-real, finish the last mile (P0).** The whole-
+>   package flow now maps to Codex (compile fans hooks + the CI binary to both harnesses;
+>   inject is confirmed + encoded in `injectableEvents`; `init` wires the eval-lock + refs
+>   nudges into `.codex/config.toml`). The remaining pre-release gaps, ranked: **(1) run
+>   the eval tier against the REAL `codex` binary at least ONCE** — the transport is built
+>   - fake-tested, but no live native `codex exec --json` eval has run (gated on Codex
+>     quota); this is the one "claimed but never executed end-to-end" piece and must be
+>     proven before we say "works on Codex" at launch. **(2)** `react` hook output on Codex
+>     stays CC-confirmed-only (a real-binary probe; low bite — react is rare). **(3)** the
+>     SessionStart lint-summary + compile-on-edit/pre-edit guards stay manual on Codex (need
+>     a harness-neutral `hook-runtime` entrypoint; documented deferral, not a blocker).
+>     Item (1) is the P0; (2)/(3) are polish. Detail in `research/codex-prototype-findings.md`.
 > - **SHIPPED this session (branch `claude/handoff-mylfen`, not merged):** the surface
 >   freeze + STABILITY + markdown cut (parked, not deleted) + pain-first hero/subdocs — so
 >   the freeze and markdown-cut items above are DONE there.
@@ -112,9 +124,10 @@
 >
 > **Launch-blocker checklist:** [ ] Ecosystem-Benchmark v0 · [ ] CLI/API surface frozen
 >
-> - stability statement · [ ] first-run hardened + top-10-plugin FP sweep · [ ] the
->   article drafted (method-first) · [ ] README 60-sec proof + GIF · [ ] CI green +
->   published-package smoke test. The viral leaderboard/badge is the FOLLOW-UP, not a blocker.
+> - stability statement · [ ] first-run hardened + top-10-plugin FP sweep · [ ] **Codex
+>   eval run live ONCE (real `codex` binary)** · [ ] the article drafted (method-first) ·
+>   [ ] README 60-sec proof + GIF · [ ] CI green + published-package smoke test. The viral
+>   leaderboard/badge is the FOLLOW-UP, not a blocker.
 
 > **🧭 The positioning wedge (from the 2026-06-25 competitive fan-out) — for the
 > article + README.** Every competitor, funded AND OSS, is **runtime/observability/
