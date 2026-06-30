@@ -303,18 +303,20 @@ How you use it:
 init` scaffolds this job). It is a green no-op until you commit your first lock.
 
 **The split that makes it sound.** The lock stores only the model's _observed
-behavior_ (the report). Your script's own assertions (`assertTriggerRate` /
-`assertSignificant`) re-run live against the replayed report on every `--check`.
-So an **input** change (skill/prompt/model) is stale, while a **threshold-only**
-edit is a valid replay (no model call) — the assertion just re-judges the recorded
-numbers. The hash covers the model-affecting inputs (task/files/settings/tools/
-plugin-dir-contents + model + `evalApiVersion`).
+behavior_ (the recorded numbers). Your script's assertions re-run live against
+those numbers on every `--check`. So:
 
-**Honest scope.** The lock promises _"your committed results match your current
-inputs,"_ not _"your results reflect current model behavior."_ Model/harness drift
-is caught when **you** re-run `--update` and review the moved numbers — there is no
-automated live run. The common bug it does catch — _edit a skill, forget to
-re-eval, ship stale numbers_ — is exactly the input-staleness it detects.
+- ❌ change an **input** (skill / prompt / model) → stale → re-run `--update`.
+- ✅ change only a **threshold** in the test → valid replay, no model — the
+  assertion just re-judges the saved numbers.
+
+The hash covers the model-affecting inputs: task, files, settings, tools,
+plugin-dir contents, model, and `evalApiVersion`.
+
+**Honest scope.** The lock proves _"your saved numbers match your current inputs,"_
+not _"they reflect today's model."_ There is no automated live run — model/harness
+drift is caught when you re-run `--update` and review the moved numbers. What it
+_does_ catch is the common bug: edit a skill, forget to re-eval, ship stale numbers.
 
 ## `evalApiVersion` — a hand-bumped behavior epoch (not the CC version)
 

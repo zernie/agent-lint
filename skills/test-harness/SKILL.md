@@ -190,31 +190,32 @@ job that asserts the capability is present, run **`vigiles test --no-skip`** so 
 skipped tier fails — a green-with-skips is untested surface. Keep unit +
 deterministic tests in CI (free); run evals locally or on a schedule with auth.
 
-## Step 5 — Keep eval results fresh in CI (the lock)
+## Step 5 — Lock the eval so CI stays honest (you do this automatically)
 
-Real-model evals run on your **subscription** — locally, never in CI. To stop a
-stale eval slipping through ("you edited a skill, forgot to re-eval, shipped old
-numbers"), give the eval a **`name`** and use the lock:
+Real-model evals run on the user's subscription — locally, never in CI. So **as
+part of writing an eval, you keep its result fresh for them.** Do these two things
+without being asked:
 
-```bash
-vigiles eval --update    # local, on your sub: records the result to a committed
-                         # .vigiles/eval-locks/<name>.lock.json — commit it
-vigiles eval --check     # CI: verifies the committed result vs current inputs
-                         # WITHOUT a model. Fails "stale" if they diverge.
-```
+1. **Give every eval a `name`.** That's what the lock keys on.
+2. **After running it, commit the lock:**
 
-It's the `npm ci` / `cargo-insta` pattern: `--check` hashes the eval's inputs
-(skill contents, prompts, model) and fails if they changed without a re-run. The
-committed diff of `recall: 0.90 → 0.65` is the quality gate you review. Your
-script's own `assertTriggerRate`/`assertSignificant` re-run against the replayed
-numbers, so a **threshold** edit is a free replay while an **input** edit is
-stale. In a workflow it's the `eval-check` job (`vigiles init` scaffolds it).
+   ```bash
+   vigiles eval --update      # records the result → .vigiles/eval-locks/<name>.lock.json
+   ```
 
-**After you change a skill's description or prompts, re-run `vigiles eval --update`
-and commit the lock.** (When eval locks exist, vigiles's PostToolUse nudge hook
-reminds you on a `SKILL.md` edit — a reminder, never a block.) Full details + the
-per-harness specifics are in
-[`docs/harness-testing.md`](../../docs/harness-testing.md).
+   Then commit that file. CI runs `vigiles eval --check` (no model) to verify it
+   still matches the inputs — so a later edit that forgets to re-eval fails loud
+   instead of shipping stale numbers.
+
+**When you later change a skill's description or prompts, re-run `vigiles eval
+--update` and commit the updated lock** — the change altered what the eval
+measures. (vigiles also nudges you: when a lock exists, a `SKILL.md` edit triggers
+a non-blocking reminder.)
+
+Why it's cheap: `--check` only hashes inputs (skill text, prompts, model). A
+**threshold** change in the test re-uses the saved numbers (no model); only an
+**input** change needs a fresh `--update`. Full mechanics:
+[`docs/harness-testing.md`](../../docs/harness-testing.md#keep-eval-results-fresh-in-ci-the-lock).
 
 ## When the user didn't say what to test
 

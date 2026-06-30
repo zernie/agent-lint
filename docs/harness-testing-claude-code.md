@@ -369,13 +369,30 @@ records, the three network modes (deny-all / `recordEgress` / allowlisted
 
 ## Keeping eval results fresh + the nudge (Claude Code)
 
-The eval lock — `vigiles eval --update` (local) / `--check` (CI) — is harness-agnostic; see the [agnostic guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock) for the mechanics. What's **Claude-Code-specific is how the reminder reaches the agent.**
+The eval lock itself is the same on every harness — see the [agnostic
+guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock). This section is
+just **how the reminder reaches the agent on Claude Code**: it works, today.
 
-vigiles's plugin ships a **PostToolUse nudge hook**: after you edit a `SKILL.md` or an `*.eval.*` script and committed locks exist, it injects an `additionalContext` reminder to re-run `vigiles eval --update` — self-gated (silent until you've committed a lock), and **never blocks** (the gate is CI's `--check`). It's how a plugin delivers awareness without touching your `CLAUDE.md`:
+vigiles's plugin ships a **PostToolUse nudge hook**. When the agent edits a
+`SKILL.md` or an `*.eval.*` file and you have a committed lock, the hook injects a
+short reminder to run `vigiles eval --update`. It's:
 
-- **A plugin can't ship an always-on CLAUDE.md** — Claude Code only auto-loads the _project's_ CLAUDE.md and the plugin's `settings.json`. So persistent plugin context comes from a hook, not a file edit.
-- **Skill descriptions are always in context**, so the `test-harness` skill carries the lock lifecycle for the model to find on demand; its body loads when invoked.
-- For an _always-on_ reminder a plugin can use a **`SessionStart` hook** emitting `hookSpecificOutput.additionalContext`; vigiles uses the event-fresh PostToolUse nudge instead, since it fires exactly when staleness is introduced.
+- ✅ **Self-gated** — silent until you've committed a lock, so it never fires in a
+  repo that doesn't use evals.
+- ✅ **Non-blocking** — a reminder, never a wall. The real gate is `--check` in CI.
+
+Why a hook and not your `CLAUDE.md`? Because that's how Claude Code actually works:
+
+| Channel                                     | Always in context?                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Your **project** `CLAUDE.md`                | ✅ yes — but it's _your_ file, so a plugin shouldn't edit it                |
+| A **plugin** instruction file               | ❌ doesn't exist — plugins ship skills + hooks, not a CLAUDE.md             |
+| **Skill descriptions**                      | ✅ yes — so the `test-harness` skill is discoverable; its body loads on use |
+| A **hook** (`SessionStart` / `PostToolUse`) | ✅ the only way a plugin injects persistent context                         |
+
+So vigiles delivers awareness two ways, neither of which touches your files: the
+`test-harness` **skill** (the agent reaches for it) and the **nudge hook** (fires
+right when you introduce staleness).
 
 ## See also
 
