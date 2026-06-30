@@ -1656,9 +1656,12 @@ async function withEvalLock<R>(
  */
 function stripPluginRoot(value: unknown, absRoot: string): unknown {
   if (absRoot === "") return value;
-  return JSON.parse(
-    JSON.stringify(value).split(absRoot).join("${PLUGIN_ROOT}"),
-  );
+  const json = JSON.stringify(value);
+  // A hookless plugin resolves to `settings: undefined`, which `JSON.stringify`
+  // returns as `undefined` (not a string) — pass it through rather than `.split`
+  // a non-string (which would throw before the eval can run).
+  if (json === undefined) return value;
+  return JSON.parse(json.split(absRoot).join("${PLUGIN_ROOT}"));
 }
 
 /**
