@@ -19,7 +19,17 @@ The spec is the default because markdown has no structure to check against. A ty
 - **Edit-time red squiggles** — a dead path is caught before lint, not after.
 - **Reuse** — compose and share rules across files and repos.
 
-**Not ready for a spec?** Lint plain markdown with zero new files — inline `<!-- vigiles:enforce -->` comments, no TypeScript — and `vigiles eject` turns a spec back into markdown anytime. The deeper compiler-grade guarantees are **gradual and opt-in, like TypeScript's `strict`**.
+**Not ready for a spec?** Lint plain markdown with zero new files — inline `<!-- vigiles:enforce -->` comments, no TypeScript — and `vigiles eject` turns a spec back into markdown anytime. The deeper compiler-grade guarantees are **gradual and opt-in, like TypeScript's `strict`** — [here's why](#why-are-the-strongest-guarantees-opt-in-not-the-default).
+
+## Why are the strongest guarantees opt-in, not the default?
+
+Because "opt-in" here means **gradual, not permissive** — and the deepest tier needs a typed program to work on. Three things to separate:
+
+- **The default already catches real breakage.** On your plain markdown — no spec, no TypeScript — vigiles fails CI on a typo'd tool, a dead hook, a broken MCP server, or two skills the model can't tell apart. A clean repo stays green. You get protection at rung zero; opt-in never means vigiles ignores what's actually broken.
+- **Compiler-grade proofs need a program to check.** Guarantees like _"a config that leaks won't compile"_ or _"a multi-agent pipeline whose handoffs don't line up won't compile"_ are properties of a typed `.spec.ts` — the same way `tsc` can type-check a `.ts` file but has nothing to check in inert prose. A markdown `CLAUDE.md` gives a compiler nothing to verify. So this tier is "opt-in" mainly in the sense that **you first have to have written the typed spec.** It can't be retrofitted onto a file that isn't a program.
+- **Gradual is how adoption actually works** — the same bet TypeScript made with `strict`. You climb a ladder (markdown → inline `<!-- vigiles:enforce -->` comments → frontmatter → typed spec), and **each rung pays off without forcing the next.** Demanding the deep end at the front door is how a tool ends up with no users. And the guarantee loses no strength by being opt-in: once the spec exists, an unsafe config genuinely won't `tsc`.
+
+In short: **structural correctness is free and on by default; mathematical-strength proofs are opt-in because they require you to bring a typed program** — and forcing that at adoption time is the surest way to get zero adopters.
 
 ## Does `init` overwrite or touch my files?
 

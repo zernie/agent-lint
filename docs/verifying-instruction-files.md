@@ -26,7 +26,7 @@ Each rule is checked against your real linter config. Typos get closest-match su
 
 ### Typed spec — the default
 
-**You rarely hand-write one.** The `edit-spec` and `strengthen` skills write and update the spec from a plain-English ask. A hook recompiles it on save. The spec is what `init` sets up, and the agent manages it — not a chore. The deeper **compiler-grade guarantees** are gradual and opt-in, like TypeScript's `strict`.
+**You rarely hand-write one.** The `edit-spec` and `strengthen` skills write and update the spec from a plain-English ask. A hook recompiles it on save. The spec is what `init` sets up, and the agent manages it — not a chore. The deeper **compiler-grade guarantees** are gradual and opt-in, like TypeScript's `strict` — [why opt-in?](faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)
 
 **Markdown mode is not a lesser tier for verification.** It squiggles rule typos at edit time (via the YAML schema `init` generates). Its inline marks — `vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file paths, scripts, symbols, and linter rules woven into the prose, exactly like the spec. If you have one instruction file and don't need to generate or share rules, stay in markdown. You give up nothing on reference verification.
 
