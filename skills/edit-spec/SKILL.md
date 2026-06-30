@@ -136,6 +136,7 @@ If the vigiles plugin is installed (`/plugin marketplace add zernie/vigiles` the
 
 ## Important
 
+- **Do what's asked; don't silently escalate enforcement.** Add the rule the user asked for. If making it an `enforce()` would need a linter-config edit or a plugin install (a cost), or if it could fail a clean CI, **say so and let the user choose** — don't change linter config or flip on strict / `workflow` gating on your own. A pure win (a rule that's already enabled) you can just apply. The `strengthen` skill owns `guidance()` → `enforce()` upgrades.
 - **Never edit CLAUDE.md or AGENTS.md directly** — they have a vigiles hash comment and are build artifacts
 - **The spec is TypeScript** — you get type checking, autocomplete, and verified references
 - **`enforce()` rules are verified** — the compiler checks the rule exists AND is enabled in your linter config
