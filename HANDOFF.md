@@ -9,12 +9,22 @@
 
 ## RESUME HERE
 
-**Branch `claude/eval-cache-invalidation-vd1mzj` — pushed, NO PR opened yet.**
+**Branch `claude/eval-cache-invalidation-vd1mzj` — PR #53 OPEN, driving merge-when-green.**
+(github.com/zernie/vigiles/pull/53 — title `feat!: eval lock (CI staleness gate) +
+full Codex parity for hooks & inject`. The `!` is load-bearing: breaking change —
+`HookProtocol.injectableEvents` is now required + `EvalDriver.harness` added.)
+
+**RESUME STATE: in the autofix/merge loop.** Subscribed to PR #53 activity; a
+`send_later` check-in re-polls CI (~every 8-9 min, last armed for the 3da87a1 HEAD)
+and SQUASH-MERGES once all 6 checks are green (validate/describe/harness/e2e/test/
+check). If a job fails → fetch logs, fix, push. If the Codex review bot leaves a NEW
+real soundness comment → fix it. Merge when CI is GREEN (the gate is CI, not the bot
+going quiet). Keep the `feat!:` squash title. Subscription ends only at merge/close.
 
 This session built the **eval LOCK** (a committed CI staleness gate for evals run on
-a subscription) end-to-end as a "whole package", then closed a multi-harness gap:
-**hook inject is now a tested port contract**, not a prose deferral. All committed +
-pushed to the branch above.
+a subscription), closed the **Codex parity** gaps (hook inject as a tested port
+contract; hook fan-out + `init` wiring of nudges into `.codex/config.toml`), opened
+PR #53, and hardened the lock against **5 Codex-review soundness findings** (below).
 
 ### What landed this session (in order)
 
@@ -66,23 +76,47 @@ pushed to the branch above.
    CI binary were the real fan-out gaps. Tests: resolveHarnessAdapters units, a
    both-harness hook-install e2e (hook.test.ts), harness-aware workflow e2e
    (cli.test.ts). Research §4 in multi-harness-compile.md.
+9. **CODEX HOOK WIRING in `init`** (user: "if you can fix it, fix"). vigiles's own
+   nudge hooks reached CC via the marketplace plugin but NOT Codex (skills-only). Fix:
+   `codexPluginHooks`/`applyCodexPluginHooks` (setup-plan.ts) + `wireCodexHooks`
+   (cli.ts) write the eval-lock + refs nudges into `.codex/config.toml` as direct
+   `npx vigiles hook-runtime` commands (idempotent, preserves the user's config).
+   Deferred-loud on Codex: SessionStart lint summary + compile/pre-edit guards.
+10. **PR #53 + 5 CODEX-REVIEW FIXES** (all real soundness gaps in the lock, all on my
+    code). The input-hash bug class — a model-facing input omitted from the staleness
+    hash → `--check` replays stale results — is now CLOSED on BOTH seams:
+    (a) `evalArmsInputs` (runEval): added **stubs** + **ephemeralEnv**;
+    (b) `triggerInputs` (trigger-rate): added **harness** (via new optional
+    `EvalDriver.harness`, default "claude-code") so a Claude-recorded report is stale
+    if switched to Codex. PLUS (c) **slug-collision** guard in `readLock` (rejects a
+    lock whose stored `name` differs → safe miss, never replays the wrong eval); and
+    (d) **unnamed eval in `--check`** now THROWS instead of calling the model (the
+    no-model-in-CI contract). Each proven by a wiring/unit test; coverage held at 100%.
 
 ### DO NEXT / OPEN DECISIONS
 
-- **No PR opened.** The branch is pushed; open a PR if/when the user asks (the task
-  framing says don't auto-create one). If opened from the UI, FIX THE TITLE to a
-  Conventional Commit with `!` (breaking — `HookProtocol` gained a required field on
-  `vigiles/adapter`) so the `validate` job passes and the release version is right.
+- **PRIMARY: finish the merge loop on PR #53** (see RESUME STATE above). Squash-merge
+  when CI green; keep the `feat!:` title.
 - **react output on Codex** is the remaining CC-confirmed-only hook piece — confirm
   against the real `codex` binary before relying on it (gated, like the rest).
+- **Pre-release P0 (roadmap'd):** run the eval tier against the REAL `codex` binary
+  ONCE (the one "claimed but never executed end-to-end" Codex piece).
 
 ### Gotchas
 
 - **`dialect-drift.test.ts` FAILS here** — asserts the INSTALLED claude-code SDK tool
   set matches the pinned `VALIDATED_CC_VERSION`; this container runs a DIFFERENT CC
-  (36 tool types incl. Agent/Artifact/Workflow/TaskUpdate vs the pinned 17/38).
-  PRE-EXISTING + UNRELATED to any code change; passes in CI where CC is pinned. The
-  full suite is otherwise **1932 passed**; coverage gate green (no threshold misses).
+  (36 tool types vs the pinned 17/38). PRE-EXISTING + UNRELATED; passes in CI where CC
+  is pinned. ~1949 tests otherwise pass. NB its failure SUPPRESSES the coverage table
+  locally — to read coverage, temporarily skip it (`sed -i 's/const gate = pkg ? it :
+it.skip;/const gate = it.skip;/; s/const eventsGate = bundle ? it : it.skip;/const
+eventsGate = it.skip;/' src/dialect-drift.test.ts`), run, then `cp` it back.
+- **COVERAGE TRAP (bit me twice):** the gate is 100% lines/statements/functions on the
+  `vitest.config.mjs` include list. A branch only reachable when `GITHUB_ACTIONS` is
+  set (e.g. `emitLockMessage`'s annotation path) inverts in CI — the ELSE branch then
+  goes uncovered. ALWAYS verify with `GITHUB_ACTIONS=true npx vitest run --coverage`
+  (not the bare local run), and write tests that toggle/delete the env var to hit both
+  sides. A sort comparator needs ≥2 elements to be covered.
 - `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec +
   `node dist/cli.js compile CLAUDE.md.spec.ts` (44 rules).
 - **`npm run fmt` reformats `research/`** (huge prettier diff) — use `npx prettier
