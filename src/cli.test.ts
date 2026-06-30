@@ -1845,6 +1845,54 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("eval-lock-nudge hook: self-gated, non-blocking PostToolUse reminder", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-nudge-"));
+    try {
+      const event = JSON.stringify({
+        tool_name: "Edit",
+        tool_input: { file_path: "skills/foo/SKILL.md" },
+      });
+      const runHook = (input: string): { stdout: string; exitCode: number } => {
+        try {
+          const stdout = execSync(`node ${CLI} hook-runtime eval-lock-nudge`, {
+            cwd: dir,
+            encoding: "utf-8",
+            input,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+          return { stdout, exitCode: 0 };
+        } catch (e: unknown) {
+          const err = e as { stdout?: string; status?: number };
+          return { stdout: err.stdout ?? "", exitCode: err.status ?? 1 };
+        }
+      };
+
+      // No committed lock → silent (self-gated), exit 0 (never blocks).
+      const cold = runHook(event);
+      assert.equal(cold.exitCode, 0);
+      assert.equal(cold.stdout.trim(), "");
+
+      // Commit a lock → a SKILL.md edit now injects a non-blocking nudge.
+      mkdirSync(join(dir, ".vigiles", "eval-locks"), { recursive: true });
+      writeFileSync(
+        join(dir, ".vigiles", "eval-locks", "x.lock.json"),
+        '{"version":1,"name":"x"}',
+      );
+      const warm = runHook(event);
+      assert.equal(warm.exitCode, 0); // still never blocks
+      assert.match(warm.stdout, /additionalContext/);
+      assert.match(warm.stdout, /eval --update/);
+
+      // A non-eval edit stays silent even with a lock present.
+      const other = runHook(
+        JSON.stringify({ tool_input: { file_path: "README.md" } }),
+      );
+      assert.equal(other.stdout.trim(), "");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2030,6 +2078,39 @@ describe("plugin hook: post-edit.sh", () => {
       timeout: 5000,
     });
     assert.ok(true, "Unrelated file skipped without triggering any action");
+  });
+});
+
+describe("plugin hook: eval-lock-nudge.sh", () => {
+  it("is executable, parseable bash", () => {
+    const hookPath = resolve(process.cwd(), "hooks/eval-lock-nudge.sh");
+    assert.ok(existsSync(hookPath));
+    try {
+      execSync(`bash -n ${hookPath}`, { stdio: "pipe" });
+    } catch {
+      assert.fail("eval-lock-nudge.sh has syntax errors");
+    }
+  });
+
+  it("exits 0 (never blocks) on a SKILL.md edit", () => {
+    const hookPath = resolve(process.cwd(), "hooks/eval-lock-nudge.sh");
+    // Run in a tmp dir with no package.json: the wrapper's own guard exits 0
+    // before reaching npx — exercising that the nudge is advisory and never
+    // disrupts an edit (the gate is CI's `eval --check`, not this hook).
+    const tmp = mkdtempSync(join(tmpdir(), "vigiles-nudgesh-"));
+    try {
+      const input = JSON.stringify({
+        tool_input: { file_path: "skills/foo/SKILL.md" },
+      });
+      execSync(`echo '${input}' | bash ${hookPath}`, {
+        cwd: tmp,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 5000,
+      });
+      assert.ok(true, "exited 0");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

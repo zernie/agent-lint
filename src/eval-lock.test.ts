@@ -17,6 +17,8 @@ import {
   lockModeFromEnv,
   evalApiVersionFromEnv,
   anyLocksCommitted,
+  isEvalInputFile,
+  evalLockNudge,
   LOCK_VERSION,
   type EvalLock,
 } from "./eval-lock.js";
@@ -158,6 +160,46 @@ test("anyLocksCommitted: false for an absent/empty dir, true once a lock exists"
       }),
     );
     assert.equal(anyLocksCommitted(dir), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("isEvalInputFile: SKILL.md + *.eval.* only", () => {
+  assert.equal(isEvalInputFile("skills/foo/SKILL.md"), true);
+  assert.equal(isEvalInputFile("SKILL.md"), true);
+  assert.equal(isEvalInputFile("examples/x.eval.mjs"), true);
+  assert.equal(isEvalInputFile("a/b.eval.ts"), true);
+  assert.equal(isEvalInputFile("README.md"), false);
+  assert.equal(isEvalInputFile("src/eval.ts"), false); // not an .eval.* file
+  assert.equal(isEvalInputFile("notskill.md"), false);
+});
+
+test("evalLockNudge: self-gated on a committed lock + an eval-input edit", () => {
+  const dir = tmp();
+  try {
+    const locks = join(dir, "locks");
+    // No lock yet → silent even on a SKILL.md edit.
+    assert.equal(evalLockNudge("skills/foo/SKILL.md", locks), null);
+    // Commit a lock into the gated dir.
+    writeLock(
+      locks,
+      buildLock({
+        name: "e",
+        inputsHash: "h",
+        model: "m",
+        harnessVersionKey: "",
+        evalApiVersion: 1,
+        builtAt: "2026-06-30T00:00:00.000Z",
+        report: {},
+      }),
+    );
+    // A non-eval file never nudges, even with a lock present.
+    assert.equal(evalLockNudge("README.md", locks), null);
+    // A SKILL.md edit WITH a committed lock → a non-blocking reminder.
+    const msg = evalLockNudge("skills/foo/SKILL.md", locks);
+    assert.ok(msg && /eval --update/.test(msg));
+    assert.ok(/reminder, not a block/.test(msg ?? ""));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

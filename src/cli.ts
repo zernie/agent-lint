@@ -36,7 +36,11 @@ import {
   formatCapabilityDiff,
 } from "./core/capability-diff.js";
 import { validate, loadConfig } from "./core/validate.js";
-import { anyLocksCommitted, DEFAULT_LOCK_DIR } from "./eval-lock.js";
+import {
+  anyLocksCommitted,
+  evalLockNudge,
+  DEFAULT_LOCK_DIR,
+} from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
   parseSetupArgs,
@@ -5151,6 +5155,9 @@ async function handleHookRuntime(
     case "refs":
       refsHookCommand();
       return;
+    case "eval-lock-nudge":
+      evalLockNudgeHookCommand();
+      return;
     case "effect-enter":
       setEffectActive(process.cwd());
       console.log("Effect boundary entered.");
@@ -5206,6 +5213,44 @@ const INSTRUCTION_FILE = /^(SKILL|CLAUDE|AGENTS)\.md$/;
 
 function isInstructionFile(file: string): boolean {
   return INSTRUCTION_FILE.test(basename(file));
+}
+
+/**
+ * PostToolUse-hook entrypoint: when the agent edits an eval input (a `SKILL.md`
+ * trigger surface or an `*.eval.*` script), and committed eval locks exist, inject
+ * a NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating (silent
+ * until a lock is committed), never blocks, never runs an eval — a reminder, not a
+ * gate (the gate is `eval --check` in CI). The harness-neutral nudge lives in
+ * `evalLockNudge`; CC delivers it as `additionalContext` (Codex inject is a
+ * documented follow-on — see docs/harness-testing-codex.md).
+ */
+function evalLockNudgeHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin → nothing to do */
+  }
+  let file = "";
+  try {
+    const j = JSON.parse(raw) as { tool_input?: { file_path?: string } };
+    file = j.tool_input?.file_path ?? "";
+  } catch {
+    /* malformed → nothing to do */
+  }
+  if (!file) return;
+  const cwd = process.cwd();
+  const target = relative(cwd, resolve(cwd, file)) || file;
+  const msg = evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
+  if (!msg) return;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: msg,
+      },
+    }) + "\n",
+  );
 }
 
 /**

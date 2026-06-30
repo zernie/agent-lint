@@ -200,6 +200,42 @@ export function anyLocksCommitted(dir: string): boolean {
   return readdirSync(dir).some((f) => f.endsWith(".lock.json"));
 }
 
+/**
+ * Does an edited path plausibly change an eval's INPUTS — so a committed lock may
+ * now be stale? Two surfaces feed the hash: a skill's trigger surface (`SKILL.md`)
+ * and the eval script that holds the prompts/spec (`*.eval.{mjs,cjs,js,mts,cts,ts}`).
+ * Pure (string-only) so the nudge hook stays cheap and never runs an eval script.
+ */
+export function isEvalInputFile(path: string): boolean {
+  const p = path.replace(/\\/g, "/");
+  if (/(^|\/)SKILL\.md$/.test(p)) return true;
+  return /\.eval\.(mjs|cjs|js|mts|cts|ts)$/.test(p);
+}
+
+/**
+ * The NON-BLOCKING nudge to emit after an eval-input edit when committed locks
+ * exist, or `null` for no nudge. Self-gating: it stays silent until you've opted
+ * into the lock (committed one), so it can't annoy a repo that doesn't use evals.
+ * It deliberately does NOT recompute staleness (that needs the eval script + is
+ * the job of `eval --check`) — a reminder, not a gate. The honest harness-neutral
+ * reminder; how it reaches the agent (CC injects `additionalContext` today; Codex
+ * inject is a follow-on) is the caller's concern. See docs/harness-testing-*.md.
+ */
+export function evalLockNudge(
+  filePath: string,
+  lockDir: string,
+): string | null {
+  if (!isEvalInputFile(filePath)) return null;
+  if (!anyLocksCommitted(lockDir)) return null;
+  return (
+    `vigiles: you edited ${filePath}, which can change an eval's inputs — a ` +
+    `committed eval lock may now be stale. When you're done, run ` +
+    `\`vigiles eval --update\` (local, on your subscription) and commit the ` +
+    `updated lock; CI's \`vigiles eval --check\` will otherwise flag it stale. ` +
+    `This is a reminder, not a block.`
+  );
+}
+
 /** Write a named eval's lock (pretty JSON for a reviewable git diff). */
 export function writeLock(dir: string, lock: EvalLock): void {
   mkdirSync(dir, { recursive: true });

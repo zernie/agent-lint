@@ -40,6 +40,7 @@ export const HOOK_RUNTIME_KINDS = [
   "guard",
   "action",
   "refs",
+  "eval-lock-nudge",
   "effect-enter",
   "effect-exit",
 ] as const;
