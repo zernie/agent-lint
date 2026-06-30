@@ -51,6 +51,17 @@ Test layer drives the real `claude` / `codex` CLI. You can even
 
 The only thing that needs a model is a real-model **eval**. That runs on **your own Claude Pro/Max subscription** via the `claude` CLI — **$0 of metered API tokens**. Tools like promptfoo / DeepEval hit a metered API and bill per token on every run. See [the eval architecture](eval-architecture.md).
 
+## What does `vigiles audit` actually run — and why did it "find nothing"?
+
+`audit` has two layers, and by default you get only the first:
+
+- **The deterministic read (always on).** A plain `audit` **executes nothing**. It reads your files and reports structural facts — a broken hook path, an undeclared MCP server, a tool-contract typo, two near-identical descriptions, a subagent holding all three lethal-trifecta legs. Safe on any repo, identical on every OS, no key.
+- **The executing checks (only with your yes).** Two questions can't be answered by reading: _does each skill actually fire?_ (recall + precision) and _do two skills fight over the same prompt?_ (the selection-collision matrix). Answering them runs the real model on your subscription, so `audit` **asks once** at a terminal and remembers your choice in `.vigilesrc.json` (`audit.measure`). Headless — CI, an agent, `--json` — it stays a read and prints a one-line nudge. It never hangs and never executes on its own.
+
+**So if `audit` graded a skill-heavy repo a clean A and "found little," it almost certainly ran only the deterministic read.** The behavioral findings — the skills that never fire, the ones that collide — live behind that one consent. Say yes at a terminal, or measure in a script with [`measureTriggerRate`](measuring-skills.md), to see them.
+
+`audit` is a **local report, like Lighthouse — not a CI gate.** For CI, use [`vigiles lint`](verifying-instruction-files.md), which is deterministic and gates real breakage. The full author workflow is in [shipping plugins](for-plugin-authors.md).
+
 ## Does it work on a non-JavaScript repo (Python, Rust, Go…)?
 
 ✅ **Yes for Lint** — `npx vigiles lint` verifies your `CLAUDE.md` against your repo and linters (Ruff, Clippy, Pylint, RuboCop, … alongside ESLint) with **no install**.

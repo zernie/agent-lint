@@ -65,6 +65,8 @@ This is the model-gated trigger tier, measured on your own subscription. As a lo
 npx vigiles audit ./my-plugin --prompts=prompts.json
 ```
 
+**The selection-collision matrix** runs each skill's own prompts against your _whole_ skill set and records which skill actually fired. The diagonal is recall (the right skill fired); off-diagonal mass means a **sibling hijacked the prompt** — two skills so alike the model picks the wrong one. It's the behavioral confirmation of the deterministic [description-overlap](#1-scan-a-draft-for-structural-health) finding, and it's body-stubbed (the skill's procedure never runs), so it measures _selection_ cheaply. Most valuable when several skills do similar things.
+
 **For automation / CI** (no human to consent), drive `measureTriggerRate` directly. It reports recall across varied prompts and, with irrelevant prompts, precision — so a too-broad description that hijacks unrelated work fails too. That's the designed path for testing skills in a script. See [measuring skills](measuring-skills.md) and the [testing API](testing-api.md).
 
 ## 4. Rank against the field
