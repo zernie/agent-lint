@@ -197,7 +197,8 @@ stray `git push` is caught before it happens. No model, no key, on every commit.
 _"65% fewer tokens." Says who?_ vigiles[^name] A/Bs the claim on real coding tasks and reports
 the token bill, whether it hit its target, and whether the code still works. promptfoo
 and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max
-subscription. **[Measure a skill →](docs/measuring-skills.md)**
+subscription. Evals run locally — a committed lock then lets **CI catch stale results with no
+model call**. **[Measure a skill →](docs/measuring-skills.md)**
 
 ## Quick start
 

@@ -12,7 +12,9 @@ npx vigiles compile [files...]      # Compile .spec.ts → .md AND .vigiles/hook
 npx vigiles eject [file]            # Un-manage a compiled file → plain hand-owned markdown (--keep-spec)
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
-npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N)
+npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N) — local, on your subscription
+npx vigiles eval --update           # Record each named eval's result to a committed .vigiles/eval-locks/<name>.lock.json (local)
+npx vigiles eval --check            # Verify committed eval results against current inputs WITHOUT a model — the CI staleness gate
 npx vigiles audit [dir]              # Lighthouse for your harness: category rings + fixes (a deterministic read); writes vigiles-report.html + .json
                                      # the executing checks (your hooks · live MCP · do skills FIRE?) run only interactively — a plain audit asks once
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)

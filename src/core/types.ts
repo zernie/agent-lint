@@ -378,6 +378,17 @@ export interface VigilesConfig {
    * (audit is a local report, not a CI step — there is no execution flag).
    */
   audit?: { measure?: boolean };
+
+  /**
+   * `vigiles eval` preferences. `apiVersion` is the hand-bumped **behavior epoch**
+   * folded into the eval LOCK's input hash (`src/eval-lock.ts`): bump it when a
+   * harness-side change YOU made (a CLAUDE.md edit, a global hook) would shift
+   * eval outputs but isn't otherwise visible to the lock — so `vigiles eval
+   * --check` reports the committed eval results STALE and forces a local re-run.
+   * Default 1. Distinct from the (auto-resolved) `claude` CLI version, which is
+   * recorded as provenance but deliberately NOT hashed.
+   */
+  eval?: { apiVersion?: number };
 }
 
 /** Valid marker types for rule detection. */

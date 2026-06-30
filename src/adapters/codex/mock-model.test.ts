@@ -122,6 +122,14 @@ test("codexRuntime.wireMock surfaces the keyless flag recipe + dummy-key env", (
   expect(wired.env.MOCK_KEY).toBe("dummy-key");
 });
 
+test("codexRuntime.versionKey opts out of version partitioning (0.x churns weekly)", () => {
+  // Codex's minor IS its patch cadence (~2 bumps/week), so keying major.minor
+  // like Claude Code would churn the cache/lock weekly — it returns "" instead.
+  expect(codexRuntime.versionKey("0.143.0")).toBe("");
+  expect(codexRuntime.versionKey("0.139.0-alpha.31")).toBe("");
+  expect(codexRuntime.versionKey("anything")).toBe("");
+});
+
 test("parseResponsesRequest: tolerates malformed JSON", () => {
   const r = parseResponsesRequest("{not valid json");
   expect(r).toEqual({ prompt: "", model: "", toolNames: [] });

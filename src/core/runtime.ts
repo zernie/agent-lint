@@ -34,4 +34,24 @@ export interface HarnessRuntime {
     readonly args: readonly string[];
     readonly env: Record<string, string>;
   };
+  /**
+   * Reduce a raw `--version` string to the **behaviorally-significant** token the
+   * cache + lock key on — so a harness upgrade that actually moves agent behavior
+   * (new system prompt / tool defs) invalidates a stale replay, while churn that
+   * doesn't shouldn't partition the key. **What counts as significant is
+   * per-harness**, which is exactly why this lives on the port rather than as a
+   * universal `major.minor` rule:
+   *
+   * - **Claude Code** is semver-ish — `major.minor` bumps roughly quarterly
+   *   (0.2 → 1.0 → 2.0 → 2.1 over 16 months) while patches ship ~daily — so it
+   *   returns `major.minor`: a real behavior boundary, rare enough not to churn.
+   * - **Codex** is perpetual `0.x` where the *minor* IS the patch cadence (~2
+   *   bumps/week), so `major.minor` would churn weekly — it returns `""`, opting
+   *   out of version partitioning and relying on the dated model id +
+   *   `evalApiVersion` instead.
+   *
+   * `""` means "don't partition on the harness version." Pure (no spawn — the
+   * caller resolves the raw string via `agentBinary --version`); unit-testable.
+   */
+  versionKey(raw: string): string;
 }

@@ -49,7 +49,6 @@ import {
   modelTier,
   belowModelFloor,
   runSkillSelectionTrial,
-  harnessVersionKey,
   ephemeralRunEnv,
   seedEphemeralHome,
   resolveSpawnEnv,
@@ -1532,13 +1531,6 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
   });
   assert.ok(out.includes("isolated"));
   assert.ok(out.toLowerCase().includes("upper bound"));
-});
-
-test("harnessVersionKey reduces to major.minor (patches don't churn the cache)", () => {
-  assert.equal(harnessVersionKey("2.1.179 (Claude Code)"), "2.1");
-  assert.equal(harnessVersionKey("2.1.180 (Claude Code)"), "2.1"); // patch → same key
-  assert.equal(harnessVersionKey("2.2.0"), "2.2"); // minor → different
-  assert.equal(harnessVersionKey("nonsense"), "nonsense"); // fallback
 });
 
 test("modelTier ranks by family; belowModelFloor is fail-open on unknowns", () => {
