@@ -184,6 +184,12 @@ export function readLock(dir: string, name: string): EvalLock | null {
       `eval lock: ${path} has unsupported version ${String(obj.version)} ` +
         `(expected ${String(LOCK_VERSION)}) — re-run \`vigiles eval --update\``,
     );
+  // Slug collision guard: two distinct names can normalize to the same file
+  // (`foo/bar` and `foo bar` → `foo-bar.lock.json`). A lock whose stored `name`
+  // differs from the one requested belongs to the OTHER eval — treat it as a
+  // MISS (not this eval's lock) so `--check` degrades to "stale → re-run" and
+  // NEVER replays the wrong eval's report. The stored name is the source of truth.
+  if (obj.name !== name) return null;
   return obj as unknown as EvalLock;
 }
 
