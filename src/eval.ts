@@ -1599,6 +1599,17 @@ async function withEvalLock<R>(
   const { lock } = args;
   if (lock.mode === "off") return produce();
   if (!args.name) {
+    // An unnamed eval can't be keyed to a lock. In `check` (the CI gate) running
+    // it would call the model — violating the no-model-in-CI contract and failing
+    // for missing auth — so FAIL LOUDLY instead of silently hitting the model.
+    // `update` (local, model available) keeps producing: the eval just isn't gated.
+    if (lock.mode === "check") {
+      throw new Error(
+        `vigiles eval --check: an unnamed eval cannot run in CI — it has no ` +
+          `committed lock to replay, and running it would call the model. Add a ` +
+          `\`name\` to the spec to gate it, or exclude it from the --check run.`,
+      );
+    }
     emitLockMessage(
       `vigiles eval --${lock.mode}: skipped the lock for an unnamed eval — set ` +
         `\`name\` on the spec to enable the staleness gate for it.`,
@@ -1671,7 +1682,16 @@ function evalArmsInputs<M extends Metrics>(
   const stubs = [...(spec.stubs ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  return { task: spec.task, arms, stubs };
+  // `ephemeralEnv` swaps the trial's environment (scrubbed env + throwaway HOME
+  // vs the inherited process env), which can move tool/hook/agent behavior — a
+  // model-facing input, so it belongs in the hash. Normalize to a bool so a
+  // record under one mode can't be replayed under the other with the same hash.
+  return {
+    task: spec.task,
+    arms,
+    stubs,
+    ephemeralEnv: spec.ephemeralEnv === true,
+  };
 }
 
 export async function runEvalWith<M extends Metrics>(

@@ -347,6 +347,45 @@ test("lock check after a TOOL-STUB change: fails 'stale' (stubs are model-facing
   }
 });
 
+test("lock CHECK on an unnamed eval: throws (never calls the model in CI)", async () => {
+  const dir = tmp();
+  try {
+    const r = countingRunner();
+    await assert.rejects(
+      () => runEvalWith({ ...spec(dir, "check"), name: undefined }, r.run),
+      /unnamed eval cannot run in CI/,
+    );
+    assert.equal(r.calls(), 0, "an unnamed check must NOT reach the model");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lock check after an ephemeralEnv toggle: fails 'stale' (it changes the run env)", async () => {
+  const dir = tmp();
+  try {
+    // Record with the default (inherited) env…
+    await runEvalWith(spec(dir, "update"), countingRunner().run);
+    // …then check with ephemeralEnv ON → a different run environment → stale.
+    const chk = countingRunner();
+    await assert.rejects(
+      () =>
+        runEvalWith(
+          {
+            ...spec(dir, "check"),
+            ephemeralEnv: true,
+            lock: { mode: "check", dir, evalApiVersion: 1 },
+          },
+          chk.run,
+        ),
+      /STALE|changed/,
+    );
+    assert.equal(chk.calls(), 0, "a stale check never reaches the model");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lock on but NO name: loud skip — runner runs, no lock written", async () => {
   const dir = tmp();
   try {
