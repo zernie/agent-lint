@@ -432,6 +432,60 @@ test("trigger-rate lock check after a HARNESS switch: fails 'stale' (driver is a
   }
 });
 
+test("eval-arm lock with a plugin: ${PLUGIN_ROOT} path is normalized (location-independent)", async () => {
+  const root = tmp();
+  // The SAME plugin (root-based hook) at TWO different absolute paths.
+  const mkPlugin = (dir: string): string => {
+    mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(dir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "p",
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                { type: "command", command: "bash ${CLAUDE_PLUGIN_ROOT}/h.sh" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    return dir;
+  };
+  const dirA = mkPlugin(mkdtempSync(join(root, "pa-")));
+  const dirB = mkPlugin(mkdtempSync(join(root, "pb-")));
+  const lockDir = join(root, "locks");
+  const spc = (plugin: string, mode: "update" | "check") =>
+    ({
+      name: "plugin eval",
+      arms: { run: { plugin } },
+      task: "do it",
+      trials: 1,
+      model: MODEL,
+      spacingSec: 0,
+      measure: (ctx: { turns: number }) => ({ turns: ctx.turns }),
+      lock: { mode, dir: lockDir, evalApiVersion: 1 },
+    }) as const;
+  try {
+    // Record with the plugin at dirA…
+    await runEvalWith(spc(dirA, "update"), countingRunner().run);
+    // …then check the SAME plugin at a DIFFERENT abs path → must REPLAY, not go
+    // stale (the expanded ${CLAUDE_PLUGIN_ROOT} differs only by the abs prefix).
+    const chk = countingRunner();
+    await runEvalWith(spc(dirB, "check"), chk.run);
+    assert.equal(
+      chk.calls(),
+      0,
+      "same plugin at a different path must replay, not falsely go stale",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("lock on but NO name: loud skip — runner runs, no lock written", async () => {
   const dir = tmp();
   try {

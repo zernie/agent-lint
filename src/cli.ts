@@ -181,6 +181,7 @@ import {
   runInject,
   runReact,
   dispatchKind,
+  hookRouting,
   hookMode,
   hookNeeds,
   gateAction,
@@ -5529,6 +5530,7 @@ async function installHookFile(
   const role = dispatchKind(program);
   const event = typeof program.on === "string" ? program.on : "";
   const injectable = adapter.hookProtocol?.injectableEvents ?? [];
+  const matcher = hookRouting(program).matcher;
   let warning: string | undefined;
   if (adapter.name !== "claude-code") {
     if (role === "inject" && !injectable.includes(event)) {
@@ -5541,6 +5543,18 @@ async function installHookFile(
         `react output is confirmed only for Claude Code; on ${adapter.name} this ` +
         `hook's react output is unverified (the gate deny→exit 2 path IS ` +
         `cross-harness). Confirm against the real binary first.`;
+    } else if (matcher !== undefined) {
+      // A tool-matched gate carries TOOL NAMES in its matcher. vigiles does not
+      // yet translate tool vocabularies across dialects, so a matcher authored
+      // with Claude Code names (`Edit`/`Write`/`Bash`) won't fire on a harness
+      // that names the same tools differently (Codex: `apply_patch`/`shell`).
+      // Warn LOUDLY rather than report a silently-non-firing success.
+      warning =
+        `this hook matches tool(s) "${matcher}" — if those are Claude Code tool ` +
+        `names, they may not match ${adapter.name}'s vocabulary (e.g. ` +
+        `apply_patch/shell), so the hook may not fire. Verify the matcher uses ` +
+        `${adapter.name}'s tool names (cross-dialect matcher translation is not ` +
+        `yet automatic).`;
     }
   }
   return { role, settingsPath: adapter.layout.settingsPath, warning };
