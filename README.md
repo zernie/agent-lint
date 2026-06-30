@@ -226,12 +226,16 @@ npx vigiles init   # adopts your files (non-destructive — eject reverses), add
 
 Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
 
-**You don't hand-write any of this — your agent does.** `init` installs
-model-invocable skills, so a plain-English ask does the work:
+**Adoption is smooth: one command, then your agent does the rest.** `init` installs
+the **skills and hooks**, so a plain-English ask does the work — no specs to
+hand-write, no hooks to wire:
 
-- _"test my skills"_ → scaffolds **and runs** a trigger/behaviour test (`test-harness`)
+- _"test my skills"_ → scaffolds **and runs** a trigger/behaviour test, then commits its result so CI can check it (`test-harness`)
 - _"harden my rules"_ → upgrades prose guidance into enforced linter rules (`strengthen`)
 - _"add a rule to my CLAUDE.md"_ → edits the source and recompiles (`edit-spec`)
+
+The **hooks** keep it honest in-loop — nudging the agent to mark a reference or
+refresh a stale eval — so there are no chores to remember.
 
 <details>
 <summary>What <code>init</code> sets up</summary>
