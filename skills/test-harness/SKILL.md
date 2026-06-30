@@ -190,6 +190,33 @@ job that asserts the capability is present, run **`vigiles test --no-skip`** so 
 skipped tier fails — a green-with-skips is untested surface. Keep unit +
 deterministic tests in CI (free); run evals locally or on a schedule with auth.
 
+## Step 5 — Lock the eval so CI stays honest (you do this automatically)
+
+Real-model evals run on the user's subscription — locally, never in CI. So **as
+part of writing an eval, you keep its result fresh for them.** Do these two things
+without being asked:
+
+1. **Give every eval a `name`.** That's what the lock keys on.
+2. **After running it, commit the lock:**
+
+   ```bash
+   vigiles eval --update      # records the result → .vigiles/eval-locks/<name>.lock.json
+   ```
+
+   Then commit that file. CI runs `vigiles eval --check` (no model) to verify it
+   still matches the inputs — so a later edit that forgets to re-eval fails loud
+   instead of shipping stale numbers.
+
+**When you later change a skill's description or prompts, re-run `vigiles eval
+--update` and commit the updated lock** — the change altered what the eval
+measures. (vigiles also nudges you: when a lock exists, a `SKILL.md` edit triggers
+a non-blocking reminder.)
+
+Why it's cheap: `--check` only hashes inputs (skill text, prompts, model). A
+**threshold** change in the test re-uses the saved numbers (no model); only an
+**input** change needs a fresh `--update`. Full mechanics:
+[`docs/harness-testing.md`](../../docs/harness-testing.md#keep-eval-results-fresh-in-ci-the-lock).
+
 ## When the user didn't say what to test
 
 Don't ask them to specify — **pick something real and demonstrate.** Scan the

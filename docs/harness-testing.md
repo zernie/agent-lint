@@ -280,6 +280,56 @@ console.log(formatEvalReport(report));
 > **Note:** `runEval` is shipped and proven for Claude Code; for Codex it's a
 > documented follow-on — use the deterministic `runHarnessTest` tier there.
 
+## Keep eval results fresh in CI (the lock)
+
+Real-model evals run on your subscription, so they run **on your machine, never in
+CI**. That leaves one classic bug: you tweak a skill, forget to re-run the eval,
+and ship stale numbers. The **eval lock** catches it — a small committed file that
+CI checks **with no model and no API key**.
+
+You mostly won't touch this by hand. The `test-harness` skill records the lock
+when it runs an eval, and a hook reminds the agent to refresh it after an edit.
+Here's the whole loop:
+
+```
+  YOU / the test-harness skill            CI  (no model, no key)
+  ────────────────────────────            ─────────────────────
+  run the eval  ─────────────┐
+                             ▼
+            vigiles eval --update           vigiles eval --check
+            writes the lock file  ──commit──►  re-hashes the inputs
+            (.vigiles/eval-locks/)                    │
+                                          same inputs? ├─ yes ─► ✅ pass (replays)
+                                                       └─ no ──► ❌ "stale, re-run --update"
+```
+
+What each command does:
+
+| Command                 | Runs where   | Needs a model?    | Does                                                   |
+| ----------------------- | ------------ | ----------------- | ------------------------------------------------------ |
+| `vigiles eval --update` | your machine | ✅ yes (your sub) | records the result to a committed lock                 |
+| `vigiles eval --check`  | CI           | ❌ no             | verifies the committed result still matches the inputs |
+
+It's the `npm ci` / `cargo-insta` pattern. `--check` hashes the eval's inputs
+(skill text, prompts, model) and fails if they changed without a re-run. You review
+the committed diff — `recall: 0.90 → 0.65` is the quality gate.
+
+Two things keep it low-noise:
+
+- ✅ **Change a threshold** in your test → valid replay, no model call. Your own
+  `assertTriggerRate` / `assertSignificant` re-run against the saved numbers.
+- ❌ **Change an input** (skill text, prompts) → stale → re-run `--update`.
+
+ℹ️ **Honest scope:** the lock proves "your saved numbers match your current
+inputs," not "they reflect today's model." Re-run `--update` when you want fresh
+numbers. In CI it's `command: eval-check` — a green no-op until you commit your
+first lock, and `vigiles init` scaffolds the job.
+
+**How the agent gets reminded** is the same on both harnesses — the hook injects the
+nudge as `additionalContext` (Claude Code and Codex both honor it). See the per-harness guides:
+[Claude Code](harness-testing-claude-code.md#keeping-eval-results-fresh--the-nudge-claude-code)
+· [Codex](harness-testing-codex.md#keeping-eval-results-fresh--the-nudge-codex).
+
 ## Advanced
 
 These ride on the eval tier — reach for them when the basic measure isn't enough.
@@ -315,8 +365,11 @@ connector) so you don't re-derive it:
   with: { tier: unit } # or: integration (adds bwrap + CLI) / e2e (adds egress)
 ```
 
-The **eval** axis is separate (a real model / key) — run `npm run test:eval` on a
-keyed job, not on every PR.
+The **eval** axis is separate: real-model evals run **locally on your
+subscription** (`vigiles eval --update`), not on every PR. What CI runs is the
+deterministic [staleness gate](#keep-eval-results-fresh-in-ci-the-lock) —
+`vigiles eval --check` (or `command: eval-check`) — which verifies your committed
+eval results with no model.
 
 ## What's covered today
 

@@ -1209,11 +1209,44 @@ describe("CLI: vigiles init — both pillars + workflow", () => {
       const yaml = readFileSync(wf, "utf-8");
       assert.match(yaml, /uses: zernie\/vigiles@v1/);
       assert.match(yaml, /npx vigiles test/); // the harness job
+      // The harness test job installs the CC binary (the detected default).
+      assert.match(yaml, /npm i -g @anthropic-ai\/claude-code/);
+      assert.doesNotMatch(yaml, /@openai\/codex/);
       // A greenfield repo (no AGENTS.md) records the default harness.
       const cfg = JSON.parse(
         readFileSync(join(dir, ".vigilesrc.json"), "utf-8"),
       ) as { harness?: unknown };
       assert.equal(cfg.harness, "claude-code");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--harness=codex: the CI test job installs the codex binary, not claude", () => {
+    const dir = freshProject();
+    try {
+      run("init --harness=codex --no-plugin", dir);
+      const yaml = readFileSync(
+        join(dir, ".github/workflows/vigiles.yml"),
+        "utf-8",
+      );
+      assert.match(yaml, /npm i -g @openai\/codex/);
+      assert.doesNotMatch(yaml, /@anthropic-ai\/claude-code/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("--harness=claude,codex: the CI test job installs BOTH binaries", () => {
+    const dir = freshProject();
+    try {
+      run("init --harness=claude,codex --no-plugin", dir);
+      const yaml = readFileSync(
+        join(dir, ".github/workflows/vigiles.yml"),
+        "utf-8",
+      );
+      assert.match(yaml, /@anthropic-ai\/claude-code/);
+      assert.match(yaml, /@openai\/codex/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -1827,6 +1860,112 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("eval lock flags: mutual-exclusion + cold-start no-op", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-lock-"));
+    try {
+      // --check + --update is a usage error (exit 2).
+      const both = run("eval --check --update", dir);
+      assert.equal(both.exitCode, 2);
+      assert.match(both.stderr, /mutually exclusive/);
+
+      // --check with no committed locks is a GREEN no-op (smooth adoption): the
+      // staleness gate activates only once the first lock is committed.
+      const cold = run("eval --check", dir);
+      assert.equal(cold.exitCode, 0);
+      assert.match(cold.stdout, /no committed eval locks found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("eval lock e2e: --update writes a lock, --check replays green, an input change goes red", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-locke2e-"));
+    try {
+      // A real eval script run by the built CLI, but MODEL-FREE: it drives
+      // `runEvalWith` (from the built dist) with a fake runner, so the whole
+      // --update → --check → stale flow is exercised end to end with no model.
+      const evalJs = resolve(__dirname, "..", "dist", "eval.js");
+      writeFileSync(
+        join(dir, "x.eval.cjs"),
+        `const { runEvalWith } = require(${JSON.stringify(evalJs)});\n` +
+          `const fake = () => Promise.resolve({ code: 0, stdout: JSON.stringify({ type: "result", result: "ok", num_turns: 1 }) });\n` +
+          `runEvalWith({ name: "e2e-eval", arms: { run: {} }, task: process.env.E2E_TASK || "task A", trials: 1, model: "claude-sonnet-4-6-20260101", spacingSec: 0, measure: () => ({ ok: 1 }) }, fake)\n` +
+          `  .then(() => process.exit(0))\n` +
+          `  .catch((e) => { console.error(String((e && e.message) || e)); process.exit(1); });\n`,
+      );
+      const lockFile = join(
+        dir,
+        ".vigiles",
+        "eval-locks",
+        "e2e-eval.lock.json",
+      );
+
+      // 1. --update: drives the (fake) run and writes a committed lock.
+      const up = run("eval --update x.eval.cjs", dir, { E2E_TASK: "task A" });
+      assert.equal(up.exitCode, 0);
+      assert.ok(existsSync(lockFile), "a lock is committed");
+
+      // 2. --check with the SAME inputs: replays green, no model.
+      const ok = run("eval --check x.eval.cjs", dir, { E2E_TASK: "task A" });
+      assert.equal(ok.exitCode, 0);
+
+      // 3. --check after an INPUT change (different task): STALE → red.
+      const stale = run("eval --check x.eval.cjs", dir, { E2E_TASK: "task B" });
+      assert.equal(stale.exitCode, 1);
+      assert.match(stale.stdout + stale.stderr, /stale/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("eval-lock-nudge hook: self-gated, non-blocking PostToolUse reminder", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-nudge-"));
+    try {
+      const event = JSON.stringify({
+        tool_name: "Edit",
+        tool_input: { file_path: "skills/foo/SKILL.md" },
+      });
+      const runHook = (input: string): { stdout: string; exitCode: number } => {
+        try {
+          const stdout = execSync(`node ${CLI} hook-runtime eval-lock-nudge`, {
+            cwd: dir,
+            encoding: "utf-8",
+            input,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+          return { stdout, exitCode: 0 };
+        } catch (e: unknown) {
+          const err = e as { stdout?: string; status?: number };
+          return { stdout: err.stdout ?? "", exitCode: err.status ?? 1 };
+        }
+      };
+
+      // No committed lock → silent (self-gated), exit 0 (never blocks).
+      const cold = runHook(event);
+      assert.equal(cold.exitCode, 0);
+      assert.equal(cold.stdout.trim(), "");
+
+      // Commit a lock → a SKILL.md edit now injects a non-blocking nudge.
+      mkdirSync(join(dir, ".vigiles", "eval-locks"), { recursive: true });
+      writeFileSync(
+        join(dir, ".vigiles", "eval-locks", "x.lock.json"),
+        '{"version":1,"name":"x"}',
+      );
+      const warm = runHook(event);
+      assert.equal(warm.exitCode, 0); // still never blocks
+      assert.match(warm.stdout, /additionalContext/);
+      assert.match(warm.stdout, /eval --update/);
+
+      // A non-eval edit stays silent even with a lock present.
+      const other = runHook(
+        JSON.stringify({ tool_input: { file_path: "README.md" } }),
+      );
+      assert.equal(other.stdout.trim(), "");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2012,6 +2151,39 @@ describe("plugin hook: post-edit.sh", () => {
       timeout: 5000,
     });
     assert.ok(true, "Unrelated file skipped without triggering any action");
+  });
+});
+
+describe("plugin hook: eval-lock-nudge.sh", () => {
+  it("is executable, parseable bash", () => {
+    const hookPath = resolve(process.cwd(), "hooks/eval-lock-nudge.sh");
+    assert.ok(existsSync(hookPath));
+    try {
+      execSync(`bash -n ${hookPath}`, { stdio: "pipe" });
+    } catch {
+      assert.fail("eval-lock-nudge.sh has syntax errors");
+    }
+  });
+
+  it("exits 0 (never blocks) on a SKILL.md edit", () => {
+    const hookPath = resolve(process.cwd(), "hooks/eval-lock-nudge.sh");
+    // Run in a tmp dir with no package.json: the wrapper's own guard exits 0
+    // before reaching npx — exercising that the nudge is advisory and never
+    // disrupts an edit (the gate is CI's `eval --check`, not this hook).
+    const tmp = mkdtempSync(join(tmpdir(), "vigiles-nudgesh-"));
+    try {
+      const input = JSON.stringify({
+        tool_input: { file_path: "skills/foo/SKILL.md" },
+      });
+      execSync(`echo '${input}' | bash ${hookPath}`, {
+        cwd: tmp,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 5000,
+      });
+      assert.ok(true, "exited 0");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

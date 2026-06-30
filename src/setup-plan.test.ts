@@ -8,6 +8,8 @@ import {
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  codexPluginHooks,
+  applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
   STRUCTURAL_RULES,
@@ -143,22 +145,72 @@ test("planPluginInstall: claude uses the marketplace and never vendors", () => {
   assert.equal(noCli.vendors, false);
 });
 
-test("planPluginInstall: codex installs skills GLOBALLY (-g), not vendored", () => {
+test("planPluginInstall: codex installs skills GLOBALLY (-g) + wires repo hooks", () => {
   const [codex] = planPluginInstall(["codex"], { hasClaude: false });
   assert.equal(codex.harness, "codex");
-  // The cross-agent skills CLI with -g → ~/.codex/skills/, not the repo.
+  // The cross-agent skills CLI with -g → ~/.agents/skills/, not the repo.
   assert.ok(codex.commands.some((c) => /skills add .* -a codex -g/.test(c)));
-  assert.equal(codex.vendors, false); // -g is global, so no repo pollution
-  assert.ok(codex.notes.some((n) => /hooks/.test(n))); // honest about the gap
+  // Skills are global, but the nudge hooks are written to .codex/config.toml
+  // (repo-committed, the Codex norm) → this method now touches the repo.
+  assert.equal(codex.vendors, true);
+  assert.ok(codex.notes.some((n) => /config\.toml/.test(n))); // names where hooks land
+  assert.ok(codex.notes.some((n) => /Still manual/.test(n))); // honest about what's deferred
 });
 
-test("planPluginInstall: both harnesses → one plan each, none vendoring", () => {
+test("planPluginInstall: both harnesses → one plan each; only codex touches the repo", () => {
   const plans = planPluginInstall(["claude", "codex"], { hasClaude: true });
   assert.deepEqual(
     plans.map((p) => p.harness),
     ["claude", "codex"],
   );
-  assert.ok(plans.every((p) => !p.vendors)); // BOTH install globally
+  // Claude installs to the global marketplace (no repo files); Codex writes the
+  // repo's .codex/config.toml hooks.
+  const byName = Object.fromEntries(plans.map((p) => [p.harness, p.vendors]));
+  assert.equal(byName.claude, false);
+  assert.equal(byName.codex, true);
+});
+
+test("codexPluginHooks: the two PostToolUse nudges run as direct npx hook-runtime commands", () => {
+  const hooks = codexPluginHooks();
+  assert.equal(hooks.length, 2);
+  assert.ok(hooks.every((h) => h.event === "PostToolUse"));
+  // additionalContext is honored on PostToolUse (confirmed) — these reach the agent.
+  assert.ok(
+    hooks.some((h) => h.command.includes("hook-runtime eval-lock-nudge")),
+  );
+  assert.ok(hooks.some((h) => h.command.includes("hook-runtime refs")));
+  // Direct npx, no plugin root / vendored script path.
+  assert.ok(
+    hooks.every((h) => h.command.startsWith("npx --no-install vigiles")),
+  );
+  // Codex's edit tool is `apply_patch` (NOT Claude's Edit/Write) — a CC-named
+  // matcher would never fire on Codex.
+  assert.ok(hooks.every((h) => h.matcher === "^apply_patch$"));
+});
+
+test("applyCodexPluginHooks: adds the nudges, is idempotent, preserves the user's config", () => {
+  // Fresh config → both nudges added.
+  const fresh = applyCodexPluginHooks({}) as {
+    hooks: { PostToolUse: { command: string }[] };
+  };
+  assert.equal(fresh.hooks.PostToolUse.length, 2);
+
+  // Re-run → still 2, never duplicated (idempotent re-merge keyed by command).
+  const again = applyCodexPluginHooks(fresh) as typeof fresh;
+  assert.equal(again.hooks.PostToolUse.length, 2);
+
+  // Preserves the user's own hook AND unrelated top-level keys.
+  const withUser = {
+    model: "gpt-5",
+    hooks: { PostToolUse: [{ matcher: "^Bash$", command: "my-own-hook" }] },
+  };
+  const merged = applyCodexPluginHooks(withUser) as {
+    model: string;
+    hooks: { PostToolUse: { command: string }[] };
+  };
+  assert.equal(merged.model, "gpt-5");
+  assert.equal(merged.hooks.PostToolUse.length, 3); // 1 user + 2 vigiles
+  assert.ok(merged.hooks.PostToolUse.some((e) => e.command === "my-own-hook"));
 });
 
 test("shouldPrompt: only a TTY human with unpinned choices", () => {

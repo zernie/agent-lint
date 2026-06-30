@@ -15,6 +15,7 @@ the compiled output actually differ by harness?**
 | ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
 | Instruction file | **No** — plain markdown, byte-identical                         | `CLAUDE.md` vs `AGENTS.md` (different name, same bytes)       | sync tool / mirror, else vigiles                           |
 | Skill            | **Yes** — frontmatter profile (`claude-code` full vs `minimal`) | `.claude/skills/…` vs `.codex/skills/…` (**different roots**) | vigiles (verify per harness; multi-emit deferred — see §3) |
+| Hook             | **Yes** — settings format (JSON vs TOML) + matcher syntax       | `.claude/settings.json` vs `.codex/config.toml`               | **vigiles — installs into EVERY declared harness (§4)**    |
 | Subagent         | **N/A** — Codex non-goal                                        | `agents/<name>.md` (CC only)                                  | nobody (single harness)                                    |
 
 The key correction that collapses the "this is hard" feeling: the two harness
@@ -134,7 +135,31 @@ compile` now warns per declared minimal-profile harness
   honest, correct behavior; multi-emit waits on the tolerance probe + an
   output-location decision.
 
-### 4. Subagents — Claude Code only
+### 4. Hooks — install into EVERY declared harness (shipped)
+
+Unlike a skill or instruction file (one markdown artifact, emitted once), a
+compiled hook is a piece of **wiring merged into the harness's settings**. A typed
+`vigiles/hook` program is harness-NEUTRAL — the same `(event) => Decision` — and
+the only per-harness part is the emitted block (JSON `settings.json` with an exact
+matcher vs TOML `config.toml` with an anchored-regex matcher). So when a repo
+declares **both** harnesses, the right behavior is to install the SAME hook into
+**both** configs, each in its native format, not pick the first.
+
+`vigiles compile` does this now: the hook install resolves the FULL declared set
+(`resolveHarnessAdapters` in `src/adapter-registry.ts` — `--harness=` flag → that
+one; else the config `harness` list → all; else auto-detect → the detected one)
+and loops, merging the compiled block into each adapter's settings idempotently.
+Per-harness warnings still fire per install (an inject hook warns only on a harness
+whose `injectableEvents` lacks the event; a react hook warns on Codex). This closes
+the gap where instruction files mirrored to both harnesses but a hook landed in
+only one — the symptom that a feature "works on CC, silently absent on Codex."
+
+The CI workflow `init` scaffolds is harness-aware too: the deterministic harness
+job installs the binary for each declared harness (`@anthropic-ai/claude-code`
+and/or `@openai/codex` via `harnessTestBinaries`), so a both-harness repo tests
+both in CI.
+
+### 5. Subagents — Claude Code only
 
 Codex subagents are a deliberate non-goal (a Codex subagent is an `[agents]` TOML
 concurrency table, not a tool-contract file). Single harness, nothing to fan out.
@@ -146,10 +171,13 @@ Once split by surface, "multi-target compile" is not one scary feature:
 - **Instructions** — sync-tool fan-out (done) + a byte-copy fallback (new, small).
 - **Skills** — per-harness verification (the array's real job, shipped) +
   per-root multi-emit (deferred — output-location + tolerance unresolved).
+- **Hooks** — installed into EVERY declared harness, each in its native format
+  (shipped); the scaffolded CI workflow installs each harness's binary.
 - **Subagents** — single harness.
 
-The array's headline value is **per-harness verification**, not N-way emission —
-which keeps vigiles in author+verify and out of the rulesync fan-out business.
+The array's headline value is **per-harness verification + wiring fan-out**, not
+N-way markdown emission — which keeps vigiles in author+verify and out of the
+rulesync fan-out business.
 
 ## Implementation slices
 

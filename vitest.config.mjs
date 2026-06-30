@@ -69,6 +69,7 @@ export default defineConfig({
         "src/eval.ts",
         "src/eval-baseline.ts",
         "src/eval-cache.ts",
+        "src/eval-lock.ts",
         "src/stats.ts",
         "src/run-hook.ts",
         "src/mock-model.ts",

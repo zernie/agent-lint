@@ -145,6 +145,17 @@ jobs:
       - name: Lint compiled files (direct CLI — redundant safety)
         run: node dist/cli.js lint
 
+      # Dogfood the eval staleness gate via the composite Action. This repo's
+      # real-model evals run locally (`npm run test:eval`), so no lock is
+      # committed yet — `eval-check` is a green no-op here, but it proves the
+      # action's `command: eval-check` → `eval --check` path works in CI.
+      - name: Dogfood the eval staleness gate (eval-check)
+        uses: ./
+        with:
+          command: eval-check
+          version: local
+          comment: "false"
+
       # Public-API surface gate: API Extractor compares the live .d.ts surface of
       # every public entry point against the committed etc/*.api.md reports. A PR
       # that adds/removes/changes a public export (or leaks a Claude-Code symbol

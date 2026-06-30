@@ -352,8 +352,10 @@ export function planPluginInstall(
     if (harness === "codex") {
       // The cross-agent `skills` CLI with `-g -y` installs to the global store
       // ~/.agents/skills/ (NOT the repo, and NOT ~/.codex/ — verified against
-      // the real CLI). Skills only; Codex hooks (.codex/config.toml [hooks])
-      // are not wired automatically.
+      // the real CLI). Skills install globally; the proactive NUDGE hooks
+      // (eval-lock + refs) are wired into the repo's .codex/config.toml by
+      // `init` (see codexPluginHooks / wireCodexHooks) — Codex config is
+      // repo-committed, so that's the idiomatic place.
       return {
         harness,
         commands: ["npx --yes skills add zernie/vigiles -a codex -g -y"],
@@ -362,9 +364,10 @@ export function planPluginInstall(
         manualSteps: ["npx skills add zernie/vigiles -a codex -g -y"],
         notes: [
           "Codex reads AGENTS.md directly; the skills install globally to ~/.agents/skills/ (not the repo).",
-          "Codex hooks (.codex/config.toml [hooks]) are not auto-wired yet — add them manually for compile-on-edit.",
+          "The eval-lock + refs NUDGE hooks are wired into .codex/config.toml (repo-committed, the Codex norm).",
+          "Still manual on Codex: the SessionStart lint summary + compile-on-edit/pre-edit guards (no harness-neutral entrypoint yet).",
         ],
-        vendors: false,
+        vendors: true,
       };
     }
     return {
@@ -376,6 +379,86 @@ export function planPluginInstall(
       vendors: false,
     };
   });
+}
+
+/** One vigiles-managed Codex hook: a `[[hooks.<event>]]` entry. */
+export interface CodexPluginHook {
+  readonly event: string;
+  /** Codex matcher (anchored regex, the dialect convention). */
+  readonly matcher: string;
+  /** The shell command Codex runs (a direct `npx vigiles …`, no plugin root). */
+  readonly command: string;
+  /** A unique command substring → idempotent re-merge (replaces in place). */
+  readonly key: string;
+}
+
+/**
+ * vigiles's proactive nudges, wired into a Codex repo's `.codex/config.toml`.
+ *
+ * Codex has no global plugin store (unlike Claude Code's marketplace), so its
+ * config is repo-committed — the idiomatic place for these. They run as DIRECT
+ * `npx vigiles hook-runtime …` commands (NOT vendored bash scripts): the runtime
+ * entrypoints read the event JSON on stdin and emit the `hookSpecificOutput.
+ * additionalContext` shape Codex honors on `PostToolUse` (confirmed against the
+ * official hooks docs + encoded in `HookProtocol.injectableEvents`). Safety: only
+ * an INTENTIONAL `exit 2` blocks an edit (the refs nudge, when `unmarked-refs` is
+ * `error`); an npx-resolution failure exits non-2, so a missing dep never blocks.
+ *
+ * Deliberately NOT here (a loud, documented deferral — no-silent-skips): the
+ * SessionStart lint summary (CC delivers it as plain stdout, whose SessionStart
+ * prepend is unconfirmed on Codex — vs the JSON `additionalContext` these use) and
+ * the compile-on-edit / pre-edit-block guards (filename-gated bash with no
+ * harness-neutral `hook-runtime` entrypoint yet). Those stay manual on Codex.
+ */
+export function codexPluginHooks(): CodexPluginHook[] {
+  // Codex's file-edit tool is `apply_patch` (its dialect vocabulary —
+  // src/adapters/codex/dialect.ts), NOT Claude's `Edit`/`Write`. A PostToolUse
+  // matcher keyed on CC tool names would never fire on Codex, so the nudges must
+  // match the Codex tool name. (Both nudge entrypoints also self-gate on the
+  // edited file, so a non-edit event no-ops regardless.)
+  return [
+    {
+      event: "PostToolUse",
+      matcher: "^apply_patch$",
+      command: "npx --no-install vigiles hook-runtime eval-lock-nudge",
+      key: "hook-runtime eval-lock-nudge",
+    },
+    {
+      event: "PostToolUse",
+      matcher: "^apply_patch$",
+      command: "npx --no-install vigiles hook-runtime refs",
+      key: "hook-runtime refs",
+    },
+  ];
+}
+
+/** A Codex `config.toml` shape, narrowed to the `[hooks]` table we manage. */
+interface CodexConfig {
+  hooks?: Record<string, { matcher?: string; command: string }[]>;
+  [k: string]: unknown;
+}
+
+/**
+ * Idempotently merge {@link codexPluginHooks} into a parsed `.codex/config.toml`
+ * object. Pure — the IO (read/parse/serialize/write) stays in cli.ts's
+ * `wireCodexHooks`. Each vigiles hook is keyed by a unique command substring, so
+ * a re-run REPLACES its own entry in place and leaves the user's own Codex hooks
+ * (and every other config key) untouched. Returns a new object.
+ */
+export function applyCodexPluginHooks(
+  existing: Record<string, unknown>,
+): Record<string, unknown> {
+  const config = existing as CodexConfig;
+  const hooks: Record<string, { matcher?: string; command: string }[]> = {
+    ...(config.hooks ?? {}),
+  };
+  for (const h of codexPluginHooks()) {
+    const kept = (hooks[h.event] ?? []).filter(
+      (e) => !e.command.includes(h.key),
+    );
+    hooks[h.event] = [...kept, { matcher: h.matcher, command: h.command }];
+  }
+  return { ...existing, hooks };
 }
 
 /**

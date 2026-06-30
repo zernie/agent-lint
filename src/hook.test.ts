@@ -253,15 +253,64 @@ export default defineInject({ on: "SessionStart", produce: (e) => inject("hi " +
     assert.match(config, /\[\[hooks\.PreToolUse\]\]/);
     assert.doesNotMatch(gate.stderr, /only confirmed for Claude Code/);
 
-    // An inject hook still merges, but the inject OUTPUT shape is unconfirmed
-    // on Codex — so it warns loudly instead of silently shipping a maybe-no-op.
+    // An inject hook on a Codex-SUPPORTED event (SessionStart) compiles WITHOUT a
+    // warning — `additionalContext` is confirmed shared with Codex (official docs).
     const inj = spawnSync(
       "node",
       [CLI, "compile", "brief.mjs", "--harness=codex"],
       { cwd: dir, encoding: "utf-8" },
     );
     assert.equal(inj.status, 0, inj.stderr);
-    assert.match(inj.stderr, /inject output is only confirmed for Claude Code/);
+    assert.doesNotMatch(inj.stderr, /does not honor|only confirmed/i);
+
+    // But an inject hook on an event Codex does NOT honor for additionalContext
+    // (Stop) warns LOUDLY — the injected text wouldn't reach the agent.
+    writeFileSync(
+      resolve(dir, "onstop.mjs"),
+      `import { defineInject, inject } from "vigiles/hook";
+export default defineInject({ on: "Stop", produce: () => inject("late") });`,
+    );
+    const bad = spawnSync(
+      "node",
+      [CLI, "compile", "onstop.mjs", "--harness=codex"],
+      { cwd: dir, encoding: "utf-8" },
+    );
+    assert.match(bad.stderr, /does not honor for additionalContext/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("compile (hook): a repo targeting BOTH harnesses installs the SAME hook into both configs", () => {
+  const dir = makeTmpDir();
+  try {
+    linkVigiles(dir);
+    // The repo declares both harnesses — no --harness flag, so the install must
+    // fan out to EVERY enabled harness, not pick the first (the gap: hooks used
+    // to install into one harness while instruction files mirrored to both).
+    writeFileSync(
+      resolve(dir, ".vigilesrc.json"),
+      JSON.stringify({ harness: ["claude-code", "codex"] }, null, 2) + "\n",
+    );
+    writeFileSync(resolve(dir, "guard.mjs"), GATE_PKG);
+    const r = spawnSync("node", [CLI, "compile", "guard.mjs"], {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    assert.equal(r.status, 0, r.stderr);
+    // The SAME compiled gate lands in BOTH harnesses' native config formats.
+    const ccSettings = JSON.parse(
+      readFileSync(resolve(dir, ".claude/settings.json"), "utf-8"),
+    ) as { hooks?: { PreToolUse?: unknown[] } };
+    assert.ok(ccSettings.hooks?.PreToolUse, "CC settings has the hook");
+    const codexConfig = readFileSync(
+      resolve(dir, ".codex/config.toml"),
+      "utf-8",
+    );
+    assert.match(codexConfig, /\[\[hooks\.PreToolUse\]\]/);
+    // The output names both harnesses (one install line each).
+    assert.match(r.stdout, /harness: claude-code/);
+    assert.match(r.stdout, /harness: codex/);
   } finally {
     cleanupTmpDir(dir);
   }

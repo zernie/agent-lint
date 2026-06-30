@@ -26,6 +26,7 @@ assertions come from the agnostic `vigiles/testing` (or the tier barrels
 - [Did the injected context land? (`modelRequests`)](#did-the-injected-context-land-modelrequests)
 - [Reliable events in the deterministic tier](#reliable-events-in-the-deterministic-tier)
 - [Dogfooding real third-party plugins (and the sandbox boundary)](#dogfooding-real-third-party-plugins-and-the-sandbox-boundary)
+- [Keeping eval results fresh + the nudge (Claude Code)](#keeping-eval-results-fresh--the-nudge-claude-code)
 - [See also](#see-also)
 
 ## A worked example: one real plugin, every tier
@@ -365,6 +366,33 @@ throws. Drive another harness with `sandbox: false` (you audited the code, or th
 outer container is the boundary). The full sandbox story — what it isolates vs
 records, the three network modes (deny-all / `recordEgress` / allowlisted
 `egress: { allow }`), and the limits — is in [`docs/sandboxing.md`](sandboxing.md).
+
+## Keeping eval results fresh + the nudge (Claude Code)
+
+The eval lock itself is the same on every harness — see the [agnostic
+guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock). This section is
+just **how the reminder reaches the agent on Claude Code**: it works, today.
+
+vigiles's plugin ships a **PostToolUse nudge hook**. When the agent edits a
+`SKILL.md` or an `*.eval.*` file and you have a committed lock, the hook injects a
+short reminder to run `vigiles eval --update`. It's:
+
+- ✅ **Self-gated** — silent until you've committed a lock, so it never fires in a
+  repo that doesn't use evals.
+- ✅ **Non-blocking** — a reminder, never a wall. The real gate is `--check` in CI.
+
+Why a hook and not your `CLAUDE.md`? Because that's how Claude Code actually works:
+
+| Channel                                     | Always in context?                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Your **project** `CLAUDE.md`                | ✅ yes — but it's _your_ file, so a plugin shouldn't edit it                |
+| A **plugin** instruction file               | ❌ doesn't exist — plugins ship skills + hooks, not a CLAUDE.md             |
+| **Skill descriptions**                      | ✅ yes — so the `test-harness` skill is discoverable; its body loads on use |
+| A **hook** (`SessionStart` / `PostToolUse`) | ✅ the only way a plugin injects persistent context                         |
+
+So vigiles delivers awareness two ways, neither of which touches your files: the
+`test-harness` **skill** (the agent reaches for it) and the **nudge hook** (fires
+right when you introduce staleness).
 
 ## See also
 

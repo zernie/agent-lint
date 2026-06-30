@@ -80,8 +80,9 @@ const SKIP_DIRS = new Set(["node_modules", ".git"]);
 /**
  * Canonicalize a value so the key is stable regardless of object key order —
  * recursively sorts object keys. Arrays keep order (it's significant for tools).
+ * Exported so the eval LOCK ({@link ./eval-lock}) hashes its inputs the same way.
  */
-function canonical(value: unknown): unknown {
+export function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value !== null && typeof value === "object") {
     const obj = value as Record<string, unknown>;
