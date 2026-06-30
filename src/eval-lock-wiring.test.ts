@@ -527,3 +527,126 @@ test("lock on but NO name: loud skip — runner runs, no lock written", async ()
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPLETENESS GUARD — the structural test for the bug class the review kept
+// finding: a model-facing input omitted from the lock hash, so `--check` replays
+// stale results. Each row below mutates ONE input that steers the run and asserts
+// the inputsHash CHANGES. ADD A ROW whenever you add an input to EvalSpec/
+// TriggerRateSpec that affects the model-facing run — a new input that isn't
+// hashed makes a row fail here (in CI), instead of a reviewer finding it later.
+// (Plugin/pluginDir CONTENT changes are covered by their own dir-hash tests.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALT_MODEL = "claude-opus-4-8-20260101"; // dated → no floating-alias warning
+
+/** The committed lock's inputsHash for a freshly-recorded eval (fake runner). */
+async function evalHash(
+  root: string,
+  mut: (s: ReturnType<typeof spec>) => Record<string, unknown>,
+): Promise<string> {
+  const dir = mkdtempSync(join(root, "h-"));
+  const base = { ...spec(dir, "update"), allowedTools: ["Read"] };
+  const s = mut(base);
+  await runEvalWith(s as never, countingRunner().run);
+  const lock = readLock(dir, (s.name as string) ?? "wiring eval");
+  return lock?.inputsHash ?? "";
+}
+
+test("COMPLETENESS: every model-facing runEval input changes the lock hash", async () => {
+  const root = tmp();
+  try {
+    const baseHash = await evalHash(root, (s) => s);
+    const variants: Record<
+      string,
+      (s: ReturnType<typeof spec>) => Record<string, unknown>
+    > = {
+      task: (s) => ({ ...s, task: "a DIFFERENT task" }),
+      model: (s) => ({ ...s, model: ALT_MODEL }),
+      "allowedTools (tools)": (s) => ({ ...s, allowedTools: ["Read", "Bash"] }),
+      fixture: (s) => ({ ...s, fixture: { "extra.txt": "x" } }),
+      "arm.files": (s) => ({
+        ...s,
+        arms: { run: { files: { "f.txt": "y" } } },
+      }),
+      "arm.settings": (s) => ({
+        ...s,
+        arms: { run: { settings: { permissions: { allow: ["Bash"] } } } },
+      }),
+      "arm.model": (s) => ({ ...s, arms: { run: { model: ALT_MODEL } } }),
+      "arm.interceptTools": (s) => ({
+        ...s,
+        arms: { run: { interceptTools: [{ tool: "Bash" }] } },
+      }),
+      stubs: (s) => ({ ...s, stubs: [{ name: "gh", stdout: "PR #1" }] }),
+      ephemeralEnv: (s) => ({ ...s, ephemeralEnv: true }),
+    };
+    for (const [field, mut] of Object.entries(variants)) {
+      const h = await evalHash(root, mut);
+      assert.notEqual(
+        h,
+        baseHash,
+        `changing \`${field}\` must change the lock inputsHash (else --check replays stale)`,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("COMPLETENESS: every model-facing trigger-rate input changes the lock hash", async () => {
+  const root = tmp();
+  const pluginDir = makeSkillPlugin(join(root, "plugin"));
+  const baseSpec = (dir: string) => ({
+    name: "ctrigger",
+    pluginDir,
+    prompts: ["use the foo skill", "please foo this"],
+    irrelevantPrompts: ["what's the weather", "tell me a joke"],
+    fired: () => true,
+    minPrompts: 1,
+    minDistance: 0,
+    trials: 1,
+    model: MODEL,
+    spacingSec: 0,
+    lock: { mode: "update" as const, dir, evalApiVersion: 1 },
+  });
+  const hashOf = async (
+    mut: (s: ReturnType<typeof baseSpec>) => Record<string, unknown>,
+    harness?: string,
+  ): Promise<string> => {
+    const dir = mkdtempSync(join(root, "ht-"));
+    const s = mut(baseSpec(dir));
+    await measureTriggerRateWith(
+      s as never,
+      countingRunner().run,
+      undefined,
+      undefined,
+      harness,
+    );
+    return readLock(dir, "ctrigger")?.inputsHash ?? "";
+  };
+  try {
+    const baseHash = await hashOf((s) => s);
+    const variants: Record<
+      string,
+      [(s: ReturnType<typeof baseSpec>) => Record<string, unknown>, string?]
+    > = {
+      prompts: [(s) => ({ ...s, prompts: ["totally different ask here"] })],
+      irrelevantPrompts: [
+        (s) => ({ ...s, irrelevantPrompts: ["a brand new irrelevant prompt"] }),
+      ],
+      model: [(s) => ({ ...s, model: ALT_MODEL })],
+      harness: [(s) => s, "codex"], // the driver/harness identity
+    };
+    for (const [field, [mut, harness]] of Object.entries(variants)) {
+      const h = await hashOf(mut, harness);
+      assert.notEqual(
+        h,
+        baseHash,
+        `changing \`${field}\` must change the trigger lock inputsHash`,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
