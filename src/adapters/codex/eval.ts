@@ -218,6 +218,9 @@ export const codexEvalDriver: EvalDriver = {
   runner: codexEvalAgentRunner,
   parse: parseCodexEvalRun,
   runError: codexRunError,
+  // The harness identity → folded into the trigger-rate lock hash, so a report
+  // recorded on Claude Code is STALE if the eval is switched to Codex (and v.v.).
+  harness: "codex",
 };
 
 /**

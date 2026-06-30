@@ -352,6 +352,7 @@ export function evalChecks<T>(target: T, checks: readonly Check<T>[]): CheckResu
 
 // @public
 export interface EvalDriver {
+    readonly harness?: string;
     // (undocumented)
     readonly parse: ModelOutputParser;
     // (undocumented)
