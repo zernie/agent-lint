@@ -19,6 +19,7 @@ layer-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter
 - [The OpenAI Responses mock (`startCodexMock`)](#the-openai-responses-mock-startcodexmock)
 - [What maps, and what doesn't](#what-maps-and-what-doesnt)
 - [Authenticating Codex (for the eval tier)](#authenticating-codex-for-the-eval-tier)
+- [Keeping eval results fresh + the nudge (Codex)](#keeping-eval-results-fresh--the-nudge-codex)
 - [See also](#see-also)
 
 ## Select Codex by the `{ adapter }` option
@@ -186,6 +187,16 @@ The eval tier also needs **network egress** to the Codex/OpenAI backend (the
 deterministic tier doesn't — it only talks to the in-process mock). Install the
 CLI with `npm i -g @openai/codex` (pin the version — the `codex exec --json`
 event schema can shift between releases; validated against `codex-cli` 0.141.0).
+
+## Keeping eval results fresh + the nudge (Codex)
+
+The eval lock — `vigiles eval --update` / `--check` — is a harness-agnostic CLI feature and works on Codex exactly as on Claude Code (the hash is computed from your eval's inputs; no harness binary needed for `--check`). See the [agnostic guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock) for the mechanics.
+
+What differs on Codex is **how the reminder reaches the agent:**
+
+- **`AGENTS.md` is the always-loaded instruction file** (Codex's CLAUDE.md analog), and the normal Codex convention for tool guidance — so a one-line "after editing a skill, run `vigiles eval --update`" note in `AGENTS.md` is an acceptable, idiomatic opt-in there (it is _not_ written for you).
+- **Skills install** via the cross-agent skills CLI, so the `test-harness` skill (which documents the lock lifecycle) is available on Codex too.
+- **The PostToolUse nudge hook fires on Codex** (hook events are near-1:1), but Codex's hook **context-injection** output isn't confirmed yet — only the block/`exit 2` path is shared. So the nudge **text** doesn't yet reach the agent the way it does on Claude Code. Until Codex inject lands, lean on the **skill** + the optional **`AGENTS.md` note**; the hard staleness gate (`eval --check` in CI) works identically regardless.
 
 ## See also
 

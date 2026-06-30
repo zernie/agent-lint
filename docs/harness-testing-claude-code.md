@@ -26,6 +26,7 @@ assertions come from the agnostic `vigiles/testing` (or the tier barrels
 - [Did the injected context land? (`modelRequests`)](#did-the-injected-context-land-modelrequests)
 - [Reliable events in the deterministic tier](#reliable-events-in-the-deterministic-tier)
 - [Dogfooding real third-party plugins (and the sandbox boundary)](#dogfooding-real-third-party-plugins-and-the-sandbox-boundary)
+- [Keeping eval results fresh + the nudge (Claude Code)](#keeping-eval-results-fresh--the-nudge-claude-code)
 - [See also](#see-also)
 
 ## A worked example: one real plugin, every tier
@@ -365,6 +366,16 @@ throws. Drive another harness with `sandbox: false` (you audited the code, or th
 outer container is the boundary). The full sandbox story — what it isolates vs
 records, the three network modes (deny-all / `recordEgress` / allowlisted
 `egress: { allow }`), and the limits — is in [`docs/sandboxing.md`](sandboxing.md).
+
+## Keeping eval results fresh + the nudge (Claude Code)
+
+The eval lock — `vigiles eval --update` (local) / `--check` (CI) — is harness-agnostic; see the [agnostic guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock) for the mechanics. What's **Claude-Code-specific is how the reminder reaches the agent.**
+
+vigiles's plugin ships a **PostToolUse nudge hook**: after you edit a `SKILL.md` or an `*.eval.*` script and committed locks exist, it injects an `additionalContext` reminder to re-run `vigiles eval --update` — self-gated (silent until you've committed a lock), and **never blocks** (the gate is CI's `--check`). It's how a plugin delivers awareness without touching your `CLAUDE.md`:
+
+- **A plugin can't ship an always-on CLAUDE.md** — Claude Code only auto-loads the _project's_ CLAUDE.md and the plugin's `settings.json`. So persistent plugin context comes from a hook, not a file edit.
+- **Skill descriptions are always in context**, so the `test-harness` skill carries the lock lifecycle for the model to find on demand; its body loads when invoked.
+- For an _always-on_ reminder a plugin can use a **`SessionStart` hook** emitting `hookSpecificOutput.additionalContext`; vigiles uses the event-fresh PostToolUse nudge instead, since it fires exactly when staleness is introduced.
 
 ## See also
 

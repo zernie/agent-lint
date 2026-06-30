@@ -306,6 +306,12 @@ inputs," not "they reflect today's model" — re-run `--update` when you want fr
 numbers. In a workflow it's `command: eval-check` (a green no-op until you commit
 your first lock); `vigiles init` scaffolds the job.
 
+vigiles also **reminds the agent** to re-run `--update` after it edits a skill (a
+non-blocking PostToolUse nudge) — how that reminder reaches the agent differs per
+harness (Claude Code injects it; Codex is a documented follow-on). See the
+per-harness guides: [Claude Code](harness-testing-claude-code.md#keeping-eval-results-fresh--the-nudge-claude-code)
+· [Codex](harness-testing-codex.md#keeping-eval-results-fresh--the-nudge-codex).
+
 ## Advanced
 
 These ride on the eval tier — reach for them when the basic measure isn't enough.
