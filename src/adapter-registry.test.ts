@@ -7,6 +7,7 @@ import {
   normalizeHarnessName,
   normalizeHarnessList,
   resolveHarnessSelection,
+  resolveHarnessAdapters,
   adapterForInstructionFile,
   type HarnessSelection,
 } from "./adapter-registry.js";
@@ -168,6 +169,71 @@ test("resolveHarnessSelection: ambiguous repo (CLAUDE.md + AGENTS.md) warns", ()
     const notice = noticeOf(sel);
     assert.match(notice, /matches/);
     assert.match(notice, /harness/);
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+// resolveHarnessAdapters — the FULL fan-out set (unlike resolveHarnessSelection's
+// single pick): an install writes the same artifact into EVERY enabled harness.
+test("resolveHarnessAdapters: config harness list → ALL of them (the fan-out)", () => {
+  const dir = makeTmpDir();
+  try {
+    const adapters = resolveHarnessAdapters({
+      root: dir,
+      configHarness: ["claude", "codex"],
+    });
+    assert.deepEqual(
+      adapters.map((a) => a.name),
+      ["claude-code", "codex"],
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveHarnessAdapters: --harness flag → just that one (explicit override is singular)", () => {
+  const dir = makeTmpDir();
+  try {
+    const adapters = resolveHarnessAdapters({
+      root: dir,
+      flag: "codex",
+      configHarness: ["claude", "codex"],
+    });
+    assert.deepEqual(
+      adapters.map((a) => a.name),
+      ["codex"],
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveHarnessAdapters: no config → auto-detect → the one detected", () => {
+  const dir = makeTmpDir();
+  try {
+    writeFileSync(join(dir, "AGENTS.md"), "# x\n");
+    const adapters = resolveHarnessAdapters({ root: dir });
+    assert.deepEqual(
+      adapters.map((a) => a.name),
+      ["codex"],
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("resolveHarnessAdapters: de-dupes an alias + its canonical (claude + claude-code → one)", () => {
+  const dir = makeTmpDir();
+  try {
+    const adapters = resolveHarnessAdapters({
+      root: dir,
+      configHarness: ["claude", "claude-code", "codex"],
+    });
+    assert.deepEqual(
+      adapters.map((a) => a.name),
+      ["claude-code", "codex"],
+    );
   } finally {
     cleanupTmpDir(dir);
   }

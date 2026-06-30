@@ -36,12 +36,18 @@ import {
   formatCapabilityDiff,
 } from "./core/capability-diff.js";
 import { validate, loadConfig } from "./core/validate.js";
+import {
+  anyLocksCommitted,
+  evalLockNudge,
+  DEFAULT_LOCK_DIR,
+} from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
   parseSetupArgs,
   shouldPrompt,
   resolvePlan,
   planPluginInstall,
+  applyCodexPluginHooks,
   mergeProjectConfig,
   collectSetupAnswers,
   type SetupPlan,
@@ -97,6 +103,7 @@ import {
   detectAdapterResult,
   resolveAdapter,
   resolveHarnessSelection,
+  resolveHarnessAdapters,
   normalizeHarnessName,
   normalizeHarnessList,
   getAdapter,
@@ -174,6 +181,7 @@ import {
   runInject,
   runReact,
   dispatchKind,
+  hookRouting,
   hookMode,
   hookNeeds,
   gateAction,
@@ -2158,7 +2166,18 @@ function specReferencedElsewhere(
 /** Full GitHub Actions workflow that wires the production `zernie/vigiles@v1`
  * Action (lint pillar) and, when the test pillar is set up, a deterministic
  * harness job. */
-function vigilesWorkflow(plan: SetupPlan): string {
+/** The npm package(s) that provide each harness's CLI binary — the deterministic
+ * harness tier spawns the real agent CLI against a mock model (no API key). A repo
+ * targeting both harnesses installs both. */
+function harnessTestBinaries(harnesses: string[]): string {
+  const pkgs: string[] = [];
+  if (harnesses.includes("claude")) pkgs.push("@anthropic-ai/claude-code");
+  if (harnesses.includes("codex")) pkgs.push("@openai/codex");
+  // Fall back to Claude Code if the set is somehow empty (back-compatible default).
+  return (pkgs.length > 0 ? pkgs : ["@anthropic-ai/claude-code"]).join(" ");
+}
+
+function vigilesWorkflow(plan: SetupPlan, harnesses: string[]): string {
   const harness = plan.test
     ? `
   harness:
@@ -2172,8 +2191,23 @@ function vigilesWorkflow(plan: SetupPlan): string {
         with:
           node-version: "20"
       - run: npm install
-      - run: npm i -g @anthropic-ai/claude-code # mock tier needs the binary, no API key
+      - run: npm i -g ${harnessTestBinaries(harnesses)} # mock tier needs the binary, no API key
       - run: npx vigiles test
+
+  eval-check:
+    # Eval staleness gate — real-model evals run LOCALLY on your subscription
+    # (\`npx vigiles eval --update\`, which commits a lock); this job VERIFIES those
+    # committed results against the current inputs with NO model call. It stays a
+    # green no-op until you commit your first lock. See docs/harness-testing.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1
+        with:
+          command: eval-check
 `
     : "";
   return `name: vigiles
@@ -2255,7 +2289,7 @@ function rewriteRemovedSubcommands(content: string): string {
  * commit hint). An existing workflow is never clobbered unless `--force`, but a
  * STALE one (old bare-`npx vigiles` API, or a removed subcommand) is reported
  * loudly instead of silently skipped — and rewritten in place with `--force`. */
-function wireGha(plan: SetupPlan): string[] {
+function wireGha(plan: SetupPlan, harnesses: string[]): string[] {
   const dir = resolve(process.cwd(), ".github", "workflows");
   const path = resolve(dir, "vigiles.yml");
   const rel = ".github/workflows/vigiles.yml";
@@ -2279,7 +2313,7 @@ function wireGha(plan: SetupPlan): string[] {
       );
     } else if (workflowUsesStaleApi(content)) {
       if (plan.force) {
-        writeFileSync(path, vigilesWorkflow(plan));
+        writeFileSync(path, vigilesWorkflow(plan, harnesses));
         console.log(`✓ Regenerated ${rel} (was a stale bare \`npx vigiles\`)`);
         return [rel];
       }
@@ -2295,7 +2329,7 @@ function wireGha(plan: SetupPlan): string[] {
     return [];
   }
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(path, vigilesWorkflow(plan));
+  writeFileSync(path, vigilesWorkflow(plan, harnesses));
   console.log(
     "✓ Created .github/workflows/vigiles.yml (uses zernie/vigiles@v1)",
   );
@@ -2776,6 +2810,42 @@ function installPlugins(harnesses: string[]): void {
     console.log("");
     reportInstall(plan, runInstall(plan, exec));
   }
+  // Claude Code gets its hooks from the global marketplace plugin; Codex has no
+  // global store, so wire vigiles's proactive nudge hooks into the repo's
+  // .codex/config.toml directly (the idiomatic, repo-committed place).
+  if (harnesses.includes("codex")) wireCodexHooks();
+}
+
+/**
+ * Wire vigiles's proactive nudge hooks into `.codex/config.toml` (idempotently).
+ * Codex honors `additionalContext` on `PostToolUse`, and these run as direct
+ * `npx vigiles hook-runtime …` commands (no plugin root / vendored script), so a
+ * Codex user gets the same eval-lock + refs nudges a Claude Code user gets from
+ * the marketplace plugin. The pure merge is `applyCodexPluginHooks` (unit-tested
+ * in setup-plan.test.ts) — this only does the read/parse/write IO.
+ */
+function wireCodexHooks(): void {
+  const path = resolve(process.cwd(), ".codex", "config.toml");
+  let config: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      config = parseToml(readFileSync(path, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      console.log(
+        "⚠ .codex/config.toml is not valid TOML — skipping Codex hook wiring (fix it, then re-run `vigiles init`).",
+      );
+      return;
+    }
+  }
+  const merged = applyCodexPluginHooks(config);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, serializeConfig(merged, "toml"));
+  console.log(
+    "✓ Wired the eval-lock + refs nudge hooks into .codex/config.toml (commit it)",
+  );
 }
 
 /** Add/upgrade `vigiles` in the project's `devDependencies` (and move it out of
@@ -2984,7 +3054,7 @@ async function setup(args: string[]): Promise<void> {
   // CI — the production Action (+ a harness job when Pillar 2 is on).
   if (plan.gha) {
     console.log("");
-    written.push(...wireGha(plan));
+    written.push(...wireGha(plan, harnesses));
   }
 
   // Plugin/skill install — per-harness (Claude marketplace / Codex direct).
@@ -4459,6 +4529,46 @@ async function handleGenerateHarness(
  * tier needs it, just like the node:test suite). `--trials=N` is forwarded to
  * eval scripts via the `VIGILES_TRIALS` env var.
  */
+/**
+ * Resolve the eval LOCK env from the `eval` flags. `--update` records each named
+ * eval's report to a committed `.vigiles/eval-locks/<name>.lock.json` (run locally
+ * on your subscription); `--check` (CI) verifies the committed result against the
+ * current inputs WITHOUT a model call. `--check` is a green NO-OP until the first
+ * lock is committed (smooth adoption). Returns the env to thread, or `"skip"` to
+ * exit green now. `--check`+`--update` together is a usage error (exit 2). The
+ * behavior epoch comes from `.vigilesrc.json` `eval.apiVersion` (committed).
+ */
+function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
+  const wantCheck = args.includes("--check");
+  const wantUpdate = args.includes("--update");
+  if (wantCheck && wantUpdate) {
+    console.error(
+      "vigiles eval: --check and --update are mutually exclusive (one verifies, one records).",
+    );
+    process.exit(2);
+  }
+  if (
+    wantCheck &&
+    !anyLocksCommitted(resolve(process.cwd(), DEFAULT_LOCK_DIR))
+  ) {
+    console.log(
+      "ℹ vigiles eval --check: no committed eval locks found — nothing to verify.\n" +
+        "  Run `vigiles eval --update` locally (on your subscription) and commit the\n" +
+        "  lock to enable the CI staleness gate.",
+    );
+    return "skip";
+  }
+  const env: Record<string, string> = {};
+  if (wantCheck) env.VIGILES_EVAL_LOCK = "check";
+  if (wantUpdate) env.VIGILES_EVAL_LOCK = "update";
+  if (wantCheck || wantUpdate) {
+    const apiVersion = loadConfig().eval?.apiVersion;
+    if (apiVersion !== undefined)
+      env.VIGILES_EVAL_API_VERSION = String(apiVersion);
+  }
+  return env;
+}
+
 function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
@@ -4467,6 +4577,16 @@ function handleRunScripts(
   const cwd = process.cwd();
   // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
+
+  // The eval LOCK flags (`--check`/`--update`) are resolved BEFORE file discovery
+  // so mutual-exclusion + the cold-start no-op are honored regardless of file
+  // count. Returns the env to thread to scripts, or `"skip"` to exit green now.
+  let lockEnv: Record<string, string> = {};
+  if (kind === "eval") {
+    const r = resolveEvalLockEnv(args);
+    if (r === "skip") return;
+    lockEnv = r;
+  }
 
   const files = discoverScripts(restArgs, defaultGlob, cwd);
 
@@ -4504,7 +4624,7 @@ function handleRunScripts(
   // it's part of the measurement definition, so it belongs in the spec
   // (`model` / `minModel`), version-controlled, not a hidden override.
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
-  const env: NodeJS.ProcessEnv = {};
+  const env: NodeJS.ProcessEnv = { ...lockEnv };
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
@@ -4722,6 +4842,12 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+  );
+  console.log(
+    "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
+  );
+  console.log(
+    "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
   );
   console.log(
     "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",
@@ -5079,6 +5205,9 @@ async function handleHookRuntime(
     case "refs":
       refsHookCommand();
       return;
+    case "eval-lock-nudge":
+      evalLockNudgeHookCommand();
+      return;
     case "effect-enter":
       setEffectActive(process.cwd());
       console.log("Effect boundary entered.");
@@ -5134,6 +5263,44 @@ const INSTRUCTION_FILE = /^(SKILL|CLAUDE|AGENTS)\.md$/;
 
 function isInstructionFile(file: string): boolean {
   return INSTRUCTION_FILE.test(basename(file));
+}
+
+/**
+ * PostToolUse-hook entrypoint: when the agent edits an eval input (a `SKILL.md`
+ * trigger surface or an `*.eval.*` script), and committed eval locks exist, inject
+ * a NON-BLOCKING reminder to re-run `vigiles eval --update`. Self-gating (silent
+ * until a lock is committed), never blocks, never runs an eval — a reminder, not a
+ * gate (the gate is `eval --check` in CI). The harness-neutral nudge lives in
+ * `evalLockNudge`; both CC and Codex deliver it as `additionalContext` on
+ * `PostToolUse` (confirmed — see docs/harness-testing-codex.md).
+ */
+function evalLockNudgeHookCommand(): void {
+  let raw = "";
+  try {
+    raw = readFileSync(0, "utf-8");
+  } catch {
+    /* no stdin → nothing to do */
+  }
+  let file = "";
+  try {
+    const j = JSON.parse(raw) as { tool_input?: { file_path?: string } };
+    file = j.tool_input?.file_path ?? "";
+  } catch {
+    /* malformed → nothing to do */
+  }
+  if (!file) return;
+  const cwd = process.cwd();
+  const target = relative(cwd, resolve(cwd, file)) || file;
+  const msg = evalLockNudge(target, resolve(cwd, DEFAULT_LOCK_DIR));
+  if (!msg) return;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: msg,
+      },
+    }) + "\n",
+  );
 }
 
 /**
@@ -5354,35 +5521,65 @@ async function installHookFile(
   mkdirSync(dirname(settingsAbs), { recursive: true });
   writeFileSync(settingsAbs, serializeConfig(merged, format));
 
-  // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
-  // but an inject/react hook's OUTPUT shape is confirmed only for Claude Code. On
-  // another harness it would emit CC-shaped output that may not be read — exactly
-  // the silent failure this feature exists to prevent. Flag it, loudly.
+  // No silent skips: warn loudly only where a hook's OUTPUT genuinely may not
+  // apply on this harness. INJECT's `additionalContext` shape is now CONFIRMED
+  // shared with Codex (per the official hooks docs), so an inject hook only
+  // warns when its event isn't in the harness's `injectableEvents`. REACT's
+  // output is still Claude-Code-confirmed only. The gate (deny→exit 2) path is
+  // cross-harness and never warns.
   const role = dispatchKind(program);
-  const warning =
-    adapter.name !== "claude-code" && (role === "inject" || role === "react")
-      ? `${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
-        `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
-        `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
-        `${adapter.name} for now, or confirm against the real binary first ` +
-        `(research/compiled-hooks-codex.md §Deferred).`
-      : undefined;
+  const event = typeof program.on === "string" ? program.on : "";
+  const injectable = adapter.hookProtocol?.injectableEvents ?? [];
+  const matcher = hookRouting(program).matcher;
+  let warning: string | undefined;
+  if (adapter.name !== "claude-code") {
+    if (role === "inject" && !injectable.includes(event)) {
+      warning =
+        `this inject hook targets "${event}", which ${adapter.name} does not ` +
+        `honor for additionalContext — the injected text won't reach the agent. ` +
+        `Use an event ${adapter.name} supports: ${injectable.join(", ")}.`;
+    } else if (role === "react") {
+      warning =
+        `react output is confirmed only for Claude Code; on ${adapter.name} this ` +
+        `hook's react output is unverified (the gate deny→exit 2 path IS ` +
+        `cross-harness). Confirm against the real binary first.`;
+    } else if (matcher !== undefined) {
+      // A tool-matched gate carries TOOL NAMES in its matcher. vigiles does not
+      // yet translate tool vocabularies across dialects, so a matcher authored
+      // with Claude Code names (`Edit`/`Write`/`Bash`) won't fire on a harness
+      // that names the same tools differently (Codex: `apply_patch`/`shell`).
+      // Warn LOUDLY rather than report a silently-non-firing success.
+      warning =
+        `this hook matches tool(s) "${matcher}" — if those are Claude Code tool ` +
+        `names, they may not match ${adapter.name}'s vocabulary (e.g. ` +
+        `apply_patch/shell), so the hook may not fire. Verify the matcher uses ` +
+        `${adapter.name}'s tool names (cross-dialect matcher translation is not ` +
+        `yet automatic).`;
+    }
+  }
   return { role, settingsPath: adapter.layout.settingsPath, warning };
 }
 
 /**
  * Compile + install every hook (explicit paths, else discovered under
- * `.vigiles/hooks/`) into the active harness's config. Returns false if any
- * hook failed to compile.
+ * `.vigiles/hooks/`) into EVERY enabled harness's config. A typed hook is
+ * harness-neutral, so when a repo targets both harnesses the SAME hook is merged
+ * into `.claude/settings.json` AND `.codex/config.toml` (each in its native
+ * format, with per-harness warnings) — never just the first. The harness set is
+ * resolved from the `--harness=` flag, else `config.harness`, else auto-detect.
+ * Returns false if any hook failed to compile for any harness.
  */
 async function installHooks(
   hookFiles: string[],
   harnessFlag: string | undefined,
+  configHarness: string | readonly string[] | undefined,
 ): Promise<boolean> {
   if (hookFiles.length === 0) return true;
-  const adapter = harnessFlag
-    ? resolveAdapter(process.cwd(), harnessFlag)
-    : detectAdapterResult(process.cwd()).adapter;
+  const adapters = resolveHarnessAdapters({
+    root: process.cwd(),
+    flag: harnessFlag,
+    configHarness,
+  });
   // Validate registered providers first → the names a hook's provider() ref may
   // resolve to (an unsafe provider fails the whole compile, like a bad hook).
   let registeredProviders: string[];
@@ -5398,11 +5595,14 @@ async function installHooks(
   let ok = true;
   for (const file of hookFiles) {
     try {
-      const r = await installHookFile(file, adapter, registeredProviders);
-      console.log(
-        `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
-      );
-      if (r.warning) console.warn(`⚠ ${r.warning}`);
+      // Fan out: the same compiled hook lands in each enabled harness's config.
+      for (const adapter of adapters) {
+        const r = await installHookFile(file, adapter, registeredProviders);
+        console.log(
+          `✓ ${file} → ${r.settingsPath} (role: ${r.role}, harness: ${adapter.name})`,
+        );
+        if (r.warning) console.warn(`⚠ ${r.warning}`);
+      }
     } catch (e) {
       if (e instanceof HookCompileError) {
         console.error(`✗ ${file} — ${e.message}`);
@@ -6109,7 +6309,7 @@ async function main(): Promise<void> {
       let valid = true;
       if (specs.length > 0)
         valid = (await compile(specs, config, { harnessFlag })) && valid;
-      valid = (await installHooks(hooks, harnessFlag)) && valid;
+      valid = (await installHooks(hooks, harnessFlag, config.harness)) && valid;
       // Keep an existing whole-harness registry in sync (cheap, opt-in) so the
       // user never hand-runs `generate-harness`. Skipped when no harness.gen.ts.
       if (specs.length > 0)

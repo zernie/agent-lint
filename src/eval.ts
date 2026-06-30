@@ -55,6 +55,20 @@ import {
   hashDir,
   type CacheMode,
 } from "./eval-cache.js";
+import {
+  evalInputsHash,
+  buildLock,
+  readLock,
+  writeLock,
+  decideLock,
+  diffReportNumbers,
+  formatLockUpdate,
+  lockModeFromEnv,
+  evalApiVersionFromEnv,
+  DEFAULT_LOCK_DIR,
+  type LockMode,
+  type EvalLockOptions,
+} from "./eval-lock.js";
 import type { Check, CheckJSON } from "./check.js";
 import { welchTTest, type Comparison } from "./stats.js";
 import {
@@ -224,6 +238,16 @@ export interface EvalSpec<M extends Metrics> {
    * to today). See {@link ToolStub} and `research/eval-coverage-and-isolation.md`.
    */
   readonly stubs?: readonly ToolStub[];
+  /**
+   * **The eval LOCK** — a committed staleness gate for CI (see `src/eval-lock.ts`).
+   * With a `name` set, `vigiles eval --update` (local, on your subscription)
+   * records the report to `.vigiles/eval-locks/<name>.lock.json`; `--check` (CI)
+   * verifies the committed result against the current inputs WITHOUT a model call,
+   * failing "stale" when they diverge. Mode normally comes from the CLI; set
+   * `lock` to drive it programmatically or point a test at a throwaway dir. The
+   * lock engages only when `name` is set (it keys the lock file).
+   */
+  readonly lock?: EvalLockOptions;
 }
 
 /** Per-metric summary statistics across an arm's runs. */
@@ -1122,33 +1146,22 @@ export function belowModelFloor(model: string, floor: string): boolean {
   return m !== null && f !== null && m < f;
 }
 
-/**
- * Reduce a raw `--version` string to the **major.minor** cache-key token. We key
- * the cache on major.minor, NOT the patch: a patch release rarely changes agent
- * behaviour, so keying patches would churn the cache on every release for no
- * signal; a minor/major bump is where the system prompt / tool defs actually move.
- * (If a specific patch is known to matter, clear the cache or bump
- * `CACHE_FORMAT_VERSION`.) Falls back to the trimmed raw string when no semver is
- * found. Pure + tested.
- */
-export function harnessVersionKey(raw: string): string {
-  const m = /(\d+)\.(\d+)\.\d+/.exec(raw);
-  return m ? `${m[1]}.${m[2]}` : raw.trim();
-}
-
 /* v8 ignore start -- spawns the real harness binary; memoized, cache-path only */
 let cachedHarnessVersion: string | undefined;
 /**
- * The harness binary version (`claude --version`) reduced to major.minor, for the
- * cache key — so a CLI **minor/major** upgrade (new system prompt / tool defs)
- * invalidates a stale replay, while patches don't churn it. Memoized (one spawn
- * per process), resolved only on the cache path, "unknown" if the binary isn't
- * found (then it doesn't partition the key).
+ * The harness binary version (`claude --version`), reduced to its
+ * behaviorally-significant token by the runtime port's
+ * {@link HarnessRuntime.versionKey} — so a Claude Code **minor/major** upgrade
+ * (new system prompt / tool defs) invalidates a stale replay while patches don't
+ * churn it. The reduction is per-harness (CC → `major.minor`, Codex → `""`) and
+ * lives on the adapter, not here. Memoized (one spawn per process), resolved only
+ * on the cache path, "unknown" if the binary isn't found (then it doesn't
+ * partition the key).
  */
 function harnessVersion(): string {
   if (cachedHarnessVersion === undefined) {
     try {
-      cachedHarnessVersion = harnessVersionKey(
+      cachedHarnessVersion = claudeCodeRuntime.versionKey(
         execSync(`${claudeCodeRuntime.agentBinary} --version`, {
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"],
@@ -1539,6 +1552,171 @@ function aggregateArms<M extends Metrics>(
  * (pass a fake returning canned stream-json). `runEval` is this with the real
  * agent runner.
  */
+// ---------------------------------------------------------------------------
+// The eval LOCK seam (see src/eval-lock.ts) — wraps a named eval's run so
+// `--check` replays the committed report (no model) and `--update` records it.
+// ---------------------------------------------------------------------------
+
+/** Resolved lock settings for a run: mode (CLI/env) + where + the behavior epoch. */
+interface ResolvedLock {
+  readonly mode: LockMode;
+  readonly dir: string;
+  readonly evalApiVersion: number;
+}
+
+function resolveLock(over?: EvalLockOptions): ResolvedLock {
+  return {
+    mode: over?.mode ?? lockModeFromEnv(),
+    dir: over?.dir ?? resolve(process.cwd(), DEFAULT_LOCK_DIR),
+    evalApiVersion: over?.evalApiVersion ?? evalApiVersionFromEnv(),
+  };
+}
+
+/** Emit a vigiles message (GitHub annotation under Actions, else stderr/stdout). */
+function emitLockMessage(msg: string, warn: boolean): void {
+  if (process.env.GITHUB_ACTIONS)
+    console.log(`::${warn ? "warning" : "notice"}::${msg}`);
+  else if (warn) console.warn(msg);
+  else console.log(msg);
+}
+
+/**
+ * Run a named eval through the lock. `off` → just `produce()`. `check` → replay a
+ * matching committed lock (NO model call) or throw "stale". `update` → `produce()`,
+ * write the lock, print the human-facing delta. The model is driven ONLY on the
+ * run path — never on a clean `check`, which is what keeps the CI gate binary-free.
+ * A lock-on run with no `name` is a LOUD skip (the lock needs a name to key the file).
+ */
+async function withEvalLock<R>(
+  args: {
+    readonly name: string | undefined;
+    readonly inputs: unknown;
+    readonly model: string;
+    readonly lock: ResolvedLock;
+  },
+  produce: () => Promise<R>,
+): Promise<R> {
+  const { lock } = args;
+  if (lock.mode === "off") return produce();
+  if (!args.name) {
+    // An unnamed eval can't be keyed to a lock. In `check` (the CI gate) running
+    // it would call the model — violating the no-model-in-CI contract and failing
+    // for missing auth — so FAIL LOUDLY instead of silently hitting the model.
+    // `update` (local, model available) keeps producing: the eval just isn't gated.
+    if (lock.mode === "check") {
+      throw new Error(
+        `vigiles eval --check: an unnamed eval cannot run in CI — it has no ` +
+          `committed lock to replay, and running it would call the model. Add a ` +
+          `\`name\` to the spec to gate it, or exclude it from the --check run.`,
+      );
+    }
+    emitLockMessage(
+      `vigiles eval --${lock.mode}: skipped the lock for an unnamed eval — set ` +
+        `\`name\` on the spec to enable the staleness gate for it.`,
+      true,
+    );
+    return produce();
+  }
+  if (!isDatedModel(args.model)) warnFloatingModel(args.model);
+  const inputsHash = evalInputsHash({
+    model: args.model,
+    evalApiVersion: lock.evalApiVersion,
+    inputs: args.inputs,
+  });
+  const existing = readLock(lock.dir, args.name);
+  const decision = decideLock(lock.mode, args.name, inputsHash, existing);
+  if (decision.kind === "stale") throw new Error(decision.reason);
+  if (decision.kind === "replay") return decision.report as R;
+  const report = await produce();
+  const builtLock = buildLock({
+    name: args.name,
+    inputsHash,
+    model: args.model,
+    harnessVersionKey: harnessVersion(),
+    evalApiVersion: lock.evalApiVersion,
+    builtAt: new Date().toISOString(),
+    report,
+  });
+  const deltas = existing ? diffReportNumbers(existing.report, report) : [];
+  writeLock(lock.dir, builtLock);
+  emitLockMessage(
+    formatLockUpdate(args.name, deltas, existing === null),
+    false,
+  );
+  return report;
+}
+
+/**
+ * Strip the machine-specific plugin-root prefix from a resolved value before it
+ * enters the lock hash. `resolveHarness` expands `${PLUGIN_ROOT}` in a plugin's
+ * hook commands to the checkout's ABSOLUTE path, so a lock recorded at
+ * `/home/dev/...` would be falsely STALE when `--check` recomputes it at
+ * `/home/runner/...` in CI (or any other machine). Normalizing the prefix back to
+ * a token makes the hash location-independent. No-op when there's no plugin root.
+ */
+function stripPluginRoot(value: unknown, absRoot: string): unknown {
+  if (absRoot === "") return value;
+  const json = JSON.stringify(value);
+  // A hookless plugin resolves to `settings: undefined`, which `JSON.stringify`
+  // returns as `undefined` (not a string) — pass it through rather than `.split`
+  // a non-string (which would throw before the eval can run).
+  if (json === undefined) return value;
+  return JSON.parse(json.split(absRoot).join("${PLUGIN_ROOT}"));
+}
+
+/**
+ * Resolve each arm's model-affecting inputs into a canonical object for the lock
+ * hash — WITHOUT running the model (it reads files + hashes plugin dirs only). The
+ * trial count is excluded (a sample-size knob, not a behavior input); `measure` is
+ * excluded by design (the script re-asserts against the replayed report).
+ */
+function evalArmsInputs<M extends Metrics>(
+  spec: EvalSpec<M>,
+  cfg: RunConfig,
+): unknown {
+  const arms: Record<string, unknown> = {};
+  for (const [name, arm] of Object.entries(spec.arms)) {
+    const resolved = resolveHarness({
+      plugin: arm.plugin,
+      settings: arm.settings,
+      files: { ...spec.fixture, ...arm.files },
+    });
+    // The plugin root `resolveHarness` expanded into the resolved files/settings
+    // is this checkout's absolute path — normalize it out so the hash is the same
+    // on the dev's machine and in CI (else every plugin-with-root-hooks eval is
+    // falsely stale across machines).
+    const absRoot = arm.plugin ? resolve(process.cwd(), arm.plugin) : "";
+    arms[name] = {
+      model: arm.model ?? cfg.model,
+      tools: [...cfg.tools].sort(),
+      files: stripPluginRoot(resolved.files, absRoot),
+      settings: stripPluginRoot(resolved.settings, absRoot),
+      pluginDirHash: arm.pluginDir ? hashDir(arm.pluginDir) : undefined,
+      interceptTools: arm.interceptTools
+        ? serializeIntercepts(arm.interceptTools)
+        : undefined,
+    };
+  }
+  // Tool stubs (`spec.stubs`) are written onto PATH before each trial, so a
+  // change to a canned CLI output IS a model-facing input change — fold a
+  // canonical (name-sorted) view into the hash so `--check` catches it. Sorted
+  // for a stable key regardless of declaration order; an empty list is the
+  // byte-identical-to-before default. Each ToolStub is plain serializable data.
+  const stubs = [...(spec.stubs ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  // `ephemeralEnv` swaps the trial's environment (scrubbed env + throwaway HOME
+  // vs the inherited process env), which can move tool/hook/agent behavior — a
+  // model-facing input, so it belongs in the hash. Normalize to a bool so a
+  // record under one mode can't be replayed under the other with the same hash.
+  return {
+    task: spec.task,
+    arms,
+    stubs,
+    ephemeralEnv: spec.ephemeralEnv === true,
+  };
+}
+
 export async function runEvalWith<M extends Metrics>(
   spec: EvalSpec<M>,
   runner: AgentRunner,
@@ -1581,12 +1759,22 @@ export async function runEvalWith<M extends Metrics>(
     return { armName: unit.armName, skipped: false, row, usage };
   };
 
-  const results = await runPool(units, concurrency, worker);
-  const { arms, totalCostUsd } = aggregateArms<M>(
-    Object.keys(spec.arms),
-    results,
+  const lock = resolveLock(spec.lock);
+  // Resolve the lock inputs only when the lock is active (off skips the
+  // resolveHarness/hashDir work). `check` replays the committed report below
+  // without ever entering the run pool — so no model is driven in CI.
+  const inputs = lock.mode === "off" ? undefined : evalArmsInputs(spec, cfg);
+  return withEvalLock(
+    { name: spec.name, inputs, model: cfg.model, lock },
+    async () => {
+      const results = await runPool(units, concurrency, worker);
+      const { arms, totalCostUsd } = aggregateArms<M>(
+        Object.keys(spec.arms),
+        results,
+      );
+      return { name: spec.name ?? "eval", trials, arms, totalCostUsd, aborted };
+    },
   );
-  return { name: spec.name ?? "eval", trials, arms, totalCostUsd, aborted };
 }
 
 /** Render one metric: `name=mean±se pass^k=…` (se/pass^k shown when measured). */
@@ -1643,6 +1831,19 @@ export function formatEvalReport(report: EvalReport): string {
  * (reuse the bare predicates, e.g. `(t) => skillResolved(t, "x:y")`).
  */
 export interface TriggerRateSpec {
+  /**
+   * A stable name for this trigger eval — required to engage the {@link lock}
+   * (it keys the committed `.vigiles/eval-locks/<name>.lock.json`). Two evals over
+   * the same skill with different prompts get distinct names. Optional otherwise.
+   */
+  readonly name?: string;
+  /**
+   * **The eval LOCK** — the CI staleness gate (see `src/eval-lock.ts`). With
+   * `name` set, `vigiles eval --update` records this trigger-rate report locally
+   * and `--check` verifies it against the current inputs (skill contents, prompts,
+   * model) with NO model call. Mode normally comes from the CLI flags.
+   */
+  readonly lock?: EvalLockOptions;
   /**
    * Plugin dir installed natively (`--plugin-dir`) so its skills/commands
    * activate. Provide this OR {@link skillsDir}, not both.
@@ -1805,12 +2006,21 @@ export interface EvalDriver {
   readonly runner: AgentRunner;
   readonly parse: ModelOutputParser;
   readonly runError?: (out: RunOut) => string | null;
+  /**
+   * The harness this driver runs (e.g. `"claude-code"`, `"codex"`). Folded into a
+   * trigger-rate eval's LOCK hash so a report recorded on one harness is marked
+   * STALE if the eval is later switched to another (a different harness can fire a
+   * skill differently). Optional for back-compat — absent defaults to
+   * `"claude-code"`, so an existing single-harness lock is unaffected.
+   */
+  readonly harness?: string;
 }
 
 /** The default (Claude Code) eval driver: real `claude` + stream-json parsing. */
 export const claudeEvalDriver: EvalDriver = {
   runner: spawnAgent,
   parse: parseClaudeRun,
+  harness: "claude-code",
 };
 
 /**
@@ -2289,6 +2499,7 @@ export async function measureTriggerRateWith(
   runner: AgentRunner,
   parse: ModelOutputParser = parseClaudeRun,
   runError?: (out: RunOut) => string | null,
+  harness = "claude-code",
 ): Promise<TriggerRateReport> {
   // Deterministic gate FIRST — before spending a token (or packaging a skillsDir).
   assertTriggerDiversity(spec);
@@ -2324,30 +2535,59 @@ export async function measureTriggerRateWith(
     runError,
   };
 
+  const lock = resolveLock(spec.lock);
   try {
-    const relevant = await runTriggerSet(spec.prompts, cfg, runner);
-    const base: TriggerRateReport = {
-      rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
-      n: relevant.n,
-      perPrompt: relevant.perPrompt,
-      competitors,
-      errored: positiveOrUndefined(relevant.errored),
-    };
-    if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
+    // The lock hashes the skill UNDER TEST (its dir contents) + the prompts +
+    // model + tools — the inputs that steer whether it fires. `--check` replays
+    // the committed report with no model; `--update` records it. Resolved only
+    // when the lock is active. `trials` is excluded (a sample-size knob).
+    const triggerInputs =
+      lock.mode === "off"
+        ? undefined
+        : {
+            pluginDirHash: hashDir(pluginDir),
+            prompts: [...spec.prompts],
+            irrelevantPrompts: spec.irrelevantPrompts
+              ? [...spec.irrelevantPrompts]
+              : undefined,
+            model: cfg.model,
+            tools: [...cfg.tools].sort(),
+            fixture: spec.fixture,
+            competitors,
+            // The harness the driver runs is a model-facing input — a Claude vs
+            // Codex run can fire a skill differently — so a recorded report is
+            // STALE if the eval is switched to another harness.
+            harness,
+          };
+    return await withEvalLock(
+      { name: spec.name, inputs: triggerInputs, model: cfg.model, lock },
+      async () => {
+        const relevant = await runTriggerSet(spec.prompts, cfg, runner);
+        const base: TriggerRateReport = {
+          rate: relevant.n > 0 ? relevant.fired / relevant.n : 0,
+          n: relevant.n,
+          perPrompt: relevant.perPrompt,
+          competitors,
+          errored: positiveOrUndefined(relevant.errored),
+        };
+        if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
-    const irrelevant = await runTriggerSet(
-      spec.irrelevantPrompts ?? [],
-      cfg,
-      runner,
+        const irrelevant = await runTriggerSet(
+          spec.irrelevantPrompts ?? [],
+          cfg,
+          runner,
+        );
+        const fires = relevant.fired + irrelevant.fired;
+        return {
+          ...base,
+          errored: positiveOrUndefined(relevant.errored + irrelevant.errored),
+          falsePositiveRate:
+            irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
+          precision: fires > 0 ? relevant.fired / fires : undefined,
+          perIrrelevant: irrelevant.perPrompt,
+        };
+      },
     );
-    const fires = relevant.fired + irrelevant.fired;
-    return {
-      ...base,
-      errored: positiveOrUndefined(relevant.errored + irrelevant.errored),
-      falsePositiveRate: irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
-      precision: fires > 0 ? relevant.fired / fires : undefined,
-      perIrrelevant: irrelevant.perPrompt,
-    };
   } finally {
     // Remove the throwaway plugin dir we built from a loose `skillsDir`.
     if (packaged) rmSync(packaged, { recursive: true, force: true });
@@ -2367,7 +2607,13 @@ export async function measureTriggerRate(
   opts: { evalDriver?: EvalDriver } = {},
 ): Promise<TriggerRateReport> {
   const d = opts.evalDriver ?? claudeEvalDriver;
-  return measureTriggerRateWith(spec, d.runner, d.parse, d.runError);
+  return measureTriggerRateWith(
+    spec,
+    d.runner,
+    d.parse,
+    d.runError,
+    d.harness ?? "claude-code",
+  );
 }
 /* v8 ignore stop */
 

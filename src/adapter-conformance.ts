@@ -108,6 +108,15 @@ export function checkAdapterConformance(
         Number.isInteger(adapter.hookProtocol.blockExitCode),
         "hookProtocol.blockExitCode is not an integer",
       );
+      // A shell-hook harness must declare WHICH events can inject developer
+      // context (`additionalContext`). Encoding it makes "can this harness
+      // deliver an inject hook?" a tested contract — the gap that let Codex's
+      // inject support sit unverified in prose. Empty would mean the harness
+      // can't inject context from a hook at all; every harness we support can.
+      need(
+        adapter.hookProtocol.injectableEvents.length > 0,
+        "hookProtocol.injectableEvents is empty — a shell-hook harness must declare the events that honor additionalContext injection (or it can't deliver an inject/nudge hook)",
+      );
       portNames.push(["hookProtocol", adapter.hookProtocol.name]);
     }
   } else {

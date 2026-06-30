@@ -19,6 +19,7 @@ layer-2 **deterministic** path — `runHarnessTest(spec, { adapter: codexAdapter
 - [The OpenAI Responses mock (`startCodexMock`)](#the-openai-responses-mock-startcodexmock)
 - [What maps, and what doesn't](#what-maps-and-what-doesnt)
 - [Authenticating Codex (for the eval tier)](#authenticating-codex-for-the-eval-tier)
+- [Keeping eval results fresh + the nudge (Codex)](#keeping-eval-results-fresh--the-nudge-codex)
 - [See also](#see-also)
 
 ## Select Codex by the `{ adapter }` option
@@ -186,6 +187,26 @@ The eval tier also needs **network egress** to the Codex/OpenAI backend (the
 deterministic tier doesn't — it only talks to the in-process mock). Install the
 CLI with `npm i -g @openai/codex` (pin the version — the `codex exec --json`
 event schema can shift between releases; validated against `codex-cli` 0.141.0).
+
+## Keeping eval results fresh + the nudge (Codex)
+
+The eval lock works on Codex exactly as on Claude Code — `--check` just hashes your
+eval's inputs, so it needs no harness binary. See the [agnostic
+guide](harness-testing.md#keep-eval-results-fresh-in-ci-the-lock) for how it works.
+
+What's different on Codex is **how the reminder reaches the agent.** Here's the
+honest status of each channel:
+
+| Channel                                       | On Codex?                                                                                                                                                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eval --check` staleness gate (CI)            | ✅ identical — the hard gate is fully there                                                                                                                                                                    |
+| `test-harness` **skill** (documents the lock) | ✅ installs via the cross-agent skills CLI                                                                                                                                                                     |
+| `AGENTS.md` one-line note (opt-in)            | ✅ idiomatic on Codex — it's the normal place for tool guidance (not written for you)                                                                                                                          |
+| The PostToolUse **nudge hook**                | ✅ Codex honors `additionalContext` injection on `PostToolUse` (and `SessionStart` / `UserPromptSubmit` / `PreToolUse` / `SubagentStart`), so the reminder reaches the agent — the same channel as Claude Code |
+
+So on Codex today: the **skill**, the optional **`AGENTS.md` note**, and the
+**hook-delivered nudge** all work. The CI gate (`eval --check`) is unaffected — it
+works the same everywhere.
 
 ## See also
 

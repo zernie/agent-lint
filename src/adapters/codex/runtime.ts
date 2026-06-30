@@ -42,6 +42,16 @@ export const codexRuntime: HarnessRuntime = {
   } {
     return { args: codexMockArgs(baseUrl), env: codexMockEnv() };
   },
+  /**
+   * Codex opts OUT of version partitioning (`""`). It is perpetual `0.x` where
+   * the *minor* is the patch cadence (~2 bumps/week, 134 minors in 14 months), so
+   * keying `major.minor` like Claude Code would churn the cache/lock weekly. With
+   * no stable behavior boundary in the version string, Codex relies on the dated
+   * model id + `evalApiVersion` for staleness instead. See research/cache-invalidation.md.
+   */
+  versionKey(_raw: string): string {
+    return "";
+  },
 };
 
 /**

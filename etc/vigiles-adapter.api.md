@@ -94,6 +94,7 @@ export interface HarnessRuntime {
     readonly modelApiKeyEnv: string;
     readonly modelBaseUrlEnv: string;
     readonly name: string;
+    versionKey(raw: string): string;
     wireMock(baseUrl: string): {
         readonly args: readonly string[];
         readonly env: Record<string, string>;
@@ -105,6 +106,7 @@ export interface HookProtocol {
     readonly blockExitCode: number;
     readonly denyDecisionValues: readonly string[];
     readonly eventEnvVars: readonly string[];
+    readonly injectableEvents: readonly string[];
     readonly matcherStyle?: "exact" | "regex";
     readonly name: string;
 }

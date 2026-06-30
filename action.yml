@@ -7,7 +7,11 @@ branding:
 
 inputs:
   command:
-    description: "Which vigiles command to run: 'lint' (verify references + integrity + coverage) or 'compile' (specs → markdown)."
+    description: >
+      Which vigiles command to run: 'lint' (verify references + integrity +
+      coverage), 'compile' (specs → markdown), or 'eval-check' (verify committed
+      eval locks against current inputs — the staleness gate; runs NO model, so
+      it is the CI-safe half of evals you produce locally with `vigiles eval --update`).
     required: false
     default: "lint"
   paths:
@@ -65,7 +69,14 @@ runs:
         set -euo pipefail
 
         cmd="${VIGILES_COMMAND:-lint}"
-        args=("$cmd")
+        # 'eval-check' is the CI staleness gate — it maps to the real verb
+        # `eval --check` (verify committed locks vs current inputs, NO model).
+        # Real evals run locally on a subscription (`eval --update`), never in CI.
+        if [[ "$cmd" == "eval-check" ]]; then
+          args=("eval" "--check")
+        else
+          args=("$cmd")
+        fi
 
         # paths: split on commas and whitespace into positional args.
         paths="${VIGILES_PATHS:-}"

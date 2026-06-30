@@ -24,13 +24,13 @@ import {
 A harness differs from Claude Code along two axes — **format** (what it reads and
 writes) and **transport** (how it runs) — captured by five descriptors:
 
-| Port             | Axis      | What it describes                                                                                                           |
-| ---------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `HarnessDialect` | format    | built-in tool catalog, never-available tools, MCP tool shape, hook event names, instruction-file targets, plugin-root token |
-| `PluginLayout`   | format    | where the instruction file / skills / agents / commands / hooks / settings live on disk + the plugin-root token             |
-| `HarnessRuntime` | transport | the agent binary to spawn + the env a no-key mock model is reached through                                                  |
-| `HookProtocol`   | transport | how a hook signals block/deny — the block exit code + the decision values                                                   |
-| `ModelMock`      | transport | the mock model's wire format (`anthropic-messages` / `openai-responses`) + endpoints                                        |
+| Port             | Axis      | What it describes                                                                                                               |
+| ---------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `HarnessDialect` | format    | built-in tool catalog, never-available tools, MCP tool shape, hook event names, instruction-file targets, plugin-root token     |
+| `PluginLayout`   | format    | where the instruction file / skills / agents / commands / hooks / settings live on disk + the plugin-root token                 |
+| `HarnessRuntime` | transport | the agent binary to spawn + the env a no-key mock model is reached through                                                      |
+| `HookProtocol`   | transport | how a hook signals block/deny — the block exit code + the decision values + the events that honor `additionalContext` injection |
+| `ModelMock`      | transport | the mock model's wire format (`anthropic-messages` / `openai-responses`) + endpoints                                            |
 
 Each is a plain value object. Implement the ones your harness needs; the
 conformance kit tells you what's missing.
@@ -86,6 +86,11 @@ const hookProtocol: HookProtocol = {
   blockExitCode: 2,
   denyDecisionValues: ["block", "deny"],
   eventEnvVars: [],
+  // Events that honor `additionalContext` injection — so an inject/nudge hook
+  // actually reaches the agent. A shellHooks adapter MUST declare at least one
+  // (an empty list fails conformance); `compile` warns when an inject hook
+  // targets an event NOT in this list.
+  injectableEvents: ["SessionStart", "UserPromptSubmit", "PostToolUse"],
 };
 
 const modelMock: ModelMock = {

@@ -1,9 +1,17 @@
 /**
- * codexHookProtocol — EXPERIMENTAL, internal-only. Codex's hook wire protocol.
+ * codexHookProtocol — Codex's hook wire protocol.
  * Finding: it is essentially IDENTICAL to Claude Code's (exit 2 / `decision:block`
  * / `permissionDecision:deny`) — the thin `HookProtocol` port was the right call.
  * The genuine deltas are the env vars a hook receives + the TOML config format
  * (the latter lives in PluginLayout.settingsFormat, not here).
+ *
+ * Context injection (`hookSpecificOutput.additionalContext`) is ALSO shared — same
+ * shape, confirmed against the official Codex hooks docs
+ * (developers.openai.com/codex/hooks): supported on SessionStart, UserPromptSubmit,
+ * PreToolUse, PostToolUse, SubagentStart. (Earlier docs called this "deferred" —
+ * it is not.) So vigiles's PostToolUse nudges + SessionStart summary deliver on
+ * Codex unchanged. Caveats: Stop/SubagentStop/PreCompact carry no context, and
+ * Codex marks a hook run failed if it emits an unsupported field for the event.
  */
 import type { HookProtocol } from "../../core/hook-protocol.js";
 
@@ -14,6 +22,16 @@ export const codexHookProtocol: HookProtocol = {
   // Codex matchers are anchored regexes (`matcher = "^Bash$"`), unlike Claude
   // Code's exact tool name / `A|B` alternation.
   matcherStyle: "regex",
+  // Events that honor `hookSpecificOutput.additionalContext` on Codex, per the
+  // official hooks docs. Includes the events vigiles's shipped hooks use
+  // (PostToolUse, SessionStart), so those nudges reach the Codex agent too.
+  injectableEvents: [
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "SubagentStart",
+  ],
   eventEnvVars: [
     "session_id",
     "cwd",

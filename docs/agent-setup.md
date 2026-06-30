@@ -1,6 +1,20 @@
 # Agent Setup Guide
 
-How to set up vigiles when an AI agent is doing the installation (non-interactive).
+**One command is all you need.** `npx vigiles init` handles everything non-interactively — the agent runs it, skills and hooks take over, and there are no manual chores afterward. This guide shows what happens and what fallbacks exist.
+
+→ Back to [README](../README.md)
+
+## Contents
+
+- [What an Agent Can Do](#what-an-agent-can-do)
+- [Non-Interactive Setup](#non-interactive-setup)
+  - [Step 1: Run the wizard](#step-1-run-the-wizard)
+  - [Step 2: Install hooks directly (fallback)](#step-2-install-hooks-directly-fallback)
+  - [Step 3: Edit the spec](#step-3-edit-the-spec)
+  - [Step 4: Compile and verify](#step-4-compile-and-verify)
+- [Recommended Agent Prompt](#recommended-agent-prompt)
+- [What the Agent Gets Wrong](#what-the-agent-gets-wrong)
+- [See also](#see-also)
 
 ## What an Agent Can Do
 
@@ -14,12 +28,7 @@ How to set up vigiles when an AI agent is doing the installation (non-interactiv
 | Install the plugin       | Maybe            | `claude plugin install vigiles@vigiles` if the `claude` CLI is on PATH; else the user runs the two `/plugin` commands in-session |
 | Install hooks (fallback) | Yes              | Write to `.claude/settings.json` directly                                                                                        |
 
-The plugin installs through the Claude Code **marketplace** — globally into
-`~/.claude/plugins/`, never vendored into the repo. `init` runs the
-non-interactive `claude plugin` CLI when it's available; otherwise it prints the
-two in-session slash commands for the user to run. An agent that can't reach the
-`claude` CLI can still get the hook behaviour by writing it to
-`.claude/settings.json` directly (Step 2).
+**The plugin installs globally** — into `~/.claude/plugins/`, never vendored into your repo. `init` calls the `claude plugin` CLI when available. If the `claude` CLI is not on PATH, it prints the two in-session slash commands for the user to run. An agent that can't reach `claude` at all can still get hook behaviour by writing directly to `.claude/settings.json` (see Step 2 below).
 
 ## Non-Interactive Setup
 
@@ -29,22 +38,21 @@ two in-session slash commands for the user to run. An agent that can't reach the
 npx vigiles init        # or `npx vigiles init --yes` to be explicit
 ```
 
-`init` auto-detects a non-TTY (an agent / CI / piped input) and runs
-**non-interactively** — no prompts, no hanging. So a user prompt as simple as
-_"set up vigiles in this repo"_ works: the agent runs `npx vigiles init` and gets
-sensible defaults. With the defaults it sets up **both layers** — Lint (a typed
-spec + types) and Test (a starter `vigiles.harness.mjs`), a
-`zernie/vigiles@v1` CI workflow (`.github/workflows/vigiles.yml`), `vigiles` added
-to `devDependencies`, and the Claude Code plugin installed via the marketplace.
+`init` **auto-detects a non-TTY** and runs without prompts. A user prompt as simple as _"set up vigiles in this repo"_ is enough — the agent runs this command and gets sensible defaults.
 
-Scope it with flags when needed: `--lint`, `--test` (one layer or both),
-`--harness=claude,codex`, `--no-gha`, `--no-plugin`, `--strict`. (A human running
-it in a terminal gets interactive prompts instead.)
+**What `init` sets up by default:**
+
+- **Lint layer** — a typed `.spec.ts` + generated types
+- **Test layer** — a starter `vigiles.harness.mjs`
+- **CI** — a `zernie/vigiles@v1` workflow at `.github/workflows/vigiles.yml`
+- **Dependency** — `vigiles` added to `devDependencies`
+- **Plugin** — Claude Code plugin installed via the marketplace
+
+Scope it with flags when needed: `--lint`, `--test` (one layer or both), `--harness=claude,codex`, `--no-gha`, `--no-plugin`, `--strict`. A human running it in a terminal gets interactive prompts instead.
 
 ### Step 2: Install hooks directly (fallback)
 
-The plugin already brings the hooks. If you'd rather commit project-level hooks
-instead of (or alongside) the plugin, write them to `.claude/settings.json`:
+The plugin already brings the hooks. If you'd rather commit project-level hooks instead of (or alongside) the plugin, write them to `.claude/settings.json`:
 
 ```json
 {
@@ -69,7 +77,7 @@ This is equivalent to what the plugin installs, but written directly without the
 
 ### Step 3: Edit the spec
 
-The agent should read the generated `.spec.ts` file and fill in the project's actual conventions — sections, key files, commands, and rules. Use the `edit-spec` skill instructions as a guide for the spec format.
+**The agent reads the generated `.spec.ts`** and fills in the project's actual conventions — sections, key files, commands, and rules. Use the `edit-spec` skill instructions as a guide for the spec format.
 
 ### Step 4: Compile and verify
 
@@ -100,3 +108,9 @@ Common issues when agents set up vigiles:
 - **Using wrong rule names** — `enforce("no-console")` instead of `enforce("eslint/no-console")`. The compiler catches this.
 - **Forgetting to compile** — the PostToolUse hook handles this automatically
 - **Adding headers inside sections** — the compiler catches `#`/`##` headers in section content
+
+## See also
+
+- [Agent Workflows](agent-workflows.md) — per-agent setup (Claude Code, Codex, Cursor, CI)
+- [Markdown mode](markdown-mode.md) — inline comments and frontmatter (no `.spec.ts` required)
+- [CLI reference](cli.md)

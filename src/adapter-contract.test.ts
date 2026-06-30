@@ -51,6 +51,28 @@ describe("adapter contract (run over the whole registry)", () => {
         },
       );
 
+      // The gap-catching test: vigiles SHIPS inject hooks (the SessionStart lint
+      // summary; the PostToolUse refs + eval-lock nudges). For those to reach the
+      // agent, the harness must honor `additionalContext` on those events. This
+      // asserts it per-harness — so a harness that CAN'T deliver our hooks fails
+      // the build, instead of the gap sitting unverified in prose (the exact
+      // miss that let Codex inject go unconfirmed). Events vigiles' shipped hooks
+      // use: PostToolUse (nudges) + SessionStart (summary).
+      hooksTest(
+        adapter.capabilities.shellHooks
+          ? "honors additionalContext on the events vigiles' shipped hooks use"
+          : "honors additionalContext — n/a (no shell hooks)",
+        () => {
+          const injectable = adapter.hookProtocol?.injectableEvents ?? [];
+          for (const ev of ["PostToolUse", "SessionStart"]) {
+            expect(
+              injectable,
+              `${adapter.name} does not declare inject support for ${ev} — vigiles' shipped hooks couldn't deliver`,
+            ).toContain(ev);
+          }
+        },
+      );
+
       // Harness testing (pillar 2) — gated on the capability, loud skip otherwise.
       const testableTest = adapter.capabilities.harnessTesting ? it : it.skip;
       testableTest(

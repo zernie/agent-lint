@@ -1,22 +1,12 @@
 # Verifying your instruction files
 
-**Your CLAUDE.md drifts the moment you refactor.** It still points the agent at a
-file that moved and a script that was renamed — and the agent trusts the stale
-claim as fact and acts on fiction. `vigiles lint` resolves every reference against
-reality: a dead file path, a missing script, a renamed code symbol, or a linter
-rule that doesn't exist (or exists but is **disabled**) is caught before it can
-mislead the agent.
+**`vigiles lint` checks every reference in your CLAUDE.md against reality.** A dead file path, a missing script, a renamed symbol, or a linter rule that doesn't exist (or exists but is disabled) is caught before the agent trusts a stale claim and acts on it.
 
-> The [README](../README.md) has the 30-second pitch; this is the full guide. For
-> the testing layer, see [Testing your harness](harness-testing.md).
+> The [README](../README.md) has the 30-second pitch; this is the full guide. For the testing layer, see [Testing your harness](harness-testing.md).
 
 ## Two ways to lint: a typed spec (the default) or plain markdown
 
-**The default is a typed spec your agent writes** — `init` adopts your existing
-CLAUDE.md into one and the `edit-spec` / `strengthen` skills keep it current, so you
-rarely hand-write a `.spec.ts`. Prefer zero new files, or not ready for TypeScript?
-Plain markdown with inline comments lints too — and gives up nothing on reference
-verification.
+**The default is a typed spec your agent writes.** `init` adopts your existing CLAUDE.md into one. The `edit-spec` and `strengthen` skills keep it current, so you rarely hand-write a `.spec.ts`. Prefer zero new files, or not ready for TypeScript? Plain markdown with inline comments lints too — and gives up nothing on reference verification.
 
 ### Markdown mode — the zero-setup floor
 
@@ -30,47 +20,23 @@ Add a comment to your existing CLAUDE.md and lint it:
 npx vigiles lint CLAUDE.md
 ```
 
-Each rule is checked against your real linter config — typos get closest-match
-suggestions, disabled rules are flagged. `vigiles lint` enforces them in CI.
-Zero install commitment, zero new files.
+Each rule is checked against your real linter config. Typos get closest-match suggestions. Disabled rules are flagged. `vigiles lint` enforces them in CI. Zero install commitment, zero new files.
 
-> **Want editor autocomplete?** Move the rules into a `vigiles:` YAML
-> frontmatter block — `init` already generated the schema, so your editor's YAML
-> language server autocompletes rule names and squiggles typos at edit time, no
-> TypeScript required. [Markdown mode →](markdown-mode.md)
+> **Want editor autocomplete?** Move the rules into a `vigiles:` YAML frontmatter block. `init` already generated the schema, so your editor's YAML language server autocompletes rule names and squiggles typos at edit time — no TypeScript required. [Markdown mode →](markdown-mode.md)
 
 ### Typed spec — the default
 
-**You rarely hand-write one.** It's TypeScript for your harness, but the
-`edit-spec` / `strengthen` skills write and update the spec from a plain-English ask
-and a hook recompiles it on save — so the spec is the default `init` sets up and the
-agent manages, not a chore. The deeper **compiler-grade guarantees** are gradual and
-opt-in, like TypeScript's `strict` — here's what they buy you.
+**You rarely hand-write one.** The `edit-spec` and `strengthen` skills write and update the spec from a plain-English ask. A hook recompiles it on save. The spec is what `init` sets up, and the agent manages it — not a chore. The deeper **compiler-grade guarantees** are gradual and opt-in, like TypeScript's `strict`.
 
-**Markdown mode is not a lesser tier for verification.** It squiggles rule typos
-at edit time (the YAML schema `init` generates), and its inline marks —
-`vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file
-paths, scripts, symbols, and linter rules _woven into the prose_, exactly like the
-spec. If you have one instruction file and don't need to generate or share rules,
-stay in markdown; you give up nothing on reference verification.
+**Markdown mode is not a lesser tier for verification.** It squiggles rule typos at edit time (via the YAML schema `init` generates). Its inline marks — `vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file paths, scripts, symbols, and linter rules woven into the prose, exactly like the spec. If you have one instruction file and don't need to generate or share rules, stay in markdown. You give up nothing on reference verification.
 
-A typed spec adds one thing markdown can't: **rules and instructions become
-composable, type-checked code.**
+**A typed spec adds one thing markdown can't: rules and instructions become composable, type-checked code.**
 
-- **Compose and reuse.** Share a rule-set across many files or repos, generate
-  rules programmatically, and let `tsc` make a stale reference _unrepresentable_ as
-  you author — not just flagged on `lint`.
-- **One hashed source.** `compile` stamps the emitted CLAUDE.md with an integrity
-  hash, so the agent edits the spec and hand-edits to the artifact are caught.
-  (This only matters once you've chosen the spec-as-source model — in markdown the
-  file _is_ the source, so there's no drift to detect.)
-- **Monotonicity proofs.** A rule can be strengthened (`guidance` → `enforce`) but
-  never silently weakened or removed, gated by the proof system below.
+- **Compose and reuse.** Share a rule-set across many files or repos, generate rules programmatically, and let `tsc` make a stale reference _unrepresentable_ as you author — not just flagged on `lint`.
+- **One hashed source.** `compile` stamps the emitted CLAUDE.md with an integrity hash, so agent edits to the spec and hand-edits to the artifact are caught. (This only matters once you've chosen the spec-as-source model. In markdown the file _is_ the source, so there's no drift to detect.)
+- **Monotonicity proofs.** A rule can be strengthened (`guidance` → `enforce`) but never silently weakened or removed, gated by the proof system.
 
-So: the spec is the default — and the clear choice once you're standardizing rules
-across a codebase, generating them, or wanting the integrity hash. For a single
-instruction file, markdown is a fully capable floor you can stay on, not a lesser
-tier.
+The spec is the default — and the clear choice once you're standardizing rules across a codebase, generating them, or wanting the integrity hash. For a single instruction file, markdown is a fully capable floor you can stay on.
 
 ```typescript
 // CLAUDE.md.spec.ts
@@ -100,14 +66,11 @@ export default claude({
 });
 ```
 
-`npx vigiles compile` turns that into CLAUDE.md. From there the loop runs itself:
-the agent edits the spec, hooks auto-compile, types catch typos in the editor, and
-CI catches drift.
+`npx vigiles compile` turns that into CLAUDE.md. From there the loop runs itself: the agent edits the spec, hooks auto-compile, types catch typos in the editor, and CI catches drift.
 
 ## Three rule types
 
-**`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the
-catalog AND is enabled in your project config. A disabled rule is a compile error.
+**`enforce()`** — delegated to a linter. vigiles verifies the rule exists in the catalog AND is enabled in your project config. A disabled rule is a compile error.
 
 <!-- vigiles:ignore -->
 
@@ -117,18 +80,11 @@ catalog AND is enabled in your project config. A disabled rule is a compile erro
 "no-unwrap": enforce("clippy/unwrap_used", "Use expect() with context."),
 ```
 
-Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies.
-[Full linter support details →](linter-support.md)
+Supports ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, and Cedar policies. [Full linter support details →](linter-support.md)
 
-**`guidance()`** — e.g. `guidance("Google unfamiliar APIs first.")` — prose advice
-with no mechanical enforcement, but not untracked: guidance rules join the
-monotonicity proof system, so a rule can be strengthened (`guidance` → `enforce`)
-but never silently weakened or removed without an explicit allowlist.
+**`guidance()`** — prose advice with no mechanical enforcement. Not untracked, though: guidance rules join the monotonicity proof system, so a rule can be strengthened (`guidance` → `enforce`) but never silently weakened or removed without an explicit allowlist.
 
-**`guard()`** — reactive: runs a command when watched files change (e.g.
-`*.spec.ts` → `npx vigiles compile`). One declaration emits the hook for every
-supported system (Claude Code PostToolUse, husky pre-commit, CI) — no
-copy-pasting the trigger across each. [Full spec format →](spec-format.md)
+**`guard()`** — reactive: runs a command when watched files change (e.g. `*.spec.ts` → `npx vigiles compile`). One declaration emits the hook for every supported system — Claude Code PostToolUse, husky pre-commit, CI — with no copy-pasting the trigger across each. [Full spec format →](spec-format.md)
 
 ## Verified references
 
@@ -151,39 +107,18 @@ export default claude({
 });
 ```
 
-There's a small family of inline **marks** that `lint` checks, each binding a
-reference to its real source:
+There's a small family of inline **marks** that `lint` checks, each binding a reference to its real source:
 
-- `` `vigiles:symbol file#name` `` — the named file actually **defines** that
-  symbol (function, class, method, constant), parsed with
-  [ast-grep](https://ast-grep.github.io) across **JS/TS, Python, Ruby, Rust, and
-  CSS**. Rename it and `lint` fails; in markdown mode the `refs-hook` **forces
-  the mark**, blocking edits that leave a code reference bare.
-- `` `vigiles:mcp server#tool` `` — the referenced **MCP tool exists** on its
-  server. `lint` reads `.mcp.json`, starts the server, lists its tools, and flags
-  a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP
-  server renaming `create_issue` → `issue_write`, which otherwise fails silently.
+- `` `vigiles:symbol file#name` `` — **the named file actually defines that symbol** (function, class, method, constant), parsed with [ast-grep](https://ast-grep.github.io) across JS/TS, Python, Ruby, Rust, and CSS. Rename it and `lint` fails. In markdown mode the `refs-hook` forces the mark, blocking edits that leave a code reference bare.
+- `` `vigiles:mcp server#tool` `` — **the referenced MCP tool exists on its server.** `lint` reads `.mcp.json`, starts the server, lists its tools, and flags a renamed/removed one with a "did you mean" — catching e.g. the GitHub MCP server renaming `create_issue` → `issue_write`, which otherwise fails silently.
 
-**Typo-safe at authoring time, too.** `vigiles generate types` emits a
-`.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your
-editor; `generate-schema` gives the YAML-frontmatter mode the same via your YAML
-language server. Both have `--check` CI freshness modes.
-[How it works →](linter-support.md#generate-types)
+**Typo-safe at authoring time, too.** `vigiles generate types` emits a `.vigiles/generated.d.ts` so `enforce("eslint/no-consolee")` red-squiggles in your editor. `generate-schema` gives the YAML-frontmatter mode the same via your YAML language server. Both have `--check` CI freshness modes. [How it works →](linter-support.md#generate-types)
 
 ## The validation rules — the full matrix
 
-Beyond the references above, `vigiles lint` runs a set of **deterministic
-validation rules** over your instruction files, skills, subagents, and hooks.
-Each has a default severity (`"warn"` / `"error"` / `false`) and is configured in
-`.vigilesrc.json`. Every rule is **deterministic** (no model, no API key) and
-links to its own reference doc.
+Beyond the references above, `vigiles lint` runs a set of **deterministic validation rules** over your instruction files, skills, subagents, and hooks. Each has a default severity (`"warn"` / `"error"` / `false`) and is configured in `.vigilesrc.json`. Every rule is **deterministic** — no model, no API key — and links to its own reference doc.
 
-**Not every rule applies to every harness.** A rule is scoped to the _surface_ it
-checks and runs only where the active harness has that surface — elsewhere
-`vigiles lint` reports it as **n/a** (loud, never a failure). That's what lets one
-config target Claude Code _and_ Codex without duplicating rules per harness:
-universal rules stay bare and run everywhere; surface rules light up only where
-the surface exists.
+**Not every rule applies to every harness.** A rule is scoped to the _surface_ it checks and runs only where the active harness has that surface. Where the surface doesn't exist, `vigiles lint` reports the rule as **n/a** — loud, never a silent pass or failure. That's what lets one config target Claude Code _and_ Codex without duplicating rules per harness.
 
 | Surface (the gate)          | Rules                                                                                                                               | Applies to                                |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
@@ -284,54 +219,33 @@ Set severities in `.vigilesrc.json`:
 }
 ```
 
-Disable a rule for one file with `<!-- vigiles-disable require-instructions-spec -->`
-at the top of the markdown. `--strict` promotes `require-instructions-spec` to
-`"error"`.
+Disable a rule for one file with `<!-- vigiles-disable require-instructions-spec -->` at the top of the markdown. `--strict` promotes `require-instructions-spec` to `"error"`.
 
-`vigiles init` groups rules by confidence: the FP-safe **`structural`** group
-(broken tools / dead hooks / broken MCP / collisions) gates at `error` by default;
-the opinionated **`workflow`** group (`require-instructions-spec`, `untested-*`)
-is added by `--strict`; the **`nudge`** group (`frontmatter-valid`,
-`skill-frontmatter`, `prefer-compiled-hooks`, `unmarked-refs`) stays `warn` and
-never gates. `--report-only` writes the whole gate at `warn` (nothing fails CI).
-See [the CLI guide](cli.md#init).
+`vigiles init` groups rules by confidence:
+
+- **`structural`** — FP-safe correctness rules (broken tools / dead hooks / broken MCP / collisions). Gates at `error` by default.
+- **`workflow`** — opinionated rules a clean repo can still fail because the work isn't done yet (`require-instructions-spec`, `untested-*`). Off by default; added by `--strict`.
+- **`nudge`** — recommendations / acknowledged-noisy (`frontmatter-valid`, `skill-frontmatter`, `prefer-compiled-hooks`, `unmarked-refs`). Stays `warn` and never gates.
+
+`--report-only` writes the whole gate at `warn` (nothing fails CI). See [the CLI guide](cli.md#init).
 
 ## The marking nudge — what happens on every file save
 
-Verification only works on references that are _marked_ (`enforce()`, `file()`,
-`cmd()`, a `vigiles:symbol` span, or an inline `<!-- vigiles:enforce -->`). The
-agent could just write a reference as plain prose, which nothing can verify. So
-the plugin ships a **PostToolUse hook that nudges the agent to mark references,
-in the loop**, the moment it edits an instruction file. The flow, from save:
+**Verification only works on references that are marked.** `enforce()`, `file()`, `cmd()`, a `vigiles:symbol` span, or an inline `<!-- vigiles:enforce -->` are all marks. An agent could write a reference as plain prose, which nothing can verify. To close that gap, the plugin ships a **PostToolUse hook that nudges the agent to mark references, in the loop**, the moment it edits an instruction file.
+
+The flow, from save:
 
 1. **The agent edits** `CLAUDE.md` / `AGENTS.md` / `SKILL.md`.
-2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles hook-runtime refs`) and scans the
-   saved file for **unmarked linter-rule references** — a slash-scoped name with
-   no file extension, like `` `eslint/no-console` `` — and for `vigiles:symbol`
-   marks whose target is missing. (It's deliberately narrow: bare identifiers like
-   `` `runHook` `` and file paths are **not** flagged — too noisy.)
+2. **The refs-hook fires** (`refs-nudge.sh` → `vigiles hook-runtime refs`) and scans the saved file for **unmarked linter-rule references** — a slash-scoped name with no file extension, like `` `eslint/no-console` `` — and for `vigiles:symbol` marks whose target is missing. (Deliberately narrow: bare identifiers like `` `runHook` `` and file paths are **not** flagged — too noisy.)
 3. **It reacts by the `unmarked-refs` severity** (`.vigilesrc.json`):
-   - **`"warn"` (default) → a non-blocking nudge.** The hook injects a message
-     into the agent's context — _"these references aren't verifiable; express
-     them as marks, or `<!-- vigiles:ignore -->` if it's prose"_ — and the agent,
-     **still editing that file**, can fix them on the spot. Nothing is blocked.
-   - **`"error"` → block.** The edit is rejected (exit 2) until the references
-     are marked or ignored.
+   - **`"warn"` (default) → a non-blocking nudge.** The hook injects a message into the agent's context. The agent, still editing that file, can fix the references on the spot. Nothing is blocked.
+   - **`"error"` → block.** The edit is rejected (exit 2) until the references are marked or ignored.
    - **`false` → off.**
-4. **The deterministic backstop:** on commit (a git pre-commit hook) and in CI,
-   `vigiles lint` / `vigiles refs` re-run the same check — the unbypassable
-   floor that catches anything the in-loop nudge didn't.
+4. **The deterministic backstop:** on commit (a git pre-commit hook) and in CI, `vigiles lint` / `vigiles refs` re-run the same check — the floor that catches anything the in-loop nudge didn't.
 
-**What it deliberately does not do:** it can't force a _plaintext_ reference
-(no backticks, pure prose) to become a mark — distinguishing a load-bearing
-reference from ordinary prose is undecidable.
-It catches the high-signal, low-noise case (a backticked linter-rule name); bare
-identifiers, paths, and prose are left to the shipped instructions, not the hook.
+⚠️ **What it deliberately does not do:** it can't force a _plaintext_ reference (no backticks, pure prose) to become a mark. Distinguishing a load-bearing reference from ordinary prose is undecidable. The hook catches the high-signal, low-noise case (a backticked linter-rule name). Bare identifiers, paths, and prose are left to the shipped instructions, not the hook.
 
-**Harness note:** the in-loop nudge is a hook, so it works on **Claude Code and
-Codex**. A harness without hooks doesn't get the per-save nudge — it falls back
-to the always-loaded instructions plus the `vigiles lint` CI floor. See the
-[`unmarked-refs` rule](rules/unmarked-refs.md).
+ℹ️ **Harness note:** the in-loop nudge is a hook, so it works on **Claude Code and Codex**. A harness without hooks doesn't get the per-save nudge — it falls back to the always-loaded instructions plus the `vigiles lint` CI floor. See the [`unmarked-refs` rule](rules/unmarked-refs.md).
 
 ## What changes with vigiles
 
@@ -349,14 +263,9 @@ to the always-loaded instructions plus the `vigiles lint` CI floor. See the
 | **New lint rules from PR feedback** | Copy-paste from review       | `/pr-to-lint-rule` generates rule + tests + spec entry        |
 | **CI**                              | Nothing to verify            | `vigiles lint` catches hand-edits, disabled rules, stale refs |
 
-**Codex / AGENTS.md** gets the same compile-time checks and the same
-`vigiles lint` CI pipeline — just no hooks (no plugin system), so you run
-`vigiles compile` manually or in CI.
+**Codex / AGENTS.md** gets the same compile-time checks and the same `vigiles lint` CI pipeline — just no hooks (no plugin system), so you run `vigiles compile` manually or in CI.
 
-Everything vigiles compiles and lints is **deterministic** — same input, same
-output, no LLM in the loop. The non-deterministic parts (authoring specs,
-suggesting upgrades, writing custom rules) are agent skills that run outside the
-compilation pipeline. [Determinism breakdown and flow diagram →](comparison.md)
+Everything vigiles compiles and lints is **deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline. [Determinism breakdown and flow diagram →](comparison.md)
 
 ## See also
 

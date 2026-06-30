@@ -17,6 +17,14 @@ test("claudeCodeRuntime.wireMock is env-only (no argv flags)", () => {
   assert.equal(wired.env.ANTHROPIC_API_KEY, "sk-vigiles-mock");
 });
 
+test("claudeCodeRuntime.versionKey reduces to major.minor (patches don't churn)", () => {
+  assert.equal(claudeCodeRuntime.versionKey("2.1.179 (Claude Code)"), "2.1");
+  assert.equal(claudeCodeRuntime.versionKey("2.1.180 (Claude Code)"), "2.1"); // patch → same key
+  assert.equal(claudeCodeRuntime.versionKey("2.2.0"), "2.2"); // minor → different
+  assert.equal(claudeCodeRuntime.versionKey("1.0.96"), "1.0");
+  assert.equal(claudeCodeRuntime.versionKey("nonsense"), "nonsense"); // fallback
+});
+
 test("mockModelEnv layers the mock URL + dummy key over the base env", () => {
   const env = mockModelEnv(claudeCodeRuntime, "http://127.0.0.1:9999", {
     PATH: "/usr/bin",
@@ -37,10 +45,14 @@ test("an alternate runtime maps the URL onto its own env var — the Codex seam"
       args: [],
       env: { OPENAI_BASE_URL: baseUrl, OPENAI_API_KEY: "sk-mock" },
     }),
+    // A harness whose version string carries no stable behavior boundary opts
+    // out of version partitioning (the Codex shape — see codexRuntime).
+    versionKey: () => "",
   };
   const env = mockModelEnv(codexRuntime, "http://127.0.0.1:1", {});
   assert.equal(env.OPENAI_BASE_URL, "http://127.0.0.1:1");
   assert.equal(env.OPENAI_API_KEY, "sk-mock");
   // The Claude Code vars are NOT set under the codex runtime.
   assert.equal(env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(codexRuntime.versionKey("0.143.0"), ""); // no partitioning
 });

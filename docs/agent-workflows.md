@@ -1,10 +1,24 @@
 # Agent Workflows
 
+**vigiles is low-friction by design.** Run `npx vigiles init` and the installed skills and hooks handle the rest — auto-compiling specs, blocking stray edits, and nudging the agent when something needs attention. This guide shows the per-agent setup.
+
+→ Back to [README](../README.md)
+
 vigiles verifies the rule references in agent instruction files — declared as inline comments, `vigiles:` YAML frontmatter, or a typed spec compiled to markdown ([markdown mode](markdown-mode.md)). Different AI agents read different files, but the validation pipeline is the same. The workflows below use spec mode, the deepest level; the inline and frontmatter levels need no build step.
+
+## Contents
+
+- [Auto-Detection](#auto-detection)
+- [Claude Code](#claude-code)
+- [Codex / GitHub Copilot](#codex--github-copilot)
+- [Multi-Agent (Claude + Codex)](#multi-agent-claude--codex)
+- [Cursor / Windsurf / Other Formats](#cursor--windsurf--other-formats)
+- [CI Pipeline](#ci-pipeline)
+- [See also](#see-also)
 
 ## Auto-Detection
 
-`vigiles init` scans your project and auto-detects:
+`vigiles init` scans your project and **auto-detects which agents you're already using** — no `--target` flag needed unless you want to override.
 
 | Signal                                     | What it means                                     |
 | ------------------------------------------ | ------------------------------------------------- |
@@ -17,7 +31,7 @@ vigiles verifies the rule references in agent instruction files — declared as 
 | `rule-porter` / `rulesync` in package.json | Sync tool already installed                       |
 | Symlinked instruction files                | Notes them in output                              |
 
-The wizard creates specs for detected targets, generates types, compiles, and adds a CI step. No `--target` flag needed unless you want to override the auto-detection.
+The wizard creates specs for detected targets, generates types, compiles, and adds a CI step.
 
 ## Claude Code
 
@@ -32,7 +46,7 @@ npx vigiles init
 #   /plugin install vigiles@vigiles
 ```
 
-**What the plugin does:**
+**What the plugin does once installed** — the agent no longer needs to remember to compile:
 
 | Hook        | Trigger                                         | Action                                   |
 | ----------- | ----------------------------------------------- | ---------------------------------------- |
@@ -40,7 +54,7 @@ npx vigiles init
 | PostToolUse | Agent edits a `.spec.ts` file                   | Auto-runs `vigiles compile`              |
 | PostToolUse | Agent edits linter config or `package.json`     | Auto-runs `vigiles generate types`       |
 
-**Without the plugin**, you must run `vigiles compile` manually after editing specs. CI still catches stale files.
+⚠️ **Without the plugin**, you must run `vigiles compile` manually after editing specs. CI still catches stale files.
 
 ## Codex / GitHub Copilot
 
@@ -58,11 +72,13 @@ Codex and GitHub Copilot read `AGENTS.md` directly. There is no plugin or hook s
 2. Run `npx vigiles compile` to regenerate `AGENTS.md`
 3. CI verifies freshness: `npx vigiles lint && npx vigiles generate types --check`
 
-vigiles's authoring skills install globally for Codex via the cross-agent `skills` CLI (no repo vendoring): `npx skills add zernie/vigiles -a codex -g -y` installs into the global agents store `~/.agents/skills/` (or let `vigiles init --harness=codex` run it). Codex hooks (`.codex/config.toml [hooks]`) aren't auto-wired yet. If you also use Claude Code, install the plugin (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or `vigiles init`) for auto-recompilation.
+**Authoring skills for Codex** install globally via the cross-agent `skills` CLI — no repo vendoring: `npx skills add zernie/vigiles -a codex -g -y` installs into `~/.agents/skills/`. `vigiles init --harness=codex` runs this automatically. Codex hooks (`.codex/config.toml [hooks]`) aren't auto-wired yet.
+
+ℹ️ **If you also use Claude Code**, install the plugin (`/plugin marketplace add zernie/vigiles` then `/plugin install vigiles@vigiles`, or `vigiles init`) for auto-recompilation.
 
 ## Multi-Agent (Claude + Codex)
 
-Use a single spec with multiple targets:
+Use a **single spec with multiple targets** — one source of truth, two outputs:
 
 ```typescript
 export default claude({
@@ -71,7 +87,7 @@ export default claude({
 });
 ```
 
-One spec, two outputs. Both files are compiled from the same source of truth with the same linter verification.
+Both files compile from the same spec with the same linter verification.
 
 ```bash
 npx vigiles init                      # for CLAUDE.md (primary)
@@ -100,6 +116,12 @@ All agents share the same CI step:
 
 This catches:
 
-- Hash mismatches (someone edited the compiled `.md` directly)
-- Missing specs (`require-instructions-spec` rule — every `.md` should have a `.spec.ts`)
-- Stale generated types (linter config changed but types weren't regenerated)
+- **Hash mismatches** — someone edited the compiled `.md` directly
+- **Missing specs** — `require-instructions-spec` rule requires a `.spec.ts` behind every `.md`
+- **Stale generated types** — linter config changed but types weren't regenerated
+
+## See also
+
+- [Agent Setup](agent-setup.md) — non-interactive installation and recommended agent prompt
+- [Markdown mode](markdown-mode.md) — inline comments and frontmatter (no `.spec.ts` required)
+- [CLI reference](cli.md)
