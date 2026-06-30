@@ -295,6 +295,15 @@ export const RULE_META: Record<RuleName, RuleMeta> = {
       "Two model-invocable skills aren't near-identical (wrong one fires).",
     detector: "findDescriptionOverlaps",
   },
+  "skill-description-budget": {
+    id: "skill-description-budget",
+    bucket: "heuristic-behavioral",
+    surface: ["skill"],
+    defaultSeverity: "warn",
+    summary:
+      "A model-invocable skill's description isn't so long the trigger is buried.",
+    detector: "findDescriptionBudgetIssues",
+  },
   "frontmatter-valid": {
     id: "frontmatter-valid",
     bucket: "heuristic-behavioral",
