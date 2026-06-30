@@ -462,6 +462,7 @@ describe("loadConfig", () => {
       "prefer-compiled-hooks": false,
       "disallowed-tools-contract": "warn",
       "description-overlap": "warn",
+      "skill-description-budget": "warn",
       "frontmatter-valid": "warn",
       "mcp-hook-target-resolves": "warn",
       "lethal-trifecta": "warn",
