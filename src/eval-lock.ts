@@ -218,8 +218,8 @@ export function isEvalInputFile(path: string): boolean {
  * into the lock (committed one), so it can't annoy a repo that doesn't use evals.
  * It deliberately does NOT recompute staleness (that needs the eval script + is
  * the job of `eval --check`) — a reminder, not a gate. The honest harness-neutral
- * reminder; how it reaches the agent (CC injects `additionalContext` today; Codex
- * inject is a follow-on) is the caller's concern. See docs/harness-testing-*.md.
+ * reminder; how it reaches the agent (both CC and Codex inject `additionalContext`
+ * on `PostToolUse`) is the caller's concern. See docs/harness-testing-*.md.
  */
 export function evalLockNudge(
   filePath: string,

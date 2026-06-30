@@ -5,8 +5,15 @@ to **Codex** as well as Claude Code, through the existing adapter ports — no c
 changes to the harness boundary. `vigiles compile --harness=codex` emits a
 TOML `[[hooks.<event>]]` block with an anchored-regex matcher; the default stays
 Claude Code JSON. The gate runtime (`run-hook-program`) is shared unchanged
-(Codex's veto is exit-2-identical). This doc records the design that landed; the
-one deferred half (the inject/ask OUTPUT JSON shape) is noted in §4.
+(Codex's veto is exit-2-identical). This doc records the design that landed.
+
+**UPDATE (2026-06-30):** the inject half is no longer deferred — the official
+Codex hooks docs (`developers.openai.com/codex/hooks`) confirm `additionalContext`
+is honored on `SessionStart`/`UserPromptSubmit`/`PreToolUse`/`PostToolUse`/`SubagentStart`,
+the same shape as CC. This is now **encoded** in `HookProtocol.injectableEvents`
+(per-adapter), so conformance fails a `shellHooks` adapter that can't inject — the
+gap can't recur as a prose deferral. The one piece still CC-confirmed-only is
+**react** output (§4).
 
 ## The thesis: one program, the emit is the only harness-specific part
 
@@ -14,15 +21,16 @@ A compiled hook is a pure `(event) => Decision` (or `Injection`/`Reaction`)
 against the closed `vigiles/hook` vocabulary. Almost none of it is
 Claude-Code-specific:
 
-| Piece                                                                   | Harness-specific? |
-| ----------------------------------------------------------------------- | ----------------- |
-| The typed program (`defineHook`/`defineInject`/`defineReact`, `decide`) | **No** — pure     |
-| The AST matcher (`command.runs`/`touches`/`pipesToShell`, `path.under`) | **No** — bash AST |
-| Capability check (`checkHookImports`) + stamp (`stampHook`)             | **No**            |
-| The runtime decision (`decideProgram`/`decideFileGate`/`runReact`)      | **No**            |
-| **Block signalling** — `exit 2`                                         | **Shared** (★)    |
-| **The emitted settings block** (format + matcher syntax)                | **Yes** — emit    |
-| **The inject/ask OUTPUT JSON shape**                                    | **Mostly shared** |
+| Piece                                                                   | Harness-specific?      |
+| ----------------------------------------------------------------------- | ---------------------- |
+| The typed program (`defineHook`/`defineInject`/`defineReact`, `decide`) | **No** — pure          |
+| The AST matcher (`command.runs`/`touches`/`pipesToShell`, `path.under`) | **No** — bash AST      |
+| Capability check (`checkHookImports`) + stamp (`stampHook`)             | **No**                 |
+| The runtime decision (`decideProgram`/`decideFileGate`/`runReact`)      | **No**                 |
+| **Block signalling** — `exit 2`                                         | **Shared** (★)         |
+| **The emitted settings block** (format + matcher syntax)                | **Yes** — emit         |
+| **The inject OUTPUT JSON shape** (`additionalContext`)                  | **Shared** (confirmed) |
+| **The react/`ask` OUTPUT JSON shape**                                   | **CC-confirmed only**  |
 
 ★ The load-bearing finding from [`harness-landscape.md`](harness-landscape.md):
 Codex's hook protocol is a **near-1:1 port of Claude Code's** — stdin JSON, and a
@@ -55,12 +63,13 @@ only the _wiring artifact_ (`compile-hook`'s output) is per-harness.
    (the existing moat) so a hook targeting an event the harness lacks is a
    compile error, not a silent dead hook.
 
-4. **Inject/ask output JSON (HookProtocol, minor).** Deny is `exit 2` (shared).
-   The inject `additionalContext` shape and the `ask` `permissionDecision` shape
-   are emitted by the runtime; if Codex's field names differ, that formatting
-   moves behind `HookProtocol` (which already encodes `blockExitCode` +
-   `denyDecisionValues`). **To confirm against the real `codex` binary** before
-   building — gate, like the rest of the Codex transport work.
+4. **Inject/react output JSON (HookProtocol).** Deny is `exit 2` (shared). The
+   inject `additionalContext` shape is **CONFIRMED shared** with Codex (official
+   hooks docs) and now encoded in `HookProtocol.injectableEvents` (which events
+   honor it, per-adapter) alongside `blockExitCode` + `denyDecisionValues`. The
+   **react** output shape (and `ask`'s `permissionDecision`) remains CC-confirmed
+   only — to confirm against the real `codex` binary before relying on it; `compile
+--harness=codex` warns loudly on a react hook.
 
 ## The build (what landed — small, port-shaped, no harness-boundary edits)
 
@@ -86,21 +95,20 @@ layout.settingsFormat}` into the emit. The printed target line becomes "add to
   reads the event's `tool_name` from stdin JSON, both harness-neutral.
 - **The stamp** is harness-neutral — unchanged.
 
-## Deferred (the one honest gap)
+## The one remaining gap: react output
 
-The **inject/ask OUTPUT JSON shape** (§4) is still CC-shaped in the runtime: a
-gate's `deny` is exit-2 (shared, works on Codex today), but an `inject` hook
-prints CC's `hookSpecificOutput.additionalContext` and `ask` prints CC's
-`permissionDecision`. If Codex's field names differ, that formatting moves behind
-`HookProtocol` — to confirm against the real `codex` binary first, like the rest
-of the Codex transport work. Gate/`deny` hooks (the safety case) are fully
-cross-harness now; inject/ask on Codex is the remaining item.
+`deny` (exit-2) and `inject` (`additionalContext`) are both cross-harness today —
+the inject shape is confirmed against the official Codex hooks docs and encoded in
+`HookProtocol.injectableEvents`. The one piece still CC-confirmed-only is **react**
+output (and `ask`'s `permissionDecision`): the runtime prints CC's shape, and
+whether Codex honors the same fields is unconfirmed against the real binary.
 
-The gap is **loud, not silent** (no-silent-skips): `compile-hook --harness=codex`
-on an inject/react hook still emits the TOML routing but prints a `⚠` warning that
-the output shape is CC-confirmed only and may not apply on Codex — so a user is
-never handed a clean-looking inject that quietly no-ops. A gate hook compiles with
-no warning (its output IS cross-harness).
+The gap is **loud, not silent** (no-silent-skips): `compile --harness=codex` on a
+react hook emits the TOML routing but prints a `⚠` warning that the react output
+shape is CC-confirmed only — so a user is never handed a clean-looking react that
+quietly no-ops. Gate AND inject hooks compile with no warning (their output IS
+cross-harness — an inject hook warns only if its event isn't in Codex's
+`injectableEvents`).
 
 ## Boundary + dogfood
 

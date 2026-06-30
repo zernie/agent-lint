@@ -98,14 +98,21 @@ How the test tiers drive the agent against a no-key mock.
 
 ### `HookProtocol` (transport)
 
-How a hook signals a block/deny.
+How a hook signals a block/deny, and which events can inject developer context.
 
-| Field                | Type                | Meaning                              | Claude Code        |
-| -------------------- | ------------------- | ------------------------------------ | ------------------ |
-| `name`               | `string`            | stable id                            | `"claude-code"`    |
-| `blockExitCode`      | `number`            | exit code that blocks a tool call    | `2`                |
-| `denyDecisionValues` | `readonly string[]` | decision values meaning "deny"       | `["block","deny"]` |
-| `eventEnvVars`       | `readonly string[]` | env vars a synthesized event carries | `[]`               |
+| Field                | Type                | Meaning                                                    | Claude Code                                         | Codex                                                                            |
+| -------------------- | ------------------- | ---------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `name`               | `string`            | stable id                                                  | `"claude-code"`                                     | `"codex"`                                                                        |
+| `blockExitCode`      | `number`            | exit code that blocks a tool call                          | `2`                                                 | `2`                                                                              |
+| `denyDecisionValues` | `readonly string[]` | decision values meaning "deny"                             | `["block","deny"]`                                  | `["block","deny"]`                                                               |
+| `eventEnvVars`       | `readonly string[]` | env vars a synthesized event carries                       | `[]`                                                | `[]`                                                                             |
+| `injectableEvents`   | `readonly string[]` | events that honor `additionalContext` (inject/nudge hooks) | `["SessionStart","UserPromptSubmit","PostToolUse"]` | `["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","SubagentStart"]` |
+
+`injectableEvents` makes "can this harness deliver an inject hook, and on which
+events?" a **tested contract** rather than prose — a `shellHooks` adapter that
+declares an empty list fails conformance, and `compile` warns when an inject hook
+targets an event the harness doesn't honor. A code-module-hook adapter
+(`shellHooks:false`, no `hookProtocol`) is exempt.
 
 ### `ModelMock` (transport)
 

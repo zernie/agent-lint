@@ -5471,19 +5471,29 @@ async function installHookFile(
   mkdirSync(dirname(settingsAbs), { recursive: true });
   writeFileSync(settingsAbs, serializeConfig(merged, format));
 
-  // Honest gap (no silent skips): the gate/deny path is exit-2 and cross-harness,
-  // but an inject/react hook's OUTPUT shape is confirmed only for Claude Code. On
-  // another harness it would emit CC-shaped output that may not be read — exactly
-  // the silent failure this feature exists to prevent. Flag it, loudly.
+  // No silent skips: warn loudly only where a hook's OUTPUT genuinely may not
+  // apply on this harness. INJECT's `additionalContext` shape is now CONFIRMED
+  // shared with Codex (per the official hooks docs), so an inject hook only
+  // warns when its event isn't in the harness's `injectableEvents`. REACT's
+  // output is still Claude-Code-confirmed only. The gate (deny→exit 2) path is
+  // cross-harness and never warns.
   const role = dispatchKind(program);
-  const warning =
-    adapter.name !== "claude-code" && (role === "inject" || role === "react")
-      ? `${role} output is only confirmed for Claude Code. On ${adapter.name}, ` +
-        `the gate (deny→exit 2) path works, but this hook's ${role} output is ` +
-        `CC-shaped and unverified — it may silently not apply. Use a gate hook on ` +
-        `${adapter.name} for now, or confirm against the real binary first ` +
-        `(research/compiled-hooks-codex.md §Deferred).`
-      : undefined;
+  const event = typeof program.on === "string" ? program.on : "";
+  const injectable = adapter.hookProtocol?.injectableEvents ?? [];
+  let warning: string | undefined;
+  if (adapter.name !== "claude-code") {
+    if (role === "inject" && !injectable.includes(event)) {
+      warning =
+        `this inject hook targets "${event}", which ${adapter.name} does not ` +
+        `honor for additionalContext — the injected text won't reach the agent. ` +
+        `Use an event ${adapter.name} supports: ${injectable.join(", ")}.`;
+    } else if (role === "react") {
+      warning =
+        `react output is confirmed only for Claude Code; on ${adapter.name} this ` +
+        `hook's react output is unverified (the gate deny→exit 2 path IS ` +
+        `cross-harness). Confirm against the real binary first.`;
+    }
+  }
   return { role, settingsPath: adapter.layout.settingsPath, warning };
 }
 

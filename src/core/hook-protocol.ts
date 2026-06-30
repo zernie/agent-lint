@@ -31,4 +31,19 @@ export interface HookProtocol {
    * Used by `compileHookProgram` when rendering the settings block.
    */
   readonly matcherStyle?: "exact" | "regex";
+  /**
+   * The events whose hook can inject **developer context** into the agent by
+   * printing `{ hookSpecificOutput: { hookEventName, additionalContext } }` on
+   * stdout. The inject *shape* is shared across Claude Code and Codex (so the
+   * runtime emits it once, not per-harness); the genuinely per-harness fact is
+   * **which events honor it** — and encoding it here is what makes "this harness
+   * can deliver an inject hook" a TESTED contract instead of an assumption. Both
+   * Claude Code and Codex support the main lifecycle events (SessionStart,
+   * UserPromptSubmit, PostToolUse); a few (Stop, SubagentStop, PreCompact) carry
+   * no context on either. An empty list means the harness cannot inject context
+   * from a hook at all. Verified for Codex against the official hooks docs
+   * (developers.openai.com/codex/hooks). The conformance kit asserts a
+   * shell-hook harness declares a non-empty set.
+   */
+  readonly injectableEvents: readonly string[];
 }

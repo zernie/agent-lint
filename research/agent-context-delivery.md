@@ -48,20 +48,22 @@ when staleness is introduced, which is what matters.)
 
 ## Codex (this repo's validated research)
 
-| Question                              | Answer                                                                                                                                                                                                           | Source                       |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Instruction file                      | **`AGENTS.md`** — the CLAUDE.md analog, always loaded. And the _normal_ Codex convention for tool guidance (no marketplace), so an `AGENTS.md` note is far less unusual on Codex than a CLAUDE.md edit is on CC. | `harness-landscape.md`       |
-| "Plugins"?                            | No marketplace; **skills** install via the cross-agent skills CLI into a global store (`~/.agents/skills/`), and **hooks** live in `config.toml [hooks]`.                                                        | `harness-landscape.md`       |
-| Hook events                           | `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStart/Stop` — near-1:1 with CC, JSON on stdin.                                                                                                | `harness-landscape.md`       |
-| Hook **block** (deny)                 | **Shared** — `exit 2` vetoes identically to CC. The compiled-hook gate runtime already works on Codex.                                                                                                           | `compiled-hooks-codex.md` §3 |
-| Hook **inject** (`additionalContext`) | **NOT confirmed/built.** The inject/ask OUTPUT shape is the one deferred piece (`compiled-hooks-codex.md` §4); Codex's separate `notify` program is notify-only (can't feed the agent).                          | `compiled-hooks-codex.md` §4 |
+| Question                              | Answer                                                                                                                                                                                                                                                                                                                                                                                                             | Source                       |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Instruction file                      | **`AGENTS.md`** — the CLAUDE.md analog, always loaded. And the _normal_ Codex convention for tool guidance (no marketplace), so an `AGENTS.md` note is far less unusual on Codex than a CLAUDE.md edit is on CC.                                                                                                                                                                                                   | `harness-landscape.md`       |
+| "Plugins"?                            | No marketplace; **skills** install via the cross-agent skills CLI into a global store (`~/.agents/skills/`), and **hooks** live in `config.toml [hooks]`.                                                                                                                                                                                                                                                          | `harness-landscape.md`       |
+| Hook events                           | `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStart/Stop` — near-1:1 with CC, JSON on stdin.                                                                                                                                                                                                                                                                                                  | `harness-landscape.md`       |
+| Hook **block** (deny)                 | **Shared** — `exit 2` vetoes identically to CC. The compiled-hook gate runtime already works on Codex.                                                                                                                                                                                                                                                                                                             | `compiled-hooks-codex.md` §3 |
+| Hook **inject** (`additionalContext`) | **CONFIRMED — same shape as CC.** Per the official Codex hooks docs (`developers.openai.com/codex/hooks`), `additionalContext` is honored on `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SubagentStart` (NOT `Stop`/`SubagentStop`/`PreCompact`). The PostToolUse eval-lock nudge reaches the agent on Codex just as on CC. **react** OUTPUT shape is the one still CC-confirmed-only piece. | official Codex hooks docs    |
 
-**Implication for the eval-lock nudge on Codex:** the PostToolUse hook _fires_, but
-until vigiles builds/validates Codex's inject output, the reminder text can't reach
-the agent the CC way. So on Codex the confirmed awareness channels are the
-**skill** (works now) and an **`AGENTS.md` one-liner** (opt-in, the Codex norm).
-The nudge-hook delivery is the tracked Codex follow-on, bundled with the rest of
-Codex inject (`compiled-hooks-codex.md` §4).
+**Implication for the eval-lock nudge on Codex:** the PostToolUse hook _fires_ AND
+its `additionalContext` reaches the agent (PostToolUse is in Codex's injectable
+events). So on Codex all three awareness channels work: the **skill**, an optional
+**`AGENTS.md` one-liner** (the Codex norm), and the **hook-delivered nudge**. This
+is now **encoded** in `HookProtocol.injectableEvents` — a `shellHooks` adapter that
+can't inject fails conformance, so the gap can't recur silently (the original miss
+was a prose deferral, not a tested contract). The remaining CC-only piece is
+**react** output (`compiled-hooks-codex.md` §4).
 
 ## The portable decision (what this means for any vigiles feature)
 
@@ -71,8 +73,9 @@ Codex inject (`compiled-hooks-codex.md` §4).
 2. **Skill = the portable floor.** Description always-in-context (CC) + body on
    invocation; installs on both harnesses. Put the workflow knowledge here.
 3. **Hook = the proactive layer.** PostToolUse inject for an event-fresh nudge;
-   SessionStart inject for always-on. **Block works on both harnesses; inject is
-   CC-now / Codex-deferred** — state that caveat wherever a feature relies on it.
+   SessionStart inject for always-on. **Block AND inject work on both harnesses**
+   (inject on each harness's declared `injectableEvents`); only **react** output
+   is still CC-confirmed-only — state that caveat wherever a react hook relies on it.
 4. **The hard gate stays in CI** (`eval --check`) — hooks/skills are nudge-level,
    never the enforcement.
 

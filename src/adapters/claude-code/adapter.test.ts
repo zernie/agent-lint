@@ -51,6 +51,21 @@ test("conformance kit catches a broken adapter", () => {
   assert.ok(r.failures.some((m) => m.includes("builtinAgentTools")));
 });
 
+test("conformance catches a shell-hook adapter that can't inject context", () => {
+  // The exact class of gap that let Codex's inject support sit unverified: a
+  // shellHooks adapter whose hookProtocol declares NO injectable events (so an
+  // inject/nudge hook would silently never reach the agent). The kit must reject it.
+  const proto = claudeCodeAdapter.hookProtocol;
+  assert.ok(proto, "fixture precondition: CC has a hookProtocol");
+  const noInject: HarnessAdapter = {
+    ...claudeCodeAdapter,
+    hookProtocol: { ...proto, injectableEvents: [] },
+  };
+  const r = checkAdapterConformance(noInject);
+  assert.equal(r.ok, false);
+  assert.ok(r.failures.some((m) => m.includes("injectableEvents is empty")));
+});
+
 test("conformance ACCEPTS a pillar-1-only adapter (no transport ports)", () => {
   // A closed, un-mockable harness (Cursor/Devin shape): reference verification
   // only. It legitimately omits runtime/hookProtocol/modelMock, and the kit must
