@@ -94,6 +94,7 @@ export interface HarnessRuntime {
     readonly modelApiKeyEnv: string;
     readonly modelBaseUrlEnv: string;
     readonly name: string;
+    versionKey(raw: string): string;
     wireMock(baseUrl: string): {
         readonly args: readonly string[];
         readonly env: Record<string, string>;

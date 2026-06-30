@@ -1827,6 +1827,24 @@ describe("CLI: vigiles test — skips are loud and gateable", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("eval lock flags: mutual-exclusion + cold-start no-op", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vigiles-lock-"));
+    try {
+      // --check + --update is a usage error (exit 2).
+      const both = run("eval --check --update", dir);
+      assert.equal(both.exitCode, 2);
+      assert.match(both.stderr, /mutually exclusive/);
+
+      // --check with no committed locks is a GREEN no-op (smooth adoption): the
+      // staleness gate activates only once the first lock is committed.
+      const cold = run("eval --check", dir);
+      assert.equal(cold.exitCode, 0);
+      assert.match(cold.stdout, /no committed eval locks found/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

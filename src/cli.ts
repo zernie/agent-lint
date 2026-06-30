@@ -36,6 +36,7 @@ import {
   formatCapabilityDiff,
 } from "./core/capability-diff.js";
 import { validate, loadConfig } from "./core/validate.js";
+import { anyLocksCommitted, DEFAULT_LOCK_DIR } from "./eval-lock.js";
 import { applyConfigFlags } from "./cli-flags.js";
 import {
   parseSetupArgs,
@@ -2174,6 +2175,21 @@ function vigilesWorkflow(plan: SetupPlan): string {
       - run: npm install
       - run: npm i -g @anthropic-ai/claude-code # mock tier needs the binary, no API key
       - run: npx vigiles test
+
+  eval-check:
+    # Eval staleness gate — real-model evals run LOCALLY on your subscription
+    # (\`npx vigiles eval --update\`, which commits a lock); this job VERIFIES those
+    # committed results against the current inputs with NO model call. It stays a
+    # green no-op until you commit your first lock. See docs/harness-testing.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: zernie/vigiles@v1
+        with:
+          command: eval-check
 `
     : "";
   return `name: vigiles
@@ -4459,6 +4475,46 @@ async function handleGenerateHarness(
  * tier needs it, just like the node:test suite). `--trials=N` is forwarded to
  * eval scripts via the `VIGILES_TRIALS` env var.
  */
+/**
+ * Resolve the eval LOCK env from the `eval` flags. `--update` records each named
+ * eval's report to a committed `.vigiles/eval-locks/<name>.lock.json` (run locally
+ * on your subscription); `--check` (CI) verifies the committed result against the
+ * current inputs WITHOUT a model call. `--check` is a green NO-OP until the first
+ * lock is committed (smooth adoption). Returns the env to thread, or `"skip"` to
+ * exit green now. `--check`+`--update` together is a usage error (exit 2). The
+ * behavior epoch comes from `.vigilesrc.json` `eval.apiVersion` (committed).
+ */
+function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
+  const wantCheck = args.includes("--check");
+  const wantUpdate = args.includes("--update");
+  if (wantCheck && wantUpdate) {
+    console.error(
+      "vigiles eval: --check and --update are mutually exclusive (one verifies, one records).",
+    );
+    process.exit(2);
+  }
+  if (
+    wantCheck &&
+    !anyLocksCommitted(resolve(process.cwd(), DEFAULT_LOCK_DIR))
+  ) {
+    console.log(
+      "ℹ vigiles eval --check: no committed eval locks found — nothing to verify.\n" +
+        "  Run `vigiles eval --update` locally (on your subscription) and commit the\n" +
+        "  lock to enable the CI staleness gate.",
+    );
+    return "skip";
+  }
+  const env: Record<string, string> = {};
+  if (wantCheck) env.VIGILES_EVAL_LOCK = "check";
+  if (wantUpdate) env.VIGILES_EVAL_LOCK = "update";
+  if (wantCheck || wantUpdate) {
+    const apiVersion = loadConfig().eval?.apiVersion;
+    if (apiVersion !== undefined)
+      env.VIGILES_EVAL_API_VERSION = String(apiVersion);
+  }
+  return env;
+}
+
 function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
@@ -4467,6 +4523,16 @@ function handleRunScripts(
   const cwd = process.cwd();
   // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
+
+  // The eval LOCK flags (`--check`/`--update`) are resolved BEFORE file discovery
+  // so mutual-exclusion + the cold-start no-op are honored regardless of file
+  // count. Returns the env to thread to scripts, or `"skip"` to exit green now.
+  let lockEnv: Record<string, string> = {};
+  if (kind === "eval") {
+    const r = resolveEvalLockEnv(args);
+    if (r === "skip") return;
+    lockEnv = r;
+  }
 
   const files = discoverScripts(restArgs, defaultGlob, cwd);
 
@@ -4504,7 +4570,7 @@ function handleRunScripts(
   // it's part of the measurement definition, so it belongs in the spec
   // (`model` / `minModel`), version-controlled, not a hidden override.
   const trialsFlag = args.find((a) => a.startsWith("--trials="));
-  const env: NodeJS.ProcessEnv = {};
+  const env: NodeJS.ProcessEnv = { ...lockEnv };
   if (trialsFlag) env.VIGILES_TRIALS = trialsFlag.split("=")[1];
 
   console.log(`Running ${String(files.length)} ${kind} file(s):\n`);
@@ -4722,6 +4788,12 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "  vigiles eval [files...]        Run *.eval.mjs real-model harness evals (--trials=N, --min=N, --no-skip)",
+  );
+  console.log(
+    "                                 --update records each named eval's result to a committed lock (run locally on your subscription)",
+  );
+  console.log(
+    "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
   );
   console.log(
     "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",

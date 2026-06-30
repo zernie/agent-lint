@@ -1,10 +1,99 @@
-# Cache invalidation — best practices and what vigiles does
+# Cache invalidation + eval staleness — best practices and what vigiles does
 
-> Research of record (2026-06-17) behind the eval record/replay cache
-> (`src/eval-cache.ts`). Synthesizes how mature content-addressed caches (Bazel,
-> Turborepo, Nx, Gradle, ccache, Jest, webpack, ESLint) and LLM caches
-> (promptfoo, LangChain, Helicone) design keys + invalidation, then records the
-> decisions for vigiles. Companion to [`docs/eval-architecture.md`](../docs/eval-architecture.md).
+> Research of record behind the two eval staleness mechanisms — the record/replay
+> CACHE (`src/eval-cache.ts`, 2026-06-17) and the committed eval LOCK
+> (`src/eval-lock.ts`, 2026-06-30). Synthesizes how mature content-addressed
+> caches (Bazel, Turborepo, Nx, Gradle, ccache, Jest, webpack, ESLint) and LLM
+> caches (promptfoo, LangChain, Helicone) design keys + invalidation, then records
+> the decisions for vigiles. Companion to [`docs/eval-architecture.md`](../docs/eval-architecture.md).
+
+## Two mechanisms, not one: CACHE (local speed) vs LOCK (CI staleness)
+
+These are different tools and conflating them causes confusion. Keep them apart:
+
+|             | **eval CACHE** (`eval-cache.ts`)   | **eval LOCK** (`eval-lock.ts`)                     |
+| ----------- | ---------------------------------- | -------------------------------------------------- |
+| Purpose     | local iteration speed              | CI staleness detection                             |
+| Mechanism   | keyed store, skip the model call   | integrity hash of inputs                           |
+| Lifecycle   | **gitignored**, throwaway          | **committed**, reviewed in the diff                |
+| Question    | "can I skip re-calling the model?" | "did inputs change without a re-run?"              |
+| Analogy     | build cache / ccache               | `Cargo.lock` + `npm ci`, `jest --ci`/`cargo-insta` |
+| Runs in CI? | no (local only)                    | **yes** — `eval --check`, binary-free              |
+
+The driving problem the LOCK solves: real-model evals authenticate as your own
+`claude` CLI on your **subscription**, so they only run **locally** — never in CI
+(no metered key; a subscription can't be driven headless). So CI can't _run_ the
+eval; it can only **verify** that the committed numbers still match the current
+inputs. That's an integrity hash, not a cache — the founder's own intuition
+("it's more of an integrity hash") and exactly right. The same
+integrity-hash-of-inputs pattern vigiles already ships in `core/integrity.ts`
+(compiled markdown) and `core/sidecar.ts` (`.inputs.json` spec inputs), applied a
+third time to eval results.
+
+## The eval LOCK (the CI staleness gate)
+
+`vigiles eval --update` (local, on the sub) records each named eval's report to a
+committed `.vigiles/eval-locks/<slug>.lock.json`; `vigiles eval --check` (CI)
+recomputes the input hash and fails "stale, re-run `--update`" on a mismatch,
+**without a model call**. The committed diff of `recall: 0.90 → 0.65` IS the
+quality gate a human reviews — the snapshot/lockfile pattern.
+
+**The clean split that makes replay sound and `measure` re-scorable.** The lock
+stores only the model's **observed behavior** (the report). The script's own
+assertions (`assertTriggerRate`/`assertSignificant`) **re-run live** against the
+replayed report on every `--check`. So:
+
+- change an **input** (skill/prompt/model) → the recorded behavior is for a
+  different world → `inputsHash` changes → **stale** (re-run locally).
+- change only the **threshold/assertion** → the recorded behavior is still valid
+  → valid **replay**, no model call, and the script's new assertion judges the
+  replayed numbers correctly.
+
+`inputsHash` = `SHA-256(canonical({ model, evalApiVersion, <seam inputs> }))`,
+where `<seam inputs>` is the task/files/settings/sorted-tools/pluginDirHash for
+`runEval`, or the (stubbed) skill-dir hash + prompts + model + tools for
+`measureTriggerRate`. A nice property of the trigger seam: it hashes the
+**stubbed** plugin dir (trigger-rate stubs bodies, since selection is by
+frontmatter), so editing a skill's BODY is _not_ stale (it isn't measured) but
+editing its DESCRIPTION is — the hash tracks exactly the measured surface.
+
+### Honest scope — no fiction (we killed the nightly run)
+
+The lock promises **"your committed results match your current inputs,"** NOT
+"your results reflect current model behavior." Those differ, and the second is
+**uncatchable** in this cost structure — the model is only ever driven locally,
+on the sub, when a human chooses to. Earlier design notes leaned on a "nightly
+live run" as the drift backstop; **nobody runs that**, so designing around it is
+a lie. We dropped it. Model/harness drift is caught when YOU re-run `--update`
+and review the moved numbers. The common, real bug — _edit a skill, forget to
+re-eval, ship stale numbers_ — IS caught deterministically, which is the point.
+
+The lock absorbs the role of `eval-baseline.ts`'s live-rerun regression check:
+without a nightly tier, that comparison only ever happens at `--update` time, so
+`--update` surfaces the per-number delta vs the prior lock (`diffReportNumbers`)
+for the human to review. One committed artifact, two consumers (`--check` gate +
+`--update` review), no separate nightly tier.
+
+### Why the harness version is provenance, NOT a hash input
+
+Tempting to fold the `claude` version into `inputsHash` (a CC bump can shift
+behavior). **We don't**, for two reasons: (1) `--check` runs in CI where `claude`
+is **pinned** to a fixed version, while a dev's local `claude` is whatever they
+have — hashing the version would false-trip `--check` on every PR where those
+differ; (2) it's the honest-scope line above — the gate is about author-controlled
+inputs, and keeping the version out is what lets `--check` stay **binary-free +
+deterministic** in CI. The version is recorded on the lock as provenance + a soft
+`--update` note. (The eval CACHE _does_ key on it — that's local replay
+soundness, a separate axis; see below.)
+
+### Cold-start (smooth adoption)
+
+`eval --check` is a green **no-op** until the first lock is committed
+(`anyLocksCommitted`): a fresh `vigiles init` repo with eval files but no locks
+doesn't go red. Once any lock exists, every named eval is held to having a fresh
+one (a new unlocked eval reads as stale — the correct "you forgot to commit"
+nudge). The GHA exposes it as `command: eval-check`; `init` scaffolds the
+`eval-check` CI job.
 
 ## The cache in one line
 
@@ -20,12 +109,35 @@ A replay cache for agent behaviour has a sharper staleness problem than a build
 cache: the model **and** the harness binary evolve continuously, and a stale
 replay silently changes eval results. The three edges, and where each stands:
 
-- **Harness binary version (the `claude` CLI) — KEYED.** The CLI upgrade changes
-  the system prompt + tool definitions, which steer behaviour as much as the
-  model. `harnessVersion` (`claude --version`, resolved once per run) is in the
-  key, so a CLI upgrade invalidates. Trade-off accepted: frequent CLI patches
-  invalidate often — correct over silently-stale, and the primary use (re-score
-  `measure` within a session) is unaffected since the version is stable then.
+- **Harness binary version (the `claude` CLI) — KEYED in the CACHE, per-adapter.**
+  The CLI upgrade changes the system prompt + tool definitions, which steer
+  behaviour as much as the model, so the **cache** keys on it (`harnessVersion`,
+  resolved once per run). But _what counts as a behavior-significant version_ is
+  **per-harness**, so the reduction lives on the runtime port
+  (`HarnessRuntime.versionKey`), NOT a universal `major.minor` rule — see the
+  cadence data below. (The LOCK does NOT hash it — provenance only, per the
+  section above.)
+
+### Version cadence: Claude Code vs Codex have OPPOSITE semantics (the data)
+
+Measured from npm (2026-06-30) — this is _why_ `versionKey` is a port method:
+
+- **Claude Code — `major.minor` is meaningful + stable.** 452 published versions
+  in 16 months, but only **4 distinct `major.minor`**: `0.2` (Feb 2025) → `1.0`
+  (May 2025) → `2.0` (Sep 2025) → `2.1` (Jan 2026) — a minor bump ~every 3–4
+  months; everything else is daily patches. So `claudeCodeRuntime.versionKey` →
+  `major.minor`: a real behavior boundary, rare enough not to churn the cache.
+- **Codex — perpetual `0.x`, the _minor_ IS the patch cadence.** 3147 versions in
+  14 months, **134 distinct `major.minor`** = ~2 minor bumps/week (now `0.143`).
+  Keying `major.minor` like CC would churn the cache **weekly**, so
+  `codexRuntime.versionKey` → `""` (opt out of version partitioning; rely on the
+  dated model id + `evalApiVersion`).
+
+The old "CC ships daily → exclude the version" note conflated _patch_ cadence
+(daily) with _minor_ cadence (quarterly) — it was wrong about CC and accidentally
+right about Codex. The port method makes the decision per-adapter, where it
+belongs (a future harness supplies its own reduction).
+
 - **Model alias re-points (e.g. `sonnet` → a new snapshot) — WARNED, not
   auto-invalidated.** No provider exposes a weight hash, so a floating alias keyed
   as the string `"sonnet"` can't be detected when its weights change. We warn

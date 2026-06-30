@@ -25,4 +25,8 @@ export const opencodeRuntime: HarnessRuntime = {
       },
     };
   },
+  /** Prototype: opts out of version partitioning (like Codex). */
+  versionKey(_raw: string): string {
+    return "";
+  },
 };

@@ -44,18 +44,31 @@ annotations and fail the job.
     paths: CLAUDE.md.spec.ts # optional; auto-discovers when omitted
 ```
 
+## Check eval results aren't stale (no model)
+
+Real-model evals run locally on your subscription (`vigiles eval --update`, which
+commits a lock). This job verifies those committed results against the current
+inputs **without** a model call — failing if you changed a skill but forgot to
+re-eval. It's a green no-op until you commit your first lock.
+
+```yaml
+- uses: zernie/vigiles@v1
+  with:
+    command: eval-check # → `vigiles eval --check`; no API key, no subscription
+```
+
 ## Inputs
 
-| Input               | Default   | Description                                                                                 |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `command`           | `lint`    | `lint` (verify references + integrity + coverage) or `compile` (specs → markdown).          |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.   |
-| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build. |
-| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                 |
-| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).  |
-| `working-directory` | `.`       | Directory to run vigiles in.                                                                |
-| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                  |
-| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).           |
+| Input               | Default   | Description                                                                                                                                                                      |
+| ------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`           | `lint`    | `lint` (verify references + integrity + coverage), `compile` (specs → markdown), or `eval-check` (verify committed eval locks vs current inputs — the staleness gate, no model). |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.                                                                                        |
+| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build.                                                                                      |
+| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                                                                                                      |
+| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).                                                                                       |
+| `working-directory` | `.`       | Directory to run vigiles in.                                                                                                                                                     |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                                                                                                       |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                                                                                                |
 
 ## Output channels
 

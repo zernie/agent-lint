@@ -381,6 +381,7 @@ export interface EvalSpec<M extends Metrics> {
     readonly concurrency?: number;
     readonly ephemeralEnv?: boolean;
     readonly fixture?: Record<string, string>;
+    readonly lock?: EvalLockOptions;
     readonly maxCostUsd?: number;
     readonly measure: (ctx: RunContext) => M;
     readonly model?: string;
@@ -886,10 +887,12 @@ export interface TriggerRateSpec {
     readonly fixture?: Record<string, string>;
     readonly installSet?: readonly string[];
     readonly irrelevantPrompts?: readonly string[];
+    readonly lock?: EvalLockOptions;
     readonly minDistance?: number;
     readonly minModel?: string;
     readonly minPrompts?: number;
     readonly model?: string;
+    readonly name?: string;
     readonly pluginDir?: string;
     readonly prompts: readonly string[];
     readonly skillsDir?: string;

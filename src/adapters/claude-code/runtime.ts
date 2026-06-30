@@ -29,6 +29,18 @@ export const claudeCodeRuntime: HarnessRuntime = {
       },
     };
   },
+  /**
+   * Claude Code keys on **major.minor**: a minor/major bump is where the system
+   * prompt + tool defs actually move (0.2 → 1.0 → 2.0 → 2.1, ~quarterly), while
+   * the daily patch stream rarely changes behavior — so keying patches would
+   * churn the cache for no signal. Falls back to the trimmed raw string when no
+   * semver is found. (If a specific patch is known to matter, clear the cache or
+   * bump `CACHE_FORMAT_VERSION`.)
+   */
+  versionKey(raw: string): string {
+    const m = /(\d+)\.(\d+)\.\d+/.exec(raw);
+    return m ? `${m[1]}.${m[2]}` : raw.trim();
+  },
 };
 
 /**

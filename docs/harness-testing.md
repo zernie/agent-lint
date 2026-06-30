@@ -280,6 +280,32 @@ console.log(formatEvalReport(report));
 > **Note:** `runEval` is shipped and proven for Claude Code; for Codex it's a
 > documented follow-on — use the deterministic `runHarnessTest` tier there.
 
+## Keep eval results fresh in CI (the lock)
+
+Real-model evals run on your **subscription**, so they run **locally** — never in
+CI. But CI can still catch the classic rot: _you edit a skill, forget to re-eval,
+and ship stale numbers._ The **eval lock** is a committed integrity stamp that
+makes that a failing check — no model call, no key.
+
+Give the eval a `name`, then:
+
+```bash
+vigiles eval --update     # local, on your subscription: records the result to
+                          # .vigiles/eval-locks/<name>.lock.json — commit it
+vigiles eval --check      # CI: verifies the committed result against current
+                          # inputs WITHOUT a model. Fails "stale" if they diverge.
+```
+
+It's the `npm ci` / `cargo-insta` pattern: `--check` recomputes a hash of the
+eval's inputs (skill contents, prompts, model) and fails when they changed without
+a re-run. The committed diff of `recall: 0.90 → 0.65` is the quality gate you
+review. Your script's own `assertTriggerRate`/`assertSignificant` re-run against
+the replayed numbers, so a **threshold** edit is a valid replay (no model) while an
+**input** edit is stale. It promises "your committed numbers match your current
+inputs," not "they reflect today's model" — re-run `--update` when you want fresh
+numbers. In a workflow it's `command: eval-check` (a green no-op until you commit
+your first lock); `vigiles init` scaffolds the job.
+
 ## Advanced
 
 These ride on the eval tier — reach for them when the basic measure isn't enough.
@@ -315,8 +341,11 @@ connector) so you don't re-derive it:
   with: { tier: unit } # or: integration (adds bwrap + CLI) / e2e (adds egress)
 ```
 
-The **eval** axis is separate (a real model / key) — run `npm run test:eval` on a
-keyed job, not on every PR.
+The **eval** axis is separate: real-model evals run **locally on your
+subscription** (`vigiles eval --update`), not on every PR. What CI runs is the
+deterministic [staleness gate](#keep-eval-results-fresh-in-ci-the-lock) —
+`vigiles eval --check` (or `command: eval-check`) — which verifies your committed
+eval results with no model.
 
 ## What's covered today
 
