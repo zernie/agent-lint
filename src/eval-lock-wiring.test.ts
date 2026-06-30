@@ -292,6 +292,61 @@ test("lock update under GITHUB_ACTIONS + a floating model emits an annotation + 
   }
 });
 
+test("lock messages WITHOUT GITHUB_ACTIONS take the plain stderr/stdout path", async () => {
+  // CI sets GITHUB_ACTIONS=true globally, so the annotation branch is covered
+  // there; this DELETES it to also exercise the console.warn/console.log else
+  // branches (warn=true via the unnamed-skip path, warn=false via a normal
+  // update) regardless of the ambient environment.
+  const dir = tmp();
+  const prev = process.env.GITHUB_ACTIONS;
+  delete process.env.GITHUB_ACTIONS;
+  try {
+    // (a) named update → emitLockMessage(..., warn:false) → console.log
+    await runEvalWith(spec(dir, "update"), countingRunner().run);
+    assert.ok(readLock(dir, "wiring eval"), "the lock is written");
+    // (b) unnamed update → emitLockMessage(..., warn:true) → console.warn
+    const r = countingRunner();
+    await runEvalWith({ ...spec(dir, "update"), name: undefined }, r.run);
+    assert.ok(r.calls() > 0);
+  } finally {
+    if (prev === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("lock check after a TOOL-STUB change: fails 'stale' (stubs are model-facing input)", async () => {
+  const dir = tmp();
+  // Two stubs (unsorted) so the name-sort comparator actually runs.
+  const withStub = (stdout: string) => ({
+    ...spec(dir, "update"),
+    stubs: [
+      { name: "psql", stdout: "row" },
+      { name: "gh", stdout },
+    ],
+  });
+  try {
+    // Record with one canned `gh` output…
+    await runEvalWith(withStub("PR #1"), countingRunner().run);
+    // …then check with a DIFFERENT canned output → the inputs changed → stale.
+    const chk = countingRunner();
+    await assert.rejects(
+      () =>
+        runEvalWith(
+          {
+            ...withStub("PR #2"),
+            lock: { mode: "check", dir, evalApiVersion: 1 },
+          },
+          chk.run,
+        ),
+      /STALE|changed/,
+    );
+    assert.equal(chk.calls(), 0, "a stale check never reaches the model");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lock on but NO name: loud skip — runner runs, no lock written", async () => {
   const dir = tmp();
   try {

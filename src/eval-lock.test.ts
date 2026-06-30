@@ -107,6 +107,37 @@ test("readLock returns null on a miss", () => {
   }
 });
 
+test("readLock returns null on a slug COLLISION (a different eval's lock, not this one's)", () => {
+  // `foo bar` and `foo/bar` both normalize to `foo-bar.lock.json`. A lock whose
+  // stored name differs from the requested name must NOT be read as this eval's
+  // lock — else `--check` could replay the wrong eval's report. It degrades to a
+  // miss (→ "stale", re-run), never to wrong data.
+  const dir = tmp();
+  try {
+    assert.equal(lockSlug("foo bar"), lockSlug("foo/bar")); // precondition
+    writeLock(
+      dir,
+      buildLock({
+        name: "foo bar",
+        inputsHash: "h",
+        model: "m",
+        harnessVersionKey: "",
+        evalApiVersion: 1,
+        builtAt: "2026-01-01T00:00:00Z",
+        report: { ok: true },
+      }),
+    );
+    assert.ok(readLock(dir, "foo bar"), "the matching name reads its own lock");
+    assert.equal(
+      readLock(dir, "foo/bar"),
+      null,
+      "the colliding-but-different name reads as a miss, not the other lock",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("readLock THROWS on corrupt JSON (a broken lock is not a silent 'no lock')", () => {
   const dir = tmp();
   try {

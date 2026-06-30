@@ -1663,7 +1663,15 @@ function evalArmsInputs<M extends Metrics>(
         : undefined,
     };
   }
-  return { task: spec.task, arms };
+  // Tool stubs (`spec.stubs`) are written onto PATH before each trial, so a
+  // change to a canned CLI output IS a model-facing input change — fold a
+  // canonical (name-sorted) view into the hash so `--check` catches it. Sorted
+  // for a stable key regardless of declaration order; an empty list is the
+  // byte-identical-to-before default. Each ToolStub is plain serializable data.
+  const stubs = [...(spec.stubs ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  return { task: spec.task, arms, stubs };
 }
 
 export async function runEvalWith<M extends Metrics>(
