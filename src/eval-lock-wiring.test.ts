@@ -386,6 +386,52 @@ test("lock check after an ephemeralEnv toggle: fails 'stale' (it changes the run
   }
 });
 
+test("trigger-rate lock check after a HARNESS switch: fails 'stale' (driver is an input)", async () => {
+  const dir = tmp();
+  try {
+    const pluginDir = makeSkillPlugin(join(dir, "plugin"));
+    const lockDir = join(dir, "locks");
+    const base = {
+      name: "foo trigger",
+      pluginDir,
+      prompts: ["use the foo skill", "please foo this"],
+      fired: () => true,
+      minPrompts: 1,
+      minDistance: 0,
+      trials: 1,
+      model: "claude-sonnet-4-6-20260101",
+      spacingSec: 0,
+    };
+    // Record on the default harness (claude-code)…
+    await measureTriggerRateWith(
+      {
+        ...base,
+        lock: { mode: "update" as const, dir: lockDir, evalApiVersion: 1 },
+      },
+      countingRunner().run,
+    );
+    // …then check as if driven by Codex (same prompts/model/plugin) → stale.
+    const chk = countingRunner();
+    await assert.rejects(
+      () =>
+        measureTriggerRateWith(
+          {
+            ...base,
+            lock: { mode: "check" as const, dir: lockDir, evalApiVersion: 1 },
+          },
+          chk.run,
+          undefined,
+          undefined,
+          "codex",
+        ),
+      /STALE|changed/,
+    );
+    assert.equal(chk.calls(), 0, "a stale check never reaches the model");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lock on but NO name: loud skip — runner runs, no lock written", async () => {
   const dir = tmp();
   try {

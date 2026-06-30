@@ -1983,12 +1983,21 @@ export interface EvalDriver {
   readonly runner: AgentRunner;
   readonly parse: ModelOutputParser;
   readonly runError?: (out: RunOut) => string | null;
+  /**
+   * The harness this driver runs (e.g. `"claude-code"`, `"codex"`). Folded into a
+   * trigger-rate eval's LOCK hash so a report recorded on one harness is marked
+   * STALE if the eval is later switched to another (a different harness can fire a
+   * skill differently). Optional for back-compat — absent defaults to
+   * `"claude-code"`, so an existing single-harness lock is unaffected.
+   */
+  readonly harness?: string;
 }
 
 /** The default (Claude Code) eval driver: real `claude` + stream-json parsing. */
 export const claudeEvalDriver: EvalDriver = {
   runner: spawnAgent,
   parse: parseClaudeRun,
+  harness: "claude-code",
 };
 
 /**
@@ -2467,6 +2476,7 @@ export async function measureTriggerRateWith(
   runner: AgentRunner,
   parse: ModelOutputParser = parseClaudeRun,
   runError?: (out: RunOut) => string | null,
+  harness = "claude-code",
 ): Promise<TriggerRateReport> {
   // Deterministic gate FIRST — before spending a token (or packaging a skillsDir).
   assertTriggerDiversity(spec);
@@ -2521,6 +2531,10 @@ export async function measureTriggerRateWith(
             tools: [...cfg.tools].sort(),
             fixture: spec.fixture,
             competitors,
+            // The harness the driver runs is a model-facing input — a Claude vs
+            // Codex run can fire a skill differently — so a recorded report is
+            // STALE if the eval is switched to another harness.
+            harness,
           };
     return await withEvalLock(
       { name: spec.name, inputs: triggerInputs, model: cfg.model, lock },
@@ -2570,7 +2584,13 @@ export async function measureTriggerRate(
   opts: { evalDriver?: EvalDriver } = {},
 ): Promise<TriggerRateReport> {
   const d = opts.evalDriver ?? claudeEvalDriver;
-  return measureTriggerRateWith(spec, d.runner, d.parse, d.runError);
+  return measureTriggerRateWith(
+    spec,
+    d.runner,
+    d.parse,
+    d.runError,
+    d.harness ?? "claude-code",
+  );
 }
 /* v8 ignore stop */
 
