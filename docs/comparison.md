@@ -31,27 +31,27 @@ Codex has no hook or plugin system. The compile-time verification and CI enforce
 
 ## What's Deterministic vs What's Not
 
+**Everything vigiles compiles and lints is deterministic** — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline.
+
 | Check                            | Deterministic? | How                                                                                  |
 | -------------------------------- | -------------- | ------------------------------------------------------------------------------------ |
-| Linter rule exists in catalog    | Yes            | Node API (`builtinRules`) or CLI (`ruff rule`, `rubocop --show-cops`)                |
-| Linter rule is enabled in config | Yes            | `calculateConfigForFile` (ESLint), `--show-settings` (Ruff), `--show-cops` (RuboCop) |
-| Cedar policy exists              | Yes            | Scan `.cedar/` and `cedar/` for `@id("...")` annotations, with filename fallback     |
-| File path exists                 | Yes            | `fs.existsSync`                                                                      |
-| npm script exists                | Yes            | Parsed from `package.json`                                                           |
-| SHA-256 hash matches             | Yes            | Recompute and compare                                                                |
-| Duplicate rule detection         | Yes            | Normalized Compression Distance (NCD) with fixed threshold                           |
-| Orphan docs detection            | Yes            | Scan configured doc directories for `.md` files no other markdown references         |
-| guidance → enforce suggestion    | **No**         | Agent reads linter docs, reasons about intent — `/strengthen` skill                  |
-| PR comment → lint rule           | **No**         | Agent generates custom rule code — `/pr-to-lint-rule` skill                          |
-| Spec content authoring           | **No**         | Agent or human writes the spec — vigiles verifies it                                 |
-
-Everything vigiles compiles and lints is deterministic — same input, same output, no LLM in the loop. The non-deterministic parts (authoring specs, suggesting upgrades, writing custom rules) are agent skills that run outside the compilation pipeline.
+| Linter rule exists in catalog    | ✅ Yes         | Node API (`builtinRules`) or CLI (`ruff rule`, `rubocop --show-cops`)                |
+| Linter rule is enabled in config | ✅ Yes         | `calculateConfigForFile` (ESLint), `--show-settings` (Ruff), `--show-cops` (RuboCop) |
+| Cedar policy exists              | ✅ Yes         | Scan `.cedar/` and `cedar/` for `@id("...")` annotations, with filename fallback     |
+| File path exists                 | ✅ Yes         | `fs.existsSync`                                                                      |
+| npm script exists                | ✅ Yes         | Parsed from `package.json`                                                           |
+| SHA-256 hash matches             | ✅ Yes         | Recompute and compare                                                                |
+| Duplicate rule detection         | ✅ Yes         | Normalized Compression Distance (NCD) with fixed threshold                           |
+| Orphan docs detection            | ✅ Yes         | Scan configured doc directories for `.md` files no other markdown references         |
+| guidance → enforce suggestion    | ❌ No          | Agent reads linter docs, reasons about intent — `/strengthen` skill                  |
+| PR comment → lint rule           | ❌ No          | Agent generates custom rule code — `/pr-to-lint-rule` skill                          |
+| Spec content authoring           | ❌ No          | Agent or human writes the spec — vigiles verifies it                                 |
 
 ## What vigiles Does and Doesn't Validate in Markdown
 
 vigiles validates vigiles-specific things in `.md` files: `<!-- vigiles:enforce ... -->` comments (inline mode), `vigiles:` YAML frontmatter rules (frontmatter mode), and `enforce("...")` / `file("...")` / `cmd("...")` / `ref("...")` calls inside fenced TS/JS code blocks. Same engines used for `.spec.ts` references.
 
-Out of scope (use other tools):
+Out of scope — use other tools:
 
 | Concern                              | Use instead                                                                     |
 | ------------------------------------ | ------------------------------------------------------------------------------- |
