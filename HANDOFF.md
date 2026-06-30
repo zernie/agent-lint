@@ -49,9 +49,9 @@ default → fix it to a CC title immediately.
 6. **`287e4ae` feat** — new lint rule **`skill-description-budget`** (warn-tier
    trigger proxy, generous 500-char budget). Fully wired (detector + rule-meta
    heuristic-behavioral→warn + DEFAULT_RULES + NUDGE group + scan + lint + docs/rules
-   + matrix + tests). Does NOT fire on haretrail — the earlier "634/781-char" was
-   BYTE counts; in CHARS (Cyrillic = 2 bytes) the longest is 463 < 500. Correctly
-   FP-safe.
+   - matrix + tests). Does NOT fire on haretrail — the earlier "634/781-char" was
+     BYTE counts; in CHARS (Cyrillic = 2 bytes) the longest is 463 < 500. Correctly
+     FP-safe.
 
 ### DO NEXT / OPEN DECISIONS
 
