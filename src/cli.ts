@@ -6626,6 +6626,17 @@ async function main(): Promise<void> {
             capabilitiesOfReport(beforeReport, adapter.dialect),
             capabilitiesOfReport(report, adapter.dialect),
           );
+          // Feed the flight recorder: the blast-radius change (moat #2) as a record.
+          appendObservation({
+            kind: "capability-diff",
+            added: [
+              ...diff.addedSideEffecting,
+              ...diff.addedUnknown,
+              ...diff.addedReadOnly,
+            ],
+            removed: [...diff.removed],
+            widened: diff.widened,
+          });
           console.log(
             json
               ? JSON.stringify({ capabilityDiff: diff }, null, 2)
