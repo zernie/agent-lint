@@ -562,6 +562,16 @@ export default defineHook({
     assert.equal(rec.event, "PreToolUse");
     assert.equal(rec.would, "deny");
     assert.match(rec.reason, /force-push/);
+    // …and the SAME decision landed in the unified flight-recorder ledger.
+    const ledger = readFileSync(resolve(dir, ".vigiles/runs.jsonl"), "utf-8");
+    const led = JSON.parse(ledger.trim().split("\n")[0]) as {
+      kind: string;
+      decision: string;
+      mode: string;
+    };
+    assert.equal(led.kind, "hook");
+    assert.equal(led.decision, "deny");
+    assert.equal(led.mode, "observe");
   } finally {
     cleanupTmpDir(dir);
   }

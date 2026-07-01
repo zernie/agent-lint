@@ -213,10 +213,12 @@ import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
   evaluatePreToolUse,
+  readActiveAgent,
   pushActiveAgent,
   popActiveAgent,
   decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
+import { appendObservation } from "./observe.js";
 import {
   setEffectActive,
   clearEffectActive,
@@ -5135,6 +5137,13 @@ function agentHookCommand(): void {
   if (!tool) return;
   const decision = evaluatePreToolUse(cwd, tool, command);
   if (!decision.allow) {
+    appendObservation({
+      kind: "agent",
+      name: readActiveAgent(cwd) ?? "unknown",
+      tool,
+      allowed: false,
+      reason: decision.message,
+    });
     console.error(decision.message);
     process.exit(2);
   }
@@ -5764,10 +5773,26 @@ function emitGate(
   const action = gateAction(decision, mode);
   switch (action.kind) {
     case "block":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: "deny",
+        mode: "enforce",
+        rule: file,
+        reason: action.reason,
+      });
       console.error(action.reason);
       process.exit(2);
       return;
     case "ask":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: "ask",
+        mode: "enforce",
+        rule: file,
+        reason: action.reason,
+      });
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
@@ -5779,6 +5804,14 @@ function emitGate(
       );
       return;
     case "observe":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: action.would,
+        mode: "observe",
+        rule: file,
+        reason: action.reason,
+      });
       recordObservation(file, on, action.would, action.reason);
       console.error(
         `⚠ [vigiles observe] ${on}: would ${action.would} — ${action.reason}`,
