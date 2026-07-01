@@ -85,6 +85,27 @@ Two ways to specify an arm:
 
 That's why vigiles can measure continuously — on every change, not once — while a per-token competitor cannot. Most of vigiles needs no model at all. Only this measurement tier does, and it runs where your subscription already is. See [`docs/eval-architecture.md`](eval-architecture.md) for the cost model.
 
+### What a run reports — and the metered-API warning
+
+A real-model run tells you **exactly what it spent**, so a paid run is never silent:
+
+```text
+  Spent: 84,400 tokens (2.1k in · 1.8k out · 80k cache) · ~$0.42 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+```
+
+- **Tokens + API-equivalent `$`** — `total_cost_usd`, i.e. what the run _would_ cost at metered API rates. On your subscription you pay **$0 beyond the sub**; the `$` is just the yardstick.
+- **The billed-to line** — if you have an `ANTHROPIC_API_KEY` set, the run is billed **per token**, and vigiles says so loudly:
+
+```text
+  ⚠ Billed to: METERED API (ANTHROPIC_API_KEY is set) — you paid ~$0.42 this run.
+     Run it free on your Claude subscription: unset ANTHROPIC_API_KEY, then `claude login`.
+```
+
+- **No "% of your plan."** Anthropic doesn't expose a subscription's quota (the real limits are rolling rate windows, not a dollar bucket), so vigiles won't invent a percentage. Tokens + the API-equivalent `$` + how you were billed is the honest, complete picture — plus a running session tally across the runs in one sitting.
+
+The numbers also live on the report (`report.arms[*].usage`), and the `test-harness` skill relays them to you after any run it does on your behalf.
+
 ## See also
 
 - [Testing your harness](harness-testing.md) — the deterministic tiers (no model) under this one.
