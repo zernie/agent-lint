@@ -5030,6 +5030,12 @@ function skillStartCommand(target: string | undefined): void {
     process.exit(2);
   }
   setActiveSkill(process.cwd(), target);
+  // Record the fire in the flight recorder: the skill NAME is the parent dir of
+  // its SKILL.md (skills/<name>/SKILL.md), falling back to the raw target.
+  const parts = target.replace(/\\/g, "/").split("/").filter(Boolean);
+  const name =
+    parts.length >= 2 ? parts[parts.length - 2] : (parts[0] ?? target);
+  appendObservation({ kind: "skill", name, fired: true });
   console.log(`Active skill: ${target}`);
 }
 
