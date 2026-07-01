@@ -7,7 +7,16 @@ argument-hint: <path to CLAUDE.md, defaults to CLAUDE.md>
 
 Start a typed `CLAUDE.md.spec.ts` from an existing hand-written CLAUDE.md (or AGENTS.md). This is the non-destructive adoption path — you keep your existing instruction file as the starting point and get type safety going forward.
 
-> **Faithful by default, and reversible.** Adoption is non-destructive: the goal is a spec that compiles back to the user's existing file as closely as possible — preserve every rule, command, key file, and prose section. Don't upgrade `guidance()` to `enforce()` here; that's a separate, opt-in step (the `strengthen` skill). And it's never a one-way door — `vigiles eject <file>` hands the file back as plain hand-owned markdown anytime. For the lightest touch with no spec at all, inline `<!-- vigiles:enforce ... -->` comments are verified by `vigiles lint` with the same engine.
+## Adoption rules
+
+Adoption is the **safe, faithful on-ramp — never an upgrade in disguise.** These are non-negotiable:
+
+- **Faithful.** Preserve every rule, command, key file, and prose section as-is. Invent nothing — the spec must compile back to ~the user's existing file.
+- **Non-destructive.** Never edit the original `CLAUDE.md` / `AGENTS.md`. Only write the new `.spec.ts`. Never auto-`compile` over the file — switching it to spec-managed is a separate, explicit step the user runs with a diff to review.
+- **Don't escalate enforcement.** Keep `guidance()` as `guidance()`. Upgrading to `enforce()` has a cost (config/plugins, possible false positives) and is a separate opt-in step — the `strengthen` skill. Adoption is **not** turning on strict / `workflow` gating.
+- **Reversible.** `vigiles eject <file>` hands the file back as plain hand-owned markdown anytime — it's never a one-way door. Tell the user this.
+- **Ask before writing.** Present the generated spec and a conversion summary first; write only on the user's yes.
+- **A lighter touch exists.** For no spec at all, inline `<!-- vigiles:enforce ... -->` comments are verified by `vigiles lint` with the same engine.
 
 ## Instructions
 

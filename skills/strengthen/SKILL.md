@@ -5,6 +5,10 @@ description: Upgrade a vigiles spec's guidance() rules to enforce() — scan the
 
 Scan spec files for `guidance()` rules and suggest `enforce()` replacements backed by real linter rules.
 
+## Principle: auto the free wins, nudge for the costs
+
+The dividing line is **cost, not strictness**. A `guidance()` → `enforce()` swap where the linter rule **already exists and is enabled** is a pure win — free, reversible, no false-positive risk — so apply it (Tier 1 below). Anything that **costs** something — editing linter config, installing a plugin, or a change that could fail a clean CI — is the user's call: **present it with the tradeoff spelled out and let them choose** (Tiers 2–4). Never silently edit config, install a dependency, or escalate the repo into strict gating. This is the `init` enforcement model (structural = on by default, workflow/strict = opt-in) applied at edit time.
+
 ## Instructions
 
 ### Step 0: Choose Mode

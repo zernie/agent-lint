@@ -28,6 +28,21 @@ export {
   skill,
   type ClaudeCodeToolVocabulary,
 } from "./adapters/claude-code/typed-spec.js";
+// Selection-collision — a Claude-Code-ONLY behavioral measurement (Codex has no
+// skill-selection event to read), so it lives on this surface, not the agnostic
+// `vigiles/testing`. `measureSelectionMatrix` builds the N×N "which skill fired?"
+// matrix (diagonal = recall, off-diagonal = collision); `assertNoCollision` gates it.
+export {
+  measureSelectionMatrix,
+  assertNoCollision,
+  formatSelectionReport,
+} from "./scan-behavioral.js";
+export type {
+  SelectionReport,
+  SkillSelectionStat,
+  SelectionOptions,
+  SelectionMatrixOptions,
+} from "./scan-behavioral.js";
 export * from "./adapters/claude-code/layout.js";
 export * from "./adapters/claude-code/runtime.js";
 export * from "./adapters/claude-code/hook-protocol.js";

@@ -917,6 +917,8 @@ interface LintReport {
   disallowedToolErrors: number;
   descriptionOverlapIssues: number;
   descriptionOverlapErrors: number;
+  descriptionBudgetIssues: number;
+  descriptionBudgetErrors: number;
   frontmatterValidIssues: number;
   frontmatterValidErrors: number;
   mcpHookIssues: number;
@@ -1039,6 +1041,7 @@ function lintExitCode(report: LintReport): 0 | 1 | 2 {
     report.hookScriptErrors > 0 ||
     report.disallowedToolErrors > 0 ||
     report.descriptionOverlapErrors > 0 ||
+    report.descriptionBudgetErrors > 0 ||
     report.frontmatterValidErrors > 0 ||
     report.mcpHookErrors > 0 ||
     report.preferCompiledHookErrors > 0 ||
@@ -1500,6 +1503,11 @@ async function runLint(
   // descriptions collide in the selector (deterministic NCD precision proxy).
   const descriptionOverlap = checkDescriptionOverlap(config, silent, adapter);
 
+  // 7k². Skill-description-budget — a model-invocable skill whose description is
+  // so long the trigger signal is buried (heuristic proxy; degrades recall +
+  // precision). Generous 500-char budget; warn-tier, never gates.
+  const descriptionBudget = checkDescriptionBudget(config, silent, adapter);
+
   // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
   // stricter than some loaders, so verify before enforcing).
   const frontmatterValid = checkFrontmatterValid(config, silent, adapter);
@@ -1610,6 +1618,8 @@ async function runLint(
     disallowedToolErrors: disallowedTools.errors,
     descriptionOverlapIssues: descriptionOverlap.issues,
     descriptionOverlapErrors: descriptionOverlap.errors,
+    descriptionBudgetIssues: descriptionBudget.issues,
+    descriptionBudgetErrors: descriptionBudget.errors,
     frontmatterValidIssues: frontmatterValid.issues,
     frontmatterValidErrors: frontmatterValid.errors,
     mcpHookIssues: mcpHookTargets.issues,
@@ -3609,6 +3619,40 @@ function checkDescriptionOverlap(
   }
   if (found.length > 0 && !silent) {
     console.log("\nDescription-overlap check:\n");
+    for (const issue of found) {
+      console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
+      ghAnnotate(sev === "error" ? "error" : "warning", issue.message);
+    }
+  }
+  return { issues: found.length, errors: sev === "error" ? found.length : 0 };
+}
+
+/**
+ * Apply the `skill-description-budget` rule: a model-invocable skill whose
+ * description is so long the trigger signal is buried — the selector weighs the
+ * opening most, so a bloated description hurts recall + precision. A
+ * deterministic heuristic proxy (generous 500-char budget). Reuses `scanPlugin`'s
+ * `descriptionBudgetIssues`. Warning by default; "error" gates CI.
+ */
+function checkDescriptionBudget(
+  config: VigilesConfig | undefined,
+  silent: boolean,
+  adapter: HarnessAdapter,
+): { issues: number; errors: number } {
+  const sev = ruleSeverity(config?.rules?.["skill-description-budget"]);
+  if (!sev) return { issues: 0, errors: 0 };
+  let found: readonly { message: string }[];
+  try {
+    found = scanPlugin(
+      process.cwd(),
+      adapter.layout,
+      adapter.dialect,
+    ).descriptionBudgetIssues;
+  } catch {
+    return { issues: 0, errors: 0 };
+  }
+  if (found.length > 0 && !silent) {
+    console.log("\nSkill-description-budget check:\n");
     for (const issue of found) {
       console.log(`  ${sev === "error" ? "✗" : "⚠"} ${issue.message}`);
       ghAnnotate(sev === "error" ? "error" : "warning", issue.message);

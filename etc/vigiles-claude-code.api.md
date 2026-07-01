@@ -8,6 +8,12 @@
 export function agent<const P extends AuthoredPurity | undefined = undefined>(spec: AgentSpecInput<P, ClaudeCodeToolVocabulary>): AgentSpec;
 
 // @public
+export function assertNoCollision(report: SelectionReport, opts?: {
+    maxOffDiagonal?: number;
+    maxPluginCollision?: number;
+}): void;
+
+// @public
 export function buildClaudeArgs(spec: HarnessTestSpec, hasSettings: boolean): string[];
 
 // @public
@@ -66,6 +72,9 @@ export function extractRequest(body: {
     messages?: unknown;
 }): ModelRequest;
 
+// @public
+export function formatSelectionReport(r: SelectionReport): string;
+
 // @public (undocumented)
 export interface HarnessDialect {
     readonly builtinAgentTools: readonly string[];
@@ -93,6 +102,9 @@ export interface LoadedPlugin {
 
 // @public
 export function loadPlugin(pluginPath: string, layout?: PluginLayout): ReturnType<typeof loadPlugin_2>;
+
+// @public
+export function measureSelectionMatrix(dir: string, opts?: SelectionMatrixOptions): Promise<SelectionReport>;
 
 // @public (undocumented)
 export interface MockHandle {
@@ -137,7 +149,47 @@ export function resolveHarness(opts: {
 export function scriptModel(turns: readonly ModelTurn[]): ModelTurn[];
 
 // @public
+export interface SelectionMatrixOptions extends SelectionOptions {
+    readonly prompts?: TriggerPromptSet;
+}
+
+// @public
+export interface SelectionOptions {
+    readonly concurrency?: number;
+    readonly harness?: ProbeHarness;
+    readonly model?: string;
+    readonly trials?: number;
+}
+
+// @public (undocumented)
+export interface SelectionReport {
+    readonly available: boolean;
+    readonly collisionRate: number;
+    readonly matrix: readonly (readonly number[])[];
+    // (undocumented)
+    readonly n: number;
+    // (undocumented)
+    readonly note?: string;
+    // (undocumented)
+    readonly perSkill: readonly SkillSelectionStat[];
+    readonly skills: readonly string[];
+}
+
+// @public
 export function skill<const P extends AuthoredPurity | undefined = undefined>(spec: SkillSpecInput<P, ClaudeCodeToolVocabulary>): SkillSpec;
+
+// @public (undocumented)
+export interface SkillSelectionStat {
+    readonly collidesWith: readonly {
+        readonly skill: string;
+        readonly rate: number;
+    }[];
+    readonly collisionRate: number;
+    readonly n: number;
+    readonly recall: number;
+    // (undocumented)
+    readonly skill: string;
+}
 
 // @public
 export function startMock(script: readonly ModelTurn[], opts?: {

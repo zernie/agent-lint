@@ -30,6 +30,7 @@ function makeReport(over: Partial<ScanReport> = {}): ScanReport {
     mcpIssues: [],
     mcpHookIssues: [],
     descriptionOverlaps: [],
+    descriptionBudgetIssues: [],
     trifectaFindings: [],
     skillResourceIssues: [],
     skillFenceIssues: [],

@@ -19,7 +19,17 @@ The spec is the default because markdown has no structure to check against. A ty
 - **Edit-time red squiggles** — a dead path is caught before lint, not after.
 - **Reuse** — compose and share rules across files and repos.
 
-**Not ready for a spec?** Lint plain markdown with zero new files — inline `<!-- vigiles:enforce -->` comments, no TypeScript — and `vigiles eject` turns a spec back into markdown anytime. The deeper compiler-grade guarantees are **gradual and opt-in, like TypeScript's `strict`**.
+**Not ready for a spec?** Lint plain markdown with zero new files — inline `<!-- vigiles:enforce -->` comments, no TypeScript — and `vigiles eject` turns a spec back into markdown anytime. The deeper compiler-grade guarantees are **gradual and opt-in, like TypeScript's `strict`** — [here's why](#why-are-the-strongest-guarantees-opt-in-not-the-default).
+
+## Why are the strongest guarantees opt-in, not the default?
+
+Because "opt-in" here means **gradual, not permissive** — and the deepest tier needs a typed program to work on. Three things to separate:
+
+- **The default already catches real breakage.** On your plain markdown — no spec, no TypeScript — vigiles fails CI on a typo'd tool, a dead hook, a broken MCP server, or two skills the model can't tell apart. A clean repo stays green. You get protection at rung zero; opt-in never means vigiles ignores what's actually broken.
+- **Compiler-grade proofs need a program to check.** Guarantees like _"a config that leaks won't compile"_ or _"a multi-agent pipeline whose handoffs don't line up won't compile"_ are properties of a typed `.spec.ts` — the same way `tsc` can type-check a `.ts` file but has nothing to check in inert prose. A markdown `CLAUDE.md` gives a compiler nothing to verify. So this tier is "opt-in" mainly in the sense that **you first have to have written the typed spec.** It can't be retrofitted onto a file that isn't a program.
+- **Gradual is how adoption actually works** — the same bet TypeScript made with `strict`. You climb a ladder (markdown → inline `<!-- vigiles:enforce -->` comments → frontmatter → typed spec), and **each rung pays off without forcing the next.** Demanding the deep end at the front door is how a tool ends up with no users. And the guarantee loses no strength by being opt-in: once the spec exists, an unsafe config genuinely won't `tsc`.
+
+In short: **structural correctness is free and on by default; mathematical-strength proofs are opt-in because they require you to bring a typed program** — and forcing that at adoption time is the surest way to get zero adopters.
 
 ## Does `init` overwrite or touch my files?
 
@@ -40,6 +50,17 @@ Test layer drives the real `claude` / `codex` CLI. You can even
 **Most of vigiles needs no model and no key.** Lint and the deterministic Test tiers run in milliseconds on every commit, free.
 
 The only thing that needs a model is a real-model **eval**. That runs on **your own Claude Pro/Max subscription** via the `claude` CLI — **$0 of metered API tokens**. Tools like promptfoo / DeepEval hit a metered API and bill per token on every run. See [the eval architecture](eval-architecture.md).
+
+## What does `vigiles audit` actually run — and why did it "find nothing"?
+
+`audit` has two layers, and by default you get only the first:
+
+- **The deterministic read (always on).** A plain `audit` **executes nothing**. It reads your files and reports structural facts — a broken hook path, an undeclared MCP server, a tool-contract typo, two near-identical descriptions, a subagent holding all three lethal-trifecta legs. Safe on any repo, identical on every OS, no key.
+- **The executing checks (only with your yes).** Two questions can't be answered by reading: _does each skill actually fire?_ (recall + precision) and _do two skills fight over the same prompt?_ (the selection-collision matrix). Answering them runs the real model on your subscription, so `audit` **asks once** at a terminal and remembers your choice in `.vigilesrc.json` (`audit.measure`). Headless — CI, an agent, `--json` — it stays a read and prints a one-line nudge. It never hangs and never executes on its own.
+
+**So if `audit` graded a skill-heavy repo a clean A and "found little," it almost certainly ran only the deterministic read.** The behavioral findings — the skills that never fire, the ones that collide — live behind that one consent. Say yes at a terminal, or measure in a script with [`measureTriggerRate`](measuring-skills.md), to see them.
+
+`audit` is a **local report, like Lighthouse — not a CI gate.** For CI, use [`vigiles lint`](verifying-instruction-files.md), which is deterministic and gates real breakage. The full author workflow is in [shipping plugins](for-plugin-authors.md).
 
 ## Does it work on a non-JavaScript repo (Python, Rust, Go…)?
 

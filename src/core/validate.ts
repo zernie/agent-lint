@@ -97,6 +97,9 @@ export const DEFAULT_RULES: Required<RulesConfig> = {
   "disallowed-tools-contract": "warn",
   // Deterministic NCD precision proxy (near-identical skill descriptions) — warn.
   "description-overlap": "warn",
+  // A model-invocable skill's description so long the trigger signal is buried —
+  // WARN only (heuristic proxy, generous 500-char budget); never gates.
+  "skill-description-budget": "warn",
   // Malformed-YAML frontmatter — WARN only (js-yaml is stricter than some loaders).
   "frontmatter-valid": "warn",
   // A mcp_tool hook incomplete / targeting an undeclared server — on by default at warn.

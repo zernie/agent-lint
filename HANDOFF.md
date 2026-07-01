@@ -9,138 +9,112 @@
 
 ## RESUME HERE
 
-**Branch `claude/eval-cache-invalidation-vd1mzj` — PR #53 OPEN, driving merge-when-green.**
-(github.com/zernie/vigiles/pull/53 — title `feat!: eval lock (CI staleness gate) +
-full Codex parity for hooks & inject`. The `!` is load-bearing: breaking change —
-`HookProtocol.injectableEvents` is now required + `EvalDriver.harness` added.)
+**Branch `claude/haretrail-dogfood-pvdo9t` — PR #54 OPEN, being WATCHED** (user said
+"watch", NOT merge — do NOT auto-merge; merge is the user's call). An hourly cron
+`5438c724` re-checks CI + mergeability: report green, fetch-logs-and-fix on red, stop
+(CronDelete) when merged/closed. HEAD `90eb01b`.
 
-**RESUME STATE: in the autofix/merge loop.** Subscribed to PR #53 activity; a
-`send_later` check-in re-polls CI (~every 8-9 min, last armed for the 3da87a1 HEAD)
-and SQUASH-MERGES once all 6 checks are green (validate/describe/harness/e2e/test/
-check). If a job fails → fetch logs, fix, push. If the Codex review bot leaves a NEW
-real soundness comment → fix it. Merge when CI is GREEN (the gate is CI, not the bot
-going quiet). Keep the `feat!:` squash title. Subscription ends only at merge/close.
+Session started as a DOGFOOD of `vigiles audit` on `fleytman/haretrail` (a Codex
+skills repo) and turned into a docs + rules + **eval-cost-transparency** + **research
+corpus index** batch.
 
-This session built the **eval LOCK** (a committed CI staleness gate for evals run on
-a subscription), closed the **Codex parity** gaps (hook inject as a tested port
-contract; hook fan-out + `init` wiring of nudges into `.codex/config.toml`), opened
-PR #53, and hardened the lock against **5 Codex-review soundness findings** (below).
+**RESUME STATE: cost + selection-matrix DONE (pushed). Remaining haretrail ideas
+optional/ask-first** (`research/haretrail-eval-ideas.md`): deriveTriggerSetFromManifest
+(free negatives), locales axis, measureDescriptionAblation, withPluginFixture — none built.
 
-### What landed this session (in order)
+### What landed this session (all pushed)
 
-1. **Eval LOCK vs CACHE split** — `src/eval-lock.ts`. The lock is a COMMITTED
-   integrity stamp (`.vigiles/eval-locks/<slug>.lock.json`), distinct from the
-   gitignored local speed CACHE (`eval-cache.ts`). `eval --update` (local, on the
-   sub) records each NAMED eval's report; `eval --check` (CI) recomputes
-   `evalInputsHash` over the MODEL-AFFECTING inputs and fails STALE on a mismatch
-   WITHOUT a model call (`decideLock` → run | replay | stale). Honest scope: verifies
-   "committed results match current INPUTS", NOT "reflect current model behavior".
-   NO nightly run (user killed it — "nobody's gonna do that"). Harness version is
-   PROVENANCE, NOT hashed (CI's pinned `claude` ≠ a dev's local would false-trip).
-2. **Per-adapter `versionKey`** extracted to `HarnessRuntime.versionKey` —
-   CC → `major.minor` (~quarterly); Codex → `""` (minor is patch-cadence ~weekly).
-3. **Lock wired into** eval entry points (`runEvalWith`/`measureTriggerRateWith` via
-   `withEvalLock`), CLI flags, GHA (`command: eval-check`), and `init` (scaffolds the
-   job). `anyLocksCommitted` makes `--check` a green no-op until the first lock.
-4. **Agent-awareness without editing the user's CLAUDE.md** — a PostToolUse nudge
-   hook (`hooks/eval-lock-nudge.sh` → `hook-runtime eval-lock-nudge`) injects an
-   `additionalContext` reminder after a `SKILL.md`/`*.eval.*` edit, self-gated on a
-   committed lock + the `test-harness` skill. VERIFIED: a plugin CANNOT ship an
-   always-on instruction blob; channels are SKILLS + HOOKS (`research/agent-context-delivery.md`).
-5. **Three CLAUDE.md rules added** — `cohesive-feature-delivery` (whole-flow
-   definition-of-done checklist), `prose-clarity` / `lead-with-easy-adoption`.
-6. **Public docs prose sweep** (13 guides) for scannability + the eval-lock docs.
-7. **HOOK INJECT ENCODED INTO THE PORT** (commit `b6136f2`, `feat!`) — the answer to
-   "how was Codex inject missed if adapters fail tests on missing functionality?":
-   inject support was PROSE-deferred, not encoded, so conformance never asserted it.
-   Official Codex hooks docs (developers.openai.com/codex/hooks) CONFIRM
-   `additionalContext` on SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/
-   SubagentStart — same shape as CC. Fix: `HookProtocol.injectableEvents` (required
-   field); conformance REJECTS a shellHooks adapter with an empty list; the
-   adapter-contract suite asserts every shellHooks adapter declares the events our
-   shipped hooks use (PostToolUse, SessionStart) — the test that WOULD have caught
-   the miss. `compile` warns on an inject hook only when its event isn't injectable;
-   **react** output stays the one CC-confirmed-only piece. Corrected every "Codex
-   inject deferred" ref across docs/research/CLAUDE.md + documented `injectableEvents`
-   in the adapter API + authoring guides.
-8. **MULTI-HARNESS HOOK FAN-OUT** (user spotted it: "shouldn't compile compile for
-   both since both can be enabled?"). Instruction files already mirror to both, but
-   hooks installed into ONE harness only (`installHooks` ignored `config.harness`,
-   auto-detected one). Fix: `resolveHarnessAdapters` (adapter-registry.ts) returns
-   the FULL declared set (flag→one, config list→all, else detect→one); `installHooks`
-   loops, merging the SAME compiled hook into `.claude/settings.json` AND
-   `.codex/config.toml`, each native format, per-harness warnings. Plus the `init` CI
-   workflow is now harness-aware — the test job installs `@anthropic-ai/claude-code`
-   and/or `@openai/codex` per declared harness (`harnessTestBinaries`). Skills compile
-   byte-identical across harnesses; subagents are CC-only by design — so hooks + the
-   CI binary were the real fan-out gaps. Tests: resolveHarnessAdapters units, a
-   both-harness hook-install e2e (hook.test.ts), harness-aware workflow e2e
-   (cli.test.ts). Research §4 in multi-harness-compile.md.
-9. **CODEX HOOK WIRING in `init`** (user: "if you can fix it, fix"). vigiles's own
-   nudge hooks reached CC via the marketplace plugin but NOT Codex (skills-only). Fix:
-   `codexPluginHooks`/`applyCodexPluginHooks` (setup-plan.ts) + `wireCodexHooks`
-   (cli.ts) write the eval-lock + refs nudges into `.codex/config.toml` as direct
-   `npx vigiles hook-runtime` commands (idempotent, preserves the user's config).
-   Deferred-loud on Codex: SessionStart lint summary + compile/pre-edit guards.
-10. **PR #53 + 5 CODEX-REVIEW FIXES** (all real soundness gaps in the lock, all on my
-    code). The input-hash bug class — a model-facing input omitted from the staleness
-    hash → `--check` replays stale results — is now CLOSED on BOTH seams:
-    (a) `evalArmsInputs` (runEval): added **stubs** + **ephemeralEnv**;
-    (b) `triggerInputs` (trigger-rate): added **harness** (via new optional
-    `EvalDriver.harness`, default "claude-code") so a Claude-recorded report is stale
-    if switched to Codex. PLUS (c) **slug-collision** guard in `readLock` (rejects a
-    lock whose stored `name` differs → safe miss, never replays the wrong eval); and
-    (d) **unnamed eval in `--check`** now THROWS instead of calling the model (the
-    no-model-in-CI contract). Each proven by a wiring/unit test; coverage held at 100%.
+- **`measureSelectionMatrix` + `assertNoCollision`** (`90eb01b`) — PROMOTED the
+  cross-skill selection-collision matrix (was CLI-only under audit consent) to a
+  first-class assertable eval primitive. Zero-setup (auto-derives prompts from
+  descriptions), `assertNoCollision({maxOffDiagonal})` gates it. Exported on
+  **`vigiles/claude-code`** NOT agnostic `vigiles/testing` (CC-only — reads the
+  selector's choice; scan-behavioral is Codex-adapter-coupled). Thin wrapper over the
+  existing `measurePluginSelection`; `measureSelectionMatrixWith` = injectable core.
+  Example eval + no-model tests + for-plugin-authors.md CI path.
+- **Cost threading — LAST path** (`2268cef`) — `measure`/`measureArms` now carry
+  `usage: ArmUsage` on `CheckReport` + emit cost in the v8-ignored wrappers (measureArms
+  sums both arms). ALL four eval paths now print spend (runEval + measureTriggerRate
+  already did) — the cost-transparency feature is now COMPLETE.
 
-### DO NEXT / OPEN DECISIONS
+0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
+   `status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
+   NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
+   index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
+   Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
+   `src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
+   stays the human index, now points at the machine one. `.prettierignore` gained the
+   nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
 
-- **PRIMARY: finish the merge loop on PR #53** (see RESUME STATE above). Squash-merge
-  when CI green; keep the `feat!:` title.
-- **react output on Codex** is the remaining CC-confirmed-only hook piece — confirm
-  against the real `codex` binary before relying on it (gated, like the rest).
-- **Pre-release P0 (roadmap'd):** run the eval tier against the REAL `codex` binary
-  ONCE (the one "claimed but never executed end-to-end" Codex piece).
+1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
+   scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
+   RU descriptions fire fine on EN prompts; it cried wolf on correct non-English
+   authoring). Why saved in that research doc; `one-detector-no-drift` example moved to
+   `description-overlap`.
+2. **Cost transparency** — `src/eval-cost.ts` (pure engine: tokens + API-equivalent `$`
+   - metered-vs-sub detection + session tally + formatter, fully unit-tested). Emits
+     after `runEval` (`abeb93e`) AND `measureTriggerRate` (threaded `usage` into
+     `TriggerRateReport`). NO "% of sub" (Anthropic doesn't expose plan quota). The
+     `test-harness` skill MUST relay spend to the user; `docs/measuring-skills.md` documents it.
+3. **`surface-architecture-decisions` rule** (`c1c8067`) — output arch decisions (file
+   placement, core/adapter/port, extend-vs-create) to chat in a scannable block with the
+   boundary reasoning. FOLDED IN parse-don't-validate + make-illegal-states-irrepresentable
+   (`53e3dfa`), framed as decisions-to-name (ts-essentials holds the mechanical how).
+4. Earlier batch (in prior handoff too): `document-the-why` rule + `doc-command-coverage`
+   check; `skill-description-budget` lint rule; audit→behavioral→consent + opt-in FAQ
+   docs; auto-vs-nudge in the 3 spec skills.
+
+### DO NEXT / OPEN
+
+- **PRIMARY: keep watching PR #54 → green** (cron `5438c724`). Merge is the USER's call.
+- **haretrail feature ideas** (`research/haretrail-eval-ideas.md`): measureSelectionMatrix
+  now DONE; remaining = deriveTriggerSetFromManifest, locales axis, description-ablation,
+  withPluginFixture. All optional/ask-first.
+- **#3 "collision-cluster" rule — RECOMMENDED DROP** (NCD is byte-level/language-bound,
+  can't catch cross-language collision; the model MATRIX already ships under
+  `audit.measure` consent). Pending user OK.
+- Cosmetic vigiles bug (unfixed): lethal-trifecta finding labels `.codex/skills/…` but
+  files are at `skills/…` — apply `onDiskPath` to that finding's label in `scan.ts`.
 
 ### Gotchas
 
-- **`dialect-drift.test.ts` FAILS here** — asserts the INSTALLED claude-code SDK tool
-  set matches the pinned `VALIDATED_CC_VERSION`; this container runs a DIFFERENT CC
-  (36 tool types vs the pinned 17/38). PRE-EXISTING + UNRELATED; passes in CI where CC
-  is pinned. ~1949 tests otherwise pass. NB its failure SUPPRESSES the coverage table
-  locally — to read coverage, temporarily skip it (`sed -i 's/const gate = pkg ? it :
-it.skip;/const gate = it.skip;/; s/const eventsGate = bundle ? it : it.skip;/const
-eventsGate = it.skip;/' src/dialect-drift.test.ts`), run, then `cp` it back.
-- **COVERAGE TRAP (bit me twice):** the gate is 100% lines/statements/functions on the
-  `vitest.config.mjs` include list. A branch only reachable when `GITHUB_ACTIONS` is
-  set (e.g. `emitLockMessage`'s annotation path) inverts in CI — the ELSE branch then
-  goes uncovered. ALWAYS verify with `GITHUB_ACTIONS=true npx vitest run --coverage`
-  (not the bare local run), and write tests that toggle/delete the env var to hit both
-  sides. A sort comparator needs ≥2 elements to be covered.
-- `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec +
-  `node dist/cli.js compile CLAUDE.md.spec.ts` (44 rules).
-- **`npm run fmt` reformats `research/`** (huge prettier diff) — use `npx prettier
---write <files>` and stage ONLY your files. (`npm run fmt:check` was clean here.)
-- Commits: **NO session links / NO model IDs** (auto-classifier blocks them).
-- Breaking port changes are `feat!` — the CI `validate` job checks the PR TITLE, and
-  the release version comes from it.
-- After a HookProtocol/port change, run `node scripts/api-extractor.mjs --local` to
-  regenerate `etc/*.api.md` (the committed surface gate) — `injectableEvents` landed
-  in `etc/vigiles-adapter.api.md`.
+- `CLAUDE.md` COMPILED from `CLAUDE.md.spec.ts` — edit the spec + `node dist/cli.js
+compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`. SAME for the
+  scoped `src/CLAUDE.md`, `src/core/CLAUDE.md`, and now `research/CLAUDE.md` (compiled
+  from `research/CLAUDE.md.spec.ts` — all in `.prettierignore`).
+- **RESEARCH INDEX SYNC**: a new `research/*.md` needs a `keyFiles` line in
+  `research/CLAUDE.md.spec.ts` + `status:`/`topic:` frontmatter, or `src/research-index.test.ts`
+  fails. Rename/delete → update the spec (compiler verifies each path exists). Recompile after.
+- **`dialect-drift.test.ts` fails LOCALLY** in this container (installed claude-code drifted
+  from pinned `2.1.187`); CI pins the version so it passes there. Env-only, not a real break.
+- **RUN ESLINT, not just fmt:check, on new files** — `no-confusing-void-expression`
+  (a void-returning arrow shorthand, e.g. `() => console.error(x)` / `() => reset()`)
+  is an ERROR (add braces); string spread `[...str]` too (use `Array.from`). `npm run
+lint` = 0 errors passes; the repo carries ~173 WARNINGS (not gated).
+- `validate.test.ts` has a hardcoded `DEFAULT_RULES` literal that breaks on a new rule.
+  Run the full suite (`npx vitest run`) / grep for it. (It IS vitest, not node:test.)
+- `prettier --check .` covers `HANDOFF.md` — run `npx prettier --write HANDOFF.md` before commit.
+- A new LINT RULE = ~12 files in lockstep (`rule-meta` EXACT-match `docs/rules/`; `setup-plan` group).
+- Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks). Conventional-Commit PR title.
+- Eval `usage` is now threaded on ALL report types (`EvalReport`, `CheckReport`,
+  `TriggerRateReport`) — source is the parser's `ParsedModelRun.usage`. Adding a new
+  report type? Carry `usage: ArmUsage` + `aggregateUsage` in the loop (that's the pattern).
+- **Selection-matrix lives on `vigiles/claude-code`** (CC-only), NOT `vigiles/testing`
+  (agnostic). `scan-behavioral` imports the Codex adapter → never re-export it from the
+  agnostic barrel. `assertNoCollision` sits there too (co-located with its report type).
 
 ### Decisions of record (don't relitigate)
 
-- **Eval lock ≠ cache** — lock = committed integrity stamp (CI gate); cache =
-  gitignored local speed. Lock verifies INPUTS match, not model behavior. No nightly.
-- **Harness version is provenance, not a hash input** — keeps `--check` binary-free.
-- **Inject works on BOTH harnesses** (each harness's `injectableEvents`); only react
-  output is CC-confirmed-only. The gap can't recur — it's a tested port contract now.
-- **Never edit the user's CLAUDE.md to convey a workflow** — deliver via skill + hook.
-- Public docs name USER BENEFIT (no `moat`/`flywheel`, no `research/` links). `startup/` LOCKED.
+- Cross-language deterministic flag is DEAD (refuted). If ever revived → key on language
+  INCONSISTENCY within a plugin (some EN, some RU), NOT "non-Latin", and only after measuring.
+- Cost: tokens + API-equivalent `$` + a metered-API warning; NEVER a fake "% of sub".
+- `surface-architecture-decisions` is now ACTIVE — output arch/placement decisions to chat.
+- Selection-collision: deterministic NCD is language-bound → the model MATRIX (shipped,
+  under `audit.measure` consent) is the real catch. Don't build a looser-NCD cluster rule.
+- Public docs = user benefit (no moat/flywheel, no `research/` links). `startup/` LOCKED.
 
 ## Don't re-read unless the task needs it
 
-- `research/cache-invalidation.md` — the eval lock/cache design record.
-- `research/agent-context-delivery.md` — how a plugin delivers context per harness (CC/Codex).
-- `research/compiled-hooks-codex.md` — the Codex hook adapter (inject now confirmed; react open).
-- `research/roadmap.md` — `🚀 Launch readiness`. `startup/` — git-crypt vault (LOCKED).
+- `research/plugin-behavioral-findings.md` — Finding 3a (cross-lang refuted) + the eval fixtures.
+- `research/measurement-authority.md` / `research/audit-wow-ideas.md` — behavioral feature ideas.
+- `research/roadmap.md` — the front-door roadmap. `startup/` — git-crypt vault (LOCKED).

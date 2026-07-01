@@ -154,6 +154,7 @@ export const WORKFLOW_RULES = [
  * (research/install-enforcement-dx.md).
  */
 export const NUDGE_RULES = [
+  "skill-description-budget",
   "frontmatter-valid",
   "skill-frontmatter",
   "prefer-compiled-hooks",
