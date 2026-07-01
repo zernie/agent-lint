@@ -12,20 +12,29 @@
 **Branch `claude/haretrail-dogfood-pvdo9t` — PR #54 OPEN, being WATCHED** (user said
 "watch", NOT merge — do NOT auto-merge; merge is the user's call). An hourly cron
 `5438c724` re-checks CI + mergeability: report green, fetch-logs-and-fix on red, stop
-(CronDelete) when merged/closed. HEAD `53e3dfa`.
+(CronDelete) when merged/closed. HEAD `b062882`.
 
 Session started as a DOGFOOD of `vigiles audit` on `fleytman/haretrail` (a Codex
-skills repo) and turned into a docs + rules + **eval-cost-transparency** batch.
+skills repo) and turned into a docs + rules + **eval-cost-transparency** + **research
+corpus index** batch.
 
-**RESUME STATE: cost-transparency feature is PARTLY done.** NEXT unfinished piece:
-**thread `usage` into `measure`/`measureArms` (`CheckReport`)** so the scored-check
-paths also print cost — SAME shape as the trigger-rate threading just shipped (the
-parser's `ParsedModelRun.usage` is the harness-neutral source; add `usage: ArmUsage`
-to `CheckReport`, aggregate in the run loop, emit in the v8-ignored wrapper). Ask the
-user first — the skill path (`measureTriggerRate`) + `runEval` already emit.
+**RESUME STATE: two open threads, both OPTIONAL/ask-first.** (a) cost-transparency's
+last path — **thread `usage` into `measure`/`measureArms` (`CheckReport`)** so scored
+checks also print cost (SAME shape as the shipped trigger-rate threading: parser's
+`ParsedModelRun.usage` is the source; add `usage: ArmUsage` to `CheckReport`, aggregate
+in the run loop, emit in the v8-ignored wrapper). (b) the haretrail feature ideas in
+`research/haretrail-eval-ideas.md` (measureSelectionMatrix etc.) — none built yet.
 
 ### What landed this session (all pushed)
 
+0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
+   `status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
+   NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
+   index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
+   Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
+   `src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
+   stays the human index, now points at the machine one. `.prettierignore` gained the
+   nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
 1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
    scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
    RU descriptions fire fine on EN prompts; it cried wolf on correct non-English
@@ -48,6 +57,8 @@ user first — the skill path (`measureTriggerRate`) + `runEval` already emit.
 
 - **PRIMARY: keep watching PR #54 → green** (cron `5438c724`). Merge is the USER's call.
 - **Cost:** thread `usage` into `measure`/`measureArms` `CheckReport` (last path) — optional, ask.
+- **haretrail feature ideas** (`research/haretrail-eval-ideas.md`): measureSelectionMatrix
+  ("confusion matrix for your router") is the flagged first-build; none built yet.
 - **#3 "collision-cluster" rule — RECOMMENDED DROP** (NCD is byte-level/language-bound,
   can't catch cross-language collision; the model MATRIX already ships under
   `audit.measure` consent). Pending user OK.
@@ -57,7 +68,14 @@ user first — the skill path (`measureTriggerRate`) + `runEval` already emit.
 ### Gotchas
 
 - `CLAUDE.md` COMPILED from `CLAUDE.md.spec.ts` — edit the spec + `node dist/cli.js
-compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`.
+compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`. SAME for the
+  scoped `src/CLAUDE.md`, `src/core/CLAUDE.md`, and now `research/CLAUDE.md` (compiled
+  from `research/CLAUDE.md.spec.ts` — all in `.prettierignore`).
+- **RESEARCH INDEX SYNC**: a new `research/*.md` needs a `keyFiles` line in
+  `research/CLAUDE.md.spec.ts` + `status:`/`topic:` frontmatter, or `src/research-index.test.ts`
+  fails. Rename/delete → update the spec (compiler verifies each path exists). Recompile after.
+- **`dialect-drift.test.ts` fails LOCALLY** in this container (installed claude-code drifted
+  from pinned `2.1.187`); CI pins the version so it passes there. Env-only, not a real break.
 - **RUN ESLINT, not just fmt:check, on new files** — `no-confusing-void-expression`
   (a void-returning arrow shorthand, e.g. `() => console.error(x)` / `() => reset()`)
   is an ERROR (add braces); string spread `[...str]` too (use `Array.from`). `npm run
