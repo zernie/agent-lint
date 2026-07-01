@@ -35,6 +35,7 @@ import {
 import { tmpdir, homedir } from "node:os";
 import { resolve, join, dirname, delimiter } from "node:path";
 
+import { appendObservation } from "./observe.js";
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
 import {
@@ -2650,6 +2651,22 @@ export async function measureTriggerRate(
   );
   // Surface what the run spent (tokens + API-equivalent $ + metered warning).
   emitCostSummary(costFromArm(report.usage));
+  // Feed the flight recorder: recall (+ precision when measured) for this skill.
+  const evalName = spec.name ?? "trigger-rate";
+  appendObservation({
+    kind: "eval",
+    name: evalName,
+    metric: "recall",
+    value: report.rate,
+  });
+  if (report.precision !== undefined) {
+    appendObservation({
+      kind: "eval",
+      name: evalName,
+      metric: "precision",
+      value: report.precision,
+    });
+  }
   return report;
 }
 /* v8 ignore stop */
