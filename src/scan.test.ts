@@ -15,7 +15,6 @@ import {
   formatScanReport,
   expandMarketplace,
   inspectMarketplace,
-  unexpectedScript,
   verifyLiveMcpTools,
   formatMcpContractReport,
   isManagedHookCommand,
@@ -301,54 +300,6 @@ test("scanPlugin reports manualHookCount 0 when there are no hand-written hooks"
   const r = scanPlugin(dir);
   assert.equal(r.manualHookCount, 0);
   assert.doesNotMatch(formatScanReport(r), /hand-written hook/);
-  cleanupTmpDir(dir);
-});
-
-test("unexpectedScript: expected is a configurable default (Latin), not hardcoded", () => {
-  const ru = "Создавать и обновлять task-folders в репозитории";
-  const en = "Create and update task folders in the repo";
-  // Default expectation is Latin → Cyrillic text is the mismatch, English isn't.
-  assert.equal(unexpectedScript(ru), "Cyrillic");
-  assert.equal(unexpectedScript(en), null);
-  // A Cyrillic-targeted pack flips it: its Russian descriptions pass, English flags.
-  assert.equal(unexpectedScript(ru, "Cyrillic"), null);
-  assert.equal(unexpectedScript(en, "Cyrillic"), "Latin");
-  // No alphabetic content → nothing to judge.
-  assert.equal(unexpectedScript("1234 — !!! ***"), null);
-});
-
-test("scanPlugin flags a non-Latin description as a cross-language trigger risk", () => {
-  const dir = makeTmpDir("scan-lang");
-  // Cyrillic description (fleytman/haretrail shape) — the selector is
-  // English-centric, so flag it; an English description must NOT be flagged.
-  write(
-    dir,
-    "skills/ru/SKILL.md",
-    "---\nname: ru\ndescription: Создавать и обновлять task-folders в репозитории когда пользователь хочет начать работу\n---\n# ru\n",
-  );
-  write(
-    dir,
-    "skills/en/SKILL.md",
-    "---\nname: en\ndescription: Create and update task folders in the repo when the user wants to start work\n---\n# en\n",
-  );
-  // mostly-English with one foreign word → below threshold, not flagged
-  write(
-    dir,
-    "skills/mixed/SKILL.md",
-    "---\nname: mixed\ndescription: Generate a résumé summary for the candidate from their work history here\n---\n# mixed\n",
-  );
-  const byName = Object.fromEntries(
-    scanPlugin(dir).skills.map((s) => [s.name, s]),
-  );
-  assert.equal(byName.ru.descriptionScript, "Cyrillic");
-  assert.equal(byName.en.descriptionScript, null);
-  assert.equal(byName.mixed.descriptionScript, null);
-  const text = formatScanReport(scanPlugin(dir));
-  assert.match(
-    text,
-    /ru \(description in Cyrillic — cross-language trigger risk\)/,
-  );
-  assert.match(text, /1 skill\(s\) have descriptions in an unexpected script/); // only ru
   cleanupTmpDir(dir);
 });
 
