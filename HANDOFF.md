@@ -48,17 +48,19 @@ become the sensors); it is NOT a pick-your-tools framework.
   - **`debug-my-harness` skill** (model-invocable) — reads the ledger to diagnose; + dogfood
     trigger eval; loads clean; skill enumerations + keyFiles synced (3→4 model-invocable).
   - `.vigiles/runs.jsonl` is **gitignored** (runtime artifact, never committed).
+  - **AuditReport JSON + HTML integration DONE** — `summarizeObservations` (pure, shares
+    denial logic w/ the terminal formatter) → an ADDITIVE optional `observations` field on
+    AuditReport (NO schema bump — additive-only precedent). `audit --json` + the HTML report
+    (a `report/` Observations component + `report/src/schema.ts` mirror synced, parity test
+    green) both render it. Verified end-to-end (`--json` + built template).
 
-### DO NEXT (the two heavier remaining pieces — NOT rushed at session tail)
+### DO NEXT (one heavier piece remains)
 
 1. **capability-diff PR comment** — the GHA integration. Building blocks EXIST:
-   `scan/audit --capability-diff <base>` computes it; `action.yml` already posts a sticky PR
-   comment (find-by-marker). Wire: compute base ref in the action → run capability-diff → fold
-   into the comment. GHA-heavy → dogfood in this repo's own CI (prod-grade-gha-cli).
-2. **`AuditReport` JSON integration of the ledger** — a VERSIONED schema bump
-   (`src/audit-report.ts` `schemaVersion` + the `report/` React app + `audit-html` +
-   `report/src/schema.ts` mirror). Cross-cutting; do deliberately, not rushed.
-   (Terminal render already ships; JSON is the deliberate follow-up.)
+   `scan/audit --capability-diff <base>` computes it (+ emits a ledger record now);
+   `action.yml` already posts a sticky PR comment (find-by-marker). Wire: compute base ref in
+   the action → run capability-diff → fold into the comment. GHA-heavy → dogfood in this
+   repo's own CI (prod-grade-gha-cli).
 
 - Optional: unify the legacy `hook-observations.jsonl` writer fully into the ledger (both are
   written today for back-compat — additive, no removal yet).
