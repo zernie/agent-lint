@@ -16,6 +16,9 @@ import {
   buildSelectionReport,
   measurePluginSelectionWith,
   measurePluginSelection,
+  measureSelectionMatrix,
+  measureSelectionMatrixWith,
+  assertNoCollision,
   formatSelectionReport,
   isGateDescription,
   detectGateSkills,
@@ -350,6 +353,98 @@ test("measurePluginSelection reports n/a for a non-Claude harness", async () => 
   assert.equal(r.available, false);
   assert.match(r.note ?? "", /Claude Code only/);
   assert.match(formatSelectionReport(r), /unavailable/);
+});
+
+test("measureSelectionMatrix delegates + reports n/a off Claude Code (no model)", async () => {
+  // The real wrapper: derives prompts, then hands off to measurePluginSelection,
+  // which short-circuits to unavailable on a non-Claude harness (no binary needed).
+  const dir = plugin();
+  const r = await measureSelectionMatrix(dir, { harness: "codex" });
+  assert.equal(r.available, false);
+  assert.match(r.note ?? "", /Claude Code only/);
+  cleanupTmpDir(dir);
+});
+
+test("measureSelectionMatrixWith auto-derives prompts from descriptions (no --prompts)", async () => {
+  // No prompt set supplied: the matrix derives recall prompts from each skill's
+  // description. foo's prompts name "foo", baz's name "baz", so the multiProbe
+  // (fires the skill named in the task) gives a clean diagonal — recall, no collision.
+  const dir = plugin();
+  const r = await measureSelectionMatrixWith(dir, multiProbe);
+  assert.ok(r.available);
+  assert.ok(r.n > 0); // it actually ran (prompts were derived)
+  const byName = Object.fromEntries(r.perSkill.map((s) => [s.skill, s]));
+  assert.equal(byName.foo.recall, 1);
+  assert.equal(byName.foo.collisionRate, 0);
+  assert.equal(r.collisionRate, 0);
+  cleanupTmpDir(dir);
+});
+
+test("assertNoCollision passes a clean matrix, fails a hijack (naming the collider)", () => {
+  const clean = buildSelectionReport(
+    ["foo", "baz"],
+    [
+      { intended: "foo", firedBare: ["foo"] },
+      { intended: "baz", firedBare: ["baz"] },
+    ],
+  );
+  assert.doesNotThrow(() => {
+    assertNoCollision(clean);
+  });
+
+  // foo's prompt fired baz too → foo.collisionRate 1, plugin rate 0.5.
+  const collided = buildSelectionReport(
+    ["foo", "baz"],
+    [
+      { intended: "foo", firedBare: ["foo", "baz"] },
+      { intended: "baz", firedBare: ["baz"] },
+    ],
+  );
+  // default (no opts) demands ZERO collision → throws naming foo + baz.
+  assert.throws(() => {
+    assertNoCollision(collided);
+  }, /foo = 1\.00.*top collider: baz/s);
+  // a tolerance that admits it passes; a per-skill cap below it still fails.
+  assert.doesNotThrow(() => {
+    assertNoCollision(collided, { maxOffDiagonal: 1 });
+  });
+  assert.throws(() => {
+    assertNoCollision(collided, { maxOffDiagonal: 0.5 });
+  }, /foo = 1\.00/);
+});
+
+test("assertNoCollision: maxPluginCollision gates the plugin-wide rate alone", () => {
+  const collided = buildSelectionReport(
+    ["foo", "baz"],
+    [
+      { intended: "foo", firedBare: ["foo", "baz"] },
+      { intended: "baz", firedBare: ["baz"] },
+    ],
+  );
+  // Only the plugin cap given → per-skill zero is NOT also demanded.
+  assert.doesNotThrow(() => {
+    assertNoCollision(collided, { maxPluginCollision: 0.6 });
+  });
+  assert.throws(() => {
+    assertNoCollision(collided, { maxPluginCollision: 0.4 });
+  }, /plugin collision rate/);
+});
+
+test("assertNoCollision throws on a green that tested nothing", () => {
+  assert.throws(() => {
+    assertNoCollision({
+      available: false,
+      skills: [],
+      matrix: [],
+      perSkill: [],
+      collisionRate: 0,
+      n: 0,
+      note: "needs the claude CLI + model auth",
+    });
+  }, /unavailable/);
+  assert.throws(() => {
+    assertNoCollision(buildSelectionReport(["foo", "baz"], []));
+  }, /measured nothing/);
 });
 
 // ─── Enforcement-gate detection (adversarial-gate eval, step 1) ───────────────

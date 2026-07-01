@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { scanPlugin } from "./scan.js";
+import { autoTriggerPrompts } from "./audit-prompts.js";
 import { judge } from "./judge.js";
 import type { PluginLayout } from "./core/layout.js";
 import type { HarnessDialect } from "./core/dialect.js";
@@ -591,6 +592,118 @@ export function formatSelectionReport(r: SelectionReport): string {
     );
   }
   return lines.join("\n");
+}
+
+/** Options for {@link measureSelectionMatrix}: {@link SelectionOptions} plus an
+ * optional explicit prompt set (auto-derived from descriptions when omitted). */
+export interface SelectionMatrixOptions extends SelectionOptions {
+  /**
+   * Per-skill recall prompts. Omit for ZERO-SETUP — prompts are auto-derived
+   * from each skill's description (the same generator the audit trigger tier
+   * uses). Supply your own for a curated collision benchmark; only the `prompts`
+   * array per skill is read (any `irrelevant` bank is ignored here).
+   */
+  readonly prompts?: TriggerPromptSet;
+}
+
+/**
+ * Measure a plugin's skill-SELECTION collision matrix — "when I ask for skill i's
+ * job, does ONLY skill i fire?" The first-class, assertable form of the cross-skill
+ * collision measurement (pair with {@link assertNoCollision}). The matrix diagonal
+ * is recall; off-diagonal mass is collision — skill j hijacking skill i's prompt,
+ * the failure that breaks a multi-skill plugin and that per-skill trigger-rate
+ * (each skill in ISOLATION) structurally can't see.
+ *
+ * ZERO-SETUP: with no `prompts`, they're derived from each model-invocable skill's
+ * description. Claude Code only (Codex has no skill-selection event to read); needs
+ * the `claude` CLI + model auth, else `available: false`. Thin promotion of
+ * {@link measurePluginSelection}. See research/plugin-selection-collision.md.
+ */
+export async function measureSelectionMatrix(
+  dir: string,
+  opts: SelectionMatrixOptions = {},
+): Promise<SelectionReport> {
+  return measurePluginSelection(dir, resolveSelectionPrompts(dir, opts), opts);
+}
+
+/**
+ * Injectable core of {@link measureSelectionMatrix} (for tests): auto-derive the
+ * prompts (unless supplied) and drive the matrix via a fake/real probe.
+ */
+export async function measureSelectionMatrixWith(
+  dir: string,
+  probe: HarnessProbe,
+  opts: SelectionMatrixOptions = {},
+): Promise<SelectionReport> {
+  return measurePluginSelectionWith(
+    dir,
+    resolveSelectionPrompts(dir, opts),
+    probe,
+    opts,
+  );
+}
+
+/** The prompts for a selection run: explicit if given, else auto-derived from the
+ * model-invocable skills' descriptions (the zero-setup path). */
+function resolveSelectionPrompts(
+  dir: string,
+  opts: SelectionMatrixOptions,
+): TriggerPromptSet {
+  return (
+    opts.prompts ??
+    autoTriggerPrompts(
+      scanPlugin(dir)
+        .skills.filter((s) => !s.userInvoked && s.hasDescription)
+        .map((s) => ({ name: s.name, description: s.description ?? "" })),
+    )
+  );
+}
+
+/**
+ * Assert a plugin's skills don't hijack each other — the gate over a
+ * {@link SelectionReport} from {@link measureSelectionMatrix}. `maxOffDiagonal`
+ * caps EACH skill's collision rate (fraction of its own prompts on which a SIBLING
+ * fired); `maxPluginCollision` caps the plugin-wide rate. With neither set it
+ * demands ZERO collision. THROWS (never a silent green) when nothing was measured
+ * — an unavailable harness or a zero-run report is a gap, not a pass.
+ */
+export function assertNoCollision(
+  report: SelectionReport,
+  opts: { maxOffDiagonal?: number; maxPluginCollision?: number } = {},
+): void {
+  if (!report.available)
+    throw new Error(`selection matrix unavailable — ${report.note ?? "n/a"}`);
+  if (report.n === 0)
+    throw new Error(
+      `selection matrix measured nothing — ${report.note ?? "no runs"}`,
+    );
+  // Enforce the per-skill ceiling when asked, OR by default (name = NoCollision);
+  // if only the plugin-wide cap is given, don't also silently demand zero per-skill.
+  const maxOff =
+    opts.maxOffDiagonal ??
+    (opts.maxPluginCollision === undefined ? 0 : undefined);
+  if (maxOff !== undefined) {
+    const worst = report.perSkill
+      .filter((s) => s.n > 0)
+      .reduce<
+        SkillSelectionStat | undefined
+      >((w, s) => (w && w.collisionRate >= s.collisionRate ? w : s), undefined);
+    if (worst && worst.collisionRate > maxOff) {
+      const top = worst.collidesWith[0];
+      const tail = top ? ` (top collider: ${top.skill} ${pct(top.rate)})` : "";
+      throw new Error(
+        `expected each skill's collision rate ≤ ${String(maxOff)}, but ${worst.skill} = ${worst.collisionRate.toFixed(2)}${tail}`,
+      );
+    }
+  }
+  if (
+    opts.maxPluginCollision !== undefined &&
+    report.collisionRate > opts.maxPluginCollision
+  ) {
+    throw new Error(
+      `expected plugin collision rate ≤ ${String(opts.maxPluginCollision)}, got ${report.collisionRate.toFixed(2)}`,
+    );
+  }
 }
 
 // ─── Enforcement-gate detection (for the adversarial-gate eval) ───────────────
