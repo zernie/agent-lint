@@ -16,12 +16,12 @@ vigiles is ONE loop, not a bag of features: **declare what the harness should do
 spec), then check reality against that declaration.** Four instruments do the checking, each
 a facet of the same loop — not a menu to assemble:
 
-| Instrument | When | Cost | Checks |
-| --- | --- | --- | --- |
-| **Verify** (lint / cross-ref / compile) | author-time | free, no model | refs resolve, spec compiles, tool-contracts valid, capability-diff at PR |
-| **Gate** (compiled hooks) | loop-time | free | unsafe states can't be entered |
-| **Measure** (evals on your sub) | pre-ship | your sub | does the skill fire, does behaviour move |
-| **Observe** (the flight recorder) | real sessions | free, local | what actually happened, vs the declaration |
+| Instrument                              | When          | Cost           | Checks                                                                   |
+| --------------------------------------- | ------------- | -------------- | ------------------------------------------------------------------------ |
+| **Verify** (lint / cross-ref / compile) | author-time   | free, no model | refs resolve, spec compiles, tool-contracts valid, capability-diff at PR |
+| **Gate** (compiled hooks)               | loop-time     | free           | unsafe states can't be entered                                           |
+| **Measure** (evals on your sub)         | pre-ship      | your sub       | does the skill fire, does behaviour move                                 |
+| **Observe** (the flight recorder)       | real sessions | free, local    | what actually happened, vs the declaration                               |
 
 The spine that keeps this coherent (and stops it becoming a kitchen-sink framework): **the
 typed spec is the ground truth every instrument measures against.** A feature belongs only
@@ -52,12 +52,12 @@ catch a miss from passive prod observation) — minus the cloud.
 
 The right instrument depends on whether the surface is deterministic or behavioral:
 
-| Surface | Core property | Typed spec? | Observe? | What we do |
-| --- | --- | --- | --- | --- |
-| **Subagents** | deterministic (composition/contracts) | ✅ big (railway, tool-contract, result) | ✅ typed outcomes | compile-time handoff checks + typed ok/err in the ledger |
-| **Hooks** | deterministic (a decision) | ✅ big (compiled hooks) | ✅ every decision logged | author `(event)=>Decision`; observe-mode + guardrail-check |
-| **Skills** | behavioral (triggering) | ◑ thin proxies only (description-overlap, metadata) | ✅ main lever | fire-rate/collision from sessions + `measureTriggerRate` on-sub |
-| **CLAUDE.md** | prose → behavioral | ◑ references only, not behaviour | ✅ find the noise | verify refs + observe which rules are ignored → PROMOTE |
+| Surface       | Core property                         | Typed spec?                                         | Observe?                 | What we do                                                      |
+| ------------- | ------------------------------------- | --------------------------------------------------- | ------------------------ | --------------------------------------------------------------- |
+| **Subagents** | deterministic (composition/contracts) | ✅ big (railway, tool-contract, result)             | ✅ typed outcomes        | compile-time handoff checks + typed ok/err in the ledger        |
+| **Hooks**     | deterministic (a decision)            | ✅ big (compiled hooks)                             | ✅ every decision logged | author `(event)=>Decision`; observe-mode + guardrail-check      |
+| **Skills**    | behavioral (triggering)               | ◑ thin proxies only (description-overlap, metadata) | ✅ main lever            | fire-rate/collision from sessions + `measureTriggerRate` on-sub |
+| **CLAUDE.md** | prose → behavioral                    | ◑ references only, not behaviour                    | ✅ find the noise        | verify refs + observe which rules are ignored → PROMOTE         |
 
 Rule underneath: **you can type a decision; you cannot type "does this fire."** Forcing
 types onto behaviour would cry wolf. Existing instruments all STAY — the ledger is the new
@@ -95,13 +95,13 @@ documented per-harness gap, not a silent CC-only path.
 The loop that connects the halves: **observe → find the ignored, decidable rule → promote it
 from prose to a typed gate → the gate emits to the ledger → repeat.**
 
-| Prose rule (~80% compliance) | Promoted to (100%) |
-| --- | --- |
-| "run tests before committing" | Stop-gate hook (deny stop until tests pass) |
-| "never force-push" | compiled Bash hook (deny `git push -f`) |
-| "no `var` / no `console.log`" | `enforce("eslint/...")` |
-| "reviewer must not write files" | subagent tool-contract / purity floor |
-| "don't touch `.env`" | compiled file-gate hook |
+| Prose rule (~80% compliance)    | Promoted to (100%)                          |
+| ------------------------------- | ------------------------------------------- |
+| "run tests before committing"   | Stop-gate hook (deny stop until tests pass) |
+| "never force-push"              | compiled Bash hook (deny `git push -f`)     |
+| "no `var` / no `console.log`"   | `enforce("eslint/...")`                     |
+| "reviewer must not write files" | subagent tool-contract / purity floor       |
+| "don't touch `.env`"            | compiled file-gate hook                     |
 
 Only the DECIDABLE slice promotes; "write clean code" stays prose (undecidable). The
 `strengthen` skill already does the linter case; promotion generalizes it to hooks +
