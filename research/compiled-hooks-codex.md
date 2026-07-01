@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Compiled hooks — the Codex adapter
 
 Status: **BUILT (2026-06-22).** A single typed `vigiles/hook` program now compiles

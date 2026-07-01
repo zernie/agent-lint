@@ -1,3 +1,8 @@
+---
+status: active
+topic: testing
+---
+
 # Harness-testing coverage matrix — what we test, what we should
 
 > Status: roadmap / gap analysis (2026-06-09). The companion to

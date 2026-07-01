@@ -1,3 +1,8 @@
+---
+status: superseded
+topic: positioning
+---
+
 # Strategy verdict — which directions are genuinely best
 
 > Status: decision synthesis (2026-06-19). The capstone over a long strategy exploration

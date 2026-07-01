@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Competitor rule matrix + poach backlog
 
 > Status: research (2026-06-19), from a 3-agent parallel landscape sweep

@@ -1,3 +1,8 @@
+---
+status: idea
+topic: spec
+---
+
 # Enforce-Over-Guidance: Deterministic Upgrade Gates
 
 Research doc for mechanisms that pressure `guidance()` rules toward `enforce()` rules without relying on LLM judgment. Saved here during design iteration — two ideas survived review (snapshot-gated downgrades, Merkle diff vs upstream catalog); two didn't (author-supplied candidates, pure keyword overlap).

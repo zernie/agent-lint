@@ -1,3 +1,8 @@
+---
+status: superseded
+topic: docs
+---
+
 # vigiles Adoption Strategy
 
 Goal: **`npx vigiles setup && npx skills add zernie/vigiles` works on first run with zero config. The agent starts editing specs automatically — no workflow change required. Start permissive, tighten over time.**

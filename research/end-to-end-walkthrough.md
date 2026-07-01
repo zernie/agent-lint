@@ -1,3 +1,8 @@
+---
+status: idea
+topic: spec
+---
+
 <!-- vigiles:ignore-file -->
 
 # End-to-end walkthrough — what it all looks like

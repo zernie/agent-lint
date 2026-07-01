@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: audit
+---
+
 # Audit eval-thickening, the adversarial-gate eval, and the benchmark headroom finding (2026-06-28)
 
 > Internal session record. What we built (audit's behavioral/eval tier went from

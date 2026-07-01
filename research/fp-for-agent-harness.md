@@ -1,3 +1,8 @@
+---
+status: idea
+topic: hooks
+---
+
 # FP for the Agent Harness: Railway, Effects, and Skills
 
 ## Framing

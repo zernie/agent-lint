@@ -1,3 +1,8 @@
+---
+status: active
+topic: testing
+---
+
 # Testing non-deterministic AI tools — prior art & the model it implies
 
 > Landscape + design note (2026-06-09). How the field tests LLM/agent systems

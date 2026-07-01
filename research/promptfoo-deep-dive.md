@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # promptfoo deep dive — what it is now, how it overlaps vigiles, what to do
 
 > A focused companion to `research/eval-api-landscape.md`. That doc scored the

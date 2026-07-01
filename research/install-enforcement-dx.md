@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: docs
+---
+
 # Install enforcement DX — rule groups, presets, and the agentic install flow
 
 > The design record behind the `install-enforcement-model` rule (root `CLAUDE.md`).

@@ -1,3 +1,8 @@
+---
+status: active
+topic: adapters
+---
+
 # Harness capability inventory — Claude Code vs Codex (and what vigiles does about each)
 
 > A written, exhaustive inventory of the harness-specific capabilities across the

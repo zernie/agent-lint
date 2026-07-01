@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: sandbox
+---
+
 # Deterministic Bash effect classification (no LLM)
 
 > Status: research synthesis (2026-06-20). The question: Claude Code uses an LLM permission

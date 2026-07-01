@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: adapters
+---
+
 # OpenCode prototype — does the capability tier hold for a non-shell-hook harness?
 
 > An **internal, non-shipped** OpenCode adapter (`src/adapters/opencode/`), built

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: adapters
+---
+
 # Codex prototype — does the adapter kit actually generalize?
 
 > Started as an internal, non-shipped Codex adapter (`src/adapters/codex/`) to

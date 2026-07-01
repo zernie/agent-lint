@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # How a plugin delivers context to the agent — CC vs Codex (verified)
 
 > Research of record (2026-06-30). The authoritative answer to "how does vigiles

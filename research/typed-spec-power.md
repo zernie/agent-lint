@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Typed-spec power — the non-replicable wins of a `.spec.ts` over markdown
 
 > Status: research + prototype (2026-06-21). Question from the founder: the

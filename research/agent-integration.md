@@ -1,3 +1,8 @@
+---
+status: idea
+topic: hooks
+---
+
 # Agent Integration: Proofs, Hooks, and Static Analysis for AI Coding
 
 ## Framing

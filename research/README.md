@@ -5,6 +5,14 @@ and parked ideas — the project's **internal record, not user-facing** (those
 how-to docs live in [`../docs/`](../docs/README.md)). Grouped by theme; each is
 one click away.
 
+> **Two indexes, two audiences.** This README is the **human** index — curated,
+> thematic, prose. [`CLAUDE.md`](CLAUDE.md) (compiled from
+> [`CLAUDE.md.spec.ts`](CLAUDE.md.spec.ts)) is the **agent** index — every doc in
+> one line, so a session gets the whole corpus as directory memory. Every doc also
+> carries `status:` (`active` / `shipped` / `idea` / `superseded` / `rejected`) and
+> `topic:` frontmatter, so you can slice the corpus deterministically:
+> `grep -l 'status: shipped' research/*.md`, `grep -l 'topic: eval' research/*.md`.
+
 > **Building something? Start at [`roadmap.md`](roadmap.md)** — the single
 > consolidated, ranked view of what ships next (Now / Next / Later / Backlog /
 > Rejected), each item linking the doc below that holds its rationale.
@@ -65,6 +73,7 @@ one click away.
 
 - [`skill-authoring-pains.md`](skill-authoring-pains.md) — the documented real-world pains (triggering, silent frontmatter failures, refs rot) + the doc-vs-procedure split.
 - [`skill-as-pipeline.md`](skill-as-pipeline.md) — the skill-as-pipeline model (result/process gates) the benchmarks tested and largely deflated.
+- [`haretrail-eval-ideas.md`](haretrail-eval-ideas.md) — a deep `audit` dogfood of a Codex skills repo (fleytman/haretrail) → un-built ideas: new deterministic cross-ref checks (`openai.yaml` / trigger-manifest / env-var contract) + new eval helpers (the **selection-collision "confusion matrix for your router"** primitive, manifest-driven fixtures + auto-negatives, description-ablation). The cross-language flag it prompted was REMOVED (refuted).
 
 ## Self-evolving specs & proofs
 

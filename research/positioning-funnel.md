@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Positioning & go-to-market — moat axes, the funnel, and the first move
 
 > Status: strategy synthesis (2026-06-19). The cross-axis moat analysis: a check is

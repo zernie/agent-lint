@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Eval-startups critique → vigiles positioning
 
 External source: Thomas Liao, "Why Eval Startups Fail" (thomasliao.com/eval-startups).

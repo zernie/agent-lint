@@ -37,6 +37,12 @@ import { resolve, join, dirname, delimiter } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
+import {
+  emitCostSummary,
+  costFromEvalReport,
+  costFromArm,
+  sumCosts,
+} from "./eval-cost.js";
 import { ncd } from "./core/proofs.js";
 import {
   parseToolCalls,
@@ -414,7 +420,11 @@ export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
 export async function runEval<M extends Metrics>(
   spec: EvalSpec<M>,
 ): Promise<EvalReport> {
-  return runEvalWith(spec, spawnAgent);
+  const report = await runEvalWith(spec, spawnAgent);
+  // Surface what the run spent — tokens + API-equivalent $, and a LOUD warning if
+  // it was billed to a metered API key instead of the subscription. See eval-cost.ts.
+  emitCostSummary(costFromEvalReport(report));
+  return report;
 }
 /* v8 ignore stop */
 
@@ -480,6 +490,8 @@ export interface CheckRate {
 export interface CheckReport {
   readonly n: number;
   readonly perCheck: readonly CheckRate[];
+  /** Cost / latency / token totals for the run (the same source as `runEval`). */
+  readonly usage: ArmUsage;
 }
 
 /**
@@ -548,6 +560,7 @@ export async function measureWith(
           n: s?.n ?? 0,
         };
       }),
+      usage: arm?.usage ?? aggregateUsage([]),
     };
   } finally {
     if (stubbed) rmSync(stubbed, { recursive: true, force: true });
@@ -557,7 +570,9 @@ export async function measureWith(
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureWith */
 /** Score a check vocabulary across trials against the real `claude` CLI. */
 export async function measure(spec: MeasureSpec): Promise<CheckReport> {
-  return measureWith(spec, spawnAgent);
+  const report = await measureWith(spec, spawnAgent);
+  emitCostSummary(costFromArm(report.usage));
+  return report;
 }
 /* v8 ignore stop */
 
@@ -635,6 +650,7 @@ export async function measureArmsWith(
             n: s?.n ?? 0,
           };
         }),
+        usage: arm.usage,
       };
     }
     return { arms };
@@ -672,7 +688,12 @@ function stubArmPluginDirs(arms: Record<string, EvalArm>): {
 export async function measureArms(
   spec: ArmsMeasureSpec,
 ): Promise<ArmsCheckReport> {
-  return measureArmsWith(spec, spawnAgent);
+  const report = await measureArmsWith(spec, spawnAgent);
+  // Sum every arm's spend — an A/B run pays for both arms.
+  emitCostSummary(
+    sumCosts(Object.values(report.arms).map((a) => costFromArm(a.usage))),
+  );
+  return report;
 }
 /* v8 ignore stop */
 
@@ -1992,6 +2013,8 @@ export interface TriggerRateReport {
    * `n` means the measurement is thin (e.g. a Codex usage limit was hit); re-run.
    */
   readonly errored?: number;
+  /** Cost / tokens SPENT across all runs (relevant + irrelevant) — feeds the cost summary. */
+  readonly usage: ArmUsage;
 }
 
 /**
@@ -2398,7 +2421,7 @@ async function runTriggerTrial(
   prompt: string,
   cfg: TriggerRunConfig,
   runner: AgentRunner,
-): Promise<{ fired: number; errored: boolean }> {
+): Promise<{ fired: number; errored: boolean; usage: EvalUsage }> {
   const cwd = mkdtempSync(join(tmpdir(), "vigiles-trigger-"));
   try {
     if (cfg.fixture) writeFiles(cwd, cfg.fixture);
@@ -2411,12 +2434,17 @@ async function runTriggerTrial(
       pluginDir: cfg.pluginDir,
       timeoutMs: cfg.timeoutMs,
     });
+    // Usage comes from the parser (harness-neutral: Claude + Codex both fill it),
+    // and a run costs tokens even when it errors — so accumulate it either way.
+    const ctx = makeContext(cwd, out, cfg.parse);
     // An errored/rate-limited turn is NOT a "skill didn't fire" miss — it's
     // excluded from the rate, so e.g. a Codex usage limit can't read as recall 0.
-    if (cfg.runError?.(out)) return { fired: 0, errored: true };
+    if (cfg.runError?.(out))
+      return { fired: 0, errored: true, usage: ctx.usage };
     return {
-      fired: cfg.fired(makeContext(cwd, out, cfg.parse)) ? 1 : 0,
+      fired: cfg.fired(ctx) ? 1 : 0,
       errored: false,
+      usage: ctx.usage,
     };
   } finally {
     rmSync(cwd, { recursive: true, force: true });
@@ -2437,6 +2465,8 @@ async function runTriggerSet(
   fired: number;
   n: number;
   errored: number;
+  /** Per-run usage across this set (every run, errored or not — cost is cost). */
+  usages: EvalUsage[];
 }> {
   // Flatten prompts × trials into one work list so concurrency spans both.
   const jobs = prompts.flatMap((prompt, promptIndex) =>
@@ -2468,6 +2498,7 @@ async function runTriggerSet(
     fired: firedBy.reduce((a, b) => a + b, 0),
     n: trialsBy.reduce((a, b) => a + b, 0),
     errored,
+    usages: outcomes.map((o) => o.usage),
   };
 }
 
@@ -2569,6 +2600,7 @@ export async function measureTriggerRateWith(
           perPrompt: relevant.perPrompt,
           competitors,
           errored: positiveOrUndefined(relevant.errored),
+          usage: aggregateUsage(relevant.usages),
         };
         if ((spec.irrelevantPrompts?.length ?? 0) === 0) return base;
 
@@ -2585,6 +2617,8 @@ export async function measureTriggerRateWith(
             irrelevant.n > 0 ? irrelevant.fired / irrelevant.n : 0,
           precision: fires > 0 ? relevant.fired / fires : undefined,
           perIrrelevant: irrelevant.perPrompt,
+          // Total cost across BOTH sets (the precision runs cost tokens too).
+          usage: aggregateUsage([...relevant.usages, ...irrelevant.usages]),
         };
       },
     );
@@ -2607,13 +2641,16 @@ export async function measureTriggerRate(
   opts: { evalDriver?: EvalDriver } = {},
 ): Promise<TriggerRateReport> {
   const d = opts.evalDriver ?? claudeEvalDriver;
-  return measureTriggerRateWith(
+  const report = await measureTriggerRateWith(
     spec,
     d.runner,
     d.parse,
     d.runError,
     d.harness ?? "claude-code",
   );
+  // Surface what the run spent (tokens + API-equivalent $ + metered warning).
+  emitCostSummary(costFromArm(report.usage));
+  return report;
 }
 /* v8 ignore stop */
 

@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # vigiles Feature Ideas: Programming Techniques as Product Features
 
 Focus: **deterministic, mechanically checkable** features that vigiles provides **to users** of the tool. Each maps a proven programming technique to a real problem in messy production AI-adopting codebases.

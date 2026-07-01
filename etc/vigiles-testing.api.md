@@ -279,6 +279,7 @@ export interface CheckReport {
     readonly n: number;
     // (undocumented)
     readonly perCheck: readonly CheckRate[];
+    readonly usage: ArmUsage;
 }
 
 // @public
@@ -878,6 +879,7 @@ export interface TriggerRateReport {
     readonly perPrompt: readonly PromptTriggerStat[];
     readonly precision?: number;
     readonly rate: number;
+    readonly usage: ArmUsage;
 }
 
 // @public

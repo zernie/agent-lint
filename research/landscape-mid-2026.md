@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Landscape Mid-2026: Deep Dives and Next Steps
 
 Follow-up research to `competitive-landscape.md`, focused on items surfaced in mid-2026 that warrant deeper analysis: ContextCov (academic post-hoc extraction), Harness Engineering (positioning frame), AgentProof (workflow verification), AWS Bedrock AgentCore + Cedar (runtime policy as code), Compiled AI (paradigm validation). Closes with a unified comparison matrix and concrete next-step proposals.

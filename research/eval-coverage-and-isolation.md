@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Eval coverage & isolation — what vigiles tests, how, and what it delegates
 
 > Status: **decided** (2026-06-17). The single source of truth for the question

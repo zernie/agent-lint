@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Instruction-file linter landscape (mid-2026) — the crowded category and the real moat
 
 > Status: competitive synthesis (2026-06-19). What the 2025–2026 wave of dedicated

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: audit
+---
+
 # Audit → adoption UX: how the report creates specs
 
 > Design record (2026-06-27) for the "run init from the audit report" flow the

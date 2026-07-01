@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # The typed-spec MOAT — synthesis & durable record
 
 > Status: synthesis + endorsed thesis (2026-06-21). This is the consolidated RECORD

@@ -1,3 +1,8 @@
+---
+status: idea
+topic: docs
+---
+
 # README revamp — 5 complete concepts
 
 > Working planning doc (2026-06-27). Five **distinct** whole-README directions to

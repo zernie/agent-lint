@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # Roadmap — the single front door
 
 > Updated 2026-06-13. The scattered "next steps" sections across the research

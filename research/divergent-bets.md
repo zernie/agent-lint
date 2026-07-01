@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # Divergent bets (2026-06-13) — beyond "extend the pillars"
 
 > Status: roadmap / live triage. Follow-up to

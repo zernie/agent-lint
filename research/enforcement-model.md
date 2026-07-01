@@ -1,3 +1,8 @@
+---
+status: active
+topic: linters
+---
+
 # The enforcement model: prevention is a gradient bounded by decidability
 
 > Internal design record. The user-facing rules matrix lives in

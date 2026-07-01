@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Behavioral findings — trigger-rate probes of popular plugins
 
 > Status: live findings log (2026-06-18). The behavioral half of the
@@ -157,6 +162,26 @@ What this leaves as haretrail's real (minor) issues: the cosmetic `{data-repo}`
 placeholder, the untested surfaces, and an UNMEASURED precision/overlap question
 (debrief vs lessons vs postmortem; task vs research) — recall is healthy, precision
 across the overlapping cluster wasn't probed here.
+
+#### Decision (2026-07-01): the cross-language SCAN FLAG was REMOVED
+
+Given 3a, the deterministic "non-Latin description → cross-language trigger risk"
+finding (the `unexpectedScript` / `descriptionScript` detector in `src/scan.ts`)
+was **deleted** — the `Script` type, `scriptCounts`, `unexpectedScript`, the
+`ScanSkill.descriptionScript` field, its report line/summary, and its tests. Why:
+
+- **It fires on 100% of non-Latin descriptions**, but a non-English description is
+  a legitimate AUDIENCE choice, not a defect — so the flag scolds correct work.
+- **The one time we measured it (3a), the risk was refuted** — frontier models
+  handle RU-description / EN-prompt selection fine. A warning that reads as a defect
+  on correct authoring is crying wolf (violates `lint-rule-calibration`).
+- The audit already nudges "go measure your triggering," so the language-specific
+  flag added no signal beyond that.
+
+If a language check ever returns, it should key on **internal INCONSISTENCY** (a
+plugin mixing EN and RU descriptions across skills) — NOT "non-Latin script" — and
+even that we'd only surface after measuring, not as a standing warn. (The
+`one-detector-no-drift` rule's teaching example was reassigned to `description-overlap`.)
 
 ### Finding 3b — precision probe BLOCKED by a usage limit, which caught a tooling bug
 

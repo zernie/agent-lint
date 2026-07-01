@@ -1,3 +1,8 @@
+---
+status: rejected
+topic: security
+---
+
 # Runtime Guardrails & the Observability Bridge
 
 > Status: research (2026-06-13). Adjacent to [runtime-enforcement](runtime-enforcement.md), [agent-integration](agent-integration.md), [landscape-mid-2026](landscape-mid-2026.md) — does NOT re-cover the **dev-loop** runtime story (spec-derived Claude Code hooks, skill contracts, post-session git-diff audit) those docs already own. This doc covers the **production/online runtime** and the **observability/tracing** markets, and asks whether the same spec extends past commit-time into either.

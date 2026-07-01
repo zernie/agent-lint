@@ -26,7 +26,7 @@ Each rule is checked against your real linter config. Typos get closest-match su
 
 ### Typed spec — the default
 
-**You rarely hand-write one.** The `edit-spec` and `strengthen` skills write and update the spec from a plain-English ask. A hook recompiles it on save. The spec is what `init` sets up, and the agent manages it — not a chore. The deeper **compiler-grade guarantees** are gradual and opt-in, like TypeScript's `strict`.
+**You rarely hand-write one.** The `edit-spec` and `strengthen` skills write and update the spec from a plain-English ask. A hook recompiles it on save. The spec is what `init` sets up, and the agent manages it — not a chore. The deeper **compiler-grade guarantees** are gradual and opt-in, like TypeScript's `strict` — [why opt-in?](faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)
 
 **Markdown mode is not a lesser tier for verification.** It squiggles rule typos at edit time (via the YAML schema `init` generates). Its inline marks — `vigiles:file`, `vigiles:cmd`, `vigiles:symbol`, `vigiles:enforce` — verify file paths, scripts, symbols, and linter rules woven into the prose, exactly like the spec. If you have one instruction file and don't need to generate or share rules, stay in markdown. You give up nothing on reference verification.
 
@@ -120,15 +120,15 @@ Beyond the references above, `vigiles lint` runs a set of **deterministic valida
 
 **Not every rule applies to every harness.** A rule is scoped to the _surface_ it checks and runs only where the active harness has that surface. Where the surface doesn't exist, `vigiles lint` reports the rule as **n/a** — loud, never a silent pass or failure. That's what lets one config target Claude Code _and_ Codex without duplicating rules per harness.
 
-| Surface (the gate)          | Rules                                                                                                                               | Applies to                                |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                                                | all harnesses                             |
-| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `frontmatter-valid`, `skill-resource-resolves`, `skill-missing-fence` | all with skills                           |
-| Plugin layout               | `plugin-dir-layout`                                                                                                                 | all with a plugin manifest                |
-| MCP                         | `mcp-config`                                                                                                                        | all with MCP                              |
-| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `hook-matcher`, `hook-block-ineffective`, `prefer-compiled-hooks`             | Claude Code, Codex                        |
-| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves`                                          | Claude Code (n/a on Codex — no subagents) |
-| Safety (skills + subagents) | `lethal-trifecta`, `delegation-trifecta`                                                                                            | all (subagent half n/a on Codex)          |
+| Surface (the gate)          | Rules                                                                                                                                                           | Applies to                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Instruction file &amp; docs | `require-instructions-spec`, `integrity`, `coverage`, `unmarked-refs`, `orphan-docs`                                                                            | all harnesses                             |
+| Skills                      | `untested-skill`, `skill-frontmatter`, `description-overlap`, `skill-description-budget`, `frontmatter-valid`, `skill-resource-resolves`, `skill-missing-fence` | all with skills                           |
+| Plugin layout               | `plugin-dir-layout`                                                                                                                                             | all with a plugin manifest                |
+| MCP                         | `mcp-config`                                                                                                                                                    | all with MCP                              |
+| Shell hooks                 | `untested-hook`, `hook-script-exists`, `hook-events`, `hook-matcher`, `hook-block-ineffective`, `prefer-compiled-hooks`                                         | Claude Code, Codex                        |
+| Subagents                   | `subagent-tool-contract`, `subagent-frontmatter`, `untested-subagent`, `mcp-tool-resolves`                                                                      | Claude Code (n/a on Codex — no subagents) |
+| Safety (skills + subagents) | `lethal-trifecta`, `delegation-trifecta`                                                                                                                        | all (subagent half n/a on Codex)          |
 
 The per-family tables below give each rule's default severity and what it checks.
 
@@ -178,13 +178,14 @@ The per-family tables below give each rule's default severity and what it checks
 
 ### Skill triggers
 
-| Rule                                                          | Default  | What it checks                                                               |
-| ------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| [`skill-frontmatter`](rules/skill-frontmatter.md)             | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)             |
-| [`description-overlap`](rules/description-overlap.md)         | `"warn"` | No two model-invocable skills have near-identical descriptions               |
-| [`frontmatter-valid`](rules/frontmatter-valid.md)             | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn)           |
-| [`skill-resource-resolves`](rules/skill-resource-resolves.md) | `"warn"` | A SKILL.md body's bundled-file refs (`scripts/`/`references/`) exist on disk |
-| [`skill-missing-fence`](rules/skill-missing-fence.md)         | `"warn"` | A SKILL.md opens with a `---` fence (else it loads as body and never fires)  |
+| Rule                                                            | Default  | What it checks                                                               |
+| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| [`skill-frontmatter`](rules/skill-frontmatter.md)               | `"warn"` | Recommend explicit skill `name`+`description` (reliable trigger)             |
+| [`description-overlap`](rules/description-overlap.md)           | `"warn"` | No two model-invocable skills have near-identical descriptions               |
+| [`skill-description-budget`](rules/skill-description-budget.md) | `"warn"` | A model-invocable skill's description isn't so long the trigger is buried    |
+| [`frontmatter-valid`](rules/frontmatter-valid.md)               | `"warn"` | A skill/agent `---` block is valid YAML (js-yaml is strict — warn)           |
+| [`skill-resource-resolves`](rules/skill-resource-resolves.md)   | `"warn"` | A SKILL.md body's bundled-file refs (`scripts/`/`references/`) exist on disk |
+| [`skill-missing-fence`](rules/skill-missing-fence.md)           | `"warn"` | A SKILL.md opens with a `---` fence (else it loads as body and never fires)  |
 
 ### Structure
 

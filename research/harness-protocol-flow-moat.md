@@ -1,3 +1,8 @@
+---
+status: idea
+topic: hooks
+---
+
 # The NEW moat: type the harness's DYNAMIC structure (ORDER, FLOW, REPLAY), not just its set
 
 > Deep FP pass (2026-06-22) hunting a moat vigiles does NOT already claim, grounded in

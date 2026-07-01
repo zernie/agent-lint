@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: testing
+---
+
 <!-- vigiles:ignore-file -->
 
 # Testing-API design — the ideal shape (deterministic + non-deterministic)

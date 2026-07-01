@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Strategic synthesis (2026-06-13): four deep researches, one throughline
 
 > Status: synthesis (2026-06-13). Reads across four same-day deep researches —

@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Poaching the app-frameworks for a typed CLAUDE.md — and the moat it gives
 
 > What can vigiles steal from Mastra / Vercel AI SDK / LangGraph / Pydantic AI / Temporal

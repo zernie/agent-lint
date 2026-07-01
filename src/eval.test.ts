@@ -67,6 +67,17 @@ import { tool, output, turns, judged } from "./check.js";
 import { parseIntercepts } from "./tool-intercept.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
+/** A zero ArmUsage for TriggerRateReport fixtures (cost isn't what these assert). */
+const zeroUsage = {
+  totalCostUsd: 0,
+  meanCostUsd: 0,
+  meanDurationMs: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCacheReadTokens: 0,
+};
+
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
   assert.equal(s.x.mean, 4);
@@ -607,6 +618,57 @@ test("measureWith scores a check vocabulary across trials (rate ± se, pass^k)",
   assert.ok(formatCheckReport(report).includes("measured 3 run(s)"));
 });
 
+test("measureWith threads usage into the CheckReport (the cost source)", async () => {
+  // Each trial's `result` event carries cost/tokens; the report must aggregate
+  // them the same way runEval does, so `measure` can print the spend.
+  const stream = JSON.stringify({
+    type: "result",
+    result: "ok",
+    num_turns: 1,
+  }).replace(
+    /}$/,
+    ',"total_cost_usd":0.02,"duration_ms":1000,"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10}}',
+  );
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: stream });
+
+  const report = await measureWith(
+    { task: "t", checks: [output("ok")], trials: 2, spacingSec: 0 },
+    runner,
+  );
+  // 2 trials × $0.02 = $0.04 total, tokens summed across trials.
+  assert.ok(Math.abs(report.usage.totalCostUsd - 0.04) < 1e-9);
+  assert.equal(report.usage.totalInputTokens, 200);
+  assert.equal(report.usage.totalOutputTokens, 100);
+  assert.equal(report.usage.totalCacheReadTokens, 20);
+  assert.equal(report.usage.meanDurationMs, 1000);
+});
+
+test("measureArmsWith carries each arm's usage", async () => {
+  const stream = JSON.stringify({
+    type: "result",
+    result: "ok",
+    num_turns: 1,
+  }).replace(/}$/, ',"total_cost_usd":0.01,"usage":{"output_tokens":5}}');
+  const runner = (): Promise<{ code: number; stdout: string }> =>
+    Promise.resolve({ code: 0, stdout: stream });
+
+  const report = await measureArmsWith(
+    {
+      arms: { a: {}, b: {} },
+      task: "t",
+      checks: [output("ok")],
+      trials: 2,
+      spacingSec: 0,
+    },
+    runner,
+  );
+  // Each arm ran 2 trials × $0.01.
+  assert.ok(Math.abs((report.arms.a?.usage.totalCostUsd ?? 0) - 0.02) < 1e-9);
+  assert.ok(Math.abs((report.arms.b?.usage.totalCostUsd ?? 0) - 0.02) < 1e-9);
+  assert.equal(report.arms.a?.usage.totalOutputTokens, 10);
+});
+
 test("measureWith stubSkillBodies packages a stubbed plugin and cleans it up", async () => {
   const dir = makeTmpDir("measure-stub");
   const skills = join(dir, "skills");
@@ -1004,6 +1066,7 @@ test("assertRates + checkReportToJUnit gate and serialize a CheckReport", () => 
         n: 10,
       },
     ],
+    usage: zeroUsage,
   };
   // gate: skill at 0.4 is below 0.8 → throws naming it
   assert.throws(() => {
@@ -1039,6 +1102,7 @@ test("assertRates: `per` overrides the threshold by check kind", () => {
         n: 10,
       },
     ],
+    usage: zeroUsage,
   };
   // A stricter per-kind threshold trips a check the global `min` would pass, and
   // the failure message reports that check's own min.
@@ -1062,7 +1126,7 @@ test("assertRates: `per` overrides the threshold by check kind", () => {
 
 test("assertRates: throws on an empty report (a green that tested nothing)", () => {
   assert.throws(() => {
-    assertRates({ n: 5, perCheck: [] }, { min: 0.9 });
+    assertRates({ n: 5, perCheck: [], usage: zeroUsage }, { min: 0.9 });
   }, /no checks to gate/);
 });
 
@@ -1091,6 +1155,7 @@ test("formatCheckReport labels a no-arg check by its kind alone", () => {
   const report: CheckReport = {
     n: 3,
     perCheck: [{ check: { kind: "turns" }, rate: 1, se: 0, passK: 1, n: 3 }],
+    usage: zeroUsage,
   };
   assert.ok(formatCheckReport(report).includes("turns"));
   assert.ok(!formatCheckReport(report).includes("turns(")); // no arg parens
@@ -1528,6 +1593,7 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
     n: 1,
     perPrompt: [],
     competitors: 0,
+    usage: zeroUsage,
   });
   assert.ok(out.includes("isolated"));
   assert.ok(out.toLowerCase().includes("upper bound"));
@@ -2059,7 +2125,13 @@ test("runEvalWith aborts when maxCostUsd is exceeded", async () => {
 });
 
 test("assertTriggerRate gates on the minimum rate", () => {
-  const report = { rate: 0.5, n: 4, perPrompt: [], competitors: 0 };
+  const report = {
+    rate: 0.5,
+    n: 4,
+    perPrompt: [],
+    competitors: 0,
+    usage: zeroUsage,
+  };
   assert.doesNotThrow(() => {
     assertTriggerRate(report, { min: 0.5 });
   });
@@ -2077,6 +2149,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
     precision: 0.667,
     perIrrelevant: [],
     competitors: 0,
+    usage: zeroUsage,
   };
   // within both thresholds → ok
   assert.doesNotThrow(() => {
@@ -2100,6 +2173,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
         falsePositiveRate: 0,
         precision: undefined,
         competitors: 0,
+        usage: zeroUsage,
       },
       { minPrecision: 0.5 },
     );

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Typed-spec FORMAL VERIFICATION — model checking the harness protocol
 
 > Cluster: formal verification & model checking. Round 2 — going deep on the

@@ -1,3 +1,8 @@
+---
+status: active
+topic: benchmark
+---
+
 <!-- vigiles:ignore-file -->
 
 # Benchmark methodology — how vigiles measures "what actually works"

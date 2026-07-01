@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Eval-API landscape — the field, summarized and compared against vigiles
 
 Research capturing how vigiles' eval API (`src/eval.ts`, `src/harness-assert.ts`,

@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Cross-tool standards conformance: should vigiles become the neutral verification layer?
 
 > Status: research (2026-06-13). Adjacent to [sync-landscape-analysis](sync-landscape-analysis.md),

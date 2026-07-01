@@ -1,3 +1,8 @@
+---
+status: idea
+topic: audit
+---
+
 # Adoption-gateway preview — "what would vigiles catch in YOUR repo?"
 
 > Internal design doc (the user-facing how-to, when this ships, will live in

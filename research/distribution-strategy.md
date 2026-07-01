@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Distribution Strategy: Why Nobody Uses vigiles Yet
 
 Strategic analysis from mid-2026. Several months after first release: downloads near zero, GitHub stars from friends only, no organic discovery. Articles published, package on npm, but no adoption flywheel. This doc breaks down why and proposes concrete moves.

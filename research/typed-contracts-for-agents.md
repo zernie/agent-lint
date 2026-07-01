@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Typed contracts for agents — the durable purpose of the spec under measurement
 
 > Status: strategy synthesis (2026-06-19). Under the measurement reframe

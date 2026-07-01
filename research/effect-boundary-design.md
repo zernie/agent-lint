@@ -1,3 +1,8 @@
+---
+status: superseded
+topic: spec
+---
+
 <!-- vigiles:ignore-file -->
 
 # Effect-boundary design — `effect()` region mark

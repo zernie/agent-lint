@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Typed-spec — ALGEBRAIC EFFECTS, MONADS & INTERPRETERS (round 2, deep dive)
 
 > Status: research + prototypes (2026-06-21). Round-2 deepening of one cluster the

@@ -1,3 +1,8 @@
+---
+status: idea
+topic: audit
+---
+
 # OSS PR / issue drafts — verified bugs found by `vigiles scan`
 
 > Status: ready-to-file (2026-06-19). Each is a REAL, hand-verified defect in a

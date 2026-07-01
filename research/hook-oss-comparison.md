@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Compiled hooks vs the originals — an OSS comparison
 
 > Internal research (2026-06-24). A head-to-head between vigiles's COMPILED hooks

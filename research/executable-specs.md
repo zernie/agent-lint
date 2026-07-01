@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 <!-- vigiles:ignore-file -->
 
 # Executable Specification Files

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Subagent spec compilation — research + roadmap
 
 Why vigiles compiles typed subagent definitions (`agents/<name>.md.spec.ts` →

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: proofs
+---
+
 # Self-Evolving Specification System
 
 Design document for vigiles's self-evolving spec system. Specs mutate, proofs verify, only valid mutations survive. The system improves itself deterministically — AI proposes changes, algorithms prove correctness.

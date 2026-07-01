@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # Handoff — PR #40 (`claude/os-plugin-bug-adoption-cy8j97`)
 
 > Status (2026-06-19): branch is green and pushed; PR

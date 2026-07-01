@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Rule-Sync Landscape: What's Useful, What We Have, What's Worth Adding
 
 The mid-2026 sync landscape (Ruler, ai-rulez, block/ai-rules, ai-rules-sync, anywhere-agents) is loud but uneven — clear demand, varied solution quality. This doc breaks each tool down by the dimension that matters for vigiles: which ideas transfer, which we already have, which are worth building, and which are scope traps.

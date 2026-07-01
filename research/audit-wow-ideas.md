@@ -1,3 +1,8 @@
+---
+status: active
+topic: audit
+---
+
 # Audit "wow" ideas — making `vigiles audit` land an "oh shit", not a green A
 
 > Research record, 2026-06-29. Question: what can `vigiles audit` CHECK (deterministic)

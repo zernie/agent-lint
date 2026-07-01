@@ -1,3 +1,8 @@
+---
+status: active
+topic: adapters
+---
+
 # Adapter/plugin API design — entry points, selection, boundary, conformance
 
 > Survey of how widely-used TS/JS libraries structure a **harness-agnostic core +

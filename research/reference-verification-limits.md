@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Reference verification — what's deterministic, what isn't, what to delegate
 
 > Status: synthesis (2026-06-08). The conceptual boundary of vigiles's core:

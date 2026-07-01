@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Spec API design — strict-typed builders, `doc()` vs `section()`, presets
 
 > Status: best-practice synthesis (2026-06-19). Three external sweeps — typed builders
