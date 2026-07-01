@@ -3,6 +3,15 @@
   This file is the FRONT DOOR + a marketing asset for someone who already lives
   in Claude Code / Codex. Optimize for a phone-skimmer.
 
+  TAGLINE = VERIFY-FIRST (decided 2026-07): "Catch the silent breakage in your
+  Claude Code & Codex setup" + subhead "verify your CLAUDE.md, skills, and hooks
+  are real — and prove they actually work." Lead with references-are-real (the
+  unique catch only vigiles makes); test/observe fold in AFTER. Do NOT revert to
+  the old test-first "tests your skills never had" tagline. Stay coding-scoped
+  (name CC/Codex + CLAUDE.md/skills/hooks) so it's never mistaken for a
+  general-agent tool. NOT "observability" as the headline (it undersells verify +
+  reads as the general-app category).
+
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
