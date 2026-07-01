@@ -878,6 +878,7 @@ export interface TriggerRateReport {
     readonly perPrompt: readonly PromptTriggerStat[];
     readonly precision?: number;
     readonly rate: number;
+    readonly usage: ArmUsage;
 }
 
 // @public
