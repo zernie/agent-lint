@@ -108,7 +108,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # fetch-depth: 0 so the dogfooded action's capability-diff can reach the
+      # PR base commit (it materializes it as a detached worktree).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -125,13 +129,16 @@ jobs:
       # action emits per-line `::error file=,line=::` annotations (rendered inline
       # on the PR diff) and posts a sticky PR comment. See the prod-grade-gha-cli
       # rule. Running it first means a lint failure surfaces THROUGH the action
-      # (comment + annotations), not a bare CLI step before it.
+      # (comment + annotations), not a bare CLI step before it. `capability-diff`
+      # folds the blast-radius diff vs the PR base into the SAME sticky comment
+      # (informational — no fail-on-widen — so a legit widening doesn't red CI).
       - name: Dogfood the vigiles GitHub Action (primary lint gate)
         id: vigiles-action
         uses: ./
         with:
           command: lint
           version: local
+          capability-diff: "true"
 
       - name: Assert the action reported success
         run: |
