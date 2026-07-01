@@ -33,11 +33,6 @@ A spec earns its place when you cross from **declaring** your harness to
 So: **markdown declares; a spec is testable as code.** Reach for a spec exactly
 when you want `result()` → `assertAgentOk`. The rest is the field reference.
 
-> **See it concretely:** [`examples/scaffold-demo/`](../examples/scaffold-demo/) — a
-> typed agent spec, and the outcome + safety test `vigiles scaffold-test` **generates
-> from it** (an `assertAgentOk` over the real `result()` fields + a `notTool` safety
-> check derived from the `tools` contract). Nobody hand-writes those assertions.
-
 ### Enforce vs. verify
 
 A spec gives you a `tools` allowlist and a `purity` floor. It's tempting to read
