@@ -65,6 +65,7 @@ one click away.
 
 - [`skill-authoring-pains.md`](skill-authoring-pains.md) — the documented real-world pains (triggering, silent frontmatter failures, refs rot) + the doc-vs-procedure split.
 - [`skill-as-pipeline.md`](skill-as-pipeline.md) — the skill-as-pipeline model (result/process gates) the benchmarks tested and largely deflated.
+- [`haretrail-eval-ideas.md`](haretrail-eval-ideas.md) — a deep `audit` dogfood of a Codex skills repo (fleytman/haretrail) → un-built ideas: new deterministic cross-ref checks (`openai.yaml` / trigger-manifest / env-var contract) + new eval helpers (the **selection-collision "confusion matrix for your router"** primitive, manifest-driven fixtures + auto-negatives, description-ablation). The cross-language flag it prompted was REMOVED (refuted).
 
 ## Self-evolving specs & proofs
 
