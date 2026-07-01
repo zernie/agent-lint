@@ -11,8 +11,8 @@
 
 **Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. This is a long STRATEGY +
 BUILD session: decided the tool direction → built the OBSERVE layer → verify-first launch
-positioning → a 2-pass Fable pivot re-review → launch-surface CUTS → a competitor-teardown
-workflow (STILL RUNNING, background).
+positioning → a 2-pass Fable pivot re-review → launch-surface CUTS → SHIPPED the capability-diff
+PR comment (moat #2) → salvaged the deep half of a competitor-teardown workflow (it died throttled).
 
 **THE DIRECTION (decision of record).** vigiles = ONE LOOP: declare what the harness should
 do (typed spec) → check reality against it, via four instruments — VERIFY (lint/cross-ref),
@@ -38,6 +38,18 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
   VERB to skill-internal (engine kept); demoted "7 catalogs" from the README headline.
   GUARDS KEPT (deliberate — it's a HIDDEN `hook-runtime guard` kind, not public surface;
   clean removal would gut a real e2e test + touch shipped guardrail-check → not worth it).
+- **#2 CAPABILITY-DIFF PR COMMENT — SHIPPED.** The CLI/lib layer (`audit --capability-diff`)
+  was already built+tested; this session added the GHA face: `action.yml` gains
+  `capability-diff` + `fail-on-widen` inputs, materializes the PR base with `git archive`
+  (NOT a worktree — avoids checkout/smudge filters, e.g. git-crypt), runs the diff, folds a
+  section into the SAME sticky comment only when the surface changed. Dogfooded in `ci.yml`
+  (`fetch-depth: 0` + `capability-diff: true`). Verified e2e locally (widen→section+exit-1,
+  no-change→no-section, no leaked worktrees/report-files). Docs: `docs/github-action.md`.
+- **VAULT: deep competitor teardown SALVAGED.** The teardown workflow DIED (throttled, silent
+  1h+); one cluster returned deep before it died → saved to `startup/competitor-teardown-2026.md`
+  (9 cos: Coval/Momentic/Hamming/Roark/promptfoo[→OpenAI $86M]/DeepEval/Ashr/HUD/Respan; full
+  rule-6 fields + ranked poach-list). Folded IN: the 2 Fable pivot reviews (#4) + the launch
+  anonymize/areas-for-improvement decision (#3). 4 planned clusters `unrun` (coverage map in-doc).
 
 ### THE PIVOT — 2nd-pass decisions of record (from Fable ×2 + hit-rate data)
 
@@ -59,18 +71,16 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
 - **Biggest risk:** speed-to-being-the-NAMED cross-harness auditor before Anthropic ships a
   built-in `claude doctor`. CC+Codex neutrality is the hedge.
 
-### IN FLIGHT + DO NEXT
+### DO NEXT (all this session's queued items are DONE — #2/#3/#4 landed)
 
-- **RUNNING (background): competitor-teardown workflow** (`wf_17aa399e-e38`) — 5 clusters
-  (typed-spec frameworks / eval-testing / observability[Braintrust-deep] / gating-reliability /
-  attestation) → synthesis. THROTTLED (transient rate-limits); 2/5 clusters back last check.
-  On completion → **VAULT SAVE** per rule 6: `startup/competitor-teardown-2026.md` (full detail,
-  depth-tagged, coverage map, indexed, cross-linked) + FOLD IN the two Fable pivot reviews +
-  the anonymize/areas-for-improvement launch decision.
-- **QUEUED: #2 capability-diff PR comment** (GHA — checkout PR base, run `audit --capability-diff`,
-  fold into the existing sticky comment in `action.yml`; dogfood in this repo's CI). Sequenced
-  AFTER the workflow to avoid throttle contention. User approved "in agent".
-- Then the BUILD from the cohesion pass; the launch ARTICLE (behavioral finding, anonymized).
+- **RE-RUN the 4 `unrun` teardown clusters** — typed-spec frameworks / observability
+  (Braintrust-deep) / gating-reliability / attestation. The workflow died throttled; re-run a
+  fresh one OFF-PEAK, or fold into `funded-adjacency-2026.md` / `harness-tech-direction-2026.md`
+  (partial coverage there). Coverage map is in `startup/competitor-teardown-2026.md`.
+- **The launch ARTICLE** — the behavioral silent-breakage finding, ANONYMIZED + framed as
+  areas-for-improvement (decision recorded in the vault teardown doc). Not yet written.
+- **The cohesion-pass BUILD items** — the top poaches now also live in the teardown doc's
+  ranked list (observe-replay-as-test is the flagged flagship of the observe layer).
 
 ### ALSO OPEN (separate track) + Gotchas
 
@@ -95,5 +105,6 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
 ## Don't re-read unless the task needs it
 
 - `startup/harness-tech-direction-2026.md` — the full competitive tech + monetization + exit (vault).
+- `startup/competitor-teardown-2026.md` — the deep agent-eval-testing teardown + poach-list (vault).
 - `research/harness-observability-direction.md` — the tech direction of record.
 - `research/roadmap.md` — the front-door roadmap.
