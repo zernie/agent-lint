@@ -7,6 +7,7 @@ import {
   readObservations,
   observationsOfKind,
   formatObservation,
+  formatLedgerSummary,
   OBSERVE_VERSION,
   LEDGER_FILE,
   type ObservationRecord,
@@ -112,6 +113,40 @@ describe("observe ledger", () => {
         resolve(cwd, "afile"),
       );
     }).not.toThrow();
+  });
+
+  it("formatLedgerSummary is empty for no records, and summarizes otherwise", () => {
+    expect(formatLedgerSummary([])).toBe("");
+    const records: ObservationRecord[] = [
+      {
+        v: 1,
+        ts: "t",
+        kind: "hook",
+        event: "PreToolUse",
+        decision: "deny",
+        rule: "no-force-push",
+        reason: "force-push blocked",
+      },
+      {
+        v: 1,
+        ts: "t",
+        kind: "agent",
+        name: "reviewer",
+        tool: "Bash",
+        allowed: false,
+        reason: "outside contract",
+      },
+      { v: 1, ts: "t", kind: "skill", name: "commit-helper", fired: true },
+      { v: 1, ts: "t", kind: "hook", event: "PreToolUse", decision: "allow" },
+    ];
+    const out = formatLedgerSummary(records);
+    expect(out).toContain("4 records");
+    expect(out).toContain("2 hook");
+    expect(out).toContain("recent denials (2)");
+    expect(out).toContain("no-force-push");
+    expect(out).toContain("reviewer → Bash");
+    // an allow is counted but never listed as a denial
+    expect(out).not.toContain("allow:");
   });
 
   it("formatObservation is one newline-terminated JSON line", () => {
