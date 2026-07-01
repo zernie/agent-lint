@@ -279,6 +279,7 @@ export interface CheckReport {
     readonly n: number;
     // (undocumented)
     readonly perCheck: readonly CheckRate[];
+    readonly usage: ArmUsage;
 }
 
 // @public

@@ -41,6 +41,7 @@ import {
   emitCostSummary,
   costFromEvalReport,
   costFromArm,
+  sumCosts,
 } from "./eval-cost.js";
 import { ncd } from "./core/proofs.js";
 import {
@@ -489,6 +490,8 @@ export interface CheckRate {
 export interface CheckReport {
   readonly n: number;
   readonly perCheck: readonly CheckRate[];
+  /** Cost / latency / token totals for the run (the same source as `runEval`). */
+  readonly usage: ArmUsage;
 }
 
 /**
@@ -557,6 +560,7 @@ export async function measureWith(
           n: s?.n ?? 0,
         };
       }),
+      usage: arm?.usage ?? aggregateUsage([]),
     };
   } finally {
     if (stubbed) rmSync(stubbed, { recursive: true, force: true });
@@ -566,7 +570,9 @@ export async function measureWith(
 /* v8 ignore start -- real claude subprocess; thin wrapper over measureWith */
 /** Score a check vocabulary across trials against the real `claude` CLI. */
 export async function measure(spec: MeasureSpec): Promise<CheckReport> {
-  return measureWith(spec, spawnAgent);
+  const report = await measureWith(spec, spawnAgent);
+  emitCostSummary(costFromArm(report.usage));
+  return report;
 }
 /* v8 ignore stop */
 
@@ -644,6 +650,7 @@ export async function measureArmsWith(
             n: s?.n ?? 0,
           };
         }),
+        usage: arm.usage,
       };
     }
     return { arms };
@@ -681,7 +688,12 @@ function stubArmPluginDirs(arms: Record<string, EvalArm>): {
 export async function measureArms(
   spec: ArmsMeasureSpec,
 ): Promise<ArmsCheckReport> {
-  return measureArmsWith(spec, spawnAgent);
+  const report = await measureArmsWith(spec, spawnAgent);
+  // Sum every arm's spend — an A/B run pays for both arms.
+  emitCostSummary(
+    sumCosts(Object.values(report.arms).map((a) => costFromArm(a.usage))),
+  );
+  return report;
 }
 /* v8 ignore stop */
 
