@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Hook pain points — the verified failure corpus + the killer feature
 
 > Internal research (2026-06-22). Five parallel web-research passes over the

@@ -1,3 +1,8 @@
+---
+status: active
+topic: sandbox
+---
+
 # Cross-platform sandboxing — decision + survey
 
 > Status: **decided** (2026-06-17). Mac support is a hard requirement (a large

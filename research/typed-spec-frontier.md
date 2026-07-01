@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Typed-spec FRONTIER — PL-theory + formal-methods transfers into the harness
 
 > Status: research + prototypes (2026-06-21). The founder's "go wild, but survive

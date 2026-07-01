@@ -1,3 +1,8 @@
+---
+status: idea
+topic: spec
+---
+
 # Shareable typed presets — the one place the typed spec earns its keep
 
 > Status: design sketch (2026-06-19). Expands bet #9 from `harness-state-space.md`: a

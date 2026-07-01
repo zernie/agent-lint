@@ -1,3 +1,8 @@
+---
+status: rejected
+topic: testing
+---
+
 # Retargeting pillar 2 at code-defined agent SDKs?
 
 > Status: research (2026-06-13). Adjacent to

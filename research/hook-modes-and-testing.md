@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Hooks: modes & testing — landscape analysis + what to deliver
 
 > Internal research (2026-06-23). A step-back over the hook surface — both the

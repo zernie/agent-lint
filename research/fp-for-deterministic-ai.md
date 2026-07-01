@@ -1,3 +1,8 @@
+---
+status: idea
+topic: misc
+---
+
 # Functional Programming Techniques for Deterministic AI Code
 
 ## Framing

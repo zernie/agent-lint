@@ -1,3 +1,8 @@
+---
+status: idea
+topic: proofs
+---
+
 # Poach: "Agentic Harness Engineering" (AHE) — for the optimize / measure / evolve line
 
 > Deep-read + poach of arXiv:2604.25850 ("Agentic Harness Engineering:

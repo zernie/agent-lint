@@ -1,3 +1,8 @@
+---
+status: idea
+topic: proofs
+---
+
 # Formal Proofs for AI Agents
 
 Scope: should vigiles reach past its current deterministic proofs (monotonicity,

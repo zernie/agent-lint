@@ -1,3 +1,8 @@
+---
+status: active
+topic: audit
+---
+
 # The harness checkup ("Lighthouse mode") + the casual-vs-power lane decision
 
 > What this doc is: the decision record for a product question raised from CC-user

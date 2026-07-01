@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # Pre-release focus — what to park / polish / add before the HN launch
 
 > The consolidation doc the rest of the research feeds into. vigiles has real

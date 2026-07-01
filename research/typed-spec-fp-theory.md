@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Typed-spec — DEEP FP / MONAD THEORY (round 3): the analyzability boundary
 
 > Status: research + prototypes (2026-06-21). Round-3 frontier dive into the

@@ -1,3 +1,8 @@
+---
+status: active
+topic: security
+---
+
 # Agent supply-chain & plugin/MCP security: should vigiles scan?
 
 > Status: research (2026-06-13). Adjacent to

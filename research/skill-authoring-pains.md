@@ -1,3 +1,8 @@
+---
+status: active
+topic: skills
+---
+
 # Skill-authoring pains — research + strategic note
 
 > Status: research capture (2026-06-06). Pauses no code; informs whether vigiles's

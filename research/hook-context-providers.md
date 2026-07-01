@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Hook context providers — I/O-dependent decisions without losing the moat
 
 > Internal research (2026-06-23). How a COMPILED hook can decide on external

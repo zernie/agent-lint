@@ -1,3 +1,8 @@
+---
+status: idea
+topic: skills
+---
+
 # Skill as a pipeline — harness-driven control-flow graph with deterministic gates
 
 > Status: design capture (2026-06-07). Output of a multi-step design discussion that

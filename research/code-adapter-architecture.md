@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: adapters
+---
+
 # Harness Adapter Architecture — extracting Claude Code behind ports
 
 > The plan for decoupling vigiles from Claude Code so a second harness (Codex is

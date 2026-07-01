@@ -1,3 +1,8 @@
+---
+status: rejected
+topic: benchmark
+---
+
 # Benchmarks — do runtime gates earn their complexity?
 
 > Status: empirical result (2026-06-08). We built the skill runtime-enforcement

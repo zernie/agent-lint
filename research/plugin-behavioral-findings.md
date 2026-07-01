@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Behavioral findings — trigger-rate probes of popular plugins
 
 > Status: live findings log (2026-06-18). The behavioral half of the

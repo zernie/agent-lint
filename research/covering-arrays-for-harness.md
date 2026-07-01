@@ -1,3 +1,8 @@
+---
+status: idea
+topic: eval
+---
+
 # Covering arrays for the harness — pairwise sampling driven by the typed spec
 
 > Status: research + prototype (2026-06-21). Question from the founder's

@@ -1,3 +1,8 @@
+---
+status: active
+topic: misc
+---
+
 # Code Search for AI Coding Agents
 
 Research on how AI coding agents find and read code. Agents spend ~99% of their time reading. This document compares approaches: grep, AST-based search, embeddings, LSP, and graph databases.

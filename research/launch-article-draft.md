@@ -1,3 +1,8 @@
+---
+status: idea
+topic: positioning
+---
+
 # DRAFT — launch article: "I measured the hyped Claude skills. Most are cost, not benefit."
 
 > **Internal draft of an external article.** Public voice (user benefit, no internal

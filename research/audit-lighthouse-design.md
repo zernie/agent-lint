@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: audit
+---
+
 # `vigiles audit` — Lighthouse for your harness (locked design + build plan)
 
 > Internal design record. The lane/positioning rationale is in

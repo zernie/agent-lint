@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # OSS lane sweep (2026-06-25) — is anyone open-source in our differentiated lane?
 
 > A dedicated GitHub/npm/PyPI sweep (combing both harness-engineering awesome-lists)

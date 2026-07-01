@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Robust-by-default side-effect separation for skills/agents
 
 > Status: research synthesis (2026-06-19). The question: how robustly can we force pure /

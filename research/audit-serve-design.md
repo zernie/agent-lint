@@ -1,3 +1,8 @@
+---
+status: idea
+topic: audit
+---
+
 # `audit --serve` — the one-click-local adoption server (design + security)
 
 > Internal design record (2026-06-28). `audit`'s HTML report is a static file, so

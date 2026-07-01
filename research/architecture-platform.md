@@ -1,3 +1,8 @@
+---
+status: rejected
+topic: roadmap
+---
+
 # Architecture-Aware Agent Platform
 
 ## Vision

@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: hooks
+---
+
 # Runtime Spec Enforcement
 
 ## The Gap

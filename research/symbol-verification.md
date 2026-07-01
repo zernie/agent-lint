@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Symbol verification — design & requirements
 
 > Status: design lock (2026-06-08). Extends the cross-referencing engine from

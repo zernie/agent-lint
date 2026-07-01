@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Railway-style subagents — verified orchestration over flat workers
 
 Design exploration. Builds on `research/subagent-compilation.md` (the flat

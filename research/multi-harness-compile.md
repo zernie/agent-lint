@@ -1,3 +1,8 @@
+---
+status: active
+topic: adapters
+---
+
 # Multi-harness compile & the mirror story
 
 How vigiles compiles/verifies one repo that targets more than one harness

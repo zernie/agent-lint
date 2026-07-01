@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Measurement authority — the offensive reframe (what actually makes agents better)
 
 > Status: strategy pivot (2026-06-19). Supersedes the security-led "spine" in

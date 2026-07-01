@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Scope: vigiles skills vs. dynamic workflows
 
 <!-- vigiles:ignore-file -->

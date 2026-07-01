@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Agent-skill eval landscape: AWS `sample-agent-skill-eval` (and the token-compression cluster)
 
 Two things crossed the radar mid-June 2026 that touch the **second pillar**

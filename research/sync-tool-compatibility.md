@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: positioning
+---
+
 # Sync-Tool Compatibility: Requirements to Stay Composable
 
 > Grounding for the `compose-with-sync-tools` rule (CLAUDE.md). Researched the

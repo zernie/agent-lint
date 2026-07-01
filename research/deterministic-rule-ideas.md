@@ -1,3 +1,8 @@
+---
+status: idea
+topic: linters
+---
+
 # Deterministic rule ideas — the next moat surfaces
 
 > Status: ideas backlog (2026-06-19), grounded in the mid-2026 OSS plugin sweep

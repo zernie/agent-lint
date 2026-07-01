@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Zero-config mother harness — "create-agentic-app" done right
 
 > Status: research synthesis (2026-06-19). Can vigiles be the close-to-zero-config,

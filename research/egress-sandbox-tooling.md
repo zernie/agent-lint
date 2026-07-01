@@ -1,3 +1,8 @@
+---
+status: active
+topic: sandbox
+---
+
 # Egress-sandbox tooling: build vs adopt, and why CI breaks
 
 Companion to [`sandbox-network.md`](sandbox-network.md) (the resolver-pinned

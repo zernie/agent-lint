@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Whole-harness codegen — one typed registry, `tsc` over the entire harness
 
 > Status: research + prototype (2026-06-21). Founder's idea: auto-generate ONE

@@ -1,3 +1,8 @@
+---
+status: idea
+topic: audit
+---
+
 # Unifying `scan` and `lint` — one rule engine, two frontends
 
 `vigiles scan` and `vigiles lint` are today two parallel implementations with

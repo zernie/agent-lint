@@ -1,3 +1,8 @@
+---
+status: idea
+topic: audit
+---
+
 # haretrail-driven audit + eval ideas (2026-07-01)
 
 Captured from a deep dogfood of `vigiles audit` on `fleytman/haretrail` (a Codex

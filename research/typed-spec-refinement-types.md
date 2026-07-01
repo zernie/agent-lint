@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Typed-spec REFINEMENT / DEPENDENT / FULL-SESSION types — round 2
 
 > Status: research + prototypes (2026-06-21). Round-2 deep-dive on ONE cluster of

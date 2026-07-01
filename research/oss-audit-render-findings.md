@@ -1,3 +1,8 @@
+---
+status: active
+topic: audit
+---
+
 # OSS audit render + issue-hunt findings (2026-06-28)
 
 > What `audit` actually catches in the wild, from rendering the new report on real

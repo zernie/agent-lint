@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: spec
+---
+
 # Spec syntax & railway scope — two decisions, settled with research
 
 > Status: decided (2026-06-20), backed by two web-research passes (cited below).

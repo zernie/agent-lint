@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Plugin selection-collision: the behavioral confirmation of `description-overlap`
 
 > Internal design + findings record. The user-facing pitch lives in the eval docs;

@@ -1,3 +1,8 @@
+---
+status: active
+topic: audit
+---
+
 # Structural findings — deterministic `scan` sweep of popular plugins
 
 > Status: live findings log (2026-06-19). The **deterministic / structural**

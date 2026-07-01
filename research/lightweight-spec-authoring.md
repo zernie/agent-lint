@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 # Lightweight spec authoring — what real CLAUDE.mds need, and why the spec is too heavy
 
 > Status: design synthesis (2026-06-19). Grounded in a sweep of ~16 real-world

@@ -1,3 +1,8 @@
+---
+status: active
+topic: spec
+---
+
 <!-- vigiles:ignore-file -->
 
 # When does a typed spec earn its keep? — the spec-value model

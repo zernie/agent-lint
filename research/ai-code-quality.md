@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # AI Code Quality Research
 
 Collected April 2026 during the vigiles v2 design session. This document captures the research, insights, and decisions that shaped vigiles v2's architecture.

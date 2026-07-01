@@ -1,3 +1,8 @@
+---
+status: active
+topic: positioning
+---
+
 # Competitive Landscape: AI Agent Instruction File Tooling
 
 Collected April 2026; refreshed mid-2026 with new entrants. 20+ tools across five categories. For deeper analysis of mid-2026 academic and runtime additions (ContextCov, AgentProof, AWS Bedrock + Cedar, Compiled AI, Harness Engineering) and concrete next-step proposals, see `landscape-mid-2026.md`.

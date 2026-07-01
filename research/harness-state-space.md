@@ -1,3 +1,8 @@
+---
+status: active
+topic: roadmap
+---
+
 # Harness state-space — the moat thesis, generative checks, and ranked bets
 
 > Status: strategy synthesis (2026-06-19). The organizing thesis (minimize the

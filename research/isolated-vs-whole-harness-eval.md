@@ -1,3 +1,8 @@
+---
+status: active
+topic: eval
+---
+
 # Isolated vs whole-harness skill/agent evaluation
 
 > Research of record (2026-06-17). When you eval ONE skill/subagent, do you load

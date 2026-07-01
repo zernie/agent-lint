@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: sandbox
+---
+
 # Sandbox network: from deny-all to allowlisted, recorded egress
 
 ## Where we are

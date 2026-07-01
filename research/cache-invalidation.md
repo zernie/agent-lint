@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: eval
+---
+
 # Cache invalidation + eval staleness — best practices and what vigiles does
 
 > Research of record behind the two eval staleness mechanisms — the record/replay

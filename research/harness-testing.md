@@ -1,3 +1,8 @@
+---
+status: shipped
+topic: testing
+---
+
 # Testing the Claude Code harness — design & coverage
 
 > Status: shipped (2026-06-08, extended 2026-06-09). The second pillar that came

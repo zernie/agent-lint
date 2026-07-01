@@ -1,3 +1,8 @@
+---
+status: idea
+topic: sandbox
+---
+
 # `vigiles/os-isolation` port — implementation design
 
 > Status: **design of record (2026-06-17), not yet implemented.** The decision

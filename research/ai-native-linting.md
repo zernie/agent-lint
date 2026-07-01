@@ -1,3 +1,8 @@
+---
+status: active
+topic: linters
+---
+
 # AI-native linting — the LLM-reviewer wave and where the deterministic line holds
 
 > Status: research (2026-06-13). Adjacent to

@@ -1,3 +1,8 @@
+---
+status: active
+topic: adapters
+---
+
 # Harness Landscape & the Codex Extraction Map (mid-2026)
 
 > Researched June 2026 (multi-source, primary docs). Answers two questions: (1)
