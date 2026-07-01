@@ -83,7 +83,11 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>The tests your agent's skills and hooks never had.</strong>
+  <strong>Catch the silent breakage in your Claude Code &amp; Codex setup.</strong>
+</p>
+
+<p align="center">
+  Verify your CLAUDE.md, skills, and hooks are real — and prove they actually work.
 </p>
 
 <p align="center">
@@ -94,14 +98,11 @@
 
 ---
 
-**You installed some plugins and wrote a few skills. Do they actually work?**
+**Your skills, hooks, and instructions are your agent's harness — the half you wrote, and the half nothing checks.**
 
-Your skills, hooks, and instructions are your agent's **harness** — the half you wrote
-and own, and the half nothing checks. A skill that never fires. Two skills the agent
-confuses. A subagent wired to a tool that doesn't exist. It breaks silently, and you
-find out mid-task.
+A subagent wired to a tool that doesn't exist. A hook that looks like it blocks and doesn't. Two skills the agent can't tell apart. It all looks fine, and it breaks silently mid-task.
 
-It's a library with no tests. This runs them:
+vigiles checks your harness is _real_, not just well-formed:
 
 ```bash
 npx vigiles audit
