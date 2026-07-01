@@ -12,29 +12,38 @@
 **Branch `claude/haretrail-dogfood-pvdo9t` — PR #54 OPEN, being WATCHED** (user said
 "watch", NOT merge — do NOT auto-merge; merge is the user's call). An hourly cron
 `5438c724` re-checks CI + mergeability: report green, fetch-logs-and-fix on red, stop
-(CronDelete) when merged/closed. HEAD `b062882`.
+(CronDelete) when merged/closed. HEAD `90eb01b`.
 
 Session started as a DOGFOOD of `vigiles audit` on `fleytman/haretrail` (a Codex
 skills repo) and turned into a docs + rules + **eval-cost-transparency** + **research
 corpus index** batch.
 
-**RESUME STATE: two open threads, both OPTIONAL/ask-first.** (a) cost-transparency's
-last path — **thread `usage` into `measure`/`measureArms` (`CheckReport`)** so scored
-checks also print cost (SAME shape as the shipped trigger-rate threading: parser's
-`ParsedModelRun.usage` is the source; add `usage: ArmUsage` to `CheckReport`, aggregate
-in the run loop, emit in the v8-ignored wrapper). (b) the haretrail feature ideas in
-`research/haretrail-eval-ideas.md` (measureSelectionMatrix etc.) — none built yet.
+**RESUME STATE: cost + selection-matrix DONE (pushed). Remaining haretrail ideas
+optional/ask-first** (`research/haretrail-eval-ideas.md`): deriveTriggerSetFromManifest
+(free negatives), locales axis, measureDescriptionAblation, withPluginFixture — none built.
 
 ### What landed this session (all pushed)
 
-0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
-   `status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
-   NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
-   index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
-   Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
-   `src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
-   stays the human index, now points at the machine one. `.prettierignore` gained the
-   nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
+−1. **`measureSelectionMatrix` + `assertNoCollision`** (`90eb01b`) — PROMOTED the
+cross-skill selection-collision matrix (was CLI-only under audit consent) to a
+first-class assertable eval primitive. Zero-setup (auto-derives prompts from
+descriptions), `assertNoCollision({maxOffDiagonal})` gates it. Exported on
+**`vigiles/claude-code`** NOT agnostic `vigiles/testing` (CC-only — reads the
+selector's choice; scan-behavioral is Codex-adapter-coupled). Thin wrapper over the
+existing `measurePluginSelection`; `measureSelectionMatrixWith` = injectable core.
+Example eval + no-model tests + for-plugin-authors.md CI path.
+−0.5 **Cost threading — LAST path** (`2268cef`) — `measure`/`measureArms` now carry
+`usage: ArmUsage` on `CheckReport` + emit cost in the v8-ignored wrappers (measureArms
+sums both arms). ALL four eval paths now print spend. (runEval + measureTriggerRate
+already did.) So the cost-transparency feature is now COMPLETE. 0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
+`status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
+NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
+index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
+Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
+`src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
+stays the human index, now points at the machine one. `.prettierignore` gained the
+nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
+
 1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
    scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
    RU descriptions fire fine on EN prompts; it cried wolf on correct non-English
@@ -56,9 +65,9 @@ in the run loop, emit in the v8-ignored wrapper). (b) the haretrail feature idea
 ### DO NEXT / OPEN
 
 - **PRIMARY: keep watching PR #54 → green** (cron `5438c724`). Merge is the USER's call.
-- **Cost:** thread `usage` into `measure`/`measureArms` `CheckReport` (last path) — optional, ask.
 - **haretrail feature ideas** (`research/haretrail-eval-ideas.md`): measureSelectionMatrix
-  ("confusion matrix for your router") is the flagged first-build; none built yet.
+  now DONE; remaining = deriveTriggerSetFromManifest, locales axis, description-ablation,
+  withPluginFixture. All optional/ask-first.
 - **#3 "collision-cluster" rule — RECOMMENDED DROP** (NCD is byte-level/language-bound,
   can't catch cross-language collision; the model MATRIX already ships under
   `audit.measure` consent). Pending user OK.
