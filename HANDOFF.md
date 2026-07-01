@@ -9,102 +9,91 @@
 
 ## RESUME HERE
 
-**Branch `claude/tool-positioning-market-65fvvh`.** This session was a STRATEGY session
-that landed a DIRECTION decision + STARTED its implementation. No PR opened yet.
+**Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. This is a long STRATEGY +
+BUILD session: decided the tool direction → built the OBSERVE layer → verify-first launch
+positioning → a 2-pass Fable pivot re-review → launch-surface CUTS → a competitor-teardown
+workflow (STILL RUNNING, background).
 
-The session: user pushed on "why is our offering thin vs funded agent-harness startups?"
-→ competitive/tech research (vault unlocked) → decided the whole tool direction + started
-building the observability ledger.
+**THE DIRECTION (decision of record).** vigiles = ONE LOOP: declare what the harness should
+do (typed spec) → check reality against it, via four instruments — VERIFY (lint/cross-ref),
+GATE (compiled hooks), MEASURE (evals on your sub), OBSERVE (local flight-recorder ledger).
+Spine: the typed spec is the declared GROUND TRUTH. Local-first + agent-readable; NOT hosted
+runtime/OTel. Coding-harness world ONLY (Market C). Existing surfaces STAY (sensors, not a
+pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
+`research/harness-observability-direction.md`; monetization = `startup/` vault ONLY.
 
-**THE DIRECTION (decision of record).** vigiles is ONE LOOP: **declare what the harness
-should do (typed spec) → check reality against it.** Four instruments are FACETS of it:
-VERIFY (lint/cross-ref), GATE (compiled hooks), MEASURE (evals on your sub), OBSERVE (a new
-local **flight-recorder ledger**). Spine: **the typed spec is the declared GROUND TRUTH** —
-that's what makes observation PRECISE on deterministic surfaces (vs a black box needing an
-LLM-judge). Local-first + **agent-readable**; NOT hosted runtime telemetry (that's the
-crowded Camp-1 trap w/ wrong skill-set + privacy risk). Existing surfaces ALL STAY (they
-become the sensors); it is NOT a pick-your-tools framework.
+### What landed this session (all pushed, full suite green except known dialect-drift)
 
-### What landed this session (all pushed)
+- **OBSERVE layer — BUILT.** `src/observe.ts` ledger + all 5 emit kinds (compiled-hook gate,
+  agent contract-rail, skill-fire, trigger-rate, capability-diff) → `.vigiles/runs.jsonl`;
+  `vigiles audit` RENDERS it (`formatLedgerSummary`) + it's in the AuditReport JSON + HTML;
+  `debug-my-harness` model-invocable skill reads it. `.vigiles/runs.jsonl` gitignored.
+- **Verify-first launch positioning.** README front door retuned ("Catch the silent breakage
+  in your Claude Code & Codex setup"), + the tagline decision LOCKED in the README editor-guide.
+- **Two rules encoded** (`CLAUDE.md.spec.ts` + `startup/CLAUDE.md`): LINK DIRECTIONALITY
+  (doc-tiers — links point outward only; vault may cite research, research/public must NEVER
+  cite the vault) + VAULT rule 6 (competitive research saved in full detail, DEPTH-TAGGED
+  deep/medium/thin, coverage-mapped, cross-linked, indexed — shallow never masquerades as deep).
+- **Launch-surface CUTS (3/4).** Deleted the `hook-spec` spike; demoted the `scaffold-test`
+  VERB to skill-internal (engine kept); demoted "7 catalogs" from the README headline.
+  GUARDS KEPT (deliberate — it's a HIDDEN `hook-runtime guard` kind, not public surface;
+  clean removal would gut a real e2e test + touch shipped guardrail-check → not worth it).
 
-- **Direction elevated to 3 tiers:** root `CLAUDE.md` NEW `## Direction` section (north-star;
-  edit the SPEC `CLAUDE.md.spec.ts` + recompile, ~47 rules) + `research/harness-observability-direction.md`
-  (full TECH record, indexed) + `startup/` vault (tech **+** monetization/exit — vault ONLY).
-- **`src/observe.ts` + `src/observe.test.ts`** — the FOUNDATION: `.vigiles/runs.jsonl` ledger.
-  Versioned discriminated union (hook/agent/skill/eval/capability-diff), best-effort append
-  (never breaks a session), tolerant reader (torn lines skipped), typed `observationsOfKind`.
-  Placement = composition root (NOT core — not the ref-verify domain; NOT an adapter — kinds
-  are harness-neutral). tsc+eslint+prettier clean, 7/7 tests green.
-- **Vault docs** (`startup/`, git-crypt): `harness-tech-direction-2026.md` (two-camps tech map,
-  telemetry/default-install fork = local-first, pseudocode DX, fundability+exit thesis) +
-  cross-links in `funded-adjacency-2026.md` + index in `startup/CLAUDE.md`.
-- **OBSERVE LAYER — largely BUILT (all pushed, full suite green except known dialect-drift):**
-  - `src/observe.ts` ledger + 8 unit tests.
-  - **All 5 emit kinds wired:** compiled-hook gate (`emitGate`) + subagent contract rail
-    (`agentHookCommand`) in `src/cli.ts`; skill-fire (`skillStartCommand`); trigger-rate
-    recall/precision (`measureTriggerRate` in `src/eval.ts`); capability-diff (audit `--capability-diff`).
-  - **`vigiles audit` RENDERS it** — `formatLedgerSummary` (pure, tested) prints a "Flight
-    recorder" section (counts + recent denials). Smoke-tested end-to-end.
-  - **`debug-my-harness` skill** (model-invocable) — reads the ledger to diagnose; + dogfood
-    trigger eval; loads clean; skill enumerations + keyFiles synced (3→4 model-invocable).
-  - `.vigiles/runs.jsonl` is **gitignored** (runtime artifact, never committed).
-  - **AuditReport JSON + HTML integration DONE** — `summarizeObservations` (pure, shares
-    denial logic w/ the terminal formatter) → an ADDITIVE optional `observations` field on
-    AuditReport (NO schema bump — additive-only precedent). `audit --json` + the HTML report
-    (a `report/` Observations component + `report/src/schema.ts` mirror synced, parity test
-    green) both render it. Verified end-to-end (`--json` + built template).
+### THE PIVOT — 2nd-pass decisions of record (from Fable ×2 + hit-rate data)
 
-### DO NEXT (one heavier piece remains)
+- **Hit-rate (measured):** deterministic ecosystem catches are THIN (444 plugins mostly clean;
+  official 0/39 graded; ~3 graded in 170) → the "I audited N plugins" headline has no big N.
+  BEHAVIORAL is the shock: superpowers (752k installs) flagship `brainstorming` fires 10-30%.
+- **Viral artifact:** the behavioral "silent breakage" finding (a popular skill silently
+  doesn't fire), framed as SILENT-BREAKAGE, never "eval". ANONYMIZED + framed as
+  AREAS-FOR-IMPROVEMENT (user call — not a call-out). Deterministic layer = the free "why".
+- **Capability-diff: UN-HOLD + PROMOTE** — viral loop (GHA sticky PR comment, org-to-org) AND
+  the attestation primitive AND markdown-impossible. The #1 build.
+- **Monetization:** observability + attestation CONVERGE for the coding-harness TEAM buyer
+  (hosted tier aggregates the local ledger; its VALUE is the compliance/conformance EVIDENCE;
+  raw data stays local, no lock-in). First revenue = 3-5 design-partner conformance pilots
+  ($10-30K) with Tier-2 regulated enterprises via a red-team/cert channel — sales-led, not PLG.
+- **Adapters:** Cursor = VERIFY-ONLY (closed/unmockable); Gemini→Antigravity (closed); next
+  FULL adapter = OpenHands/Factory (mockable). Flue (Astro team, typed agent runtime) = adapter
+  target + typed-spec validation, not a competitor.
+- **Biggest risk:** speed-to-being-the-NAMED cross-harness auditor before Anthropic ships a
+  built-in `claude doctor`. CC+Codex neutrality is the hedge.
 
-1. **capability-diff PR comment** — the GHA integration. Building blocks EXIST:
-   `scan/audit --capability-diff <base>` computes it (+ emits a ledger record now);
-   `action.yml` already posts a sticky PR comment (find-by-marker). Wire: compute base ref in
-   the action → run capability-diff → fold into the comment. GHA-heavy → dogfood in this
-   repo's own CI (prod-grade-gha-cli).
+### IN FLIGHT + DO NEXT
 
-- Optional: unify the legacy `hook-observations.jsonl` writer fully into the ledger (both are
-  written today for back-compat — additive, no removal yet).
+- **RUNNING (background): competitor-teardown workflow** (`wf_17aa399e-e38`) — 5 clusters
+  (typed-spec frameworks / eval-testing / observability[Braintrust-deep] / gating-reliability /
+  attestation) → synthesis. THROTTLED (transient rate-limits); 2/5 clusters back last check.
+  On completion → **VAULT SAVE** per rule 6: `startup/competitor-teardown-2026.md` (full detail,
+  depth-tagged, coverage map, indexed, cross-linked) + FOLD IN the two Fable pivot reviews +
+  the anonymize/areas-for-improvement launch decision.
+- **QUEUED: #2 capability-diff PR comment** (GHA — checkout PR base, run `audit --capability-diff`,
+  fold into the existing sticky comment in `action.yml`; dogfood in this repo's CI). Sequenced
+  AFTER the workflow to avoid throttle contention. User approved "in agent".
+- Then the BUILD from the cohesion pass; the launch ARTICLE (behavioral finding, anonymized).
 
-### ALSO STILL OPEN (separate track — don't lose)
+### ALSO OPEN (separate track) + Gotchas
 
-- **PR #54 on branch `claude/haretrail-dogfood-pvdo9t`** — being WATCHED by hourly cron
-  `5438c724` (report green / fix red / CronDelete when merged). Merge is the USER's call.
-  Unrelated to this session's branch.
-
-### Gotchas
-
-- **`CLAUDE.md` is COMPILED** from `CLAUDE.md.spec.ts` — edit the spec + `node dist/cli.js
-compile CLAUDE.md.spec.ts`; NEVER hand-edit. Same for `src/`, `src/core/`, `research/`
-  CLAUDE.md (all in `.prettierignore`). A recompile-on-spec-change guard hook auto-runs.
-- **VAULT (`startup/`) is git-crypt encrypted + LOCKED at session start.** git-crypt is NOT
-  preinstalled → `apt-get install -y git-crypt`, then `git-crypt unlock <keyfile>` with the
-  user's base64 key (they paste it). Files re-encrypt on commit; verify a committed blob is
-  `\0GITCRYPT` before trusting. Key NEVER in the repo (scratchpad only).
-- **RESEARCH INDEX SYNC**: a new `research/*.md` needs a `keyFiles` line in
-  `research/CLAUDE.md.spec.ts` + `status:`/`topic:` frontmatter, else `src/research-index.test.ts` fails.
-- **RUN ESLINT on new files** — `no-confusing-void-expression` (a void-returning arrow
-  shorthand → add braces) + unused imports are ERRORS; `[...str]` too (use `Array.from`).
-- `prettier --check .` covers `HANDOFF.md` — `npx prettier --write HANDOFF.md` before commit.
-- `validate.test.ts` has a hardcoded `DEFAULT_RULES` literal that breaks on a new rule.
-- `dialect-drift.test.ts` fails LOCALLY (installed claude-code drifted from pinned 2.1.187);
-  CI pins it. Env-only, not a real break.
-- Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks). Conventional-Commit title.
+- **PR #54 on `claude/haretrail-dogfood-pvdo9t`** — watched by cron `5438c724`. Merge = user's call.
+- **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
+  `git-crypt unlock <keyfile>` with the user's base64 key; verify a committed blob is `\0GITCRYPT`.
+- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile,
+  NEVER hand-edit. Deleting a keyFiles-listed file → remove its keyFiles line first or compile FAILS.
+- RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
+- `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned 2.1.187); CI pins it. Env-only.
+- Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
+- Background agents share the working tree → don't commit while one is running (race). The teardown
+  WORKFLOW does not touch the tree (research only), so committing HANDOFF/vault while it runs is safe.
 
 ### Decisions of record (don't relitigate)
 
-- **Monetization lives ONLY in `startup/` vault.** Tech direction can live in `research/` +
-  root `CLAUDE.md`. Public docs = user benefit (no moat/flywheel, no `research/` links).
-- **Local-first, agent-readable observability — NOT hosted runtime/OTel prod ingestion.**
-  Record our OWN instruments locally; never sit in the request path.
-- **Typed spec = the ground truth.** Observability is precise on deterministic surfaces
-  (hooks/contracts/refs/capability) for free; skill-triggering (behavioral) needs
-  `measureTriggerRate` (authored expectation) or a fuzzy proxy — never claim passive-catches-a-miss.
-- Existing surfaces STAY; the ledger is connective tissue, not a replacement.
-- Adoption wedge: the "100s of how-to-write-skills blog posts" = demand no tool serves →
-  "measure whether your skill actually fires." Fundability/exit detail: vault only.
+- Verify-first tagline (locked); "Lighthouse for your agent harness" = the meme-handle.
+- Monetization ONLY in vault; local-first, no data lock-in; typed spec = ground truth.
+- Guards KEPT (hidden kind, low value to remove). Viral finding ANONYMIZED + areas-for-improvement.
+- Existing surfaces STAY; capability-diff is the un-hold priority; observe depth is frozen (built).
 
 ## Don't re-read unless the task needs it
 
 - `startup/harness-tech-direction-2026.md` — the full competitive tech + monetization + exit (vault).
 - `research/harness-observability-direction.md` — the tech direction of record.
-- `research/measurement-authority.md` / `research/roadmap.md` — pivot + front-door roadmap.
+- `research/roadmap.md` — the front-door roadmap.
