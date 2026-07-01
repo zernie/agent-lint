@@ -190,6 +190,23 @@ job that asserts the capability is present, run **`vigiles test --no-skip`** so 
 skipped tier fails — a green-with-skips is untested surface. Keep unit +
 deterministic tests in CI (free); run evals locally or on a schedule with auth.
 
+### After a real-model run: TELL THE USER WHAT IT SPENT
+
+Whenever you run a real-model eval (`runEval` / `measureArms` / `measureTriggerRate`
+/ `measure`), **surface the spend to the user in your reply** — don't let a paid run
+be silent. `runEval` prints a cost block to stderr and every report carries `usage`
+(`report.arms[*].usage`: `totalCostUsd` + token counts). Relay, in plain words:
+
+- **tokens spent** and the **API-equivalent `$`** (`total_cost_usd` — what it _would_
+  cost at metered API rates);
+- **how it was billed** — "on your Claude subscription (**$0 metered**)" if you're
+  logged in, or a **⚠ warning** if `ANTHROPIC_API_KEY` is set (that run was billed
+  **per token** — tell them to unset it and `claude login` to run free).
+
+We do **not** show "% of your subscription" — Anthropic doesn't expose a plan's
+quota, so any percentage would be invented. Tokens + API-equivalent `$` + the
+billed-to line is the honest, complete picture. Keep the user's cost visible, always.
+
 ## Step 5 — Lock the eval so CI stays honest (you do this automatically)
 
 Real-model evals run on the user's subscription — locally, never in CI. So **as

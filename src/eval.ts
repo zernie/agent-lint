@@ -37,6 +37,7 @@ import { resolve, join, dirname, delimiter } from "node:path";
 
 import { resolveHarness } from "./adapters/claude-code/plugin-loader.js";
 import { claudeCodeRuntime } from "./adapters/claude-code/runtime.js";
+import { emitCostSummary, costFromEvalReport } from "./eval-cost.js";
 import { ncd } from "./core/proofs.js";
 import {
   parseToolCalls,
@@ -414,7 +415,11 @@ export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
 export async function runEval<M extends Metrics>(
   spec: EvalSpec<M>,
 ): Promise<EvalReport> {
-  return runEvalWith(spec, spawnAgent);
+  const report = await runEvalWith(spec, spawnAgent);
+  // Surface what the run spent — tokens + API-equivalent $, and a LOUD warning if
+  // it was billed to a metered API key instead of the subscription. See eval-cost.ts.
+  emitCostSummary(costFromEvalReport(report));
+  return report;
 }
 /* v8 ignore stop */
 
