@@ -9,95 +9,79 @@
 
 ## RESUME HERE
 
-**Branch `claude/haretrail-dogfood-pvdo9t` — opening a PR + watching it** (user:
-"create pr n watch"). Based on post-#53 main (`c914cb5`). Started as a DOGFOOD of
-`vigiles audit` on a real third-party repo; turned into a docs + lint-rule batch.
+**Branch `claude/haretrail-dogfood-pvdo9t` — PR #54 OPEN, being WATCHED** (user said
+"watch", NOT merge — do NOT auto-merge; merge is the user's call). An hourly cron
+`5438c724` re-checks CI + mergeability: report green, fetch-logs-and-fix on red, stop
+(CronDelete) when merged/closed. HEAD `53e3dfa`.
 
-**RESUME STATE: about to create the PR and subscribe to its activity.** Once open:
-drive CI green (validate/test/etc.), fix failures, address any real Codex-review
-comment, watch until merge/close. **Conventional-Commits PR TITLE is load-bearing**
-(the `validate` job checks the TITLE) — use a `feat:`/`docs:` title; this branch is
-NOT breaking (no public API removed). A non-CLI PR opens with a prose title by
-default → fix it to a CC title immediately.
+Session started as a DOGFOOD of `vigiles audit` on `fleytman/haretrail` (a Codex
+skills repo) and turned into a docs + rules + **eval-cost-transparency** batch.
 
-### What landed this session (in order, all pushed)
+**RESUME STATE: cost-transparency feature is PARTLY done.** NEXT unfinished piece:
+**thread `usage` into `measure`/`measureArms` (`CheckReport`)** so the scored-check
+paths also print cost — SAME shape as the trigger-rate threading just shipped (the
+parser's `ParsedModelRun.usage` is the harness-neutral source; add `usage: ArmUsage`
+to `CheckReport`, aggregate in the run loop, emit in the v8-ignored wrapper). Ask the
+user first — the skill path (`measureTriggerRate`) + `runEval` already emit.
 
-1. **Dogfooded `vigiles audit` on `fleytman/haretrail`** (clone in scratchpad;
-   github blocks git-proto, so fetched the tarball via codeload). It's a Codex
-   skills repo: root `AGENTS.md` + 11 skills, no hooks/subagents/MCP/specs. Graded
-   **A 100/100**. REAL finding: 3 skills (`daily`/`retro`/`work-evidence`) have
-   **Cyrillic descriptions** — a true-positive cross-language trigger risk. Vigiles
-   BUG spotted (NOT fixed): lethal-trifecta finding labels paths as
-   `.codex/skills/…` but files are at `skills/…` — `onDiskPath` (scan.ts:566) exists
-   but isn't applied to that finding's label. Cosmetic.
-2. **`cfbc54d` docs** — FAQ "why are the strongest guarantees opt-in" (the opt-in =
-   gated-on-a-typed-program + adoption argument); linked from README + the guide.
-3. **`e3c969a` docs** — codified the **auto-vs-nudge** model in the 3 spec skills
-   (`strengthen`/`edit-spec`/`adopt-spec`): auto the con-free wins, NUDGE (with the
-   tradeoff) for anything costing config/plugins/CI-failure, never silently escalate
-   to strict. `adopt-spec` got explicit scannable adoption rules.
-4. **`d70f5a6` docs** — closed the **audit→behavioral→consent** gap: FAQ "what does
-   `audit` actually run (read vs measure) — why it found little", and turned the bare
-   "selection-collision matrix" name-drop in `for-plugin-authors.md` into a real
-   explanation. (Discovery: the N×N matrix is ALREADY SHIPPED — `scan-behavioral.ts`
-   309-575, runs under the `audit.measure` consent — it was just undocumented.)
-5. **`3305390` feat-ish** — new CLAUDE.md rule **`document-the-why`** (every
-   user-facing decision/concept gets a plain-language doc home; name-dropping ≠
-   documenting) + its deterministic FLOOR **`doc-command-coverage`**
-   (`src/doc-command-coverage.ts`, the INVERSE of self-command-refs: every public
-   verb is mentioned under `docs/`; dogfooded in its test).
-6. **`287e4ae` feat** — new lint rule **`skill-description-budget`** (warn-tier
-   trigger proxy, generous 500-char budget). Fully wired (detector + rule-meta
-   heuristic-behavioral→warn + DEFAULT_RULES + NUDGE group + scan + lint + docs/rules
-   - matrix + tests). Does NOT fire on haretrail — the earlier "634/781-char" was
-     BYTE counts; in CHARS (Cyrillic = 2 bytes) the longest is 463 < 500. Correctly
-     FP-safe.
+### What landed this session (all pushed)
 
-### DO NEXT / OPEN DECISIONS
+1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
+   scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
+   RU descriptions fire fine on EN prompts; it cried wolf on correct non-English
+   authoring). Why saved in that research doc; `one-detector-no-drift` example moved to
+   `description-overlap`.
+2. **Cost transparency** — `src/eval-cost.ts` (pure engine: tokens + API-equivalent `$`
+   - metered-vs-sub detection + session tally + formatter, fully unit-tested). Emits
+     after `runEval` (`abeb93e`) AND `measureTriggerRate` (threaded `usage` into
+     `TriggerRateReport`). NO "% of sub" (Anthropic doesn't expose plan quota). The
+     `test-harness` skill MUST relay spend to the user; `docs/measuring-skills.md` documents it.
+3. **`surface-architecture-decisions` rule** (`c1c8067`) — output arch decisions (file
+   placement, core/adapter/port, extend-vs-create) to chat in a scannable block with the
+   boundary reasoning. FOLDED IN parse-don't-validate + make-illegal-states-irrepresentable
+   (`53e3dfa`), framed as decisions-to-name (ts-essentials holds the mechanical how).
+4. Earlier batch (in prior handoff too): `document-the-why` rule + `doc-command-coverage`
+   check; `skill-description-budget` lint rule; audit→behavioral→consent + opt-in FAQ
+   docs; auto-vs-nudge in the 3 spec skills.
 
-- **PRIMARY: create the PR + watch it green → merge** (see RESUME STATE).
-- **#3 "deterministic collision-cluster" rule — RECOMMENDED DROP, pending user OK.**
-  Why: NCD is byte-level/language-bound → cannot catch haretrail's cross-language
-  collision; the real catch (the matrix) is already shipped + now documented; a
-  looser NCD cutoff would cry wolf (calibrated cutoff 0.2 sits below the 0.25
-  distinct-pair floor). Building it fails prefer-existing-solutions + don't-cry-wolf.
-- Optional cleanup: fix the cosmetic `.codex/skills/…` path mislabel (apply
-  `onDiskPath` to the trifecta finding label).
+### DO NEXT / OPEN
+
+- **PRIMARY: keep watching PR #54 → green** (cron `5438c724`). Merge is the USER's call.
+- **Cost:** thread `usage` into `measure`/`measureArms` `CheckReport` (last path) — optional, ask.
+- **#3 "collision-cluster" rule — RECOMMENDED DROP** (NCD is byte-level/language-bound,
+  can't catch cross-language collision; the model MATRIX already ships under
+  `audit.measure` consent). Pending user OK.
+- Cosmetic vigiles bug (unfixed): lethal-trifecta finding labels `.codex/skills/…` but
+  files are at `skills/…` — apply `onDiskPath` to that finding's label in `scan.ts`.
 
 ### Gotchas
 
-- `CLAUDE.md` is COMPILED from `CLAUDE.md.spec.ts` — never hand-edit; edit the spec +
-  `node dist/cli.js compile CLAUDE.md.spec.ts` (now **45 rules**).
-- A new LINT RULE touches ~12 files in lockstep — `rule-meta.test.ts` binds
-  rule-meta keys ↔ `docs/rules/*.md` by EXACT set match, and `setup-plan` must place
-  it in exactly one group (STRUCTURAL/WORKFLOW/NUDGE). Run rule-meta + setup-plan
-  tests before committing. (Used `skill-description-budget` as the worked template.)
-- **`dialect-drift.test.ts` FAILS here** — asserts the installed CC SDK tool set vs
-  the pinned `VALIDATED_CC_VERSION`; container CC differs. PRE-EXISTING + UNRELATED;
-  passes in CI where CC is pinned.
-- **`npm run fmt` reformats `research/`** (huge diff) — `npm run lint` does NOT gate
-  on warnings (0 errors = pass; repo carries ~173 warnings). String spread `[...str]`
-  is an eslint ERROR — use `Array.from(str)` for code-point length.
-- Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks them).
-  Conventional-Commits PR TITLE (the `validate` job checks the TITLE).
+- `CLAUDE.md` COMPILED from `CLAUDE.md.spec.ts` — edit the spec + `node dist/cli.js
+compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`.
+- **RUN ESLINT, not just fmt:check, on new files** — `no-confusing-void-expression`
+  (a void-returning arrow shorthand, e.g. `() => console.error(x)` / `() => reset()`)
+  is an ERROR (add braces); string spread `[...str]` too (use `Array.from`). `npm run
+lint` = 0 errors passes; the repo carries ~173 WARNINGS (not gated).
+- `node:test` files (`validate.test.ts`) aren't in my usual vitest subset — a hardcoded
+  `DEFAULT_RULES` literal there breaks on a new rule. Run the full suite / grep for it.
+- `prettier --check .` covers `HANDOFF.md` — run `npx prettier --write HANDOFF.md` before commit.
+- A new LINT RULE = ~12 files in lockstep (`rule-meta` EXACT-match `docs/rules/`; `setup-plan` group).
+- Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks). Conventional-Commit PR title.
+- Eval report types differ: only `EvalReport` carries `usage` natively; `CheckReport`/
+  `TriggerRateReport` need threading (source = the parser's `ParsedModelRun.usage`).
 
 ### Decisions of record (don't relitigate)
 
-- **Selection-collision: deterministic NCD is language-bound** → cross-language
-  collision is only catchable by the model-gated MATRIX (shipped, under consent).
-  Don't build a looser-NCD cluster rule.
-- **`skill-description-budget` is NUDGE-tier** (never gates); a length threshold is a
-  heuristic proxy → warn ceiling (lint-rule-calibration).
-- **"audit found little on haretrail" is substantially CORRECT** — its descriptions
-  are reasonable-length, nothing's structurally broken, and its real risk
-  (cross-language selection collision) is irreducibly model-gated. The missing thing
-  was discoverability (fixed in docs), not a new deterministic check.
-- Public docs name USER BENEFIT (no `moat`/`flywheel`, no `research/` links).
-  `startup/` LOCKED (git-crypt).
+- Cross-language deterministic flag is DEAD (refuted). If ever revived → key on language
+  INCONSISTENCY within a plugin (some EN, some RU), NOT "non-Latin", and only after measuring.
+- Cost: tokens + API-equivalent `$` + a metered-API warning; NEVER a fake "% of sub".
+- `surface-architecture-decisions` is now ACTIVE — output arch/placement decisions to chat.
+- Selection-collision: deterministic NCD is language-bound → the model MATRIX (shipped,
+  under `audit.measure` consent) is the real catch. Don't build a looser-NCD cluster rule.
+- Public docs = user benefit (no moat/flywheel, no `research/` links). `startup/` LOCKED.
 
 ## Don't re-read unless the task needs it
 
-- `research/measurement-authority.md` / `research/audit-wow-ideas.md` — the
-  behavioral-axis feature ideas (the killer-feature mining source this session).
-- `research/enforcement-model.md` — the bucket/severity model behind rule-meta.
-- `research/roadmap.md` — `🚀 Launch readiness`. `startup/` — git-crypt vault (LOCKED).
+- `research/plugin-behavioral-findings.md` — Finding 3a (cross-lang refuted) + the eval fixtures.
+- `research/measurement-authority.md` / `research/audit-wow-ideas.md` — behavioral feature ideas.
+- `research/roadmap.md` — the front-door roadmap. `startup/` — git-crypt vault (LOCKED).
