@@ -104,7 +104,7 @@ A real-model run tells you **exactly what it spent**, so a paid run is never sil
 
 - **No "% of your plan."** Anthropic doesn't expose a subscription's quota (the real limits are rolling rate windows, not a dollar bucket), so vigiles won't invent a percentage. Tokens + the API-equivalent `$` + how you were billed is the honest, complete picture — plus a running session tally across the runs in one sitting.
 
-The numbers also live on the report (`report.arms[*].usage`), and the `test-harness` skill relays them to you after any run it does on your behalf.
+The numbers also live on the report — `report.usage` for a single run (`measure`, `measureTriggerRate`) or `report.arms[*].usage` per arm (`runEval`, `measureArms`) — and the `test-harness` skill relays them to you after any run it does on your behalf.
 
 ## See also
 
