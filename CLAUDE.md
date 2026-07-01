@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:9ca6865dc7a15eb5 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:6a44b42c7fb4fa39 compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -478,6 +478,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### Subagent Model Note
 
 **Guidance only** — When you launch a subagent (the Agent/Task tool), tell the user in one short line WHICH model you chose for it and WHY — e.g. "spawning the Explore agent on Haiku — cheap fan-out read, no synthesis needed" or "using Opus for this one — it has to reconcile conflicting findings across docs". The user wants visibility into the model-selection tradeoff (cost vs capability) you're making on their behalf. Keep it to a clause, not a paragraph; do it at launch, not after.
+
+### Surface Architecture Decisions
+
+**Guidance only** — The user is often flying BLIND on structure — they can't see WHERE you put a file, whether a thing is CORE vs an ADAPTER vs a PORT, or whether you extended something vs created a sibling. So when you make a non-trivial ARCHITECTURAL decision, STATE IT IN CHAT in a short, scannable block BEFORE or AS you implement it — never bury it in a big diff the user then has to reverse-engineer. What counts as architectural (surface it): WHERE a new file / module / type / detector goes (and why THERE, in the tree); whether it's harness-agnostic CORE (`src/core/**`) vs an ADAPTER (`src/adapters/<harness>/**`) vs a PORT (the five injected interfaces) vs the composition/library root (`src/*.ts`); EXTENDING an existing verb/module/report-type vs creating a new one; a CROSS-CUTTING change touching many files or a shared type; and any placement the CONSTRAINTS make load-bearing. For each decision give three things, tight: (1) WHAT — the file/module + where it sits; (2) WHY THERE — the reasoning against OUR constraints, naming the relevant one (hexagonal `core ⊄ adapter` / multi-harness-behind-a-PORT + no-CC-literal-in-core / one-detector-no-drift / cohesive-cli-surface / the rule-meta triad / additive-and-lock-safe); (3) the ALTERNATIVE you rejected, in a clause, when there was a real fork (e.g. 'a new driver method vs reuse the parser's existing `usage` — chose reuse, it's harness-neutral already'). Keep it to a few bullets — a QUICK SCAN, not an essay; the point is the user catches a wrong call (a leaked adapter import, a type in the wrong layer) in seconds, before the diff. This is the STRUCTURE analog of subagent-model-note (which surfaces the model choice): surface the placement + boundary reasoning the same way. Especially load-bearing because vigiles is hexagonal + multi-adapter, where a wrong placement (core importing an adapter, a CC literal in core, a per-harness fact not behind a port) is exactly the mistake the boundaries exist to prevent — so say the boundary out loud as you honor it.
 
 ### Doc Per Rule
 
