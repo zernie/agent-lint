@@ -71,14 +71,11 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
 - **Biggest risk:** speed-to-being-the-NAMED cross-harness auditor before Anthropic ships a
   built-in `claude doctor`. CC+Codex neutrality is the hedge.
 
-### IN FLIGHT + DO NEXT (this session's #2/#3/#4 all landed)
+### DO NEXT (this session's #2/#3/#4 all landed; teardown re-run DONE + folded in)
 
-- **RUNNING (background): teardown RE-RUN** (`wf_2daca7be-bfc`) — the 4 `unrun` clusters
-  (typed-spec frameworks / observability[Braintrust-deep] / gating-reliability / attestation),
-  batched 2×2 (peak concurrency 2, not the prior 5) to avoid self-throttle. ON COMPLETION →
-  APPEND the 4 clusters into `startup/competitor-teardown-2026.md` (below agent-eval-testing) +
-  flip their coverage rows `unrun`→`deep`. Script:
-  `.../workflows/scripts/competitor-teardown-rerun-wf_2daca7be-bfc.js` (resumeFromRunId to retry).
+- **Teardown COMPLETE** — the 2×2 re-run (`wf_2daca7be-bfc`) returned all 4 clusters clean
+  (4/4, 0 err, ~9 min); folded into `startup/competitor-teardown-2026.md` → **5 clusters / 41
+  companies, all `deep`**. The batching fixed the self-throttle; no interrupt this time.
 - **The launch ARTICLE** — the behavioral silent-breakage finding, ANONYMIZED + framed as
   areas-for-improvement (decision recorded in the vault teardown doc). Not yet written.
 - **The cohesion-pass BUILD items** — the top poaches now also live in the teardown doc's
