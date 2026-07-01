@@ -55,7 +55,6 @@ function skill(over: Partial<ScanSkill> = {}): ScanSkill {
     path: "skills/s/SKILL.md",
     hasDescription: true,
     userInvoked: false,
-    descriptionScript: null,
     resourceIssues: [],
     trifecta: null,
     fenceIssue: null,

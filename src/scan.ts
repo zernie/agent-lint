@@ -102,19 +102,6 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-/** A named writing system. The label `unexpectedScript` reports + the config's expectation parse into this. */
-export type Script =
-  | "Latin"
-  | "Cyrillic"
-  | "Han"
-  | "Japanese"
-  | "Korean"
-  | "Arabic"
-  | "Hebrew"
-  | "Greek"
-  | "Devanagari"
-  | "Thai";
-
 export interface ScanSkill {
   readonly name: string;
   readonly path: string;
@@ -126,15 +113,6 @@ export interface ScanSkill {
    */
   readonly description?: string;
   readonly userInvoked: boolean;
-  /**
-   * The description's dominant script when it DIFFERS from the expected one
-   * (default `"Latin"`), else null. The model's skill-selection context is
-   * English-centric, so a description in another script carries a cross-language
-   * trigger risk — it may under-fire on English prompts. A RISK flag, not a
-   * defect (a language-matched audience is fine); measure the real gap with the
-   * `audit` trigger tier / `measureTriggerRate`.
-   */
-  readonly descriptionScript: Script | null;
   /**
    * SKILL.md body references to a bundled file (`scripts/`/`references/`/`assets/`
    * or a relative markdown link with an extension) that don't resolve on disk
@@ -482,61 +460,6 @@ function skillName(path: string): string {
   );
 }
 
-// [Unicode \p{Script=…} property value (Node native, no dependency), our Script
-// label]. Japanese kana fold to "Japanese". Latin is the DEFAULT expectation (the
-// selector is English-centric), but it's just a default — a language-matched pack
-// can declare a different expectation, and then the OTHER script is the mismatch.
-const SCRIPTS: readonly [string, Script][] = [
-  ["Latin", "Latin"],
-  ["Cyrillic", "Cyrillic"],
-  ["Han", "Han"],
-  ["Hiragana", "Japanese"],
-  ["Katakana", "Japanese"],
-  ["Hangul", "Korean"],
-  ["Arabic", "Arabic"],
-  ["Hebrew", "Hebrew"],
-  ["Greek", "Greek"],
-  ["Devanagari", "Devanagari"],
-  ["Thai", "Thai"],
-];
-
-/** Letter counts per named script label (Japanese kana folded together). */
-function scriptCounts(text: string): Map<Script, number> {
-  const counts = new Map<Script, number>();
-  for (const [script, label] of SCRIPTS) {
-    const n = (text.match(new RegExp(`\\p{Script=${script}}`, "gu")) ?? [])
-      .length;
-    if (n > 0) counts.set(label, (counts.get(label) ?? 0) + n);
-  }
-  return counts;
-}
-
-/**
- * The description's dominant alphabetic script when it DIFFERS from `expected`
- * (default `"Latin"`) — the cross-language trigger-risk signal. The model's
- * skill-selection context is English-centric, so a description written mostly in
- * another script may under-fire on English prompts. `expected` is a configurable
- * default, not a value judgement: a Russian-targeted pack sets it to `"Cyrillic"`
- * so its Cyrillic descriptions pass and an English one is flagged instead.
- * Returns null when the dominant script IS the expected one (or there's no
- * alphabetic content). Shared by `scan` and the future lint rule (one detector,
- * no drift). The ≥20% guard avoids a near-empty string tripping on one letter.
- */
-export function unexpectedScript(
-  text: string,
-  expected: Script = "Latin",
-): Script | null {
-  const counts = scriptCounts(text);
-  let total = 0;
-  let dominant: { label: Script; count: number } | null = null;
-  for (const [label, count] of counts) {
-    total += count;
-    if (!dominant || count > dominant.count) dominant = { label, count };
-  }
-  if (!dominant || dominant.label === expected) return null;
-  return dominant.count / total >= 0.2 ? dominant.label : null;
-}
-
 /**
  * The first prose paragraph of a SKILL.md body (after the frontmatter and any
  * leading `#` headings) — Claude Code's FALLBACK skill description when the
@@ -621,7 +544,6 @@ function scanSkills(
       hasDescription: Boolean(effectiveDesc && effectiveDesc.length >= 20),
       description: effectiveDesc?.trim(),
       userInvoked,
-      descriptionScript: effectiveDesc ? unexpectedScript(effectiveDesc) : null,
       resourceIssues,
       trifecta,
       // A SKILL.md opening with `name:`/`description:` but no `---` fence loads
@@ -1467,20 +1389,14 @@ function section(
   return [`${title} (${String(count)}):`, ...lines, ""];
 }
 
-/** One skill's report line: ✓/⚠ + name + notes (no-trigger, user-invoked, language risk). */
+/** One skill's report line: ✓/⚠ + name + notes (no-trigger, user-invoked). */
 function skillLine(s: ScanSkill): string {
   if (!s.hasDescription) {
     return `  ⚠ ${s.name} (no usable description — no frontmatter description and no body text — can't trigger)`;
   }
   const notes: string[] = [];
   if (s.userInvoked) notes.push("user-invoked");
-  if (s.descriptionScript) {
-    notes.push(
-      `description in ${s.descriptionScript} — cross-language trigger risk`,
-    );
-  }
-  const mark = s.descriptionScript ? "⚠" : "✓";
-  return `  ${mark} ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
+  return `  ✓ ${s.name}${notes.length ? ` (${notes.join("; ")})` : ""}`;
 }
 
 /** One agent's report block: ✗ (broken contract) / ⚠ (inherits all) / ✓ + issues + purity. */
@@ -1680,17 +1596,6 @@ export function formatScanReport(r: ScanReport): string {
   );
   if (warnings.length > 0) {
     out.push("Warnings:", ...warnings.map((w) => `  - ${w}`), "");
-  }
-
-  // Cross-language trigger risk is a RISK, not a structural defect (a
-  // language-matched audience is fine), so it's reported separately from the
-  // verdict — it points at the behavioral column, it doesn't fail the scan.
-  const mismatched = r.skills.filter((s) => s.descriptionScript);
-  if (mismatched.length > 0) {
-    out.push(
-      `⚠ ${String(mismatched.length)} skill(s) have descriptions in an unexpected script (cross-language trigger risk) — measure with \`vigiles measure\``,
-      "",
-    );
   }
 
   // Skill-metadata is a RECOMMENDATION, not a structural defect (the skill loads

@@ -287,11 +287,7 @@ the [`vigiles/testing` API](harness-testing.md) via `guardrail-check` /
 `assertBlocksDisasters`, where you opt in explicitly.)
 
 Under the rings, the detailed report lists per-skill description + user-invoked
-flag + **description-script** detection (a description whose dominant script differs
-from the expected one — **default Latin, configurable** — carries a cross-language
-trigger risk: the selector is English-centric, so a Cyrillic/CJK/… description may
-under-fire on English prompts; a RISK flag, not a defect — measure it with the
-trigger tier), per-agent tool contract (and the "no `tools:` line → inherits every tool"
+flag, per-agent tool contract (and the "no `tools:` line → inherits every tool"
 footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
 detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
 report file.
