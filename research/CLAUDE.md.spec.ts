@@ -122,6 +122,7 @@ export default claude({
     "research/harness-state-space.md": `[active] States the "minimize harness state-space" organizing thesis (construct/verify/gate/test) and ranks moat-hunting bets via analogical transfer`,
     "research/pre-release-focus.md": `[active] Pre-launch triage: freeze VERIFY+MEASURE as the two public pillars, park/polish the rest`,
     "research/roadmap.md": `[active] Consolidated front-door roadmap ranking all open items Now/Next/Later/Backlog/Explore/Rejected across the project`,
+    "research/harness-observability-direction.md": `[active] Tech direction of record: the four-instrument loop (verify/gate/measure/observe), the deterministic-vs-behavioral precision principle, the local agent-readable runs.jsonl flight-recorder ledger, promote-prose, and the per-surface map`,
 
     // ── sandbox ──
     "research/bash-effect-classification.md": `[shipped] Design for the deterministic (no-LLM) Bash command effect classifier — decidable read-only subset, fail-closed residue`,

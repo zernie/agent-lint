@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:c820dfd227ec2281 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:dccc945ba72e2d5e compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -87,6 +87,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/harness-state-space.md` — [active] States the "minimize harness state-space" organizing thesis (construct/verify/gate/test) and ranks moat-hunting bets via analogical transfer
 - `research/pre-release-focus.md` — [active] Pre-launch triage: freeze VERIFY+MEASURE as the two public pillars, park/polish the rest
 - `research/roadmap.md` — [active] Consolidated front-door roadmap ranking all open items Now/Next/Later/Backlog/Explore/Rejected across the project
+- `research/harness-observability-direction.md` — [active] Tech direction of record: the four-instrument loop (verify/gate/measure/observe), the deterministic-vs-behavioral precision principle, the local agent-readable runs.jsonl flight-recorder ledger, promote-prose, and the per-surface map
 - `research/bash-effect-classification.md` — [shipped] Design for the deterministic (no-LLM) Bash command effect classifier — decidable read-only subset, fail-closed residue
 - `research/cross-platform-sandboxing.md` — [active] bwrap (Linux) + sandbox-exec (macOS) native backends behind one os-isolation port
 - `research/egress-sandbox-tooling.md` — [active] Recommends swapping slirp4netns for pasta to fix egress-sandbox CI failures on GH runners
