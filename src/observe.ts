@@ -156,6 +156,51 @@ export function observationsOfKind<K extends ObservationRecord["kind"]>(
   );
 }
 
+/** Was this record a denial (a blocked gate or an out-of-contract tool call)? */
+function isDenial(r: ObservationRecord): boolean {
+  return (
+    (r.kind === "hook" && r.decision === "deny") ||
+    (r.kind === "agent" && !r.allowed)
+  );
+}
+
+/** One line describing a denial for the summary. */
+function denialLine(r: ObservationRecord): string {
+  if (r.kind === "hook")
+    return `    ✗ hook ${r.rule ?? r.event}: ${r.reason ?? "denied"}`;
+  if (r.kind === "agent")
+    return `    ✗ ${r.name} → ${r.tool}: ${r.reason ?? "outside contract"}`;
+  return "";
+}
+
+/**
+ * A compact human summary of the ledger for `vigiles audit` — total, counts by kind,
+ * and the recent high-signal denials. Empty string when there is nothing recorded, so
+ * the caller can skip the section entirely.
+ */
+export function formatLedgerSummary(
+  records: readonly ObservationRecord[],
+): string {
+  if (records.length === 0) return "";
+  const lines: string[] = [
+    `Flight recorder — ${records.length} record${records.length === 1 ? "" : "s"} in .vigiles/${LEDGER_FILE}`,
+  ];
+
+  const counts = new Map<ObservationRecord["kind"], number>();
+  for (const r of records) counts.set(r.kind, (counts.get(r.kind) ?? 0) + 1);
+  const byKind = Array.from(counts.entries())
+    .map(([k, n]) => `${n} ${k}`)
+    .join(", ");
+  lines.push(`  by kind: ${byKind}`);
+
+  const denials = records.filter(isDenial);
+  if (denials.length > 0) {
+    lines.push(`  recent denials (${denials.length}):`);
+    for (const r of denials.slice(-5)) lines.push(denialLine(r));
+  }
+  return lines.join("\n");
+}
+
 /** Parse one JSONL line into a record, or `null` if it is not a well-formed record. */
 function tryParseRecord(line: string): ObservationRecord | null {
   try {

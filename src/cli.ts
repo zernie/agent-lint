@@ -218,7 +218,11 @@ import {
   popActiveAgent,
   decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
-import { appendObservation } from "./observe.js";
+import {
+  appendObservation,
+  readObservations,
+  formatLedgerSummary,
+} from "./observe.js";
 import {
   setEffectActive,
   clearEffectActive,
@@ -6557,6 +6561,11 @@ async function main(): Promise<void> {
               .length,
           );
           if (fireNudge) console.log("\n" + fireNudge);
+          // The flight recorder: a compact summary of what the harness actually
+          // DID in real sessions (hook/agent decisions), read off the local
+          // agent-readable ledger. Empty (skipped) until something is recorded.
+          const ledgerSummary = formatLedgerSummary(readObservations(root));
+          if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
         // firing). A plain `audit` is a deterministic READ; these run only on
