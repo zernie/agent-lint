@@ -12,6 +12,7 @@ how-to; this is the reference you reach for when you need the exact name or knob
 - [The `check` vocabulary](#the-check-vocabulary)
 - [vitest / jest matchers](#vitest--jest-matchers)
 - [`measureTriggerRate` options](#measuretriggerrate-options)
+- [Selection-collision matrix (Claude Code only)](#selection-collision-matrix-claude-code-only)
 - [`runEval`, `measure`, `measureArms`](#runeval-measure-measurearms)
 - [Significance &amp; regression gating](#significance--regression-gating)
 - [Imports &amp; harness selection](#imports--harness-selection)
@@ -297,6 +298,44 @@ assertTriggerRate(report, { min: 0.8, maxFalsePositive: 0.1 });
 - **Comparing models** is a harness A/B — set a per-arm `model` in `measureArms` /
   `runEval`, no separate matrix runner.
 
+## Selection-collision matrix (Claude Code only)
+
+> **🔵 Claude Code only — import from `vigiles/claude-code`, not `vigiles/testing`.**
+> This reads _which_ skill the selector chose, and only Claude Code surfaces that
+> (Codex has no skill-selection event). On any other harness it returns
+> `available: false` rather than a fake pass.
+
+Per-skill trigger-rate asks each skill in isolation. It can't catch the failure
+that breaks a _multi-skill_ plugin: one skill hijacking a **sibling's** prompt.
+`measureSelectionMatrix` runs each skill's own prompts against the whole installed
+set and records which skill fired — an N×N matrix whose diagonal is recall and
+whose off-diagonal mass is collision.
+
+```ts
+import { measureSelectionMatrix, assertNoCollision } from "vigiles/claude-code";
+
+const report = await measureSelectionMatrix("./my-plugin", {
+  // prompts auto-derived from each skill's description (zero setup);
+  // pass `prompts` (a { skill: { prompts: [...] } } map) for a curated set.
+  trials: 1,
+});
+
+// Fail the build when a sibling steals a skill's prompt.
+assertNoCollision(report, { maxOffDiagonal: 0.2 }); // per-skill collision ceiling
+// or gate the plugin-wide rate: assertNoCollision(report, { maxPluginCollision: 0.1 })
+```
+
+- **Zero-setup** — omit `prompts` and they're derived from descriptions (the same
+  generator the `audit` trigger tier uses). Body-stubbed, so it measures
+  _selection_ cheaply (the skill's procedure never runs).
+- **`assertNoCollision`** — with no options it demands **zero** collision;
+  `maxOffDiagonal` caps each skill's collision rate, `maxPluginCollision` caps the
+  plugin-wide rate. It **throws on a green that tested nothing** (unavailable
+  harness / zero runs), never a silent pass.
+- It's the behavioral confirmation of the deterministic
+  [`description-overlap`](rules/description-overlap.md) lint rule: the rule says
+  "these two look confusable," the matrix says "they collide X% of the time."
+
 ## `runEval`, `measure`, `measureArms`
 
 `runEval` drives the real model N trials × arm and aggregates: **mean** for
@@ -425,6 +464,10 @@ deliberate surfaces, not aliases:
 - **Authoring** — `vigiles/spec`: the spec builders for `.spec.ts` files.
 - **CC-specific transport** — `scriptModel`, `loadPlugin`, `resolveHarness`,
   `LoadedPlugin` live in `vigiles/claude-code`, not `vigiles/testing`.
+- **CC-only measurement** — `measureSelectionMatrix` / `assertNoCollision` live in
+  `vigiles/claude-code` too. They read which skill the selector chose (Codex has no
+  such event), so they can't sit on the agnostic surface. Everything else measured
+  (`measureTriggerRate`, `measure`, `runEval`) is on `vigiles/testing`.
 - **Runner integration** — `vigiles/vitest` / `vigiles/jest`.
 - **Harness selection** — `vigiles/claude-code` / `vigiles/codex` / `vigiles/adapter`.
 

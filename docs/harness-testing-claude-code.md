@@ -149,6 +149,13 @@ This is the **one** tier that needs model auth, so — unlike Tiers 0–2 — it
 **not** run in CI. Full file:
 [`examples/harness/oh-my-claudecode-eval.eval.mjs`](../examples/harness/oh-my-claudecode-eval.eval.mjs).
 
+**Multi-skill plugin? Also gate _selection collision_.** `measureTriggerRate`
+tests one skill in isolation; for a plugin where several skills do similar things,
+`measureSelectionMatrix` + `assertNoCollision` catch one skill hijacking a
+sibling's prompt. It's **Claude-Code-only** (it reads which skill the selector
+chose) — import it from `vigiles/claude-code`, and see the
+[testing API reference](testing-api.md#selection-collision-matrix-claude-code-only).
+
 ## Test the whole machine (`plugin`)
 
 The unit that matters is the _assembled_ plugin/repo: hooks + settings +
