@@ -287,6 +287,10 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "Doc-command coverage — the INVERSE of self-command-refs and the deterministic FLOOR under the document-the-why rule. self-command-refs checks docs→code (every `vigiles <cmd>` ref resolves); this checks code→docs (every public VERB is MENTIONED under docs/, so a verb shipped without a doc home fails CI). HIGH-PRECISION, biased AGAINST a false 'undocumented' alarm: 'mentioned' is matched generously in a COMMAND context (`vigiles <verb>` or a backtick-prefixed `` `<verb> ``), so a bare English word ('test'/'audit') doesn't count but a documented verb always does. hook-runtime (the hidden runtime umbrella) is exempt. Pure detector reused by the repo dogfood in src/doc-command-coverage.test.ts",
     "src/doc-command-coverage.test.ts":
       "Doc-command-coverage unit tests + the repo DOGFOOD: every public VERB is mentioned under docs/ (the floor under document-the-why). verbMentioned counts a command context not a bare word, findUndocumentedVerbs flags a verb absent from all docs and exempts hook-runtime",
+    "src/research-index.ts":
+      "Research-index completeness — the cross-reference moat applied to the `research/` corpus's OWN index. The index is `research/CLAUDE.md.spec.ts` (a scoped claude() spec whose keyFiles map every research doc); the compiler already verifies index→disk (a keyFiles path that doesn't exist fails compile), so this closes the reverse: unindexedResearchDocs flags a `research/*.md` (except README.md) with NO index entry, deadIndexEntries flags an entry pointing at a deleted doc. Pure detector reused by the repo dogfood in src/research-index.test.ts — bidirectional sync = compiler + this check",
+    "src/research-index.test.ts":
+      "Research-index unit tests + the repo DOGFOOD: every research/*.md is indexed in research/CLAUDE.md.spec.ts (add a doc → add its line), no index entry points at a deleted doc. The deterministic floor keeping the research corpus map complete",
     "src/core/spec.test.ts": "Spec + compiler test suite (node:test)",
     "src/core/agent.test.ts":
       "Subagent compilation test suite (node:test): agent() builder + compileAgent — frontmatter, tool-contract verification (built-in/MCP/never-available/did-you-mean), body-ref validation, Rules section, hash, adoptDiff round-trip",
@@ -466,6 +470,8 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
     "src/core/proofs.test.ts":
       "Proof system + evolution engine tests (node:test)",
     "CLAUDE.md.spec.ts": "This file — the source of truth for CLAUDE.md",
+    "research/CLAUDE.md.spec.ts":
+      "The scoped INDEX spec for the research/ corpus: a claude() spec whose keyFiles map every research/*.md to a one-line, status-tagged summary (grouped by topic), so a session working in research/ gets the whole corpus as directory memory without opening 114 files. Compiles to research/CLAUDE.md; every keyFiles path is compiler-verified to exist, and the research-index-complete dogfood (src/research-index.test.ts) asserts the reverse — every doc is indexed. Mirrors src/CLAUDE.md.spec.ts (the code map); this is the research map. Each doc also carries status:/topic: frontmatter (grep -l 'status: superseded' research/*.md)",
     "examples/SKILL.md.spec.ts": "Example SKILL.md spec",
     "examples/railway/ship-pr.md.spec.ts":
       "Dogfood: a railway() over five flat agent() workers (planner→implementer→reviewer, bounded fixer recovery, reporter error track), each with a result() contract. Compiles via the real `vigiles compile` to ship-pr.md (orchestrator command) + one .md per agent (with vigiles:ok/err Output contracts); every delegate() target is resolved against the sibling agent specs at compile time",
