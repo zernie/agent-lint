@@ -80,7 +80,9 @@ describe("detectBilling", () => {
 });
 
 describe("session tally", () => {
-  beforeEach(() => resetSessionCost());
+  beforeEach(() => {
+    resetSessionCost();
+  });
 
   it("accumulates across runs", () => {
     expect(sessionCost().costUsd).toBe(0);
@@ -135,7 +137,9 @@ describe("formatCostSummary", () => {
 });
 
 describe("emitCostSummary", () => {
-  beforeEach(() => resetSessionCost());
+  beforeEach(() => {
+    resetSessionCost();
+  });
 
   it("records the session and writes to the injected sink", () => {
     const lines: string[] = [];
