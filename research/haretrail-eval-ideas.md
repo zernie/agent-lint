@@ -2,11 +2,12 @@
 
 Captured from a deep dogfood of `vigiles audit` on `fleytman/haretrail` (a Codex
 skills repo: root `AGENTS.md` + 11 prose skills, each with `references/workflow.md`
-+ `../_shared/system-behavior.md`; 7 have a Codex `agents/openai.yaml`; a
-`scripts/triggers/en.json` **trigger manifest**; shell installers; **no hooks, no
-CC subagents, no MCP, no specs**). audit graded it A-100 and only flagged the (now
-REMOVED) Cyrillic-description finding — which prompted asking what audit *could*
-find. These are the ideas, not yet built.
+
+- `../_shared/system-behavior.md`; 7 have a Codex `agents/openai.yaml`; a
+  `scripts/triggers/en.json` **trigger manifest**; shell installers; **no hooks, no
+  CC subagents, no MCP, no specs**). audit graded it A-100 and only flagged the (now
+  REMOVED) Cyrillic-description finding — which prompted asking what audit _could_
+  find. These are the ideas, not yet built.
 
 ## New DETERMINISTIC audit/lint checks (the cross-reference moat on surfaces we don't parse yet)
 
@@ -51,10 +52,10 @@ work-evidence/summary/lessons/postmortem) — Finding 3b was blocked by a usage 
    hand-authored `irrelevantPrompts`. Generalizes to any plugin with described skills.
 3. **`measureTriggerRate({ locales: ['en','ru'] })` — a cross-lingual axis.**
    Recall per language, side by side (formalizes the hand-run Finding 3a). Useful for
-   any multilingual plugin. NB the deterministic Cyrillic *flag* was removed (refuted),
-   but this *measurement* helper still has value on request.
+   any multilingual plugin. NB the deterministic Cyrillic _flag_ was removed (refuted),
+   but this _measurement_ helper still has value on request.
 4. **`measureDescriptionAblation` — does the description earn its length?** A/B full
-   description vs first-sentence-only → recall delta. The *measured* payoff of the
+   description vs first-sentence-only → recall delta. The _measured_ payoff of the
    `skill-description-budget` warn rule. Rides the existing `runEval`/`measureArms` A/B.
 5. **`withPluginFixture` — the plugin seeds its own behavioral test.** Materialize the
    plugin's own `templates/` + `examples/fixture-data-repo/` as ground truth for the
@@ -63,7 +64,7 @@ work-evidence/summary/lessons/postmortem) — Finding 3b was blocked by a usage 
 
 ## Honest framing
 
-- On a content-only skills repo, the deterministic *test* tier (runHook / tool-contract)
+- On a content-only skills repo, the deterministic _test_ tier (runHook / tool-contract)
   has ~nothing to bite (no hooks/subagents) — the value is **behavioral**.
 - Only **prompts-derived-from-descriptions** generalize to every plugin; the manifest
   (#2's freebie) and fixtures (#5) are haretrail bonuses.
