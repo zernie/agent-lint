@@ -164,13 +164,65 @@ function isDenial(r: ObservationRecord): boolean {
   );
 }
 
-/** One line describing a denial for the summary. */
-function denialLine(r: ObservationRecord): string {
+/** A denial rendered as a structured `{label, reason}` — the shared shape the
+ *  terminal line and the JSON summary both derive from (one-detector-no-drift). */
+export interface LedgerDenial {
+  readonly label: string;
+  readonly reason: string;
+}
+
+/** Per-kind record count. */
+export interface LedgerCount {
+  readonly kind: ObservationRecord["kind"];
+  readonly count: number;
+}
+
+/** The structured ledger summary carried in the versioned AuditReport JSON. */
+export interface LedgerSummary {
+  readonly total: number;
+  readonly counts: readonly LedgerCount[];
+  readonly denials: number;
+  /** The most recent denials (blocked gates / out-of-contract tool calls). */
+  readonly recentDenials: readonly LedgerDenial[];
+}
+
+/** Structured description of a denial (the single source for label + reason). */
+function denialParts(r: ObservationRecord): LedgerDenial {
   if (r.kind === "hook")
-    return `    ✗ hook ${r.rule ?? r.event}: ${r.reason ?? "denied"}`;
+    return { label: `hook ${r.rule ?? r.event}`, reason: r.reason ?? "denied" };
   if (r.kind === "agent")
-    return `    ✗ ${r.name} → ${r.tool}: ${r.reason ?? "outside contract"}`;
-  return "";
+    return {
+      label: `${r.name} → ${r.tool}`,
+      reason: r.reason ?? "outside contract",
+    };
+  return { label: r.kind, reason: "" };
+}
+
+/** One line describing a denial for the terminal summary. */
+function denialLine(r: ObservationRecord): string {
+  const d = denialParts(r);
+  return `    ✗ ${d.label}: ${d.reason}`;
+}
+
+/**
+ * The structured ledger summary for the AuditReport JSON — total, per-kind counts,
+ * and the recent denials. `undefined` when nothing is recorded, so the report field
+ * stays absent (additive/optional). Shares `isDenial`/`denialParts` with the
+ * terminal `formatLedgerSummary` so the two can't drift.
+ */
+export function summarizeObservations(
+  records: readonly ObservationRecord[],
+): LedgerSummary | undefined {
+  if (records.length === 0) return undefined;
+  const map = new Map<ObservationRecord["kind"], number>();
+  for (const r of records) map.set(r.kind, (map.get(r.kind) ?? 0) + 1);
+  const denied = records.filter(isDenial);
+  return {
+    total: records.length,
+    counts: Array.from(map.entries()).map(([kind, count]) => ({ kind, count })),
+    denials: denied.length,
+    recentDenials: denied.slice(-5).map(denialParts),
+  };
 }
 
 /**

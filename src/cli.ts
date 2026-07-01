@@ -222,6 +222,7 @@ import {
   appendObservation,
   readObservations,
   formatLedgerSummary,
+  summarizeObservations,
 } from "./observe.js";
 import {
   setEffectActive,
@@ -6532,10 +6533,14 @@ async function main(): Promise<void> {
           root,
           adapter.layout.instructionFile,
         );
+        // Read the local flight recorder ONCE — feeds both the JSON report
+        // (structured summary, the product boundary) and the terminal render.
+        const ledgerRecords = readObservations(root);
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
           adoptableSurfaces,
+          observations: summarizeObservations(ledgerRecords),
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -6570,7 +6575,7 @@ async function main(): Promise<void> {
           // The flight recorder: a compact summary of what the harness actually
           // DID in real sessions (hook/agent decisions), read off the local
           // agent-readable ledger. Empty (skipped) until something is recorded.
-          const ledgerSummary = formatLedgerSummary(readObservations(root));
+          const ledgerSummary = formatLedgerSummary(ledgerRecords);
           if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
