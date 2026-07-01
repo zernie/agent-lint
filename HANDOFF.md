@@ -24,25 +24,27 @@ optional/ask-first** (`research/haretrail-eval-ideas.md`): deriveTriggerSetFromM
 
 ### What landed this session (all pushed)
 
-−1. **`measureSelectionMatrix` + `assertNoCollision`** (`90eb01b`) — PROMOTED the
-cross-skill selection-collision matrix (was CLI-only under audit consent) to a
-first-class assertable eval primitive. Zero-setup (auto-derives prompts from
-descriptions), `assertNoCollision({maxOffDiagonal})` gates it. Exported on
-**`vigiles/claude-code`** NOT agnostic `vigiles/testing` (CC-only — reads the
-selector's choice; scan-behavioral is Codex-adapter-coupled). Thin wrapper over the
-existing `measurePluginSelection`; `measureSelectionMatrixWith` = injectable core.
-Example eval + no-model tests + for-plugin-authors.md CI path.
-−0.5 **Cost threading — LAST path** (`2268cef`) — `measure`/`measureArms` now carry
-`usage: ArmUsage` on `CheckReport` + emit cost in the v8-ignored wrappers (measureArms
-sums both arms). ALL four eval paths now print spend. (runEval + measureTriggerRate
-already did.) So the cost-transparency feature is now COMPLETE. 0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
-`status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
-NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
-index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
-Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
-`src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
-stays the human index, now points at the machine one. `.prettierignore` gained the
-nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
+- **`measureSelectionMatrix` + `assertNoCollision`** (`90eb01b`) — PROMOTED the
+  cross-skill selection-collision matrix (was CLI-only under audit consent) to a
+  first-class assertable eval primitive. Zero-setup (auto-derives prompts from
+  descriptions), `assertNoCollision({maxOffDiagonal})` gates it. Exported on
+  **`vigiles/claude-code`** NOT agnostic `vigiles/testing` (CC-only — reads the
+  selector's choice; scan-behavioral is Codex-adapter-coupled). Thin wrapper over the
+  existing `measurePluginSelection`; `measureSelectionMatrixWith` = injectable core.
+  Example eval + no-model tests + for-plugin-authors.md CI path.
+- **Cost threading — LAST path** (`2268cef`) — `measure`/`measureArms` now carry
+  `usage: ArmUsage` on `CheckReport` + emit cost in the v8-ignored wrappers (measureArms
+  sums both arms). ALL four eval paths now print spend (runEval + measureTriggerRate
+  already did) — the cost-transparency feature is now COMPLETE.
+
+0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
+   `status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
+   NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
+   index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
+   Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
+   `src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
+   stays the human index, now points at the machine one. `.prettierignore` gained the
+   nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
 
 1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
    scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
@@ -89,13 +91,17 @@ compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`. SAME fo
   (a void-returning arrow shorthand, e.g. `() => console.error(x)` / `() => reset()`)
   is an ERROR (add braces); string spread `[...str]` too (use `Array.from`). `npm run
 lint` = 0 errors passes; the repo carries ~173 WARNINGS (not gated).
-- `node:test` files (`validate.test.ts`) aren't in my usual vitest subset — a hardcoded
-  `DEFAULT_RULES` literal there breaks on a new rule. Run the full suite / grep for it.
+- `validate.test.ts` has a hardcoded `DEFAULT_RULES` literal that breaks on a new rule.
+  Run the full suite (`npx vitest run`) / grep for it. (It IS vitest, not node:test.)
 - `prettier --check .` covers `HANDOFF.md` — run `npx prettier --write HANDOFF.md` before commit.
 - A new LINT RULE = ~12 files in lockstep (`rule-meta` EXACT-match `docs/rules/`; `setup-plan` group).
 - Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks). Conventional-Commit PR title.
-- Eval report types differ: only `EvalReport` carries `usage` natively; `CheckReport`/
-  `TriggerRateReport` need threading (source = the parser's `ParsedModelRun.usage`).
+- Eval `usage` is now threaded on ALL report types (`EvalReport`, `CheckReport`,
+  `TriggerRateReport`) — source is the parser's `ParsedModelRun.usage`. Adding a new
+  report type? Carry `usage: ArmUsage` + `aggregateUsage` in the loop (that's the pattern).
+- **Selection-matrix lives on `vigiles/claude-code`** (CC-only), NOT `vigiles/testing`
+  (agnostic). `scan-behavioral` imports the Codex adapter → never re-export it from the
+  agnostic barrel. `assertNoCollision` sits there too (co-located with its report type).
 
 ### Decisions of record (don't relitigate)
 
