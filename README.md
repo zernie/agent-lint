@@ -170,9 +170,10 @@ This subagent — a helper your main agent hands a task to — declares a tool t
 doesn't exist. The harness drops it silently, so the agent loses a capability it
 thinks it has. vigiles catches it and gives you the **one-line fix**.
 
-That's the whole idea — it checks your harness against reality, not style. Every path,
-script, code symbol, and linter rule, verified to exist _and_ be enabled across 7
-catalogs (ESLint, Ruff, Clippy + four more).
+That's the whole idea — it checks your harness against reality, not style. Every
+referenced tool, hook, file, script, and skill is verified to actually resolve — and
+where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff,
+Clippy and more).
 **[Full guide →](docs/verifying-instruction-files.md)**
 
 All three catches are free and need no model — and vigiles **prevents** other whole
