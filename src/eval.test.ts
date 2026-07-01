@@ -67,6 +67,17 @@ import { tool, output, turns, judged } from "./check.js";
 import { parseIntercepts } from "./tool-intercept.js";
 import { makeTmpDir, cleanupTmpDir } from "./core/test-utils.js";
 
+/** A zero ArmUsage for TriggerRateReport fixtures (cost isn't what these assert). */
+const zeroUsage = {
+  totalCostUsd: 0,
+  meanCostUsd: 0,
+  meanDurationMs: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCacheReadTokens: 0,
+};
+
 test("aggregateStats reports mean, sample std, se, and n", () => {
   const s = aggregateStats([{ x: 2 }, { x: 4 }, { x: 6 }]);
   assert.equal(s.x.mean, 4);
@@ -1528,6 +1539,7 @@ test("formatTriggerRateReport labels an isolated run honestly (upper-bound recal
     n: 1,
     perPrompt: [],
     competitors: 0,
+    usage: zeroUsage,
   });
   assert.ok(out.includes("isolated"));
   assert.ok(out.toLowerCase().includes("upper bound"));
@@ -2059,7 +2071,13 @@ test("runEvalWith aborts when maxCostUsd is exceeded", async () => {
 });
 
 test("assertTriggerRate gates on the minimum rate", () => {
-  const report = { rate: 0.5, n: 4, perPrompt: [], competitors: 0 };
+  const report = {
+    rate: 0.5,
+    n: 4,
+    perPrompt: [],
+    competitors: 0,
+    usage: zeroUsage,
+  };
   assert.doesNotThrow(() => {
     assertTriggerRate(report, { min: 0.5 });
   });
@@ -2077,6 +2095,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
     precision: 0.667,
     perIrrelevant: [],
     competitors: 0,
+    usage: zeroUsage,
   };
   // within both thresholds → ok
   assert.doesNotThrow(() => {
@@ -2100,6 +2119,7 @@ test("assertTriggerRate gates precision: false-positive rate and minPrecision", 
         falsePositiveRate: 0,
         precision: undefined,
         competitors: 0,
+        usage: zeroUsage,
       },
       { minPrecision: 0.5 },
     );
