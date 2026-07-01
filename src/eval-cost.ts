@@ -190,6 +190,11 @@ export function emitCostSummary(
   const billing = detectBilling(opts.env ?? process.env);
   const session = recordSessionCost(c);
   const text = formatCostSummary(c, { billing, session });
-  (opts.out ?? ((s: string): void => console.error(s)))(text);
+  (
+    opts.out ??
+    ((s: string): void => {
+      console.error(s);
+    })
+  )(text);
   return text;
 }
