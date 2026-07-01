@@ -71,12 +71,14 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
 - **Biggest risk:** speed-to-being-the-NAMED cross-harness auditor before Anthropic ships a
   built-in `claude doctor`. CC+Codex neutrality is the hedge.
 
-### DO NEXT (all this session's queued items are DONE — #2/#3/#4 landed)
+### IN FLIGHT + DO NEXT (this session's #2/#3/#4 all landed)
 
-- **RE-RUN the 4 `unrun` teardown clusters** — typed-spec frameworks / observability
-  (Braintrust-deep) / gating-reliability / attestation. The workflow died throttled; re-run a
-  fresh one OFF-PEAK, or fold into `funded-adjacency-2026.md` / `harness-tech-direction-2026.md`
-  (partial coverage there). Coverage map is in `startup/competitor-teardown-2026.md`.
+- **RUNNING (background): teardown RE-RUN** (`wf_2daca7be-bfc`) — the 4 `unrun` clusters
+  (typed-spec frameworks / observability[Braintrust-deep] / gating-reliability / attestation),
+  batched 2×2 (peak concurrency 2, not the prior 5) to avoid self-throttle. ON COMPLETION →
+  APPEND the 4 clusters into `startup/competitor-teardown-2026.md` (below agent-eval-testing) +
+  flip their coverage rows `unrun`→`deep`. Script:
+  `.../workflows/scripts/competitor-teardown-rerun-wf_2daca7be-bfc.js` (resumeFromRunId to retry).
 - **The launch ARTICLE** — the behavioral silent-breakage finding, ANONYMIZED + framed as
   areas-for-improvement (decision recorded in the vault teardown doc). Not yet written.
 - **The cohesion-pass BUILD items** — the top poaches now also live in the teardown doc's
@@ -92,8 +94,16 @@ pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
 - RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
 - `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned 2.1.187); CI pins it. Env-only.
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
-- Background agents share the working tree → don't commit while one is running (race). The teardown
-  WORKFLOW does not touch the tree (research only), so committing HANDOFF/vault while it runs is safe.
+- Background agents share the working tree → don't commit while one is running (race). A research
+  WORKFLOW does not touch the tree, so committing HANDOFF/vault while it runs is safe.
+- **WORKFLOW FRAGILITY (post-mortem of the first teardown run).** Two causes, remember both:
+  (1) SELF-THROTTLE — a wide concurrent fan-out (5 agents × many web searches) all hit ONE shared
+  account rate-limit bucket → `429`/`529`/`503` + backoff → crawl. FIX: batch (2×2 = peak 2).
+  (2) The KILL SHOT was an INTERRUPT — the in-flight agents' last log line is
+  `[Request interrupted by user]`, aborted at the SESSION COMPACTION boundary; a background
+  workflow does NOT survive a hard session interrupt (killed, never resumes, no notification).
+  FIX: keep research fan-outs NARROW + FAST, launch with context headroom, or split so each
+  sub-run returns before a compaction. Don't leave a long fan-out as the only thing across a likely compact.
 
 ### Decisions of record (don't relitigate)
 
