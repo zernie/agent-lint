@@ -26,13 +26,20 @@ has descriptive names (cleaning requires `git filter-repo` + force-push; separat
 via vault README.md). **CONDITIONAL-GO.** Framing shift is the critical finding.
 Next build step: see vault s14.md (pivot-decision) for the recommended sequence.
 
-**STRATEGY SESSION — DIRECTION CONVERGED (2026-07-02, extended).** Added vault docs `s21`–`s29`
-(see vault README/CLAUDE index for each). A long strategy pass (VC/market, demand-side, open-harness
-expansion, curation, naming, and a verifier-vs-framework fork) that CONVERGED on a single direction +
-a personal-strategy doc. The direction, next steps, forks, and personal loose ends all live INSIDE
-the vault (`s26` = consolidated direction; `s29` = the latest positioning refinement). All strategy/
-personal content is vault-only — do NOT restate here. Net: the thinking is done; the bottleneck is
-now SHIPPING the smallest artifact that proves pull (see vault), not more research.
+**STRATEGY SESSION — CONVERGED + COMMITTED TO A BUILD (2026-07-02, extended).** Added vault docs
+`s21`–`s32` (see vault README/CLAUDE index). A long strategy pass (VC/market, demand-side,
+open-harness expansion, curation, naming, verifier-vs-framework, an objective re-rank, two Fable
+contrarian passes, and a code-grounded audit-capability analysis) CONVERGED and then COMMITTED to a
+single concrete BUILD. All strategy/personal content is vault-only — do NOT restate here. Net: the
+strategy debate is CLOSED; the remaining unknown is a MEASURABLE NUMBER from a build/measure task
+specified in the vault (`s31` = committed plan, `s32` = runnable Phase-A spec). **Next concrete step
+is a BUILD**, gated on a private measurement — see `startup/s31`+`s32`.
+Public-safe technical finding that is the build's substrate: **`audit`'s security surface is SHALLOW**
+— it reads declared tool-sets/field-shapes only, NOT content/dataflow (prompt-injection / secrets /
+tool-poisoning are grep-confirmed ABSENT from `scan.ts`, listed PLANNED in
+`research/audit-wow-ideas.md`); and the strongest security probe — the `guardrail-check.ts` disaster
+battery (already proves a widely-copied guard blocks 2/7) — is deliberately EXCLUDED from audit for
+cross-platform-confinement reasons. Running that battery at scale (confined, Linux CI) is the build.
 
 **OPEN FOLLOW-UPS (from prior session, still pending):**
 
