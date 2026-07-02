@@ -6,112 +6,83 @@
 > first.** Git-TRACKED + EPHEMERAL container, so an update persists ONLY if you
 > **commit + push**. **REFRESH IT before you end the session** (and on any "handoff"
 > request). A **Stop hook** nudges you at ≥5 commits without a refresh.
+>
+> ⚠️ **THIS FILE IS PUBLIC** (open-source repo). NO STRATEGY here — business
+> direction / monetization / competitive framing live ONLY in the `startup/`
+> vault. HANDOFF may POINT to the vault, never describe its contents. (See the
+> `doc-tiers` rule — fixed this session.)
 
 ## RESUME HERE
 
-**Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. This is a long STRATEGY +
-BUILD session: decided the tool direction → built the OBSERVE layer → verify-first launch
-positioning → a 2-pass Fable pivot re-review → launch-surface CUTS → SHIPPED the capability-diff
-PR comment (moat #2) → salvaged the deep half of a competitor-teardown workflow (it died throttled).
+**Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. Long STRATEGY + BUILD +
+DOC-HYGIENE session.
 
-**THE DIRECTION (decision of record).** vigiles = ONE LOOP: declare what the harness should
-do (typed spec) → check reality against it, via four instruments — VERIFY (lint/cross-ref),
-GATE (compiled hooks), MEASURE (evals on your sub), OBSERVE (local flight-recorder ledger).
-Spine: the typed spec is the declared GROUND TRUTH. Local-first + agent-readable; NOT hosted
-runtime/OTel. Coding-harness world ONLY (Market C). Existing surfaces STAY (sensors, not a
-pick-your-tools framework). Full record: root `CLAUDE.md ## Direction` +
-`research/harness-observability-direction.md`; monetization = `startup/` vault ONLY.
+**Immediate pending task:** a DOC-MIGRATION decision + execution — move the already-public
+STRATEGIC research docs into the `startup/` vault (the repo is PUBLIC, so strategy shouldn't
+live in `research/`). Reconnaissance done: ~15 candidate docs, but they're heavily cross-linked
+FROM the technical research corpus (~100+ inbound `see research/X.md` refs; measurement-authority
+←18, divergent-bets ←17, …), so moving them means removing index/keyFiles entries + neutralizing
+those inbound refs (can't repoint into the vault — link-directionality) + fixing any orphans +
+recompiling. AWAITING USER SCOPE: **targeted-6** (the live-strategy docs) vs **all-15** vs **hold**
+(rely on the fixed rule going forward). Plan: hand the mechanical grind to ONE background agent that
+verifies (compile + index/orphan/self-command-refs tests) before committing; keep main context lean.
 
-### What landed this session (all pushed, full suite green except known dialect-drift)
+**Business direction: SEE THE VAULT.** The leading thesis + all competitive/monetization strategy
+live in `startup/` (`distro-thesis-2026.md` = current leading direction; `strategic-synthesis-
+teardown-2026.md`; `competitor-teardown-2026.md`). Do NOT restate any of it here.
 
-- **OBSERVE layer — BUILT.** `src/observe.ts` ledger + all 5 emit kinds (compiled-hook gate,
-  agent contract-rail, skill-fire, trigger-rate, capability-diff) → `.vigiles/runs.jsonl`;
-  `vigiles audit` RENDERS it (`formatLedgerSummary`) + it's in the AuditReport JSON + HTML;
-  `debug-my-harness` model-invocable skill reads it. `.vigiles/runs.jsonl` gitignored.
-- **Verify-first launch positioning.** README front door retuned ("Catch the silent breakage
-  in your Claude Code & Codex setup"), + the tagline decision LOCKED in the README editor-guide.
-- **Two rules encoded** (`CLAUDE.md.spec.ts` + `startup/CLAUDE.md`): LINK DIRECTIONALITY
-  (doc-tiers — links point outward only; vault may cite research, research/public must NEVER
-  cite the vault) + VAULT rule 6 (competitive research saved in full detail, DEPTH-TAGGED
-  deep/medium/thin, coverage-mapped, cross-linked, indexed — shallow never masquerades as deep).
-- **Launch-surface CUTS (3/4).** Deleted the `hook-spec` spike; demoted the `scaffold-test`
-  VERB to skill-internal (engine kept); demoted "7 catalogs" from the README headline.
-  GUARDS KEPT (deliberate — it's a HIDDEN `hook-runtime guard` kind, not public surface;
-  clean removal would gut a real e2e test + touch shipped guardrail-check → not worth it).
-- **#2 CAPABILITY-DIFF PR COMMENT — SHIPPED.** The CLI/lib layer (`audit --capability-diff`)
-  was already built+tested; this session added the GHA face: `action.yml` gains
-  `capability-diff` + `fail-on-widen` inputs, materializes the PR base with `git archive`
-  (NOT a worktree — avoids checkout/smudge filters, e.g. git-crypt), runs the diff, folds a
-  section into the SAME sticky comment only when the surface changed. Dogfooded in `ci.yml`
-  (`fetch-depth: 0` + `capability-diff: true`). Verified e2e locally (widen→section+exit-1,
-  no-change→no-section, no leaked worktrees/report-files). Docs: `docs/github-action.md`.
-- **VAULT: deep competitor teardown SALVAGED.** The teardown workflow DIED (throttled, silent
-  1h+); one cluster returned deep before it died → saved to `startup/competitor-teardown-2026.md`
-  (9 cos: Coval/Momentic/Hamming/Roark/promptfoo[→OpenAI $86M]/DeepEval/Ashr/HUD/Respan; full
-  rule-6 fields + ranked poach-list). Folded IN: the 2 Fable pivot reviews (#4) + the launch
-  anonymize/areas-for-improvement decision (#3). 4 planned clusters `unrun` (coverage map in-doc).
+**Technical direction (public-safe):** vigiles = ONE LOOP — declare (typed spec) → check reality,
+via four instruments: VERIFY (lint/cross-ref), GATE (compiled hooks), MEASURE (evals on your sub),
+OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` +
+`research/harness-observability-direction.md`.
 
-### THE PIVOT — 2nd-pass decisions of record (from Fable ×2 + hit-rate data)
+### What landed this session (all pushed; suite green except known env-only dialect-drift)
 
-- **Hit-rate (measured):** deterministic ecosystem catches are THIN (444 plugins mostly clean;
-  official 0/39 graded; ~3 graded in 170) → the "I audited N plugins" headline has no big N.
-  BEHAVIORAL is the shock: superpowers (752k installs) flagship `brainstorming` fires 10-30%.
-- **Viral artifact:** the behavioral "silent breakage" finding (a popular skill silently
-  doesn't fire), framed as SILENT-BREAKAGE, never "eval". ANONYMIZED + framed as
-  AREAS-FOR-IMPROVEMENT (user call — not a call-out). Deterministic layer = the free "why".
-- **Capability-diff: UN-HOLD + PROMOTE** — viral loop (GHA sticky PR comment, org-to-org) AND
-  the attestation primitive AND markdown-impossible. The #1 build.
-- **Monetization:** observability + attestation CONVERGE for the coding-harness TEAM buyer
-  (hosted tier aggregates the local ledger; its VALUE is the compliance/conformance EVIDENCE;
-  raw data stays local, no lock-in). First revenue = 3-5 design-partner conformance pilots
-  ($10-30K) with Tier-2 regulated enterprises via a red-team/cert channel — sales-led, not PLG.
-- **Adapters:** Cursor = VERIFY-ONLY (closed/unmockable); Gemini→Antigravity (closed); next
-  FULL adapter = OpenHands/Factory (mockable). Flue (Astro team, typed agent runtime) = adapter
-  target + typed-spec validation, not a competitor.
-- **Biggest risk:** speed-to-being-the-NAMED cross-harness auditor before Anthropic ships a
-  built-in `claude doctor`. CC+Codex neutrality is the hedge.
-
-### DO NEXT (this session's #2/#3/#4 all landed; teardown re-run DONE + folded in)
-
-- **Teardown COMPLETE** — the 2×2 re-run (`wf_2daca7be-bfc`) returned all 4 clusters clean
-  (4/4, 0 err, ~9 min); folded into `startup/competitor-teardown-2026.md` → **5 clusters / 41
-  companies, all `deep`**. The batching fixed the self-throttle; no interrupt this time.
-- **The launch ARTICLE** — the behavioral silent-breakage finding, ANONYMIZED + framed as
-  areas-for-improvement (decision recorded in the vault teardown doc). Not yet written.
-- **The cohesion-pass BUILD items** — the top poaches now also live in the teardown doc's
-  ranked list (observe-replay-as-test is the flagged flagship of the observe layer).
+- **#2 CAPABILITY-DIFF PR COMMENT — SHIPPED.** `action.yml` gains `capability-diff` +
+  `fail-on-widen` inputs; materializes the PR base with `git archive` (NOT a worktree — avoids
+  checkout/smudge filters e.g. git-crypt), runs `audit --capability-diff --no-html --no-json`,
+  extracts just the diff paragraph, folds it into the SAME sticky comment only when the surface
+  changed. Dogfooded in `ci.yml` (`fetch-depth: 0` + `capability-diff: true`). Verified e2e.
+  Docs: `docs/github-action.md`.
+- **OBSERVE layer** (earlier this session) — `src/observe.ts` ledger + 5 emit kinds; `audit`
+  renders it; `debug-my-harness` skill reads it. `.vigiles/runs.jsonl` gitignored.
+- **DOC-TIERS RULE FIXED** (`CLAUDE.md.spec.ts` → recompiled `CLAUDE.md`): the rule wrongly
+  treated `research/`+`CLAUDE.md` as a "private record" holding the moat/positioning narrative.
+  The repo is PUBLIC, so they're not private. Corrected: those hold the TECHNICAL record only;
+  ALL strategy → the `startup/` vault. Added the competitor-playbook test + fixed the sibling
+  `public-vs-internal-docs` line ("strategic vocab → vault, not CLAUDE.md/research").
+- **Competitor research → vault (encrypted).** `competitor-teardown-2026.md` (5 clusters / 41
+  companies, deep, + raw JSON appendix), `strategic-synthesis-teardown-2026.md` (Opus synthesis +
+  a Fable contrarian pass), `distro-thesis-2026.md`. Method-lesson recorded: gather cheap/parallel,
+  then run ONE top-model synthesis pass over the full corpus.
 
 ### ALSO OPEN (separate track) + Gotchas
 
 - **PR #54 on `claude/haretrail-dogfood-pvdo9t`** — watched by cron `5438c724`. Merge = user's call.
 - **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
   `git-crypt unlock <keyfile>` with the user's base64 key; verify a committed blob is `\0GITCRYPT`.
-- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile,
-  NEVER hand-edit. Deleting a keyFiles-listed file → remove its keyFiles line first or compile FAILS.
+  Vault files are in `.prettierignore` (no fmt needed); a committed blob must read `\0GITCRYPT`.
+- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
+  (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
+  keyFiles line first or compile FAILS.
 - RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
 - `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned 2.1.187); CI pins it. Env-only.
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
-- Background agents share the working tree → don't commit while one is running (race). A research
-  WORKFLOW does not touch the tree, so committing HANDOFF/vault while it runs is safe.
-- **WORKFLOW FRAGILITY (post-mortem of the first teardown run).** Two causes, remember both:
-  (1) SELF-THROTTLE — a wide concurrent fan-out (5 agents × many web searches) all hit ONE shared
-  account rate-limit bucket → `429`/`529`/`503` + backoff → crawl. FIX: batch (2×2 = peak 2).
-  (2) The KILL SHOT was an INTERRUPT — the in-flight agents' last log line is
-  `[Request interrupted by user]`, aborted at the SESSION COMPACTION boundary; a background
-  workflow does NOT survive a hard session interrupt (killed, never resumes, no notification).
-  FIX: keep research fan-outs NARROW + FAST, launch with context headroom, or split so each
-  sub-run returns before a compaction. Don't leave a long fan-out as the only thing across a likely compact.
+- Background agents share the working tree → don't commit while one is running (race). A read-only
+  research WORKFLOW doesn't touch the tree; a MUTATING migration agent does — stay off the tree while it runs.
+- **WORKFLOW FRAGILITY (post-mortem):** a wide fan-out self-throttles on ONE shared rate-limit
+  bucket (`429`/`529`/`503`); and the KILL SHOT is a SESSION-COMPACTION INTERRUPT (`[Request
+interrupted by user]`) — a background workflow does NOT survive it. FIX: batch (2×2 = peak 2),
+  keep fan-outs narrow+fast, don't leave a long fan-out as the only thing across a likely compaction.
 
 ### Decisions of record (don't relitigate)
 
-- Verify-first tagline (locked); "Lighthouse for your agent harness" = the meme-handle.
-- Monetization ONLY in vault; local-first, no data lock-in; typed spec = ground truth.
-- Guards KEPT (hidden kind, low value to remove). Viral finding ANONYMIZED + areas-for-improvement.
-- Existing surfaces STAY; capability-diff is the un-hold priority; observe depth is frozen (built).
+- Repo is PUBLIC → strategy is VAULT-ONLY (doc-tiers rule fixed). HANDOFF/research/CLAUDE.md = public.
+- Capability-diff PR comment shipped; observe layer built (frozen). Guards KEPT (hidden runtime kind).
+- Competitor research (41 cos) + synthesis + distro thesis are vaulted; the LEADING direction is in the vault.
 
 ## Don't re-read unless the task needs it
 
-- `startup/harness-tech-direction-2026.md` — the full competitive tech + monetization + exit (vault).
-- `startup/competitor-teardown-2026.md` — the deep agent-eval-testing teardown + poach-list (vault).
-- `research/harness-observability-direction.md` — the tech direction of record.
-- `research/roadmap.md` — the front-door roadmap.
+- `startup/distro-thesis-2026.md` — the current leading business thesis (vault).
+- `startup/strategic-synthesis-teardown-2026.md` / `competitor-teardown-2026.md` — the strategy record (vault).
+- `research/roadmap.md` — the front-door (technical) roadmap.
