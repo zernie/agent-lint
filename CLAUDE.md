@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:6874e3c352010ba5 compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:bf7a206cc46751ac compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -489,6 +489,10 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 ### No Session Links
 
 **Guidance only** — This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.
+
+### Vault Commit Hygiene
+
+**Guidance only** — Git commit messages and filenames are ALWAYS plaintext in the public history — git-crypt only encrypts file contents. Two hard rules: (1) VAULT FILENAMES must be opaque IDs (s01.md, s02.json, …), never descriptive names that reveal the document's topic. The ID→name mapping lives in startup/README.md (encrypted, only readable after unlock). (2) COMMIT MESSAGES for vault-only changes must be generic — use `chore: vault` or similar — never name the document topic, the strategy, or the competitive content in the subject or body. Any commit touching startup/ files should read as a maintenance operation to an outside observer.
 
 ### Subagent Model Note
 
