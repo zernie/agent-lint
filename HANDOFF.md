@@ -31,12 +31,11 @@ typed-spec-moat, strategic-synthesis-2026-06, eval-startups-positioning moved re
    `research/CLAUDE.md` Scope text ("research/ = private record / moat narrative" — same public-repo bug
    as doc-tiers), and strategic framing inside individual kept docs. Lower urgency (already-public).
 
-**Strategic next step (the real fork):** run the PIVOT VALIDATION GATE — see `startup/pivot-decision-
-2026-07.md`. Batched 2×2 research, alone, full context headroom (workflow-fragility lesson).
+**Strategic next step (the real fork):** run the PIVOT VALIDATION GATE — see the vault (s14.md).
+Batched 2×2 research, alone, full context headroom (workflow-fragility lesson).
 
-**Business direction: SEE THE VAULT.** The leading thesis + all competitive/monetization strategy
-live in `startup/` (`distro-thesis-2026.md` = current leading direction; `strategic-synthesis-
-teardown-2026.md`; `competitor-teardown-2026.md`). Do NOT restate any of it here.
+**Business direction: SEE THE VAULT.** All competitive/monetization strategy + the leading thesis
+live in `startup/` (vault README.md has the filename index). Do NOT restate any of it here.
 
 **Technical direction (public-safe):** vigiles = ONE LOOP — declare (typed spec) → check reality,
 via four instruments: VERIFY (lint/cross-ref), GATE (compiled hooks), MEASURE (evals on your sub),
@@ -58,10 +57,9 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
   The repo is PUBLIC, so they're not private. Corrected: those hold the TECHNICAL record only;
   ALL strategy → the `startup/` vault. Added the competitor-playbook test + fixed the sibling
   `public-vs-internal-docs` line ("strategic vocab → vault, not CLAUDE.md/research").
-- **Competitor research → vault (encrypted).** `competitor-teardown-2026.md` (5 clusters / 41
-  companies, deep, + raw JSON appendix), `strategic-synthesis-teardown-2026.md` (Opus synthesis +
-  a Fable contrarian pass), `distro-thesis-2026.md`. Method-lesson recorded: gather cheap/parallel,
-  then run ONE top-model synthesis pass over the full corpus.
+- **Competitor research → vault (encrypted).** 5 clusters / 41 companies, deep, + raw JSON
+  appendix; synthesis + a Fable contrarian pass; leading distro thesis. Method-lesson recorded:
+  gather cheap/parallel, then run ONE top-model synthesis pass over the full corpus.
 
 ### ALSO OPEN (separate track) + Gotchas
 
@@ -71,6 +69,8 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
   Vault files are in `.prettierignore` (no fmt needed); a committed blob must read `\0GITCRYPT`.
   **⚠️ `git mv` INTO `startup/` DOES NOT ENCRYPT** (reuses the plaintext blob) — after moving,
   `git add --renormalize startup/` then VERIFY `git show HEAD:startup/<f>.md | head -c9`=`\0GITCRYPT`.
+  **FILENAMES ARE PUBLIC** — use opaque IDs (s01.md, s02.json, …); the mapping lives in `startup/README.md`.
+  **COMMIT MESSAGES ARE PUBLIC** — use generic messages like `chore: vault` for vault-only changes.
 - `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
   (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
   keyFiles line first or compile FAILS.
@@ -92,6 +92,5 @@ interrupted by user]`) — a background workflow does NOT survive it. FIX: batch
 
 ## Don't re-read unless the task needs it
 
-- `startup/distro-thesis-2026.md` — the current leading business thesis (vault).
-- `startup/strategic-synthesis-teardown-2026.md` / `competitor-teardown-2026.md` — the strategy record (vault).
+- vault `startup/` — unlock + read `startup/README.md` for the filename index; leading thesis + strategy record are in there.
 - `research/roadmap.md` — the front-door (technical) roadmap.
