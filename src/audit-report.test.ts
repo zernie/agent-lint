@@ -204,6 +204,21 @@ describe("buildAuditReport", () => {
       "untested",
     ]);
   });
+
+  it("carries the observations summary when provided (additive/optional)", () => {
+    const r = buildAuditReport(makeReport({}), {
+      harness: "claude-code",
+      vigilesVersion: "1.0.0",
+      observations: {
+        total: 2,
+        counts: [{ kind: "hook", count: 2 }],
+        denials: 1,
+        recentDenials: [{ label: "hook no-force-push", reason: "blocked" }],
+      },
+    });
+    expect(r.observations?.total).toBe(2);
+    expect(r.observations?.recentDenials[0].label).toBe("hook no-force-push");
+  });
 });
 
 describe("buildLeaderboardReport / buildMarketplaceReport", () => {

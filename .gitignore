@@ -10,6 +10,8 @@ logo-v*.png
 
 # vigiles transient skill-runtime state
 .vigiles/active-skill.json
+# observability flight-recorder ledger (local runtime record, never committed)
+.vigiles/runs.jsonl
 # eval record/replay cache (recorded model runs)
 .vigiles/eval-cache/
 

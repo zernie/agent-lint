@@ -62,16 +62,8 @@ import type {
   RuleSeverity,
 } from "./core/types.js";
 import { ruleSeverity, ruleOptions } from "./core/types.js";
-import type { SurfaceKind, Surface } from "./test-coverage.js";
+import type { SurfaceKind } from "./test-coverage.js";
 import { findUntestedSurfaces, formatUntestedReport } from "./test-coverage.js";
-import {
-  scaffoldTest,
-  formatScaffolds,
-  type ScaffoldInput,
-  type ResultContract,
-  type ContractField,
-} from "./scaffold-test.js";
-import { effectSurface } from "./core/effects.js";
 import {
   scanPlugin,
   formatScanReport,
@@ -213,10 +205,17 @@ import { parse as parseToml } from "@iarna/toml";
 import type { SHA256Hash } from "./core/hash.js";
 import {
   evaluatePreToolUse,
+  readActiveAgent,
   pushActiveAgent,
   popActiveAgent,
   decideTaskDispatch,
 } from "./adapters/claude-code/agent-runtime.js";
+import {
+  appendObservation,
+  readObservations,
+  formatLedgerSummary,
+  summarizeObservations,
+} from "./observe.js";
 import {
   setEffectActive,
   clearEffectActive,
@@ -4713,148 +4712,6 @@ function capabilitiesOfReport(
   return computeHarnessCapabilities(agents, dialect);
 }
 
-/**
- * The plugin's declared name for the namespaced skill id, read from the layout's
- * manifest (adapter-aware path, not a hardcoded `.claude-plugin/`), falling back to
- * the dir basename. JSON manifests only for now (a TOML/Codex manifest → basename).
- */
-function pluginNameFor(dir: string, manifestPath: string): string {
-  try {
-    const manifest = JSON.parse(
-      readFileSync(resolve(dir, manifestPath), "utf-8"),
-    ) as { name?: unknown };
-    if (typeof manifest.name === "string" && manifest.name)
-      return manifest.name;
-  } catch {
-    /* missing / non-JSON manifest → fall back */
-  }
-  return basename(dir);
-}
-
-/** Enrich an untested Surface with the metadata the right template needs. */
-/** Extract `"name": type` fields from one rendered `vigiles:ok`/`err` shape block. */
-function parseContractFields(block: string): ContractField[] {
-  const fields: ContractField[] = [];
-  const re = /"([^"]+)"\s*:\s*(string\[\]|string|number|boolean)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(block)) !== null) {
-    fields.push({ name: m[1], type: m[2] });
-  }
-  return fields;
-}
-
-/**
- * Parse a subagent's compiled `## Output contract` (the `vigiles:ok` / `vigiles:err`
- * blocks the compiler emits) back into a typed `ResultContract`, so the generator
- * can write an `assertAgentOk` test against the real fields. Returns null when the
- * agent has no result() contract.
- */
-function parseResultContract(md: string): ResultContract | null {
-  const ok = /```vigiles:ok\n([\s\S]*?)```/.exec(md);
-  const err = /```vigiles:err\n([\s\S]*?)```/.exec(md);
-  if (!ok && !err) return null;
-  const okFields = ok ? parseContractFields(ok[1]) : [];
-  const errFields = err ? parseContractFields(err[1]) : [];
-  if (okFields.length === 0 && errFields.length === 0) return null;
-  return { ok: okFields, err: errFields };
-}
-
-function scaffoldInputFor(
-  s: Surface,
-  report: ScanReport,
-  pluginName: string,
-  dir: string,
-  dialect: HarnessDialect,
-): ScaffoldInput {
-  const base = { kind: s.kind, name: s.name, path: s.path };
-  switch (s.kind) {
-    case "skill": {
-      const sk = report.skills.find((x) => x.name === s.name);
-      return { ...base, pluginName, userInvoked: sk?.userInvoked };
-    }
-    case "agent": {
-      const ag = report.agents.find((x) => x.name === s.name);
-      const tools = ag?.tools ?? null;
-      const sideEffectingTools = tools
-        ? effectSurface(tools, dialect).sideEffecting
-        : undefined;
-      let resultContract: ResultContract | null = null;
-      try {
-        resultContract = parseResultContract(
-          readFileSync(resolve(dir, s.path), "utf-8"),
-        );
-      } catch {
-        // agent .md unreadable → no contract to generate against
-      }
-      return { ...base, tools, sideEffectingTools, resultContract };
-    }
-    case "hook":
-      return { ...base, hookCommand: `bash ${s.path}` };
-  }
-}
-
-/**
- * `vigiles scaffold-test [dir]` — generate a runnable STARTER test for each
- * untested skill/agent/hook (B1, test-gen from free-form). Reuses the
- * untested-surface detector for the list + `scan` for the metadata, then emits the
- * cheapest meaningful tier per kind (hook → `runHook`, skill → `measureTriggerRate`,
- * subagent → `runHarnessTest`) at the surface's suggested test path. Dry-run by
- * default (prints the scaffolds); `--write` creates the files (never clobbering an
- * existing one); `--json` for the agent-consumable `{ path, content }[]`.
- */
-function handleScaffoldTest(restArgs: string[], args: string[]): void {
-  const dir = resolve(restArgs[0] ?? ".");
-  const write = args.includes("--write");
-  const json = args.includes("--json");
-  const harnessFlag = harnessFlagFrom(args);
-  const adapter = harnessFlag
-    ? resolveAdapter(dir, harnessFlag)
-    : detectAdapterResult(dir).adapter;
-
-  const { untested } = findUntestedSurfaces({
-    basePath: dir,
-    layout: adapter.layout,
-  });
-  const report = scanPlugin(dir, adapter.layout, adapter.dialect);
-  const pluginName = pluginNameFor(dir, adapter.layout.manifestPath);
-  const scaffolds = untested.map((s) =>
-    scaffoldTest(scaffoldInputFor(s, report, pluginName, dir, adapter.dialect)),
-  );
-
-  if (json) {
-    console.log(JSON.stringify(scaffolds, null, 2));
-    return;
-  }
-  if (!write) {
-    console.log(formatScaffolds(scaffolds));
-    for (const s of scaffolds) {
-      console.log(`\n# ${s.path}\n`);
-      console.log(s.content);
-    }
-    if (scaffolds.length > 0) {
-      console.log("Re-run with --write to create these files.");
-    }
-    return;
-  }
-  const written: string[] = [];
-  const skipped: string[] = [];
-  for (const s of scaffolds) {
-    const target = resolve(dir, s.path);
-    if (existsSync(target)) {
-      skipped.push(s.path);
-      continue;
-    }
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, s.content);
-    written.push(s.path);
-  }
-  for (const p of written) console.log(`✓ wrote ${p}`);
-  for (const p of skipped) console.log(`⊘ skipped ${p} (already exists)`);
-  if (written.length === 0 && skipped.length === 0) {
-    console.log("Nothing to scaffold — every surface already has a test.");
-  }
-}
-
 function printUsage(command: string | undefined): void {
   console.log("vigiles — compile typed specs to instruction files");
   console.log("");
@@ -4892,9 +4749,6 @@ function printUsage(command: string | undefined): void {
   );
   console.log(
     "                                 --check verifies committed eval results against current inputs WITHOUT a model — the CI staleness gate",
-  );
-  console.log(
-    "  vigiles scaffold-test [dir]    Generate a starter test for each untested skill/agent/hook (--write, --json)",
   );
   console.log("");
   console.log("Examples:");
@@ -5024,6 +4878,12 @@ function skillStartCommand(target: string | undefined): void {
     process.exit(2);
   }
   setActiveSkill(process.cwd(), target);
+  // Record the fire in the flight recorder: the skill NAME is the parent dir of
+  // its SKILL.md (skills/<name>/SKILL.md), falling back to the raw target.
+  const parts = target.replace(/\\/g, "/").split("/").filter(Boolean);
+  const name =
+    parts.length >= 2 ? parts[parts.length - 2] : (parts[0] ?? target);
+  appendObservation({ kind: "skill", name, fired: true });
   console.log(`Active skill: ${target}`);
 }
 
@@ -5135,6 +4995,13 @@ function agentHookCommand(): void {
   if (!tool) return;
   const decision = evaluatePreToolUse(cwd, tool, command);
   if (!decision.allow) {
+    appendObservation({
+      kind: "agent",
+      name: readActiveAgent(cwd) ?? "unknown",
+      tool,
+      allowed: false,
+      reason: decision.message,
+    });
     console.error(decision.message);
     process.exit(2);
   }
@@ -5764,10 +5631,26 @@ function emitGate(
   const action = gateAction(decision, mode);
   switch (action.kind) {
     case "block":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: "deny",
+        mode: "enforce",
+        rule: file,
+        reason: action.reason,
+      });
       console.error(action.reason);
       process.exit(2);
       return;
     case "ask":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: "ask",
+        mode: "enforce",
+        rule: file,
+        reason: action.reason,
+      });
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
@@ -5779,6 +5662,14 @@ function emitGate(
       );
       return;
     case "observe":
+      appendObservation({
+        kind: "hook",
+        event: on,
+        decision: action.would,
+        mode: "observe",
+        rule: file,
+        reason: action.reason,
+      });
       recordObservation(file, on, action.would, action.reason);
       console.error(
         `⚠ [vigiles observe] ${on}: would ${action.would} — ${action.reason}`,
@@ -6489,10 +6380,14 @@ async function main(): Promise<void> {
           root,
           adapter.layout.instructionFile,
         );
+        // Read the local flight recorder ONCE — feeds both the JSON report
+        // (structured summary, the product boundary) and the terminal render.
+        const ledgerRecords = readObservations(root);
         const auditReport = buildAuditReport(report, {
           harness: adapter.name,
           vigilesVersion: getVersion(),
           adoptableSurfaces,
+          observations: summarizeObservations(ledgerRecords),
         });
         const sc = auditReport.score;
         const plan = optimize(report);
@@ -6524,6 +6419,11 @@ async function main(): Promise<void> {
               .length,
           );
           if (fireNudge) console.log("\n" + fireNudge);
+          // The flight recorder: a compact summary of what the harness actually
+          // DID in real sessions (hook/agent decisions), read off the local
+          // agent-readable ledger. Empty (skipped) until something is recorded.
+          const ledgerSummary = formatLedgerSummary(ledgerRecords);
+          if (ledgerSummary) console.log("\n" + ledgerSummary);
         }
         // ONE read-vs-run decision for the EXECUTING checks (live MCP + skill
         // firing). A plain `audit` is a deterministic READ; these run only on
@@ -6577,6 +6477,24 @@ async function main(): Promise<void> {
           const diff = diffCapabilities(
             capabilitiesOfReport(beforeReport, adapter.dialect),
             capabilitiesOfReport(report, adapter.dialect),
+          );
+          // Feed the flight recorder: the blast-radius change (moat #2) as a record.
+          // Write to the AUDITED root's ledger (not the caller's cwd) — the same
+          // `root` the audit reads back via `readObservations(root)`, so a
+          // `vigiles audit ./after --capability-diff=./before` from a parent dir
+          // records into ./after/.vigiles/, not the parent workspace.
+          appendObservation(
+            {
+              kind: "capability-diff",
+              added: [
+                ...diff.addedSideEffecting,
+                ...diff.addedUnknown,
+                ...diff.addedReadOnly,
+              ],
+              removed: [...diff.removed],
+              widened: diff.widened,
+            },
+            root,
           );
           console.log(
             json
@@ -6693,10 +6611,6 @@ async function main(): Promise<void> {
       }
       break;
     }
-
-    case "scaffold-test":
-      handleScaffoldTest(restArgs, args);
-      break;
 
     // --- Plumbing ---
 

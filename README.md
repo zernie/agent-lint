@@ -3,6 +3,15 @@
   This file is the FRONT DOOR + a marketing asset for someone who already lives
   in Claude Code / Codex. Optimize for a phone-skimmer.
 
+  TAGLINE = VERIFY-FIRST (decided 2026-07): "Catch the silent breakage in your
+  Claude Code & Codex setup" + subhead "verify your CLAUDE.md, skills, and hooks
+  are real — and prove they actually work." Lead with references-are-real (the
+  unique catch only vigiles makes); test/observe fold in AFTER. Do NOT revert to
+  the old test-first "tests your skills never had" tagline. Stay coding-scoped
+  (name CC/Codex + CLAUDE.md/skills/hooks) so it's never mistaken for a
+  general-agent tool. NOT "observability" as the headline (it undersells verify +
+  reads as the general-app category).
+
   SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
   plugins people actually ship, THEN explain the mechanism. The proofs are not
   illustrative — every block traces to a real dogfood run captured in
@@ -83,7 +92,11 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>The tests your agent's skills and hooks never had.</strong>
+  <strong>Catch the silent breakage in your Claude Code &amp; Codex setup.</strong>
+</p>
+
+<p align="center">
+  Verify your CLAUDE.md, skills, and hooks are real — and prove they actually work.
 </p>
 
 <p align="center">
@@ -94,14 +107,11 @@
 
 ---
 
-**You installed some plugins and wrote a few skills. Do they actually work?**
+**Your skills, hooks, and instructions are your agent's harness — the half you wrote, and the half nothing checks.**
 
-Your skills, hooks, and instructions are your agent's **harness** — the half you wrote
-and own, and the half nothing checks. A skill that never fires. Two skills the agent
-confuses. A subagent wired to a tool that doesn't exist. It breaks silently, and you
-find out mid-task.
+A subagent wired to a tool that doesn't exist. A hook that looks like it blocks and doesn't. Two skills the agent can't tell apart. It all looks fine, and it breaks silently mid-task.
 
-It's a library with no tests. This runs them:
+vigiles checks your harness is _real_, not just well-formed:
 
 ```bash
 npx vigiles audit
@@ -160,9 +170,10 @@ This subagent — a helper your main agent hands a task to — declares a tool t
 doesn't exist. The harness drops it silently, so the agent loses a capability it
 thinks it has. vigiles catches it and gives you the **one-line fix**.
 
-That's the whole idea — it checks your harness against reality, not style. Every path,
-script, code symbol, and linter rule, verified to exist _and_ be enabled across 7
-catalogs (ESLint, Ruff, Clippy + four more).
+That's the whole idea — it checks your harness against reality, not style. Every
+referenced tool, hook, file, script, and skill is verified to actually resolve — and
+where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff,
+Clippy and more).
 **[Full guide →](docs/verifying-instruction-files.md)**
 
 All three catches are free and need no model — and vigiles **prevents** other whole

@@ -59,16 +59,18 @@ re-eval. It's a green no-op until you commit your first lock.
 
 ## Inputs
 
-| Input               | Default   | Description                                                                                                                                                                      |
-| ------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`           | `lint`    | `lint` (verify references + integrity + coverage), `compile` (specs → markdown), or `eval-check` (verify committed eval locks vs current inputs — the staleness gate, no model). |
-| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.                                                                                        |
-| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build.                                                                                      |
-| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                                                                                                      |
-| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).                                                                                       |
-| `working-directory` | `.`       | Directory to run vigiles in.                                                                                                                                                     |
-| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                                                                                                       |
-| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                                                                                                |
+| Input               | Default   | Description                                                                                                                                                                                                               |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`           | `lint`    | `lint` (verify references + integrity + coverage), `compile` (specs → markdown), or `eval-check` (verify committed eval locks vs current inputs — the staleness gate, no model).                                          |
+| `paths`             | _(auto)_  | Comma/space-separated paths — `.md` for `lint`, `.spec.ts` for `compile`. Auto-discovers.                                                                                                                                 |
+| `version`           | `latest`  | npm version of `vigiles` to run (`1`, `1.2.3`, `latest`). `local` runs a checked-out build.                                                                                                                               |
+| `max-rules`         | _(unset)_ | Cap rules per spec (maps to `--max-rules`).                                                                                                                                                                               |
+| `catalog-only`      | `false`   | Only check that linter rules exist; skip config-enabled checks (maps to `--catalog-only`).                                                                                                                                |
+| `working-directory` | `.`       | Directory to run vigiles in.                                                                                                                                                                                              |
+| `comment`           | `true`    | On `pull_request` events, post/update a sticky PR comment with the result.                                                                                                                                                |
+| `capability-diff`   | `false`   | On `pull_request` events, diff the agent's capability surface (subagents' tool/effect blast radius) vs the PR base and fold it into the sticky comment (maps to `--capability-diff`). Needs `fetch-depth: 0` on checkout. |
+| `fail-on-widen`     | `false`   | With `capability-diff`, fail the run when the PR **widens** the blast radius (maps to `--fail-on-widen`).                                                                                                                 |
+| `github-token`      | _(auto)_  | Token for the PR comment. Defaults to the workflow token (`${{ github.token }}`).                                                                                                                                         |
 
 ## Output channels
 
@@ -92,6 +94,22 @@ permissions:
 The `valid` output is `'true'` if vigiles passed (exit 0), `'false'` otherwise.
 Exit codes (also reflected in `valid`): **0** clean · **1** warnings · **2** hard errors.
 On a fork PR (read-only token) the comment step degrades to a warning — the job still passes/fails on the result.
+
+## Capability diff in PRs
+
+Set `capability-diff: true` to answer one question on every PR: **did this change widen what your agents can do?** The Action materializes the PR base, computes the [capability diff](cli.md#capability-diff--audit-after---capability-diffbefore) (new side-effecting/unknown tools, a loosened purity floor), and folds a short section into the same sticky comment — only when something actually changed. It's informational by default; add `fail-on-widen: true` to block a PR that grows the blast radius.
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0 # required: the base commit must be present to diff against
+- uses: zernie/vigiles@v1
+  with:
+    capability-diff: "true"
+    # fail-on-widen: "true"   # optional gate
+```
+
+`fetch-depth: 0` is required because a shallow checkout (the default) doesn't carry the PR base commit the diff compares against.
 
 ## Versioning
 

@@ -20,7 +20,6 @@ export const VERBS = [
   "test",
   "eval",
   "audit",
-  "scaffold-test",
   "generate",
   "hook-runtime",
 ] as const;

@@ -38,6 +38,18 @@ inputs:
     description: "On pull_request events, post/update a sticky PR comment with the result ('true' or 'false'). Requires `pull-requests: write`."
     required: false
     default: "true"
+  capability-diff:
+    description: >
+      On pull_request events, compare the agent's capability surface (the
+      subagents' tool/effect blast radius) against the PR base and fold the diff
+      into the sticky comment (maps to `audit --capability-diff`). Requires
+      `fetch-depth: 0` on checkout so the base commit is present. 'true' or 'false'.
+    required: false
+    default: "false"
+  fail-on-widen:
+    description: "With capability-diff, fail the run when the PR WIDENS the blast radius (maps to the CLI's --fail-on-widen). 'true' or 'false'."
+    required: false
+    default: "false"
   github-token:
     description: "Token used to post the PR comment. Defaults to the workflow token."
     required: false
@@ -64,6 +76,8 @@ runs:
         VIGILES_CATALOG_ONLY: ${{ inputs.catalog-only }}
         VIGILES_ACTION_PATH: ${{ github.action_path }}
         VIGILES_COMMENT: ${{ inputs.comment }}
+        VIGILES_CAPABILITY_DIFF: ${{ inputs.capability-diff }}
+        VIGILES_FAIL_ON_WIDEN: ${{ inputs.fail-on-widen }}
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
@@ -114,6 +128,57 @@ runs:
         status="${PIPESTATUS[0]}"
         set -e
 
+        # Capability diff (moat #2): did this PR WIDEN the agent's blast radius?
+        # Runs orthogonally to the main command — it's an additive PR-comment
+        # section, so it works whatever `command` gated above. The BEFORE tree is
+        # a detached worktree of the PR base; the AFTER tree is this checkout.
+        capdiff=""       # markdown appended to the sticky comment
+        capstatus=0
+        if [[ "${VIGILES_CAPABILITY_DIFF:-false}" == "true" \
+              && "${GITHUB_EVENT_NAME:-}" == "pull_request" ]]; then
+          base_sha="$(jq -r '.pull_request.base.sha // empty' "${GITHUB_EVENT_PATH:-/dev/null}")"
+          if [[ -z "$base_sha" ]]; then
+            echo "::warning::capability-diff: no PR base sha in the event payload"
+          else
+            # A shallow checkout may not carry the base commit — fetch it first.
+            git fetch --no-tags --depth=1 origin "$base_sha" >/dev/null 2>&1 \
+              || git fetch --no-tags origin "$base_sha" >/dev/null 2>&1 || true
+            base_dir="$(mktemp -d)"
+            # Materialize the base tree with `git archive` (NOT a worktree): it
+            # exports stored blobs WITHOUT running checkout/smudge filters, so it's
+            # light and can't trip a required filter (e.g. git-crypt) the runner
+            # lacks. The agent surface (unencrypted) lands as plaintext to diff.
+            if git archive "$base_sha" 2>/dev/null | tar -x -C "$base_dir" 2>/dev/null; then
+              # Diff the SAME relative dir in both trees (support a subdir working-directory).
+              rel="$(git rev-parse --show-prefix 2>/dev/null || echo '')"
+              before="${base_dir%/}/${rel}"; before="${before%/}"
+              capout="$(mktemp)"
+              fail_flag=(); [[ "${VIGILES_FAIL_ON_WIDEN:-false}" == "true" ]] && fail_flag=(--fail-on-widen)
+              # --no-html --no-json: this run is for the diff only, so skip the
+              # report artifacts. The full audit still streams to the CI log; only
+              # the capability-diff paragraph is extracted for the sticky comment.
+              set +e
+              "${runner[@]}" audit . --capability-diff="$before" --no-html --no-json "${fail_flag[@]}" 2>&1 | tee "$capout"
+              capstatus="${PIPESTATUS[0]}"
+              set -e
+              # Pull out just the "Capability surface …" paragraph (a self-contained
+              # block with no internal blank lines), then drop the no-change case
+              # so a PR that touches nothing capability-relevant gets no section.
+              capdiff="$(awk '/Capability surface/{f=1} f&&NF{print} f&&!NF{exit}' "$capout")"
+              case "$capdiff" in *"unchanged"*) capdiff="" ;; esac
+            else
+              echo "::warning::capability-diff: could not materialize PR base ${base_sha} (need fetch-depth: 0?)"
+            fi
+            rm -rf "$base_dir" 2>/dev/null || true
+          fi
+        fi
+
+        # A capability WIDENING (fail-on-widen → exit 1) flips an otherwise-green
+        # run to failed, so the gate is visible in the output + PR comment.
+        if [[ "$capstatus" -ne 0 && "$status" -eq 0 ]]; then
+          status="$capstatus"
+        fi
+
         if [[ "$status" -eq 0 ]]; then
           echo "valid=true" >> "$GITHUB_OUTPUT"
           headline="✅ \`vigiles ${cmd}\` passed"
@@ -130,6 +195,14 @@ runs:
           echo
           echo "$headline"
           echo
+          if [[ -n "$capdiff" ]]; then
+            echo "### Capability diff"
+            echo
+            echo '```'
+            echo "$capdiff"
+            echo '```'
+            echo
+          fi
           echo '<details><summary>Output</summary>'
           echo
           echo '```'
