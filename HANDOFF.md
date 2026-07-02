@@ -26,6 +26,12 @@ has descriptive names (cleaning requires `git filter-repo` + force-push; separat
 via vault README.md). **CONDITIONAL-GO.** Framing shift is the critical finding.
 Next build step: see vault s14.md (pivot-decision) for the recommended sequence.
 
+**RESEARCH DEEPENED + PERSONAL-STRATEGY (2026-07-02, later).** Added vault docs `s21`–`s24`
+(see vault README/CLAUDE index for what each holds): a wider VC/market + demand-side research
+pass, plus one personal-strategy doc with its own open loose ends tracked INSIDE the vault. All
+strategy/personal content stays vault-only — do NOT restate here. Possible next-session action a
+user may request lives in the vault, not this public file.
+
 **OPEN FOLLOW-UPS (from prior session, still pending):**
 
 1. **`research/roadmap.md` ~37 DANGLING relative refs** to the 6 docs moved research/→`startup/`
@@ -50,6 +56,9 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
   rule; HANDOFF scrubbed of vault filenames; vault unlocked + re-encrypted on commit.
 - **PIVOT GATE RESEARCH** — 4-agent research fan-out (Sonnet) + Opus synthesis; full raw
   findings (gate-raw-a1–a4) + synthesis saved to vault. Gate verdict: CONDITIONAL-GO.
+- **DEEP-DIVE RESEARCH (later same day)** — multiple Sonnet fan-outs (VC/YC keyword landscape,
+  uncovered funds, demand-side buyer+analyst validation, distro delta) → vault `s21`–`s23`
+  (synthesis + appendix), plus a personal-strategy doc `s24`. Strategy stays vaulted.
 - **Earlier sessions:** capability-diff PR comment shipped; observe layer built; doc-tiers
   rule fixed; 41-company competitor research vaulted; 6 research docs migrated to vault.
 
