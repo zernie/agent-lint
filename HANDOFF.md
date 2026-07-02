@@ -17,15 +17,22 @@
 **Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. Long STRATEGY + BUILD +
 DOC-HYGIENE session.
 
-**Immediate pending task:** a DOC-MIGRATION decision + execution — move the already-public
-STRATEGIC research docs into the `startup/` vault (the repo is PUBLIC, so strategy shouldn't
-live in `research/`). Reconnaissance done: ~15 candidate docs, but they're heavily cross-linked
-FROM the technical research corpus (~100+ inbound `see research/X.md` refs; measurement-authority
-←18, divergent-bets ←17, …), so moving them means removing index/keyFiles entries + neutralizing
-those inbound refs (can't repoint into the vault — link-directionality) + fixing any orphans +
-recompiling. AWAITING USER SCOPE: **targeted-6** (the live-strategy docs) vs **all-15** vs **hold**
-(rely on the fixed rule going forward). Plan: hand the mechanical grind to ONE background agent that
-verifies (compile + index/orphan/self-command-refs tests) before committing; keep main context lean.
+**DOC-MIGRATION: DONE (targeted-6).** measurement-authority, divergent-bets, distribution-strategy,
+typed-spec-moat, strategic-synthesis-2026-06, eval-startups-positioning moved research/→`startup/`
+(encrypted, verified `\0GITCRYPT`), index/keyFiles removed, specs recompiled, 54 tests green.
+**Two follow-ups remain (next session):**
+
+1. **`research/roadmap.md` still has ~37 DANGLING relative refs** to the 6 moved docs (the migration
+   agent only neutralized `research/X.md`-style, not relative `X.md`-style — README + plugin-structural
+   ARE clean now). They're scattered across ~10 sections; roadmap also still has strategic sections
+   (Explore/GTM @~830) needing de-strategization. Needs a focused whole-doc pass (leak-sensitive; don't
+   rush at session end). No test catches these (prose links), so they won't fail CI meanwhile.
+2. **Broader research-corpus de-strategization** — `research/README.md` "Strategy & bets" leftovers,
+   `research/CLAUDE.md` Scope text ("research/ = private record / moat narrative" — same public-repo bug
+   as doc-tiers), and strategic framing inside individual kept docs. Lower urgency (already-public).
+
+**Strategic next step (the real fork):** run the PIVOT VALIDATION GATE — see `startup/pivot-decision-
+2026-07.md`. Batched 2×2 research, alone, full context headroom (workflow-fragility lesson).
 
 **Business direction: SEE THE VAULT.** The leading thesis + all competitive/monetization strategy
 live in `startup/` (`distro-thesis-2026.md` = current leading direction; `strategic-synthesis-
