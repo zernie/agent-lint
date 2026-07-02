@@ -208,4 +208,3 @@ core and launch on the CLI**, which is a narrower, stabler contract than the lib
 - The private `startup/` vault (git-crypt) — the investor/competitor/funding research
   this triage draws on.
 - `roadmap.md` — `🚀 Launch readiness` points here; the durable Now/Next/Later map.
-- `measurement-authority.md` — the measurement identity the launch leads with.

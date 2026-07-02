@@ -21,7 +21,7 @@ one answer that drives adoption:
 > **"What would vigiles catch in MY repo, right now, if I adopted it?"**
 
 The whole positioning calls `audit` the adoption front door (see
-`audit-lighthouse-design.md`, `measurement-authority.md`), but the front door
+`audit-lighthouse-design.md`), but the front door
 currently opens onto a hygiene report, not a personalized proof of value. This doc
 is the missing piece: a preview that shows a non-adopter the concrete bugs a spec
 would catch in their harness today.
@@ -163,7 +163,6 @@ Adoptability section/number.
 ## See also
 
 - `audit-lighthouse-design.md` — the audit model + every decision in the rings arc.
-- `measurement-authority.md` — the adoption-engine positioning this serves.
 - `reference-verification-limits.md` — the undecidability ceiling the honesty
   boundary respects.
 - `install-enforcement-dx.md` — `init` auto-adopt (the writer the preview hands off to).

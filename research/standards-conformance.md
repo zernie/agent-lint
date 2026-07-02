@@ -5,12 +5,10 @@ topic: positioning
 
 # Cross-tool standards conformance: should vigiles become the neutral verification layer?
 
-> Status: research (2026-06-13). Adjacent to [sync-landscape-analysis](sync-landscape-analysis.md),
-> [reference-verification-limits](reference-verification-limits.md), and
-> [distribution-strategy](distribution-strategy.md). Does NOT re-cover the rule-_sync_ tool
+> Status: research (2026-06-13). Adjacent to [sync-landscape-analysis](sync-landscape-analysis.md)
+> and [reference-verification-limits](reference-verification-limits.md). Does NOT re-cover the rule-_sync_ tool
 > comparison (rulesync/Ruler/rule-porter/vibe-cli — see sync-landscape), the deterministic-vs-judgment
-> boundary or the doc-format identity-vs-link discussion (see reference-verification-limits), or the
-> adoption-funnel diagnosis (see distribution-strategy). Covers: the 2026 standardization of agent
+> boundary or the doc-format identity-vs-link discussion (see reference-verification-limits). Covers: the 2026 standardization of agent
 > config formats/protocols and whether vigiles should reposition as the neutral, tool-agnostic
 > **conformance + reference-verification** layer riding that wave.
 
@@ -190,8 +188,6 @@ pivot (#4). Keep the harness pillar deep and Claude-Code-anchored.
   the compose-don't-absorb stance this doc inherits.
 - [reference-verification-limits](reference-verification-limits.md) — the deterministic-vs-judgment boundary
   and why plain markdown (AGENTS.md/SKILL.md included) can't structurally self-fix references.
-- [distribution-strategy](distribution-strategy.md) — the funnel diagnosis; the AGENTS.md corpus is the bigger
-  target for the E1 "scan popular repos, publish findings" lever.
 - [competitive-landscape](competitive-landscape.md) — the broader tool field.
 - [harness-testing](harness-testing.md) — Pillar 2, the uncontested moat this doc says to keep deep.
 

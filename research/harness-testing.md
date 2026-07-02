@@ -197,8 +197,8 @@ but not a separate layer, because splitting it would imply eval delivers a
 different value than "test the harness," which it doesn't.
 
 The one future where eval graduates to a third layer: if vigiles builds the
-**self-improving harness** (auto-tune skills/hooks by measured evolution — see
-`research/divergent-bets.md` #7), eval stops being "a way to test" and becomes "a
+**self-improving harness** (auto-tune skills/hooks by measured evolution), eval
+stops being "a way to test" and becomes "a
 way to _optimize_" — a genuinely distinct concern worth its own layer. Until then:
 two layers, four levels (refs · unit · integration · e2e) + the eval axis.
 

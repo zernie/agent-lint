@@ -11,9 +11,7 @@ topic: spec
 > skills/agents/CLAUDE.mds have a `.spec.ts` and some don't, what does the spec
 > actually BUY over plain markdown — per capability, per surface — and therefore
 > what should the `require-*-spec` rules default to? This supersedes the scattered
-> per-file note; it is THE reference. See also
-> [`typed-spec-moat.md`](typed-spec-moat.md) (the three moats) and
-> [`measurement-authority.md`](measurement-authority.md) (the pivot).
+> per-file note; it is THE reference.
 
 ## The reframe: capability is the axis, not spec-vs-no-spec
 
@@ -112,9 +110,6 @@ harness as one program**, and a **deterministic, judge-free contract oracle**.
 
 ## See also
 
-- [`typed-spec-moat.md`](typed-spec-moat.md) — the three moats (the depth specs unlock).
-- [`measurement-authority.md`](measurement-authority.md) — the pivot; why lint/test/eval
-  on markdown is the adoption engine.
 - [`adoption-strategy.md`](adoption-strategy.md) — progressive adoption & the per-file
   mixed-repo behavior (points here for the capability model).
 - [`effect-boundary-design.md`](effect-boundary-design.md) — why the `effect()`

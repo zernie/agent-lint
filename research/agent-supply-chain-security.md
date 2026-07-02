@@ -203,9 +203,8 @@ smallest first step.
   "another scanner" in mid-2026 is entering a closing door.
 - **Security is a trust-asymmetric business.** A reference verifier that misses a
   stale path is a bug; a security scanner that misses a malicious skill is a
-  breach you're now liable for. vigiles is pre-adoption
-  (`research/distribution-strategy.md`) — taking on security-grade trust
-  obligations before having users is backwards.
+  breach you're now liable for. vigiles is pre-adoption — taking on
+  security-grade trust obligations before having users is backwards.
 - **"Delegate, don't build" still mostly holds.** The skill-eval-landscape punt
   was right about the _static_ rows (secrets/malware/typosquat/deps) —
   `gitleaks`/`semgrep`/Socket do those better and it'd violate the
@@ -237,5 +236,3 @@ _capability_, not an identity.
   builds on.
 - [runtime-enforcement](runtime-enforcement.md) and `src/agent-runtime.ts` —
   the declared-vs-enforced tool-contract rail (#4740/#21460, SDK #172) idea #2 generalizes.
-- [distribution-strategy](distribution-strategy.md) — why the pre-adoption stage
-  argues against the security-grade trust bar of a full pivot.

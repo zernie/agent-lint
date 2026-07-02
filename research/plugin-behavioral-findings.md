@@ -6,9 +6,7 @@ topic: eval
 # Behavioral findings — trigger-rate probes of popular plugins
 
 > Status: live findings log (2026-06-18). The behavioral half of the
-> "find bugs in popular OSS plugins" adoption bet
-> ([distribution-strategy](distribution-strategy.md) E1,
-> [divergent-bets](divergent-bets.md) #9). The deterministic scan/leaderboard
+> "find bugs in popular OSS plugins" adoption bet. The deterministic scan/leaderboard
 > ([scan.ts](../src/scan.ts), [leaderboard.ts](../src/leaderboard.ts)) is the
 > free, no-model column; this doc records what the **model-gated** column
 > (`measureTriggerRate`) finds that the structural column structurally cannot.
@@ -401,10 +399,6 @@ skillResolved(t, "superpowers:brainstorming")`); the canonical shape is
 - [plugin-structural-findings](plugin-structural-findings.md) — the deterministic
   half (structural sweep of real marketplaces): the public disclosures list + the
   scanner false positives the sweep found and fixed.
-- [distribution-strategy](distribution-strategy.md) — E1: run scan on popular
-  repos and publish findings; this is the behavioral half.
-- [divergent-bets](divergent-bets.md) — #9 plugin/skill leaderboard; the
-  behavioral columns (trigger-rate/egress) stack on the structural score.
 - [skill-authoring-pains](skill-authoring-pains.md) — triggering as the #1 pain.
 - [eval-coverage-and-isolation](eval-coverage-and-isolation.md) — where the
   model-gated tier sits in the coverage model.

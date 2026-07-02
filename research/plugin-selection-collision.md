@@ -159,4 +159,3 @@ overlapping skills that actually FIRE (superpowers minus the vendoring gap).
 
 - `src/core/description-overlap.ts` — the deterministic proxy this confirms.
 - `research/plugin-behavioral-findings.md` — the trigger-rate dogfood findings.
-- `research/measurement-authority.md` — the leaderboard this column feeds.

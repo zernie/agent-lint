@@ -7,8 +7,8 @@ topic: roadmap
 
 > Tech direction of record (2026-07-01). The architecture decision behind the next build
 > phase. This is the TECHNICAL half only — product/GTM specifics are kept out of the
-> public record by design. Companion to `harness-state-space.md` (the organizing thesis)
-> and `measurement-authority.md` (the measurement pivot); `roadmap.md` sequences it.
+> public record by design. Companion to `harness-state-space.md` (the organizing thesis);
+> `roadmap.md` sequences it.
 
 ## The frame: the typed spec is the declared ground truth
 
@@ -140,6 +140,5 @@ mode; the spine is "the typed spec is the ground truth everything checks against
 ## See also
 
 - `harness-state-space.md` — the construct/verify/gate/test organizing thesis.
-- `measurement-authority.md` — the measurement pivot this observability layer serves.
 - `roadmap.md` — where this sequences against the rest.
 - `typed-claude-md-poach.md` — the typed-composition mechanics (subagents/railway half).

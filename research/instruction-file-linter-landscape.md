@@ -244,6 +244,5 @@ AgentLint already uses the phrase); keep the rule set small, true, and FP-calibr
   _use-as-prompt_ rather than validate.
 - `lightweight-spec-authoring.md` — the `doc()` primitive + templates the "authoring
   ergonomic, not a moat" point refers to, grounded in a real-CLAUDE.md corpus sweep.
-- `divergent-bets.md` — the plugin-health leaderboard bet (scan over real marketplaces).
 - `agent-supply-chain-security.md` — the security-scan surface (SkillCheck/SkillSpector
   territory), orthogonal to reference verification.

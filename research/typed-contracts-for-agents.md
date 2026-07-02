@@ -5,13 +5,13 @@ topic: spec
 
 # Typed contracts for agents — the durable purpose of the spec under measurement
 
-> Status: strategy synthesis (2026-06-19). Under the measurement reframe
-> (`measurement-authority.md`), what is the spec FOR — given markdown wins for authoring a
+> Status: strategy synthesis (2026-06-19). Under the measurement reframe,
+> what is the spec FOR — given markdown wins for authoring a
 > CLAUDE.md? Answer: not authoring instruction files, but turning **skills/agents from
 > prose-vibes black boxes into typed, contract-bound, side-effect-explicit UNITS that are
 > cheap + deterministic to test** — which is exactly what makes the measurement identity
 > affordable and rigorous. Railway / Result / monads applied to agents. Companion to
-> `measurement-authority.md`, `shareable-presets.md`, `railway-subagents.md`,
+> `shareable-presets.md`, `railway-subagents.md`,
 > `fp-for-agent-harness.md`.
 
 ## The question
@@ -122,7 +122,6 @@ skill — and the more structure you let us add, the cheaper and sharper the tes
   tagged error union, `doc()` vs structured builders, `extends()` merge, strict-typing borrows).
 - `side-effect-separation.md` — enforcing the side-effect boundary deterministically (the mark
   doubles as the safety gate AND the test seam).
-- `measurement-authority.md` — the identity these contracts make affordable.
 - `shareable-presets.md` — the template/distribution axis (generalized to skills/agents here).
 - `railway-subagents.md` — the railway design this elevates from a feature to a purpose.
 - `fp-for-agent-harness.md` — the Railway/algebraic-effect structure for skills/hooks.

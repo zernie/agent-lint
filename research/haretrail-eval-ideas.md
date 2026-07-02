@@ -78,5 +78,4 @@ work-evidence/summary/lessons/postmortem) — Finding 3b was blocked by a usage 
   auto-sibling-negatives + run on the real installed harness on your subscription.
 
 See also: `research/plugin-behavioral-findings.md` (Findings 3a/3b — the haretrail
-probe + the cross-language refutation), `research/measurement-authority.md`,
-`research/audit-wow-ideas.md`.
+probe + the cross-language refutation), `research/audit-wow-ideas.md`.

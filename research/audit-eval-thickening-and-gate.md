@@ -9,8 +9,7 @@ topic: audit
 > one eval to three), the adversarial-gate eval design + LIVE findings, the
 > benchmark-corpus headroom constraint, and the competitive ranking + idea backlog
 > that framed it. Companion to `skill-eval-landscape.md` (the adversarial-gate
-> concept), `measurement-authority.md` (benchmark-as-flywheel), and
-> `oss-audit-render-findings.md` (what audit catches in the wild).
+> concept) and `oss-audit-render-findings.md` (what audit catches in the wild).
 
 ## 0. Operational correction — model auth WORKS in the Claude-Code-web sandbox
 
@@ -159,8 +158,7 @@ headroom corpus first.
   not more quota. The pipeline + executing checks (run the artifact via `ctx.sh`,
   verified to discriminate good/bad) all WORK; the gap is the task source.
 
-Strategic caveat of record (`eval-startups-positioning.md` /
-`measurement-authority.md`): the benchmark is an ACQUISITION FLYWHEEL, not the
+Strategic caveat of record: the benchmark is an ACQUISITION FLYWHEEL, not the
 moat — keep it thin, lead public copy with user value ("the eval you can afford"),
 never "what works vs hype" as a banner; a public leaderboard gets Goodharted. It's
 the launch HOOK; audit is the on-ramp.
