@@ -62,6 +62,8 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
 - **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
   `git-crypt unlock <keyfile>` with the user's base64 key; verify a committed blob is `\0GITCRYPT`.
   Vault files are in `.prettierignore` (no fmt needed); a committed blob must read `\0GITCRYPT`.
+  **⚠️ `git mv` INTO `startup/` DOES NOT ENCRYPT** (reuses the plaintext blob) — after moving,
+  `git add --renormalize startup/` then VERIFY `git show HEAD:startup/<f>.md | head -c9`=`\0GITCRYPT`.
 - `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
   (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
   keyFiles line first or compile FAILS.
