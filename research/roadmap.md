@@ -17,9 +17,7 @@ topic: roadmap
 > [`feature-ideas.md`](feature-ideas.md) (pillar-1 user features),
 > [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
 > (pillar-2 surface coverage), [`harness-state-space.md`](harness-state-space.md)
-> (analogical-transfer moats). Strategy from
-> [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) and
-> [`divergent-bets.md`](divergent-bets.md). See also the full index in
+> (analogical-transfer moats). See also the full index in
 > [`README.md`](README.md).
 
 ## Direction (technical)
@@ -67,7 +65,7 @@ topic: roadmap
 >   needs):** (1) lock the **8 CLI verbs + flags + exit codes** (just consolidated —
 >   the CLI is what ~90% of launch users touch, and it's a narrower/stabler contract
 >   than the library); (2) draw a hard **public vs internal line** — un-export or
->   loudly label the experimental/parked surface (`guards.ts`, `hook-spec.ts`,
+>   loudly label the experimental/parked surface (`guards.ts`, `hook-spec.ts`
 >   effect-region, the opencode prototype, the deep typed-spec exports) so a later
 >   breaking change burns nobody (audit via the `api-extractor` `etc/*.api.md`
 >   surface); (3) ship a one-paragraph **0.x stability statement** ("CLI stable;
@@ -80,8 +78,8 @@ topic: roadmap
 >   marketplace, and a smoke-test of the PUBLISHED npm package.
 > - **PARKED for launch (add back post-HN):** Guard / compiled hooks — niche (you must
 >   write hooks) + the honest #34692 caveat dilutes a first impression. README section
->   - table row commented out (markers point here); the `docs/compiled-hooks.md` guide
->     stays. Re-headline post-launch.
+> - table row commented out (markers point here); the `docs/compiled-hooks.md` guide
+>   stays. Re-headline post-launch.
 > - **CUT / COLLAPSE — the markdown adoption ladder:** KEEP the zero-TS inline-comment
 >   on-ramp (`<!-- vigiles:enforce -->`; the README depends on it), but collapse the
 >   3-rung ladder (inline / frontmatter / spec) to **2 (plain markdown → typed spec)** —
@@ -103,13 +101,13 @@ topic: roadmap
 >   inject is confirmed + encoded in `injectableEvents`; `init` wires the eval-lock + refs
 >   nudges into `.codex/config.toml`). The remaining pre-release gaps, ranked: **(1) run
 >   the eval tier against the REAL `codex` binary at least ONCE** — the transport is built
->   - fake-tested, but no live native `codex exec --json` eval has run (gated on Codex
->     quota); this is the one "claimed but never executed end-to-end" piece and must be
->     proven before we say "works on Codex" at launch. **(2)** `react` hook output on Codex
->     stays CC-confirmed-only (a real-binary probe; low bite — react is rare). **(3)** the
->     SessionStart lint-summary + compile-on-edit/pre-edit guards stay manual on Codex (need
->     a harness-neutral `hook-runtime` entrypoint; documented deferral, not a blocker).
->     Item (1) is the P0; (2)/(3) are polish. Detail in `research/codex-prototype-findings.md`.
+> - fake-tested, but no live native `codex exec --json` eval has run (gated on Codex
+>   quota); this is the one "claimed but never executed end-to-end" piece and must be
+>   proven before we say "works on Codex" at launch. **(2)** `react` hook output on Codex
+>   stays CC-confirmed-only (a real-binary probe; low bite — react is rare). **(3)** the
+>   SessionStart lint-summary + compile-on-edit/pre-edit guards stay manual on Codex (need
+>   a harness-neutral `hook-runtime` entrypoint; documented deferral, not a blocker).
+>   Item (1) is the P0; (2)/(3) are polish. Detail in `research/codex-prototype-findings.md`.
 > - **SHIPPED this session (branch `claude/handoff-mylfen`, not merged):** the surface
 >   freeze + STABILITY + markdown cut (parked, not deleted) + pain-first hero/subdocs — so
 >   the freeze and markdown-cut items above are DONE there.
@@ -146,13 +144,13 @@ topic: roadmap
       stark. **SONNET follow-up DONE (2026-06-20, caveman's TARGET model, pilot
       2×2): the debunk STRENGTHENS — −23% output / −20% cost (the bill went UP),
       0 regressions.** Rules out the "haiku underuses the style" caveat. Widen to
-      5×3 for tighter CIs; direction is clear. → `measurement-authority.md`, `benchmark-methodology.md`
+      5×3 for tighter CIs; direction is clear. → `benchmark-methodology.md`
 
 **P1 — measurement (the identity):**
 
 - [ ] **Ecosystem benchmark v0** — A/B 10–20 most-hyped skills/plugins on a small real-task
       corpus; publish "what works vs hype" (lead with the debunks). Reuses `runEval` /
-      `measureTriggerRate` + the ROI-optimizer bet. → `measurement-authority.md`, `divergent-bets.md`
+      `measureTriggerRate` + the ROI-optimizer bet.
 - [x] **Does-our-spec-help A/B — DONE (2026-06-20), the spec HELPED.** First real-model
       A/B of vigiles's OWN typed contract: [`examples/harness/dogfood/reviewer-ab.eval.mjs`](../examples/harness/dogfood/reviewer-ab.eval.mjs)
       (prose vs spec code-reviewer, controlled, sonnet 2×). **Result: quality identical
@@ -160,7 +158,7 @@ topic: roadmap
       `vigiles:ok` outcome 0% prose → 100% spec).** So the typed contract adds
       deterministic testability (assertAgentOk, no LLM judge) at ZERO quality cost — the
       "typed contracts make measurement affordable" thesis, validated on our own contract.
-      → `measurement-authority.md`, `typed-contracts-for-agents.md`
+      → `typed-contracts-for-agents.md`
 - [x] **FIX: subagent nested-trace recovery under `--plugin-dir` — SHIPPED (`212869d`).**
       Two real CC behaviors fixed + validated against a captured live dispatch: (1) a
       `--plugin-dir` agent's `subagent_type` is namespaced `plugin:agent` → match the bare
@@ -182,8 +180,8 @@ topic: roadmap
       **Mechanism to poach (arXiv AHE, `agentic-harness-evolution-poach.md`):** wrap each
       recommendation in a **falsifiable predicted-delta contract** — predict which evals
       it improves/regresses, run, **auto-revert on no-improvement**, and predict
-      REGRESSIONS explicitly (their regression-foresight was the weak spot). →
-      `measurement-authority.md`, `divergent-bets.md`, `agentic-harness-evolution-poach.md`
+      REGRESSIONS explicitly (their regression-foresight was the weak spot).
+      `agentic-harness-evolution-poach.md`
 - [x] **Benchmark methodology + task corpus — v0 DONE (2026-06-20).** The method
       doc: [`benchmark-methodology.md`](benchmark-methodology.md) (the metric triple —
       bill/target/blast-radius — grounded in the P0 caveman measurement). The
@@ -193,13 +191,13 @@ topic: roadmap
       correctness oracle discriminates good/bad). The P0 eval now consumes it, and
       the ecosystem benchmark (A1) + `vigiles optimize` (A2) A/B over the SAME corpus.
       Remaining: per-repo-variance handling (report the distribution across tasks,
-      not one mean). → `measurement-authority.md`
+      not one mean).
 
 **P1 — typed contracts / spec-as-testability (substrate + adoption ramp):**
 
 - [x] **Test-gen from free-form — SHIPPED (2026-06-20)** as `vigiles scaffold-test`
       ([`src/scaffold-test.ts`](../src/scaffold-test.ts) + CLI). Free-form in, a runnable
-      starter test out, per kind at the untested-detector's suggested path. →
+      starter test out, per kind at the untested-detector's suggested path.
       `typed-contracts-for-agents.md`
 - [ ] **Auto-derive `interceptTools` from the tools allowlist in `scaffold-test`** — the
       salvaged nugget from the rejected `effect()`-as-test-seam reframe (2026-06-21): read a
@@ -217,7 +215,7 @@ topic: roadmap
       `start`/`andThen` fold) cross-references at `tsc` time that step N's `ok` SUPPLIES step
       N+1's `needs` — a missing field / wrong type / out-of-order handoff **won't compile**.
       The headline non-replicable typed-spec win. Additive over the string-based `delegate()`
-      path; shallow `Supplies<>` encoding (TS2589-safe). → `typed-spec-power.md`, `typed-spec-moat.md`
+      path; shallow `Supplies<>` encoding (TS2589-safe). → `typed-spec-power.md`
 - [~] **Semantic capability-diff at PR time (Moat #2) — the bridge bet. v0 SHIPPED.**
   `vigiles capability-diff <before> <after>` (src/core/capability-diff.ts +
   the CLI handler): diffs the two whole-harness capability lattices and reports the
@@ -232,7 +230,7 @@ topic: roadmap
   "this PR gives `summarizer` network access / removes the review gate / opens a
   cross-step exfil path" — off the spec's **effect surface**, not a text diff. Markdown
   gives a text diff; only a typed spec gives a capability diff. **The bridge that serves
-  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `audit`,
+  BOTH moat and adoption** (a free PR comment — partial on plain plugins via `audit`
   richer on specs — so value without authoring a typed spec). Built on: the
   whole-harness **capability lattice** (`computeHarnessCapabilities`, SHIPPED in
   `generate-harness`) + the **effect-row (M1) + cross-step accumulation** engine
@@ -243,8 +241,8 @@ topic: roadmap
   moat feature that also pulls adoption. A funded competitor validates the
   PR-time-verification-for-agents surface AND leaves this lane open (they test the app
   the agent built, not the agent's powers) — see the private `startup/` vault.
-  → `typed-spec-moat.md` (Moat #2),
-  `measurement-authority.md` (the bridge), `typed-spec-fp-theory.md` (T2) · **P1**
+  → `typed-spec-fp-theory.md` (T2) · **P1**
+
 - [ ] **Lethal trifecta as a forbidden TYPE (F1) — the dangerous tool combo is
       unrepresentable.** An agent with untrusted-input + secret-access + exfil legs in one
       `tools` contract won't compile without a typed `allowTrifecta` sign-off the compiler
@@ -257,7 +255,7 @@ topic: roadmap
 - [x] **Elevate railway/Result contracts — SHIPPED (2026-06-20)** (docs + worked example).
       `assertAgentOk/Err/Result` existed but were invisible; added
       [`examples/harness/railway-result.harness.mjs`](../examples/harness/railway-result.harness.mjs)
-      (Part A pure, Part B a real mock turn) + a `docs/harness-testing.md` section. →
+      (Part A pure, Part B a real mock turn) + a `docs/harness-testing.md` section.
       `typed-contracts-for-agents.md`, `railway-subagents.md`
 - [x] **Side-effect boundaries for skills — SHIPPED (2026-06-20).** The deterministic
       side-effect-boundary ASSERTION (rung 2): added `didNotWrite()` (the symmetric no-write
@@ -268,7 +266,7 @@ topic: roadmap
       `tool-intercept` (real-model prevention) stays as is. → `typed-contracts-for-agents.md`
 - [ ] **Shareable typed templates (skills/agents) — DEFERRED (premature).** `preset()` /
       `extend()` only pay off at SCALE (an org standard or monorepo consuming one published
-      preset), and vigiles has ~no consumers yet (`distribution-strategy.md`) — building the
+      preset), and vigiles has ~no consumers yet — building the
       network-effect layer before the network. The `off()` primitive in the sketch is also
       mis-framed (it reads as "disable an eslint rule," but vigiles never touches eslint config
       — it can only drop an inherited rule from the compiled instruction file). Revisit once
@@ -276,7 +274,7 @@ topic: roadmap
 - [x] **`dir()` + `glob()` lightweight authoring — SHIPPED (2026-06-20).**
       [`src/core/spec.ts`](../src/core/spec.ts) builders + compile-time verification
       (`validateDirRef` — exists AND is a directory; `validateGlobRef` — matches ≥1 path),
-      7 vitest cases, docs in [`docs/spec-format.md`](../docs/spec-format.md). →
+      7 vitest cases, docs in [`docs/spec-format.md`](../docs/spec-format.md).
       `lightweight-spec-authoring.md`
 - [✗] **`doc()` builder — DROPPED (2026-06-20).** It would duplicate `instructions\`\``(the existing tagged template already does typed prose-with-refs). Research-backed:
 the spec syntax is already the correct hybrid (plain-object backbone + typed-value
@@ -299,7 +297,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       skill, gated: `output` without `context:"fork"` is a compile error
       (`output-without-fork`) — enforcing "a typed outcome needs the subagent
       boundary" from the research. A forked skill's Output contract renders via the
-      SAME `renderOutputContract` the subagent uses (one-renderer-no-drift). →
+      SAME `renderOutputContract` the subagent uses (one-renderer-no-drift).
       `spec-syntax-and-railway-scope.md`
 
 **P2 — linting, repositioned (free pre-filter + diagnostic):**
@@ -312,8 +310,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       `vigiles optimize` WHEN it genuinely optimizes: when each add/drop/swap recommendation
       carries a real-model before/after delta (the A2 measured half over `bench/corpus`).
       At that point "optimize" means something `audit` can't, and the verb is earned. The
-      pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way. →
-      `measurement-authority.md` (A2)
+      pure `optimize()`/`formatOptimize()` in `src/optimize.ts` are kept either way.
 - [ ] **Keep the high-signal cross-ref engine; drop the breadth race** (no beat-agnix-on-rule-count).
       CONFIRMED by the 2026-06-25 OSS sweep (`oss-lane-sweep-2026-06.md`): **agnix** is the
       structure-lint incumbent (297★, 429 rules, Rust, LSP) — the lane to NOT race. Our
@@ -333,8 +330,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
       Shipped as the `explainScore` engine (deterministic; `explainSurface` narrows to
       one surface). Now folded INLINE into the default `audit` report (A2) via
       `formatRecommendations` — each recommendation IS an explanation reshaped with an
-      action verb (the former `--explain`/`--fix-plan` flags are gone). →
-      `measurement-authority.md`
+      action verb (the former `--explain`/`--fix-plan` flags are gone).
 
 **Distribution:**
 
@@ -351,7 +347,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   (`"pure" | "bounded" | "dangerously-unrestricted"`, enforced at compile —
   absent tools = inherits-all = violation); the **audit effect-surface column**
   (per-unit purity + `N pure · M bounded · K unrestricted` audit); and the
-  standalone **deterministic Bash-effect classifier** (`src/core/bash-effects.ts`,
+  standalone **deterministic Bash-effect classifier** (`src/core/bash-effects.ts`
   `mvdan-sh` AST + catalog + fail-closed residue, zero-false-read-only gate). Two
   design calls locked in: the enum mirrors the analysis vocabulary
   (declare/report symmetry), and `dangerously-unrestricted` is loud at the
@@ -380,11 +376,11 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 - **`vigiles audit`** + **plugin health leaderboard** — deterministic per-plugin
   report + rank-by-structural-health (`src/scan.ts`, `src/leaderboard.ts`).
 - **`untested-surface` rule** + **skills conformance gate** — third gap detector;
-  every skill loads with a usable description (`src/test-coverage.ts`,
+  every skill loads with a usable description (`src/test-coverage.ts`
   `src/skills-dogfood.test.ts`).
 - **Eval B→A→C** — cost/latency capture, record/replay cache, concurrency +
   budget, Welch significance + pass^k, regression gating vs committed baseline
-  ([`eval-api-landscape.md`](eval-api-landscape.md): `src/eval.ts`, `stats.ts`,
+  ([`eval-api-landscape.md`](eval-api-landscape.md): `src/eval.ts`, `stats.ts`
   `eval-baseline.ts`).
 - **Sandbox unit tier + allowlisted egress** — `runHook`/`runHarnessTest` confine
   untrusted code under bubblewrap; `egress: { allow }` ([`sandbox-network.md`](sandbox-network.md),
@@ -413,7 +409,7 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
   for OUTPUTS, applied to the HARNESS. Builds on the shipped observe ledger (`src/observe.ts`).
 - **Harness-native cross-check — DEEPEN (2026-06-21, IN PROGRESS).** The moat refinement
   (see [`landscape-mid-2026.md`](landscape-mid-2026.md) §"Read of Market C" REFINEMENT):
-  cross-referencing's value is the HARNESS-NATIVE references (tools, MCP `server#tool`,
+  cross-referencing's value is the HARNESS-NATIVE references (tools, MCP `server#tool`
   hook events, paths, delegates), NOT the linter-catalog leg (legacy/supporting — don't
   add more catalogs). **First build: live MCP tool resolution of the real
   `mcp__server__tool` contract refs** — the live engine exists (`src/core/mcp.ts`
@@ -479,7 +475,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
     `effectSurface` and AUTO-DERIVE the `interceptTools` entry per side-effecting tool —
     delivers "the agent's hole is easy to test/mock" with zero new spec surface. → folds
     into the scaffold-test enhancement, NOT an `effect()` revival.
-  - See [`effect-boundary-design.md`](effect-boundary-design.md). · **P3**
+  - See [`effect-boundary-design.md`](effect-boundary-design.md). **P3**
 - **Authoring ergonomics — `dir()` / `glob()` SHIPPED (2026-06-20).** The two
   lightweight verification helpers (the `Ref` union extended → render + compile
   verification in every switch). `doc()` was the proposed next sibling but is now
@@ -493,7 +489,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   `measure` with `stubSkillBodies`, on **Sonnet** — the realistic selector, not
   haiku, which under-measures trigger-rate) as a per-PR gate, then the
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
-  roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). · **HIGH**
+  roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). **HIGH**
 - **PATH-shim / record-replay helper (fake-on-PATH)** — the R2 tier: a fake
   binary earlier on PATH that emits a result **recorded once** from the real tool
   and replayed deterministically (never model-synthesized — drift → false
@@ -531,11 +527,11 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **More deterministic lint rules — the next moat surfaces.** This session
   shipped 5 cross-referencing rules (agent-tool-contract, hook-events,
   agent-frontmatter, skill-frontmatter, mcp-config). The ranked, sweep-grounded,
-  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`,
+  FP-calibrated backlog for the next batch — `mcp-tool-resolves`, `hook-shape`
   `duplicate-names`, the novel `description-overlap` (NCD precision proxy),
   `frontmatter-valid`, `hook-matcher` — is in
   [deterministic-rule-ideas](deterministic-rule-ideas.md). Each is the same
-  "valid is not true" cross-reference on a new surface, high-precision by design. · **P1**
+  "valid is not true" cross-reference on a new surface, high-precision by design. **P1**
 - **`no-internal-links-in-public-docs` lint rule — deterministic enforcement.**
   Today it's a GUIDANCE rule only (root `CLAUDE.md` spec): a public doc
   (`README.md` / `docs/*.md`) must never link an internal `research/*.md`. Make it
@@ -545,7 +541,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   research doc referenced from `CLAUDE.md` keyFiles / `research/README.md`. Same
   one-detector-no-drift shape (shared by `lint` + a `audit` note) as the other doc
   rules. Add the `RulesConfig` key + `docs/rules/<name>.md` + the matrix row
-  (rules-docs-in-sync). · **P1**
+  (rules-docs-in-sync). **P1**
 - **Agent-native lint delivery — JSON-in-the-loop + lint-as-hook.** The lint
   consumer is shifting from a human in an editor to an _agent in a loop_, so deliver
   findings where the agent acts: (a) structured `--json` with did-you-mean fixes and
@@ -556,7 +552,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   human ignores a noisy finding, but an agent _obediently "fixes" every one_, so a false
   positive makes it edit correct content. The "don't cry wolf" discipline is load-bearing
   once the consumer is a model. See [instruction-file-linter-landscape](instruction-file-linter-landscape.md)
-  (the moat in an agent-authored world). · **P1**
+  (the moat in an agent-authored world). **P1**
 - **Cross-platform confinement — macOS Seatbelt backend.** Confinement is
   Linux-only today (`bwrap`), so on a Mac foreign plugin/skill code forces the
   refuse-or-`sandbox:false` choice — unacceptable when most devs are on macOS.
@@ -568,10 +564,10 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   decided in [cross-platform-sandboxing](cross-platform-sandboxing.md). **Note: the
   maintainer has no Mac**, so this needs a macOS CI runner (or a Mac-having
   contributor) to validate the backend end-to-end — the pure policy/args seams can
-  still be unit-tested without one. · **P1**
+  still be unit-tested without one. **P1**
 - **AGENTS.md + SKILL.md as first-class verified inputs** — the engine is already
   format-agnostic; rides the 60k-repo / 32-tool wave.
-  [standards-conformance](standards-conformance.md) · [synthesis T1#1](strategic-synthesis-2026-06.md) · **MED**
+  [standards-conformance](standards-conformance.md) · **MED**
 - **`audit` → observed-egress column** — boot each hook under `recordEgress`, list
   hosts reached; turns `audit` from static into behavioural, feeding the
   leaderboard and the supply-chain audit. [agent-supply-chain-security #1](agent-supply-chain-security.md) · **MED**
@@ -611,7 +607,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
       has a Stage-1 PREVENT on-ramp (`init` auto-adopts CLAUDE.md / skills / subagents into
       typed specs); hooks have only Stage-3 DETECTION (the `hook-*` lint rules), because
       there's no `adoptHook` and `prefer-compiled-hooks` defaults off. An `adoptHook` would
-      convert a hand-written shell hook into a compiled `vigiles/hook` program during `init`,
+      convert a hand-written shell hook into a compiled `vigiles/hook` program during `init`
       making `hook-block-ineffective` / `hook-events` / `hook-script-exists` _prevented by
       construction_ instead of detect-only. Parked because shell→typed is lossy/undecidable in
       the general case (best-effort + a loud "couldn't fully translate" is the realistic shape).
@@ -717,7 +713,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   → near-neighbor → whole-harness (`installSet`) tiers crossed with model arms.
   Decisive cheap first probe: `brainstorming` recall at 2 roster sizes × 2 models
   (~20 stubbed runs) to confirm the curve is real + model-dependent before any
-  matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · [divergent-bets #11](divergent-bets.md) · **P3 (MED)**
+  matrix. Measure, don't claim. [plugin-behavioral-findings](plugin-behavioral-findings.md) · **P3 (MED)**
 - **Plugin selection-collision matrix** — **SHIPPED (core + CLI `audit --prompts=`, interactive).**
   The behavioral CONFIRMATION of the deterministic `description-overlap` rule: run
   each model-invocable skill's own prompts against the whole installed plugin and
@@ -734,11 +730,11 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
 - **Observed-vs-declared, signed (the flagship)** — declare a contract, run
   confined, diff observed vs declared, sign with the SHA-256 chain. Only vigiles
   holds both the declaration model and the confined trace.
-  [synthesis T2#6](strategic-synthesis-2026-06.md) · [supply-chain #2](agent-supply-chain-security.md) · **MED**
+  [supply-chain #2](agent-supply-chain-security.md) · **MED**
 - **OTel-GenAI span emission** from the test tiers (`src/otel.ts`, opt-in) — make
   test-time traces speak prod-observability's wire format.
   [runtime-guardrails #1](runtime-guardrails-observability.md) · **P3**
-- **`enforce()` over AI-linter catalogs** — a `semgrep/` resolver in `linters.ts`,
+- **`enforce()` over AI-linter catalogs** — a `semgrep/` resolver in `linters.ts`
   then CodeRabbit/Greptile. [ai-native-linting #1](ai-native-linting.md) · **MED**
 - **MCP-reference conformance** + a typed `mcp()` / `mcpConfig` harness hook —
   "does the cited `server#tool` still exist" via live or `.well-known`.
@@ -805,16 +801,16 @@ assertRates`) is the recommended path for testing one skill, but
     been **deleted**. What's still needed: ONE polished, reliably-passing demo plus a
     recorded GIF/asciinema, framed by the three "best"s — the stale-`enforce()`
     "lies" story as the one-sentence sell, and `vigiles audit` as the zero-setup wedge.
-    [distribution-strategy](distribution-strategy.md) · feature-ideas #14 · **MED**
+    feature-ideas #14 · **MED**
 - **Leaderboard behavioural columns** — real trigger-rate + safety on top of the
-  structural score. [divergent-bets #9](divergent-bets.md) · **LOW**
+  structural score. **LOW**
 - **Harness cost/ROI optimizer** — A/B token-cost eval (full vs trimmed CLAUDE.md);
-  a money story. [divergent-bets #10](divergent-bets.md) · **strong**
+  a money story. **strong**
 - **CI for model upgrades** — `--model` matrix over an eval baseline; catch the
-  harness a new model silently breaks. [divergent-bets #8](divergent-bets.md) · **LOW**
+  harness a new model silently breaks. **LOW**
 - **Measured `judge()` rule — as an experiment first** — one `*.eval.mjs` that
   grades a code property + reports its FP rate; ship the rule kind only if the
-  rate is publishable. [ai-native-linting #2](ai-native-linting.md) · [synthesis T2#8](strategic-synthesis-2026-06.md) · **LOW**
+  rate is publishable. [ai-native-linting #2](ai-native-linting.md) · **LOW**
 - **Sandboxed eval tier + non-Linux backend** — `runEval` still spawns `claude`
   unconfined; `sandbox-exec`/docker for non-Linux. [feature-ideas §13](feature-ideas.md) · **LOW**
 - **Deterministic subagent / command wiring** — register + drive without a model.
@@ -831,67 +827,28 @@ assertRates`) is the recommended path for testing one skill, but
 - Subagents: typed tool catalog for `tools:`, handoff resolution.
   [subagent-compilation.md](subagent-compilation.md)
 - **#7 Self-improving harness** — auto-tune via `evolve.ts` + `proofs.ts` (idle).
-  Differentiated but hard (cost, overfitting). [divergent-bets #7](divergent-bets.md)
+  Differentiated but hard (cost, overfitting).
 
 ## Explore — go-to-market / strategic (not code-first)
 
-- **Sell to harness vendors** (B2B) · **Compliance/attestation buyer** (EU AI Act,
-  SOC2-for-agents). [divergent-bets #3/#4](divergent-bets.md)
-- **Positioning pivot:** lead with _"conformance/attestation for the agent
-  harness"_, demote "linter for instruction files".
-  [strategic-synthesis](strategic-synthesis-2026-06.md)
-- **README STATUS BADGE for cc/codex plugins** (adoption flywheel, 2026-06-21 idea):
-  a GitHub badge a plugin author drops in their README showing their harness is
-  **verified / tested / evaled**, with TIERS (e.g. 🛡 lint-clean → ✅ tested (runHook)
-  → 🎯 evaled (trigger-rate/behavior)). Same viral mechanic as build-passing/coverage
-  badges — every badge is an ad + social proof, and the tiers pull authors UP the
-  ladder (lint→test→eval, the exact funnel). Needs a `vigiles badge`/shield endpoint +
-  a public verdict. The single highest-leverage distribution artifact tied to the
-  product. See [distribution-strategy.md](distribution-strategy.md).
-- **Viral debunk articles** (measurement-as-marketing) — but **method-first, NOT
-  caveman-first.** The caveman take is SATURATED (~6mo old; Kuba Guzik/GrowwStacks/HN/
-  Decrypt already covered it; the author conceded), so a "caveman is vaporware" piece is
-  late and draws "already covered" pushback. The defensible angle is the **reproducible
-  harness applied at SCALE** ("I built a re-runnable harness and measured N hyped skills'
-  claims — here's the leaderboard"), where caveman is one VALIDATION row (agreeing with
-  prior work proves the harness is sound) and the fresh content is the under-measured
-  skills (token-efficient, the cluster) + head-to-head + the output-GROWS / best-case-is-
-  worst finding. Ties A1 → adoption. See [measurement-authority.md](measurement-authority.md),
-  `bench/ecosystem/FINDINGS.md` (§ saturation warning + methodology audit).
-- **PUBLIC plugin leaderboard (site + GitHub) — the persistent viral artifact.** Promote
-  A1 from internal findings to a public, always-on **ranking of real plugins/skills by
-  claim-vs-measured + structural health**, with **head-to-head within a category** (e.g.
-  compression: caveman vs token-efficient vs … on the same corpus). It's the durable
-  home the debunk articles link into and the data moat accumulates in. Reuses what's
-  already built: `src/leaderboard.ts` (structural-health score/grade) + `bench/ecosystem/`
-  (A1 claim-vs-measured) — the new work is curation, a web surface, and a re-run cadence
-  (sub-affordable, so it can stay current — the thing competitors can't afford). The
-  README **badge** (above) is the per-plugin face of this leaderboard. The
-  highest-leverage distribution bet; pairs with A1. See
-  [measurement-authority.md](measurement-authority.md) (the two-products section),
-  [divergent-bets.md](divergent-bets.md) (#9 leaderboard), `bench/ecosystem/`.
-- **Build-business-on-top + acquisition posture:** position so (a) others can build on
-  vigiles (open-core `agent()` + the `vigiles/adapter` authoring kit + the measurement
-  DATA as the moat), and (b) it's an acquisition target for a top AI lab that wants to
-  own the quality/safety-verification layer of its coding agent. Closed SaaS rivals
-  (riftmap/SkillCheck/PolicyLayer) prove a business exists on this shape.
-  [divergent-bets.md](divergent-bets.md), [landscape-mid-2026.md](landscape-mid-2026.md)
+> Go-to-market, positioning, monetization, and distribution bets (badge/leaderboard/
+> acquisition posture, buyer segments, viral-artifact plans) live in the private
+> `startup/` vault — this is a public doc (see the `doc-tiers` rule). The CODE-first
+> items those bets depend on are ranked in the sections above.
 
 ## Rejected / parked (don't relitigate)
 
 - **Killed:** compiler-not-linter, one-source-many-backends.
-  [divergent-bets](divergent-bets.md)
 - **No (researched):** SDK pillar-2 retarget — gap closed by first-party SDK
   mocks; the 2026-06-17 multi-SDK probe relocates pillar-2 value to the Claude
   Agent SDK + Codex (no mock, unenforced/buggy tool contract) + a mock-ergonomics
   borrow-list. [sdk-harness-testing.md](sdk-harness-testing.md)
-- **Demoted:** vigiles-as-MCP-oracle → fold into `audit`. [divergent-bets #5](divergent-bets.md)
+- **Demoted:** vigiles-as-MCP-oracle → fold into `audit`.
 - **Punted:** promptfoo interop (E) + dataset/scorer parity (D).
   [eval-api-landscape.md](eval-api-landscape.md) · [promptfoo-deep-dive.md](promptfoo-deep-dive.md)
 - **Rejected pivots:** security vendor, guardrails/observability vendor, generic
-  agent-config linter (agnix lane), AI PR reviewer. [strategic-synthesis](strategic-synthesis-2026-06.md)
+  agent-config linter (agnix lane), AI PR reviewer.
 - **Parked:** measure model × harness (overlaps "CI for model upgrades").
-  [divergent-bets #11](divergent-bets.md)
 - **No (evaluated 2026-06-18):** [Sogen](https://sogen.dev/) as a sandbox backend
   — it's a syscall-level Windows/Linux _binary emulator_ (Unicorn/icicle/Hyper-V)
   for malware/DRM research, and its own docs say host isolation "might not be
@@ -938,7 +895,7 @@ assertRates`) is the recommended path for testing one skill, but
   payload-contract twin of typed composition's wire check); plus full branching/recursive
   session types for the railway ok/err arms (TS-encodable but a recursive walk hits TS2589,
   so the shipped typed `pipe` is fixed-arity). Key insight: the type-vs-runtime line is set
-  by ARITY (literal shape → type, arbitrary value → runtime guard, protocol structure →
+  by ARITY (literal shape → type, arbitrary value → runtime guard, protocol structure
   shallow type). Prototyped in
   [`prototypes/typed-spec-refinement-types/`](prototypes/typed-spec-refinement-types/).
 - [`covering-arrays-for-harness.md`](covering-arrays-for-harness.md) — the NIST
@@ -968,16 +925,5 @@ assertRates`) is the recommended path for testing one skill, but
   uniqueness in the JS generator (~100ms at a realistic tens-of-specs harness). A MOAT lever
   (markdown- AND framework-impossible). Prototyped in
   [`prototypes/whole-harness-codegen/`](prototypes/whole-harness-codegen/).
-- [`typed-spec-moat.md`](typed-spec-moat.md) — the consolidated synthesis of all
-  five typed-spec research rounds + the founder-endorsed moat thesis: the harness as
-  a compilable, analyzable formal object, the three concrete moats (unsafe harnesses
-  don't compile / semantic capability-diff at PR / affordable interaction-testing),
-  the type-safe pipelining keystone, the full ranked record of every finding, the
-  adoption-tension catalog, and the proposed build order. The pick-what-to-build-later
-  record.
 - [`feature-ideas.md`](feature-ideas.md) · [`harness-testing-coverage-matrix.md`](harness-testing-coverage-matrix.md)
   — the two detailed backlogs.
-- [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) ·
-  [`divergent-bets.md`](divergent-bets.md) — the strategy behind the bets.
-- [`distribution-strategy.md`](distribution-strategy.md) — why "Now" leads with
-  distribution artifacts.
