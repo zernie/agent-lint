@@ -22,24 +22,15 @@ topic: roadmap
 > [`divergent-bets.md`](divergent-bets.md). See also the full index in
 > [`README.md`](README.md).
 
-## Strategic direction (2026-06-19): measurement authority
+## Direction (technical)
 
-> The pivot (`measurement-authority.md`): vigiles is the **empirical authority on what makes
-> agentic coding actually work** — benchmark the ecosystem (viral) + auto-optimize your harness
-> (adoption), powered by the only real-model A/B eval stack cheap enough to run it (the sub).
-> Three layers, one machine, each makes the next affordable: **measurement (offense) → typed
-> contracts (cheap-to-test substrate + the spec's new purpose) → linting (free pre-filter)**.
-> Specs are reframed as the progressive, zero-friction on-ramp to testability
-> (`typed-contracts-for-agents.md`).
+> vigiles is ONE LOOP — declare what the harness should do (the typed spec) → check reality
+> against it — via four instruments: **VERIFY** (lint/cross-ref/compile), **GATE** (compiled
+> hooks), **MEASURE** (evals on your subscription), **OBSERVE** (the local `.vigiles/runs.jsonl`
+> flight recorder). Full technical record: [`harness-observability-direction.md`](harness-observability-direction.md).
 >
-> **Reality check (2026-06-21):** a heavy typed-spec moat push shipped real features
-> (typed purity + composition + `generate-harness`) and a coherent "compiler for
-> harnesses" category — but the work has leaned **maker-cool (the moat) over user-pull
-> (the measurement/benchmark identity)**, and vigiles still has ~no users. Near-term
-> priority is the **adoption engine** (the at-scale ecosystem benchmark + zero-friction
-> `audit`/measure that needs no typed spec), with the moat as the depth users discover
-> after. The bridge bet = **capability-diff (#2)** (serves both). Full status & gaps:
-> [`measurement-authority.md`](measurement-authority.md#status--gaps-2026-06-21--honest-read-of-where-the-pivot-stands).
+> _Business direction / positioning / monetization live in the private `startup/` vault
+> (this is a public doc — see the `doc-tiers` rule)._
 
 ## 🚀 Launch readiness (pre-HN) — the current top priority (2026-06-24)
 
@@ -403,6 +394,23 @@ helpers (also: NO`section()`helper — keep the object map). →`spec-syntax-and
 
 ## Now — cheap, high-leverage, do next
 
+- **Step-enforcement / process-gating prototype + A/B dogfood (2026-07, NEW).** Declare each
+  step of a skill/agent procedure with a checkable POSTCONDITION + control-flow, compile it to
+  hooks that block advance/stop until the postcondition holds (extends `guards.ts` `requireBefore`
+  - the Stop-gate + `result()`). Then A/B on a vendored complex OSS skill — gated vs prose-only —
+    measuring THREE metrics: process-adherence, HELD-OUT correctness (a hidden oracle from
+    `bench/corpus/`, NOT the gate's own check — that's tautological), and cost. Answers the
+    highest-felt-pain question: does deterministic gating actually improve the model's step-following?
+    Scope: agent-first (clean call→return boundary), NO loops v0, only observable-postcondition steps
+    are gate-able (the boundary). Deterministic mock-model proof runs free; the real-model A/B runs on
+    the sub. (Note: `benchmarks-runtime-gates.md` earlier found gates didn't help capable agents — this
+    re-tests with a POSTCONDITION contract + held-out oracle, a sharper design.)
+- **`observe` → `promote` loop (2026-07, NEW).** `vigiles promote <session>`: read a real
+  `.vigiles/runs.jsonl` failure (wrong skill fired, hook didn't block, contract violated) and emit a
+  scripted-mock `*.harness.mjs`/`*.eval.mjs` fixture that reproduces it, the ledger's objective
+  auto-populated as the assertion. Turns "we hit a bug in a real session" into "there's now a test
+  that would have caught it" without hand-authoring. The record→promote flywheel every eval tool has
+  for OUTPUTS, applied to the HARNESS. Builds on the shipped observe ledger (`src/observe.ts`).
 - **Harness-native cross-check — DEEPEN (2026-06-21, IN PROGRESS).** The moat refinement
   (see [`landscape-mid-2026.md`](landscape-mid-2026.md) §"Read of Market C" REFINEMENT):
   cross-referencing's value is the HARNESS-NATIVE references (tools, MCP `server#tool`,

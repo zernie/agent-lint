@@ -6,9 +6,7 @@ topic: audit
 # Structural findings — deterministic `scan` sweep of popular plugins
 
 > Status: live findings log (2026-06-19). The **deterministic / structural**
-> half of the "find bugs in popular OSS plugins" adoption bet
-> ([distribution-strategy](distribution-strategy.md) E1,
-> [divergent-bets](divergent-bets.md) #9) — sibling of the model-gated
+> half of the "find bugs in popular OSS plugins" adoption bet — sibling of the model-gated
 > [plugin-behavioral-findings](plugin-behavioral-findings.md). Records what the
 > free, no-model column (`vigiles scan` / [scan.ts](../src/scan.ts),
 > [leaderboard.ts](../src/leaderboard.ts)) finds across real marketplaces — both
@@ -159,6 +157,3 @@ lands a regression test in `src/scan.test.ts` /
   plus the poach backlog the sweep + landscape surfaced.
 - [plugin-behavioral-findings](plugin-behavioral-findings.md) — the model-gated
   half (trigger-rate recall/precision on real plugins).
-- [distribution-strategy](distribution-strategy.md) — E1: scan popular repos and
-  publish findings; this is the structural half.
-- [divergent-bets](divergent-bets.md) — #9 the plugin/skill leaderboard.

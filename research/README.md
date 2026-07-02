@@ -23,8 +23,6 @@ one click away.
 >   checks + the **Flue-framework poach (Appendix D: F1–F8)** + the **OSS-issue
 >   detector harvest** (which of the top OSS-plugin pains are shipped vs queued) +
 >   the prevent/detect/measure handling matrix. **The main idea doc.**
-> - [`divergent-bets.md`](divergent-bets.md) — bolder, beyond-the-layers bets,
->   triaged with founder reactions.
 > - [`feature-ideas.md`](feature-ideas.md) — the long-tail parked-ideas list.
 > - [`harness-state-space.md`](harness-state-space.md) — the analogical-transfer
 >   moat ideas (CS principles mapped onto the harness).
@@ -94,7 +92,6 @@ one click away.
 
 ## Adoption, distribution & ideas
 
-- [`distribution-strategy.md`](distribution-strategy.md) — **why nobody uses vigiles yet**: funnel diagnosis + the demo lever (now shipped).
 - [`adoption-strategy.md`](adoption-strategy.md) — zero-config setup, progressive enforcement, agent workflows.
 - [`adoption-gateway-preview.md`](adoption-gateway-preview.md) — **"what would vigiles catch in YOUR repo?"** — the `audit` adoption preview. Why deterministic spec-creation fails (extraction is semantic), and the architecture that works: **LLM proposes, deterministic disposes** — the model drafts the spec, the moat verifies the refs, so the "M broken right now" number is trustworthy though extraction is probabilistic. A model-gated tier behind the existing consent.
 - [`feature-ideas.md`](feature-ideas.md) — the parked-ideas list (custom-rule plugin API, reverse coverage, sandboxed exec §13, …).
@@ -102,14 +99,11 @@ one click away.
 - [`ai-code-quality.md`](ai-code-quality.md) — AI code-quality patterns.
 - [`code-search-for-agents.md`](code-search-for-agents.md) — code-search approaches (grep vs embeddings vs AST-grep).
 
-## Strategy & bets (2026-06)
+## Adjacent-market analysis (2026-06)
 
-The four same-day deep researches into adjacent markets, their synthesis, the
-divergent-bets triage, and the SDK probe. Ranked into action in [`roadmap.md`](roadmap.md).
+Technical assessments of adjacent markets — what to extend, delegate, or reject.
+(Business/competitive STRATEGY lives in the private `startup/` vault, not here.)
 
-- [`strategic-synthesis-2026-06.md`](strategic-synthesis-2026-06.md) — **read first**: all four researches converge on extend-don't-pivot, with one unclaimed wedge (observed-≟-declared). Ranked Tier-1/2/3 bets + the positioning pivot.
-- [`divergent-bets.md`](divergent-bets.md) — bolder directions triaged with founder reactions (leaderboard + cost-optimizer = strong; SDK = no; compiler-not-linter = killed).
-- [`eval-startups-positioning.md`](eval-startups-positioning.md) — the "why eval startups fail" critique mapped onto vigiles: it dodges the trap (harness-eval, not model-eval; tooling not services), but it's a yellow flag on the benchmark-as-moat bet and validates the attestation/safety direction.
 - [`agent-supply-chain-security.md`](agent-supply-chain-security.md) — plugin/MCP supply-chain security; build a thin harness-aware `scan`, reject the security-vendor pivot.
 - [`standards-conformance.md`](standards-conformance.md) — AGENTS.md/SKILL.md/MCP standardization; extend pillar 1 to be format-neutral, reject the generic-linter pivot.
 - [`runtime-guardrails-observability.md`](runtime-guardrails-observability.md) — guardrails + OTel-GenAI; stay out of the request path, take the OTel-emit / verify-trace / Cedar-codegen bridges.
