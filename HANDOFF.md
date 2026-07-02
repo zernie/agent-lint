@@ -26,11 +26,13 @@ has descriptive names (cleaning requires `git filter-repo` + force-push; separat
 via vault README.md). **CONDITIONAL-GO.** Framing shift is the critical finding.
 Next build step: see vault s14.md (pivot-decision) for the recommended sequence.
 
-**RESEARCH DEEPENED + PERSONAL-STRATEGY (2026-07-02, later).** Added vault docs `s21`–`s24`
-(see vault README/CLAUDE index for what each holds): a wider VC/market + demand-side research
-pass, plus one personal-strategy doc with its own open loose ends tracked INSIDE the vault. All
-strategy/personal content stays vault-only — do NOT restate here. Possible next-session action a
-user may request lives in the vault, not this public file.
+**STRATEGY SESSION — DIRECTION CONVERGED (2026-07-02, extended).** Added vault docs `s21`–`s29`
+(see vault README/CLAUDE index for each). A long strategy pass (VC/market, demand-side, open-harness
+expansion, curation, naming, and a verifier-vs-framework fork) that CONVERGED on a single direction +
+a personal-strategy doc. The direction, next steps, forks, and personal loose ends all live INSIDE
+the vault (`s26` = consolidated direction; `s29` = the latest positioning refinement). All strategy/
+personal content is vault-only — do NOT restate here. Net: the thinking is done; the bottleneck is
+now SHIPPING the smallest artifact that proves pull (see vault), not more research.
 
 **OPEN FOLLOW-UPS (from prior session, still pending):**
 
@@ -59,6 +61,9 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
 - **DEEP-DIVE RESEARCH (later same day)** — multiple Sonnet fan-outs (VC/YC keyword landscape,
   uncovered funds, demand-side buyer+analyst validation, distro delta) → vault `s21`–`s23`
   (synthesis + appendix), plus a personal-strategy doc `s24`. Strategy stays vaulted.
+- **STRATEGY CONVERGENCE (same day, extended)** — further Sonnet fan-outs (open-harness expansion,
+  curation/adoption-intelligence, naming, verifier-vs-framework) → vault `s25`–`s29`. Direction
+  converged (consolidated in `s26`, refined in `s29`). No code changed; all strategy vaulted.
 - **Earlier sessions:** capability-diff PR comment shipped; observe layer built; doc-tiers
   rule fixed; 41-company competitor research vaulted; 6 research docs migrated to vault.
 
