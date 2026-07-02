@@ -791,6 +791,10 @@ Two boundary rules are enforced by \`eslint-plugin-boundaries\` (rule \`boundari
       "This is a public repo. Claude Code session URLs are private and must not appear in commits or PRs.",
     ),
 
+    "vault-commit-hygiene": guidance(
+      "Git commit messages and filenames are ALWAYS plaintext in the public history — git-crypt only encrypts file contents. Two hard rules: (1) VAULT FILENAMES must be opaque IDs (s01.md, s02.json, …), never descriptive names that reveal the document's topic. The ID→name mapping lives in startup/README.md (encrypted, only readable after unlock). (2) COMMIT MESSAGES for vault-only changes must be generic — use `chore: vault` or similar — never name the document topic, the strategy, or the competitive content in the subject or body. Any commit touching startup/ files should read as a maintenance operation to an outside observer.",
+    ),
+
     "subagent-model-note": guidance(
       'When you launch a subagent (the Agent/Task tool), tell the user in one short line WHICH model you chose for it and WHY — e.g. "spawning the Explore agent on Haiku — cheap fan-out read, no synthesis needed" or "using Opus for this one — it has to reconcile conflicting findings across docs". The user wants visibility into the model-selection tradeoff (cost vs capability) you\'re making on their behalf. Keep it to a clause, not a paragraph; do it at launch, not after.',
     ),
