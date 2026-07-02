@@ -85,5 +85,4 @@ ablation finding (structure > prose) in the launch.
 
 - `roadmap.md` — A2 (the measured half of `scan --fix-plan`); `evolve.ts` /
   `proofs.ts` (proof-gated selection this validates + concretizes).
-- `measurement-authority.md` — the measure-then-optimize identity AHE mirrors.
 - `covering-arrays-for-harness.md` — the affordable-eval substrate the measured loop runs on.

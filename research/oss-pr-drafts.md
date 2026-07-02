@@ -166,5 +166,3 @@ reportable — recorded so we don't re-chase them:
 
 - [plugin-structural-findings](plugin-structural-findings.md) — the sweep + the
   disclosures table these expand.
-- [distribution-strategy](distribution-strategy.md) — E1, why filing these is the
-  highest-leverage adoption move.

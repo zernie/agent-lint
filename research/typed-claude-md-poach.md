@@ -8,7 +8,7 @@ topic: spec
 > What can vigiles steal from Mastra / Vercel AI SDK / LangGraph / Pydantic AI / Temporal
 > to make a **typed CLAUDE.md** (the `.spec.ts`) stronger — and which steals yield a
 > **markdown-impossible moat**? Consolidates + extends the scattered notes
-> (`feature-ideas.md` §14b, `landscape-mid-2026.md` poach list, `typed-spec-moat.md`,
+> (`feature-ideas.md` §14b, `landscape-mid-2026.md` poach list,
 > `typed-spec-effects-monads.md` M1–M6). These frameworks are a **different market**
 > (app-building, not harness-verification — see `landscape-mid-2026.md`); we lift
 > mechanics, not strategy.
@@ -142,7 +142,6 @@ a runtime gate they don't need.
 
 ## See also
 
-- `research/typed-spec-moat.md` — the moat synthesis + build order (M1–M6).
 - `research/typed-spec-effects-monads.md` — M1 effect-row (the headline) in depth.
 - `research/feature-ideas.md` §14b — Zod-`result()` (bet #2 above).
 - `research/landscape-mid-2026.md` — why these are a different market (poach, don't fear).

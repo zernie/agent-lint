@@ -19,8 +19,7 @@ topic: eval
 >
 > **Builds on, does not duplicate:** `typed-spec-power.md` (#2 typed purity — the
 > rung-1 prune this composes with), `typed-spec-frontier.md` (the
-> compile-time-vs-runtime split; F1/F2 typed contracts), `divergent-bets.md` #11
-> (measure model × harness), and the roadmap's eval items "Per-model trigger-rate
+> compile-time-vs-runtime split; F1/F2 typed contracts), and the roadmap's eval items "Per-model trigger-rate
 >
 > - context-rot curve" and "Near-neighbor trigger-rate tier". Prototype (grounds
 >   every row-count claim): `research/prototypes/covering-arrays/`.
@@ -271,7 +270,6 @@ in one run.
 
 - `typed-spec-power.md` (#2 typed purity — the rung-1 prune this composes with)
 - `typed-spec-frontier.md` (the compile-time-vs-runtime split; typed contracts)
-- `divergent-bets.md` #11 (measure model × harness — the study #3/#4 feed)
 - `research/roadmap.md` — eval items "Per-model trigger-rate + context-rot curve",
   "Near-neighbor trigger-rate tier" (the matrix this would sample). _(linked, not
   edited — the parent owns the roadmap.)_

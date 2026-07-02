@@ -14,7 +14,7 @@ topic: spec
 >
 > Companions: `railway-subagents.md`, `spec-syntax-and-railway-scope.md`,
 > `typed-contracts-for-agents.md`, `side-effect-separation.md`,
-> `divergent-bets.md` (#1/#2 killed), `docs/spec-format.md` ("Why a spec?").
+> `docs/spec-format.md` ("Why a spec?").
 > Prototype: `research/prototypes/typed-spec-power/`.
 
 ## The filter (applied to every idea)
@@ -277,5 +277,3 @@ see a handoff mismatch yet — the gap #1 would close).
 - `research/side-effect-separation.md` + `research/effect-boundary-design.md` — the
   runtime purity gate #2 sits ABOVE (type rejects the contradiction; the gate still
   confines the undecidable Bash command at the live call).
-- `research/divergent-bets.md` — #1/#2 (compiler-not-linter, many-formats) killed,
-  bounding what "generation" should and shouldn't mean here.

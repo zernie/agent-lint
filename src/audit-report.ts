@@ -13,6 +13,7 @@
  */
 import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
+import type { LedgerSummary } from "./observe.js";
 import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
 import type { PluginScore } from "./leaderboard.js";
@@ -101,11 +102,21 @@ export interface AuditReport {
    * at least one adoptable surface. Additive/optional — schema version unchanged.
    */
   readonly adoptable?: Adoptable;
+  /**
+   * The flight-recorder summary — what the harness actually DID in real sessions
+   * (hook/agent decisions, counts, recent denials), read off `.vigiles/runs.jsonl`.
+   * Present only when the local ledger has records. Additive/optional — schema
+   * version unchanged. The CLI reads + summarizes the ledger and passes it in, so
+   * the pure builder stays fs-free.
+   */
+  readonly observations?: LedgerSummary;
 }
 
 export interface BuildAuditReportOptions {
   readonly harness: string;
   readonly vigilesVersion: string;
+  /** The flight-recorder summary from the local ledger (omit when empty). */
+  readonly observations?: LedgerSummary;
   /**
    * The repo-relative paths of surfaces that exist but have no `.spec.ts` yet,
    * computed by the CLI's layout-aware `discoverAdoptableSurfaces` (so the pure
@@ -171,6 +182,7 @@ export function buildAuditReport(
       untested: report.untested,
     },
     ...(adoptable ? { adoptable } : {}),
+    ...(opts.observations ? { observations: opts.observations } : {}),
   };
 }
 

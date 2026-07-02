@@ -123,14 +123,12 @@ HS-2, declared-vs-observed effects HS-3, contradiction class HS-4, matcher-cover
 capability-graph HS-7, illegal-states HS-8, cross-harness HS-9, metamorphic HS-10), hook-pain-points.md
 (battery HP-1, false-confidence HP-2, dead-event HP-3, delivery-bug caveat HP-4),
 agent-supply-chain-security.md (egress SC-1, contract-drift SC-2, tool-poisoning SC-3, attestation
-SC-4), measurement-authority.md + skill-eval-landscape.md (trigger-rate MA-1, adversarial-gate MA-2,
+SC-4), skill-eval-landscape.md (trigger-rate MA-1, adversarial-gate MA-2,
 claim-vs-measured MA-3, cost/ROI MA-4, score-explainer MA-5, description-overlap MA-6),
 skill-authoring-pains.md (bundled-resource SK-1, frontmatter SK-2, volume SK-3),
 oss-pr-drafts/oss-audit-render-findings.md (never-available tool OSS-1, prose-only subagent OSS-2),
 eval-coverage-and-isolation.md (two-number rollup EC-1, record-replay EC-2),
-landscape-mid-2026.md (Cedar LM-1, live-MCP LM-2, spec-evolution LM-3 parked),
-typed-spec-moat.md (capability-diff TS-1, unsafe-doesn't-compile TS-2, covering-array TS-3,
-noninterference TS-4), divergent-bets.md (leaderboard DB-1, model-upgrade CI DB-2, self-improving DB-3).
+landscape-mid-2026.md (Cedar LM-1, live-MCP LM-2, spec-evolution LM-3 parked).
 
 ## Appendix B — GitHub OSS-failure stream (real issues, dated 2026-06-29)
 

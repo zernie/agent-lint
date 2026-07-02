@@ -101,5 +101,4 @@ moat, not a curation identity.)
 - `harness-state-space.md` — the thesis + the ranked bets (the ammunition these axes deploy).
 - `instruction-file-linter-landscape.md` — the competitor map (why the cross-ref engine +
   testing, not rule count, is the moat) + the named threats (agnix/Codacy/AgentLint/AgentEval).
-- `divergent-bets.md` — the leaderboard + cost/ROI-optimizer bets this builds on.
 - `roadmap.md` — where the first move + Tier-1 bets land.

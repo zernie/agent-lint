@@ -7,8 +7,7 @@ topic: skills
 
 > Status: research capture (2026-06-06). Pauses no code; informs whether vigiles's
 > center of gravity should shift from "compile CLAUDE.md" toward "verify SKILL.md
-> procedures." Companion to `research/distribution-strategy.md` and
-> `research/landscape-mid-2026.md`.
+> procedures." Companion to `research/landscape-mid-2026.md`.
 
 ## Why this exists
 

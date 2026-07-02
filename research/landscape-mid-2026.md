@@ -244,8 +244,7 @@ Show HN got **1 point**).
 >   files, sub-agents — are real and live, not silently broken."**
 
 Risk = a polished in-market linter (agnix/claudelint) ADDING cross-ref, or an adjacent
-player porting in — not present-day direct competition. Full corrected synthesis:
-`typed-spec-moat.md` § "Competitive reality check".
+player porting in — not present-day direct competition.
 
 **Sources:** mastra.ai; promptfoo.dev/docs/intro; claudelint.com; github.com/pdugan20/claudelint; github.com/carlrannaberg/cclint; github.com/felixgeelhaar/cclint; github.com/agent-sh/agnix; github.com/0xmariowu/AgentLint; getskillcheck.com; code.claude.com/docs/en/plugins; hesreallyhim/awesome-claude-code; riftmap.dev; github.com/marketplace/actions/agentauditkit-mcp-security-scan.
 

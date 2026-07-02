@@ -13,8 +13,7 @@ topic: benchmark
 > first worked instance, the P0 caveman measurement
 > (`bench/evals/caveman-claim.eval.mjs`). Feeds the two P1 measurement products:
 > the **ecosystem benchmark** (rank hyped skills) and **`vigiles optimize`**
-> (per-repo recommendations). See [`measurement-authority.md`](measurement-authority.md)
-> for the strategy and [`roadmap.md`](roadmap.md) for priority.
+> (per-repo recommendations). See [`roadmap.md`](roadmap.md) for priority.
 
 A benchmark is only as trustworthy as its method. The whole pitch ("measured ≪
 claimed") collapses if the method is gameable or unstated. So the method is
@@ -101,7 +100,6 @@ cheap v0 sweep; sonnet/opus — a skill's target models — for the rigorous pas
 
 ## See also
 
-- [`measurement-authority.md`](measurement-authority.md) — the strategy this serves.
 - [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs) —
   the first worked instance (the P0 caveman measurement).
 - [`bench/ecosystem/`](../bench/ecosystem/) — the A1 ecosystem-benchmark v0: the

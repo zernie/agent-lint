@@ -6,115 +6,92 @@
 > first.** Git-TRACKED + EPHEMERAL container, so an update persists ONLY if you
 > **commit + push**. **REFRESH IT before you end the session** (and on any "handoff"
 > request). A **Stop hook** nudges you at ≥5 commits without a refresh.
+>
+> ⚠️ **THIS FILE IS PUBLIC** (open-source repo). NO STRATEGY here — business
+> direction / monetization / competitive framing live ONLY in the `startup/`
+> vault. HANDOFF may POINT to the vault, never describe its contents. (See the
+> `doc-tiers` rule — fixed this session.)
 
 ## RESUME HERE
 
-**Branch `claude/haretrail-dogfood-pvdo9t` — PR #54 OPEN, being WATCHED** (user said
-"watch", NOT merge — do NOT auto-merge; merge is the user's call). An hourly cron
-`5438c724` re-checks CI + mergeability: report green, fetch-logs-and-fix on red, stop
-(CronDelete) when merged/closed. HEAD `90eb01b`.
+**Branch `claude/tool-positioning-market-65fvvh`.** No PR opened. Long STRATEGY + BUILD +
+DOC-HYGIENE session.
 
-Session started as a DOGFOOD of `vigiles audit` on `fleytman/haretrail` (a Codex
-skills repo) and turned into a docs + rules + **eval-cost-transparency** + **research
-corpus index** batch.
+**DOC-MIGRATION: DONE (targeted-6).** measurement-authority, divergent-bets, distribution-strategy,
+typed-spec-moat, strategic-synthesis-2026-06, eval-startups-positioning moved research/→`startup/`
+(encrypted, verified `\0GITCRYPT`), index/keyFiles removed, specs recompiled, 54 tests green.
+**Two follow-ups remain (next session):**
 
-**RESUME STATE: cost + selection-matrix DONE (pushed). Remaining haretrail ideas
-optional/ask-first** (`research/haretrail-eval-ideas.md`): deriveTriggerSetFromManifest
-(free negatives), locales axis, measureDescriptionAblation, withPluginFixture — none built.
+1. **`research/roadmap.md` still has ~37 DANGLING relative refs** to the 6 moved docs (the migration
+   agent only neutralized `research/X.md`-style, not relative `X.md`-style — README + plugin-structural
+   ARE clean now). They're scattered across ~10 sections; roadmap also still has strategic sections
+   (Explore/GTM @~830) needing de-strategization. Needs a focused whole-doc pass (leak-sensitive; don't
+   rush at session end). No test catches these (prose links), so they won't fail CI meanwhile.
+2. **Broader research-corpus de-strategization** — `research/README.md` "Strategy & bets" leftovers,
+   `research/CLAUDE.md` Scope text ("research/ = private record / moat narrative" — same public-repo bug
+   as doc-tiers), and strategic framing inside individual kept docs. Lower urgency (already-public).
 
-### What landed this session (all pushed)
+**Strategic next step (the real fork):** run the PIVOT VALIDATION GATE — see `startup/pivot-decision-
+2026-07.md`. Batched 2×2 research, alone, full context headroom (workflow-fragility lesson).
 
-- **`measureSelectionMatrix` + `assertNoCollision`** (`90eb01b`) — PROMOTED the
-  cross-skill selection-collision matrix (was CLI-only under audit consent) to a
-  first-class assertable eval primitive. Zero-setup (auto-derives prompts from
-  descriptions), `assertNoCollision({maxOffDiagonal})` gates it. Exported on
-  **`vigiles/claude-code`** NOT agnostic `vigiles/testing` (CC-only — reads the
-  selector's choice; scan-behavioral is Codex-adapter-coupled). Thin wrapper over the
-  existing `measurePluginSelection`; `measureSelectionMatrixWith` = injectable core.
-  Example eval + no-model tests + for-plugin-authors.md CI path.
-- **Cost threading — LAST path** (`2268cef`) — `measure`/`measureArms` now carry
-  `usage: ArmUsage` on `CheckReport` + emit cost in the v8-ignored wrappers (measureArms
-  sums both arms). ALL four eval paths now print spend (runEval + measureTriggerRate
-  already did) — the cost-transparency feature is now COMPLETE.
+**Business direction: SEE THE VAULT.** The leading thesis + all competitive/monetization strategy
+live in `startup/` (`distro-thesis-2026.md` = current leading direction; `strategic-synthesis-
+teardown-2026.md`; `competitor-teardown-2026.md`). Do NOT restate any of it here.
 
-0. **Research corpus index** (`b062882`) — all 114 `research/*.md` now carry
-   `status:`/`topic:` frontmatter (slice via `grep -l 'status: shipped' research/*.md`).
-   NEW `research/CLAUDE.md.spec.ts` → compiled `research/CLAUDE.md`: the agent-facing
-   index (one status-tagged line per doc, topic-grouped), mirrors `src/CLAUDE.md.spec.ts`.
-   Sync enforced both ways: compiler verifies each keyFiles path EXISTS + NEW
-   `src/research-index.ts` dogfood asserts every doc is indexed. `research/README.md`
-   stays the human index, now points at the machine one. `.prettierignore` gained the
-   nested compiled `CLAUDE.md` artifacts (src/, src/core/, research/).
+**Technical direction (public-safe):** vigiles = ONE LOOP — declare (typed spec) → check reality,
+via four instruments: VERIFY (lint/cross-ref), GATE (compiled hooks), MEASURE (evals on your sub),
+OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` +
+`research/harness-observability-direction.md`.
 
-1. **Cross-language flag REMOVED** (`30c0175`) — `unexpectedScript`/`descriptionScript`
-   scan finding GONE (measured + REFUTED: `plugin-behavioral-findings.md` Finding 3a —
-   RU descriptions fire fine on EN prompts; it cried wolf on correct non-English
-   authoring). Why saved in that research doc; `one-detector-no-drift` example moved to
-   `description-overlap`.
-2. **Cost transparency** — `src/eval-cost.ts` (pure engine: tokens + API-equivalent `$`
-   - metered-vs-sub detection + session tally + formatter, fully unit-tested). Emits
-     after `runEval` (`abeb93e`) AND `measureTriggerRate` (threaded `usage` into
-     `TriggerRateReport`). NO "% of sub" (Anthropic doesn't expose plan quota). The
-     `test-harness` skill MUST relay spend to the user; `docs/measuring-skills.md` documents it.
-3. **`surface-architecture-decisions` rule** (`c1c8067`) — output arch decisions (file
-   placement, core/adapter/port, extend-vs-create) to chat in a scannable block with the
-   boundary reasoning. FOLDED IN parse-don't-validate + make-illegal-states-irrepresentable
-   (`53e3dfa`), framed as decisions-to-name (ts-essentials holds the mechanical how).
-4. Earlier batch (in prior handoff too): `document-the-why` rule + `doc-command-coverage`
-   check; `skill-description-budget` lint rule; audit→behavioral→consent + opt-in FAQ
-   docs; auto-vs-nudge in the 3 spec skills.
+### What landed this session (all pushed; suite green except known env-only dialect-drift)
 
-### DO NEXT / OPEN
+- **#2 CAPABILITY-DIFF PR COMMENT — SHIPPED.** `action.yml` gains `capability-diff` +
+  `fail-on-widen` inputs; materializes the PR base with `git archive` (NOT a worktree — avoids
+  checkout/smudge filters e.g. git-crypt), runs `audit --capability-diff --no-html --no-json`,
+  extracts just the diff paragraph, folds it into the SAME sticky comment only when the surface
+  changed. Dogfooded in `ci.yml` (`fetch-depth: 0` + `capability-diff: true`). Verified e2e.
+  Docs: `docs/github-action.md`.
+- **OBSERVE layer** (earlier this session) — `src/observe.ts` ledger + 5 emit kinds; `audit`
+  renders it; `debug-my-harness` skill reads it. `.vigiles/runs.jsonl` gitignored.
+- **DOC-TIERS RULE FIXED** (`CLAUDE.md.spec.ts` → recompiled `CLAUDE.md`): the rule wrongly
+  treated `research/`+`CLAUDE.md` as a "private record" holding the moat/positioning narrative.
+  The repo is PUBLIC, so they're not private. Corrected: those hold the TECHNICAL record only;
+  ALL strategy → the `startup/` vault. Added the competitor-playbook test + fixed the sibling
+  `public-vs-internal-docs` line ("strategic vocab → vault, not CLAUDE.md/research").
+- **Competitor research → vault (encrypted).** `competitor-teardown-2026.md` (5 clusters / 41
+  companies, deep, + raw JSON appendix), `strategic-synthesis-teardown-2026.md` (Opus synthesis +
+  a Fable contrarian pass), `distro-thesis-2026.md`. Method-lesson recorded: gather cheap/parallel,
+  then run ONE top-model synthesis pass over the full corpus.
 
-- **PRIMARY: keep watching PR #54 → green** (cron `5438c724`). Merge is the USER's call.
-- **haretrail feature ideas** (`research/haretrail-eval-ideas.md`): measureSelectionMatrix
-  now DONE; remaining = deriveTriggerSetFromManifest, locales axis, description-ablation,
-  withPluginFixture. All optional/ask-first.
-- **#3 "collision-cluster" rule — RECOMMENDED DROP** (NCD is byte-level/language-bound,
-  can't catch cross-language collision; the model MATRIX already ships under
-  `audit.measure` consent). Pending user OK.
-- Cosmetic vigiles bug (unfixed): lethal-trifecta finding labels `.codex/skills/…` but
-  files are at `skills/…` — apply `onDiskPath` to that finding's label in `scan.ts`.
+### ALSO OPEN (separate track) + Gotchas
 
-### Gotchas
-
-- `CLAUDE.md` COMPILED from `CLAUDE.md.spec.ts` — edit the spec + `node dist/cli.js
-compile CLAUDE.md.spec.ts` (now ~46 rules). Never hand-edit `CLAUDE.md`. SAME for the
-  scoped `src/CLAUDE.md`, `src/core/CLAUDE.md`, and now `research/CLAUDE.md` (compiled
-  from `research/CLAUDE.md.spec.ts` — all in `.prettierignore`).
-- **RESEARCH INDEX SYNC**: a new `research/*.md` needs a `keyFiles` line in
-  `research/CLAUDE.md.spec.ts` + `status:`/`topic:` frontmatter, or `src/research-index.test.ts`
-  fails. Rename/delete → update the spec (compiler verifies each path exists). Recompile after.
-- **`dialect-drift.test.ts` fails LOCALLY** in this container (installed claude-code drifted
-  from pinned `2.1.187`); CI pins the version so it passes there. Env-only, not a real break.
-- **RUN ESLINT, not just fmt:check, on new files** — `no-confusing-void-expression`
-  (a void-returning arrow shorthand, e.g. `() => console.error(x)` / `() => reset()`)
-  is an ERROR (add braces); string spread `[...str]` too (use `Array.from`). `npm run
-lint` = 0 errors passes; the repo carries ~173 WARNINGS (not gated).
-- `validate.test.ts` has a hardcoded `DEFAULT_RULES` literal that breaks on a new rule.
-  Run the full suite (`npx vitest run`) / grep for it. (It IS vitest, not node:test.)
-- `prettier --check .` covers `HANDOFF.md` — run `npx prettier --write HANDOFF.md` before commit.
-- A new LINT RULE = ~12 files in lockstep (`rule-meta` EXACT-match `docs/rules/`; `setup-plan` group).
-- Commits/PR: **NO session links / NO model IDs** (auto-classifier blocks). Conventional-Commit PR title.
-- Eval `usage` is now threaded on ALL report types (`EvalReport`, `CheckReport`,
-  `TriggerRateReport`) — source is the parser's `ParsedModelRun.usage`. Adding a new
-  report type? Carry `usage: ArmUsage` + `aggregateUsage` in the loop (that's the pattern).
-- **Selection-matrix lives on `vigiles/claude-code`** (CC-only), NOT `vigiles/testing`
-  (agnostic). `scan-behavioral` imports the Codex adapter → never re-export it from the
-  agnostic barrel. `assertNoCollision` sits there too (co-located with its report type).
+- **PR #54 on `claude/haretrail-dogfood-pvdo9t`** — watched by cron `5438c724`. Merge = user's call.
+- **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
+  `git-crypt unlock <keyfile>` with the user's base64 key; verify a committed blob is `\0GITCRYPT`.
+  Vault files are in `.prettierignore` (no fmt needed); a committed blob must read `\0GITCRYPT`.
+  **⚠️ `git mv` INTO `startup/` DOES NOT ENCRYPT** (reuses the plaintext blob) — after moving,
+  `git add --renormalize startup/` then VERIFY `git show HEAD:startup/<f>.md | head -c9`=`\0GITCRYPT`.
+- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
+  (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
+  keyFiles line first or compile FAILS.
+- RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
+- `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned 2.1.187); CI pins it. Env-only.
+- Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
+- Background agents share the working tree → don't commit while one is running (race). A read-only
+  research WORKFLOW doesn't touch the tree; a MUTATING migration agent does — stay off the tree while it runs.
+- **WORKFLOW FRAGILITY (post-mortem):** a wide fan-out self-throttles on ONE shared rate-limit
+  bucket (`429`/`529`/`503`); and the KILL SHOT is a SESSION-COMPACTION INTERRUPT (`[Request
+interrupted by user]`) — a background workflow does NOT survive it. FIX: batch (2×2 = peak 2),
+  keep fan-outs narrow+fast, don't leave a long fan-out as the only thing across a likely compaction.
 
 ### Decisions of record (don't relitigate)
 
-- Cross-language deterministic flag is DEAD (refuted). If ever revived → key on language
-  INCONSISTENCY within a plugin (some EN, some RU), NOT "non-Latin", and only after measuring.
-- Cost: tokens + API-equivalent `$` + a metered-API warning; NEVER a fake "% of sub".
-- `surface-architecture-decisions` is now ACTIVE — output arch/placement decisions to chat.
-- Selection-collision: deterministic NCD is language-bound → the model MATRIX (shipped,
-  under `audit.measure` consent) is the real catch. Don't build a looser-NCD cluster rule.
-- Public docs = user benefit (no moat/flywheel, no `research/` links). `startup/` LOCKED.
+- Repo is PUBLIC → strategy is VAULT-ONLY (doc-tiers rule fixed). HANDOFF/research/CLAUDE.md = public.
+- Capability-diff PR comment shipped; observe layer built (frozen). Guards KEPT (hidden runtime kind).
+- Competitor research (41 cos) + synthesis + distro thesis are vaulted; the LEADING direction is in the vault.
 
 ## Don't re-read unless the task needs it
 
-- `research/plugin-behavioral-findings.md` — Finding 3a (cross-lang refuted) + the eval fixtures.
-- `research/measurement-authority.md` / `research/audit-wow-ideas.md` — behavioral feature ideas.
-- `research/roadmap.md` — the front-door roadmap. `startup/` — git-crypt vault (LOCKED).
+- `startup/distro-thesis-2026.md` — the current leading business thesis (vault).
+- `startup/strategic-synthesis-teardown-2026.md` / `competitor-teardown-2026.md` — the strategy record (vault).
+- `research/roadmap.md` — the front-door (technical) roadmap.

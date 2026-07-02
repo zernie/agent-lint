@@ -137,8 +137,7 @@ Task`/version literal/date in a file meant to be stable).
     disclosure, one-per-repo, fix+test, automation disclosed — "a CVE is a CVE" is the only
     thing maintainers still thank a bot for. Guardrails below are non-negotiable.
 14. **Public "is your harness broken?" leaderboard.** Scan popular marketplaces, rank
-    plugins by harness health (`scoreReport` exists). Shareable, drives "fix yours". The
-    no-model half of `divergent-bets.md` #9.
+    plugins by harness health (`scoreReport` exists). Shareable, drives "fix yours".
 15. **Free hosted web validator.** Paste a CLAUDE.md / repo URL → instant report → funnel to
     the CLI/PR. Exactly how agentlinter.com / SkillCheck seed adoption; low-friction
     top-of-funnel.
@@ -308,7 +307,6 @@ the bot be _invited_ and welcome rather than blocked. Sources: [curl ends bug bo
   survives (preset library).
 - `agent-supply-chain-security.md` — the prior security stance this sharpens into the
   capability-graph check.
-- `divergent-bets.md` — the leaderboard bet (#14) and adjacent strategic moves.
 - `harness-protocol-flow-moat.md` — the SEQUEL: the dynamic axes a capability SET can't see
   (ORDER/FLOW/REPLAY) framed as the **reliability RUNTIME** moat, grounded in the 2026-06
   failure corpus. This doc is the static-SET axis; that one is time/provenance/cardinality.

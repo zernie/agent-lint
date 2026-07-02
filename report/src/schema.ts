@@ -75,6 +75,24 @@ export interface Adoptable {
   createAllCommand: string;
 }
 
+export interface LedgerDenial {
+  label: string;
+  reason: string;
+}
+
+export interface LedgerCount {
+  kind: string;
+  count: number;
+}
+
+/** The flight-recorder summary — what the harness actually did in real sessions. */
+export interface LedgerSummary {
+  total: number;
+  counts: LedgerCount[];
+  denials: number;
+  recentDenials: LedgerDenial[];
+}
+
 export interface AuditReport {
   meta: {
     schemaVersion: number;
@@ -96,4 +114,10 @@ export interface AuditReport {
    * command-emit affordances. Present only when there's something to adopt.
    */
   adoptable?: Adoptable;
+  /**
+   * The flight-recorder summary from the local ledger (`.vigiles/runs.jsonl`) —
+   * counts + recent denials of what the harness actually did. Present only when
+   * something is recorded.
+   */
+  observations?: LedgerSummary;
 }

@@ -180,7 +180,7 @@ it's a small, well-bounded build because both sides already have the seams
 
 A Claude Code marketplace plugin that teaches an agent to author vigiles specs and
 harness tests correctly. Cheap, on-brand (we dogfood skills already), and aimed
-straight at the funnel problem in `research/distribution-strategy.md`.
+straight at the funnel problem.
 
 ### 4. Housekeeping: correct the now-stale scorecard
 
@@ -229,7 +229,6 @@ see, because there is no output to grade when the right behaviour is _not_ actin
   and the B→A→C roadmap (this doc is the promptfoo-specific zoom-in + the stale-
   claim correction).
 - `research/harness-testing.md` — the three-tier design promptfoo has no analog for.
-- `research/distribution-strategy.md` — the funnel problem move #3 targets.
 - `src/eval.ts` — `runEval` + the injectable `AgentRunner` seam move #1 plugs into.
   </content>
   </invoke>

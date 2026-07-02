@@ -146,7 +146,7 @@ writes `CLAUDE.md` from `.ruler/`. They clobber each other every run.
 - **Native multi-format emitters** (`.mdc`, `.clinerules`, Gemini, …). Ruler and
   rulesync maintain 16–25 evolving formats as their whole job. Compose; never
   absorb that maintenance. (Already a guidance rule + `sync-landscape-analysis.md`.)
-- **A sync/fan-out engine.** `divergent-bets.md` killed one-source-many-backends.
+- **A sync/fan-out engine.** The one-source-many-backends direction was killed.
 - **`rulesync import` reimplementation.** Their import already reads our
   `CLAUDE.md` — the round-trip works without our help.
 

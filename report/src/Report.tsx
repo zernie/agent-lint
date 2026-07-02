@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
 import { Adopt } from "@/components/Adopt";
+import { Observations } from "@/components/Observations";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
@@ -78,8 +79,15 @@ function Stat({ n, label }: { n: number | string; label: string }) {
 }
 
 export function Report({ data }: { data: AuditReport }) {
-  const { score, recommendations, inventory, meta, adoptability, adoptable } =
-    data;
+  const {
+    score,
+    recommendations,
+    inventory,
+    meta,
+    adoptability,
+    adoptable,
+    observations,
+  } = data;
   const overall = score.empty ? null : score.overall;
   const b = band(overall);
   return (
@@ -154,6 +162,19 @@ export function Report({ data }: { data: AuditReport }) {
             config.
           </p>
           <Adoptability data={adoptability} />
+        </>
+      )}
+
+      {observations && observations.total > 0 && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Flight recorder
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            What your harness actually did in real sessions — read off the local
+            <code className="mx-1 font-mono">.vigiles/runs.jsonl</code> ledger.
+          </p>
+          <Observations data={observations} />
         </>
       )}
 

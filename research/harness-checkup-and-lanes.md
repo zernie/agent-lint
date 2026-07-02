@@ -11,8 +11,7 @@ topic: audit
 > Should vigiles ship a zero-config "Lighthouse for your harness" audit, predefined
 > evals that need no authoring, and which lane (casual-free / power-test / both)?
 > Decision below, then the synthesis, then the external-research appendix.
-> Feeds `pre-release-focus.md` (the VERIFY-mass / MEASURE-depth thesis) and
-> `measurement-authority.md`.
+> Feeds `pre-release-focus.md` (the VERIFY-mass / MEASURE-depth thesis).
 
 ## The decision
 

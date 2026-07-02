@@ -274,7 +274,7 @@ Four coherent theses of "world-class," each a different bet:
     providers/assertions under _our_ statistics + pass^k.
   - **a vigiles Agent Skill** — copy promptfoo's own move (a Claude Code
     marketplace plugin that teaches an agent to author the configs); aimed at the
-    funnel in `research/distribution-strategy.md`.
+    adoption funnel.
     See `research/promptfoo-deep-dive.md` for the full case.
 
 **Decision (2026-06-10): pursue B → A → C; defer D.** B builds the seed/cache

@@ -14,9 +14,7 @@ topic: spec
 > `generate-types` (`.d.ts`) and `generate-schema` (JSON Schema) machinery — NOT a
 > runtime import side effect.
 >
-> Companions: `typed-spec-moat.md` (the moat synthesis — this is "the harness as a
-> compilable formal object" at REPO scale + the §2 capability-diff substrate),
-> `typed-spec-power.md` (typed composition #1, the per-file basis this lifts to
+> Companions: `typed-spec-power.md` (typed composition #1, the per-file basis this lifts to
 > repo scale), `src/core/generate-types.ts` (the codegen to extend),
 > `src/core/spec.ts` (`Supplies<>`, `TypedAgentSpec`, `result()` — the shipped
 > typed surface this builds on), `src/core/compile.ts` `validateRailway` (today's
@@ -66,7 +64,7 @@ The two clear headline wins are **#1 cross-file handoff** and **#2 dangling
 delegate**, both proven against `tsc` 5.9.3 below. **#3 is real but the encoding
 matters** — it is the one item where the naive type form is exactly the TS2589 trap,
 and the correct answer is a generator-side JS check. **#4** is the substrate the
-capability-diff moat (`typed-spec-moat.md` §2) needs, and it composes from #1/#2.
+capability-diff moat needs, and it composes from #1/#2.
 
 ---
 
@@ -192,7 +190,7 @@ The GOOD registry (`specs/planner|implementer|reviewer.spec.ts` + a
 
 **MOAT (lever), not a mere helper — with one precise caveat.** The registry is the
 repo-scale realization of "the harness becomes a compilable, analyzable formal
-object" (`typed-spec-moat.md` §1). Concretely it is **markdown-impossible AND
+object". Concretely it is **markdown-impossible AND
 orchestration-framework-impossible**:
 
 - **vs markdown / a linter:** a linter can check that a `delegate` target exists
@@ -206,10 +204,10 @@ orchestration-framework-impossible**:
   harness they assemble passes **untyped state** (Python dicts, loose message
   objects) between nodes at RUNTIME; a missing/wrong field surfaces as a runtime
   `KeyError`. The registry checks every handoff at **compile time**, across files,
-  before anything runs (`typed-spec-moat.md` "the second wall").
+  before anything runs.
 
 It is the substrate for the founder's favorite moat — the **semantic capability-diff
-at PR time** (`typed-spec-moat.md` §2): once the whole harness is one typed value,
+at PR time**: once the whole harness is one typed value,
 the capability lattice (#4) is computable, and a PR diff over the COMPUTED type
 ("this PR widened the blast radius / removed a gate / opened a cross-step trifecta")
 falls out. The registry is what makes "diff the harness's capabilities" a repo-wide
@@ -258,7 +256,7 @@ vigiles already has the muscle for it:
 **Build the registry, scoped to #1 (cross-file handoff) + #2 (dangling delegate) as
 generated O(N) TYPES, with #3 (duplicate names) detected in the JS GENERATOR — and
 position #4 (the whole-harness capability lattice) as the engine for the
-capability-diff moat (`typed-spec-moat.md` §2/§6 build-order step 2→3).**
+capability-diff moat.**
 
 Why this exact scope:
 
@@ -280,10 +278,6 @@ the way around it.**
 
 ## See also
 
-- `typed-spec-moat.md` — the moat synthesis: §1 "the harness as a compilable formal
-  object" (this is its repo-scale form), §2 the capability-diff at PR (which #4
-  enables), §3 the keystone computed pipeline type (which the registry hosts), §6
-  build-order (step 2 "cross-step accumulation" is exactly #4 over the registry).
 - `typed-spec-power.md` — #1 typed composition (the per-file basis this lifts to repo
   scale) + the TS2589/shallow-encoding lesson the perf measurement re-confirms.
 - `src/core/generate-types.ts` / `src/core/generate-schema.ts` — the existing codegen

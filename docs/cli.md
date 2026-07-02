@@ -20,7 +20,6 @@ npx vigiles audit [dir]              # Lighthouse for your harness: category rin
 npx vigiles audit <dir> --no-html    # Skip writing vigiles-report.html · --no-json skips the JSON artifact (both written by default)
 npx vigiles audit <dir> --json       # Print the versioned AuditReport JSON to stdout (the upload/CI contract)
 npx vigiles audit <after> --capability-diff=<before>  # Did this change WIDEN the agent's blast radius? (no model)
-npx vigiles scaffold-test [dir]     # Generate a starter test for each untested skill/agent/hook (--write)
 npx vigiles generate types          # Emit .d.ts from project state (for spec mode; --check to verify)
 npx vigiles generate schema         # Emit JSON Schema for vigiles: frontmatter (--check to verify)
 npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry over every spec (--check to verify)
@@ -442,33 +441,6 @@ npx vigiles audit ./head --capability-diff=./base --json           # structured 
 
 This is the **capability-diff** check: the capability surface is the typed
 effect lattice `generate-harness` already computes; the diff reads it.
-
-### `scaffold-test [dir]`
-
-**Free-form in, a runnable starter test out.** For every **untested** skill /
-subagent / hook in a plugin (the surfaces `vigiles lint` flags via
-`untested-skill` / `untested-subagent` / `untested-hook`), generate a scaffolded
-test at its suggested path — the deterministic counterpart to the `test-harness`
-skill (which picks the tier with a model). Each scaffold wires the real public
-API + the surface's own metadata and leaves TODOs only where judgement is needed:
-
-| Surface      | Tier      | Generated                                                   |
-| ------------ | --------- | ----------------------------------------------------------- |
-| **hook**     | `runHook` | a unit test asserting the block/allow decision (free)       |
-| **skill**    | eval      | a `measureTriggerRate` recall + precision eval (real model) |
-| **subagent** | harness   | a `runHarnessTest` scaffold (points at the `result()` path) |
-
-```bash
-npx vigiles scaffold-test ./my-plugin          # dry-run: print the scaffolds
-npx vigiles scaffold-test ./my-plugin --write   # write each to its suggested path (never clobbers)
-npx vigiles scaffold-test ./my-plugin --json    # the agent-consumable { path, content, kind, tier }[]
-npx vigiles scaffold-test ./repo --harness=codex
-```
-
-`--write` skips any path that already exists, and the generated file lands where
-the untested-surface detector looks for it — so the surface stops being reported
-untested. Fill in the TODOs (prompts / event input / assertions), then run with
-`vigiles test` or `vigiles eval`.
 
 ### `generate harness [dir] [out]`
 

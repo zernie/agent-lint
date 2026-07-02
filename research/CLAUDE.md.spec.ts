@@ -18,7 +18,7 @@ import { claude, guidance } from "../src/core/spec.js";
 
 export default claude({
   sections: {
-    scope: `The \`research/\` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries \`status:\`/\`topic:\` frontmatter: STATUS is one of \`active\` (current thinking), \`shipped\` (built — the doc is the design record), \`idea\` (proposed, not built), \`superseded\` (replaced — see the newer doc), \`rejected\` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: \`grep -l 'status: shipped' research/*.md\`, \`grep -l 'topic: eval' research/*.md\`. READ-FIRST keystones: \`roadmap.md\` (the front door), \`measurement-authority.md\` (the strategy pivot), \`harness-state-space.md\` (the organizing thesis). The ROOT \`CLAUDE.md\` keyFiles map the CODE; this maps the RESEARCH.`,
+    scope: `The \`research/\` corpus is the INTERNAL record (design rationale, competitive analysis, the moat/positioning narrative) — tier 2 in the doc-tiers rule, NEVER linked from public docs. This file is its INDEX. Each doc carries \`status:\`/\`topic:\` frontmatter: STATUS is one of \`active\` (current thinking), \`shipped\` (built — the doc is the design record), \`idea\` (proposed, not built), \`superseded\` (replaced — see the newer doc), \`rejected\` (decided against). TOPIC groups by area (spec, hooks, eval, testing, adapters, audit, sandbox, linters, positioning, roadmap, proofs, skills, security, docs, benchmark, misc). Query the corpus deterministically: \`grep -l 'status: shipped' research/*.md\`, \`grep -l 'topic: eval' research/*.md\`. READ-FIRST keystones: \`roadmap.md\` (the front door) and \`harness-state-space.md\` (the organizing thesis). The ROOT \`CLAUDE.md\` keyFiles map the CODE; this maps the RESEARCH.`,
   },
 
   keyFiles: {
@@ -91,22 +91,17 @@ export default claude({
     "research/ai-code-quality.md": `[active] Collected empirical data (CodeRabbit, ETH Zurich, GitGuardian) on AI code-quality failure modes that shaped vigiles v2`,
     "research/competitive-landscape.md": `[active] Catalogs 20+ competing tools across linters, staleness detectors, rule-sync, and runtime policy engines`,
     "research/competitor-rule-matrix.md": `[active] Matrix comparing vigiles's rules against agnix/claudelint/claude-plugin-validate/eval tools; vigiles alone on cross-referencing`,
-    "research/distribution-strategy.md": `[active] Diagnoses near-zero adoption via a 5-stage funnel and proposes fixes`,
     "research/dynamic-workflows-and-scope.md": `[active] vigiles skills (authored, reusable) distinct from Anthropic's ephemeral generated dynamic workflows`,
-    "research/eval-startups-positioning.md": `[active] External essay's eval-startup-failure critique applied to vigiles's harness-testing vs measurement-authority positioning debate`,
     "research/instruction-file-linter-landscape.md": `[active] 2025-26 CLAUDE.md/AGENTS.md linters are now a crowded "validate" category, not an empty niche`,
     "research/landscape-mid-2026.md": `[active] Deep dives on ContextCov, Harness Engineering, AgentProof, Bedrock+Cedar, Compiled AI + next steps`,
     "research/launch-article-draft.md": `[idea] Draft external article: hyped Claude skills cost tokens without proven benefit, built on pilot data`,
-    "research/measurement-authority.md": `[active] Strategy pivot to empirical authority on what makes agentic coding work; P0 validated`,
     "research/oss-lane-sweep-2026-06.md": `[active] GitHub/npm/PyPI sweep: vigiles's cross-ref/harness-testing/trigger-eval lanes are unoccupied`,
     "research/positioning-funnel.md": `[active] Moat is the category + distribution, not individual checks; axes as funnel stages, leaderboard wedge`,
     "research/reference-verification-limits.md": `[active] Synthesis of what reference verification can/can't do deterministically: proxy-vs-judgment gap, prose undecidability, delegate rule`,
     "research/standards-conformance.md": `[active] Assesses AGENTS.md/SKILL.md/MCP standardization wave; recommends extending format-neutral reference verification, not pivoting`,
-    "research/strategic-synthesis-2026-06.md": `[active] Synthesizes four 2026-06-13 researches into one ranked bet list; convergent verdict: extend two pillars, don't pivot to adjacent markets`,
-    "research/strategy-verdict.md": `[superseded] Ranked verdict for viral leaderboard + zero-config installer + cross-harness testing moat; superseded by measurement-authority.md`,
+    "research/strategy-verdict.md": `[superseded] Ranked verdict for viral leaderboard + zero-config installer + cross-harness testing moat; superseded by a later strategy synthesis`,
     "research/sync-landscape-analysis.md": `[active] Per-tool breakdown of Ruler/ai-rulez/etc, deciding what to absorb vs delegate vs skip`,
     "research/sync-tool-compatibility.md": `[shipped] Verified Ruler/rulesync formats and the compatibility contract vigiles holds via src/core/compose.ts`,
-    "research/typed-spec-moat.md": `[active] Consolidated synthesis of five research rounds on the typed-spec moat, with market-corrected competitive positioning`,
     "research/zero-config-mother-harness.md": `[active] Argues vigiles should be a persistent verifier (not a scaffolder) composing a curated bundle`,
 
     // ── proofs ──
@@ -116,12 +111,12 @@ export default claude({
 
     // ── roadmap ──
     "research/architecture-platform.md": `[rejected] Vision for vigiles-as-architecture-platform (FSD/DDD presets); superseded/rejected direction vs current scope`,
-    "research/divergent-bets.md": `[active] Triages strategic bets beyond the two-pillar frame — leaderboard + cost/ROI optimizer rated strong`,
     "research/feature-ideas.md": `[active] Detailed catalog of 14 pillar-1 verification feature ideas mapping FP/CS techniques to product features; status tracked in roadmap.md`,
     "research/handoff-pr40.md": `[active] Handoff record for open PR #40 shipping the OSS-bug-adoption deterministic rule suite (tool-contract, mcp, frontmatter rules) and scanner`,
     "research/harness-state-space.md": `[active] States the "minimize harness state-space" organizing thesis (construct/verify/gate/test) and ranks moat-hunting bets via analogical transfer`,
     "research/pre-release-focus.md": `[active] Pre-launch triage: freeze VERIFY+MEASURE as the two public pillars, park/polish the rest`,
     "research/roadmap.md": `[active] Consolidated front-door roadmap ranking all open items Now/Next/Later/Backlog/Explore/Rejected across the project`,
+    "research/harness-observability-direction.md": `[active] Tech direction of record: the four-instrument loop (verify/gate/measure/observe), the deterministic-vs-behavioral precision principle, the local agent-readable runs.jsonl flight-recorder ledger, promote-prose, and the per-surface map`,
 
     // ── sandbox ──
     "research/bash-effect-classification.md": `[shipped] Design for the deterministic (no-LLM) Bash command effect classifier — decidable read-only subset, fail-closed residue`,

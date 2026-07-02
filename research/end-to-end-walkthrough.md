@@ -10,8 +10,8 @@ topic: spec
 > Status: design illustration (2026-06-19). One realistic skill (`release`) carried from
 > free-form prose → typed contract + side-effect boundary → compiled artifact → runtime gate →
 > deterministic test → measurement. Shows how the threads compose: `doc()`/`spec-api-design.md`,
-> `typed-contracts-for-agents.md` (Result), `side-effect-separation.md` (the boundary),
-> `measurement-authority.md` (the eval). **Not all shipped** — `[exists]` / `[proposed]` tags
+> `typed-contracts-for-agents.md` (Result), `side-effect-separation.md` (the boundary).
+> **Not all shipped** — `[exists]` / `[proposed]` tags
 > mark which is which.
 
 The example skill: **`release`** — decide a semver bump + changelog (pure), then write the
@@ -251,5 +251,4 @@ lint, gate what's left in the loop, and pay a model only for the irreducibly-fuz
 - `spec-api-design.md` — the `doc()` / `result()` / `extend()` API this uses.
 - `typed-contracts-for-agents.md` — why the typed outcome + boundary make the unit testable.
 - `side-effect-separation.md` — the gate + sandbox + auto-marker behind step 4.
-- `measurement-authority.md` — the measure/optimize identity behind step 6.
 - `examples/railway/ship-pr.md.spec.ts` — a shipped railway example in the same spirit.

@@ -9,8 +9,8 @@ free to improve while the parts most people actually use stay put.
 
 ## What's stable — depend on it
 
-- **The CLI** — the eight verbs (`init`, `compile`, `lint`, `test`, `eval`,
-  `scan`, `scaffold-test`, `generate`), their flags, and their **exit codes**
+- **The CLI** — the verbs (`init`, `compile`, `lint`, `test`, `eval`,
+  `scan`, `generate`), their flags, and their **exit codes**
   (`0` clean / `1` warn / `2` error). This is the narrowest, stablest contract
   and what ~90% of users touch — including the GitHub Action, which wraps it.
 - **The authoring + testing library entry points:**

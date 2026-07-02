@@ -308,4 +308,3 @@ case-law (Google v. Oracle, Sega/Connectix, substantial-similarity) is the chat 
 - `docs/harnesses.md` — the user-facing how-to (which import, what's supported).
 - `research/sync-tool-compatibility.md` — the _format-axis_ composition with
   Ruler/rulesync (a different kind of "other tool").
-- `research/divergent-bets.md` — the parked `measure-model × harness` bet.
