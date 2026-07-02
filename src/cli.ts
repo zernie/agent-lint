@@ -6479,16 +6479,23 @@ async function main(): Promise<void> {
             capabilitiesOfReport(report, adapter.dialect),
           );
           // Feed the flight recorder: the blast-radius change (moat #2) as a record.
-          appendObservation({
-            kind: "capability-diff",
-            added: [
-              ...diff.addedSideEffecting,
-              ...diff.addedUnknown,
-              ...diff.addedReadOnly,
-            ],
-            removed: [...diff.removed],
-            widened: diff.widened,
-          });
+          // Write to the AUDITED root's ledger (not the caller's cwd) — the same
+          // `root` the audit reads back via `readObservations(root)`, so a
+          // `vigiles audit ./after --capability-diff=./before` from a parent dir
+          // records into ./after/.vigiles/, not the parent workspace.
+          appendObservation(
+            {
+              kind: "capability-diff",
+              added: [
+                ...diff.addedSideEffecting,
+                ...diff.addedUnknown,
+                ...diff.addedReadOnly,
+              ],
+              removed: [...diff.removed],
+              widened: diff.widened,
+            },
+            root,
+          );
           console.log(
             json
               ? JSON.stringify({ capabilityDiff: diff }, null, 2)
