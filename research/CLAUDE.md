@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:3f36f1aacd5810b6 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:2796078e54713d83 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -56,6 +56,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/deterministic-rule-ideas.md` — [idea] Backlog of next cross-reference lint rules from the OSS plugin sweep
 - `research/enforcement-model.md` — [active] Why rule severity follows a gradient bounded by decidability
 - `research/code-search-for-agents.md` — [active] Compares grep/AST/embeddings/LSP/graph-DB code search approaches for AI coding agents
+- `research/scoped-session-github-access.md` — [active] What a Claude-Code web session can reach on GitHub (token-bound proxy blocks cross-repo search) + the proven in-session sourcegraph+raw discovery workaround
 - `research/fp-for-deterministic-ai.md` — [idea] Surveys FP techniques (Result types, exhaustive matching, property testing) for AI-written code; proposes 10 vigiles features
 - `research/ai-code-quality.md` — [active] Collected empirical data (CodeRabbit, ETH Zurich, GitGuardian) on AI code-quality failure modes that shaped vigiles v2
 - `research/competitive-landscape.md` — [active] Catalogs 20+ competing tools across linters, staleness detectors, rule-sync, and runtime policy engines

@@ -85,6 +85,7 @@ export default claude({
 
     // ── misc ──
     "research/code-search-for-agents.md": `[active] Compares grep/AST/embeddings/LSP/graph-DB code search approaches for AI coding agents`,
+    "research/scoped-session-github-access.md": `[active] What a Claude-Code web session can reach on GitHub (token-bound proxy blocks cross-repo search) + the proven in-session sourcegraph+raw discovery workaround`,
     "research/fp-for-deterministic-ai.md": `[idea] Surveys FP techniques (Result types, exhaustive matching, property testing) for AI-written code; proposes 10 vigiles features`,
 
     // ── positioning ──
