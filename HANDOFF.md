@@ -85,18 +85,21 @@ OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record: `CLAUDE.md` 
   `git add --renormalize startup/` then VERIFY `git show HEAD:startup/<f>.md | head -c9`=`\0GITCRYPT`.
   **FILENAMES ARE PUBLIC** — use opaque IDs (s01.md, s02.json, …); the mapping lives in `startup/README.md`.
   **COMMIT MESSAGES ARE PUBLIC** — use generic messages like `chore: vault` for vault-only changes.
-- **SCOPED-SESSION WEB/GITHUB ACCESS (empirically tested 2026-07, for scrape-type tasks):** the GitHub
-  _integration_ is scoped to `zernie/vigiles`. Via the proxy: `api.github.com` + `github.com` (search AND
-  HTML repo pages) = **403**; `grep.app` = **429** (bot-block); `sourcegraph.com/.api/search/stream` =
-  **200 but 0 results** (public global code search is gutted). What **WORKS**: `raw.githubusercontent.com/
-<owner>/<repo>/<ref>/<path>` = **200** (fetch ANY known public file), plus WebFetch/WebSearch general web.
-  So you can **FETCH a known public file, but cannot SEARCH github**. Discovering unknown files across
-  GitHub (e.g. a corpus scrape) needs a real `GITHUB_TOKEN` code-search run from OUTSIDE this scoped
-  session — a laptop or **GitHub Actions in your own repo** (has a token + Linux for bubblewrap confinement
-  - reproducibility). **Playwright/Chromium is preinstalled** (browsers at `/opt/pw-browsers`; the node
-    module is NOT — `npm i playwright-core`) but does **NOT** help for github — the proxy blocks the
-    github.com HOST for any tool; playwright only helps non-github JS/bot-protected public sites, still bound
-    by the proxy allowlist. (Corpus scrape for the s31/s32 benchmark → run it in GitHub Actions.)
+- **SCOPED-SESSION GITHUB ACCESS — the real blocker is TOKEN-BINDING, not network (re-tested 2026-07-03):**
+  The Claude-Code github-actions PROXY intercepts every `api.github.com/*` request and permits ONLY
+  repository-scoped endpoints for the configured repo (`zernie/vigiles`), returning a custom Anthropic
+  message: _"sessions are bound to their configured repositories."_ This is enforced at the PATH level
+  and is **token-independent** — CONFIRMED: even a user-supplied classic PAT with `public_repo` (and the
+  env's own `GH_TOKEN`) hit the SAME refusal, and `/user` returns empty (the proxy doesn't forward your
+  auth). So a cross-repo `search/code` run is IMPOSSIBLE in-session no matter the token or the network
+  policy. NOTE the network policy is a SEPARATE knob: with full network access `api.github.com` is
+  reachable (200 on repo-scoped paths) — earlier "403" was the older restrictive policy; that changed,
+  the token-binding did not. Repo-scoped GitHub work uses the `mcp__github__*` tools (they route through
+  the scoped integration). What still WORKS for fetches: `raw.githubusercontent.com/<owner>/<repo>/<ref>/
+<path>` = **200** (any known public file) + WebFetch/WebSearch general web. So: FETCH a known file yes,
+  SEARCH github no. A corpus scrape (s31/s32 benchmark) MUST run OUTSIDE this session — laptop / Codespace /
+  GitHub Actions in your own repo (plain shell + plain token, no proxy). Playwright won't help (proxy is
+  host+path level, not a bot-block).
 - `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
   (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
   keyFiles line first or compile FAILS.
