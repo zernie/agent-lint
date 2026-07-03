@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:2796078e54713d83 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:b0ece8bc55fd44b9 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -89,6 +89,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/os-isolation-port.md` — [idea] Design-of-record for a vigiles/os-isolation port (bwrap/nft vs sandbox-exec), not yet implemented
 - `research/sandbox-network.md` — [shipped] Sandbox egress design: deny-all → recordEgress → allowlisted real egress via slirp4netns/nft — all three shipped
 - `research/agent-supply-chain-security.md` — [active] Assesses plugin/MCP supply-chain risk landscape; recommends a thin vigiles-specific security scan, not a generic scanner
+- `research/plugin-capability-governance.md` — [active] Landscape of plugin capability governance (mid-2026): the DECLARE-manifest gap (MCP hints unenforced, CC subagent tools:/#4740/#172 not enforced) + org-imposed policy prior art (Chrome runtime_blocked_hosts, K8s admission control, Cedar) + funded MCP-gateway market + the RUNTIME-POLICY gap adjacent to vigiles's tool-contract/purity/compiled-hook primitives
 - `research/runtime-guardrails-observability.md` — [rejected] Evaluates online guardrails/observability markets; verdict: stay out except one OTel-GenAI emission bridge
 - `research/skill-as-pipeline.md` — [idea] Design capture modeling a skill as Guidance-or-Pipeline control-flow graph with deterministic harness-owned gates
 - `research/skill-authoring-pains.md` — [active] Research on real-world SKILL.md authoring pain points: triggering non-determinism, frontmatter pitfalls, volume tradeoffs
@@ -99,6 +100,7 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/lightweight-spec-authoring.md` — [active] Sweep of 16 real instruction files: current claude() spec is too heavy; value is composition/templates
 - `research/railway-subagents.md` — [active] Railway-orchestration design over flat subagents: Temporal analogy, marks vs typed workflow() vs driver options
 - `research/shareable-presets.md` — [idea] Design sketch for publishable npm-package typed presets that other repos extend, bundling rules + evals
+- `research/composable-instruction-files.md` — [active] Mid-2026 survey of composable/modular instruction files: only Claude Code + Gemini CLI have true @import; AGENTS.md standard has no imports (open proposal); demand real+dated (openai/codex#17401); the unmet gap is multi-repo registry-distributed versioned rule packages; maps onto vigiles's preset()/extends() + compose.ts
 - `research/spec-api-design.md` — [active] Best-practice synthesis for spec.ts API: doc()/section() split, preset()/extends() merge model, strict-typing upgrades
 - `research/spec-syntax-and-railway-scope.md` — [shipped] Settles two decisions: railway/Result is subagent-only (not skills), and the plain-object+helpers spec syntax is correct as-is
 - `research/spec-value-model.md` — [active] Reference answer for when a typed .spec.ts earns its keep per capability (lint/test/eval/whole-harness typing) vs plain markdown
