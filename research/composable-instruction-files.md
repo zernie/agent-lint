@@ -66,6 +66,20 @@ Relevant to vigiles because the typed spec already models composition
 - The **AGENTS.md-has-no-imports gap** (#3) is the interesting wedge: a typed spec that composes
   reusable parts and compiles to each harness's native mechanism (or to a flat merged file where none
   exists) is exactly the "author once, distribute everywhere" value — and it's un-standardized upstream.
+- **THE KEY DIFFERENTIATOR — composition FINER than `@include`.** Every native mechanism (CC/Gemini
+  `@path`, Codex nesting, the AGENTS.md #11 proposal) is **file-granular**: you splice a whole markdown
+  file. But because vigiles authors in a TYPED SPEC, composition happens at the **TS-module level — you
+  import functions/values**: a single `section()`, one rule, a `guidance()`, a `preset()`. That is:
+  (a) **sub-file granularity** — reuse ONE rule across specs, not a whole file; (b) **type-checked** —
+  a missing/renamed imported symbol is a tsc error, not a silently-dropped `@path`; (c) **parameterizable**
+  — a `securityRules({ language: "rust" })` function, the Terraform-module/Nix-option model the borrow-list
+  flagged as the mature target; (d) **versioned + named for free** — it's an npm import, so the "named
+  addressable unit + versioning across a repo boundary" that EVERY `@import` proposal lacks (§prior-art)
+  comes built-in. The compiled markdown still emits a flat file (or the harness's native `@import`), so
+  downstream harnesses need no composition support. This is the markdown-impossible move: `@include`
+  composes TEXT; a typed spec composes typed FUNCTIONS that compile to text. Maps directly onto the
+  existing `preset()`/`extends()` design (`spec-api-design.md`) — the finer-than-file granularity is the
+  under-stated part to lead with.
 - Verdict alignment: this is a PRODUCT-PHASE thread (composition/authoring ergonomics), parked behind
   the security-report push. Captured, not committed.
 
