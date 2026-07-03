@@ -43,10 +43,11 @@ cross-platform-confinement reasons. Running that battery at scale (confined, Lin
 
 **OPEN FOLLOW-UPS (from prior session, still pending):**
 
-1. **`research/roadmap.md` ~37 DANGLING relative refs** to the 6 docs moved research/→`startup/`
-   in a prior session. Scattered across ~10 sections; roadmap also has strategic sections
-   (Explore/GTM @~830) needing de-strategization. Needs a focused whole-doc pass.
-   No test catches these (prose links), won't fail CI meanwhile.
+1. ~~`research/roadmap.md` ~37 dangling refs~~ **RESOLVED / was stale (verified 2026-07):**
+   `roadmap.md` has ZERO broken markdown links and ZERO links INTO the vault — the `startup/`
+   mentions are all compliant PROSE pointers ("see the private `startup/` vault"), which
+   `doc-tiers` allows. Nothing to fix. (roadmap still has strategic Explore/GTM prose @~500/748/830
+   that's borderline but public-safe; de-strategize only if a rule tightens.)
 2. **Broader research-corpus de-strategization** — `research/README.md` "Strategy & bets"
    leftovers, `research/CLAUDE.md` Scope text. Lower urgency (already-public).
 
