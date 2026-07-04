@@ -131,6 +131,53 @@ catches a `--trigger`-class problem with **no model**.
   doesn't exist (broken entry). Partly covered by `inspectMarketplace`; promote
   to a flagged finding. **Low effort.**
 
+## Security-depth cluster (external-validation round, 2026-07)
+
+Independent corroboration from another team's private CC skill-linter set — several
+of their P0 checks target the SECURITY surface `audit`/`lint` is grep-confirmed
+SHALLOW on today (content/dataflow, not just declared tool-sets). These converge
+with the PLANNED items in [audit-wow-ideas](audit-wow-ideas.md) (#7 secrets, the
+prompt-injection scan) and add two techniques worth stealing verbatim.
+
+- **`hardcoded-secret`** — key-shaped literals in `settings.json`/`.mcp.json`/
+  `CLAUDE.md`/skill bodies (`AKIA…`, `ghp_…`, `password=`, `api_key=`). This is
+  the same idea as audit-wow #7, but the STEAL is the **doc-placeholder
+  post-filter**: after the regex match, drop hits that are obvious placeholders
+  (`ghp_xxx`, `<your-token>`, `example`, all-caps env-ref) so the rule stays
+  lint-grade. That post-filter is what moves it from bucket-C-warn to a
+  defensible **external-decidable → error-capable** check (don't-cry-wolf). The
+  regex list is cheap; the FP recipe is the moat. **Effort: S–M.**
+- **`prompt-injection-content`** — a skill/agent body that instructs the model to
+  EXECUTE the contents of an env var / fetched file / tool output (the classic
+  "run whatever `$X` contains"). Matches audit-wow's planned prompt-injection
+  scan. HONEST ceiling: content-injection detection is **heuristic-behavioral
+  (bucket C → `warn`, never `error`)** — a private corpus can run it P0 because
+  it controls its inputs, but vigiles's public FP bar caps it at a nudge.
+- **`prod-datastore-access` / `obfuscation`** — patterns for a hook/skill
+  reaching a production datastore, or deliberately obfuscated command bodies.
+  Same content/dataflow family as secrets; higher FP risk → **bucket C, `warn`**,
+  lower priority. Fold into one "suspicious content" detector, not three rules.
+- **NON-SUPPRESSIBLE security tier (concept)** — their security checks can't be
+  turned off per-file. Worth stealing as a POSTURE, not a rule: today every
+  `structural` rule is `vigiles:ignore`-suppressible. A small non-suppressible
+  slice (secrets + lethal-trifecta) is defensible and matches the safety framing.
+  Needs a config-model change, not a detector — park until the security cluster
+  actually ships.
+
+### Eval-lane, NOT a lint rule — baseline-leak detection
+
+The one genuinely NEW idea for us, and it's in the MEASURE pillar, not `lint`.
+A **baseline-leak scan** detects when a skill's without-skill eval BASELINE
+already "gives away the answer" — so the with-skill vs without-skill delta
+collapses and the eval silently reports "the skill doesn't help" (or, worse,
+inflates it) for the wrong reason. This is an **eval-integrity** check that
+belongs next to `eval-lock`/`stats.ts` in the `runEval`/`measureTriggerRate`
+A/B tier — a leaky baseline is a measurement bug no lint rule can see. None of
+the eval landscape (promptfoo/DeepEval — [eval-api-landscape](eval-api-landscape.md))
+has this. **Effort: M**; design home is the eval tier, cross-ref
+[isolated-vs-whole-harness-eval](isolated-vs-whole-harness-eval.md). Deliberately
+kept OUT of this lint backlog — noted here only so the idea isn't lost.
+
 ## Deliberately NOT rules (the undecidable-prose floor)
 
 - A subagent BODY that says "use the X tool" while X isn't in its `tools:`
