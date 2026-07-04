@@ -14,36 +14,24 @@
 
 ## RESUME HERE
 
-**Branch `claude/docs-linting-accuracy-4psb1g`.** No PR opened (open one only if asked).
+**Branch `claude/gate-release-completion-jh6j25`.** No PR opened (open only if asked).
+**Nothing pushed** — all commits are LOCAL, vault-only (`chore: vault`).
 
-**README OVERHAUL: DONE + pushed** (several commits this session). The front door was
-rebuilt for clarity after repeated "it's confusing / so much stuff / what even is it"
-feedback. **Product positioning locked (public-safe product/messaging, not business
-strategy):**
+**This was a STRATEGY / DIRECTION session — ALL substance is in the VAULT.** Do NOT
+restate or name topics here (public file). Unlock `startup/`, read `startup/README.md`
+(ID→name index), then **`s44` (the session's conclusion + the OPEN FORK)** first, then
+`s43`. New/changed vault docs this session: `s37`–`s41` (renamed from descriptive
+`gate-*` names → opaque IDs, index updated), `s42`, `s43`, `s44` (all encrypted —
+verified `\0GITCRYPT`).
 
-- vigiles is **a TOOL you run** (ESLint / Lighthouse / `npm audit` class), NOT a
-  framework and NOT a "collection of libs". The FAQ says this outright — it's the #1
-  thing that scared people off.
-- Front door flow: **felt-pain hook → Lighthouse-style A–F report card → 3 real
-  (anonymized) proofs → the `audit`/`lint`/`test`/`eval` verb-map** ("one tool, four
-  verbs", framed _vibes → verified_).
-- **Codex/AGENTS.md is first-class** (instruction-neutral nouns everywhere).
-- **Plain language**: "harness" defined on first use; "specs" made concrete
-  (`CLAUDE.md.spec.ts` + init→compile→CLAUDE.md); security is ONE dev-native gotcha
-  proof, never the brand.
-- The **README top HTML comment holds all the direction rules — READ IT before
-  editing the README** (tagline/proof-order/Codex/audit-vs-lint scope all pinned there).
+**Open at session end:** a research agent (a novelty check for a technical direction)
+was IN FLIGHT — its result + the direction DECISION belong in the vault, not here.
+**Next session: read `s44`, collect the research result, DECIDE, record in vault — do
+NOT re-run the exploration** (`s44` explains exactly why the loop is closed).
 
-**Method (repeatable):** validated via a **6-persona cold-read** (`review-docs` skill:
-newcomer / power-user / plugin-author / skeptical-senior / decision-maker / Codex) +
-two **Fable** positioning consults. Personas landed 4/5 except Codex 3/5; the last pass
-targeted the Codex ceiling + the plain-language stumbles. A re-run to confirm scores
-moved was offered, not yet done.
-
-**Business / strategy direction: SEE THE VAULT.** The active initiative, its next
-concrete steps, and all strategy live ONLY in `startup/` (unlock, then read
-`startup/README.md` for the ID→name index). Do NOT restate — or name the topics of —
-any of it in this file or any public doc.
+**No public code/docs changed this session** — work was entirely vault + scratchpad.
+The prior session's README/roadmap state still holds, BUT some public framing may now be
+stale given the vault direction shift — reconcile only per `s44`, never by leaking it.
 
 **⚠️ CLEANUP DEBT (this session found it):** the PREVIOUS HANDOFF committed on `main`
 LEAKED vault-tier strategy into this public file (specifics deliberately omitted here).
@@ -89,6 +77,10 @@ reality — via four instruments: VERIFY (lint/cross-ref), GATE (compiled hooks)
 - `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
   (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
   keyFiles line first or compile FAILS.
+- **COMMIT SIGNING is BROKEN in-container** — the SSH signing key is a 0-byte pubkey with no
+  private key, so commits are `sig=N` (GitHub shows "Unverified"). Author/committer email ARE
+  correct (`noreply@anthropic.com`); only the signature is missing. UNFIXABLE here; don't churn
+  amends chasing it. Cosmetic only, and nothing's pushed.
 - RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
 - `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned version); CI pins it. Env-only.
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
