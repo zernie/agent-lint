@@ -1,88 +1,66 @@
 <!--
   README DIRECTION — read before editing; keep changes aligned.
-  This file is the FRONT DOOR + a marketing asset for someone who already lives
-  in Claude Code / Codex. Optimize for a phone-skimmer.
+  Front door + marketing asset for someone who lives in Claude Code / Codex.
+  Optimize for a phone-skimmer who must come away knowing WHAT IT IS and wanting
+  to run it — never scared off. Validated by a 6-persona cold-read (2026-07):
+  newcomer / power-user / plugin-author / skeptical-senior / decision-maker /
+  Codex-user. The fixes below trace to that review — don't regress them.
 
-  TAGLINE = VERIFY-FIRST (decided 2026-07): "Catch the silent breakage in your
-  Claude Code & Codex setup" + subhead "verify your CLAUDE.md, skills, and hooks
-  are real — and prove they actually work." Lead with references-are-real (the
-  unique catch only vigiles makes); test/observe fold in AFTER. Do NOT revert to
-  the old test-first "tests your skills never had" tagline. Stay coding-scoped
-  (name CC/Codex + CLAUDE.md/skills/hooks) so it's never mistaken for a
-  general-agent tool. NOT "observability" as the headline (it undersells verify +
-  reads as the general-app category).
+  HOOK = FELT PAIN, then breadth (founder direction 2026-07). Bold tagline is a
+  specific second-person pain: "You have a rule your agent follows half the time
+  — and no way to know which one." It's rhetorical (the reader's own uncertainty),
+  NOT an ecosystem stat — do NOT reintroduce a bare "%"/number in the tagline (the
+  doc mocks uncited stats: "'65% fewer tokens.' Says who?", so a fake stat up top
+  reads as hypocrisy). Dev-native CRAFT bait, NOT enterprise fear (OSS dev tool,
+  not a security product). The report-card + 5 rings RIGHT BELOW show the breadth
+  so the specific hook doesn't read as narrow.
 
-  SPINE = CONCEPT 5 (proof/demo-led). Lead with REAL, screenshotable catches on
-  plugins people actually ship, THEN explain the mechanism. The proofs are not
-  illustrative — every block traces to a real dogfood run captured in
-  research/dogfood/. THREE COMMUNITY catches, anonymized (2026-06-29: Proof 1 is now a
-  lethal-trifecta exfil path → Safety 80, from madappgang's `tester` shown as
-  "my-plugin" — added to pay off the new Safety-ring hero; Proof 2 a skill-description
-  collision → wrong-skill-fires (claude-flow, Triggering F); Proof 3 an
-  AskUserQuestion-never-available tool) — all real GRADED/structural defects that
-  REPRODUCE on current main. NEVER replace a real catch with a fabricated one. (The
-  earlier Proof 1 was a missing-SKILL.md/Truthfulness catch, swapped 2026-06-28: its
-  source (superpowers) is clean on current main and NO reproducible dead-file-ref
-  exists in popular OSS — those are an adopt+strengthen payoff, see
-  research/oss-audit-render-findings.md.)
+  DEFINE "HARNESS" on first use (the load-bearing noun, used ~15×) — gloss it as
+  "the CLAUDE.md/AGENTS.md rules, skills, subagents, and hooks steering your
+  agent." 4 of 6 personas bounced on it being undefined. Keep the gloss.
 
-  WHY ONLY TWO (decided 2026-06-28): the earlier Proofs 3-4 leaned on
-  pr-review-toolkit's "review agents inherit all tools" as an official-plugin
-  defect. But inherit-all (a subagent with no `tools:` line) is now ADVISORY, not a
-  graded penalty — omitting the tool contract is a near-universal, legitimate
-  authoring style (an OSS sweep of 122 plugins found 109 whose only finding was
-  this), so penalizing it cried wolf. With that change the official plugins are all
-  a clean A, so a "even Anthropic has bugs" proof would be dishonest — Proofs 3-4
-  were DROPPED rather than reframed. The leaderboard feature still exists; it just
-  isn't a headline proof.
+  INSTRUCTION-NEUTRAL NOUNS (Codex was the lowest score): body copy says CLAUDE.md
+  OR AGENTS.md, never CLAUDE.md alone. The tagline may keep punch, but Codex must
+  appear within the first sentence or two (the harness gloss names AGENTS.md), and
+  every "adopts your CLAUDE.md"/"verifies your CLAUDE.md" gets "or AGENTS.md".
 
-  DON'T SHAME OSS: community catches are real but ANONYMIZED in public copy (no
-  obra/superpowers, madappgang by name) — real names live only in research/dogfood/.
-  If an official/vendor proof returns, punch UP (name Anthropic's own); never name a
-  volunteer's repo to show its bug.
+  CATEGORY = A TOOL YOU RUN (ESLint/Lighthouse/npm audit class), NOT a framework,
+  NOT a lib-collection. The FAQ says this outright — it's the #1 thing that scares
+  people off. The library/subpath exports are the automation door for the 5%.
 
-  1. LEAD WITH BENEFITS / the reader's CONCRETE PAIN, never an apology, caveat, or
-     competitor. A bolded lead-in is the first thing read — make it the hook/win.
-     End a section on the win, not the trade-off. A paragraph is ≤ ~3 lines.
-  2. PROOF FIRST, mechanism second. The three instruments (Lint/Test/Eval) come
-     AFTER the proof stack as "how it does it", not as a competing front door.
-  3. SPEC-FIRST IS THE DEFAULT but easy — `init` ADOPTS your CLAUDE.md into a spec,
-     skills edit it, you rarely hand-write .spec.ts. Give it ONE home (Quick start),
-     not five scattered mentions. `eject` always reverses. Inline markdown is the
-     zero-TS floor.
-  4. Guard / compiled hooks is PARKED FOR LAUNCH (see research/roadmap.md). Live set
-     is Lint/Test/Eval. Do NOT make the 2/7→7/7 battery the hero — re-add post-HN.
-  5. SCANNABLE + SHORT — ~200-line cap; punchy cells, bullets, runnable blocks.
-     Push depth into docs/ and LINK it.
-  6. NO INTERNAL VOCABULARY (moat / measurement-authority / flywheel) and NO
-     research/ links — name the user benefit.
-  7. ASSETS: the hero vigiles-audit.png is a REAL current report (a community
-     plugin rendered as "my-plugin" to anonymize) — C 72 with five rings, the
-     SAFETY ring (80) flagging a subagent holding all three lethal-trifecta legs
-     (a prompt-injection exfil path) + an inline subagent-tool-contract fix; the
-     dramatic Safety catch is the whole point of leading with this report (chose
-     the "bite" over a clean A 92 on 2026-06-29). No dialect-drift banner (HTML
-     report is terminal-banner-free by design). Re-render via headless Chromium on
-     the React report if the UI changes (recipe: copy a trifecta-bearing plugin to
-     my-plugin/, `node dist/cli.js audit my-plugin --no-json --no-serve`,
-     headless_shell `--window-size=820,1180 --force-device-scale-factor=2
-     --screenshot` on vigiles-report.html, then `rm -rf my-plugin
-     vigiles-report.html`). (vigiles-demo.gif was removed
-     from Proof 1 — it rendered as a frozen half-typed terminal and was redundant
-     with the code block; if a lint demo returns, it belongs in the Lint section
-     with a non-frozen asset.)
+  AUDIT vs LINT — ONE CONSISTENT, ACCURATE STORY (a persona caught 3 conflicting
+  answers): `lint` = the CI gate on the deterministic checks (broken refs, tool
+  contracts, dead hooks, skill collisions — Proofs 1 & 2). `audit` = those same
+  checks + the Safety ring + two opt-in LIVE checks (MCP connects? skills fire?)
+  + the graded report. Do NOT claim lint gates the lethal-trifecta Safety flag
+  (it's an audit ring, not a default gating rule) and do NOT say lint is
+  refs-only. The table row, the reconciliation line, and the Lint subsection must
+  all agree.
 
-  READABILITY (the 2026-06-29 pass — why this reads the way it does):
-  A. ONE bold per block, on the single phrase the eye should catch. Bold
-     everywhere = bold nowhere. Link CTAs may stay bold (they're navigation).
-  B. ONE idea per sentence. No em-dash clause-chains, no stacked parentheticals.
-     If a clause needs a paren, cut it or give it its own line.
-  C. PLAIN words in every LEAD; push jargon (rings, recall/precision,
-     interceptTools, selector, deterministic) into the linked docs. A skimmer who
-     lives in Claude Code still may not know the vocabulary.
-  D. SHOW via the proofs/code blocks; don't stack adjectives ("real, popular,
-     free, model-less") on top of what the block already proves.
-  E. SELL the outcome before the mechanism; the instruments come AFTER the proofs.
+  SPINE = proof/demo-led. Real, screenshotable catches on shipped plugins, THEN
+  mechanism. Every proof traces to a real dogfood run (research/dogfood/) — NEVER
+  fabricate one. Order = most-RELATABLE first (broken tool ref → skill collision →
+  secrets-exfil gotcha last as the bite). The intro triplet maps 1:1 to the 3
+  proofs. Security is ONE dev-native GOTCHA proof, never the brand. Add a repro
+  line ("run `npx vigiles audit <any-repo>` for your own") + a one-line note that
+  examples use CC subagents but the checks run on Codex too. FALSE CONFIDENCE is
+  the coined term (a guard that looks like it works and silently doesn't), defined
+  once in the Test section.
+
+  FUNNEL: "How it works" opens with the audit/lint/test/eval verb-map table — the
+  load-bearing "one tool, not four" fix. Frame it vibes → verified. Name that
+  init/compile/eject manage the spec layer (personas noticed the verb-count gap).
+
+  DON'T SHAME OSS: catches are ANONYMIZED (no obra/superpowers, madappgang,
+  claude-flow by name) — real names live only in research/dogfood/.
+  Guard/compiled-hooks + the 2/7→7/7 battery are PARKED FOR LAUNCH — not the hero.
+
+  RULES: lead with the reader's CONCRETE PAIN; ≤ ~3-line paragraphs; ONE bold per
+  block; ONE idea per sentence; NO internal vocabulary (moat/flywheel) / NO
+  research/ links / NO enterprise/national-interest framing — name the user
+  benefit; ~220-line body cap; push depth into docs/ and LINK it. Assets: the hero
+  vigiles-audit.png is a REAL current report (a community plugin as "my-plugin"),
+  C 72, five rings — re-render via headless Chromium if the UI changes.
 -->
 
 <p align="center">
@@ -92,11 +70,11 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>Catch the silent breakage in your Claude Code &amp; Codex setup.</strong>
+  <strong>You have a rule your agent follows half the time — and no way to know which one.</strong>
 </p>
 
 <p align="center">
-  Verify your CLAUDE.md, skills, and hooks are real — and prove they actually work.
+  Verify your CLAUDE.md or AGENTS.md, skills, and hooks are real — and prove they actually work.
 </p>
 
 <p align="center">
@@ -107,44 +85,44 @@
 
 ---
 
-**Your skills, hooks, and instructions are your agent's harness — the half you wrote, and the half nothing checks.**
+**You review every PR. Nothing reviews your CLAUDE.md.**
 
-A subagent wired to a tool that doesn't exist. A hook that looks like it blocks and doesn't. Two skills the agent can't tell apart. It all looks fine, and it breaks silently mid-task.
+Your **harness** — the CLAUDE.md or AGENTS.md rules, skills, subagents, and hooks steering your agent — is the one part nobody checks. Nobody verified it's real. Nobody tested it works. That's not a system. That's vibes.
 
-vigiles checks your harness is _real_, not just well-formed:
+And vibes break silently mid-task: a subagent wired to a tool that doesn't exist, two skills your agent can't tell apart, one helper quietly able to read your secrets and send them out.
+
+vigiles[^name] checks your harness is _real_, not just well-formed — Claude Code and Codex alike. One command, no key, no config, safe on any repo:
 
 ```bash
 npx vigiles audit
 ```
 
-No key, no config, safe on any repo. Here's what it caught on plugins people actually
-ship. ↓
+It's free and open-source, runs entirely on your machine, and never bills per token. (`eval` is the only step that calls a model — on your own Claude subscription.) Here's what it caught on plugins people actually ship. ↓
 
 ## What it caught
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report scoring my-plugin C (72/100): five categories scored A–F — Truthfulness, Triggering, Structure, Safety, Tested — with the Safety category flagging a subagent that holds all three lethal-trifecta legs (a prompt-injection exfil path), plus an inline fix card for a subagent declaring a tool that doesn't exist" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report scoring my-plugin C (72/100): five categories scored A–F — Truthfulness, Triggering, Structure, Safety, Tested — with an inline fix card for a subagent declaring a tool that doesn't exist" />
 </p>
 
-**Like Google's Lighthouse, but for your agent harness.** Five categories, each scored
-A–F — Truthfulness, Triggering, Structure, Safety, Tested — with every fix shown inline.
+**Like Google's Lighthouse, but for your agent harness.** One command grades it A–F across five categories, every fix shown inline:
 
-It runs locally and only reads, so it's safe on any repo and the same on every OS.
-For CI gating, use `vigiles lint` instead. **[Audit a harness →](docs/for-plugin-authors.md)**
+- **Truthfulness** — do the references resolve?
+- **Triggering** — do skills fire, without colliding?
+- **Structure** — are tool contracts and configs valid?
+- **Safety** — any way for the agent to leak your data?
+- **Tested** — does the harness ship tests?
 
-## Proof 1 — your agent can read your secrets and ship them out
+These are real scans of public plugins — run `npx vigiles audit <any-repo>` for your own. The examples below use Claude Code subagents; the same checks run on Codex `AGENTS.md`, skills, and hooks. ↓
+
+## Proof 1 — a tool your agent thinks it has and doesn't
 
 ```text
-◑ Safety   80  (80/100)
-    └ subagent "tester" holds all three lethal-trifecta legs:
-        reads private data (Bash, Read) · takes in untrusted web content (WebFetch)
-        · can send data out (Bash, WebFetch)
+✗ tester — Tool "AskUserQuestion" is never available to a subagent.
+    → remove or correct it — it's silently dropped from the contract.
 ```
 
-Give one subagent all three powers and it's a **prompt-injection exfil path**: a poisoned
-web page can tell it to read your `.env` and POST it anywhere — no exploit code, just the
-tools it was handed. vigiles flags it from the tool list alone, free, no model.
-**[How the Safety check works →](docs/for-plugin-authors.md)**
+This subagent — a helper your main agent hands work to — lists a tool that doesn't exist for it. The harness drops it without a word, so the agent quietly loses a capability it thinks it has. The markdown is perfectly valid. vigiles catches it and hands you the **one-line fix**.
 
 ## Proof 2 — two skills your agent can't tell apart
 
@@ -154,62 +132,50 @@ tools it was handed. vigiles flags it from the tool list alone, free, no model.
       apart, so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
 ```
 
-One popular plugin ships **45 pairs of skills** with near-identical descriptions. The
-agent picks which skill to run by reading those descriptions, so when two match it
-fires the wrong one. The markdown is perfectly valid.
+One popular plugin ships **45 pairs of skills** with near-identical descriptions. Your agent picks which skill to run by _reading_ those descriptions, so when two match it fires the wrong one. Still perfectly valid markdown.
 **[How triggering works →](docs/measuring-skills.md)**
 
-## Proof 3 — a tool your subagent silently can't call
+## Proof 3 — it can quietly read your secrets and send them out
 
 ```text
-✗ tester — Tool "AskUserQuestion" is never available to a subagent.
-    → remove or correct it — it's silently dropped from the contract.
+◑ Safety   80  (80/100)
+    └ subagent "tester" holds all three lethal-trifecta legs:
+        reads private data (Bash, Read) · takes in untrusted web content (WebFetch)
+        · can send data out (Bash, WebFetch)
 ```
 
-This subagent — a helper your main agent hands a task to — declares a tool that
-doesn't exist. The harness drops it silently, so the agent loses a capability it
-thinks it has. vigiles catches it and gives you the **one-line fix**.
+Hand one subagent all three powers and a poisoned web page can tell it to read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 still looks like a B** — that's the point: a healthy-looking grade can hide a single subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
 
-That's the whole idea — it checks your harness against reality, not style. Every
-referenced tool, hook, file, script, and skill is verified to actually resolve — and
-where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff,
-Clippy and more).
-**[Full guide →](docs/verifying-instruction-files.md)**
+That's the whole idea: it checks your harness against **reality, not style**. Every tool, hook, file, script, and skill you reference is verified to actually resolve — and where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff, Clippy, and more).
+**[Everything it catches →](docs/what-vigiles-catches.md)** · point `audit` at a whole marketplace and it ranks every plugin the same way.
 
-All three catches are free and need no model — and vigiles **prevents** other whole
-classes of bug by construction (a typed spec or compiled hook just won't compile).
-**[Everything it catches and prevents →](docs/what-vigiles-catches.md)** · point `audit`
-at a whole marketplace and it ranks every plugin the same way.
-**[Audit a marketplace →](docs/for-plugin-authors.md)**
+## How it works — vibes → verified
 
-## How it works
+`audit` shows you where your setup is still vibes. Turning that into _verified_ is four commands over one engine — and almost none of it needs a model or a key.
 
-The model isn't yours to fix. Your harness is. `audit` shows you the problems — here's
-what fixes and proves each one, almost all of it with no model and no key.
+| Command | Answers                        | Needs a model?           | When to run              |
+| ------- | ------------------------------ | ------------------------ | ------------------------ |
+| `audit` | Everything, graded A–F         | No — read-only[^audit]   | Anytime; it's the report |
+| `lint`  | Do the structural checks pass? | No                       | CI gate, every push      |
+| `test`  | Does the harness behave?       | No — a scripted stand-in | Every commit             |
+| `eval`  | Does a skill actually help?    | Yes — your subscription  | On demand                |
 
-### 🔎 Lint — your CLAUDE.md stops lying
+`audit` and `lint` share one engine. **`lint` is the CI gate** — it fails the build on broken references, bad tool contracts, dead hooks, and skill collisions (Proofs 1 and 2). **`audit`** runs those same checks, adds the Safety ring, renders the graded report, and can also run two opt-in _live_ checks (does your MCP server connect, do your skills fire). `test` and `eval` go past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath; you rarely run them by hand.)
 
-Every path, script, symbol, and rule verified against reality — the catches above.
-You don't write the checks: `npx vigiles init` turns your CLAUDE.md, skills, and
-subagents into _specs_ (same content, plus a layer vigiles can verify). Non-destructive,
-edited by your agent in plain English, undone by `eject`.
+### 🔎 Lint — your instructions stop lying
+
+Every path, script, symbol, and rule verified against reality — plus tool contracts, skill collisions, and dead hooks (the catches above). You don't write the checks. `npx vigiles init` writes a `CLAUDE.md.spec.ts` beside your file: the same rules, each reference now wrapped so vigiles can confirm it exists. `compile` turns that back into the `CLAUDE.md` (or `AGENTS.md`) your agent already reads. Your agent edits the spec in plain English; `eject` deletes it and leaves your original untouched.
 **[How →](docs/verifying-instruction-files.md)**
 
 ### 🧪 Test — does the harness actually do its job?
 
-A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never
-reaches the model — each passes a naive "did it run?" check. vigiles tests the real
-thing: hooks **block**, skills **fire**, subagents **finish what they promised**, and a
-stray `git push` is caught before it happens. No model, no key, on every commit.
+A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never reaches the model — each passes a naive "did it run?" check. That gap is **false confidence**: a guard that looks like it works and silently doesn't. vigiles tests the real thing — hooks block, skills fire, subagents finish what they promised, a stray `git push` is caught before it happens. It drives a scripted stand-in for the model, not a live call, so it needs no key and runs on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
 ### 📊 Eval — does a skill help, or just cost more?
 
-_"65% fewer tokens." Says who?_ vigiles[^name] A/Bs the claim on real coding tasks and reports
-the token bill, whether it hit its target, and whether the code still works. promptfoo
-and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max
-subscription. Evals run locally — a committed lock then lets **CI catch stale results with no
-model call**. **[Measure a skill →](docs/measuring-skills.md)**
+_"65% fewer tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and reports the token bill, whether it hit its target, and whether the code still works. promptfoo and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max subscription. Evals run locally; a committed lock file — like a `package-lock` — records the result, so CI catches stale numbers without calling the model again. (On Claude Code today; Codex eval support is landing.)
+**[Measure a skill →](docs/measuring-skills.md)**
 
 ## Quick start
 
@@ -232,21 +198,19 @@ Or run it yourself:
 
 ```bash
 npx vigiles init   # adopts your files (non-destructive — eject reverses), adds CI,
-                   # installs the Claude Code plugin globally
+                   # installs vigiles's skills + hooks as a Claude Code plugin (in
+                   # ~/.claude/, not your repo). On Codex, skills install globally too.
 ```
 
-Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
+Interactive in a terminal, non-interactive for agents/CI (or `--yes`). **Works with Claude Code and Codex** — vigiles verifies `CLAUDE.md` and `AGENTS.md` the same way. **[Codex setup →](docs/harnesses.md)**
 
-**Adoption is smooth: one command, then your agent does the rest.** `init` installs
-the **skills and hooks**, so a plain-English ask does the work — no specs to
-hand-write, no hooks to wire:
+**Adoption is smooth: one command, then your agent does the rest.** `init` installs the **skills and hooks**, so a plain-English ask does the work — no specs to hand-write, no hooks to wire:
 
 - _"test my skills"_ → scaffolds **and runs** a trigger/behaviour test, then commits its result so CI can check it (`test-harness`)
 - _"harden my rules"_ → upgrades prose guidance into enforced linter rules (`strengthen`)
-- _"add a rule to my CLAUDE.md"_ → edits the source and recompiles (`edit-spec`)
+- _"add a rule to my CLAUDE.md or AGENTS.md"_ → edits the source and recompiles (`edit-spec`)
 
-The **hooks** keep it honest in-loop — nudging the agent to mark a reference or
-refresh a stale eval — so there are no chores to remember.
+The **hooks** keep it honest in-loop — nudging the agent to tag a linter-rule mention so vigiles can verify it, or to re-run a test whose result just went stale — so there are no chores to remember.
 
 <details>
 <summary>What <code>init</code> sets up</summary>
@@ -254,35 +218,34 @@ refresh a stale eval — so there are no chores to remember.
 - **Both lint and test** by default; scope with `--lint` / `--test`.
 - **Already have a CLAUDE.md / AGENTS.md, skills, or subagents? `init` adopts them all** into specs faithfully and **non-destructively** — untouched until you `compile` (and `eject` undoes it).
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
-- Wires CI as a `zernie/vigiles@v1` workflow that posts a sticky PR comment + a `valid` output.
+- Wires CI as a `zernie/vigiles@v1` workflow (needs only read + PR-comment permissions) that posts a sticky PR comment + a `valid` output.
 
-Works with **Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) or
-[your own harness](docs/authoring-an-adapter.md). Prefer to write tests yourself?
-JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
+Targets Claude Code and Codex out of the box, or [your own harness](docs/authoring-an-adapter.md). Prefer to write tests yourself? JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 
 </details>
 
 ## FAQ
 
+- **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
-- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
-- **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md with no install (Ruff/Clippy/Pylint/… too).
+- **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md or AGENTS.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
+- **Is it stable enough to adopt?** Yes — the CLI is stable; only the library API is still evolving ([details](STABILITY.md)).
+- **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**
 
+**Not for you if** you want a model/capability benchmark or runtime guardrails in the request path — vigiles is build-/CI-time.
+
 ## More
 
-- **[What vigiles catches and prevents →](docs/what-vigiles-catches.md)** — the full matrix of harness problems it handles, biggest first, marked prevent / catch / measure.
-- **[CLI →](docs/cli.md)** · **[GitHub Action →](docs/github-action.md)** · the full **[lint rules matrix →](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)** lives with the linting guide.
-- **[Skills →](docs/skills.md)** — the skills `init` installs, and how the model-invocable ones trigger.
-- **[Ship plugins? The plugin-author guide →](docs/for-plugin-authors.md)** — scan a draft, make your skills fire, rank a whole marketplace — no key.
-- **[Docs index →](docs/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)** · **[Related tools →](docs/related-tools.md)**.
-- **[Stability →](STABILITY.md)** — 0.x: the CLI is stable; the library API is still evolving.
-- **Not for you if** you want a model/capability benchmark or runtime guardrails in the request path — vigiles is build-/CI-time.
-- Companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+**Docs** — **[What it catches and prevents →](docs/what-vigiles-catches.md)** · **[Verifying instruction files →](docs/verifying-instruction-files.md)** ([rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)) · **[Harness testing →](docs/harness-testing.md)** · **[Measuring skills →](docs/measuring-skills.md)** · **[CLI →](docs/cli.md)** · **[GitHub Action →](docs/github-action.md)** · **[Skills →](docs/skills.md)** · **[Plugin-author guide →](docs/for-plugin-authors.md)** · **[Docs index →](docs/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)**
+
+**Project** — **[Stability →](STABILITY.md)** · **[Related tools →](docs/related-tools.md)** · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## License
 
 [MIT](LICENSE)
 
 [^name]: **vigiles** — the watchmen of ancient Rome, who guarded the city (and fought its fires) by night. _Quis custodiet ipsos custodes?_ — "who watches the watchmen?" (Juvenal, _Satire VI_).
+
+[^audit]: `audit` reads only by default. Two deeper checks — live MCP connections and skill-firing — are opt-in and ask before they run.
