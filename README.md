@@ -4,19 +4,22 @@
   in Claude Code / Codex. Optimize for a phone-skimmer who should come away
   understanding WHAT IT IS and wanting to run it — never scared off.
 
-  HOOK = "VIBES → VERIFIED" (founder direction 2026-07). The bold tagline is the
-  review-parallel callout: "You review every PR. Nothing reviews your CLAUDE.md."
-  — dev-native CRAFT bait (you got disciplined about code; the harness didn't),
-  NOT enterprise fear (this is an OSS dev tool, not a security product). The
-  "vibes" energy then carries the INTRO ("that's not a system, that's vibes") and
-  the "vibes → verified" How-it-works section — so vibes doesn't double-hit in
-  the first breath. Arc: tagline (nothing reviews it) → intro (it's vibes) →
-  How it works (vibes → verified). The verify-first SUBHEAD keeps the substance
-  ("verify your CLAUDE.md, skills, and hooks are real — and prove they work").
-  CLAUDE.md stays in the tagline for punch; Codex/AGENTS.md is covered in the
-  intro + subhead (a two-filename tagline reads clunky). Do NOT revert to the old
-  test-first "tests your skills never had" tagline. Stay coding-scoped (name
-  CC/Codex + CLAUDE.md/AGENTS.md/skills/hooks). NOT "observability" as the headline.
+  HOOK = FELT PAIN, then breadth (founder direction 2026-07). The bold tagline is
+  a SPECIFIC second-person pain the reader recognizes instantly: "You have a
+  CLAUDE.md rule your agent follows half the time. Time to fix that." Dev-native
+  CRAFT bait, NOT enterprise fear (this is an OSS dev tool, not a security
+  product). A specific pain stings harder than an abstract line — the risk is
+  looking narrow, so the report-card + 5 rings RIGHT BELOW immediately show the
+  breadth (the sting, then "oh it does way more"). The review-parallel callout
+  ("You review every PR. Nothing reviews your CLAUDE.md.") is now the INTRO bold
+  lead (broadens the one rule → the whole harness); "vibes" carries the intro body
+  ("that's not a system, that's vibes") + the "vibes → verified" How-it-works
+  section. Arc: tagline (one felt pain) → intro (nothing reviews any of it → it's
+  vibes) → How it works (vibes → verified). Keep the verify-first SUBHEAD for
+  substance. CLAUDE.md stays in the tagline/lead for punch; Codex/AGENTS.md is
+  covered in the intro + subhead. Do NOT revert to the old test-first "tests your
+  skills never had" tagline. Stay coding-scoped (CC/Codex + CLAUDE.md/AGENTS.md/
+  skills/hooks). NOT "observability" as the headline.
 
   CATEGORY = A TOOL YOU RUN, not a framework, not a lib-collection. The analogues
   are ESLint / Lighthouse / npm audit: one command, a report, an optional CI gate.
@@ -84,7 +87,7 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>You review every PR. Nothing reviews your CLAUDE.md.</strong>
+  <strong>You have a CLAUDE.md rule your agent follows half the time. Time to fix that.</strong>
 </p>
 
 <p align="center">
@@ -99,7 +102,7 @@
 
 ---
 
-**You stopped vibe-coding. Your harness didn't.**
+**You review every PR. Nothing reviews your CLAUDE.md.**
 
 The CLAUDE.md, skills, and hooks meant to keep your agent on track are themselves unchecked — nobody verified they're real, nobody tested they work. That's not a system. That's vibes.
 
