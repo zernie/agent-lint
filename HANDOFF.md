@@ -22,24 +22,23 @@ Root CLAUDE.md gained `vault-commit-hygiene` rule (recompiled from spec). HANDOF
 scrubbed of vault filenames. Going-forward hygiene only — old commit history still
 has descriptive names (cleaning requires `git filter-repo` + force-push; separate op).
 
-**PIVOT GATE: DONE (2026-07-02).** Research ran. Verdict in vault (see `gate-synthesis-2026-07.md`
-via vault README.md). **CONDITIONAL-GO.** Framing shift is the critical finding.
-Next build step: see vault s14.md (pivot-decision) for the recommended sequence.
-
-**STRATEGY SESSION — CONVERGED + COMMITTED TO A BUILD (2026-07-02, extended).** Added vault docs
-`s21`–`s32` (see vault README/CLAUDE index). A long strategy pass (VC/market, demand-side,
-open-harness expansion, curation, naming, verifier-vs-framework, an objective re-rank, two Fable
-contrarian passes, and a code-grounded audit-capability analysis) CONVERGED and then COMMITTED to a
-single concrete BUILD. All strategy/personal content is vault-only — do NOT restate here. Net: the
-strategy debate is CLOSED; the remaining unknown is a MEASURABLE NUMBER from a build/measure task
-specified in the vault (`s31` = committed plan, `s32` = runnable Phase-A spec). **Next concrete step
-is a BUILD**, gated on a private measurement — see `startup/s31`+`s32`.
-Public-safe technical finding that is the build's substrate: **`audit`'s security surface is SHALLOW**
-— it reads declared tool-sets/field-shapes only, NOT content/dataflow (prompt-injection / secrets /
-tool-poisoning are grep-confirmed ABSENT from `scan.ts`, listed PLANNED in
-`research/audit-wow-ideas.md`); and the strongest security probe — the `guardrail-check.ts` disaster
-battery (already proves a widely-copied guard blocks 2/7) — is deliberately EXCLUDED from audit for
-cross-platform-confinement reasons. Running that battery at scale (confined, Linux CI) is the build.
+**★ PIVOT GATE CLEARED → PHASE B (2026-07-03).** The disaster-battery benchmark (s31/s32 plan) RAN
+and PASSED both gates. Result in vault `s34` (summary) + `s35` (full detail: table + the exact
+hardened `gate-v2.mjs` scorer + the tightened `gate-v3.mjs`). Public-safe headline: community AI-coding
+safety hooks overwhelmingly fail — median 0/7 blocked, ~79% fail a disaster they explicitly claim to
+guard. Whole run happened IN-SESSION via the sourcegraph+raw workaround
+(`research/scoped-session-github-access.md`). Direction (vault s26/s30/s31): objective = US visa +
+virality ≫ business; ship the SECURITY REPORT ("The State of Agentic Coding Security 2026"); vigiles =
+engine. Report draft started in vault `s36`.
+**NEXT CONCRETE STEPS (in order):** (1) run the TIGHTENED `gate-v3.mjs` (in vault s35 — needs an
+interactive session; executing foreign hooks trips the auto-mode classifier, so a human must approve)
+→ locks the airtight per-claim number; (2) widen the corpus toward N≥100 (more sourcegraph queries +
+awesome-\* lists; recover the 42 unfetched script-refs); (3) author the report (s36) + arXiv twin; queue
+responsible-disclosure fix-PRs. NOTHING PUBLIC until the tightened number is locked (a deflated number
+hurts the visa). The benchmark scraper/scorer is NOT committed (telegraphs the launch) — it lives in
+vault s35; re-create from there or from the public technique doc.
+**PENDING FROM FOUNDER:** the `/goal` prompt format (short objective vs full block — unanswered) so the
+next session can carry a correct persistent goal.
 
 **OPEN FOLLOW-UPS (from prior session, still pending):**
 
