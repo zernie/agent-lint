@@ -5,14 +5,18 @@
   understanding WHAT IT IS and wanting to run it — never scared off.
 
   HOOK = "VIBES → VERIFIED" (founder direction 2026-07). The bold tagline is the
-  dev-native emotional truth: "Your AI agent's harness is running on vibes"
-  (untested + unverified by default). It's CRAFT/self-aware bait, NOT enterprise
-  fear — this is an OSS dev tool, not a security product. The tagline draws the
-  eye; the verify-first SUBHEAD keeps the substance ("verify your CLAUDE.md,
-  skills, and hooks are real — and prove they work"). Do NOT revert to the old
+  review-parallel callout: "You review every PR. Nothing reviews your CLAUDE.md."
+  — dev-native CRAFT bait (you got disciplined about code; the harness didn't),
+  NOT enterprise fear (this is an OSS dev tool, not a security product). The
+  "vibes" energy then carries the INTRO ("that's not a system, that's vibes") and
+  the "vibes → verified" How-it-works section — so vibes doesn't double-hit in
+  the first breath. Arc: tagline (nothing reviews it) → intro (it's vibes) →
+  How it works (vibes → verified). The verify-first SUBHEAD keeps the substance
+  ("verify your CLAUDE.md, skills, and hooks are real — and prove they work").
+  CLAUDE.md stays in the tagline for punch; Codex/AGENTS.md is covered in the
+  intro + subhead (a two-filename tagline reads clunky). Do NOT revert to the old
   test-first "tests your skills never had" tagline. Stay coding-scoped (name
-  CC/Codex + CLAUDE.md/AGENTS.md/skills/hooks) so it's never mistaken for a
-  general-agent tool. NOT "observability" as the headline.
+  CC/Codex + CLAUDE.md/AGENTS.md/skills/hooks). NOT "observability" as the headline.
 
   CATEGORY = A TOOL YOU RUN, not a framework, not a lib-collection. The analogues
   are ESLint / Lighthouse / npm audit: one command, a report, an optional CI gate.
@@ -80,7 +84,7 @@
 <h1 align="center">vigiles</h1>
 
 <p align="center">
-  <strong>Your AI agent's harness is running on vibes.</strong>
+  <strong>You review every PR. Nothing reviews your CLAUDE.md.</strong>
 </p>
 
 <p align="center">
