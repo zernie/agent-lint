@@ -46,6 +46,14 @@
      End a section on the win, not the trade-off. A paragraph is ≤ ~3 lines.
   2. PROOF FIRST, mechanism second. The three instruments (Lint/Test/Eval) come
      AFTER the proof stack as "how it does it", not as a competing front door.
+     "How it works" OPENS with the audit/lint/test/eval verb-map table (what it
+     checks / needs-a-model? / when) — this is the load-bearing "one tool, not
+     four" fix (all 6 README-review personas named it their #1 change); KEEP it,
+     and keep the "audit + lint are one engine, two outputs" reconciliation.
+  2b. INSTRUCTION-NEUTRAL NOUNS: body copy says CLAUDE.md *or* AGENTS.md (never
+     CLAUDE.md alone) so Codex readers aren't second-class; the Lint header is
+     "your instructions stop lying", and Codex is surfaced in the intro + Quick
+     start, NOT only inside <details>. Don't revert headers to CLAUDE.md-only.
   3. SPEC-FIRST IS THE DEFAULT but easy — `init` ADOPTS your CLAUDE.md into a spec,
      skills edit it, you rarely hand-write .spec.ts. Give it ONE home (Quick start),
      not five scattered mentions. `eject` always reverses. Inline markdown is the
@@ -107,11 +115,11 @@
 
 ---
 
-**Your skills, hooks, and instructions are your agent's harness — the half you wrote, and the half nothing checks.**
+**Your skills, hooks, and instructions are your agent's harness.** You wrote all of it. Nothing checks any of it.
 
-A subagent wired to a tool that doesn't exist. A hook that looks like it blocks and doesn't. Two skills the agent can't tell apart. It all looks fine, and it breaks silently mid-task.
+A subagent (a helper your agent hands work to) wired to a tool that doesn't exist. A hook that looks like it blocks and doesn't. Two skills the agent can't tell apart. It all looks fine, and it breaks silently mid-task.
 
-vigiles checks your harness is _real_, not just well-formed:
+vigiles[^name] checks your harness is _real_, not just well-formed — for Claude Code (`CLAUDE.md`) and Codex (`AGENTS.md`) alike:
 
 ```bash
 npx vigiles audit
@@ -127,10 +135,16 @@ ship. ↓
 </p>
 
 **Like Google's Lighthouse, but for your agent harness.** Five categories, each scored
-A–F — Truthfulness, Triggering, Structure, Safety, Tested — with every fix shown inline.
+A–F, every fix shown inline:
+
+- **Truthfulness** — do the references resolve?
+- **Triggering** — do skills fire, without colliding?
+- **Structure** — are tool contracts and configs valid?
+- **Safety** — any way for the agent to leak your data?
+- **Tested** — does the harness ship tests?
 
 It runs locally and only reads, so it's safe on any repo and the same on every OS.
-For CI gating, use `vigiles lint` instead. **[Audit a harness →](docs/for-plugin-authors.md)**
+**[Audit a harness →](docs/for-plugin-authors.md)**
 
 ## Proof 1 — your agent can read your secrets and ship them out
 
@@ -166,9 +180,9 @@ fires the wrong one. The markdown is perfectly valid.
     → remove or correct it — it's silently dropped from the contract.
 ```
 
-This subagent — a helper your main agent hands a task to — declares a tool that
-doesn't exist. The harness drops it silently, so the agent loses a capability it
-thinks it has. vigiles catches it and gives you the **one-line fix**.
+This subagent declares a tool that doesn't exist. The harness drops it silently, so
+the agent loses a capability it thinks it has. vigiles catches it and gives you the
+**one-line fix**.
 
 That's the whole idea — it checks your harness against reality, not style. Every
 referenced tool, hook, file, script, and skill is verified to actually resolve — and
@@ -176,22 +190,33 @@ where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ru
 Clippy and more).
 **[Full guide →](docs/verifying-instruction-files.md)**
 
-All three catches are free and need no model — and vigiles **prevents** other whole
-classes of bug by construction (a typed spec or compiled hook just won't compile).
+All three catches are free and need no model. vigiles also **prevents** whole classes
+of bug up front — once your instructions are a spec, a broken reference won't compile.
 **[Everything it catches and prevents →](docs/what-vigiles-catches.md)** · point `audit`
 at a whole marketplace and it ranks every plugin the same way.
 **[Audit a marketplace →](docs/for-plugin-authors.md)**
 
 ## How it works
 
-The model isn't yours to fix. Your harness is. `audit` shows you the problems — here's
-what fixes and proves each one, almost all of it with no model and no key.
+`audit` is the report. Three checks compute it — and go further than _does it exist_ to
+_does it work_. Almost none of it needs a model or a key.
 
-### 🔎 Lint — your CLAUDE.md stops lying
+| Command | Answers                       | Needs a model?           | When to run              |
+| ------- | ----------------------------- | ------------------------ | ------------------------ |
+| `audit` | The whole harness, graded A–F | No — read-only[^audit]   | Anytime; it's the report |
+| `lint`  | Are the references real?      | No                       | CI gate (pass/fail)      |
+| `test`  | Does the harness behave?      | No — a scripted stand-in | Every commit             |
+| `eval`  | Does a skill actually help?   | Yes — your subscription  | On demand                |
 
-Every path, script, symbol, and rule verified against reality — the catches above.
-You don't write the checks: `npx vigiles init` turns your CLAUDE.md, skills, and
-subagents into _specs_ (same content, plus a layer vigiles can verify). Non-destructive,
+`audit` and `lint` are one engine, two outputs: `audit` is the read-only report you run
+yourself, `lint` runs the same deterministic checks as a pass/fail gate in CI. `test` and
+`eval` go past existence to behaviour and value.
+
+### 🔎 Lint — your instructions stop lying
+
+Every path, script, symbol, and rule verified against reality — the catches above. You
+don't write the checks: `npx vigiles init` turns your `CLAUDE.md` or `AGENTS.md`, skills,
+and subagents into _specs_ (same content, plus a layer vigiles can verify). Non-destructive,
 edited by your agent in plain English, undone by `eject`.
 **[How →](docs/verifying-instruction-files.md)**
 
@@ -200,16 +225,18 @@ edited by your agent in plain English, undone by `eject`.
 A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never
 reaches the model — each passes a naive "did it run?" check. vigiles tests the real
 thing: hooks **block**, skills **fire**, subagents **finish what they promised**, and a
-stray `git push` is caught before it happens. No model, no key, on every commit.
+stray `git push` is caught before it happens. It uses a scripted stand-in for the model,
+not a live call — so it needs no key and runs on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
 ### 📊 Eval — does a skill help, or just cost more?
 
-_"65% fewer tokens." Says who?_ vigiles[^name] A/Bs the claim on real coding tasks and reports
+_"65% fewer tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and reports
 the token bill, whether it hit its target, and whether the code still works. promptfoo
 and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max
-subscription. Evals run locally — a committed lock then lets **CI catch stale results with no
-model call**. **[Measure a skill →](docs/measuring-skills.md)**
+subscription. Evals run locally; a committed lock file — like a `package-lock` — records
+the result, so **CI catches stale numbers without calling the model again**.
+**[Measure a skill →](docs/measuring-skills.md)**
 
 ## Quick start
 
@@ -237,6 +264,9 @@ npx vigiles init   # adopts your files (non-destructive — eject reverses), add
 
 Interactive in a terminal, non-interactive for agents/CI (or `--yes`).
 
+**Works with Claude Code and Codex** — vigiles verifies `CLAUDE.md` and `AGENTS.md` the
+same way. **[Codex setup →](docs/harnesses.md)**
+
 **Adoption is smooth: one command, then your agent does the rest.** `init` installs
 the **skills and hooks**, so a plain-English ask does the work — no specs to
 hand-write, no hooks to wire:
@@ -256,7 +286,7 @@ refresh a stale eval — so there are no chores to remember.
 - Adds `vigiles` to `devDependencies`; installs the Claude Code plugin (skills + hooks) via the marketplace — globally, never vendored.
 - Wires CI as a `zernie/vigiles@v1` workflow that posts a sticky PR comment + a `valid` output.
 
-Works with **Claude Code and Codex** ([`vigiles/codex`](docs/harnesses.md)) or
+Targets Claude Code and Codex out of the box, or
 [your own harness](docs/authoring-an-adapter.md). Prefer to write tests yourself?
 JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 
@@ -286,3 +316,5 @@ JS **or** TS (`*.harness.{mjs,ts}`) — run with `npx vigiles test`.
 [MIT](LICENSE)
 
 [^name]: **vigiles** — the watchmen of ancient Rome, who guarded the city (and fought its fires) by night. _Quis custodiet ipsos custodes?_ — "who watches the watchmen?" (Juvenal, _Satire VI_).
+
+[^audit]: `audit` reads only by default. Two deeper checks — live MCP connections and skill-firing — are opt-in and ask before they run.
