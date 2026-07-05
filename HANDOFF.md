@@ -17,21 +17,23 @@
 **Branch `claude/gate-release-completion-jh6j25`.** No PR opened (open only if asked).
 **Nothing pushed** — all commits are LOCAL, vault-only (`chore: vault`).
 
-**This was a STRATEGY / DIRECTION session — ALL substance is in the VAULT.** Do NOT
-restate or name topics here (public file). Unlock `startup/`, read `startup/README.md`
-(ID→name index), then **`s44` (the session's conclusion + the OPEN FORK)** first, then
-`s43`. New/changed vault docs this session: `s37`–`s41` (renamed from descriptive
-`gate-*` names → opaque IDs, index updated), `s42`, `s43`, `s44` (all encrypted —
-verified `\0GITCRYPT`).
+**This was a STRATEGY + PERSONAL-PLANNING session — ALL substance is in the VAULT.** Do
+NOT restate or name topics here (public file — naming a topic leaks it). Unlock
+`startup/`, read `startup/README.md` (ID→name index), then **`s44` (strategy conclusion
++ the direction verdict)** and **`s45` (the personal plan + the multi-agent research
+behind it — the most actionable doc)**. New/changed vault docs this session: `s37`–`s41`
+(renamed `gate-*` → opaque IDs), `s42`, `s43`, `s44`, `s45` — all encrypted (verified
+`\0GITCRYPT`), index synced in both `README.md` + `CLAUDE.md`.
 
-**Open at session end:** a research agent (a novelty check for a technical direction)
-was IN FLIGHT — its result + the direction DECISION belong in the vault, not here.
-**Next session: read `s44`, collect the research result, DECIDE, record in vault — do
-NOT re-run the exploration** (`s44` explains exactly why the loop is closed).
+**Where it landed:** `s44` closed the direction question (a novelty check RESOLVED — see
+s44's verdict; do NOT re-run it). `s45` holds the plan built from **four+ parallel research
+agents** this session + a fetched personal doc; it ends on an OPEN FORK (two long-lead
+items to scope next — named in s45, not here). **Next session: read `s44` then `s45`,
+pick up the open fork — do NOT re-run the research or the closed explorations.**
 
-**No public code/docs changed this session** — work was entirely vault + scratchpad.
-The prior session's README/roadmap state still holds, BUT some public framing may now be
-stale given the vault direction shift — reconcile only per `s44`, never by leaking it.
+**No public code/docs changed this session** — work was entirely vault + scratchpad. The
+prior session's README/roadmap state still holds; reconcile only per the vault, never by
+leaking it.
 
 **⚠️ CLEANUP DEBT (this session found it):** the PREVIOUS HANDOFF committed on `main`
 LEAKED vault-tier strategy into this public file (specifics deliberately omitted here).
