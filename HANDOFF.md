@@ -14,91 +14,69 @@
 
 ## RESUME HERE
 
-**Branch `claude/gate-release-completion-jh6j25`.** No PR opened (open only if asked).
-**Nothing pushed** — all commits are LOCAL, vault-only (`chore: vault`).
+**Branch `claude/gate-release-completion-jh6j25`** (restarted off `main` this session after the
+earlier vault PRs merged). This was a STRATEGY + external-ARTICLE session — **most substance is
+in the `startup/` vault; do NOT restate or name topics here (public file — naming leaks it).**
+Unlock `startup/`, read `startup/README.md` (ID→name index), then the newest docs.
 
-**This was a STRATEGY + PERSONAL-PLANNING session — ALL substance is in the VAULT.** Do
-NOT restate or name topics here (public file — naming a topic leaks it). Unlock
-`startup/`, read `startup/README.md` (ID→name index), then \*\*`s44` (strategy conclusion
+**New/changed vault docs this session:** `s46`, `s47`, `s48` — all encrypted (verified
+`\0GITCRYPT`), index synced in both `README.md` + `CLAUDE.md`. **`s48` is the most actionable**
+(the execution log: what shipped + the next steps). Read `s46` → `s47` → `s48` in order; do NOT
+re-run the research behind them.
 
-- the direction verdict)** and **`s45` (the personal plan + the multi-agent research
-  behind it — the most actionable doc)\*_. New/changed vault docs this session: `s37`–`s41`
-  (renamed `gate-_`→ opaque IDs),`s42`, `s43`, `s44`, `s45`— all encrypted (verified`\0GITCRYPT`), index synced in both `README.md`+`CLAUDE.md`.
+**The main deliverable lives in a SEPARATE repo** — `zernie/zernie.github.com`, **PR #86 (DRAFT,
+not deployed)**: a blog article. Its full state + the strategic *why* are in vault `s48`. To
+continue it you need that repo + the vault (the article file, its `.audience-test-results.md`
+ledger, and the screenshots are there). **Next steps for it are in s48** (apply the confirmation
+audience-test's next-tier fixes — IN PROGRESS this session — close its publish gate, syndicate).
 
-**Where it landed:** `s44` closed the direction question (a novelty check RESOLVED — see
-s44's verdict; do NOT re-run it). `s45` holds the plan built from **four+ parallel research
-agents** this session + a fetched personal doc; it ends on an OPEN FORK (two long-lead
-items to scope next — named in s45, not here). **Next session: read `s44` then `s45`,
-pick up the open fork — do NOT re-run the research or the closed explorations.**
+**Public vigiles code/docs largely unchanged.** The only in-repo changes here: the benchmark
+DATA — `bench/ecosystem/FINDINGS.md` (a fresh run appended) + `bench/ecosystem/results-archive/`
+(the canonical run behind the article, committed so it survives a reclaim). These are held data,
+not a public story; `research/roadmap.md` state still holds.
 
-**No public code/docs changed this session** — work was entirely vault + scratchpad. The
-prior session's README/roadmap state still holds; reconcile only per the vault, never by
-leaking it.
+### PR / merge state (this session)
 
-**⚠️ CLEANUP DEBT (this session found it):** the PREVIOUS HANDOFF committed on `main`
-LEAKED vault-tier strategy into this public file (specifics deliberately omitted here).
-Scrubbed from HEAD this session. **History still holds it** (commit 74d5f15 and earlier)
-— a full purge needs `git filter-repo` + force-push, the same separate op still owed for
-the old vault descriptive filenames.
-
-**OPEN FOLLOW-UPS (public-safe, still pending):**
-
-1. `research/roadmap.md` de-strategization — some borderline Explore/GTM prose remains;
-   de-strategize only if a rule tightens (currently public-safe).
-2. `research/README.md` "Strategy & bets" + `research/CLAUDE.md` Scope text — lower
-   urgency (already public, just tone).
-
-**Technical direction (public-safe):** vigiles = ONE LOOP — declare (typed spec) → check
-reality — via four instruments: VERIFY (lint/cross-ref), GATE (compiled hooks), MEASURE
-(evals on your sub), OBSERVE (local `.vigiles/runs.jsonl` flight recorder). Full record:
-`CLAUDE.md` + `research/harness-observability-direction.md`.
-
-### What landed this session (all pushed; suite green)
-
-- **README rebuilt** end-to-end (positioning above). fmt green, all links + `vigiles
-<cmd>` refs resolve, body ~187 lines, footnotes balanced. README-only diffs.
-- Fixed a real accuracy bug: **`audit` vs `lint` scope** now told ONE consistent way
-  (lint = CI gate on the deterministic checks; audit = same + Safety ring + two opt-in
-  live checks + the report). Don't reintroduce "lint is refs-only" or "lint gates the
-  trifecta Safety flag".
-- **HANDOFF.md scrubbed** of leaked strategy (this file).
-
-### ALSO OPEN (separate track) + Gotchas
-
-- **PR #54 on `claude/haretrail-dogfood-pvdo9t`** — watched by cron `5438c724`. Merge = user's call.
-- **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
-  `base64 -d key.b64 > key.bin && git-crypt unlock key.bin` with the user's base64 key.
-  It was UNLOCKED this session for direction context; nothing from it entered public files;
-  it re-locks next session. Vault files are in `.prettierignore`; a committed blob must read `\0GITCRYPT`.
-  **⚠️ `git mv` INTO `startup/` DOES NOT ENCRYPT** — after moving, `git add --renormalize startup/`
-  then VERIFY `git show HEAD:startup/<f>.md | head -c9`=`\0GITCRYPT`.
-  **FILENAMES + COMMIT MESSAGES ARE PUBLIC** — opaque IDs (s01.md…); generic `chore: vault` messages.
-- **SCOPED-SESSION GITHUB ACCESS + cross-repo-search WORKAROUND → `research/scoped-session-github-access.md`.**
-  GitHub API is token-bound to `zernie/vigiles`; cross-GitHub discovery works in-session via the
-  sourcegraph streaming API + `raw.githubusercontent`. Full mechanics live in that doc.
-- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
-  (`node dist/cli.js compile <spec>`), NEVER hand-edit. Deleting a keyFiles-listed file → remove its
-  keyFiles line first or compile FAILS.
-- **COMMIT SIGNING is BROKEN in-container** — the SSH signing key is a 0-byte pubkey with no
-  private key, so commits are `sig=N` (GitHub shows "Unverified"). Author/committer email ARE
-  correct (`noreply@anthropic.com`); only the signature is missing. UNFIXABLE here; don't churn
-  amends chasing it. Cosmetic only, and nothing's pushed.
-- RUN ESLINT on new files (`no-confusing-void-expression`, unused imports = ERRORS; `[...str]`→Array.from).
-- `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned version); CI pins it. Env-only.
-- Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
-- **WORKFLOW FRAGILITY:** wide fan-out self-throttles on ONE rate-limit bucket; session-compaction
-  interrupt kills a background workflow. FIX: batch (2×2 = peak 2), narrow+fast. (6 background
-  subagents at once worked fine this session for the persona reads.)
-
-### Decisions of record (don't relitigate)
-
-- Repo is PUBLIC → strategy is VAULT-ONLY (`doc-tiers`). HANDOFF/research/CLAUDE.md/README = public.
-- **README = a TOOL you run, not a framework**; pain-first `vibes → verified`; Codex equal to
-  Claude Code; security is a proof not the brand; the 2/7→7/7 hook battery stays PARKED for launch.
-- Vault filenames MUST be opaque IDs; commit messages for vault changes MUST be generic.
-- Capability-diff PR comment shipped; observe layer built (frozen). Guards KEPT (hidden runtime kind).
+- Vault PRs **#58, #59, #60** (all `chore: vault`) — MERGED into `main` (squash). The branch was
+  restarted off `main` after each; force-with-lease only over already-merged history (verified
+  tree-equal first). `main` is current.
+- **zernie.github.com PR #85** (visa de-framing) — MERGED. **PR #86** (the article) — OPEN, DRAFT.
 
 ## Don't re-read unless the task needs it
 
-- vault `startup/` — unlock + read `startup/README.md` for the ID→name index; strategy is in there.
+- vault `startup/` — unlock + read `startup/README.md` for the ID→name index; strategy is there.
 - `research/roadmap.md` — the front-door (technical) roadmap.
+
+## Gotchas (still live)
+
+- **VAULT (`startup/`)** git-crypt, LOCKED at session start → `apt-get install -y git-crypt` +
+  `base64 -d key.b64 > key.bin && git-crypt unlock key.bin` with the user's base64 key (saved to
+  the session scratchpad this session; not in the repo). A committed vault blob must read
+  `\0GITCRYPT`. **`git mv` INTO `startup/` DOES NOT ENCRYPT** — `git add --renormalize startup/`
+  then verify `git show HEAD:startup/<f>.md | head -c9` = `\0GITCRYPT`. **FILENAMES + COMMIT
+  MESSAGES ARE PUBLIC** — opaque IDs (s01.md…); generic `chore: vault` messages.
+- **Real-model evals run in-container on the SUBSCRIPTION** (`claude -p` works here; `apiKeySource:"none"`,
+  `$0` metered). Cold start ~20s+ — a first probe may time out; retry with a longer timeout. The
+  ecosystem benchmark: `VIGILES_SKILLS=… VIGILES_TASK_NAMES=… VIGILES_TRIALS=… VIGILES_MODEL=sonnet
+  node bench/ecosystem/benchmark.mjs`. Do NOT `nohup … &` inside a `run_in_background:true` tool call
+  (double-detach — the wrapper reports "done" while the real process orphans; use the tool's own
+  backgrounding, or an `until ! ps -p <pid>` waiter).
+- **zernie.github.com** is a separate Next.js repo (private repo, public site). Article content lives
+  in `src/entities/article/content/*.md` (top-level only renders; gray-matter frontmatter). Its own
+  skills under `.claude/skills/` (audience-test, writing-quality) are how you review a draft. **The
+  site's markdown TABLES clip on mobile (390px) — use prose, not tables.**
+- **SCOPED-SESSION GITHUB ACCESS** — WebFetch is blocked by the net policy; **WebSearch works**.
+  Cross-GitHub discovery via WebSearch or sourcegraph + `raw.githubusercontent` (`research/scoped-session-github-access.md`).
+- `CLAUDE.md` (root + src/ + core/ + research/) COMPILED from `.spec.ts` — edit the spec + recompile
+  (`node dist/cli.js compile <spec>`), NEVER hand-edit.
+- **COMMIT SIGNING is BROKEN in-container** (0-byte pubkey) — commits show "Unverified"; author/committer
+  email correct. UNFIXABLE here; don't churn amends.
+- `dialect-drift.test.ts` fails LOCALLY (installed claude-code vs pinned version); CI pins it. Env-only.
+- Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
+
+## Decisions of record (don't relitigate)
+
+- Repo is PUBLIC → strategy is VAULT-ONLY (`doc-tiers`). HANDOFF/research/CLAUDE.md/README = public.
+- Vault filenames MUST be opaque IDs; commit messages for vault changes MUST be generic.
+- Personal visa/immigration strategy lives in the SEPARATE private repo `zernie/mine` (via `add_repo`),
+  NOT this vault (rule 7).
