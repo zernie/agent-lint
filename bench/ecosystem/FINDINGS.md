@@ -173,9 +173,9 @@ is the opening, but our qualitative thesis is already public, so cite it:
 
 ---
 
-## Fresh Sonnet run — 2026-07-06 (supersedes the magnitude numbers above; the run the zernie.com article uses)
+## Fresh Sonnet run — 2026-07-06T20-13 (corroboration; superseded for the article by the 23-54 CI run below)
 
-4 tasks (slugify, debounce, bigO, review-doc) × 5 trials × 2 arms, sonnet, **80 runs, ~$7.22 API-equivalent, $0 metered**. Clean harness sign convention (`out_cut>0` = reduction). Raw: `results/2026-07-06T20-13-50-204Z_sonnet.json` (gitignored).
+4 tasks (slugify, debounce, bigO, review-doc) × 5 trials × 2 arms, sonnet, **80 runs, ~$7.22 API-equivalent, $0 metered**. Clean harness sign convention (`out_cut>0` = reduction). Raw: `results-archive/2026-07-06T20-13-50-204Z_sonnet.json`.
 
 | Skill | claim | mean output cut | mean bill cut | output % of session | correctness | per-task spread |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -185,3 +185,30 @@ is the opening, but our qualitative thesis is already public, so cite it:
 **KEY UPDATE vs the earlier sonnet 3×5** (which had Caveman at −18% *reduction*): this larger 4-task run shows Caveman *growing* output (−8%). So the output effect is **NOT stable at −18% cut — the direction flips across runs.** The instability itself is the finding.
 
 ROBUST, every condition: output **0.4–1.3% of session** (every task), the **63–75% headline never reproduces**, **0 correctness regressions**, **no reliable bill saving** (Token-Efficient reliably +12%; Caveman flat/mixed). Do NOT quote "bill always up" (Caveman saved 12% on one task) or "stable −18% cut" (superseded). Both authors self-disclose the output-only/net-negative caveat (credited in the article).
+
+---
+
+## CANONICAL run — 2026-07-06T23-54 (the run the zernie.com article cites; +CIs +the long task)
+
+5 tasks (slugify, debounce, bigO, review-doc, **refactor-suite** — the new 3-file → fix+refactor+test+review+answer steelman) × 5 trials × 2 arms, sonnet, **100 runs, ~$9.43 API-equivalent, $0 metered**. **First run carrying per-arm confidence intervals** — each task row now persists `baselineStats`/`skillStats` (full mean/std/se/n/passK per metric). Raw: `results-archive/2026-07-06T23-54-18-601Z_sonnet.json`; log: `results-archive/2026-07-06_sonnet-5task-5trial.log`.
+
+| Skill | claim | mean output cut | mean bill cut | output % of session | correctness | overclaim gap |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Caveman** (~84k★) | 65% | **−37% (GREW)** | **+27% (up)** | 0.5–1.0% | 0 regress | **102 pts** |
+| **Token-Efficient** (~5.7k★) | 63% | **−23% (GREW)** | **+13% (up)** | 0.5–1.1% | 0 regress | **86 pts** |
+
+**Per-task with ±se (output tokens, base → skill):**
+
+Caveman — slugify 879±115 → 670±68 (**cut 24%, REAL** — bars separate); debounce 339±208 → 762±231 (−125%, noisy — base se huge); bigO 867±91 → 818±47 (6%, **overlaps zero** = noise); review-doc 2786±775 → 4866±276 (**grew 75%, REAL** — bars separate); refactor-suite 1541±105 → 1785±185 (grew 16%, marginal). Helped 2/5, hurt 3/5, MIXED. **Only two effects clear the noise and they point OPPOSITE ways** (a real cut on the one-liner, a real growth on the prose-heavy review).
+
+Token-Efficient — slugify 676±85 → 656±84 (3%, overlaps = flat); debounce 723±36 → 659±38 (9%, marginal); bigO 840±271 → 738±100 (12%, overlaps = noise); review-doc 2719±969 → 2671±503 (2%, overlaps = flat); refactor-suite 1380±131 → **3356±1676** (grew 143% — the skill INTRODUCES massive variance + growth on the long task). Small cuts (2–12%, never 63%) on 4 short tasks, one catastrophic noisy blow-up on the long one.
+
+**The airtight, adversary-proof claims (true across ALL runs, now with CIs):**
+1. Output is **0.5–1.1% of session tokens**, every task, every run. The spine.
+2. **Neither skill comes within 80+ points of its claim** (gaps 102 / 86).
+3. **0 correctness regressions** anywhere.
+4. **The bill never reliably drops.** Token-Efficient reliably +12–13% (both sonnet runs). Caveman is a coin-flip that averaged to an INCREASE in every multi-task run.
+5. **On the two prose-heavy tasks (review-doc, refactor-suite) — where a terse style should win MOST — both skills GREW output**, and on the long task the growth is real/large. The best case is the worst case.
+6. **The point estimate is noise-dominated:** Caveman output across three sonnet runs = **+18% cut → −8% growth → −37% growth**. The CIs show most single-task "cuts" overlap zero. So the honest number is a range straddling zero-to-negative — never the clean 65%.
+
+Token-Efficient is STABLE across the two 07-06 runs (−24% vs −23% output; +12% vs +13% bill) — a reproducible net-negative. Caveman's magnitude swings (the noise finding). This SUPERSEDES the article's earlier single "−8%" point estimate: the airtight framing is the **range + CIs**, not one fragile number — an adversary who reruns and gets a different number is confirming the noise thesis, not refuting it.
