@@ -19,11 +19,11 @@
 
 **This was a STRATEGY + PERSONAL-PLANNING session — ALL substance is in the VAULT.** Do
 NOT restate or name topics here (public file — naming a topic leaks it). Unlock
-`startup/`, read `startup/README.md` (ID→name index), then **`s44` (strategy conclusion
-+ the direction verdict)** and **`s45` (the personal plan + the multi-agent research
-behind it — the most actionable doc)**. New/changed vault docs this session: `s37`–`s41`
-(renamed `gate-*` → opaque IDs), `s42`, `s43`, `s44`, `s45` — all encrypted (verified
-`\0GITCRYPT`), index synced in both `README.md` + `CLAUDE.md`.
+`startup/`, read `startup/README.md` (ID→name index), then \*\*`s44` (strategy conclusion
+
+- the direction verdict)** and **`s45` (the personal plan + the multi-agent research
+  behind it — the most actionable doc)\*_. New/changed vault docs this session: `s37`–`s41`
+  (renamed `gate-_`→ opaque IDs),`s42`, `s43`, `s44`, `s45`— all encrypted (verified`\0GITCRYPT`), index synced in both `README.md`+`CLAUDE.md`.
 
 **Where it landed:** `s44` closed the direction question (a novelty check RESOLVED — see
 s44's verdict; do NOT re-run it). `s45` holds the plan built from **four+ parallel research
