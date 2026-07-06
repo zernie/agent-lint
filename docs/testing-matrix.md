@@ -105,11 +105,21 @@ real model calls and run manually / in a keyed job.
 
 `vigiles test` / `vigiles eval` accept harness/eval scripts in **either
 language** — the glob is `*.harness.*` / `*.eval.*` over `.mjs` `.cjs` `.js`
-`.mts` `.cts` `.ts` (`src/adapters/claude-code/run-scripts.ts`). A JavaScript
-file runs as a plain `node <file>`; a TypeScript file is run through **`tsx`**
-when it's installed, else **Node's native type stripping** (Node ≥ 22.6), with an
-actionable error if neither is available. So you can author your own tests in TS
-and get types end-to-end, or in JS for zero setup.
+`.mts` `.cts` `.ts` (`src/adapters/claude-code/run-scripts.ts`). Discovery is
+name-only and scoped to those infixes — **never `*.test.*` / `*.spec.*`** — so it
+won't pick up your vitest/jest/Playwright files (and it ignores `node_modules` +
+`dist`). A JavaScript file runs as a plain `node <file>`; a TypeScript file is run
+through **`tsx`** when it's installed, else **Node's native type stripping**
+(Node ≥ 22.6), with an actionable error if neither is available. So you can author
+your own tests in TS and get types end-to-end, or in JS for zero setup.
+
+A bare `vigiles eval` (no target) discovers the whole tree, and each eval runs the
+**real model on your subscription** — so it **asks before fanning out**: name the
+eval(s), pass `--all`, or answer the terminal prompt; headless with none of those,
+it refuses (exit 2) rather than spend quota. `vigiles test` is free/deterministic
+and always runs. And the deterministic API folds into an existing vitest/jest
+suite (`vigiles/vitest` · `vigiles/jest` matchers) — the CLI is the zero-dep floor,
+not a required second runner; `eval` stays its own surface (real-model, statistical).
 
 The **API itself is fully TypeScript** — `src/*.ts`, shipped with `.d.ts`; the
 whole unit suite (`src/*.test.ts`) and the type smokes (`test/types/*.ts`) are

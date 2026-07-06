@@ -147,6 +147,54 @@ export function anyFailed(results: readonly ScriptRunResult[]): boolean {
   return results.some((r) => r.status === "fail");
 }
 
+/**
+ * What a `test`/`eval` invocation should do about actually RUNNING the discovered
+ * scripts:
+ * - `run`     — proceed.
+ * - `confirm` — interactive human, no explicit intent: ask before firing `count`.
+ * - `refuse`  — headless, no explicit intent: don't silently fire the whole tree.
+ */
+export type RunScriptsDecision =
+  | { readonly kind: "run" }
+  | { readonly kind: "confirm"; readonly count: number }
+  | { readonly kind: "refuse"; readonly count: number };
+
+export interface RunScriptsEnv {
+  /** `test` is free/deterministic → always runs. `eval` spends model quota. */
+  readonly kind: "test" | "eval";
+  /** The user named explicit target files/globs (positional args) — clear intent. */
+  readonly explicitTargets: boolean;
+  /** How many script files the discovery matched. */
+  readonly matchedCount: number;
+  /** A human at a terminal who can answer + wait. */
+  readonly isTTY: boolean;
+  /** `--all` — opt in to running the whole discovered set without a prompt. */
+  readonly all: boolean;
+  /** `--yes` / `--no-interactive` — agent/CI mode: never prompt. */
+  readonly yes: boolean;
+}
+
+/**
+ * Consent gate for a bare (no-target) `vigiles eval`. `eval` runs the REAL model
+ * on your subscription, and a no-target run discovers every `*.eval.*` over the
+ * whole tree — so a repo with many evals fires them all and spends quota. Mirrors
+ * `audit`'s read-vs-run consent (`decideExecute`): a paid, side-effecting verb
+ * never fans out over an unbounded glob without either an explicit target, an
+ * `--all` opt-in, or an interactive yes. `test` is free + deterministic, so it
+ * always runs. Total + pure, first match wins; the IO (prompt/refuse) lives in the
+ * CLI.
+ */
+export function decideRunScripts(o: RunScriptsEnv): RunScriptsDecision {
+  if (o.kind === "test") return { kind: "run" };
+  if (o.explicitTargets) return { kind: "run" };
+  if (o.all || o.yes) return { kind: "run" };
+  // A bounded no-target run (0 = no-op, 1 = a single obviously-intended eval) is
+  // not the footgun; the footgun is fanning out over the whole tree.
+  if (o.matchedCount <= 1) return { kind: "run" };
+  if (!o.isTTY) return { kind: "refuse", count: o.matchedCount };
+  return { kind: "confirm", count: o.matchedCount };
+}
+
 const MARK: Record<ScriptStatus, string> = {
   pass: "✓",
   skip: "⊘",

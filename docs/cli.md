@@ -13,6 +13,7 @@ npx vigiles eject [file]            # Un-manage a compiled file → plain hand-o
 npx vigiles lint [files...]         # Verify references + integrity + symbols + coverage (incl. instruction-file symbol marks)
 npx vigiles test [files...]         # Run *.harness.{mjs,ts} deterministic harness tests (no API key)
 npx vigiles eval [files...]         # Run *.eval.{mjs,ts} real-model harness evals (--trials=N) — local, on your subscription
+npx vigiles eval --all              # Run ALL discovered evals — a bare no-target `eval` asks first (it spends model quota)
 npx vigiles eval --update           # Record each named eval's result to a committed .vigiles/eval-locks/<name>.lock.json (local)
 npx vigiles eval --check            # Verify committed eval results against current inputs WITHOUT a model — the CI staleness gate
 npx vigiles audit [dir]              # Lighthouse for your harness: category rings + fixes (a deterministic read); writes vigiles-report.html + .json
@@ -31,6 +32,25 @@ npx vigiles generate harness [dir]  # Emit harness.gen.ts — one typed registry
 Unit-tier `runHook` tests need no `claude` and always run. A skip passes by
 default; in a CI job that **asserts** the capability is present, add `--no-skip`
 so a skipped tier **fails** (a green-with-skips is untested surface).
+
+**`vigiles eval` asks before fanning out.** A bare `vigiles eval` with no target
+discovers every `*.eval.*` in the tree, and each one runs the **real model on your
+subscription** — so it never fires them all silently. Name the eval(s) to run
+(`vigiles eval path/to/x.eval.mjs`), pass `--all` to opt into the whole set, or
+answer the prompt at a terminal. Run headless with none of those and it **refuses**
+(exit 2) rather than spend quota. `vigiles test` is free and deterministic, so it
+always runs everything it finds. (Discovery is by name — `*.harness.*` / `*.eval.*`,
+never `*.test.*` / `*.spec.*` — so it won't pick up your vitest/jest files.)
+
+**Already have vitest or jest? You don't need a second runner for the
+deterministic tier.** The testing API — `runHook`, `runHarnessTest`, the check
+vocabulary, and the matchers (via `vigiles/vitest` / `vigiles/jest`) — are plain
+functions you call inside your existing suite (vigiles's own unit suite runs on
+vitest). The standalone `vigiles test` CLI is the **zero-dependency floor** for
+when no runner is installed, not a replacement. `vigiles eval` stays its own
+surface by design: real-model, non-deterministic, and statistical (mean ± se,
+trials, record/replay) — that doesn't fit a unit-test runner's pass/fail model,
+which is why every LLM-eval tool is separate from jest too.
 
 By default `init` sets up **both layers** — **Lint** (verify instruction-file
 references) and **Test** (test the harness): it scaffolds a typed spec + types
