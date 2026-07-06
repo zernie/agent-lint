@@ -62,16 +62,20 @@ export const BENCH_SKILLS = [
     id: "caveman",
     title: "Caveman Mode",
     source: "JuliusBrussee/caveman@f06348c",
-    stars: 75119,
+    stars: 84189,
     category: "compression",
     claim: {
       metric: "outputTokens",
-      pct: 75,
-      text: 'cuts token usage ~75% by "talking like caveman" (telegraphic OUTPUT prose)',
+      // We hold the skill to its README HEADLINE (65%, self-measured on 10 one-shot
+      // prompts, range 22–87%) — the more conservative of its two published numbers
+      // (the SKILL.md description says ~75%), so the overclaim gap is the STEELMAN,
+      // computed against the charitable claim. Matches the article's arithmetic.
+      pct: 65,
+      text: 'README headline "65%" token cut by "talking like caveman" (telegraphic OUTPUT prose), self-measured on 10 one-shot prompts (range 22–87%); the SKILL.md description claims ~75%.',
     },
     arm: { files: { "SKILL.md": readSkill("caveman") } },
     provenance:
-      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20). The skill's own description claims ~75%; the README says 65%.",
+      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20). Stars ~84,189 (verified 2026-07-06). The README headline is 65%; the skill's own description says ~75% — we benchmark against the conservative 65%.",
   },
   {
     id: "token-efficient",

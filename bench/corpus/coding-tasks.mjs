@@ -171,6 +171,83 @@ export const CODING_TASKS = [
       return fixedOk && reviewOk && ansOk ? 1 : 0;
     },
   },
+  {
+    // The LONGEST, most-multi-file task: a 3-file module with (i) a real logic
+    // bug and (ii) duplicated logic, asking for a fix + a refactor + a test +
+    // a thorough review + an answer marker. Reading three seed files and writing
+    // five artifacts forces the most turns and the largest explanatory surface
+    // in the corpus — the hardest steelman for a compression skill (maximal
+    // prose to compress) and the closest stand-in for a real multi-turn session.
+    // If a "save 65%" skill can't cut output HERE, it can't anywhere.
+    name: "refactor-suite",
+    files: {
+      "money.js":
+        "// money helpers\n" +
+        "function round2(x) { return Math.round(x * 100) / 100; }\n" +
+        "function addTax(amount, rate) { return round2(amount + amount * rate); }\n" +
+        "module.exports = { round2, addTax };\n",
+      "report.js":
+        "// reporting helpers\n" +
+        "function round2(x) { return Math.round(x * 100) / 100; }\n" +
+        "function average(nums) { let s = 0; for (const n of nums) s += n; return round2(s / nums.length); }\n" +
+        "function percentChange(oldV, newV) { return round2(((newV - oldV) / oldV) * 100); }\n" +
+        "module.exports = { average, percentChange };\n",
+      "summary.js":
+        "const { addTax } = require('./money');\n" +
+        "// finalPrice: apply a percentage discount, then tax.\n" +
+        "function finalPrice(base, taxRate, discountPct) {\n" +
+        "  const discounted = base - discountPct; // treats a percent as a flat amount\n" +
+        "  return addTax(discounted, taxRate);\n" +
+        "}\n" +
+        "module.exports = { finalPrice };\n",
+    },
+    task:
+      "Read money.js, report.js, and summary.js — a small money/reporting module " +
+      "split across three files. Do FOUR things, each in detail:\n" +
+      "1) `finalPrice` in summary.js has a bug: it subtracts `discountPct` as a flat " +
+      "amount instead of a PERCENTAGE of base. Write a corrected `finalPrice` (e.g. " +
+      "`base - base * discountPct / 100`) to summary.fixed.js.\n" +
+      "2) `round2` is duplicated in money.js and report.js. Extract it into a new " +
+      "shared.js that exports `round2` (keep the `Math.round(x*100)/100` logic).\n" +
+      "3) Write tests.js with a few assertions covering the fixed `finalPrice` and " +
+      "`round2`.\n" +
+      "4) Write a THOROUGH code review to review.md: explain in prose what each of the " +
+      "three files does, describe the discount bug and why it mischarges, and justify " +
+      "both the fix and the refactor. Be detailed.\n" +
+      "Then write the buggy function's name ALONE on the last line of answer.txt, " +
+      "prefixed 'ANSWER: '. Be thorough. Stop when all five files exist.",
+    target: "outputTokens",
+    check: (ctx) => {
+      const fixed = ctx.file("summary.fixed.js") ?? "";
+      const shared = ctx.file("shared.js") ?? "";
+      const tests = ctx.file("tests.js") ?? "";
+      const review = ctx.file("review.md") ?? "";
+      const ans =
+        /ANSWER:\s*(\w+)/i.exec(ctx.file("answer.txt") ?? "")?.[1] ?? "";
+      // (a) the flat-subtraction bug is gone AND the discount is now proportional;
+      const fixedOk =
+        /finalPrice/.test(fixed) &&
+        /discountPct\s*\/\s*100|\*\s*discountPct|1\s*-\s*discountPct/.test(
+          fixed,
+        ) &&
+        !/base\s*-\s*discountPct\b/.test(fixed);
+      // (b) round2 was extracted into shared.js with its rounding logic intact;
+      const sharedOk = /round2/.test(shared) && /Math\.round/.test(shared);
+      // (c) a real test file exercising the fixed behavior;
+      const testsOk =
+        tests.length > 40 &&
+        /finalPrice|round2/.test(tests) &&
+        /assert|expect|===|toBe/.test(tests);
+      // (d) a substantial review naming the bug function + a helper;
+      const reviewOk =
+        review.length > 300 &&
+        /finalPrice/.test(review) &&
+        /round2|addTax|average/.test(review);
+      // (e) the bug is attributed to `finalPrice`.
+      const ansOk = /finalPrice/i.test(ans);
+      return fixedOk && sharedOk && testsOk && reviewOk && ansOk ? 1 : 0;
+    },
+  },
 ];
 
 /** Look up a corpus task by name (the benchmark/optimizer selects a subset). */

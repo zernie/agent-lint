@@ -134,6 +134,13 @@ for (const skill of SKILLS) {
     runningCost += report.totalCostUsd;
     const b = report.arms.baseline.metrics;
     const s = report.arms.skill.metrics;
+    // Per-metric mean/std/se/n/passK from the harness — the CONFIDENCE the means
+    // alone hide. We persist the full MetricStat records so the archived JSON is
+    // "readily shareable with the article details": a reader can put an error bar
+    // on every number and see whether an A/B gap clears the noise floor.
+    const bStats = report.arms.baseline.stats ?? {};
+    const sStats = report.arms.skill.stats ?? {};
+    const se = (stats, k) => Number(stats?.[k]?.se ?? 0);
 
     const outCut = pct(b.outputTokens, s.outputTokens);
     const costCut = pct(b.costUsd, s.costUsd);
@@ -148,6 +155,8 @@ for (const skill of SKILLS) {
       task: t.name,
       baseline: b,
       skill: s,
+      baselineStats: bStats, // full mean/std/se/n/passK per metric (both arms)
+      skillStats: sStats,
       outCut,
       costCut,
       outShare,
@@ -160,6 +169,15 @@ for (const skill of SKILLS) {
         `${b.costUsd.toFixed(4).padStart(7)} ${s.costUsd.toFixed(4).padStart(7)} ` +
         `${costCut.toFixed(0).padStart(8)}%  ${outShare.toFixed(1).padStart(7)}%   ` +
         `${b.correct.toFixed(1)}/${s.correct.toFixed(1)}`,
+    );
+    // A second, quieter line: the ±1se error bars on the two absolute numbers the
+    // article leans on (output tokens, dollars), per arm, over n trials. If the
+    // arms' bars overlap, the "cut" is inside the noise — say so with the data.
+    console.log(
+      `      ${"".padEnd(13)} out ±se  base ${se(bStats, "outputTokens").toFixed(0)}` +
+        ` / skill ${se(sStats, "outputTokens").toFixed(0)}   ·   ` +
+        `$ ±se  base ${se(bStats, "costUsd").toFixed(4)}` +
+        ` / skill ${se(sStats, "costUsd").toFixed(4)}   (n=${trials})`,
     );
   }
 

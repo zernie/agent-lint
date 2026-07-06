@@ -72,6 +72,28 @@ const FIXTURES = {
       "bug.txt": "ANSWER: subtotal",
     },
   },
+  "refactor-suite": {
+    good: {
+      "summary.fixed.js":
+        "const {addTax}=require('./money');function finalPrice(base,taxRate,discountPct){const discounted=base-base*discountPct/100;return addTax(discounted,taxRate);}module.exports={finalPrice};",
+      "shared.js":
+        "function round2(x){return Math.round(x*100)/100;}module.exports={round2};",
+      "tests.js":
+        "const {finalPrice}=require('./summary.fixed');const {round2}=require('./shared');console.assert(finalPrice(100,0,10)===90,'discount');console.assert(round2(1.005)===1.01,'round');",
+      "review.md":
+        "# Review\n\n`money.js` exposes `addTax`, which grosses an amount up by a tax rate, plus a `round2` helper. `report.js` provides `average` and `percentChange` but duplicates the same `round2`. `summary.js`'s `finalPrice` had a bug: it subtracted `discountPct` as a flat dollar amount instead of a percentage of `base`, so a 10% discount on $200 knocked off $10 rather than $20 — undercharging tax and mispricing every order. The fix multiplies: `base - base * discountPct / 100`. The duplicated `round2` was hoisted into a shared.js both modules can require, removing the drift risk of two copies.",
+      "answer.txt": "ANSWER: finalPrice",
+    },
+    // bug left in place, no extraction, empty test, thin review, wrong answer
+    bad: {
+      "summary.fixed.js":
+        "function finalPrice(base,taxRate,discountPct){const discounted=base-discountPct;return addTax(discounted,taxRate);}",
+      "shared.js": "// TODO",
+      "tests.js": "",
+      "review.md": "lgtm",
+      "answer.txt": "ANSWER: addTax",
+    },
+  },
 };
 
 let failures = 0;
