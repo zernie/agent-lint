@@ -248,6 +248,7 @@ import {
   formatScriptSummary,
   anyFailed,
   scriptGlob,
+  decideRunScripts,
 } from "./adapters/claude-code/run-scripts.js";
 import {
   checkIntegrity,
@@ -4562,11 +4563,29 @@ async function handleGenerateHarness(
   );
 }
 
+/** Minimal TTY yes/no prompt (readline). Returns true only on an explicit y/yes. */
+async function promptYesNo(question: string): Promise<boolean> {
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    const answer = await new Promise<string>((res) => {
+      rl.question(question, res);
+    });
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
+}
+
 /**
  * `vigiles test` / `vigiles eval` — discover and run the two-tier harness
  * scripts (deterministic `*.harness.mjs` / real-model `*.eval.mjs`) as child
  * `node` processes, aggregating exit codes so they work as a CI command. See
- * src/run-scripts.ts.
+ * src/run-scripts.ts. A bare `vigiles eval` (no target) asks before fanning out
+ * over the whole tree — it spends model quota (see `decideRunScripts`).
  *
  * `vigiles test` skips clean when the `claude` CLI is absent (the deterministic
  * tier needs it, just like the node:test suite). `--trials=N` is forwarded to
@@ -4612,11 +4631,11 @@ function resolveEvalLockEnv(args: string[]): Record<string, string> | "skip" {
   return env;
 }
 
-function handleRunScripts(
+async function handleRunScripts(
   kind: "test" | "eval",
   args: string[],
   restArgs: string[],
-): void {
+): Promise<void> {
   const cwd = process.cwd();
   // Harness/eval scripts may be authored in JS or TS (see run-scripts.ts).
   const defaultGlob = scriptGlob(kind === "test" ? "harness" : "eval");
@@ -4651,6 +4670,38 @@ function handleRunScripts(
   if (files.length === 0) {
     console.log(`No ${defaultGlob} files found.`);
     return;
+  }
+
+  // Consent gate for a bare `vigiles eval`: it runs the REAL model on your
+  // subscription, and a no-target run discovered the whole tree — so never fan out
+  // over an unbounded glob without explicit intent. Mirrors audit's read-vs-run
+  // consent. `test` is free → always runs (decideRunScripts returns "run").
+  const runDecision = decideRunScripts({
+    kind,
+    explicitTargets: restArgs.length > 0,
+    matchedCount: files.length,
+    isTTY: (process.stdin.isTTY ?? false) && (process.stdout.isTTY ?? false),
+    all: args.includes("--all"),
+    yes: args.includes("--yes") || args.includes("--no-interactive"),
+  });
+  if (runDecision.kind === "refuse") {
+    console.error(
+      `✗ vigiles eval: ${String(runDecision.count)} eval file(s) matched the whole tree, and each ` +
+        "runs the real model on your subscription. Refusing to fire them all non-interactively.\n" +
+        "  → name the eval(s):    vigiles eval path/to/x.eval.mjs\n" +
+        "  → or opt in to all:    vigiles eval --all",
+    );
+    process.exit(2);
+  }
+  if (runDecision.kind === "confirm") {
+    const ok = await promptYesNo(
+      `About to run ${String(runDecision.count)} eval file(s) against the real model on your ` +
+        "subscription (uses your Claude quota). Continue? [y/N] ",
+    );
+    if (!ok) {
+      console.log("Aborted. Name specific eval(s), or pass --all to run them all.");
+      return;
+    }
   }
 
   // No blanket skip: unit-tier (runHook) tests need no `claude`, so always run.
@@ -6278,11 +6329,11 @@ async function main(): Promise<void> {
     }
 
     case "test":
-      handleRunScripts("test", args, restArgs);
+      await handleRunScripts("test", args, restArgs);
       break;
 
     case "eval":
-      handleRunScripts("eval", args, restArgs);
+      await handleRunScripts("eval", args, restArgs);
       break;
 
     case "audit": {
