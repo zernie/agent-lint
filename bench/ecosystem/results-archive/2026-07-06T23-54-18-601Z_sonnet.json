@@ -1,0 +1,1008 @@
+{
+  "model": "sonnet",
+  "trials": 5,
+  "tasks": [
+    "slugify",
+    "debounce",
+    "bigO",
+    "review-doc",
+    "refactor-suite"
+  ],
+  "runningCost": 9.425526099999999,
+  "leaderboard": [
+    {
+      "id": "caveman",
+      "title": "Caveman Mode",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 65,
+        "text": "README headline \"65%\" token cut by \"talking like caveman\" (telegraphic OUTPUT prose), self-measured on 10 one-shot prompts (range 22–87%); the SKILL.md description claims ~75%."
+      },
+      "meanOutCut": -37.19458478983209,
+      "meanCostCut": -27.33926932203152,
+      "meanOutShare": 0.7136481422991956,
+      "outCutMin": -124.92616656822209,
+      "outCutMax": 23.73151308304892,
+      "helped": 2,
+      "hurt": 3,
+      "mixed": true,
+      "claimGap": 102.19458478983209,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 9.2,
+            "outputTokens": 879,
+            "cacheTokens": 146320,
+            "costUsd": 0.061607800000000004,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 9.6,
+            "outputTokens": 670.4,
+            "cacheTokens": 152706.6,
+            "costUsd": 0.060303499999999996,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 9.2,
+              "std": 1.0954451150103321,
+              "se": 0.48989794855663554,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 879,
+              "std": 257.44805301264176,
+              "se": 115.1342694422473,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 146320,
+              "std": 17723.300680178058,
+              "se": 7926.101021309279,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.061607800000000004,
+              "std": 0.008200345518025447,
+              "se": 0.003667306003458125,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 9.6,
+              "std": 1.6733200530681511,
+              "se": 0.7483314773547882,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 670.4,
+              "std": 151.1615030356605,
+              "se": 67.60147927375553,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 152706.6,
+              "std": 27059.66683645606,
+              "se": 12101.450898962486,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.060303499999999996,
+              "std": 0.011538975663593362,
+              "se": 0.0051603867949021,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 23.73151308304892,
+          "costCut": 2.1171020552592497,
+          "outShare": 0.5971134760156024,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 3.6,
+            "outputTokens": 338.6,
+            "cacheTokens": 57205.4,
+            "costUsd": 0.02398982,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 6.4,
+            "outputTokens": 761.6,
+            "cacheTokens": 101917.6,
+            "costUsd": 0.0474575,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 3.6,
+              "std": 4.979959839195494,
+              "se": 2.227105745132009,
+              "n": 5,
+              "passK": 0
+            },
+            "outputTokens": {
+              "mean": 338.6,
+              "std": 464.1818609122937,
+              "se": 207.58843898444823,
+              "n": 5,
+              "passK": 0
+            },
+            "cacheTokens": {
+              "mean": 57205.4,
+              "std": 79152.90113318652,
+              "se": 35398.25351002504,
+              "n": 5,
+              "passK": 0
+            },
+            "costUsd": {
+              "mean": 0.02398982,
+              "std": 0.03309569034771748,
+              "se": 0.014800842675955985,
+              "n": 5,
+              "passK": 0
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 6.4,
+              "std": 3.847076812334269,
+              "se": 1.7204650534085253,
+              "n": 5,
+              "passK": 0
+            },
+            "outputTokens": {
+              "mean": 761.6,
+              "std": 517.2323462429626,
+              "se": 231.31333727219447,
+              "n": 5,
+              "passK": 0
+            },
+            "cacheTokens": {
+              "mean": 101917.6,
+              "std": 61013.250001946304,
+              "se": 27285.95490650822,
+              "n": 5,
+              "passK": 0
+            },
+            "costUsd": {
+              "mean": 0.0474575,
+              "std": 0.027126349527995836,
+              "se": 0.012131272305203604,
+              "n": 5,
+              "passK": 0
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": -124.92616656822209,
+          "costCut": -97.82349346514481,
+          "outShare": 0.5883824868456722,
+          "regress": false
+        },
+        {
+          "task": "bigO",
+          "baseline": {
+            "inputTokens": 10.8,
+            "outputTokens": 867,
+            "cacheTokens": 172490.4,
+            "costUsd": 0.07167727999999998,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 10.8,
+            "outputTokens": 817.8,
+            "cacheTokens": 172208.2,
+            "costUsd": 0.07019555999999999,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 10.8,
+              "std": 1.0954451150103324,
+              "se": 0.48989794855663565,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 867,
+              "std": 203.9767143573011,
+              "se": 91.22115982599651,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 172490.4,
+              "std": 17637.967181622716,
+              "se": 7887.9387206037545,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.07167727999999998,
+              "std": 0.008517272410050063,
+              "se": 0.0038090400183510803,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 10.8,
+              "std": 1.0954451150103324,
+              "se": 0.48989794855663565,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 817.8,
+              "std": 106.21299355540262,
+              "se": 47.499894736725466,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 172208.2,
+              "std": 17660.40700833364,
+              "se": 7897.974116189543,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.07019555999999999,
+              "std": 0.006962884494446247,
+              "se": 0.003113896609812213,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 5.674740484429071,
+          "costCut": 2.067210139670468,
+          "outShare": 0.5000917123209447,
+          "regress": false
+        },
+        {
+          "task": "review-doc",
+          "baseline": {
+            "inputTokens": 16,
+            "outputTokens": 2786.2,
+            "cacheTokens": 273403.4,
+            "costUsd": 0.16468778,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 18.8,
+            "outputTokens": 4865.6,
+            "cacheTokens": 324596.4,
+            "costUsd": 0.22218538000000004,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 16,
+              "std": 2.449489742783178,
+              "se": 1.0954451150103321,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 2786.2,
+              "std": 1731.9316383737553,
+              "se": 774.54337515726,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 273403.4,
+              "std": 48562.64755756218,
+              "se": 21717.876221214632,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.16468778,
+              "std": 0.050777768428880356,
+              "se": 0.022708508390543832,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 18.8,
+              "std": 1.7888543819998317,
+              "se": 0.7999999999999999,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 4865.6,
+              "std": 616.3434918939276,
+              "se": 275.63718907288256,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 324596.4,
+              "std": 30217.08460953836,
+              "se": 13513.491053758093,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.22218538000000004,
+              "std": 0.017210018782441813,
+              "se": 0.007696554378317611,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": -74.6321154260283,
+          "costCut": -34.913094341304515,
+          "outShare": 1.0087413144411261,
+          "regress": false
+        },
+        {
+          "task": "refactor-suite",
+          "baseline": {
+            "inputTokens": 10,
+            "outputTokens": 1541,
+            "cacheTokens": 174782.6,
+            "costUsd": 0.113805,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 8.8,
+            "outputTokens": 1784.8,
+            "cacheTokens": 158144.4,
+            "costUsd": 0.12307335999999998,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 10,
+              "std": 2,
+              "se": 0.8944271909999159,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 1541,
+              "std": 233.82578985218888,
+              "se": 104.57007220041496,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 174782.6,
+              "std": 34996.85451294159,
+              "se": 15651.069137921535,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.113805,
+              "std": 0.019208562195932317,
+              "se": 0.008590330164027458,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 8.8,
+              "std": 1.0954451150103324,
+              "se": 0.48989794855663565,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 1784.8,
+              "std": 414.4305731965247,
+              "se": 185.33898672432628,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 158144.4,
+              "std": 20331.01641089299,
+              "se": 9092.306949284104,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.12307335999999998,
+              "std": 0.015624023385255153,
+              "se": 0.006987275674295381,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": -15.820895522388057,
+          "costCut": -8.144070998638,
+          "outShare": 0.8739117218726323,
+          "regress": false
+        }
+      ]
+    },
+    {
+      "id": "token-efficient",
+      "title": "Token-Efficient CLAUDE.md",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 63,
+        "text": "README headline \"63%\" reduction (a 465→170 WORD count over 4 prompts); the repo's own token benchmark measures only ~4% haiku / ~12% sonnet / ~7% opus output-token reduction."
+      },
+      "meanOutCut": -23.4902444277193,
+      "meanCostCut": -12.971281468492725,
+      "meanOutShare": 0.7021208804141323,
+      "outCutMin": -143.17391304347828,
+      "outCutMax": 12.169564181948076,
+      "helped": 4,
+      "hurt": 1,
+      "mixed": true,
+      "claimGap": 86.4902444277193,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 8.8,
+            "outputTokens": 675.6,
+            "cacheTokens": 139829.2,
+            "costUsd": 0.05632691999999999,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 9.2,
+            "outputTokens": 655.8,
+            "cacheTokens": 147373.2,
+            "costUsd": 0.05768656,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 8.8,
+              "std": 1.0954451150103324,
+              "se": 0.48989794855663565,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 675.6,
+              "std": 190.31237479470428,
+              "se": 85.11028140007527,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 139829.2,
+              "std": 17724.202202073862,
+              "se": 7926.504194157724,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.05632691999999999,
+              "std": 0.008644672287137322,
+              "se": 0.0038660149754495264,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 9.2,
+              "std": 1.7888543819998317,
+              "se": 0.7999999999999999,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 655.8,
+              "std": 188.77685239456665,
+              "se": 84.42357490653899,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 147373.2,
+              "std": 29064.38356820939,
+              "se": 12997.987476528817,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.05768656,
+              "std": 0.011534340034566342,
+              "se": 0.005158313678577523,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 2.9307282415630653,
+          "costCut": -2.4138369362287326,
+          "outShare": 0.4808075517245306,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 9.2,
+            "outputTokens": 723.2,
+            "cacheTokens": 146181.6,
+            "costUsd": 0.05889382,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 8.4,
+            "outputTokens": 659.2,
+            "cacheTokens": 134283.6,
+            "costUsd": 0.05356046,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 9.2,
+              "std": 1.0954451150103324,
+              "se": 0.48989794855663565,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 723.2,
+              "std": 79.67872990955617,
+              "se": 35.63341128772265,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 146181.6,
+              "std": 17664.922269854458,
+              "se": 7899.99340252889,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.05889382,
+              "std": 0.006656412900128716,
+              "se": 0.0029768383461988655,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 8.4,
+              "std": 0.8944271909999159,
+              "se": 0.39999999999999997,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 659.2,
+              "std": 85.54355615708292,
+              "se": 38.25624132086161,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 134283.6,
+              "std": 14531.8782268501,
+              "se": 6498.853511197186,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.05356046,
+              "std": 0.005954573827571537,
+              "se": 0.0026629663710982135,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 8.849557522123893,
+          "costCut": 9.055890753902537,
+          "outShare": 0.4922607784145827,
+          "regress": false
+        },
+        {
+          "task": "bigO",
+          "baseline": {
+            "inputTokens": 9.2,
+            "outputTokens": 839.8,
+            "cacheTokens": 147048.2,
+            "costUsd": 0.06304594,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 10.8,
+            "outputTokens": 737.6,
+            "cacheTokens": 173528.4,
+            "costUsd": 0.06917216,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 9.2,
+              "std": 5.215361924162119,
+              "se": 2.33238075793812,
+              "n": 5,
+              "passK": 0
+            },
+            "outputTokens": {
+              "mean": 839.8,
+              "std": 604.9497499792855,
+              "se": 270.54175278503686,
+              "n": 5,
+              "passK": 0
+            },
+            "cacheTokens": {
+              "mean": 147048.2,
+              "std": 83421.93660662643,
+              "se": 37307.42421341896,
+              "n": 5,
+              "passK": 0
+            },
+            "costUsd": {
+              "mean": 0.06304594,
+              "std": 0.03691427071415607,
+              "se": 0.016508563731336533,
+              "n": 5,
+              "passK": 0
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 10.8,
+              "std": 1.7888543819998315,
+              "se": 0.7999999999999998,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 737.6,
+              "std": 224.29734728703323,
+              "se": 100.30882314133686,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 173528.4,
+              "std": 29358.232240719128,
+              "se": 13129.400597894788,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.06917216,
+              "std": 0.013950139661774,
+              "se": 0.006238692115868518,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 12.169564181948076,
+          "costCut": -9.717072978846856,
+          "outShare": 0.5678268418874731,
+          "regress": false
+        },
+        {
+          "task": "review-doc",
+          "baseline": {
+            "inputTokens": 14.4,
+            "outputTokens": 2718.8,
+            "cacheTokens": 242500,
+            "costUsd": 0.14910324,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 16.8,
+            "outputTokens": 2670.6,
+            "cacheTokens": 285628.4,
+            "costUsd": 0.15972055999999996,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 14.4,
+              "std": 3.5777087639996634,
+              "se": 1.5999999999999999,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 2718.8,
+              "std": 2167.8000830334886,
+              "se": 969.4696694585137,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 242500,
+              "std": 64824.86126093908,
+              "se": 28990.559282290502,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.14910324,
+              "std": 0.05649819291639335,
+              "se": 0.025266759993390526,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 16.8,
+              "std": 3.03315017762062,
+              "se": 1.3564659966250534,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 2670.6,
+              "std": 1125.2170012935283,
+              "se": 503.2123408661596,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 285628.4,
+              "std": 53379.946916421715,
+              "se": 23872.237988089848,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.15972055999999996,
+              "std": 0.033770494851171486,
+              "se": 0.015102624424205216,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": 1.7728409592467365,
+          "costCut": -7.120784229772578,
+          "outShare": 1.1086590233296307,
+          "regress": false
+        },
+        {
+          "task": "refactor-suite",
+          "baseline": {
+            "inputTokens": 9.2,
+            "outputTokens": 1380,
+            "cacheTokens": 158880.2,
+            "costUsd": 0.10155185999999998,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 12.4,
+            "outputTokens": 3355.8,
+            "cacheTokens": 221577.6,
+            "costUsd": 0.15706072,
+            "correct": 1
+          },
+          "baselineStats": {
+            "inputTokens": {
+              "mean": 9.2,
+              "std": 1.7888543819998317,
+              "se": 0.7999999999999999,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 1380,
+              "std": 293.7881890069783,
+              "se": 131.38607232123198,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 158880.2,
+              "std": 28681.250368489866,
+              "se": 12826.645100726846,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.10155185999999998,
+              "std": 0.011571770317371504,
+              "se": 0.005175053009931399,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "skillStats": {
+            "inputTokens": {
+              "mean": 12.4,
+              "std": 6.6932802122726045,
+              "se": 2.993325909419153,
+              "n": 5,
+              "passK": 1
+            },
+            "outputTokens": {
+              "mean": 3355.8,
+              "std": 3747.132396913672,
+              "se": 1675.7685520381388,
+              "n": 5,
+              "passK": 1
+            },
+            "cacheTokens": {
+              "mean": 221577.6,
+              "std": 127042.67288710515,
+              "se": 56815.21052376731,
+              "n": 5,
+              "passK": 1
+            },
+            "costUsd": {
+              "mean": 0.15706072,
+              "std": 0.11070714763346132,
+              "se": 0.049509741540704894,
+              "n": 5,
+              "passK": 1
+            },
+            "correct": {
+              "mean": 1,
+              "std": 0,
+              "se": 0,
+              "n": 5,
+              "passK": 1
+            }
+          },
+          "outCut": -143.17391304347828,
+          "costCut": -54.66060395151799,
+          "outShare": 0.8610502067144443,
+          "regress": false
+        }
+      ]
+    }
+  ]
+}
