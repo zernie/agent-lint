@@ -1,0 +1,225 @@
+{
+  "model": "sonnet",
+  "trials": 5,
+  "tasks": [
+    "slugify",
+    "debounce",
+    "bigO",
+    "review-doc"
+  ],
+  "runningCost": 7.2229415,
+  "leaderboard": [
+    {
+      "id": "caveman",
+      "title": "Caveman Mode",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 75,
+        "text": "cuts token usage ~75% by \"talking like caveman\" (telegraphic OUTPUT prose)"
+      },
+      "meanOutCut": -7.981658001712684,
+      "meanCostCut": -2.176210872736698,
+      "meanOutShare": 0.6985103507093112,
+      "outCutMin": -18.327344005227037,
+      "outCutMax": 4.526659412404791,
+      "helped": 1,
+      "hurt": 3,
+      "mixed": true,
+      "claimGap": 82.98165800171269,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 9.2,
+            "outputTokens": 664.2,
+            "cacheTokens": 146300.4,
+            "costUsd": 0.05826792000000001,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 7.2,
+            "outputTokens": 707.2,
+            "cacheTokens": 114976.8,
+            "costUsd": 0.051215319999999995,
+            "correct": 1
+          },
+          "outCut": -6.473953628425173,
+          "costCut": 12.103744221520198,
+          "outShare": 0.451917280494891,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 7.2,
+            "outputTokens": 612.2,
+            "cacheTokens": 114381.4,
+            "costUsd": 0.0470769,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 8.8,
+            "outputTokens": 724.4,
+            "cacheTokens": 139659,
+            "costUsd": 0.056094559999999995,
+            "correct": 1
+          },
+          "outCut": -18.327344005227037,
+          "costCut": -19.15516952050793,
+          "outShare": 0.5323441228234935,
+          "regress": false
+        },
+        {
+          "task": "bigO",
+          "baseline": {
+            "inputTokens": 12,
+            "outputTokens": 919,
+            "cacheTokens": 191645.8,
+            "costUsd": 0.07838875999999999,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 12.4,
+            "outputTokens": 877.4,
+            "cacheTokens": 198266.2,
+            "costUsd": 0.07974424,
+            "correct": 1
+          },
+          "outCut": 4.526659412404791,
+          "costCut": -1.7291764788727446,
+          "outShare": 0.4772122083241595,
+          "regress": false
+        },
+        {
+          "task": "review-doc",
+          "baseline": {
+            "inputTokens": 16.4,
+            "outputTokens": 3862,
+            "cacheTokens": 285938,
+            "costUsd": 0.19387978,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 15.2,
+            "outputTokens": 4312,
+            "cacheTokens": 263344.2,
+            "costUsd": 0.19373289999999999,
+            "correct": 1
+          },
+          "outCut": -11.651993785603313,
+          "costCut": 0.07575828691368222,
+          "outShare": 1.332567791194701,
+          "regress": false
+        }
+      ]
+    },
+    {
+      "id": "token-efficient",
+      "title": "Token-Efficient CLAUDE.md",
+      "category": "compression",
+      "claim": {
+        "metric": "outputTokens",
+        "pct": 63,
+        "text": "README headline \"63%\" reduction (a 465→170 WORD count over 4 prompts); the repo's own token benchmark measures only ~4% haiku / ~12% sonnet / ~7% opus output-token reduction."
+      },
+      "meanOutCut": -24.309989368459437,
+      "meanCostCut": -12.351837677188044,
+      "meanOutShare": 0.6153575961331978,
+      "outCutMin": -48.54788069073783,
+      "outCutMax": 0.19149751053236308,
+      "helped": 1,
+      "hurt": 3,
+      "mixed": true,
+      "claimGap": 87.30998936845944,
+      "anyRegress": false,
+      "tasks": [
+        {
+          "task": "slugify",
+          "baseline": {
+            "inputTokens": 7.2,
+            "outputTokens": 489.8,
+            "cacheTokens": 114215,
+            "costUsd": 0.05082872000000001,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 8.8,
+            "outputTokens": 714,
+            "cacheTokens": 140900.2,
+            "costUsd": 0.05581276,
+            "correct": 1
+          },
+          "outCut": -45.77378521845651,
+          "costCut": -9.80555874710202,
+          "outShare": 0.42698235581281824,
+          "regress": false
+        },
+        {
+          "task": "debounce",
+          "baseline": {
+            "inputTokens": 6.8,
+            "outputTokens": 509.6,
+            "cacheTokens": 107809.6,
+            "costUsd": 0.04226328,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 9.6,
+            "outputTokens": 757,
+            "cacheTokens": 153826.2,
+            "costUsd": 0.06193607999999999,
+            "correct": 1
+          },
+          "outCut": -48.54788069073783,
+          "costCut": -46.54820922559723,
+          "outShare": 0.4704318446171741,
+          "regress": false
+        },
+        {
+          "task": "bigO",
+          "baseline": {
+            "inputTokens": 11.2,
+            "outputTokens": 739.6,
+            "cacheTokens": 178627.6,
+            "costUsd": 0.07049928,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 11.2,
+            "outputTokens": 762.6,
+            "cacheTokens": 179805.6,
+            "costUsd": 0.07068012,
+            "correct": 1
+          },
+          "outCut": -3.1097890751757706,
+          "costCut": -0.25651325800774355,
+          "outShare": 0.4123127422253739,
+          "regress": false
+        },
+        {
+          "task": "review-doc",
+          "baseline": {
+            "inputTokens": 15.6,
+            "outputTokens": 3133.2,
+            "cacheTokens": 268900.4,
+            "costUsd": 0.17332612000000003,
+            "correct": 1
+          },
+          "skill": {
+            "inputTokens": 15.2,
+            "outputTokens": 3127.2,
+            "cacheTokens": 258016.8,
+            "costUsd": 0.16084156,
+            "correct": 1
+          },
+          "outCut": 0.19149751053236308,
+          "costCut": 7.202930521954816,
+          "outShare": 1.151703441877425,
+          "regress": false
+        }
+      ]
+    }
+  ]
+}

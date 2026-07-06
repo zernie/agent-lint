@@ -18,6 +18,14 @@ a published leaderboard/article). Routine/experimental runs stay in `../results/
 | -------------------------------------- | ---------- | ------ | ------------------------ | ----------------------------- | ------ | -------- |
 | `2026-06-21T13-42-51-687Z_haiku.json`  | 2026-06-21 | haiku  | caveman, token-efficient | slugify, debounce             | 2      | 0.2865   |
 | `2026-06-21T17-44-13-848Z_sonnet.json` | 2026-06-21 | sonnet | caveman, token-efficient | slugify, debounce, review-doc | 5      | 3.4333   |
+| `2026-07-06T20-13-50-204Z_sonnet.json` | 2026-07-06 | sonnet | caveman, token-efficient | slugify, debounce, bigO, review-doc | 5 | 7.2229 |
+
+**`2026-07-06` is the canonical run behind the published zernie.com article** ("Everyone
+Measuring AI-Agent Token Savings Is Measuring the Wrong Number"). 80 runs; Caveman output
+−8% (grew, mixed) / bill +2%, Token-Efficient output −24% (grew) / bill +12%, output
+0.4–1.3% of session, 0 regressions. Supersedes the 06-21 sonnet magnitude (Caveman was
+−18% cut there — the direction flips across runs). Full console log:
+`2026-07-06_sonnet-4task-5trial.log`.
 
 Schema (per file): `{ model, trials, tasks[], runningCost, leaderboard[] }`; each
 `leaderboard` row carries `claim`, `meanOutCut`/`meanCostCut`/`meanOutShare`,
