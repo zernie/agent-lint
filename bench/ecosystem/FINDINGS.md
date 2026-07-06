@@ -170,3 +170,18 @@ is the opening, but our qualitative thesis is already public, so cite it:
    `"Answer concisely."` (so it's not hidden) — but the **headline** ~75% is the
    weak-baseline number. Citable, but state it as "the headline uses the vanilla
    baseline," not "they concealed it" (don't-cry-wolf applies to our claims too).
+
+---
+
+## Fresh Sonnet run — 2026-07-06 (supersedes the magnitude numbers above; the run the zernie.com article uses)
+
+4 tasks (slugify, debounce, bigO, review-doc) × 5 trials × 2 arms, sonnet, **80 runs, ~$7.22 API-equivalent, $0 metered**. Clean harness sign convention (`out_cut>0` = reduction). Raw: `results/2026-07-06T20-13-50-204Z_sonnet.json` (gitignored).
+
+| Skill | claim | mean output cut | mean bill cut | output % of session | correctness | per-task spread |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Caveman** (now ~84k★) | 75% | **−8% (GREW)** | **+2% (flat/up)** | 0.5–1.3% | 0 regress | out −18%..+5%, cut 1/4 (bigO +5%; grew slugify −6% / debounce −18% / review −12%); cost slugify −12% vs debounce +19% |
+| **Token-Efficient** (~5.7k★) | 63% | **−24% (GREW)** | **+12% (up)** | 0.4–1.2% | 0 regress | out −49%..0% (slugify −46% / debounce −49% / bigO −3% / review 0%) |
+
+**KEY UPDATE vs the earlier sonnet 3×5** (which had Caveman at −18% *reduction*): this larger 4-task run shows Caveman *growing* output (−8%). So the output effect is **NOT stable at −18% cut — the direction flips across runs.** The instability itself is the finding.
+
+ROBUST, every condition: output **0.4–1.3% of session** (every task), the **63–75% headline never reproduces**, **0 correctness regressions**, **no reliable bill saving** (Token-Efficient reliably +12%; Caveman flat/mixed). Do NOT quote "bill always up" (Caveman saved 12% on one task) or "stable −18% cut" (superseded). Both authors self-disclose the output-only/net-negative caveat (credited in the article).
