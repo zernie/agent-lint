@@ -1,0 +1,15 @@
+
+=== caveman-compress input test (model: sonnet, 5 trials/arm) ===
+File size: verbose 2122 chars (~531 tok) → caveman 677 chars (~169 tok) = 68% smaller file (claim: ~46% input-token cut).
+
+  Spent: 1,053,755 tokens (64 in · 6.6k out · 1036.0k cache) · ~$0.48 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+Per-run session cost (the number you actually pay):
+  input tokens     verbose      6.40 → compressed      6.40   Δ -0%   p=1.00
+  cache tokens     verbose 105540.80 → compressed 103870.80   Δ -2%   p=0.87
+  cost $           verbose    0.0519 → compressed    0.0448   Δ -14%   p=0.36
+Blast radius (did the compressed memory degrade rule-following?):
+  adherence 0-1    verbose      1.00 → compressed      1.00   Δ -0%   p=1.00
+  followed all     verbose      1.00 → compressed      1.00   Δ -0%   p=1.00
+
+Data held at: bench/ecosystem/results/2026-07-07T02-38-10-942Z_compress_sonnet.json

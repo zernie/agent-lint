@@ -1,0 +1,18 @@
+{
+  "name": "caveman",
+  "version": "0.0.0",
+  "description": "Caveman Mode, vendored (JuliusBrussee/caveman@f06348c) and packaged as a real Claude Code plugin so --plugin-dir registers the skill AND runs the SessionStart activation hook — 'on from message one', exactly as the real install behaves. The loose skills/caveman/SKILL.md sibling is the pinned source the hook injects.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/caveman-activate.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

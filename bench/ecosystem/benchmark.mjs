@@ -87,6 +87,29 @@ console.log(
 let runningCost = 0;
 const leaderboard = [];
 
+// Restart-resilient output: write the JSON after EVERY skill, not just at the end,
+// so a container restart mid-run leaves a valid partial file (completed skills) to
+// analyze instead of nothing. Same path the whole run, overwritten as it grows.
+const outDir = fileURLToPath(new URL("./results/", import.meta.url));
+mkdirSync(outDir, { recursive: true });
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const outFile = `${outDir}${stamp}_${model}.json`;
+const dumpJson = () =>
+  writeFileSync(
+    outFile,
+    JSON.stringify(
+      {
+        model,
+        trials,
+        tasks: TASKS.map((t) => t.name),
+        runningCost,
+        leaderboard,
+      },
+      null,
+      2,
+    ),
+  );
+
 for (const skill of SKILLS) {
   console.log(
     `\n### ${skill.title}  [${skill.category}]  — ${skill.source}` +
@@ -134,6 +157,13 @@ for (const skill of SKILLS) {
     runningCost += report.totalCostUsd;
     const b = report.arms.baseline.metrics;
     const s = report.arms.skill.metrics;
+    // Per-metric mean/std/se/n/passK from the harness — the CONFIDENCE the means
+    // alone hide. We persist the full MetricStat records so the archived JSON is
+    // "readily shareable with the article details": a reader can put an error bar
+    // on every number and see whether an A/B gap clears the noise floor.
+    const bStats = report.arms.baseline.stats ?? {};
+    const sStats = report.arms.skill.stats ?? {};
+    const se = (stats, k) => Number(stats?.[k]?.se ?? 0);
 
     const outCut = pct(b.outputTokens, s.outputTokens);
     const costCut = pct(b.costUsd, s.costUsd);
@@ -148,6 +178,8 @@ for (const skill of SKILLS) {
       task: t.name,
       baseline: b,
       skill: s,
+      baselineStats: bStats, // full mean/std/se/n/passK per metric (both arms)
+      skillStats: sStats,
       outCut,
       costCut,
       outShare,
@@ -160,6 +192,15 @@ for (const skill of SKILLS) {
         `${b.costUsd.toFixed(4).padStart(7)} ${s.costUsd.toFixed(4).padStart(7)} ` +
         `${costCut.toFixed(0).padStart(8)}%  ${outShare.toFixed(1).padStart(7)}%   ` +
         `${b.correct.toFixed(1)}/${s.correct.toFixed(1)}`,
+    );
+    // A second, quieter line: the ±1se error bars on the two absolute numbers the
+    // article leans on (output tokens, dollars), per arm, over n trials. If the
+    // arms' bars overlap, the "cut" is inside the noise — say so with the data.
+    console.log(
+      `      ${"".padEnd(13)} out ±se  base ${se(bStats, "outputTokens").toFixed(0)}` +
+        ` / skill ${se(sStats, "outputTokens").toFixed(0)}   ·   ` +
+        `$ ±se  base ${se(bStats, "costUsd").toFixed(4)}` +
+        ` / skill ${se(sStats, "costUsd").toFixed(4)}   (n=${trials})`,
     );
   }
 
@@ -197,6 +238,7 @@ for (const skill of SKILLS) {
     anyRegress,
     tasks: taskRows,
   });
+  dumpJson(); // persist after each skill (restart-resilient)
 
   console.log(
     `    -> mean output cut ${meanOutCut.toFixed(0)}%  ·  ` +
@@ -255,25 +297,8 @@ if (quality.length) {
 }
 console.log(`\nTotal measured bill: $${runningCost.toFixed(4)}`);
 
-// ---- Hold the data: dump JSON for later analysis / the (gated) writeup ----
-const outDir = fileURLToPath(new URL("./results/", import.meta.url));
-mkdirSync(outDir, { recursive: true });
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const outFile = `${outDir}${stamp}_${model}.json`;
-writeFileSync(
-  outFile,
-  JSON.stringify(
-    {
-      model,
-      trials,
-      tasks: TASKS.map((t) => t.name),
-      runningCost,
-      leaderboard,
-    },
-    null,
-    2,
-  ),
-);
+// ---- Hold the data: final dump (already written incrementally per skill above) ----
+dumpJson();
 console.log(`\nData held at: ${outFile.replace(process.cwd() + "/", "")}`);
 console.log(
   "(v0 engine — no report published from here; the writeup is a separate gated step.)",

@@ -33,7 +33,7 @@ const readSkill = (id) =>
   readFileSync(here(`./skills/${id}/SKILL.md`), "utf-8");
 // Some injectable skills ship as a CLAUDE.md (project-instructions) rather than a
 // SKILL.md — read the vendored file by name so the arm injects it the way a user
-// actually installs it (caveman = SKILL.md; token-efficient = CLAUDE.md).
+// actually installs it (token-efficient = CLAUDE.md, auto-loaded as project memory).
 const readSkillFile = (id, file) =>
   readFileSync(here(`./skills/${id}/${file}`), "utf-8");
 const vendor = (slice) => here(`../../test/dogfood/${slice}`);
@@ -59,19 +59,32 @@ const vendor = (slice) => here(`../../test/dogfood/${slice}`);
 /** @type {BenchSkill[]} */
 export const BENCH_SKILLS = [
   {
+    // FAITHFUL INSTALL, exactly as a Claude Code user gets it: caveman registered
+    // via `--plugin-dir` (skills/caveman-plugin/, a proper .claude-plugin) INCLUDING
+    // its real SessionStart ACTIVATION HOOK, which reads SKILL.md and injects the
+    // full ruleset as session context every session — so caveman is "on from message
+    // one, no command needed" (README), NOT dormant. The upstream hook does exactly
+    // this (src/hooks/caveman-activate.js: "Emit caveman ruleset as hidden
+    // SessionStart context"); our hooks/caveman-activate.js reproduces that, minus
+    // the statusline/mode bookkeeping that doesn't touch tokens. Caveman is opt-in on
+    // some agents but AUTO-ON on Claude Code, so this — not a neutral-prompt "did it
+    // trigger" arm — is the faithful measurement of the 65% output claim.
     id: "caveman",
-    title: "Caveman Mode",
+    title: "Caveman",
     source: "JuliusBrussee/caveman@f06348c",
-    stars: 75119,
+    stars: 84189,
     category: "compression",
     claim: {
       metric: "outputTokens",
-      pct: 75,
-      text: 'cuts token usage ~75% by "talking like caveman" (telegraphic OUTPUT prose)',
+      // Held to its README HEADLINE (65%, self-measured on 10 one-shot prompts,
+      // range 22–87%) — the conservative of its two published numbers (the SKILL.md
+      // description says ~75%), so the overclaim gap is the STEELMAN.
+      pct: 65,
+      text: 'README headline "65%" output-token cut by "talking like caveman" (telegraphic prose), self-measured on 10 one-shot prompts (range 22–87%); on Claude Code it is auto-on from message one via a SessionStart hook.',
     },
-    arm: { files: { "SKILL.md": readSkill("caveman") } },
+    arm: { pluginDir: here("./skills/caveman-plugin") },
     provenance:
-      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20). The skill's own description claims ~75%; the README says 65%.",
+      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20), packaged as a proper Claude Code plugin (skills/caveman-plugin/) WITH a faithful SessionStart activation hook (hooks/caveman-activate.js, reproducing upstream src/hooks/caveman-activate.js) so `--plugin-dir` reproduces the real auto-on-from-message-one behavior — verified to produce telegraphic output. Stars ~84,189 (verified 2026-07-06). README headline 65%; SKILL.md description ~75%; benchmarked against 65%. NB: caveman ALSO ships input-side tools (/caveman-compress ~46% input on a memory file, caveman-shrink MCP middleware, cavecrew subagents) not measured here — this arm tests the viral OUTPUT claim.",
   },
   {
     id: "token-efficient",

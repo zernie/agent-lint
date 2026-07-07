@@ -1,0 +1,104 @@
+{
+  "model": "sonnet",
+  "trials": 5,
+  "file": {
+    "verboseChars": 2122,
+    "cavemanChars": 677,
+    "verboseEstTokens": 531,
+    "cavemanEstTokens": 169
+  },
+  "arms": {
+    "verbose": {
+      "metrics": {
+        "inputTokens": 6.4,
+        "cacheTokens": 105540.8,
+        "costUsd": 0.05192318,
+        "adherence": 1,
+        "followedAll": 1
+      },
+      "stats": {
+        "inputTokens": {
+          "mean": 6.4,
+          "std": 0.8944271909999157,
+          "se": 0.3999999999999999,
+          "n": 5,
+          "passK": 1
+        },
+        "cacheTokens": {
+          "mean": 105540.8,
+          "std": 15169.188350073315,
+          "se": 6783.867262852362,
+          "n": 5,
+          "passK": 1
+        },
+        "costUsd": {
+          "mean": 0.05192318,
+          "std": 0.010701500353548565,
+          "se": 0.004785856450354524,
+          "n": 5,
+          "passK": 1
+        },
+        "adherence": {
+          "mean": 1,
+          "std": 0,
+          "se": 0,
+          "n": 5,
+          "passK": 1
+        },
+        "followedAll": {
+          "mean": 1,
+          "std": 0,
+          "se": 0,
+          "n": 5,
+          "passK": 1
+        }
+      }
+    },
+    "compressed": {
+      "metrics": {
+        "inputTokens": 6.4,
+        "cacheTokens": 103870.8,
+        "costUsd": 0.04481125999999999,
+        "adherence": 1,
+        "followedAll": 1
+      },
+      "stats": {
+        "inputTokens": {
+          "mean": 6.4,
+          "std": 0.8944271909999157,
+          "se": 0.3999999999999999,
+          "n": 5,
+          "passK": 1
+        },
+        "cacheTokens": {
+          "mean": 103870.8,
+          "std": 15463.695457425434,
+          "se": 6915.574845231595,
+          "n": 5,
+          "passK": 1
+        },
+        "costUsd": {
+          "mean": 0.04481125999999999,
+          "std": 0.012332084505994923,
+          "se": 0.005515075851935312,
+          "n": 5,
+          "passK": 1
+        },
+        "adherence": {
+          "mean": 1,
+          "std": 0,
+          "se": 0,
+          "n": 5,
+          "passK": 1
+        },
+        "followedAll": {
+          "mean": 1,
+          "std": 0,
+          "se": 0,
+          "n": 5,
+          "passK": 1
+        }
+      }
+    }
+  }
+}
