@@ -273,7 +273,19 @@ export interface InlineProvider<Name extends string = string> {
 }
 
 // @public
+export function leafCommandsNormalized(command: string): NormalizedLeaf[];
+
+// @public
 export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
+
+// @public
+export interface NormalizedLeaf {
+    readonly args: readonly string[];
+    readonly argv: readonly string[];
+    readonly flags: ReadonlySet<string>;
+    hasFlag(...names: readonly string[]): boolean;
+    readonly head: string;
+}
 
 // @public
 export const nothing: () => Reaction;
