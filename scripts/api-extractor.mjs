@@ -36,6 +36,7 @@ const ENTRIES = [
   { name: "vigiles-claude-code", dts: "dist/claude-code.d.ts" },
   { name: "vigiles-codex", dts: "dist/codex.d.ts" },
   { name: "vigiles-adapter", dts: "dist/adapter.d.ts" },
+  { name: "vigiles-experimental", dts: "dist/experimental.d.ts" },
   { name: "vigiles-vitest", dts: "dist/vitest.d.mts" },
   { name: "vigiles-jest", dts: "dist/jest.d.ts" },
 ];
