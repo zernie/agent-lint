@@ -150,23 +150,21 @@ const delay = (ms: number): Promise<void> =>
 type ReadyProbe =
   | { readonly kind: "exec"; readonly command: string }
   | { readonly kind: "log"; readonly pattern: RegExp }
-  | { readonly kind: "tcp" };
+  | { readonly kind: "tcp"; readonly containerPort: number };
 
 /** Parse the authoring union into a tagged {@link ReadyProbe} (exec > log > tcp). */
 function parseReady(ready: ServiceReady): ReadyProbe {
   if ("exec" in ready) return { kind: "exec", command: ready.exec };
   if ("log" in ready) return { kind: "log", pattern: ready.log };
-  return { kind: "tcp" };
+  return { kind: "tcp", containerPort: ready.tcp }; // carry the DECLARED port
 }
 
-/** The IO seams + target a readiness poll needs, bundled to stay under max-params. */
+/** The IO seams a readiness poll needs, bundled to stay under max-params. */
 interface ReadyCtx {
   readonly exec: DockerExec;
   readonly netProbe: NetProbe;
   readonly sleep: (ms: number) => Promise<void>;
   readonly containerName: string;
-  /** Published host port; `undefined` when the service exposes none. */
-  readonly hostPort: number | undefined;
 }
 
 /** One readiness attempt for a parsed {@link ReadyProbe} — exhaustive by `kind`. */
@@ -180,13 +178,20 @@ function probeReady(ctx: ReadyCtx, probe: ReadyProbe): Promise<boolean> {
       const r = ctx.exec(["logs", ctx.containerName]);
       return Promise.resolve(probe.pattern.test(r.stdout + r.stderr));
     }
-    case "tcp":
-      if (ctx.hostPort === undefined) {
+    case "tcp": {
+      // Resolve the host mapping of the DECLARED container port (not just the
+      // primary), so `ready: { tcp }` on a secondary port probes the right socket.
+      const hostPort = parseDockerPort(
+        ctx.exec(["port", ctx.containerName, String(probe.containerPort)])
+          .stdout,
+      );
+      if (hostPort === undefined) {
         throw new Error(
-          `readiness { tcp } needs a published port, but "${ctx.containerName}" exposes none`,
+          `readiness { tcp: ${probe.containerPort} } — container port ${probe.containerPort} is not published for "${ctx.containerName}"`,
         );
       }
-      return ctx.netProbe(ctx.hostPort);
+      return ctx.netProbe(hostPort);
+    }
     /* v8 ignore next 2 -- exhaustiveness guard, unreachable given ReadyProbe */
     default:
       return assertNever(probe);
@@ -276,7 +281,7 @@ export function makeDockerRuntime(
 
       try {
         await waitReady(
-          { exec, netProbe, sleep, containerName, hostPort },
+          { exec, netProbe, sleep, containerName },
           spec.ready,
           readyTimeoutMs,
         );
