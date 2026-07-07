@@ -212,3 +212,45 @@ Token-Efficient — slugify 676±85 → 656±84 (3%, overlaps = flat); debounce 
 6. **The point estimate is noise-dominated:** Caveman output across three sonnet runs = **+18% cut → −8% growth → −37% growth**. The CIs show most single-task "cuts" overlap zero. So the honest number is a range straddling zero-to-negative — never the clean 65%.
 
 Token-Efficient is STABLE across the two 07-06 runs (−24% vs −23% output; +12% vs +13% bill) — a reproducible net-negative. Caveman's magnitude swings (the noise finding). This SUPERSEDES the article's earlier single "−8%" point estimate: the airtight framing is the **range + CIs**, not one fragile number — an adversary who reruns and gets a different number is confirming the noise thesis, not refuting it.
+
+---
+
+## ⚠️ CORRECTION + CORRECTED CANONICAL run — 2026-07-07 (the FAITHFUL caveman delivery)
+
+**The caveman rows in every run ABOVE are INVALID.** They delivered caveman as a bare
+`SKILL.md` in the run cwd, which Claude Code never registers as a skill (only `--plugin-dir`
+/ `.claude/skills` / a SessionStart hook load it) — so the "caveman" arm measured an inert,
+unread file (an adversarial review + reading the caveman README caught it). vigiles now WARNS
+on this (`unregisteredSkillFiles`). **Token-efficient rows above are VALID** (it ships a
+`CLAUDE.md`, which DOES auto-load as project memory). The corrected caveman delivery: a real
+`--plugin-dir` plugin WITH caveman's actual SessionStart activation hook (it reads SKILL.md and
+injects the ruleset — "on from message one" per the README), verified telegraphic (3.4 vs ~7–12
+articles/100w). See `skills/caveman-plugin/`.
+
+Run: caveman (faithful, auto-on) + token-efficient × **7 tasks** × 5 trials × sonnet, **140 runs,
+~$10.4 API-equiv, $0 metered**. Raw: `results-archive/2026-07-07T01-43-01-120Z_sonnet.json`; log:
+`results-archive/2026-07-07_sonnet-caveman-faithful-7task-5trial.log`. Welch + cost-share:
+`node bench/ecosystem/analyze.mjs <json>`.
+
+| Skill | claim | mean out cut | POOLED bill | out %tok | out %$ | correctness | gap |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Caveman** (~84k★, auto-on) | 65% | **6%** (MIXED, 5/7 cut) | **−1% (FLAT)** | ~0.6% | ~20% | 0 regress | 59 pts |
+| **Token-Efficient** (~5.7k★) | 63% | **−29% (GREW)** | **+10% (up)** | ~0.6% | ~19% | 0 regress | 92 pts |
+
+**Caveman per-task output Δ (Welch p):** slugify +54% (grew, p=.27) · debounce −28% (p=.22) ·
+bugfix −31% (**p=.002***) · bigO −18% (p=.27) · regex −28% (**p=.006***) · review −8% (p=.80) ·
+refactor +21% (grew, p=.65). So caveman DOES cut output — 2 significant cuts (−31%, −28%) — but
+the mean is only 6% (nowhere near 65%), it GREW on 2/7, and the **pooled bill is flat (−1%, not
+significant)**. It compresses; it just doesn't move your bill.
+
+**Token-Efficient per-task:** mostly noise or growth (regex +127% p=.037, review +54%); **pooled
+bill +10%**. Costs more, output mostly grows.
+
+**The corrected, airtight thesis (fairer + stronger than the invalid version):**
+1. **Output is ~20% of the DOLLAR bill** (cache-read is 50× cheaper), not ~1%. Lead cost-share, not token-share.
+2. **Structural cap: even a PERFECT 65% output cut caps the bill saving at ~13%** — and neither skill gets near 65% (caveman 6%, TE −29%).
+3. **Caveman genuinely cuts output** on real tasks (2 significant cuts) — it's not vaporware — **but the bill is flat** (−1% pooled). The compression is real and still doesn't save money.
+4. **Token-Efficient reliably costs more** (bill +10%, consistent with the +12–13% valid earlier runs).
+5. **0 correctness regressions.**
+6. **Noise:** slugify flipped +40% cut (an earlier faithful run) → +54% growth (this one) — same task, opposite sign; most task cells aren't individually significant.
+7. Caveman's OWN README agrees: shows "input 0% saved", warns net-negative, and ships INPUT tools (`/caveman-compress` ~46% input, `caveman-shrink` MCP) — the real lever. See the compress-test companion (`compress-test.mjs`).
