@@ -446,7 +446,7 @@ function skillBasename(path: string): boolean {
 }
 
 function hasSkillFrontmatter(content: string): boolean {
-  const m = /^﻿?\s*---\s*\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  const m = /^\uFEFF?\s*---\s*\r?\n([\s\S]*?)\r?\n---/.exec(content);
   return m !== null && /(^|\n)\s*(name|description)\s*:/.test(m[1]);
 }
 

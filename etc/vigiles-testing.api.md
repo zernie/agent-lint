@@ -739,7 +739,7 @@ export interface RunContext extends Trace {
     readonly usage: EvalUsage;
 }
 
-// @public
+// @public (undocumented)
 export function runEval<M extends Metrics>(spec: EvalSpec<M>): Promise<EvalReport>;
 
 // @public
