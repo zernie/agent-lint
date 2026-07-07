@@ -26,6 +26,9 @@ export const experimental_dockerRuntime: ContainerRuntime;
 export function experimental_startServices(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime): Promise<ServiceSession>;
 
 // @public
+export function experimental_withServices<T>(services: Readonly<Record<string, ServiceSpec>>, runtime: ContainerRuntime, fn: (session: ServiceSession) => Promise<T>): Promise<T>;
+
+// @public
 export function makeDockerRuntime(deps?: {
     exec?: DockerExec;
     netProbe?: NetProbe;

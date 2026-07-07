@@ -18,19 +18,30 @@
  *
  * THE POSTURE. vigiles COMPOSES with a throwaway container; it does not reinvent
  * the sandbox. A {@link ServiceSpec} declares a disposable service; the injected
- * {@link ContainerRuntime} port starts/stops it. Repeatability comes from a fresh
- * container per trial (`reset: "per-trial"`, the default), and the agent's egress
- * is pinned to the service endpoints and nothing else (composing with
- * `src/egress.ts`), so even a poisoned skill can reach only the throwaway DB.
+ * {@link ContainerRuntime} port starts it, and it is force-removed on teardown.
+ *
+ * ⚠️ SAFETY — the isolation is the DISPOSABLE CONTAINER, nothing more. A skill is
+ * model-driven, so the MODEL chooses the actions: it can do anything the run
+ * ENVIRONMENT allows. vigiles creates and destroys the container; it does NOT, in
+ * this tier, confine the skill's filesystem or block its network. So an R3 run is
+ * only as safe as the environment you run it in:
+ *   - run it in a DISPOSABLE environment — a CI job, a throwaway container/VM, or
+ *     a dev box with NO production access;
+ *   - point the task at the disposable service's connection string ONLY;
+ *   - keep real credentials OUT of the run (prod `DATABASE_URL`, cloud keys,
+ *     `~/.ssh`) — pair it with the eval tier's `ephemeralEnv` (throwaway HOME +
+ *     cleared env) to scrub them so the model has no real keys to misuse.
+ * Treat it like running an untrusted script. A future increment adds an egress
+ * wall (the skill reaches only the model + the service); until then that job is
+ * the operator's. See docs/measuring-skills.md § Experimental.
  *
  * WHAT SHIPS TODAY vs LATER. Today: the TYPES, the {@link ContainerRuntime} port,
- * and the pure {@link experimental_startServices} orchestration (testable with a
- * fake runtime — the same pure-policy / injected-executor split as
- * `decideSandbox` vs `runSandboxed`). Deferred to the v0 build increment: a
- * Docker-backed `ContainerRuntime` impl and the `runEval` / `measureArms` wiring
- * (an additive `services` option + `ctx.service(name)`). Requires Docker
- * (Linux-first). It is an explicit opt-in and NEVER part of `vigiles audit`
- * (audit stays side-effect-free).
+ * the pure {@link experimental_startServices} / {@link experimental_withServices}
+ * orchestration, and a Docker backend (`src/services-docker.ts`). Deferred: the
+ * `runEval` / `measureArms` `services` option + `ctx.service(name)`, per-trial
+ * reset via an eval-loop hook, and the egress wall. Requires Docker (Linux-first).
+ * It is an explicit opt-in and NEVER part of `vigiles audit` (audit stays
+ * side-effect-free).
  *
  * @experimental
  * @module vigiles/experimental (services)
@@ -124,9 +135,11 @@ export interface ServiceSession {
   /** The started services, keyed by the name declared in the `services` map. */
   readonly handles: Readonly<Record<string, ServiceHandle>>;
   /**
-   * `host:port` endpoints to pin the run's egress allowlist to (and NOTHING
-   * else), so the confined agent can reach these disposable services but cannot
-   * phone home. Composes with `src/egress.ts` (`egress: { allow }`).
+   * `host:port` endpoints for the started services — where to point your task.
+   * Intended to ALSO pin an egress allowlist (composing with `src/egress.ts`),
+   * but that wall is a FUTURE hardening: the eval tier does NOT apply it today, so
+   * right now these just identify the services. Do not read them as a network
+   * confinement guarantee — see the SAFETY note in this module's header.
    */
   readonly endpoints: readonly string[];
   /** Stop + remove every started container. Always await this in a `finally`. */
@@ -194,4 +207,34 @@ export async function experimental_startServices(
     throw err;
   }
   return { handles, endpoints, teardown: stopAll };
+}
+
+/**
+ * Run `fn` with the declared services up, disposing them afterwards — even if
+ * `fn` throws. The scope-guard form of {@link experimental_startServices}: it
+ * removes the manual `try/finally` so a `measureArms` / `measure` call can be
+ * wrapped in one line and its containers are always cleaned up.
+ *
+ * ⚠️ Read the SAFETY note in this module's header first — the container is the
+ * only isolation; keep real credentials out of the run.
+ *
+ * LIFECYCLE NOTE (honest): the services live for the WHOLE `fn` — i.e. per-RUN,
+ * not per-trial. An eval that mutates service state across trials should make its
+ * task self-contained (e.g. `drop … if exists; create; migrate`) or run
+ * `trials: 1`. True per-trial reset needs an eval-loop hook and is the next
+ * increment (research/r3-disposable-services.md).
+ *
+ * @experimental — surface may change without a major-version bump.
+ */
+export async function experimental_withServices<T>(
+  services: Readonly<Record<string, ServiceSpec>>,
+  runtime: ContainerRuntime,
+  fn: (session: ServiceSession) => Promise<T>,
+): Promise<T> {
+  const session = await experimental_startServices(services, runtime);
+  try {
+    return await fn(session);
+  } finally {
+    await session.teardown();
+  }
 }

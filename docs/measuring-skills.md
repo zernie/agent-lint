@@ -112,37 +112,68 @@ The numbers also live on the report — `report.usage` for a single run (`measur
 
 The tiers above cover a skill's **output** and its **side-effect safety** — did it call / not call a tool, write / not write a file — with no container. What they don't yet do turnkey is let a skill **actually perform a side effect against a real service and verify the resulting state**: apply a migration to a real Postgres, then check the row landed.
 
-That's the plan for this tier. vigiles **composes with a throwaway container** rather than reinventing a sandbox. A `ServiceSpec` declares a disposable service; a **fresh one per trial** keeps runs repeatable; the agent's network egress is **pinned to that service and nothing else**, so even a poisoned skill can't phone home.
+That's this tier. vigiles **composes with a throwaway container** rather than reinventing a sandbox: a `ServiceSpec` declares a disposable service, it's started fresh, and it's force-removed on teardown.
+
+### ⚠️ Safety — read this before running R3
+
+R3 runs your skill **for real**, and a skill is model-driven — the model picks the actions, so it can do anything the run environment allows. vigiles gives you a **throwaway container and deletes it afterwards. That is the only isolation it provides.** It does **not** stop a skill from touching other systems your environment leaves reachable. **Treat an R3 run like running an untrusted script — the safety is on the environment you run it in, not on vigiles.**
+
+| Do                                                                                                                                                                    | Don't                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run it in a **disposable environment** — a CI job, a throwaway container/VM, or a dev box with no production access.                                                  | **Run it against production**, or in a shell where `DATABASE_URL` / `AWS_*` / `~/.ssh` point at real systems — a model that finds a real credential may use it. |
+| Point the task at the **disposable service's connection string only**.                                                                                                | Assume vigiles sandboxes the filesystem or network here — it provisions and disposes the **container**, nothing more.                                           |
+| **Scrub real credentials** from the run — pair it with the eval tier's `ephemeralEnv` (throwaway HOME + cleared env) so there are no prod keys for the model to find. | Rely on the `endpoints` as a network wall — that's a **future** hardening, not applied yet.                                                                     |
+
+- ✅ **Guaranteed:** the service is created fresh and force-removed on teardown, even on failure.
+- ❌ **Not guaranteed (yet):** filesystem/network confinement of the skill. Until the egress wall lands (skill reaches only the model + the service), **an isolated run environment is doing that job, and you must provide it.** If you can't isolate the environment, don't run R3 yet.
+
+### Using it
+
+`experimental_withServices` starts the services, runs your block, and disposes them even on failure:
 
 ```typescript
-import { experimental_startServices } from "vigiles/experimental";
-import type { ServiceSpec, ContainerRuntime } from "vigiles/experimental";
+import {
+  experimental_withServices,
+  experimental_dockerRuntime,
+} from "vigiles/experimental";
+import { measureArms } from "vigiles/testing";
 
-// Declare a disposable Postgres; a ContainerRuntime backend starts/stops it.
-const services: Record<string, ServiceSpec> = {
-  db: {
-    image: "postgres:16",
-    env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
-    port: 5432,
-    ready: { exec: "pg_isready -U postgres" }, // start() resolves only once ready
-    seed: "psql -U postgres -d app -f schema.sql",
-    reset: "per-trial", // default — a clean DB each trial
+await experimental_withServices(
+  {
+    db: {
+      image: "postgres:16",
+      env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
+      port: 5432,
+      ready: { exec: "pg_isready -U postgres" },
+      seed: "psql -U postgres -d app -f schema.sql",
+    },
   },
-};
-
-const session = await experimental_startServices(services, myDockerRuntime);
-try {
-  // pin egress to session.endpoints, run the skill, then verify REAL state:
-  const cols = session.handles.db.exec(
-    "psql -U postgres -d app -tAc \"select column_name from information_schema.columns where table_name='users'\"",
-  ).stdout;
-  // assert the migration actually landed…
-} finally {
-  await session.teardown();
-}
+  experimental_dockerRuntime,
+  async (svc) => {
+    return measureArms({
+      arms: { baseline: {}, skill: { pluginDir: "./skills/migrator" } },
+      task: `Apply migration.sql against the DB at ${svc.endpoints[0]}. Stop.`,
+      ephemeralEnv: true, // ⬅ recommended — scrub real creds from the run
+      measure: () => ({
+        // verify the REAL resulting DB state — R3's whole point
+        migrated: /(^|\n)age(\n|$)/.test(
+          svc.handles.db.exec(
+            "psql -U postgres -d app -tAc \"select column_name from information_schema.columns where table_name='users'\"",
+          ).stdout,
+        )
+          ? 1
+          : 0,
+      }),
+      trials: 3,
+      model: "sonnet",
+    });
+  },
+);
 ```
 
-**What ships today vs later.** The types and the `ContainerRuntime` port ship now under `vigiles/experimental`; the Docker-backed runtime and the `runEval` / `measureArms` wiring (an additive `services` option + `ctx.service(name)`) are the next increment. It requires Docker (Linux-first), stays behind an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
+Runnable versions: [`side-effect-r3.mjs`](../examples/harness/side-effect-r3.mjs) (the primitive) and [`measure-with-service.mjs`](../examples/harness/measure-with-service.mjs) (the `measureArms` composition above).
+
+**What ships today vs later.** Today: the types, the `ContainerRuntime` port, `experimental_startServices` / `experimental_withServices`, and a Docker backend — all under `vigiles/experimental`. Deferred: a first-class `services` option on `measureArms` (+ `ctx.service(name)`), **per-trial** reset (today the container lives for the whole run — make your task self-contained or use `trials: 1`), and the egress wall. Requires Docker (Linux-first), stays an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
 
 ## See also
 

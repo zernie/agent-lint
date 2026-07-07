@@ -9,8 +9,13 @@
  *
  *   node examples/harness/side-effect-r3.mjs      # needs a running Docker daemon
  *
- * The surface is unstable (imported from `vigiles/experimental`); the Docker
- * backend + the `measureArms({ services })` wiring are landing incrementally.
+ * ⚠️ SAFETY — the disposable container is the ONLY isolation. Run this in a
+ * disposable environment with NO production access, and keep real credentials
+ * (prod DATABASE_URL, cloud keys, ~/.ssh) out of the run. vigiles disposes the
+ * container; it does NOT confine the skill. See docs/measuring-skills.md § Safety.
+ *
+ * The surface is unstable (imported from `vigiles/experimental`); the
+ * `measureArms` composition is shown in measure-with-service.mjs.
  * See docs/measuring-skills.md § Experimental and research/r3-disposable-services.md.
  */
 import {

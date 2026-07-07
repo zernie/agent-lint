@@ -39,15 +39,28 @@ isolation stack — because the load-bearing plumbing exists:
 | Concern                                                         | Reused as-is                                                                          | R3 adds                                             |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | **Host protection** (foreign skill can't read secrets / escape) | `decideSandbox` + `bwrapArgs` + `specTrusted` (`src/sandbox.ts`)                      | nothing                                             |
-| **Egress** (agent reaches the DB, nothing else)                 | the allowlist netns path (`buildEgressNft` / `buildEgressBwrapArgv`, `src/egress.ts`) | pin the allowlist to `{ each service's host:port }` |
+| **Egress** (agent reaches the DB, nothing else) — ⏳ DEFERRED   | the allowlist netns path (`buildEgressNft` / `buildEgressBwrapArgv`, `src/egress.ts`) | pin the allowlist to `{ each service's host:port }` |
 | **State protection** (repeatable)                               | the ephemeral throwaway CWD/HOME                                                      | a **fresh container per trial**                     |
 | **Irreversible externals**                                      | `interceptTools` (git push, paid API)                                                 | still applies                                       |
 
-Key composition: today `runSandboxed` uses `--unshare-all` = loopback-only (no
-route out) for untrusted code. **R3 is that same netns with the egress allowlist
-pinned to the disposable services** — so a poisoned skill can hit only the
-throwaway Postgres and nothing on the internet. That path (`slirp4netns`/`pasta` +
-`nft`) is done; R3 threads the container endpoint into it.
+Key composition (the INTENDED end state, ⏳ not wired yet): `runSandboxed` uses
+`--unshare-all` = loopback-only (no route out) for untrusted code. The egress wall
+would be that same netns with the allowlist pinned to `{ model endpoint + the
+disposable services }` — so a poisoned skill can hit only the model + the throwaway
+Postgres, nothing else. That path (`slirp4netns`/`pasta` + `nft`) exists; R3 would
+thread the container endpoint into it.
+
+⚠️ SAFETY POSTURE OF THE SHIPPED v0 (do not overstate it, in code or docs): the
+egress wall above is DEFERRED. Today R3 provisions + disposes the container and
+NOTHING MORE — it does not confine the skill's filesystem or network. So the v0
+safety story is entirely: **run it in a disposable/isolated environment + keep real
+credentials out of the run** (recommend `ephemeralEnv`). This is the industry norm
+(promptfoo does no isolation; testcontainers isolates only the container). The
+`endpoints` field and any "can't phone home" phrasing must NOT be presented as a
+live guarantee until the egress wall lands — that would be a false-safety claim
+(the exact thing vigiles exists to prevent). Safe-default credential-scrubbing is a
+polish item, deliberately deferred (vigiles's own `ephemeralEnv` ships opt-in
+because an over-aggressive scrub can break the real `claude` CLI auth).
 
 ## Placement (architecture)
 
@@ -82,8 +95,11 @@ import type { ServiceSpec, ContainerRuntime } from "vigiles/experimental";
   `measure` callback is sync) and is the **only** state-inspection primitive — it
   shells the service's own CLI (`psql`/`redis-cli`) so vigiles takes no per-service
   client dependency.
-- `ServiceSession` — `{ handles, endpoints, teardown() }`. `endpoints` pins the
-  egress allowlist; `teardown` disposes every container.
+- `ServiceSession` — `{ handles, endpoints, teardown() }`. `endpoints` IDENTIFY
+  the services (they will pin the egress allowlist once that wall lands — deferred,
+  not a live guarantee today); `teardown` disposes every container.
+- `experimental_withServices(services, runtime, fn)` — the scope-guard form:
+  runs `fn` with the services up, disposes them in `finally` (per-RUN lifecycle).
 - `ContainerRuntime` — the port (`name`, `available`, `start`, `stop`); `start`
   honours `ready` + runs `seed`.
 - `experimental_startServices(services, runtime)` — pure orchestration; tears down
