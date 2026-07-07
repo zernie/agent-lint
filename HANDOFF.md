@@ -26,12 +26,13 @@ re-run the research behind them.
 
 **The article deliverable lives in a SEPARATE repo** — `zernie/zernie.github.com`, **PR #86
 (DRAFT, not deployed)**: `src/entities/article/content/token-savings-wrong-number.md` (+ its
-`.audience-test-results.md` ledger). Strategic *why* in vault `s48`. Voice: FIRST-PERSON, use the
+`.audience-test-results.md` ledger). Strategic _why_ in vault `s48`. Voice: FIRST-PERSON, use the
 repo's `writing-quality` (prose) + `audience-test` skills; short paragraphs, ≤~15 em-dashes.
 
 **AUTONOMOUS ARTICLE REWORK — LARGELY DONE (DRAFT only; user deploys).** A fable review + reading
 caveman's README caught a BLOCKING eval-delivery bug + a framing error; both fixed and the article
 is rewritten to CORRECTED data. What shipped:
+
 - **vigiles guard** (`feat(eval)` 4655d85): `runEval`/`measureArms` warn on an unregistered
   `SKILL.md` in an arm's `files` (`unregisteredSkillFiles`, tested). A bare SKILL.md in cwd never
   registers as a skill — only `--plugin-dir`/`.claude/skills`/a SessionStart hook load it.
@@ -102,7 +103,7 @@ mentally; key hits: delivery(fixed), cost-share, Welch, activation, denominator.
 - **Real-model evals run in-container on the SUBSCRIPTION** (`claude -p` works here; `apiKeySource:"none"`,
   `$0` metered). Cold start ~20s+ — a first probe may time out; retry with a longer timeout. The
   ecosystem benchmark: `VIGILES_SKILLS=… VIGILES_TASK_NAMES=… VIGILES_TRIALS=… VIGILES_MODEL=sonnet
-  node bench/ecosystem/benchmark.mjs`. Do NOT `nohup … &` inside a `run_in_background:true` tool call
+node bench/ecosystem/benchmark.mjs`. Do NOT `nohup … &` inside a `run_in_background:true` tool call
   (double-detach — the wrapper reports "done" while the real process orphans; use the tool's own
   backgrounding, or an `until ! ps -p <pid>` waiter).
 - **A SKILL.md is NOT a skill unless registered.** A bare `SKILL.md` in a run's cwd (an eval

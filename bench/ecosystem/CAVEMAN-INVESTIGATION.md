@@ -4,7 +4,7 @@
 
 The full research trail behind the corrected caveman measurement (the numbers live in
 [`FINDINGS.md`](./FINDINGS.md); the raw data + Welch/cost-share snapshot in
-[`results-archive/`](./results-archive/)). This file is the *narrative*: what we set out to
+[`results-archive/`](./results-archive/)). This file is the _narrative_: what we set out to
 measure, the bug that invalidated the first pass, how it was caught, and the corrected result.
 It exists so the next person doesn't re-derive any of it.
 
@@ -20,7 +20,7 @@ in **dollars** (not output-token count), with a **correctness** gate?
 The first run delivered caveman as a bare `SKILL.md` written into the run's cwd (an eval arm's
 `files`). **Claude Code never registers a bare `SKILL.md` as a skill** — skills load only from a
 plugin (`--plugin-dir`) / `.claude/skills` layout, or via a hook that injects them. So the
-"caveman" arm ran against an inert, unread file: it measured *nothing*, and the caveman numbers
+"caveman" arm ran against an inert, unread file: it measured _nothing_, and the caveman numbers
 (a noisy "−37% growth") were an artifact. The token-efficient arm was fine — it ships a
 `CLAUDE.md`, which **does** auto-load as project memory. (That asymmetry is exactly why the bug
 hid: one of the two arms was valid.)
@@ -33,6 +33,7 @@ command needed,"** achieved by a **SessionStart hook** (`src/hooks/caveman-activ
 `SKILL.md` and injects the full ruleset as session context.
 
 **The fix (both in the tool and the benchmark).**
+
 - **vigiles** now warns when a run arm delivers a `SKILL.md` where it can't register
   (`unregisteredSkillFiles` in `src/eval.ts`, high-precision, tested) — the exact footgun, caught
   for anyone using the harness.
@@ -48,7 +49,7 @@ command needed,"** achieved by a **SessionStart hook** (`src/hooks/caveman-activ
 - **But the bill is flat** — pooled dollars across the whole run move −1% (not significant),
   because output is only **~20% of the dollar bill** (measured: output tokens × $15 ÷ real
   `costUsd` = 19.9%; cache-read is 50× cheaper) and caveman's own +1–1.5k input tokens/turn eat
-  the little it saves. A *perfect* 65% output cut caps the bill saving at ~13%.
+  the little it saves. A _perfect_ 65% output cut caps the bill saving at ~13%.
 - **Token-efficient** grows output (−29%) and its bill runs **+10%** — the one result that
   reproduces cleanly across every run.
 - **0 correctness regressions** anywhere.

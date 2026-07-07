@@ -14,13 +14,13 @@ a published leaderboard/article). Routine/experimental runs stay in `../results/
 
 ## Runs
 
-| File                                   | Date       | Model  | Skills                   | Tasks                         | Trials | Bill ($) |
-| -------------------------------------- | ---------- | ------ | ------------------------ | ----------------------------- | ------ | -------- |
-| `2026-06-21T13-42-51-687Z_haiku.json`  | 2026-06-21 | haiku  | caveman, token-efficient | slugify, debounce             | 2      | 0.2865   |
-| `2026-06-21T17-44-13-848Z_sonnet.json` | 2026-06-21 | sonnet | caveman, token-efficient | slugify, debounce, review-doc | 5      | 3.4333   |
-| `2026-07-06T20-13-50-204Z_sonnet.json` | 2026-07-06 | sonnet | caveman, token-efficient | slugify, debounce, bigO, review-doc | 5 | 7.2229 |
-| `2026-07-06T23-54-18-601Z_sonnet.json` | 2026-07-06 | sonnet | caveman ⚠, token-efficient | slugify, debounce, bigO, review-doc, refactor-suite | 5 | 9.4255 |
-| `2026-07-07T01-43-01-120Z_sonnet.json` | 2026-07-07 | sonnet | **caveman (faithful)**, token-efficient | slugify, debounce, bugfix-offbyone, bigO, regex-email, review-doc, refactor-suite | 5 | 10.4132 |
+| File                                   | Date       | Model  | Skills                                  | Tasks                                                                             | Trials | Bill ($) |
+| -------------------------------------- | ---------- | ------ | --------------------------------------- | --------------------------------------------------------------------------------- | ------ | -------- |
+| `2026-06-21T13-42-51-687Z_haiku.json`  | 2026-06-21 | haiku  | caveman, token-efficient                | slugify, debounce                                                                 | 2      | 0.2865   |
+| `2026-06-21T17-44-13-848Z_sonnet.json` | 2026-06-21 | sonnet | caveman, token-efficient                | slugify, debounce, review-doc                                                     | 5      | 3.4333   |
+| `2026-07-06T20-13-50-204Z_sonnet.json` | 2026-07-06 | sonnet | caveman, token-efficient                | slugify, debounce, bigO, review-doc                                               | 5      | 7.2229   |
+| `2026-07-06T23-54-18-601Z_sonnet.json` | 2026-07-06 | sonnet | caveman ⚠, token-efficient              | slugify, debounce, bigO, review-doc, refactor-suite                               | 5      | 9.4255   |
+| `2026-07-07T01-43-01-120Z_sonnet.json` | 2026-07-07 | sonnet | **caveman (faithful)**, token-efficient | slugify, debounce, bugfix-offbyone, bigO, regex-email, review-doc, refactor-suite | 5      | 10.4132  |
 
 **`2026-07-07T01-43` is the CORRECTED canonical run behind the zernie.com article.** 140 runs
 (7 tasks × 5 trials × 2 arms × 2 skills). It fixes a delivery bug that invalidated every
