@@ -32,10 +32,10 @@ const report = await experimental_withServices(
       image: "postgres:16-alpine",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      ready: { exec: "pg_isready -U postgres" },
-      // self-contained seed: idempotent so the shared-per-run container is clean
-      // for every trial (per-trial reset is a later increment).
-      seed: "psql -U postgres -d app -c 'drop table if exists users; create table users (id int)'",
+      // Postgres opens TCP only after init creates the DB — race-free readiness
+      // (pg_isready reports ready on the socket-only init server, too early).
+      ready: { tcp: 5432 },
+      seed: "psql -U postgres -d app -c 'create table users (id int)'",
     },
   },
   experimental_dockerRuntime,
@@ -44,9 +44,11 @@ const report = await experimental_withServices(
     runEval({
       name: "migrator: applies the migration to a real Postgres",
       fixture: { "migration.sql": "ALTER TABLE users ADD COLUMN age int;" },
+      // The task carries the FULL connection string incl. the password — with
+      // ephemeralEnv there is no ambient PGPASSWORD, so the agent needs it here.
       task:
-        `Apply migration.sql to the Postgres at ${svc.endpoints[0]} ` +
-        `(db "app", user "postgres"). Then stop.`,
+        `Apply migration.sql to the Postgres at ` +
+        `postgresql://postgres:test@${svc.endpoints[0]}/app . Then stop.`,
       arms: { baseline: {}, skill: { pluginDir: "./skills/migrator" } },
       ephemeralEnv: true, // scrub real credentials from the run (recommended)
       measure: () => {
@@ -60,7 +62,10 @@ const report = await experimental_withServices(
           .map((s) => s.trim());
         return { migrated: cols.includes("age") ? 1 : 0 };
       },
-      trials: 3,
+      // trials: 1 — the container lives for the whole run (per-RUN lifecycle), so a
+      // persistent side effect (the added column) would make later trials pass for
+      // free. Keep it 1 until per-trial reset exists. See docs § Experimental.
+      trials: 1,
       model: "sonnet",
     }),
 );

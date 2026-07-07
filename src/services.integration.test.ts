@@ -30,7 +30,10 @@ describe.skipIf(!dockerUp)("R3 real Docker (integration)", () => {
           image: "postgres:16-alpine",
           env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
           port: 5432,
-          ready: { exec: "pg_isready -U postgres -d app" },
+          // TCP-not-pg_isready: Postgres's temporary init server is socket-only
+          // (listen_addresses=''), so it opens TCP 5432 only AFTER init creates
+          // the `app` DB and the real server starts — the race-free readiness gate.
+          ready: { tcp: 5432 },
           seed: "psql -U postgres -d app -c 'create table users (id int)'",
         },
       },
