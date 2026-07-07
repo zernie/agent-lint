@@ -174,7 +174,15 @@ A hook that blocks nothing, a skill that hijacks unrelated prompts, context that
 
 ### 📊 Eval — does a skill help, or just cost more?
 
-_"65% fewer tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and reports the token bill, whether it hit its target, and whether the code still works. promptfoo and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max subscription. Evals run locally; a committed lock file — like a `package-lock` — records the result, so CI catches stale numbers without calling the model again. (On Claude Code today; Codex eval support is landing.)
+_"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and hands you three numbers: the **token bill**, whether it hit its **target**, and whether your code still **works**.
+
+```text
+caveman vs verbose · haiku · $0 on your subscription
+  output tokens   762 → 842   (+11% — the "saving" reversed)
+  correctness     1.0 → 1.0   (the fact survived)
+```
+
+Point it at any harness change that claims a number — does a compression skill pay for itself, is a subagent worth its cost, which model is cheapest here. promptfoo and DeepEval bill **per token, every run**; vigiles runs on your own Claude Pro/Max subscription, so you measure on every change, not once. A committed lock file (like `package-lock`) keeps CI honest without re-calling the model. (Claude Code today; Codex landing.)
 **[Measure a skill →](docs/measuring-skills.md)**
 
 ## Quick start
