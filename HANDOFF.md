@@ -14,10 +14,18 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-eval-docs-fjwhhu`** (off `main`). This session: README eval-cost
-clarity + the **EXPERIMENTAL R3 disposable-service tier** + a **promptfoo migration path** +
-a hard **safety pass**. All pushed; **no PR opened**. Goal was "let a team run real
-side-effect + behavior skill evals on vigiles (on the sub) instead of promptfoo."
+**Branch `claude/readme-eval-docs-fjwhhu`** → **PR #63 OPEN, merging-when-green.** This
+session: README eval-cost clarity + the **EXPERIMENTAL R3 disposable-service tier** + a
+**promptfoo migration path** + a hard **safety pass** + a **parse-don't-validate refactor** +
+a **code-quality dev skill**. Goal: "let a team run real side-effect + behavior skill evals on
+vigiles (on the sub) instead of promptfoo."
+
+**MERGE STATE (resume here first):** PR #63 (`feat(experimental): R3 disposable-service eval
+tier + promptfoo migration guide`) is open; a scheduled **send_later check-in** (trigger
+`trig_01Vx1d6ziy5dyjc2fmXfp3Md`, ~23:06Z) re-checks CI and **squash-merges with a CLEAN message
+(NO session link) when all checks are green**, else re-arms. Session is **subscribed to PR #63
+activity**. If resuming: check `get_check_runs` for #63 — merge if green, else let the check-in
+handle it. Codex-bot posted 2 P2 review comments (both real, both FIXED — see below).
 
 **Shipped (commits on the branch):**
 
@@ -34,15 +42,27 @@ side-effect + behavior skill evals on vigiles (on the sub) instead of promptfoo.
   example (`examples/harness/measure-with-service.mjs`) + the **SAFETY pass** — fixed a
   false-safety **egress OVERCLAIM** (egress is NOT pinned in the eval tier; the wall is
   deferred), added loud safety warnings in docs + JSDoc + examples.
-- `test(experimental)` (305b77c): real-tcp readiness test (covers the real `netProbe`, no
-  docker) + `examples-syntax.test.ts` (`node --check` every example in CI).
+- `test(experimental)` (305b77c): real-tcp readiness test + `examples-syntax.test.ts`.
+- `test` (59d4b1e): **graduated** `services.ts`/`services-docker.ts` into the 100% coverage
+  allowlist (real-daemon seams `v8 ignore`'d) + a real **integration tier**
+  (`src/services.integration.test.ts` — real Postgres migration, gated/skips without Docker).
+- `refactor(experimental)` (6b90895): **parse-don't-validate + irrepresentable illegal states**
+  — `parseDockerPort → number|undefined`, `ServiceReady` parsed once into a tagged `ReadyProbe`,
+  `ServiceHandle.port?/url?` (no magic `0`/`""`), exhaustive `switch`+`assertNever`.
+- `feat(dev)` (ebbb9d3): **code-quality dev skill** (`dev/skills/code-quality/`, in the
+  `vigiles-dev` plugin, NOT shipped) — SKILL.md + 5 technique references (parse-don't-validate,
+  illegal-states, exhaustive-matching, pure-functions, public-API), each grounded in the refactor.
+- `fix(experimental)` (407b289): the 2 Codex P2 fixes — `measure()` is SINGLE-arg
+  (checks/trials inside the one MeasureSpec; the example/doc wrongly passed a 2nd object) +
+  tcp readiness now honors the DECLARED port (`ReadyProbe.containerPort`).
+- `chore` (65f99de): removed a stray `.tmp-genh-cli-*` test dir + gitignored the scratch patterns.
 
 Design record: `research/r3-disposable-services.md`. Public guide: `docs/measuring-skills.md`
-§ Experimental + § Safety.
+§ Experimental + § Safety. Migration: `docs/migrating-from-promptfoo.md`.
 
-**OPEN (awaiting the user):** I ASKED whether to graduate `src/services.ts` +
-`src/services-docker.ts` into the vitest **100% coverage allowlist** (marking the real-daemon
-seams `v8 ignore` like `sandbox.ts`). NOT done yet — do only if the user says yes.
+**DONE this session (was the open question):** graduated `src/services.ts` +
+`src/services-docker.ts` into the vitest **100% coverage allowlist** (real-daemon seams
+`v8 ignore`'d like `sandbox.ts`). Coverage gate passes locally.
 
 **NEXT STEPS (the R3 loop, deferred + documented, not blocking):**
 
@@ -73,7 +93,15 @@ OSS-skill-through-R3 dogfood (inherently needs model auth). Experimental files s
   vigiles WARNS (`unregisteredSkillFiles`). Verify activation with a style/`skillResolved` check.
 - **The 100% coverage gate is an EXPLICIT allowlist** in `vitest.config.mjs` (`coverage.include`).
   A new pillar file must be added there AND its real-IO seams marked `/* v8 ignore */` (as
-  `sandbox.ts`/`egress.ts` do). Experimental files are intentionally NOT in the list yet.
+  `sandbox.ts`/`egress.ts` do). `services.ts`/`services-docker.ts` are now in it.
+- **`measure()` is SINGLE-arg** — `measure(spec: MeasureSpec)` where `checks`/`trials`/`model`
+  live INSIDE the one object (see `examples/harness/dogfood/skill-quality.eval.mjs`). Codex caught
+  a 2-arg call that silently dropped `checks`. NOTE: the ROOT `CLAUDE.md` eval.ts description still
+  says "measure(spec, { trials, checks })" — that's WRONG (fix the spec later). `runEval` (custom
+  metrics via a `measure(ctx)` callback + `ephemeralEnv`) vs `measureArms` (a `checks` array, NO
+  `measure`/`ephemeralEnv`) — don't confuse them.
+- **`git add -A` sweeps test-scratch dirs** (`.tmp-genh-*`, `.tmp-compile-genh-*`,
+  `.vigiles-test-types-tmp`, now gitignored) — prefer staging explicit paths after a test run.
 - **Transient proxy TLS** — `claude -p` trials sometimes fail "Self-signed certificate / Unable
   to connect to API" (agent-proxy CA). Flaky, not fatal; re-run, don't read a single 0-tok trial.
 - `CLAUDE.md` (root + `src/` + `core/` + `research/`) is COMPILED from `.spec.ts` — edit the spec +
@@ -99,4 +127,7 @@ OSS-skill-through-R3 dogfood (inherently needs model auth). Experimental files s
   (recommend `ephemeralEnv`); safe-default deferred because an over-aggressive scrub breaks claude auth.
 - **Don't build a promptfoo config auto-converter** — a half-parser mis-maps unsupported assertions
   = false confidence. A mapping guide + worked example instead (shipped).
+- **A code-quality / general-coding skill goes in `dev/` (the `vigiles-dev` plugin), NOT the
+  shipped plugin** — vigiles verifies harnesses, it does NOT lint code (`dont-reimplement-linters`),
+  so shipping one to users would muddy positioning. (User's call this session.)
 - Vault filenames MUST be opaque IDs; commit messages for vault changes MUST be generic.
