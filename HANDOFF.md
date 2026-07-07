@@ -54,10 +54,18 @@ is rewritten to CORRECTED data. What shipped:
   TOKEN-EFFICIENT rows are VALID (CLAUDE.md auto-loads, reproduces +10–13% bill). Flagged in
   FINDINGS + archive README.
 
-**REMAINING (not blocking, user's call):** (1) re-run the site `audience-test` on the CORRECTED
-article (numbers + frame changed materially). (2) publish-gate: recount stars at publish, confirm
-`npx vigiles eval` is published. (3) update the article's `.audience-test-results.md` ledger.
-(4) syndication package (HN/Reddit/X). Do NOT deploy — user deploys.
+**REVIEW GATES DONE (2026-07-07):** (a) audience-test Run 3 (5 personas) — median ~55% front-page,
++0.5 sentiment (vs Run 1 "eaten alive"); fixes applied (20%-as-measured, "nobody's being conned"
+framing, caveman-shrink named, softened overreach). Full record in the article's
+`.audience-test-results.md` ledger. (b) a FINAL fable fact-check verified every thesis number
+airtight against raw data + caught 3 factual slips (slugify "40%" cited no valid run → reframed to
+p=.27 noise; the −31% p=.002 cut is bugfix-offbyone not debounce; "harness refuses"→"verified on") —
+all fixed. Article commit `b4be3ba` on `claude/token-savings-article`. **Verdict: publish-ready.**
+All research + eval data saved in-repo: vigiles `bench/ecosystem/results-archive/` (JSONs + logs +
+`2026-07-07_ANALYSIS-snapshot.md`), `FINDINGS.md`, `CAVEMAN-INVESTIGATION.md`; zernie ledger.
+
+**REMAINING (user's call, not blocking):** (1) publish-gate: recount stars at publish, confirm
+`npx vigiles eval` is published. (2) syndication package (HN/Reddit/X). Do NOT deploy — user deploys.
 
 **NEXT STEPS (resume here):** (1) corrected re-run IN PROGRESS — bg task `bwynvdahs`, log
 `scratchpad/rerun-sonnet.log`, 3 skills (caveman/caveman-forced/token-efficient) × 7 tasks × 5
