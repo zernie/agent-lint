@@ -1,0 +1,63 @@
+
+=== vigiles ecosystem benchmark v0 (model: sonnet, 2 skill(s) × 4 task(s) × 5 trial(s)) ===
+Metric triple: BILL (cost$) · TARGET (output tokens) · BLAST RADIUS (correctness).
+
+
+### Caveman Mode  [compression]  — JuliusBrussee/caveman@f06348c  (75,119★)
+    claim: cuts token usage ~75% by "talking like caveman" (telegraphic OUTPUT prose)
+    task            out_base  out_skl  out_cut%   $_base   $_skl  cost_cut%  out%sess  correct(b/s)
+  Spent: 1,313,325 tokens (82 in · 6.9k out · 1298.2k cache) · ~$0.55 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+    slugify              664      707      -6%   0.0583  0.0512       12%      0.5%   1.0/1.0
+  Spent: 1,276,965 tokens (80 in · 6.7k out · 1265.2k cache) · ~$0.52 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 2,590,290 tokens · ~$1.06 API-equivalent
+    debounce             612      724     -18%   0.0471  0.0561      -19%      0.5%   1.0/1.0
+  Spent: 1,958,664 tokens (122 in · 9.0k out · 1938.3k cache) · ~$0.79 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 4,548,954 tokens · ~$1.85 API-equivalent
+    bigO                 919      877       5%   0.0784  0.0797       -2%      0.5%   1.0/1.0
+  Spent: 2,787,439 tokens (158 in · 40.9k out · 2659.9k cache) · ~$1.94 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 7,336,393 tokens · ~$3.79 API-equivalent
+    review-doc          3862     4312     -12%   0.1939  0.1937        0%      1.3%   1.0/1.0
+    -> mean output cut -8%  ·  mean cost cut -2%  ·  output share 0.7%  ·  correctness regression: no
+    -> per-task output cut spread -18%..5% (helped 1/4, hurt 3/4 — MIXED direction)
+    -> CLAIM 75% vs MEASURED -8% on the target => overclaim gap 83 points
+    (running bill so far: $3.7920)
+
+### Token-Efficient CLAUDE.md  [compression]  — drona23/claude-token-efficient@0d30a6d  (5,668★)
+    claim: README headline "63%" reduction (a 465→170 WORD count over 4 prompts); the repo's own token benchmark measures only ~4% haiku / ~12% sonnet / ~7% opus output-token reduction.
+    task            out_base  out_skl  out_cut%   $_base   $_skl  cost_cut%  out%sess  correct(b/s)
+  Spent: 1,281,675 tokens (80 in · 6.0k out · 1266.1k cache) · ~$0.53 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 8,618,068 tokens · ~$4.33 API-equivalent
+    slugify              490      714     -46%   0.0508  0.0558      -10%      0.4%   1.0/1.0
+  Spent: 1,314,594 tokens (82 in · 6.3k out · 1303.3k cache) · ~$0.52 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 9,932,662 tokens · ~$4.85 API-equivalent
+    debounce             510      757     -49%   0.0423  0.0619      -47%      0.5%   1.0/1.0
+  Spent: 1,799,789 tokens (112 in · 7.5k out · 1783.6k cache) · ~$0.71 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 11,732,451 tokens · ~$5.55 API-equivalent
+    bigO                 740      763      -3%   0.0705  0.0707       -0%      0.4%   1.0/1.0
+  Spent: 2,666,042 tokens (154 in · 31.3k out · 2563.9k cache) · ~$1.67 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 14,398,493 tokens · ~$7.22 API-equivalent
+    review-doc          3133     3127       0%   0.1733  0.1608        7%      1.2%   1.0/1.0
+    -> mean output cut -24%  ·  mean cost cut -12%  ·  output share 0.6%  ·  correctness regression: no
+    -> per-task output cut spread -49%..0% (helped 1/4, hurt 3/4 — MIXED direction)
+    -> CLAIM 63% vs MEASURED -24% on the target => overclaim gap 87 points
+    (running bill so far: $7.2229)
+
+
+========== LEADERBOARD (v0) ==========
+
+-- Debunks (a published % claim vs what we measured) --
+  Token-Efficient CLAUDE.md claim  63% · measured  -24% (range -49..0%, MIXED) · bill +12% · no regression · DEBUNKED
+  Caveman Mode           claim  75% · measured   -8% (range -18..5%, MIXED) · bill +2% · no regression · DEBUNKED
+
+Total measured bill: $7.2229
+
+Data held at: bench/ecosystem/results/2026-07-06T20-13-50-204Z_sonnet.json
+(v0 engine — no report published from here; the writeup is a separate gated step.)

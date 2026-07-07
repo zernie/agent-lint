@@ -418,9 +418,57 @@ export function spawnAgent(a: AgentRunArgs): Promise<RunOut> {
  * working model auth (e.g. `ANTHROPIC_API_KEY`). Thin wrapper over
  * `runEvalWith` with the real agent runner.
  */
+/**
+ * A `SKILL.md` written straight into a run's cwd (via an arm's `files`) is NOT
+ * registered as a skill by the harness. Claude Code — and Codex — load skills only
+ * from a plugin / `.claude/skills` layout, so a bare cwd `SKILL.md` sits unread:
+ * the arm silently measures NOTHING (baseline and "skill" become the same run). This
+ * is the exact footgun the ecosystem benchmark hit — a skill file delivered where it
+ * can never activate, with no error. Detect it so {@link runEval} / {@link measureArms}
+ * can WARN and point at `pluginDir` (a real `--plugin-dir` install) or `skillsDir`.
+ *
+ * HIGH-PRECISION (don't cry wolf): only a file whose basename is `SKILL.md` AND that
+ * carries real skill frontmatter (a `---` block naming `name`/`description`) is flagged
+ * — so an empty scratch `SKILL.md` a task is asked to AUTHOR is never flagged. Pure +
+ * exported for testing.
+ */
+export function unregisteredSkillFiles(
+  files: Record<string, string> | undefined,
+): string[] {
+  if (files === undefined) return [];
+  return Object.entries(files)
+    .filter(([p, c]) => skillBasename(p) && hasSkillFrontmatter(c))
+    .map(([p]) => p);
+}
+
+function skillBasename(path: string): boolean {
+  return (path.split(/[\\/]/).pop() ?? path) === "SKILL.md";
+}
+
+function hasSkillFrontmatter(content: string): boolean {
+  const m = /^\uFEFF?\s*---\s*\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  return m !== null && /(^|\n)\s*(name|description)\s*:/.test(m[1]);
+}
+
+/** Warn (loud, non-fatal) for every arm that drops an unregistered skill file. */
+function warnUnregisteredSkillArms(arms: Record<string, EvalArm>): void {
+  for (const [name, arm] of Object.entries(arms)) {
+    for (const path of unregisteredSkillFiles(arm.files)) {
+      console.warn(
+        `⚠ eval arm "${name}": files["${path}"] is a SKILL.md with skill ` +
+          `frontmatter, but a SKILL.md written to the run cwd is NOT registered as a ` +
+          `skill by the harness — it never activates, so this arm measures nothing. ` +
+          `Install it via \`pluginDir\` (a real --plugin-dir plugin) or \`skillsDir\`, ` +
+          `not \`files\`. See docs/harness-testing.md.`,
+      );
+    }
+  }
+}
+
 export async function runEval<M extends Metrics>(
   spec: EvalSpec<M>,
 ): Promise<EvalReport> {
+  warnUnregisteredSkillArms(spec.arms);
   const report = await runEvalWith(spec, spawnAgent);
   // Surface what the run spent — tokens + API-equivalent $, and a LOUD warning if
   // it was billed to a metered API key instead of the subscription. See eval-cost.ts.
@@ -689,6 +737,7 @@ function stubArmPluginDirs(arms: Record<string, EvalArm>): {
 export async function measureArms(
   spec: ArmsMeasureSpec,
 ): Promise<ArmsCheckReport> {
+  warnUnregisteredSkillArms(spec.arms);
   const report = await measureArmsWith(spec, spawnAgent);
   // Sum every arm's spend — an A/B run pays for both arms.
   emitCostSummary(

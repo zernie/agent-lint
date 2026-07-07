@@ -17,6 +17,7 @@ import {
   detectNodeCaps,
   scriptGlob,
   SCRIPT_EXTS,
+  decideRunScripts,
 } from "./run-scripts.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
 
@@ -185,4 +186,67 @@ test("runScripts classifies exit 77 as skip, 0 as pass, else fail", () => {
   } finally {
     cleanupTmpDir(dir);
   }
+});
+
+// --- decideRunScripts: the eval no-target consent gate --------------------------
+
+const evalEnv = (o: Partial<Parameters<typeof decideRunScripts>[0]> = {}) => ({
+  kind: "eval" as const,
+  explicitTargets: false,
+  matchedCount: 5,
+  isTTY: false,
+  all: false,
+  yes: false,
+  ...o,
+});
+
+test("decideRunScripts: `test` always runs (free/deterministic), never gated", () => {
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ kind: "test", matchedCount: 999 })),
+    { kind: "run" },
+  );
+});
+
+test("decideRunScripts: explicit targets always run (clear intent)", () => {
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ explicitTargets: true, isTTY: false })),
+    { kind: "run" },
+  );
+});
+
+test("decideRunScripts: --all opts into the whole set with no prompt", () => {
+  assert.deepEqual(decideRunScripts(evalEnv({ all: true })), { kind: "run" });
+});
+
+test("decideRunScripts: --yes / --no-interactive runs (agent/CI)", () => {
+  assert.deepEqual(decideRunScripts(evalEnv({ yes: true })), { kind: "run" });
+});
+
+test("decideRunScripts: 0 or 1 discovered eval is bounded → runs, no gate", () => {
+  assert.deepEqual(decideRunScripts(evalEnv({ matchedCount: 0 })), {
+    kind: "run",
+  });
+  assert.deepEqual(decideRunScripts(evalEnv({ matchedCount: 1 })), {
+    kind: "run",
+  });
+});
+
+test("decideRunScripts: bare eval over many, headless → REFUSE (the footgun)", () => {
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ matchedCount: 7, isTTY: false })),
+    {
+      kind: "refuse",
+      count: 7,
+    },
+  );
+});
+
+test("decideRunScripts: bare eval over many, at a TTY → CONFIRM", () => {
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ matchedCount: 7, isTTY: true })),
+    {
+      kind: "confirm",
+      count: 7,
+    },
+  );
 });

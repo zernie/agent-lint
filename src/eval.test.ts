@@ -56,6 +56,7 @@ import {
   type AgentRunArgs,
   type ParsedModelRun,
   type ModelOutputParser,
+  unregisteredSkillFiles,
 } from "./eval.js";
 import {
   usedTool,
@@ -2747,4 +2748,37 @@ test("runSkillSelectionTrial flags an errored run (excluded, not a clean miss)",
     runError: (o) => (o.stdout.includes("BOOM") ? "rate limited" : null),
   });
   assert.deepEqual(r, { fired: [], errored: true });
+});
+
+// ---- unregisteredSkillFiles: the dead-SKILL.md footgun guard --------------
+// A SKILL.md dropped into a run's cwd via `files` never registers as a skill
+// (only pluginDir/skillsDir do), so the arm silently measures nothing. The
+// benchmark hit exactly this. High-precision: flags only a real skill file.
+const SKILL_MD =
+  "---\nname: caveman\ndescription: talk terse\n---\n\nRespond terse.";
+
+test("unregisteredSkillFiles flags a SKILL.md with skill frontmatter", () => {
+  assert.deepEqual(unregisteredSkillFiles({ "SKILL.md": SKILL_MD }), [
+    "SKILL.md",
+  ]);
+  // nested path, same basename
+  assert.deepEqual(unregisteredSkillFiles({ "skills/x/SKILL.md": SKILL_MD }), [
+    "skills/x/SKILL.md",
+  ]);
+});
+
+test("unregisteredSkillFiles does NOT flag CLAUDE.md (auto-loaded) or a scratch SKILL.md", () => {
+  // CLAUDE.md IS loaded as project memory — legitimate via `files`.
+  assert.deepEqual(unregisteredSkillFiles({ "CLAUDE.md": SKILL_MD }), []);
+  // an empty scratch SKILL.md a task is asked to AUTHOR (no frontmatter) — no cry wolf.
+  assert.deepEqual(
+    unregisteredSkillFiles({ "SKILL.md": "# scratch\n\ntodo" }),
+    [],
+  );
+  // a SKILL.md-named file whose --- block carries no name/description.
+  assert.deepEqual(
+    unregisteredSkillFiles({ "SKILL.md": "---\nfoo: bar\n---\nbody" }),
+    [],
+  );
+  assert.deepEqual(unregisteredSkillFiles(undefined), []);
 });
