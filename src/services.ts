@@ -81,10 +81,13 @@ export interface ServiceSpec {
   readonly image: string;
   /** Environment for the container (e.g. `POSTGRES_PASSWORD`). */
   readonly env?: Readonly<Record<string, string>>;
-  /** The primary port to expose + reach (the one `ServiceHandle.port` reports). */
+  /**
+   * The port to publish + reach — the one `ServiceHandle.port` reports and
+   * `endpoints` lists. v0 supports a SINGLE port (the common disposable-service
+   * case: a DB, a cache); multi-port publishing is deferred rather than half-done
+   * (a declared-but-unexposed secondary port would be a misleading state).
+   */
   readonly port?: number;
-  /** Additional ports to expose, if the service needs more than one. */
-  readonly ports?: readonly number[];
   /** Readiness gate — start() resolves only once this passes. */
   readonly ready?: ServiceReady;
   /**
