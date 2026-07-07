@@ -16,9 +16,10 @@
  * supplies the treatment (a skill's SKILL.md, a model, a rule set) as the A arm and
  * runs the SAME task with/without it; the signal is the per-task delta. This module
  * is consumed by:
- *   - `bench/evals/caveman-claim.eval.mjs` (P0 — caveman vs its token claim);
- *   - the ecosystem benchmark (A1) and `vigiles optimize` (A2), which loop A/B over
- *     a SET of skills using exactly this corpus.
+ *   - the ecosystem benchmark (A1, `bench/ecosystem/benchmark.mjs`) — the faithful,
+ *     corrected caveman/skill measurement; and
+ *   - `vigiles optimize` (A2), which loop A/B over a SET of skills using exactly
+ *     this corpus.
  *
  * `target` names the metric the task's compressible/optimizable surface stresses
  * (so a benchmark can pick tasks that actually exercise the claim under test).
