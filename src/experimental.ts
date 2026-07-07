@@ -11,13 +11,20 @@
  * be removed WITHOUT a major-version bump. Do not depend on it in production.
  *
  * Current contents — the R3 disposable-service tier (real side-effect testing;
- * see docs/measuring-skills.md § Experimental and src/services.ts):
+ * see docs/measuring-skills.md § Experimental and src/services.ts).
+ *
+ * ⚠️ SAFETY: R3 runs a model-driven skill FOR REAL. The disposable container is
+ * the ONLY isolation vigiles provides — it does not confine the skill's filesystem
+ * or network. Run it in a disposable environment with NO production access and
+ * keep real credentials out of the run. See the SAFETY note in src/services.ts and
+ * docs/measuring-skills.md § Experimental.
  *
  * @experimental
  * @module vigiles/experimental
  */
 export {
   experimental_startServices,
+  experimental_withServices,
   type ServiceSpec,
   type ServiceReady,
   type ServiceReset,

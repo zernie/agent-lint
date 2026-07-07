@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 
 import {
   experimental_startServices,
+  experimental_withServices,
   type ContainerRuntime,
   type ServiceHandle,
   type ServiceSpec,
@@ -92,6 +93,34 @@ describe("experimental_startServices (orchestration)", () => {
     ).rejects.toThrow("boom");
     // the one that DID start must be cleaned up — no leaked container
     expect(stopped).toEqual(["ok"]);
+  });
+
+  it("withServices disposes the services even when fn throws", async () => {
+    let stops = 0;
+    const runtime: ContainerRuntime = {
+      name: "fake",
+      available: () => true,
+      start: () => Promise.resolve(fakeHandle(1)),
+      stop: () => {
+        stops++;
+        return Promise.resolve();
+      },
+    };
+    await expect(
+      experimental_withServices({ db: { image: "x" } }, runtime, () => {
+        throw new Error("fn blew up");
+      }),
+    ).rejects.toThrow("fn blew up");
+    expect(stops).toBe(1); // teardown ran despite the throw
+
+    // and it returns fn's value on success
+    const got = await experimental_withServices(
+      { db: { image: "x" } },
+      runtime,
+      (s) => Promise.resolve(s.endpoints.length),
+    );
+    expect(got).toBe(1);
+    expect(stops).toBe(2);
   });
 });
 
