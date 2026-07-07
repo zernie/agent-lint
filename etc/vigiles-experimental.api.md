@@ -33,6 +33,7 @@ export function makeDockerRuntime(deps?: {
     exec?: DockerExec;
     netProbe?: NetProbe;
     sleep?: (ms: number) => Promise<void>;
+    readyTimeoutMs?: number;
 }): ContainerRuntime;
 
 // @public
@@ -46,8 +47,8 @@ export interface ServiceHandle {
         readonly code: number;
     };
     readonly host: string;
-    readonly port: number;
-    readonly url: string;
+    readonly port?: number;
+    readonly url?: string;
 }
 
 // @public

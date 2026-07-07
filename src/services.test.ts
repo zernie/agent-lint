@@ -68,6 +68,27 @@ describe("experimental_startServices (orchestration)", () => {
     expect(stopped).toEqual(["db", "cache"]);
   });
 
+  it("a service that publishes no port contributes no endpoint", async () => {
+    const runtime: ContainerRuntime = {
+      name: "fake",
+      available: () => true,
+      // a portless service (e.g. a compute-only container): port is undefined
+      start: () =>
+        Promise.resolve({
+          host: "127.0.0.1",
+          exec: () => ({ stdout: "", stderr: "", code: 0 }),
+        }),
+      stop: () => Promise.resolve(),
+    };
+    const session = await experimental_startServices(
+      { worker: { image: "busybox" } },
+      runtime,
+    );
+    expect(session.handles.worker.port).toBeUndefined();
+    expect(session.endpoints).toEqual([]); // nothing reachable to list
+    await session.teardown();
+  });
+
   it("tears down already-started services when a later one fails", async () => {
     const stopped: string[] = [];
     const runtime: ContainerRuntime = {
@@ -173,7 +194,7 @@ describe("docker command builders (pure)", () => {
   it("parses the published host port from `docker port`", () => {
     expect(parseDockerPort("0.0.0.0:49153")).toBe(49153);
     expect(parseDockerPort("127.0.0.1:49153\n[::]:49153")).toBe(49153);
-    expect(parseDockerPort("")).toBe(0);
+    expect(parseDockerPort("")).toBeUndefined(); // "a port or nothing", not magic 0
   });
 });
 
@@ -375,6 +396,30 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
     });
     expect(h.port).toBe(1);
     expect(logChecks).toBe(2); // polled until the log matched
+  });
+
+  it("tcp readiness on a service with no published port throws", async () => {
+    const exec: DockerExec = (args) =>
+      args[0] === "run"
+        ? { stdout: "cid", stderr: "", code: 0 }
+        : { stdout: "", stderr: "", code: 0 };
+    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
+    // no `port` declared, but ready:{tcp} — an illegal combo, surfaced explicitly
+    await expect(
+      runtime.start("db", { image: "x", ready: { tcp: 5432 } }),
+    ).rejects.toThrow(/needs a published port/);
+  });
+
+  it("tcp readiness on a service with no published port throws", async () => {
+    const exec: DockerExec = (args) =>
+      args[0] === "run"
+        ? { stdout: "cid", stderr: "", code: 0 }
+        : { stdout: "", stderr: "", code: 0 };
+    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
+    // no `port` declared, but ready:{tcp} — an illegal combo, surfaced explicitly
+    await expect(
+      runtime.start("db", { image: "x", ready: { tcp: 5432 } }),
+    ).rejects.toThrow(/needs a published port/);
   });
 
   it("throws (and cleans up) when the service never becomes ready", async () => {
