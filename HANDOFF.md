@@ -24,23 +24,42 @@ Unlock `startup/`, read `startup/README.md` (ID→name index), then the newest d
 (the execution log: what shipped + the next steps). Read `s46` → `s47` → `s48` in order; do NOT
 re-run the research behind them.
 
-**The main deliverable lives in a SEPARATE repo** — `zernie/zernie.github.com`, **PR #86 (DRAFT,
-not deployed)**: a blog article. Its full state + the strategic *why* are in vault `s48`. To
-continue it you need that repo + the vault (the article file, its `.audience-test-results.md`
-ledger, and the screenshots are there). **Next steps for it are in s48** (apply the confirmation
-audience-test's next-tier fixes — IN PROGRESS this session — close its publish gate, syndicate).
+**The article deliverable lives in a SEPARATE repo** — `zernie/zernie.github.com`, **PR #86
+(DRAFT, not deployed)**: `src/entities/article/content/token-savings-wrong-number.md` (+ its
+`.audience-test-results.md` ledger). Strategic *why* in vault `s48`. Voice: FIRST-PERSON, use the
+repo's `writing-quality` (prose) + `audience-test` skills; short paragraphs, ≤~15 em-dashes.
 
-**Public vigiles code/docs largely unchanged.** The only in-repo changes here: the benchmark
-DATA — `bench/ecosystem/FINDINGS.md` (a fresh run appended) + `bench/ecosystem/results-archive/`
-(the canonical run behind the article, committed so it survives a reclaim). These are held data,
-not a public story; `research/roadmap.md` state still holds.
+**⚠️ IN-FLIGHT AUTONOMOUS TASK (user asleep, told me to finish + rewrite article autonomously,
+DRAFT only — user deploys):** An adversarial **fable** review caught a BLOCKING eval-delivery bug:
+the caveman skill was delivered as a bare `SKILL.md` in the run cwd, which **never registers as a
+skill** (only `CLAUDE.md`/`--plugin-dir` load) → the caveman arm measured an inert file. So the
+**old archived caveman numbers are INVALID** (`2026-07-06T23-54…` caveman rows; token-efficient
+rows there are VALID — CLAUDE.md loads). FIXED both:
+- **vigiles guard SHIPPED** (`feat(eval)`, commit 4655d85): `runEval`/`measureArms` warn on an
+  unregistered `SKILL.md` in an arm's `files` (`unregisteredSkillFiles`, high-precision, tested).
+- **benchmark delivery FIXED** (commit 8a5dca5): caveman now = real `--plugin-dir` install
+  (`bench/ecosystem/skills/caveman-plugin/`, faithful) + a forced-always-on `CLAUDE.md` steelman
+  (`caveman-forced`); both VERIFIED to activate (forced-on 9.5→3.9 articles/100w). Added
+  `bench/ecosystem/analyze.mjs` (Welch p-values via vigiles's `welchTTest` + output DOLLAR-share
+  ~21%) and `trigger-rate.mjs` (does it fire on neutral prompts?).
 
-### PR / merge state (this session)
+**NEXT STEPS (resume here):** (1) corrected re-run IN PROGRESS — bg task `bwynvdahs`, log
+`scratchpad/rerun-sonnet.log`, 3 skills (caveman/caveman-forced/token-efficient) × 7 tasks × 5
+trials sonnet; writes `bench/ecosystem/results/<stamp>_sonnet.json`. (2) then run `node
+bench/ecosystem/trigger-rate.mjs` (neutral) + `TRIGGER=1 …` (control). (3) `node
+bench/ecosystem/analyze.mjs <json>` for Welch + cost-share. (4) ARCHIVE the new json+log to
+`results-archive/`, update FINDINGS + archive README (mark 23-54 caveman rows superseded/invalid).
+(5) REWRITE the article to the corrected data — new frame: output≈20% of the $ bill (lead
+cost-share not token-share); installed-normally caveman never fires; forced-on the cut is real but
+variable & «65% never appears; token-efficient bill +12–13%. Add the honest "I caught my own
+delivery bug + added a guard" methodology footnote. Own fable's #4 (be-thorough prompts) + #5
+(metric counts code caveman exempts). (6) re-run the site `audience-test`. Full fable review saved
+mentally; key hits: delivery(fixed), cost-share, Welch, activation, denominator.
 
-- Vault PRs **#58, #59, #60** (all `chore: vault`) — MERGED into `main` (squash). The branch was
-  restarted off `main` after each; force-with-lease only over already-merged history (verified
-  tree-equal first). `main` is current.
-- **zernie.github.com PR #85** (visa de-framing) — MERGED. **PR #86** (the article) — OPEN, DRAFT.
+### PR / merge state
+
+- Vault PRs #58/#59/#60 — MERGED. **zernie.github.com PR #85** (visa de-framing) — MERGED.
+  **PR #86** (the article) — OPEN, DRAFT (do NOT deploy; user deploys).
 
 ## Don't re-read unless the task needs it
 
@@ -61,6 +80,14 @@ not a public story; `research/roadmap.md` state still holds.
   node bench/ecosystem/benchmark.mjs`. Do NOT `nohup … &` inside a `run_in_background:true` tool call
   (double-detach — the wrapper reports "done" while the real process orphans; use the tool's own
   backgrounding, or an `until ! ps -p <pid>` waiter).
+- **A SKILL.md is NOT a skill unless registered.** A bare `SKILL.md` in a run's cwd (an eval
+  arm's `files`) never loads — use `arm.pluginDir` (`--plugin-dir`, real install) or `skillsDir`.
+  `CLAUDE.md` DOES auto-load as project memory (that's why the token-efficient arm was fine, the
+  caveman one wasn't). vigiles now WARNS on this (`unregisteredSkillFiles`). Verify activation with
+  a style/`skillResolved` check, never assume a file was seen.
+- **Transient proxy TLS** — individual `claude -p` trials sometimes fail with "Self-signed
+  certificate detected / Unable to connect to API" (agent-proxy CA). It's flaky, not fatal; the
+  trial returns 0 output tokens. Re-run; don't read a single 0-token trial as a real result.
 - **zernie.github.com** is a separate Next.js repo (private repo, public site). Article content lives
   in `src/entities/article/content/*.md` (top-level only renders; gray-matter frontmatter). Its own
   skills under `.claude/skills/` (audience-test, writing-quality) are how you review a draft. **The
