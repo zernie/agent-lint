@@ -1,0 +1,5 @@
+{
+  "name": "caveman",
+  "version": "0.0.0",
+  "description": "Caveman Mode, vendored (JuliusBrussee/caveman@f06348c) and packaged as a real Claude Code plugin so --plugin-dir registers the skill. This is how a user actually installs it; the loose skills/caveman/SKILL.md sibling is the pinned source."
+}
