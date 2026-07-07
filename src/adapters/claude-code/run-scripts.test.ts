@@ -232,15 +232,21 @@ test("decideRunScripts: 0 or 1 discovered eval is bounded → runs, no gate", ()
 });
 
 test("decideRunScripts: bare eval over many, headless → REFUSE (the footgun)", () => {
-  assert.deepEqual(decideRunScripts(evalEnv({ matchedCount: 7, isTTY: false })), {
-    kind: "refuse",
-    count: 7,
-  });
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ matchedCount: 7, isTTY: false })),
+    {
+      kind: "refuse",
+      count: 7,
+    },
+  );
 });
 
 test("decideRunScripts: bare eval over many, at a TTY → CONFIRM", () => {
-  assert.deepEqual(decideRunScripts(evalEnv({ matchedCount: 7, isTTY: true })), {
-    kind: "confirm",
-    count: 7,
-  });
+  assert.deepEqual(
+    decideRunScripts(evalEnv({ matchedCount: 7, isTTY: true })),
+    {
+      kind: "confirm",
+      count: 7,
+    },
+  );
 });

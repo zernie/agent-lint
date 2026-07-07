@@ -4699,7 +4699,9 @@ async function handleRunScripts(
         "subscription (uses your Claude quota). Continue? [y/N] ",
     );
     if (!ok) {
-      console.log("Aborted. Name specific eval(s), or pass --all to run them all.");
+      console.log(
+        "Aborted. Name specific eval(s), or pass --all to run them all.",
+      );
       return;
     }
   }
