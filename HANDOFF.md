@@ -83,7 +83,8 @@ mentally; key hits: delivery(fixed), cost-share, Welch, activation, denominator.
 ### PR / merge state
 
 - Vault PRs #58/#59/#60 — MERGED. **zernie.github.com PR #85** (visa de-framing) — MERGED.
-  **PR #86** (the article) — OPEN, DRAFT (do NOT deploy; user deploys).
+  **PR #86** (the article) — **MERGED (squash) into `master` 2026-07-07 (commit 92713f5); Deploy
+  workflow ran → article SHIPPED/LIVE.** CI was green (validate + quality); user said "merge green."
 
 ## Don't re-read unless the task needs it
 
