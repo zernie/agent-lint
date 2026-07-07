@@ -106,7 +106,46 @@ A real-model run tells you **exactly what it spent**, so a paid run is never sil
 
 The numbers also live on the report — `report.usage` for a single run (`measure`, `measureTriggerRate`) or `report.arms[*].usage` per arm (`runEval`, `measureArms`) — and the `test-harness` skill relays them to you after any run it does on your behalf.
 
+## Experimental: real side-effect testing
+
+> ⚠️ **Experimental & unstable.** Import from `vigiles/experimental`. This surface is **not** covered by the [stability guarantee](../STABILITY.md) — it may change shape or be removed without a major-version bump. Don't build a production workflow on it yet.
+
+The tiers above cover a skill's **output** and its **side-effect safety** — did it call / not call a tool, write / not write a file — with no container. What they don't yet do turnkey is let a skill **actually perform a side effect against a real service and verify the resulting state**: apply a migration to a real Postgres, then check the row landed.
+
+That's the plan for this tier. vigiles **composes with a throwaway container** rather than reinventing a sandbox. A `ServiceSpec` declares a disposable service; a **fresh one per trial** keeps runs repeatable; the agent's network egress is **pinned to that service and nothing else**, so even a poisoned skill can't phone home.
+
+```typescript
+import { experimental_startServices } from "vigiles/experimental";
+import type { ServiceSpec, ContainerRuntime } from "vigiles/experimental";
+
+// Declare a disposable Postgres; a ContainerRuntime backend starts/stops it.
+const services: Record<string, ServiceSpec> = {
+  db: {
+    image: "postgres:16",
+    env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
+    port: 5432,
+    ready: { exec: "pg_isready -U postgres" }, // start() resolves only once ready
+    seed: "psql -U postgres -d app -f schema.sql",
+    reset: "per-trial", // default — a clean DB each trial
+  },
+};
+
+const session = await experimental_startServices(services, myDockerRuntime);
+try {
+  // pin egress to session.endpoints, run the skill, then verify REAL state:
+  const cols = session.handles.db.exec(
+    "psql -U postgres -d app -tAc \"select column_name from information_schema.columns where table_name='users'\"",
+  ).stdout;
+  // assert the migration actually landed…
+} finally {
+  await session.teardown();
+}
+```
+
+**What ships today vs later.** The types and the `ContainerRuntime` port ship now under `vigiles/experimental`; the Docker-backed runtime and the `runEval` / `measureArms` wiring (an additive `services` option + `ctx.service(name)`) are the next increment. It requires Docker (Linux-first), stays behind an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
+
 ## See also
 
+- [Migrating from promptfoo](migrating-from-promptfoo.md) — move your existing skill evals onto the subscription, check by check.
 - [Testing your harness](harness-testing.md) — the deterministic tiers (no model) under this one.
 - [Verifying instruction files](verifying-instruction-files.md) — the lint layer, the free pre-filter to measurement.

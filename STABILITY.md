@@ -48,6 +48,11 @@ source (excluded from the published API docs) so a later change burns nobody:
 - The whole-harness codegen (`generate harness`) and capability lattice.
 - Internal-only research/spike modules (`guards`, `hook-spec`, `evolve`) — not
   exported from any entry point.
+- **`vigiles/experimental`** — a quarantined subpath for draft surfaces, signalled
+  by the `experimental_` name prefix on runtime exports. Currently the R3
+  disposable-service tier (real side-effect testing: `experimental_startServices`,
+  `ServiceSpec`, `ContainerRuntime`, …). Import it only if you accept it may change
+  or vanish without a major bump.
 
 ## How the surface is enforced
 
