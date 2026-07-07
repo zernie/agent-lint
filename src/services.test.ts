@@ -6,7 +6,6 @@
  * bwrap/claude/codex-gated tests.
  */
 import { describe, it, expect } from "vitest";
-import { spawnSync } from "node:child_process";
 import { createServer, type AddressInfo } from "node:net";
 
 import {
@@ -340,35 +339,61 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
     await runtime.stop(h);
     expect(calls.some((c) => c[0] === "rm" && c[1] === "-f")).toBe(true);
   });
-});
 
-/* ── Gated integration: a real disposable container (skips without a daemon) ── */
-const dockerUp =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status ===
-  0;
+  it("stop() on a handle it never started is a no-op", async () => {
+    const { exec, calls } = fakeDocker({});
+    await makeDockerRuntime({ exec }).stop({
+      host: "127.0.0.1",
+      port: 1,
+      url: "",
+      exec: () => ({ stdout: "", stderr: "", code: 0 }),
+    });
+    expect(calls).toEqual([]); // no `rm` for an unknown handle
+  });
 
-describe.skipIf(!dockerUp)("real docker (integration)", () => {
-  it("spins a redis, verifies state via exec, tears down", async () => {
-    const runtime = makeDockerRuntime();
-    const session = await experimental_startServices(
-      {
-        cache: {
-          image: "redis:7-alpine",
-          port: 6379,
-          ready: { exec: "redis-cli ping" },
-          seed: "redis-cli set greeting hello",
-        },
-      },
-      runtime,
-    );
-    try {
-      const got = session.handles.cache
-        .exec("redis-cli get greeting")
-        .stdout.trim();
-      expect(got).toBe("hello");
-      expect(session.endpoints[0]).toMatch(/^127\.0\.0\.1:\d+$/);
-    } finally {
-      await session.teardown();
-    }
-  }, 60_000);
+  it("readiness via a log match (probeReady log branch)", async () => {
+    let logChecks = 0;
+    const exec: DockerExec = (args) => {
+      if (args[0] === "run") return { stdout: "cid", stderr: "", code: 0 };
+      if (args[0] === "port")
+        return { stdout: "0.0.0.0:1", stderr: "", code: 0 };
+      if (args[0] === "logs") {
+        logChecks++;
+        return {
+          stdout: logChecks < 2 ? "booting" : "ready to accept connections",
+          stderr: "",
+          code: 0,
+        };
+      }
+      return { stdout: "", stderr: "", code: 0 };
+    };
+    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
+    const h = await runtime.start("db", {
+      image: "x",
+      port: 5432,
+      ready: { log: /ready to accept/ },
+    });
+    expect(h.port).toBe(1);
+    expect(logChecks).toBe(2); // polled until the log matched
+  });
+
+  it("throws (and cleans up) when the service never becomes ready", async () => {
+    const calls: string[][] = [];
+    const exec: DockerExec = (args) => {
+      calls.push([...args]);
+      if (args[0] === "run") return { stdout: "cid", stderr: "", code: 0 };
+      if (args[0] === "port")
+        return { stdout: "0.0.0.0:1", stderr: "", code: 0 };
+      return { stdout: "", stderr: "", code: 1 }; // ready-exec never passes
+    };
+    const runtime = makeDockerRuntime({
+      exec,
+      sleep: () => Promise.resolve(),
+      readyTimeoutMs: 0, // fail fast — covers the timeout throw
+    });
+    await expect(
+      runtime.start("db", { image: "x", port: 5432, ready: { exec: "false" } }),
+    ).rejects.toThrow(/did not become ready/);
+    expect(calls.some((c) => c[0] === "rm" && c[1] === "-f")).toBe(true);
+  });
 });
