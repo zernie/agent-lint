@@ -32,9 +32,11 @@ const report = await experimental_withServices(
       image: "postgres:16-alpine",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      // Postgres opens TCP only after init creates the DB — race-free readiness
-      // (pg_isready reports ready on the socket-only init server, too early).
-      ready: { tcp: 5432 },
+      // `-h 127.0.0.1` forces pg_isready over TCP inside the container. Postgres's
+      // temp init server is socket-only, so it answers on TCP only once the REAL
+      // post-init server is up (and `app` exists) — race-free. (A `{ tcp }` probe
+      // would false-positive: docker-proxy accepts the host port before Postgres.)
+      ready: { exec: "pg_isready -U postgres -h 127.0.0.1 -d app" },
       seed: "psql -U postgres -d app -c 'create table users (id int)'",
     },
   },
@@ -49,7 +51,11 @@ const report = await experimental_withServices(
       task:
         `Apply migration.sql to the Postgres at ` +
         `postgresql://postgres:test@${svc.endpoints[0]}/app . Then stop.`,
-      arms: { baseline: {}, skill: { pluginDir: "./skills/migrator" } },
+      // SINGLE arm (skill only): the container lives for the whole run, so a
+      // baseline arm would share this DB and leave `age` behind, crediting the
+      // skill arm for free. A clean baseline/skill A/B needs per-arm DB reset
+      // (a later increment); until then, measure the skill directly.
+      arms: { skill: { pluginDir: "./skills/migrator" } },
       ephemeralEnv: true, // scrub real credentials from the run (recommended)
       measure: () => {
         // verify the REAL resulting DB state — the whole point of R3
@@ -62,9 +68,8 @@ const report = await experimental_withServices(
           .map((s) => s.trim());
         return { migrated: cols.includes("age") ? 1 : 0 };
       },
-      // trials: 1 — the container lives for the whole run (per-RUN lifecycle), so a
-      // persistent side effect (the added column) would make later trials pass for
-      // free. Keep it 1 until per-trial reset exists. See docs § Experimental.
+      // trials: 1 — per-RUN container lifecycle, so a persistent side effect would
+      // make later trials pass for free. See docs § Experimental.
       trials: 1,
       model: "sonnet",
     }),

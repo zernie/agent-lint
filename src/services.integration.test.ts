@@ -30,10 +30,12 @@ describe.skipIf(!dockerUp)("R3 real Docker (integration)", () => {
           image: "postgres:16-alpine",
           env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
           port: 5432,
-          // TCP-not-pg_isready: Postgres's temporary init server is socket-only
-          // (listen_addresses=''), so it opens TCP 5432 only AFTER init creates
-          // the `app` DB and the real server starts — the race-free readiness gate.
-          ready: { tcp: 5432 },
+          // `-h 127.0.0.1` forces pg_isready over TCP INSIDE the container. Postgres's
+          // temporary init server is socket-only (listen_addresses=''), so it answers
+          // on TCP only once the REAL post-init server starts — by which point `app`
+          // exists. (A `{ tcp }` probe can't be used here: docker-proxy accepts the
+          // published host port before Postgres is truly up.)
+          ready: { exec: "pg_isready -U postgres -h 127.0.0.1 -d app" },
           seed: "psql -U postgres -d app -c 'create table users (id int)'",
         },
       },

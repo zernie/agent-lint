@@ -75,7 +75,6 @@ export interface ServiceSpec {
     readonly env?: Readonly<Record<string, string>>;
     readonly image: string;
     readonly port?: number;
-    readonly ports?: readonly number[];
     readonly ready?: ServiceReady;
     readonly reset?: ServiceReset;
     readonly seed?: string;

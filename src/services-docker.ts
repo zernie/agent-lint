@@ -65,7 +65,7 @@ export function dockerRunArgs(
   for (const [k, v] of Object.entries(spec.env ?? {})) {
     args.push("-e", `${k}=${v}`);
   }
-  for (const port of primaryPorts(spec)) {
+  for (const port of publishedPorts(spec)) {
     // Publish to an ephemeral loopback host port; `docker port` discovers it.
     args.push("-p", `127.0.0.1::${port}`);
   }
@@ -81,13 +81,9 @@ export function dockerExecArgs(
   return ["exec", containerName, "sh", "-c", command];
 }
 
-/** The full ordered port list (primary first), de-duplicated. Pure. */
-export function primaryPorts(spec: ServiceSpec): number[] {
-  const all = [
-    ...(spec.port === undefined ? [] : [spec.port]),
-    ...(spec.ports ?? []),
-  ];
-  return [...new Set(all)];
+/** The port to publish — a 0-or-1 element list (v0 is single-port). Pure. */
+export function publishedPorts(spec: ServiceSpec): number[] {
+  return spec.port === undefined ? [] : [spec.port];
 }
 
 /**
@@ -179,8 +175,8 @@ function probeReady(ctx: ReadyCtx, probe: ReadyProbe): Promise<boolean> {
       return Promise.resolve(probe.pattern.test(r.stdout + r.stderr));
     }
     case "tcp": {
-      // Resolve the host mapping of the DECLARED container port (not just the
-      // primary), so `ready: { tcp }` on a secondary port probes the right socket.
+      // Resolve the DECLARED tcp port's host mapping (it must be the published
+      // port) — the value isn't discarded, so a wrong port surfaces as an error.
       const hostPort = parseDockerPort(
         ctx.exec(["port", ctx.containerName, String(probe.containerPort)])
           .stdout,
@@ -260,7 +256,7 @@ export function makeDockerRuntime(
           `docker run failed for service "${name}" (${spec.image}): ${run.stderr.trim()}`,
         );
       }
-      const primary = primaryPorts(spec)[0];
+      const primary = publishedPorts(spec)[0];
       const hostPort =
         primary === undefined
           ? undefined
