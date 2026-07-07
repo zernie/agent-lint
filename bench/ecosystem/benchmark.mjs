@@ -3,11 +3,13 @@
  * neutral coding corpus and report the metric triple (bill / target / blast
  * radius), leading with the debunks (claimed ≫ measured).
  *
- * This is the generalized loop the P0 caveman eval proved on ONE skill
- * (bench/evals/caveman-claim.eval.mjs): same A/B-over-one-real-task unit, same
- * whole-session token accounting, same deterministic correctness gate — now over
- * a SET of skills (bench/ecosystem/skills.mjs) on the SAME corpus
- * (bench/corpus/coding-tasks.mjs), so the rows are directly comparable.
+ * This is the generalized loop the caveman investigation validated on ONE skill
+ * (the corrected canonical run in bench/ecosystem/FINDINGS.md): same
+ * A/B-over-one-real-task unit, same whole-session token accounting, same
+ * deterministic correctness gate — now over a SET of skills
+ * (bench/ecosystem/skills.mjs) on the SAME corpus (bench/corpus/coding-tasks.mjs),
+ * so the rows are directly comparable. Skills install the faithful way
+ * (--plugin-dir + activation hook), so the treatment actually loads.
  *
  *   PILOT (cheap, do this first — minds the sub bill):
  *     VIGILES_SKILLS=caveman VIGILES_TASKS=2 VIGILES_TRIALS=2 \
