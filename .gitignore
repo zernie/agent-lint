@@ -27,3 +27,8 @@ api-reference/
 vigiles-report.html
 vigiles-report.json
 report/dist
+
+# transient test scratch dirs (generate-harness / type-check / vigiles test)
+.tmp-genh-*/
+.tmp-compile-genh-*/
+.vigiles-test-types-tmp/
