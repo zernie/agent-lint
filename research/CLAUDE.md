@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:b0ece8bc55fd44b9 compiled from research/CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:f86550a9ab437fc2 compiled from research/CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -64,7 +64,6 @@ The `research/` corpus is the INTERNAL record (design rationale, competitive ana
 - `research/dynamic-workflows-and-scope.md` — [active] vigiles skills (authored, reusable) distinct from Anthropic's ephemeral generated dynamic workflows
 - `research/instruction-file-linter-landscape.md` — [active] 2025-26 CLAUDE.md/AGENTS.md linters are now a crowded "validate" category, not an empty niche
 - `research/landscape-mid-2026.md` — [active] Deep dives on ContextCov, Harness Engineering, AgentProof, Bedrock+Cedar, Compiled AI + next steps
-- `research/launch-article-draft.md` — [idea] Draft external article: hyped Claude skills cost tokens without proven benefit, built on pilot data
 - `research/oss-lane-sweep-2026-06.md` — [active] GitHub/npm/PyPI sweep: vigiles's cross-ref/harness-testing/trigger-eval lanes are unoccupied
 - `research/positioning-funnel.md` — [active] Moat is the category + distribution, not individual checks; axes as funnel stages, leaderboard wedge
 - `research/reference-verification-limits.md` — [active] Synthesis of what reference verification can/can't do deterministically: proxy-vs-judgment gap, prose undecidability, delegate rule
