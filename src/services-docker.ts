@@ -102,6 +102,11 @@ export function parseDockerPort(output: string): number {
   return 0;
 }
 
+/* v8 ignore start -- the real-daemon IO seams: they spawn the real `docker` CLI /
+   open a real socket / sleep, and are exercised by the gated integration test
+   (skipped without a daemon) + the real-socket unit test — not the coverage gate,
+   which the pure builders + the fake-injected orchestration below carry. Same
+   pattern as sandbox.ts's `runSandboxed`. */
 /** Default real docker CLI seam (synchronous). */
 const realDockerExec: DockerExec = (args) => {
   const r = spawnSync("docker", args as string[], { encoding: "utf-8" });
@@ -131,6 +136,7 @@ const realNetProbe: NetProbe = (port) =>
 
 const delay = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
+/* v8 ignore stop */
 
 /** The IO seams + target a readiness poll needs, bundled to stay under max-params. */
 interface ReadyCtx {
@@ -191,11 +197,14 @@ export function makeDockerRuntime(
     exec?: DockerExec;
     netProbe?: NetProbe;
     sleep?: (ms: number) => Promise<void>;
+    /** Readiness deadline; injectable so a test can cover the timeout path. */
+    readyTimeoutMs?: number;
   } = {},
 ): ContainerRuntime {
   const exec = deps.exec ?? realDockerExec;
   const netProbe = deps.netProbe ?? realNetProbe;
   const sleep = deps.sleep ?? delay;
+  const readyTimeoutMs = deps.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
 
   return {
     name: "docker",
@@ -235,7 +244,7 @@ export function makeDockerRuntime(
         await waitReady(
           { exec, netProbe, sleep, containerName, hostPort },
           spec.ready,
-          DEFAULT_READY_TIMEOUT_MS,
+          readyTimeoutMs,
         );
         if (spec.seed) {
           const s = exec(dockerExecArgs(containerName, spec.seed));
