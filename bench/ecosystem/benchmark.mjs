@@ -87,6 +87,29 @@ console.log(
 let runningCost = 0;
 const leaderboard = [];
 
+// Restart-resilient output: write the JSON after EVERY skill, not just at the end,
+// so a container restart mid-run leaves a valid partial file (completed skills) to
+// analyze instead of nothing. Same path the whole run, overwritten as it grows.
+const outDir = fileURLToPath(new URL("./results/", import.meta.url));
+mkdirSync(outDir, { recursive: true });
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const outFile = `${outDir}${stamp}_${model}.json`;
+const dumpJson = () =>
+  writeFileSync(
+    outFile,
+    JSON.stringify(
+      {
+        model,
+        trials,
+        tasks: TASKS.map((t) => t.name),
+        runningCost,
+        leaderboard,
+      },
+      null,
+      2,
+    ),
+  );
+
 for (const skill of SKILLS) {
   console.log(
     `\n### ${skill.title}  [${skill.category}]  — ${skill.source}` +
@@ -215,6 +238,7 @@ for (const skill of SKILLS) {
     anyRegress,
     tasks: taskRows,
   });
+  dumpJson(); // persist after each skill (restart-resilient)
 
   console.log(
     `    -> mean output cut ${meanOutCut.toFixed(0)}%  ·  ` +
@@ -273,25 +297,8 @@ if (quality.length) {
 }
 console.log(`\nTotal measured bill: $${runningCost.toFixed(4)}`);
 
-// ---- Hold the data: dump JSON for later analysis / the (gated) writeup ----
-const outDir = fileURLToPath(new URL("./results/", import.meta.url));
-mkdirSync(outDir, { recursive: true });
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const outFile = `${outDir}${stamp}_${model}.json`;
-writeFileSync(
-  outFile,
-  JSON.stringify(
-    {
-      model,
-      trials,
-      tasks: TASKS.map((t) => t.name),
-      runningCost,
-      leaderboard,
-    },
-    null,
-    2,
-  ),
-);
+// ---- Hold the data: final dump (already written incrementally per skill above) ----
+dumpJson();
 console.log(`\nData held at: ${outFile.replace(process.cwd() + "/", "")}`);
 console.log(
   "(v0 engine — no report published from here; the writeup is a separate gated step.)",
