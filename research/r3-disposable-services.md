@@ -117,7 +117,7 @@ const report = await measureArms({
       image: "postgres:16",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      ready: { exec: "pg_isready -U postgres" },
+      ready: { tcp: 5432 }, // TCP is race-free for Postgres (up only post-init)
       seed: "psql -U postgres -d app -f references/schema.sql",
       reset: "per-trial",
     },

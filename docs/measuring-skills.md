@@ -147,7 +147,7 @@ await experimental_withServices(
       image: "postgres:16",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      ready: { exec: "pg_isready -U postgres" },
+      ready: { tcp: 5432 }, // Postgres opens TCP only after init creates the DB
       seed: "psql -U postgres -d app -f schema.sql",
     },
   },
@@ -156,7 +156,8 @@ await experimental_withServices(
     // runEval — it takes a measure(ctx) callback + supports ephemeralEnv
     return runEval({
       arms: { baseline: {}, skill: { pluginDir: "./skills/migrator" } },
-      task: `Apply migration.sql against the DB at ${svc.endpoints[0]}. Stop.`,
+      // full connection string incl. password — ephemeralEnv leaves no PGPASSWORD
+      task: `Apply migration.sql to postgresql://postgres:test@${svc.endpoints[0]}/app . Stop.`,
       ephemeralEnv: true, // ⬅ recommended — scrub real creds from the run
       measure: () => ({
         // verify the REAL resulting DB state — R3's whole point
@@ -168,7 +169,9 @@ await experimental_withServices(
           ? 1
           : 0,
       }),
-      trials: 3,
+      // trials: 1 — per-RUN container lifecycle; a persistent side effect would
+      // make later trials pass for free until per-trial reset exists.
+      trials: 1,
       model: "sonnet",
     });
   },

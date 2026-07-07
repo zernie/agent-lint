@@ -35,7 +35,8 @@ const session = await experimental_startServices(
       image: "postgres:16-alpine",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      ready: { exec: "pg_isready -U postgres" },
+      ready: { tcp: 5432 }, // Postgres opens TCP only after init creates the DB
+
       seed: "psql -U postgres -d app -c 'create table users (id int)'",
     },
   },
