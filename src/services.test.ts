@@ -398,28 +398,42 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
     expect(logChecks).toBe(2); // polled until the log matched
   });
 
-  it("tcp readiness on a service with no published port throws", async () => {
+  it("tcp readiness on a service that doesn't publish the port throws", async () => {
     const exec: DockerExec = (args) =>
       args[0] === "run"
         ? { stdout: "cid", stderr: "", code: 0 }
-        : { stdout: "", stderr: "", code: 0 };
+        : { stdout: "", stderr: "", code: 0 }; // `docker port` → empty (unpublished)
     const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
-    // no `port` declared, but ready:{tcp} — an illegal combo, surfaced explicitly
     await expect(
       runtime.start("db", { image: "x", ready: { tcp: 5432 } }),
-    ).rejects.toThrow(/needs a published port/);
+    ).rejects.toThrow(/container port 5432 is not published/);
   });
 
-  it("tcp readiness on a service with no published port throws", async () => {
-    const exec: DockerExec = (args) =>
-      args[0] === "run"
-        ? { stdout: "cid", stderr: "", code: 0 }
-        : { stdout: "", stderr: "", code: 0 };
-    const runtime = makeDockerRuntime({ exec, sleep: () => Promise.resolve() });
-    // no `port` declared, but ready:{tcp} — an illegal combo, surfaced explicitly
-    await expect(
-      runtime.start("db", { image: "x", ready: { tcp: 5432 } }),
-    ).rejects.toThrow(/needs a published port/);
+  it("tcp readiness honors the DECLARED port (not just the primary)", async () => {
+    // primary 5432 + secondary 8080; readiness declared on 8080 → the prober must
+    // ask `docker port <c> 8080`, not 5432 (the Codex-flagged bug).
+    const portQueries: string[] = [];
+    const exec: DockerExec = (args) => {
+      if (args[0] === "run") return { stdout: "cid", stderr: "", code: 0 };
+      if (args[0] === "port") {
+        portQueries.push(args[2]); // the container port asked about
+        return { stdout: `0.0.0.0:1${args[2]}`, stderr: "", code: 0 };
+      }
+      return { stdout: "", stderr: "", code: 0 };
+    };
+    const runtime = makeDockerRuntime({
+      exec,
+      netProbe: () => Promise.resolve(true),
+      sleep: () => Promise.resolve(),
+    });
+    await runtime.start("svc", {
+      image: "x",
+      port: 5432,
+      ports: [8080],
+      ready: { tcp: 8080 },
+    });
+    // readiness asked about 8080 (the declared port), proving it's not discarded
+    expect(portQueries).toContain("8080");
   });
 
   it("throws (and cleans up) when the service never becomes ready", async () => {

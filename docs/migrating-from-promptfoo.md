@@ -80,21 +80,17 @@ tests:
 ```javascript
 import { measure, output, judged, cost, assertRates } from "vigiles/testing";
 
-const report = await measure(
-  {
-    task: "Summarize in.txt in one sentence. Write it to out.txt, then stop.",
-    fixture: { "in.txt": "…" },
-    model: "sonnet",
-  },
-  {
-    trials: 5,
-    checks: [
-      output(/invoice/i), // icontains
-      judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
-      cost({ maxUsd: 0.01 }), // cost
-    ],
-  },
-);
+const report = await measure({
+  task: "Summarize in.txt in one sentence. Write it to out.txt, then stop.",
+  fixture: { "in.txt": "…" },
+  model: "sonnet",
+  trials: 5,
+  checks: [
+    output(/invoice/i), // icontains
+    judged("A single, accurate one-sentence summary", { min: 0.7 }), // llm-rubric
+    cost({ maxUsd: 0.01 }), // cost
+  ],
+});
 assertRates(report, { min: 0.8 }); // each check passes ≥80% of trials
 ```
 
