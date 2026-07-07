@@ -2,8 +2,8 @@
  * HEADROOM benchmark — does a non-compression "make-it-better" skill actually
  * LIFT correctness on tasks the baseline gets WRONG?
  *
- * The compression cluster (`ecosystem-pilot.eval.mjs`) measures token deltas on
- * the saturated-correctness corpus. This measures the OTHER, higher-value claim:
+ * The ecosystem benchmark (`bench/ecosystem/benchmark.mjs`) measures token deltas
+ * on the saturated-correctness corpus. This measures the OTHER, higher-value claim:
  * "this skill makes the agent smarter / catch more bugs." That's only measurable
  * where the baseline FAILS — the headroom corpus (`headroom-tasks.mjs`). A/B
  * (skill ON vs OFF) per task; the metric is the correctness PASS RATE and the

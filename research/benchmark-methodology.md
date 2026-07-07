@@ -10,8 +10,8 @@ topic: benchmark
 > Status: v0 (2026-06-20). The README has the pitch (vigiles is the empirical
 > authority on what makes agentic coding work); this is the **method** behind the
 > measurement — the contestable part a benchmark lives or dies on. Grounded in the
-> first worked instance, the P0 caveman measurement
-> (`bench/evals/caveman-claim.eval.mjs`). Feeds the two P1 measurement products:
+> first worked instance, the corrected caveman measurement
+> (`bench/ecosystem/FINDINGS.md`). Feeds the two P1 measurement products:
 > the **ecosystem benchmark** (rank hyped skills) and **`vigiles optimize`**
 > (per-repo recommendations). See [`roadmap.md`](roadmap.md) for priority.
 
@@ -100,8 +100,9 @@ cheap v0 sweep; sonnet/opus — a skill's target models — for the rigorous pas
 
 ## See also
 
-- [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs) —
-  the first worked instance (the P0 caveman measurement).
+- [`bench/ecosystem/FINDINGS.md`](../bench/ecosystem/FINDINGS.md) —
+  the corrected caveman measurement (the first worked instance; faithful
+  `--plugin-dir` delivery).
 - [`bench/ecosystem/`](../bench/ecosystem/) — the A1 ecosystem-benchmark v0: the
   generalized loop (`benchmark.mjs`) over a real, SHA-pinned skill manifest
   (`skills.mjs`, provenance in `SOURCES.md`), reusing this exact method over a SET

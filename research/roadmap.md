@@ -136,15 +136,16 @@ topic: roadmap
 
 **P0 — validate the thesis before building (cheapest, do first):**
 
-- [x] **Measure one hyped skill vs its claim — DONE (2026-06-20), thesis VALIDATED.**
-      caveman over 5 real coding tasks (real haiku, 3 trials, on the subscription,
-      [`bench/evals/caveman-claim.eval.mjs`](../bench/evals/caveman-claim.eval.mjs)):
-      claims ~65% output cut, measured **−5% output / −4% cost**, output only
-      **~1.1% of session tokens**, 0 correctness regressions. "Measured ≪ claimed",
-      stark. **SONNET follow-up DONE (2026-06-20, caveman's TARGET model, pilot
-      2×2): the debunk STRENGTHENS — −23% output / −20% cost (the bill went UP),
-      0 regressions.** Rules out the "haiku underuses the style" caveat. Widen to
-      5×3 for tighter CIs; direction is clear. → `benchmark-methodology.md`
+- [x] **Measure one hyped skill vs its claim — DONE, thesis VALIDATED (corrected
+      2026-07-07).** caveman over 7 real coding tasks (sonnet, 5 trials, on the
+      subscription), faithful `--plugin-dir` install so the skill actually loads —
+      the canonical run in [`bench/ecosystem/FINDINGS.md`](../bench/ecosystem/FINDINGS.md).
+      Claims ~65% output cut; **measured ~6% mean output cut (2 task-level cuts
+      significant, both clear Bonferroni), pooled bill flat (−1%), and output is
+      ~20% of the _dollar_ bill** — so even a real cut barely moves what you pay.
+      "Measured ≪ claimed" holds on the number that matters (the bill), just not the
+      way the earlier bare-`SKILL.md` pilot reported it (that delivery never loaded
+      the skill — see `FINDINGS.md`'s correction note). → `benchmark-methodology.md`
 
 **P1 — measurement (the identity):**
 
