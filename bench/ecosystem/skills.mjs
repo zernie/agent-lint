@@ -33,10 +33,19 @@ const readSkill = (id) =>
   readFileSync(here(`./skills/${id}/SKILL.md`), "utf-8");
 // Some injectable skills ship as a CLAUDE.md (project-instructions) rather than a
 // SKILL.md — read the vendored file by name so the arm injects it the way a user
-// actually installs it (caveman = SKILL.md; token-efficient = CLAUDE.md).
+// actually installs it (token-efficient = CLAUDE.md, auto-loaded as project memory).
 const readSkillFile = (id, file) =>
   readFileSync(here(`./skills/${id}/${file}`), "utf-8");
 const vendor = (slice) => here(`../../test/dogfood/${slice}`);
+// Strip a SKILL.md's YAML frontmatter, leaving the instruction body — used to
+// deliver the caveman STYLE as forced-always-on project memory (a CLAUDE.md that
+// auto-loads every turn). This is the FIX for the delivery bug the first run hit:
+// a bare SKILL.md dropped in cwd via `files` never REGISTERS as a skill (vigiles
+// now warns on it — see unregisteredSkillFiles), so the real skill goes through
+// `--plugin-dir` (arm.pluginDir, faithful install) and the forced-on steelman
+// goes through project memory (CLAUDE.md). See FINDINGS.md.
+const stripFrontmatter = (md) =>
+  md.replace(/^﻿?\s*---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
 
 /**
  * @typedef {Object} Claim
@@ -59,8 +68,14 @@ const vendor = (slice) => here(`../../test/dogfood/${slice}`);
 /** @type {BenchSkill[]} */
 export const BENCH_SKILLS = [
   {
+    // FAITHFUL INSTALL: caveman registered the real way, via `--plugin-dir`
+    // (arm.pluginDir → skills/caveman-plugin/, a proper .claude-plugin around the
+    // pinned SKILL.md). This is what a user actually gets: the skill's description
+    // is in context and it activates only when its triggers fire ("caveman mode",
+    // "be brief", "less tokens") — which neutral coding prompts never say. So this
+    // arm measures the IN-THE-WILD reality (likely ~0 activation on normal work).
     id: "caveman",
-    title: "Caveman Mode",
+    title: "Caveman (installed)",
     source: "JuliusBrussee/caveman@f06348c",
     stars: 84189,
     category: "compression",
@@ -73,9 +88,31 @@ export const BENCH_SKILLS = [
       pct: 65,
       text: 'README headline "65%" token cut by "talking like caveman" (telegraphic OUTPUT prose), self-measured on 10 one-shot prompts (range 22–87%); the SKILL.md description claims ~75%.',
     },
-    arm: { files: { "SKILL.md": readSkill("caveman") } },
+    arm: { pluginDir: here("./skills/caveman-plugin") },
     provenance:
-      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20). Stars ~84,189 (verified 2026-07-06). The README headline is 65%; the skill's own description says ~75% — we benchmark against the conservative 65%.",
+      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20), packaged as a proper Claude Code plugin (skills/caveman-plugin/) so `--plugin-dir` REGISTERS the skill (the earlier run's bare-SKILL.md-in-cwd delivery never loaded — vigiles now warns on it). Stars ~84,189 (verified 2026-07-06). README headline 65%; SKILL.md description ~75%; we benchmark against 65%.",
+  },
+  {
+    // FORCED-ON STEELMAN: the caveman instruction body injected as project memory
+    // (CLAUDE.md auto-loads every turn), so the telegraphic style is GUARANTEED
+    // active regardless of triggers. The most generous possible test of the
+    // compression claim — it removes the "did it activate?" confound and asks: even
+    // when caveman is ALWAYS on, does output (and the bill) actually drop? A real
+    // install (see `caveman`) only fires on trigger phrases, so real-world savings
+    // are <= whatever this arm shows.
+    id: "caveman-forced",
+    title: "Caveman (forced on)",
+    source: "JuliusBrussee/caveman@f06348c",
+    stars: 84189,
+    category: "compression",
+    claim: {
+      metric: "outputTokens",
+      pct: 65,
+      text: 'the same README "65%" claim, tested at its BEST: the caveman style forced always-on via project memory (CLAUDE.md), no trigger required.',
+    },
+    arm: { files: { "CLAUDE.md": stripFrontmatter(readSkill("caveman")) } },
+    provenance:
+      "The pinned caveman SKILL.md body (frontmatter stripped) delivered as CLAUDE.md project memory — guaranteed in-context every turn. Steelman delivery: tests pure compression with activation removed as a variable.",
   },
   {
     id: "token-efficient",
