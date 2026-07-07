@@ -1,0 +1,101 @@
+
+=== vigiles ecosystem benchmark v0 (model: sonnet, 2 skill(s) × 7 task(s) × 5 trial(s)) ===
+Metric triple: BILL (cost$) · TARGET (output tokens) · BLAST RADIUS (correctness).
+
+
+### Caveman  [compression]  — JuliusBrussee/caveman@f06348c  (84,189★)
+    claim: README headline "65%" output-token cut by "talking like caveman" (telegraphic prose), self-measured on 10 one-shot prompts (range 22–87%); on Claude Code it is auto-on from message one via a SessionStart hook.
+    task            out_base  out_skl  out_cut%   $_base   $_skl  cost_cut%  out%sess  correct(b/s)
+  Spent: 1,129,021 tokens (68 in · 4.6k out · 1120.2k cache) · ~$0.43 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+    slugify              361      555     -54%   0.0324  0.0539      -66%      0.4%   1.0/1.0
+                    out ±se  base 149 / skill 52   ·   $ ±se  base 0.0134 / skill 0.0031   (n=5)
+  Spent: 1,316,667 tokens (80 in · 5.7k out · 1307.0k cache) · ~$0.51 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 2,445,688 tokens · ~$0.94 API-equivalent
+    debounce             669      479      28%   0.0534  0.0476       11%      0.5%   1.0/1.0
+                    out ±se  base 55 / skill 124   ·   $ ±se  base 0.0028 / skill 0.0122   (n=5)
+  Spent: 1,580,752 tokens (96 in · 6.0k out · 1569.4k cache) · ~$0.60 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 4,026,440 tokens · ~$1.53 API-equivalent
+    bugfix-offbyone      710      491      31%   0.0646  0.0545       16%      0.4%   1.0/1.0
+                    out ±se  base 39 / skill 23   ·   $ ±se  base 0.0029 / skill 0.0026   (n=5)
+  Spent: 1,924,866 tokens (116 in · 8.2k out · 1906.2k cache) · ~$0.76 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 5,951,306 tokens · ~$2.29 API-equivalent
+    bigO                 897      734      18%   0.0745  0.0776       -4%      0.5%   1.0/1.0
+                    out ±se  base 106 / skill 88   ·   $ ±se  base 0.0071 / skill 0.0064   (n=5)
+  Spent: 1,588,441 tokens (96 in · 10.0k out · 1573.1k cache) · ~$0.66 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 7,539,747 tokens · ~$2.95 API-equivalent
+    regex-email         1159      833      28%   0.0651  0.0662       -2%      0.8%   1.0/1.0
+                    out ±se  base 64 / skill 17   ·   $ ±se  base 0.0039 / skill 0.0037   (n=5)
+  Spent: 2,578,811 tokens (148 in · 24.2k out · 2498.4k cache) · ~$1.45 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 10,118,558 tokens · ~$4.40 API-equivalent
+    review-doc          2526     2317       8%   0.1519  0.1388        9%      1.0%   1.0/1.0
+                    out ±se  base 734 / skill 338   ·   $ ±se  base 0.0177 / skill 0.0138   (n=5)
+  Spent: 1,635,823 tokens (92 in · 12.5k out · 1573.5k cache) · ~$0.96 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 11,754,381 tokens · ~$5.37 API-equivalent
+    refactor-suite      1130     1366     -21%   0.0977  0.0948        3%      0.7%   1.0/1.0
+                    out ±se  base 96 / skill 481   ·   $ ±se  base 0.0079 / skill 0.0167   (n=5)
+    -> mean output cut 6%  ·  mean cost cut -5%  ·  output share 0.6%  ·  correctness regression: no
+    -> per-task output cut spread -54%..31% (helped 5/7, hurt 2/7 — MIXED direction)
+    -> CLAIM 65% vs MEASURED 6% on the target => overclaim gap 59 points
+    (running bill so far: $5.3650)
+
+### Token-Efficient CLAUDE.md  [compression]  — drona23/claude-token-efficient@0d30a6d  (5,668★)
+    claim: README headline "63%" reduction (a 465→170 WORD count over 4 prompts); the repo's own token benchmark measures only ~4% haiku / ~12% sonnet / ~7% opus output-token reduction.
+    task            out_base  out_skl  out_cut%   $_base   $_skl  cost_cut%  out%sess  correct(b/s)
+  Spent: 1,349,907 tokens (84 in · 6.0k out · 1338.5k cache) · ~$0.53 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 13,104,288 tokens · ~$5.90 API-equivalent
+    slugify              609      595       2%   0.0513  0.0548       -7%      0.5%   1.0/1.0
+                    out ±se  base 28 / skill 38   ·   $ ±se  base 0.0004 / skill 0.0035   (n=5)
+  Spent: 1,446,865 tokens (90 in · 7.5k out · 1434.2k cache) · ~$0.58 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 14,551,153 tokens · ~$6.48 API-equivalent
+    debounce             775      721       7%   0.0621  0.0538       13%      0.5%   1.0/1.0
+                    out ±se  base 21 / skill 75   ·   $ ±se  base 0.0020 / skill 0.0028   (n=5)
+  Spent: 1,124,893 tokens (70 in · 4.8k out · 1115.8k cache) · ~$0.44 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 15,676,046 tokens · ~$6.91 API-equivalent
+    bugfix-offbyone      497      467       6%   0.0449  0.0426        5%      0.4%   1.0/1.0
+                    out ±se  base 125 / skill 118   ·   $ ±se  base 0.0115 / skill 0.0109   (n=5)
+  Spent: 1,776,532 tokens (110 in · 8.1k out · 1758.9k cache) · ~$0.71 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 17,452,578 tokens · ~$7.63 API-equivalent
+    bigO                 790      838      -6%   0.0693  0.0733       -6%      0.5%   1.0/1.0
+                    out ±se  base 71 / skill 153   ·   $ ±se  base 0.0025 / skill 0.0081   (n=5)
+  Spent: 1,191,537 tokens (74 in · 7.7k out · 1179.5k cache) · ~$0.50 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 18,644,115 tokens · ~$8.13 API-equivalent
+    regex-email          471     1071    -127%   0.0402  0.0598      -49%      0.5%   1.0/1.0
+                    out ±se  base 198 / skill 112   ·   $ ±se  base 0.0166 / skill 0.0051   (n=5)
+  Spent: 2,285,632 tokens (134 in · 24.0k out · 2205.2k cache) · ~$1.37 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 20,929,747 tokens · ~$9.49 API-equivalent
+    review-doc          1895     2911     -54%   0.1238  0.1498      -21%      0.9%   1.0/1.0
+                    out ±se  base 724 / skill 1084   ·   $ ±se  base 0.0215 / skill 0.0294   (n=5)
+  Spent: 1,429,485 tokens (82 in · 13.0k out · 1365.4k cache) · ~$0.92 API-equivalent
+  Billed to: your Claude subscription — $0 metered ✅
+  Session so far: 22,359,232 tokens · ~$10.41 API-equivalent
+    refactor-suite      1118     1484     -33%   0.0882  0.0957       -9%      0.8%   1.0/1.0
+                    out ±se  base 141 / skill 206   ·   $ ±se  base 0.0032 / skill 0.0064   (n=5)
+    -> mean output cut -29%  ·  mean cost cut -10%  ·  output share 0.6%  ·  correctness regression: no
+    -> per-task output cut spread -127%..7% (helped 3/7, hurt 4/7 — MIXED direction)
+    -> CLAIM 63% vs MEASURED -29% on the target => overclaim gap 92 points
+    (running bill so far: $10.4132)
+
+
+========== LEADERBOARD (v0) ==========
+
+-- Debunks (a published % claim vs what we measured) --
+  Token-Efficient CLAUDE.md claim  63% · measured  -29% (range -127..7%, MIXED) · bill +10% · no regression · DEBUNKED
+  Caveman                claim  65% · measured    6% (range -54..31%, MIXED) · bill +5% · no regression · DEBUNKED
+
+Total measured bill: $10.4132
+
+Data held at: bench/ecosystem/results/2026-07-07T01-43-01-120Z_sonnet.json
+(v0 engine — no report published from here; the writeup is a separate gated step.)
