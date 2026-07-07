@@ -147,14 +147,19 @@ await experimental_withServices(
       image: "postgres:16",
       env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
       port: 5432,
-      ready: { exec: "pg_isready -U postgres -h 127.0.0.1" }, // real server only
-      seed: "psql -U postgres -d app -f schema.sql",
+      ready: { exec: "pg_isready -U postgres -h 127.0.0.1 -d app" }, // real server only
+      // inline SQL — the seed runs INSIDE the container, so it can't reach a
+      // schema.sql on your host (nothing mounts it). Keep the seed self-contained.
+      seed: "psql -U postgres -d app -c 'create table users (id int)'",
     },
   },
   experimental_dockerRuntime,
   async (svc) => {
     // runEval — it takes a measure(ctx) callback + supports ephemeralEnv
     return runEval({
+      // migration.sql must be in the run FIXTURE for the agent to read it —
+      // a bare filename in the task doesn't materialize the file.
+      fixture: { "migration.sql": "ALTER TABLE users ADD COLUMN age int;" },
       // single arm — a baseline arm would share this DB and leave `age` behind,
       // crediting the skill for free (per-arm reset is a later increment).
       arms: { skill: { pluginDir: "./skills/migrator" } },

@@ -35,7 +35,10 @@ const report = await measure({
     "in.txt":
       "Invoice #4102 from Acme totals $980, due 2026-08-01, net-30 terms.",
   },
-  task: "Summarize in.txt in ONE sentence. Write it to out.txt, then stop.",
+  // Reply with the sentence as the final answer — output()/judged() score the
+  // agent's RESPONSE text (Trace.output), exactly as promptfoo scores the model's
+  // completion. (Don't write it to a file: a file wouldn't be in Trace.output.)
+  task: "Summarize in.txt in ONE sentence. Reply with only that sentence, then stop.",
   model: "sonnet",
   trials: 5,
   checks: [
