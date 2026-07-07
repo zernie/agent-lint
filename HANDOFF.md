@@ -29,19 +29,35 @@ re-run the research behind them.
 `.audience-test-results.md` ledger). Strategic *why* in vault `s48`. Voice: FIRST-PERSON, use the
 repo's `writing-quality` (prose) + `audience-test` skills; short paragraphs, ≤~15 em-dashes.
 
-**⚠️ IN-FLIGHT AUTONOMOUS TASK (user asleep, told me to finish + rewrite article autonomously,
-DRAFT only — user deploys):** An adversarial **fable** review caught a BLOCKING eval-delivery bug:
-the caveman skill was delivered as a bare `SKILL.md` in the run cwd, which **never registers as a
-skill** (only `CLAUDE.md`/`--plugin-dir` load) → the caveman arm measured an inert file. So the
-**old archived caveman numbers are INVALID** (`2026-07-06T23-54…` caveman rows; token-efficient
-rows there are VALID — CLAUDE.md loads). FIXED both:
-- **vigiles guard SHIPPED** (`feat(eval)`, commit 4655d85): `runEval`/`measureArms` warn on an
-  unregistered `SKILL.md` in an arm's `files` (`unregisteredSkillFiles`, high-precision, tested).
-- **benchmark delivery FIXED** (commit 8a5dca5): caveman now = real `--plugin-dir` install
-  (`bench/ecosystem/skills/caveman-plugin/`, faithful) + a forced-always-on `CLAUDE.md` steelman
-  (`caveman-forced`); both VERIFIED to activate (forced-on 9.5→3.9 articles/100w). Added
-  `bench/ecosystem/analyze.mjs` (Welch p-values via vigiles's `welchTTest` + output DOLLAR-share
-  ~21%) and `trigger-rate.mjs` (does it fire on neutral prompts?).
+**AUTONOMOUS ARTICLE REWORK — LARGELY DONE (DRAFT only; user deploys).** A fable review + reading
+caveman's README caught a BLOCKING eval-delivery bug + a framing error; both fixed and the article
+is rewritten to CORRECTED data. What shipped:
+- **vigiles guard** (`feat(eval)` 4655d85): `runEval`/`measureArms` warn on an unregistered
+  `SKILL.md` in an arm's `files` (`unregisteredSkillFiles`, tested). A bare SKILL.md in cwd never
+  registers as a skill — only `--plugin-dir`/`.claude/skills`/a SessionStart hook load it.
+- **faithful caveman delivery** (skills.mjs + `skills/caveman-plugin/` WITH a repro of caveman's real
+  SessionStart activation hook `hooks/caveman-activate.js` → auto-on from message one, per its
+  README). Verified telegraphic (3.4 vs ~7–12 articles/100w). `caveman-compress` INPUT test added
+  (`compress-test.mjs` + `compress/` fixtures). `analyze.mjs` = Welch + cost-share. Benchmark now
+  restart-resilient (writes JSON per skill).
+- **CORRECTED CANONICAL run** `results-archive/2026-07-07T01-43…_sonnet.json` (7 tasks×5×2×2, 140
+  runs). FINDING (fairer + stronger than the invalid version): **caveman GENUINELY cuts output**
+  (mean ~6%, 2 significant task cuts −31%/−28%) **but the pooled bill is FLAT (−1%, n.s.)** — output
+  is ~20% of the $ bill + its ~1–1.5k input/turn eats the saving. Token-efficient bill +10%. Compress
+  test: 68% smaller file, NO significant session saving, NO correctness cost. 0 regressions; gaps
+  59/92. Lead COST-share (~20%) not token-share; a perfect 65% cut caps bill saving at ~13%.
+- **article REWRITTEN + committed** to zernie PR #86 branch `claude/token-savings-article` (commit
+  f6b1d66): new frame ("it cuts output and the bill still doesn't move"), input-tool section,
+  honest "I got my delivery wrong, fixed the harness, re-ran" methodology footnote. Android-readable
+  Artifact rendered for the user.
+- **INVALID:** the `2026-07-06T23-54` (and earlier) CAVEMAN rows — delivery bug; their
+  TOKEN-EFFICIENT rows are VALID (CLAUDE.md auto-loads, reproduces +10–13% bill). Flagged in
+  FINDINGS + archive README.
+
+**REMAINING (not blocking, user's call):** (1) re-run the site `audience-test` on the CORRECTED
+article (numbers + frame changed materially). (2) publish-gate: recount stars at publish, confirm
+`npx vigiles eval` is published. (3) update the article's `.audience-test-results.md` ledger.
+(4) syndication package (HN/Reddit/X). Do NOT deploy — user deploys.
 
 **NEXT STEPS (resume here):** (1) corrected re-run IN PROGRESS — bg task `bwynvdahs`, log
 `scratchpad/rerun-sonnet.log`, 3 skills (caveman/caveman-forced/token-efficient) × 7 tasks × 5
