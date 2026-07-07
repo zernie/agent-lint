@@ -37,15 +37,6 @@ const readSkill = (id) =>
 const readSkillFile = (id, file) =>
   readFileSync(here(`./skills/${id}/${file}`), "utf-8");
 const vendor = (slice) => here(`../../test/dogfood/${slice}`);
-// Strip a SKILL.md's YAML frontmatter, leaving the instruction body — used to
-// deliver the caveman STYLE as forced-always-on project memory (a CLAUDE.md that
-// auto-loads every turn). This is the FIX for the delivery bug the first run hit:
-// a bare SKILL.md dropped in cwd via `files` never REGISTERS as a skill (vigiles
-// now warns on it — see unregisteredSkillFiles), so the real skill goes through
-// `--plugin-dir` (arm.pluginDir, faithful install) and the forced-on steelman
-// goes through project memory (CLAUDE.md). See FINDINGS.md.
-const stripFrontmatter = (md) =>
-  md.replace(/^﻿?\s*---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
 
 /**
  * @typedef {Object} Claim
@@ -68,51 +59,32 @@ const stripFrontmatter = (md) =>
 /** @type {BenchSkill[]} */
 export const BENCH_SKILLS = [
   {
-    // FAITHFUL INSTALL: caveman registered the real way, via `--plugin-dir`
-    // (arm.pluginDir → skills/caveman-plugin/, a proper .claude-plugin around the
-    // pinned SKILL.md). This is what a user actually gets: the skill's description
-    // is in context and it activates only when its triggers fire ("caveman mode",
-    // "be brief", "less tokens") — which neutral coding prompts never say. So this
-    // arm measures the IN-THE-WILD reality (likely ~0 activation on normal work).
+    // FAITHFUL INSTALL, exactly as a Claude Code user gets it: caveman registered
+    // via `--plugin-dir` (skills/caveman-plugin/, a proper .claude-plugin) INCLUDING
+    // its real SessionStart ACTIVATION HOOK, which reads SKILL.md and injects the
+    // full ruleset as session context every session — so caveman is "on from message
+    // one, no command needed" (README), NOT dormant. The upstream hook does exactly
+    // this (src/hooks/caveman-activate.js: "Emit caveman ruleset as hidden
+    // SessionStart context"); our hooks/caveman-activate.js reproduces that, minus
+    // the statusline/mode bookkeeping that doesn't touch tokens. Caveman is opt-in on
+    // some agents but AUTO-ON on Claude Code, so this — not a neutral-prompt "did it
+    // trigger" arm — is the faithful measurement of the 65% output claim.
     id: "caveman",
-    title: "Caveman (installed)",
+    title: "Caveman",
     source: "JuliusBrussee/caveman@f06348c",
     stars: 84189,
     category: "compression",
     claim: {
       metric: "outputTokens",
-      // We hold the skill to its README HEADLINE (65%, self-measured on 10 one-shot
-      // prompts, range 22–87%) — the more conservative of its two published numbers
-      // (the SKILL.md description says ~75%), so the overclaim gap is the STEELMAN,
-      // computed against the charitable claim. Matches the article's arithmetic.
+      // Held to its README HEADLINE (65%, self-measured on 10 one-shot prompts,
+      // range 22–87%) — the conservative of its two published numbers (the SKILL.md
+      // description says ~75%), so the overclaim gap is the STEELMAN.
       pct: 65,
-      text: 'README headline "65%" token cut by "talking like caveman" (telegraphic OUTPUT prose), self-measured on 10 one-shot prompts (range 22–87%); the SKILL.md description claims ~75%.',
+      text: 'README headline "65%" output-token cut by "talking like caveman" (telegraphic prose), self-measured on 10 one-shot prompts (range 22–87%); on Claude Code it is auto-on from message one via a SessionStart hook.',
     },
     arm: { pluginDir: here("./skills/caveman-plugin") },
     provenance:
-      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20), packaged as a proper Claude Code plugin (skills/caveman-plugin/) so `--plugin-dir` REGISTERS the skill (the earlier run's bare-SKILL.md-in-cwd delivery never loaded — vigiles now warns on it). Stars ~84,189 (verified 2026-07-06). README headline 65%; SKILL.md description ~75%; we benchmark against 65%.",
-  },
-  {
-    // FORCED-ON STEELMAN: the caveman instruction body injected as project memory
-    // (CLAUDE.md auto-loads every turn), so the telegraphic style is GUARANTEED
-    // active regardless of triggers. The most generous possible test of the
-    // compression claim — it removes the "did it activate?" confound and asks: even
-    // when caveman is ALWAYS on, does output (and the bill) actually drop? A real
-    // install (see `caveman`) only fires on trigger phrases, so real-world savings
-    // are <= whatever this arm shows.
-    id: "caveman-forced",
-    title: "Caveman (forced on)",
-    source: "JuliusBrussee/caveman@f06348c",
-    stars: 84189,
-    category: "compression",
-    claim: {
-      metric: "outputTokens",
-      pct: 65,
-      text: 'the same README "65%" claim, tested at its BEST: the caveman style forced always-on via project memory (CLAUDE.md), no trigger required.',
-    },
-    arm: { files: { "CLAUDE.md": stripFrontmatter(readSkill("caveman")) } },
-    provenance:
-      "The pinned caveman SKILL.md body (frontmatter stripped) delivered as CLAUDE.md project memory — guaranteed in-context every turn. Steelman delivery: tests pure compression with activation removed as a variable.",
+      "REAL SKILL.md, SHA-pinned (skills/caveman/SKILL.md@f06348c, fetched 2026-06-20), packaged as a proper Claude Code plugin (skills/caveman-plugin/) WITH a faithful SessionStart activation hook (hooks/caveman-activate.js, reproducing upstream src/hooks/caveman-activate.js) so `--plugin-dir` reproduces the real auto-on-from-message-one behavior — verified to produce telegraphic output. Stars ~84,189 (verified 2026-07-06). README headline 65%; SKILL.md description ~75%; benchmarked against 65%. NB: caveman ALSO ships input-side tools (/caveman-compress ~46% input on a memory file, caveman-shrink MCP middleware, cavecrew subagents) not measured here — this arm tests the viral OUTPUT claim.",
   },
   {
     id: "token-efficient",
