@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createServer, type AddressInfo } from "node:net";
 
 import {
   experimental_startServices,
@@ -286,6 +287,43 @@ describe("makeDockerRuntime (over a fake docker CLI)", () => {
         exec: fakeDocker({ info: { code: 1 } }).exec,
       }).available(),
     ).toBe(false);
+  });
+
+  it("readiness via a REAL tcp probe (exercises the default netProbe, no docker)", async () => {
+    // A real listening socket the default netProbe connects to — covers the
+    // real net.connect seam cross-platform, without a Docker daemon.
+    const server = createServer();
+    await new Promise<void>((r) =>
+      server.listen(0, "127.0.0.1", () => {
+        r();
+      }),
+    );
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const exec: DockerExec = (args) => {
+        if (args[0] === "run") return { stdout: "cid", stderr: "", code: 0 };
+        if (args[0] === "port")
+          return { stdout: `0.0.0.0:${port}`, stderr: "", code: 0 };
+        return { stdout: "", stderr: "", code: 0 };
+      };
+      // no netProbe injected → the REAL one runs against the live socket
+      const runtime = makeDockerRuntime({
+        exec,
+        sleep: () => Promise.resolve(),
+      });
+      const handle = await runtime.start("svc", {
+        image: "x",
+        port: 5432,
+        ready: { tcp: 5432 },
+      });
+      expect(handle.port).toBe(port); // reached readiness ⇒ start resolved
+    } finally {
+      await new Promise<void>((r) =>
+        server.close(() => {
+          r();
+        }),
+      );
+    }
   });
 
   it("stop() removes the started container", async () => {
