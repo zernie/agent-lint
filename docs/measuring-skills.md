@@ -16,6 +16,7 @@ It does that by running the thing under test on both sides of an A/B and reading
 - [Worked example](#worked-example)
 - [The ecosystem benchmark — what works vs hype](#the-ecosystem-benchmark--what-works-vs-hype)
 - [Why you can afford to run it](#why-you-can-afford-to-run-it)
+- [Experimental: real side-effect testing](#experimental-real-side-effect-testing)
 - [See also](#see-also)
 
 ## The unit: an A/B on the same real task
@@ -41,9 +42,9 @@ This is `runEval` / `measureArms` — arms × trials → mean ± se, with Welch'
 ## Worked example
 
 ```typescript
-import { measureArms } from "vigiles/testing";
+import { runEval } from "vigiles/testing";
 
-const report = await measureArms({
+const report = await runEval({
   fixture: { "in.txt": "Implement a slug helper." },
   task: "Read in.txt, write slugify() to slug.js, then explain. Stop.",
   arms: {
@@ -60,6 +61,8 @@ const report = await measureArms({
 });
 // Read the per-arm delta: lower bill? target moved? correctness intact?
 ```
+
+> `runEval` takes a **`measure(ctx)` callback** that returns any numeric metrics (used above). Its sibling `measureArms` instead scores a **declarative `checks` array** (`output`/`judged`/`cost`/…) — reach for that when your A/B is a set of pass/fail assertions rather than custom numbers.
 
 Two ways to specify an arm:
 
@@ -136,7 +139,7 @@ import {
   experimental_withServices,
   experimental_dockerRuntime,
 } from "vigiles/experimental";
-import { measureArms } from "vigiles/testing";
+import { runEval } from "vigiles/testing";
 
 await experimental_withServices(
   {
@@ -150,7 +153,8 @@ await experimental_withServices(
   },
   experimental_dockerRuntime,
   async (svc) => {
-    return measureArms({
+    // runEval — it takes a measure(ctx) callback + supports ephemeralEnv
+    return runEval({
       arms: { baseline: {}, skill: { pluginDir: "./skills/migrator" } },
       task: `Apply migration.sql against the DB at ${svc.endpoints[0]}. Stop.`,
       ephemeralEnv: true, // ⬅ recommended — scrub real creds from the run
@@ -171,7 +175,7 @@ await experimental_withServices(
 );
 ```
 
-Runnable versions: [`side-effect-r3.mjs`](../examples/harness/side-effect-r3.mjs) (the primitive) and [`measure-with-service.mjs`](../examples/harness/measure-with-service.mjs) (the `measureArms` composition above).
+Runnable versions: [`side-effect-r3.mjs`](../examples/harness/side-effect-r3.mjs) (the primitive) and [`measure-with-service.mjs`](../examples/harness/measure-with-service.mjs) (the `runEval` composition above).
 
 **What ships today vs later.** Today: the types, the `ContainerRuntime` port, `experimental_startServices` / `experimental_withServices`, and a Docker backend — all under `vigiles/experimental`. Deferred: a first-class `services` option on `measureArms` (+ `ctx.service(name)`), **per-trial** reset (today the container lives for the whole run — make your task self-contained or use `trials: 1`), and the egress wall. Requires Docker (Linux-first), stays an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
 

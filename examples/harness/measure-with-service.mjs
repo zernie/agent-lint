@@ -19,7 +19,7 @@ import {
   experimental_withServices,
   experimental_dockerRuntime,
 } from "../../dist/experimental.js";
-import { measureArms } from "../../dist/testing.js";
+import { runEval } from "../../dist/testing.js";
 
 if (!experimental_dockerRuntime.available()) {
   console.log("⊘ SKIPPED — no Docker daemon reachable (this tier needs one)");
@@ -40,7 +40,8 @@ const report = await experimental_withServices(
   },
   experimental_dockerRuntime,
   async (svc) =>
-    measureArms({
+    // runEval — takes a measure(ctx) callback + supports ephemeralEnv
+    runEval({
       name: "migrator: applies the migration to a real Postgres",
       fixture: { "migration.sql": "ALTER TABLE users ADD COLUMN age int;" },
       task:

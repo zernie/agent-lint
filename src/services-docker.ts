@@ -19,6 +19,7 @@
 import { spawnSync } from "node:child_process";
 import { connect } from "node:net";
 
+import { assertNever } from "./core/hash.js";
 import type {
   ContainerRuntime,
   ServiceHandle,
@@ -91,15 +92,16 @@ export function primaryPorts(spec: ServiceSpec): number[] {
 
 /**
  * Parse the published host port out of `docker port <c> <containerPort>` output,
- * e.g. `0.0.0.0:49153` or `127.0.0.1:49153\n[::]:49153` → `49153`. Returns `0`
- * when nothing is published (no port mapping). Pure.
+ * e.g. `0.0.0.0:49153` or `127.0.0.1:49153\n[::]:49153` → `49153`. Returns
+ * `undefined` when nothing is published — parse-don't-validate: the caller gets
+ * "a port or nothing", never a magic `0` to special-case. Pure.
  */
-export function parseDockerPort(output: string): number {
+export function parseDockerPort(output: string): number | undefined {
   for (const line of output.split("\n")) {
     const m = /:(\d+)\s*$/.exec(line.trim());
     if (m) return Number(m[1]);
   }
-  return 0;
+  return undefined;
 }
 
 /* v8 ignore start -- the real-daemon IO seams: they spawn the real `docker` CLI /
@@ -138,27 +140,57 @@ const delay = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 /* v8 ignore stop */
 
+/**
+ * The normalised readiness gate — the ergonomic authoring union
+ * {@link ServiceReady} (`{tcp} | {log} | {exec}`) parsed ONCE into a TAGGED union
+ * so the prober is an exhaustive `switch`, not a chain of `"x" in ready` checks
+ * repeated on every poll. Illegal combos (e.g. both `exec` and `tcp` set) can't
+ * reach the prober: {@link parseReady} resolves precedence deterministically.
+ */
+type ReadyProbe =
+  | { readonly kind: "exec"; readonly command: string }
+  | { readonly kind: "log"; readonly pattern: RegExp }
+  | { readonly kind: "tcp" };
+
+/** Parse the authoring union into a tagged {@link ReadyProbe} (exec > log > tcp). */
+function parseReady(ready: ServiceReady): ReadyProbe {
+  if ("exec" in ready) return { kind: "exec", command: ready.exec };
+  if ("log" in ready) return { kind: "log", pattern: ready.log };
+  return { kind: "tcp" };
+}
+
 /** The IO seams + target a readiness poll needs, bundled to stay under max-params. */
 interface ReadyCtx {
   readonly exec: DockerExec;
   readonly netProbe: NetProbe;
   readonly sleep: (ms: number) => Promise<void>;
   readonly containerName: string;
-  readonly hostPort: number;
+  /** Published host port; `undefined` when the service exposes none. */
+  readonly hostPort: number | undefined;
 }
 
-/** One readiness attempt for the declared gate. */
-function probeReady(ctx: ReadyCtx, ready: ServiceReady): Promise<boolean> {
-  if ("exec" in ready) {
-    return Promise.resolve(
-      ctx.exec(dockerExecArgs(ctx.containerName, ready.exec)).code === 0,
-    );
+/** One readiness attempt for a parsed {@link ReadyProbe} — exhaustive by `kind`. */
+function probeReady(ctx: ReadyCtx, probe: ReadyProbe): Promise<boolean> {
+  switch (probe.kind) {
+    case "exec":
+      return Promise.resolve(
+        ctx.exec(dockerExecArgs(ctx.containerName, probe.command)).code === 0,
+      );
+    case "log": {
+      const r = ctx.exec(["logs", ctx.containerName]);
+      return Promise.resolve(probe.pattern.test(r.stdout + r.stderr));
+    }
+    case "tcp":
+      if (ctx.hostPort === undefined) {
+        throw new Error(
+          `readiness { tcp } needs a published port, but "${ctx.containerName}" exposes none`,
+        );
+      }
+      return ctx.netProbe(ctx.hostPort);
+    /* v8 ignore next 2 -- exhaustiveness guard, unreachable given ReadyProbe */
+    default:
+      return assertNever(probe);
   }
-  if ("log" in ready) {
-    const r = ctx.exec(["logs", ctx.containerName]);
-    return Promise.resolve(ready.log.test(r.stdout + r.stderr));
-  }
-  return ctx.netProbe(ctx.hostPort);
 }
 
 /** Poll {@link probeReady} until it passes or the deadline elapses. */
@@ -168,9 +200,10 @@ async function waitReady(
   timeoutMs: number,
 ): Promise<void> {
   if (!ready) return;
+  const probe = parseReady(ready); // parse ONCE, then poll
   const started = numericNow();
   for (;;) {
-    if (await probeReady(ctx, ready)) return;
+    if (await probeReady(ctx, probe)) return;
     if (numericNow() - started >= timeoutMs) {
       throw new Error(
         `service "${ctx.containerName}" did not become ready within ${timeoutMs}ms`,
@@ -225,15 +258,16 @@ export function makeDockerRuntime(
       const primary = primaryPorts(spec)[0];
       const hostPort =
         primary === undefined
-          ? 0
+          ? undefined
           : parseDockerPort(
               exec(["port", containerName, String(primary)]).stdout,
             );
 
       const handle: ServiceHandle = {
         host: "127.0.0.1",
-        port: hostPort,
-        url: "",
+        port: hostPort, // undefined when the service exposes no port
+        // no `url`: the docker backend can't form a generic scheme — build your
+        // own from host + port. (Omitted, not `""`.)
         exec(command) {
           const r = exec(dockerExecArgs(containerName, command));
           return { stdout: r.stdout, stderr: r.stderr, code: r.code };

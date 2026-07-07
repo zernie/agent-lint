@@ -112,10 +112,13 @@ export interface ServiceSpec {
 export interface ServiceHandle {
   /** Host the agent reaches the service on (from inside the run environment). */
   readonly host: string;
-  /** The primary port (mirrors {@link ServiceSpec.port}). */
-  readonly port: number;
-  /** A convenience connection URL when the runtime can form one (else `""`). */
-  readonly url: string;
+  /** The published host port — `undefined` for a service that exposes none. */
+  readonly port?: number;
+  /**
+   * A connection URL when the runtime can form one; omitted otherwise (build your
+   * own from `host` + `port` — the scheme differs per service, so no generic URL).
+   */
+  readonly url?: string;
   /** Run a command inside the container and read its result (synchronous). */
   exec(command: string): {
     readonly stdout: string;
@@ -200,7 +203,10 @@ export async function experimental_startServices(
       const handle = await runtime.start(name, spec);
       handles[name] = handle;
       started.push(handle);
-      endpoints.push(`${handle.host}:${handle.port}`);
+      // Only a service that published a port has a reachable endpoint.
+      if (handle.port !== undefined) {
+        endpoints.push(`${handle.host}:${handle.port}`);
+      }
     }
   } catch (err) {
     await stopAll();
