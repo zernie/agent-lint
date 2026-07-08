@@ -117,18 +117,22 @@ function localResourceTarget(rawTarget: string): string | null {
   // intentionally from OUTSIDE the repo (JIT routing like `Read ~/.claude/docs/x.md`).
   // Not a repo-bundled resource; unverifiable from the repo and never a "broken ref".
   if (target === "~" || target.startsWith("~/")) return null;
-  // SKIP: globs and template placeholders — a ref carrying a glob metacharacter
-  // (`*`, `?`) or a brace/angle-bracket placeholder (`{trivial,…}`, `<linter>`) is a
-  // directory CONVENTION or an example, not a concrete file (`references/*.md`,
-  // `references/linter-cards/{a,b}/<linter>.md`). Resolving it as a literal path and
-  // reporting "missing" is a false positive — the biggest source of ref noise on a
-  // real authoring style (feedback P1-3).
-  if (/[*?{}<>]/.test(target)) return null;
-
-  // Drop a URL fragment / query suffix so `references/api.md#auth` resolves to
-  // the file. (Only after the scheme check above, so we never mangle a URL.)
+  // Drop a URL fragment / query suffix so `references/api.md#auth` AND
+  // `references/schema.json?raw=1` resolve to the file. Done BEFORE the glob skip
+  // below so a legitimate `?query` suffix on a real bundled ref isn't mistaken for
+  // a glob `?` and wrongly skipped — the file must still be checked. (Only after
+  // the scheme check above, so we never mangle a URL.)
   const path = target.replace(/[?#].*$/, "");
   if (path.length === 0) return null;
+
+  // SKIP: globs and template placeholders — a ref carrying a glob metacharacter
+  // (`*`) or a brace/angle-bracket placeholder (`{trivial,…}`, `<linter>`) is a
+  // directory CONVENTION or an example, not a concrete file (`references/*.md`,
+  // `references/linter-cards/{a,b}/<linter>.md`). Resolving it as a literal path and
+  // reporting "missing" is a false positive (feedback P1-3). `?` is intentionally
+  // NOT in this class — it's the query separator stripped above; a genuine `?`-glob
+  // truncates to an extensionless path and is dropped by HAS_EXT below anyway.
+  if (/[*{}<>]/.test(path)) return null;
 
   // SKIP: a `../` escape OUT of the skill dir — undecidable / not a bundled
   // resource (it points at a sibling skill or the repo). A leading `./` is fine.
