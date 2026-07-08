@@ -91,7 +91,7 @@ text
   });
 
   it("ignores vigiles:enforce markers inside fenced code blocks", () => {
-    // Illustrative example in docs/inline-mode.md would otherwise get
+    // Illustrative example in docs/markdown-mode.md would otherwise get
     // picked up as a live rule.
     const { rules, errors } = parseInlineRules(
       `# Docs

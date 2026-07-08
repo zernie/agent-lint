@@ -16,8 +16,7 @@ The docs are grouped by what you're trying to do:
 ### Verify your instruction files (the Lint layer)
 
 - [`verifying-instruction-files.md`](verifying-instruction-files.md) — the master guide: the markdown → typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references, and the before/after tables. Holds the [full validation-rules matrix](verifying-instruction-files.md#the-validation-rules--the-full-matrix).
-- [`markdown-mode.md`](markdown-mode.md) — verify rules in plain markdown with inline `<!-- vigiles:enforce -->` comments, no TypeScript.
-- [`inline-mode.md`](inline-mode.md) — the inline-comment mode in depth.
+- [`markdown-mode.md`](markdown-mode.md) — the no-spec on-ramp: verify rules in plain markdown with inline `<!-- vigiles:enforce -->` comments, no TypeScript.
 - [`skills-monorepo.md`](skills-monorepo.md) — adopt vigiles in a CI-tested skill library or a plain `.claude/` repo (no `plugin.json`).
 
 ### Test & measure your harness (the Test + Eval layers)
