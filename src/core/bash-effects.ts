@@ -45,6 +45,8 @@ interface MvdanNode {
   Stmts?: MvdanNode[];
   // CallExpr fields
   Args?: MvdanWord[];
+  /** Leading `NAME=value` env-assignments prefixing a simple command. */
+  Assigns?: MvdanAssign[];
   // BinaryCmd fields
   Op?: number;
   X?: MvdanNode;
@@ -63,6 +65,14 @@ interface MvdanRedirect extends MvdanNode {
 
 interface MvdanWord extends MvdanNode {
   Parts: MvdanNode[];
+}
+
+/** A leading `NAME=value` assignment on a CallExpr (mvdan `*syntax.Assign`). */
+interface MvdanAssign {
+  /** The variable name (a `*Lit`); its `.Value` is the name string. */
+  Name?: MvdanNode;
+  /** The RHS word; absent for a naked `NAME=` (empty value). */
+  Value?: MvdanWord;
 }
 
 // ---------------------------------------------------------------------------
@@ -527,6 +537,19 @@ export interface NormalizedLeaf {
   readonly flags: ReadonlySet<string>;
   /** True iff ANY of `names` is present in {@link flags} (short or long). */
   hasFlag(...names: readonly string[]): boolean;
+  /**
+   * Command-level env-assignments that apply to THIS leaf, keyed by variable
+   * name → static value (empty string for a naked `NAME=`). Populated from both
+   * the mvdan leading `CallExpr.Assigns` (`PIP_INDEX_URL=… pip install …`) AND
+   * the `NAME=value` words consumed by an `env` wrapper (`env NPM_CONFIG_REGISTRY=… npm i`).
+   *
+   * These carry supply-chain / behavior-altering configuration (`PIP_INDEX_URL`,
+   * `NPM_CONFIG_REGISTRY`, …) that an argv-only extractor never sees because the
+   * assignment is not an argv word. A dynamic RHS (command substitution, non-HOME
+   * parameter) is recorded with value `null` — present but unresolved. */
+  readonly assigns: ReadonlyMap<string, string | null>;
+  /** True iff a command-level assignment for ANY of `names` is present (resolved or not). */
+  hasAssign(...names: readonly string[]): boolean;
 }
 
 /**
@@ -607,6 +630,156 @@ function buildFlags(args: readonly string[]): Set<string> {
   return flags;
 }
 
+// ---------------------------------------------------------------------------
+// Command-wrapper stripping.
+//
+// A wrapper is a command whose JOB is to run ANOTHER command: `env FOO=bar CMD`,
+// `command CMD`, `sudo CMD`, `nice -n5 CMD`, `timeout 5 CMD`, `xargs CMD`,
+// `nohup CMD`. Because the normalized leaf keys on the leaf HEAD, a wrapper head
+// hides the real operation — `env GIT_SSH= git push --force` and `command rm -rf /`
+// look like `env`/`command` leaves, so a head-keyed matcher never sees the
+// `git push --force` / `rm -rf /` it must block. We resolve THROUGH the wrapper:
+// skip the wrapper's own options (and their values) and any `NAME=value` words it
+// consumes, then treat the next word as the real command head (recursing so
+// `sudo timeout 5 rm -rf /` unwraps fully). A wrapper with no following command
+// (bare `env`, `env -i`) is preserved as-is, so the env-dump predicate still fires.
+// ---------------------------------------------------------------------------
+
+const WRAPPER_HEADS = new Set([
+  "env",
+  "command",
+  "nice",
+  "timeout",
+  "sudo",
+  "xargs",
+  "nohup",
+]);
+
+/**
+ * Per-wrapper short/long options that consume a SEPARATE following token as their
+ * value (so the value is not mistaken for the wrapped command). Attached forms
+ * (`-n5`, `--kill-after=5`) are single tokens and need no entry.
+ */
+const WRAPPER_VALUE_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
+  env: new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]),
+  command: new Set(),
+  nice: new Set(["-n", "--adjustment"]),
+  timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+  sudo: new Set([
+    "-u",
+    "--user",
+    "-g",
+    "--group",
+    "-p",
+    "--prompt",
+    "-C",
+    "--close-from",
+    "-h",
+    "--host",
+    "-r",
+    "--role",
+    "-t",
+    "--type",
+    "-U",
+    "--other-user",
+    "-R",
+    "--chroot",
+    "-D",
+    "--chdir",
+  ]),
+  xargs: new Set([
+    "-I",
+    "-i",
+    "--replace",
+    "-n",
+    "--max-args",
+    "-P",
+    "--max-procs",
+    "-d",
+    "--delimiter",
+    "-E",
+    "-e",
+    "--eof",
+    "-s",
+    "--max-chars",
+    "-L",
+    "-l",
+    "--max-lines",
+    "-a",
+    "--arg-file",
+  ]),
+  nohup: new Set(),
+};
+
+/** Count of leading NON-option positionals a wrapper consumes before the command (timeout DURATION). */
+const WRAPPER_SKIP_POSITIONALS: Readonly<Record<string, number>> = {
+  timeout: 1,
+};
+
+/** True iff a normalized word is a `NAME=value` env-assignment (used by `env`). */
+function isAssignmentWord(word: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
+}
+
+/** Split a `NAME=value` word into its name and value. */
+function splitAssignmentWord(word: string): [string, string] {
+  const eq = word.indexOf("=");
+  return [word.slice(0, eq), word.slice(eq + 1)];
+}
+
+/**
+ * Resolve a wrapped command through one or more wrapper layers. Given a leaf's
+ * full normalized argv (`[head, ...args]`), returns the effective argv of the
+ * REAL command plus any `NAME=value` words an `env` wrapper consumed (so the
+ * caller can fold them into the leaf's assignment map). If the head is not a
+ * wrapper, or the wrapper has no following command, the argv is returned
+ * unchanged with an empty assignment set.
+ */
+function stripWrappers(argv: readonly string[]): {
+  argv: readonly string[];
+  envAssigns: Map<string, string | null>;
+} {
+  const envAssigns = new Map<string, string | null>();
+  let cur: readonly string[] = argv;
+  for (let guard = 0; guard < 8; guard++) {
+    const head = cur[0];
+    if (head === undefined || !WRAPPER_HEADS.has(head)) break;
+    const valueOpts = WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+    let positionalsToSkip = WRAPPER_SKIP_POSITIONALS[head] ?? 0;
+    let i = 1; // start after the wrapper head
+    let ended = false;
+    for (; i < cur.length; i++) {
+      const a = cur[i];
+      if (a === undefined) break;
+      if (a === "--") {
+        i++;
+        ended = true;
+        break;
+      }
+      if (a.length > 1 && a.startsWith("-")) {
+        if (valueOpts.has(a)) i++; // skip this option's separate value too
+        continue;
+      }
+      if (head === "env" && isAssignmentWord(a)) {
+        const [name, value] = splitAssignmentWord(a);
+        envAssigns.set(name, value);
+        continue;
+      }
+      if (positionalsToSkip > 0) {
+        positionalsToSkip--;
+        continue;
+      }
+      break; // cur[i] is the real command head
+    }
+    void ended;
+    if (i >= cur.length) break; // wrapper with no following command → keep as-is
+    const next = cur.slice(i);
+    if (next.length === cur.length) break; // no progress → stop
+    cur = next;
+  }
+  return { argv: cur, envAssigns };
+}
+
 /**
  * Extract every simple command as a {@link NormalizedLeaf} — the operation-level
  * twin of {@link leafCommands}. Same AST-backed structural coverage (a leaf nested
@@ -635,16 +808,41 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
   return out;
 }
 
+/** Collect a CallExpr's leading `NAME=value` env-assignments into a name→value map. */
+function collectAssigns(node: MvdanNode): Map<string, string | null> {
+  const assigns = new Map<string, string | null>();
+  for (const a of node.Assigns ?? []) {
+    const name = a.Name?.Value;
+    if (!name) continue;
+    // A naked `NAME=` has no Value word → empty string; a dynamic RHS → null.
+    const value = a.Value ? normalizeParts(a.Value.Parts) : "";
+    assigns.set(name, value);
+  }
+  return assigns;
+}
+
 /** Normalize a single CallExpr node to a {@link NormalizedLeaf}, or null if it isn't one / has a dynamic head. */
 function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
   if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
     return null;
   const headRaw = normalizeParts(node.Args[0]?.Parts);
   if (headRaw === null) return null; // dynamic head → not normalizable
-  const head = normalizeHead(headRaw);
-  const args = node.Args.slice(1)
+  const rawHead = normalizeHead(headRaw);
+  const rawArgs = node.Args.slice(1)
     .map((w) => normalizeParts(w.Parts))
     .filter((w): w is string => w !== null);
+
+  // Resolve through any command-wrapper (`env`/`command`/`sudo`/`timeout`/…) so
+  // the leaf reflects the REAL operation, not the wrapper head.
+  const stripped = stripWrappers([rawHead, ...rawArgs]);
+  const head = normalizeHead(stripped.argv[0] ?? rawHead);
+  const args = stripped.argv.slice(1);
+
+  // Command-level assignments: mvdan leading `CallExpr.Assigns` plus any
+  // `NAME=value` words an `env` wrapper consumed on the way to the real command.
+  const assigns = collectAssigns(node);
+  for (const [k, v] of stripped.envAssigns) assigns.set(k, v);
+
   const flags = buildFlags(args);
   return {
     head,
@@ -652,5 +850,7 @@ function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
     args,
     flags,
     hasFlag: (...names) => names.some((n) => flags.has(n)),
+    assigns,
+    hasAssign: (...names) => names.some((n) => assigns.has(n)),
   };
 }
