@@ -33,6 +33,7 @@ import { resolve, join, relative, basename } from "node:path";
 
 import { parse as parseToml } from "@iarna/toml";
 
+import { assertNever } from "./core/hash.js";
 import type { PluginLayout } from "./core/layout.js";
 
 export interface LoadedPlugin {
@@ -207,6 +208,68 @@ export function loadPlugin(
  * the classifier and every downstream detector see one shape regardless of where
  * it lives on disk. Returns the per-surface counts (drives the surface warnings).
  */
+/**
+ * WHERE a repo's model surfaces (skills/agents/commands) live — PARSED from the
+ * repo's shape ONCE (parse-don't-validate) so materialization never re-infers it
+ * from a pile of ad-hoc booleans (the tangle that spawned repeated edge-case
+ * bugs: empty dir, stray file, hook-only plugin, single-skill target). A tagged
+ * union, one variant per real shape; a NEW shape is a new variant the exhaustive
+ * `switch` below won't compile without handling — the whole point.
+ */
+type SurfaceSource =
+  | { readonly kind: "single-skill"; readonly skillName: string } // `<root>/SKILL.md` — the target IS one skill
+  | { readonly kind: "root" } // plugin / library / any root-surface content — read `<root>/<surface>`
+  | { readonly kind: "user"; readonly sub: string } // plain user repo — read `<root>/<sub>/<surface>`
+  | { readonly kind: "none" }; // nothing loadable anywhere
+
+/**
+ * A surface holds a LOADABLE file — a `<name>/SKILL.md` for skills, a `.md` for
+ * agents/commands. A stray non-surface file (`skills/README.md`, `.gitkeep`) does
+ * NOT count, else it would mark the root populated and shadow a plain user's real
+ * `.claude/skills`.
+ */
+function surfaceHasLoadable(
+  layout: PluginLayout,
+  surface: string,
+  tree: Record<string, string>,
+): boolean {
+  const keys = Object.keys(tree);
+  return surface === layout.skillDir
+    ? keys.some((k) => basename(k) === "SKILL.md")
+    : keys.some((k) => k.endsWith(".md"));
+}
+
+/**
+ * Classify the repo shape from disk, with EXPLICIT precedence:
+ *  1. a `<root>/SKILL.md` → the target IS one skill dir (single-skill).
+ *  2. any root-surface with LOADABLE content, OR a plugin manifest / hooks
+ *     convention → read the ROOT surfaces. A plugin ships from its manifest even
+ *     with no root surface dirs, so its dev `.claude/…` is never a fallback.
+ *  3. else, if the layout declares a user-surface root → a plain user repo.
+ *  4. else → nothing loadable.
+ * Pure over the pre-read `rootTrees` + a few existence checks — one place to test.
+ */
+function classifySurfaceSource(
+  root: string,
+  layout: PluginLayout,
+  rootTrees: ReadonlyMap<string, Record<string, string>>,
+): SurfaceSource {
+  if (layout.skillDir && existsSync(join(root, "SKILL.md"))) {
+    return { kind: "single-skill", skillName: basename(root) };
+  }
+  const rootHasLoadable = layout.surfaceDirs.some((s) =>
+    surfaceHasLoadable(layout, s, rootTrees.get(s) ?? {}),
+  );
+  const isPluginShaped =
+    existsSync(join(root, layout.manifestPath)) ||
+    existsSync(join(root, layout.hooksConventionPath));
+  if (rootHasLoadable || isPluginShaped) return { kind: "root" };
+  if (layout.userSurfaceRoot !== undefined) {
+    return { kind: "user", sub: layout.userSurfaceRoot };
+  }
+  return { kind: "none" };
+}
+
 function materializeSurfaces(
   root: string,
   layout: PluginLayout,
@@ -222,75 +285,50 @@ function materializeSurfaces(
     const dir = join(root, surface);
     if (isDir(dir)) rootTrees.set(surface, readTree(dir, dir));
   }
-  // Decide the surface ROOT once, at the REPO level (NOT per surface): a repo that
-  // ships ANY root-level surface WITH ENTRIES is a plugin/library — read ONLY its
-  // root surfaces, so a plugin author's dev `.claude/agents` / `.claude/skills`
-  // never leak into the audit as if shipped. A repo with NO root-surface content
-  // falls back to the user surface (`<userSurfaceRoot>/…`, the plain Claude Code
-  // user shape) — so an EMPTY or unrelated root `skills/` doesn't shadow the real
-  // `.claude/skills`, and a per-surface mix can't half-import project-local dirs.
-  // A surface counts as POPULATED only if it holds a LOADABLE file — a skill loads
-  // from `<name>/SKILL.md`, an agent/command from a `.md` file. A stray non-surface
-  // file (`skills/README.md`, `.gitkeep`) must NOT mark the root populated, else it
-  // shadows a plain user's real `.claude/skills` (recreating the F/0 this fixes).
-  const hasLoadable = (
-    surface: string,
-    tree: Record<string, string>,
-  ): boolean => {
-    const keys = Object.keys(tree);
-    return surface === layout.skillDir
-      ? keys.some((k) => basename(k) === "SKILL.md")
-      : keys.some((k) => k.endsWith(".md"));
+  const add = (key: string, content: string, onDisk: string): void => {
+    files[key] = content;
+    sources[key] = onDisk;
   };
-  const rootHasEntries = layout.surfaceDirs.some((s) =>
-    hasLoadable(s, rootTrees.get(s) ?? {}),
-  );
-  // A plugin is NEVER a plain user repo — even a HOOK-ONLY plugin with no root
-  // surface dirs ships from its manifest / hooks convention, not from a
-  // developer's project-local `.claude/`. Gate the user-surface fallback on BOTH
-  // no root-surface content AND no plugin shape, so a plugin's dev `.claude/skills`
-  // / `.claude/agents` are never imported as shipped. Plugin shape = a manifest
-  // (`.claude-plugin/plugin.json`) OR the hooks convention (`hooks/hooks.json`) —
-  // the same files `readHooks` treats as plugin content.
-  const isPluginShaped =
-    existsSync(join(root, layout.manifestPath)) ||
-    existsSync(join(root, layout.hooksConventionPath));
-  const userRoot =
-    !rootHasEntries && !isPluginShaped ? layout.userSurfaceRoot : undefined;
-  for (const surface of layout.surfaceDirs) {
-    let dir: string;
-    let tree: Record<string, string>;
-    if (userRoot !== undefined) {
-      dir = join(root, userRoot, surface);
-      tree = isDir(dir) ? readTree(dir, dir) : {};
-    } else {
-      dir = join(root, surface);
-      tree = rootTrees.get(surface) ?? {};
+
+  const source = classifySurfaceSource(root, layout, rootTrees);
+  switch (source.kind) {
+    case "single-skill": {
+      // Materialize the WHOLE skill dir under the canonical skills key, so its
+      // bundled resources (scripts/references/assets) ship too, not just SKILL.md.
+      const tree = readTree(root, root);
+      for (const [rel, content] of Object.entries(tree)) {
+        add(
+          join(layout.materializeRoot, layout.skillDir, source.skillName, rel),
+          content,
+          join(root, rel),
+        );
+      }
+      counts[layout.skillDir] = Object.keys(tree).length;
+      break;
     }
-    for (const [rel, content] of Object.entries(tree)) {
-      const key = join(layout.materializeRoot, surface, rel);
-      files[key] = content;
-      sources[key] = join(dir, rel);
+    case "root":
+    case "user": {
+      const base = source.kind === "user" ? join(root, source.sub) : root;
+      for (const surface of layout.surfaceDirs) {
+        const dir = join(base, surface);
+        // Root surfaces were pre-read; user surfaces are read fresh here.
+        const tree =
+          source.kind === "root"
+            ? (rootTrees.get(surface) ?? {})
+            : isDir(dir)
+              ? readTree(dir, dir)
+              : {};
+        for (const [rel, content] of Object.entries(tree)) {
+          add(join(layout.materializeRoot, surface, rel), content, join(dir, rel));
+        }
+        counts[surface] = Object.keys(tree).length;
+      }
+      break;
     }
-    counts[surface] = (counts[surface] ?? 0) + Object.keys(tree).length;
-  }
-  // The target IS a single skill directory (`<root>/SKILL.md`) — the natural
-  // thing to point `audit`/`test` at for one skill. Materialize the WHOLE skill
-  // dir under the canonical skills key (named by the dir), mirroring the
-  // `skills/<name>/` subtree readTree above — so its bundled resources
-  // (`scripts/`, `references/`, `assets/`) are present too, not just SKILL.md, and
-  // a single-skill harness test/eval runs against the skill's shipped files.
-  const soleSkill = join(root, "SKILL.md");
-  if (layout.skillDir && existsSync(soleSkill)) {
-    const name = basename(root);
-    const tree = readTree(root, root); // keys relative to the skill dir itself
-    for (const [rel, content] of Object.entries(tree)) {
-      const key = join(layout.materializeRoot, layout.skillDir, name, rel);
-      files[key] = content;
-      sources[key] = join(root, rel);
-    }
-    counts[layout.skillDir] =
-      (counts[layout.skillDir] ?? 0) + Object.keys(tree).length;
+    case "none":
+      break;
+    default:
+      assertNever(source);
   }
   return counts;
 }

@@ -19,12 +19,23 @@ ADOPTION FIXES, not cost analysis) → **PR #66 OPEN, merging-when-green.** This
 on a skills-monorepo FIELD REPORT (a team ran vigiles on a 46-skill CI library with no
 `plugin.json` and hit blockers) — all 7 feedback points fixed.
 
-**MERGE STATE (resume here first):** PR #66 open; **subscribed to its activity**; a `send_later`
-check-in (trigger `trig_01En7d7f4vRqfCg1fqFTtHkv`, ~13:30Z) re-checks CI and **squash-merges into
-main with a CLEAN message (NO session link / model-id) when green**, else re-arms. If resuming:
-`get_check_runs` for #66 → merge if green, then **unsubscribe**. Latest SHA `f923cad`. Two CI
-fixes already landed this round: api-extractor surface report (`etc/*.api.md`) + one eslint error
-(`no-confusing-void-expression`) in the new test.
+**MERGE STATE (resume here first):** PR #66 open, **merging-when-green**; **subscribed to its
+activity**; a `send_later` check-in (trigger `trig_01HgpKfkov7BQAJNzHtMNEoq`, ~14:44Z) re-checks CI
+and **squash-merges into main with a CLEAN message (NO session link / model-id) when all 6 jobs
+green**, else re-arms. If resuming: `get_check_runs` for #66 → merge if green, then **unsubscribe**.
+Latest SHA `aa5526d` (a HANDOFF-refresh commit sits on top). CI jobs: validate/describe/check/test/
+e2e/harness; `test` runs ~5-7 min and is always last. The lone allowed failure anywhere is env-only
+`dialect-drift` (CI pins CC, so it passes in CI).
+
+**CODE-REVIEW LOOP (done):** Codex-bot reviewed every pushed commit and found **13 real P2 bugs
+across 5 rounds — ALL fixed + tested** (api-extractor surface, eslint void-expr, single-skill bundled
+resources, root-SKILL.md coverage + colocation, sharedDirs-from-repo-root, scoped harness detection,
+per-surface→repo-level fallback, hook-only + hooks-convention plugin shape, loadable-only surface
+count, foreign-repo sharedDirs root, query-suffix vs glob-skip). Codex then **hit its usage quota**
+(no more reviews incoming) — the loop ends by quota, NOT by proof of correctness. WATCH-OUT: the
+single-skill-dir targeting + `.claude`-fallback subsystem generated most siblings; classes are now
+closed + tested, but if a NEW real bug there surfaces, prefer a redesign or NARROWING the PR (drop
+single-skill-dir) over another patch.
 
 **Shipped (branch — `feat(scan)` + `fix(lint)` + docs):**
 
