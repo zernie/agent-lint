@@ -132,7 +132,7 @@ This subagent — a helper your main agent hands work to — lists a tool that d
       apart, so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
 ```
 
-One popular plugin ships **45 pairs of skills** with near-identical descriptions. Your agent picks which skill to run by _reading_ those descriptions, so when two match it fires the wrong one. Still perfectly valid markdown.
+One popular plugin ships **45 pairs** of near-identical skill descriptions. Your agent picks a skill by _reading_ them — so when two match, it fires the wrong one. Still perfectly valid markdown.
 **[How triggering works →](docs/measuring-skills.md)**
 
 ## Proof 3 — it can quietly read your secrets and send them out
@@ -144,7 +144,7 @@ One popular plugin ships **45 pairs of skills** with near-identical descriptions
         · can send data out (Bash, WebFetch)
 ```
 
-Hand one subagent all three powers and a poisoned web page can tell it to read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 still looks like a B** — that's the point: a healthy-looking grade can hide a single subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
+Hand one subagent all three powers and a poisoned web page can make it read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 looks like a B** — and that's the trap: a healthy grade hiding a subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
 
 That's the whole idea: it checks your harness against **reality, not style**. Every tool, hook, file, script, and skill you reference is verified to actually resolve — and where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff, Clippy, and more).
 **[Everything it catches →](docs/what-vigiles-catches.md)** · point `audit` at a whole marketplace and it ranks every plugin the same way.
@@ -160,7 +160,7 @@ That's the whole idea: it checks your harness against **reality, not style**. Ev
 | `test`  | Does the harness behave?       | No — a scripted stand-in | Every commit             |
 | `eval`  | Does a skill actually help?    | Yes — your subscription  | On demand                |
 
-`audit` and `lint` share one engine. **`lint` is the CI gate** — it fails the build on broken references, bad tool contracts, dead hooks, and skill collisions (Proofs 1 and 2). **`audit`** runs those same checks, adds the Safety ring, renders the graded report, and can also run two opt-in _live_ checks (does your MCP server connect, do your skills fire). `test` and `eval` go past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath; you rarely run them by hand.)
+**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath — you rarely run them by hand.)
 
 ### 🔎 Lint — your instructions stop lying
 
