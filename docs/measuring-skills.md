@@ -1,7 +1,7 @@
 # Measuring skills & plugins — does it actually help?
 
-> The README has the pitch ("Measure — does it actually help, or just cost
-> more?"); this is the full guide. vigiles is the only harness tool that can A/B a
+> The README has the pitch (the only way to put a real number on cost); this is
+> the full guide. vigiles is the only harness tool that can A/B a
 > skill, plugin, model, or rule change on **real coding tasks** and tell you
 > whether it moved the needle — on your **Claude subscription**, not metered API.
 

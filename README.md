@@ -172,7 +172,7 @@ Every path, script, symbol, and rule verified against reality — plus tool cont
 A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never reaches the model — each passes a naive "did it run?" check. That gap is **false confidence**: a guard that looks like it works and silently doesn't. vigiles tests the real thing — hooks block, skills fire, subagents finish what they promised, a stray `git push` is caught before it happens. It drives a scripted stand-in for the model, not a live call, so it needs no key and runs on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
-### 📊 Eval — does a skill help, or just cost more?
+### 📊 Eval — the only way to put a real number on cost
 
 _"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and hands you three numbers: the **token bill**, whether it hit its **target**, and whether your code still **works**.
 
@@ -237,7 +237,7 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 - **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
 - **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md or AGENTS.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
-- **Is it stable enough to adopt?** Yes — the CLI is stable; only the library API is still evolving ([details](STABILITY.md)).
+- **Is it stable enough to adopt?** The CLI you run is small and rarely changes; the library API still moves between releases. The high version number is release automation (a new major per breaking change), not age — see [Stability](STABILITY.md).
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**
