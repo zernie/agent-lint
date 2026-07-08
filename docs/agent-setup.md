@@ -71,16 +71,18 @@ Instruction file: `AGENTS.md`, read directly — there is no plugin or hook syst
 The enforcement path is:
 
 ```bash
-npx vigiles init --target=AGENTS.md
+npx vigiles init --harness=codex   # full setup: scaffolds AGENTS.md.spec.ts + types + CI + Codex skills
 # 1. edit AGENTS.md.spec.ts (source of truth)
 # 2. npx vigiles compile        → regenerates AGENTS.md
 # 3. CI: npx vigiles lint && npx vigiles generate types --check
 ```
 
-Authoring skills install **globally** via the cross-agent `skills` CLI (no repo
-vendoring): `npx skills add zernie/vigiles -a codex -g -y` → `~/.agents/skills/`.
-`vigiles init --harness=codex` runs this. Codex hooks (`.codex/config.toml [hooks]`)
-aren't auto-wired yet.
+Use the full `init --harness=codex` (not `init --target=AGENTS.md`, which only
+scaffolds the spec) — it's what generates `.vigiles/generated.d.ts` and the CI
+config that step 3's `generate types --check` depends on. Authoring skills install
+**globally** via the cross-agent `skills` CLI (no repo vendoring):
+`npx skills add zernie/vigiles -a codex -g -y` → `~/.agents/skills/`, which that
+same command handles. Codex hooks (`.codex/config.toml [hooks]`) aren't auto-wired yet.
 
 ### Multi-agent (Claude + Codex)
 
