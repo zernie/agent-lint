@@ -11,7 +11,7 @@ that follows. Companion to `research/harness-testing.md` (the three-tier design)
 and `docs/harness-testing.md` (the guide). The conceptual model behind the two
 verbs — feature = deterministic TEST + behavioral EVAL, the two gating knobs,
 cost-matched mechanism, and the ranked gap roadmap — lives in
-[`docs/eval-architecture.md`](../docs/eval-architecture.md).
+[`eval-architecture.md`](eval-architecture.md).
 
 ## Decision (2026-06-15): keep the harness tiers, don't rebuild the eval stack
 

@@ -10,7 +10,7 @@ topic: eval
 > test, at what cost, with what isolation — and where does it hand off to a
 > container?" Consolidates a survey of popular community plugin collections and an
 > audit of a ~90-artifact real-world production skill set, blended with the
-> eval-field landscape. Companion to [`../docs/eval-architecture.md`](../docs/eval-architecture.md)
+> eval-field landscape. Companion to [`eval-architecture.md`](eval-architecture.md)
 > (the mechanism + roadmap), [`cross-platform-sandboxing.md`](cross-platform-sandboxing.md)
 > (the ephemeral run env + the OS-isolation port), and
 > [`skill-eval-landscape.md`](skill-eval-landscape.md) (how labs/practitioners eval).
@@ -33,7 +33,7 @@ containerless reproducible e2e (nobody can — see the landscape below).
 
 Every skill/hook/agent decomposes into a deterministic part and a behavioral
 part (the `feature = test + eval` decomposition in
-[`../docs/eval-architecture.md`](../docs/eval-architecture.md)). Orthogonally,
+[`eval-architecture.md`](eval-architecture.md)). Orthogonally,
 what a test needs from the _outside world_ sorts onto three rungs. **Prefer the
 lowest rung that faithfully measures the thing under test.**
 

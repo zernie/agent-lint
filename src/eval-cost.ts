@@ -9,7 +9,7 @@
  * the `claude` CLI) + a running session tally. We deliberately do NOT show a
  * "% of your subscription" — Anthropic does not expose a subscription's quota or
  * limit programmatically (and the real limits are rolling rate windows, not a
- * dollar bucket), so any percentage would be fiction. See docs/eval-architecture.md.
+ * dollar bucket), so any percentage would be fiction. See research/eval-architecture.md.
  *
  * Pure + injectable (env + an output sink), so the whole thing is unit-tested
  * without a model or a real key.

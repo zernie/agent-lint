@@ -59,6 +59,7 @@ export default claude({
     "research/covering-arrays-for-harness.md": `[idea] Pairwise/covering-array sampling over typed spec config space for interaction-testing evals`,
     "research/eval-api-landscape.md": `[active] vigiles's eval API vs promptfoo/DeepEval/Inspect; fidelity (real harness) is the differentiator`,
     "research/eval-coverage-and-isolation.md": `[active] The R1/R2/R3 rung model: what vigiles tests deterministically vs via containers`,
+    "research/eval-architecture.md": `[shipped] The eval system design-of-record: the two testing verbs reconciled with what ships, the cost model, the eval lock, model strategy, and the ranked build roadmap`,
     "research/r3-disposable-services.md": `[idea] Build spec for the R3 disposable-service tier (real side-effect testing) — the experimental vigiles/experimental surface + ContainerRuntime port, composing sandbox.ts/egress.ts`,
     "research/isolated-vs-whole-harness-eval.md": `[active] Eval skills both isolated (cheap loop) and whole-harness (release gate); isolated-only overstates recall`,
     "research/plugin-behavioral-findings.md": `[active] Live log of measureTriggerRate findings on popular plugins (superpowers under-triggers; haretrail refuted)`,

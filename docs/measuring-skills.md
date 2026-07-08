@@ -86,7 +86,7 @@ Two ways to specify an arm:
 | promptfoo, DeepEval, … | metered API SDK         | billed **per token, every run** |
 | **vigiles**            | your Claude Pro/Max sub | **$0 extra** beyond your sub    |
 
-That's why vigiles can measure continuously — on every change, not once — while a per-token competitor cannot. Most of vigiles needs no model at all. Only this measurement tier does, and it runs where your subscription already is. See [`docs/eval-architecture.md`](eval-architecture.md) for the cost model.
+That's why vigiles can measure continuously — on every change, not once — while a per-token competitor cannot. Most of vigiles needs no model at all. Only this measurement tier does, and it runs where your subscription already is.
 
 ### What a run reports — and the metered-API warning
 

@@ -124,7 +124,7 @@ export interface EvalArm {
    * opus: { model: "claude-opus-4-8" } }` — so model-as-an-arm answers "does my
    * harness still hold on the cheaper tier / after a model upgrade?" through the
    * same significance machinery, with no separate model-matrix runner. Omit to
-   * use the eval-level model. See `docs/eval-architecture.md` (model strategy).
+   * use the eval-level model. See `research/eval-architecture.md` (model strategy).
    */
   readonly model?: string;
 }
@@ -1186,7 +1186,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * e.g. `claude-haiku-4-5-20251001`. A floating alias (`haiku`, `sonnet`, or even
  * `claude-sonnet-4-6` with no date) can change underneath you — so a cached or
  * baselined result pinned to it can silently hide model drift. See
- * `docs/eval-architecture.md` (honest model pinning).
+ * `research/eval-architecture.md` (honest model pinning).
  */
 export function isDatedModel(model: string): boolean {
   return /\d{8}$/.test(model);

@@ -125,7 +125,7 @@ The same `session-start` hook is dogfooded a second time under `egress: { allow:
 ## See also
 
 - [Testing your harness](harness-testing.md) — the three tiers + the sandbox boundary.
-- [Eval architecture](eval-architecture.md) — `interceptTools`/`notTool`:
+- [Testing API](testing-api.md) — `interceptTools`/`notTool`:
   preventing a real model's tool side effects at the eval tier.
 - [`src/sandbox.ts`](../src/sandbox.ts) — `decideSandbox` (the pure policy), `bwrapArgs`, `parseEgressLog`.
 - [`src/egress.ts`](../src/egress.ts) — the `egress: { allow }` allowlist: ruleset builder, counter parser, the pure seams.
