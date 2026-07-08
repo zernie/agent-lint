@@ -26,6 +26,7 @@ Latest SHA `f1d0a2d`. CI jobs: validate/describe/check/test/e2e/harness (`test` 
 Lone allowed failure: env-only `dialect-drift` (CI pins CC → passes in CI).
 
 **Shipped (branch — all `docs:`):**
+
 - **Version honesty** — STABILITY.md + README FAQ claimed "0.x"; real npm version is **12.7.0**
   (semantic-release cuts a major per breaking change). Fixed to v12 + honest framing. Root cause: the
   `package.json` `0.0.0-semantically-released` placeholder misread as "0.x". Added `vigiles/linting`
