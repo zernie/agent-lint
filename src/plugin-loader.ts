@@ -319,7 +319,11 @@ function materializeSurfaces(
               ? readTree(dir, dir)
               : {};
         for (const [rel, content] of Object.entries(tree)) {
-          add(join(layout.materializeRoot, surface, rel), content, join(dir, rel));
+          add(
+            join(layout.materializeRoot, surface, rel),
+            content,
+            join(dir, rel),
+          );
         }
         counts[surface] = Object.keys(tree).length;
       }
@@ -327,6 +331,7 @@ function materializeSurfaces(
     }
     case "none":
       break;
+    /* v8 ignore next 2 -- exhaustiveness guard, unreachable given SurfaceSource */
     default:
       assertNever(source);
   }
