@@ -53,6 +53,8 @@ interface MvdanNode {
   Parts?: MvdanNode[];
   // Lit / Param fields
   Value?: string;
+  // ParamExp fields
+  Param?: MvdanNode;
 }
 
 interface MvdanRedirect extends MvdanNode {
@@ -486,4 +488,169 @@ export function leafCommands(command: string): string[][] {
     return true;
   });
   return out;
+}
+
+// ===========================================================================
+// OPERATION-NORMALIZED leaf extraction (additive — does NOT touch getLiteral,
+// leafCommands, or the read-only classifier above).
+//
+// The plain `leafCommands` primitive extracts LITERAL words only (`getLiteral`),
+// so a token-level matcher built on it is defeated by semantics-preserving
+// obfuscations that a POSIX shell executes identically to the plain form:
+//
+//   quoted flags        git push '--force'        (SglQuoted / DblQuoted word)
+//   absolute-path head  /bin/rm -rf /             (basename ≠ literal head)
+//   backslash-escaped   \rm -rf /                 (leading backslash on head)
+//   short-flag aliases  git commit -n             (-n ≡ --no-verify)
+//   $HOME for ~         cat "$HOME/.ssh/id_rsa"    (ParamExp instead of ~)
+//
+// `leafCommandsNormalized` canonicalizes each of these to a single operation
+// representation so a matcher can compare against the OPERATION, not the surface
+// string. This is the ingredient that closes the mutation-evasion gap the
+// Lit-only extractor leaves open (see research/ before/after measurement).
+// ===========================================================================
+
+/** A single simple command, normalized to its operation form. */
+export interface NormalizedLeaf {
+  /** Head normalized to its basename, backslash-stripped: `/bin/rm`→`rm`, `\rm`→`rm`. */
+  readonly head: string;
+  /** `[head, ...args]` — every word quote-unwrapped and $HOME/~-canonicalized. */
+  readonly argv: readonly string[];
+  /** The normalized args (argv without the head). */
+  readonly args: readonly string[];
+  /**
+   * Canonical flag tokens present on this leaf. Short clusters are split
+   * (`-rf`→`r`,`f`) and each flag is recorded in BOTH short and long form via the
+   * alias table, so a caller can test `--force`/`-f` or `--no-verify`/`-n`
+   * uniformly. Long values are split on `=` (`--index-url=x`→`index-url`).
+   */
+  readonly flags: ReadonlySet<string>;
+  /** True iff ANY of `names` is present in {@link flags} (short or long). */
+  hasFlag(...names: readonly string[]): boolean;
+}
+
+/**
+ * Known short↔long flag aliases. Deliberately small and operation-relevant:
+ * a caller always gates on the head (e.g. only treats `index-url` as supply-chain
+ * when the head is `pip`), so recording both forms unconditionally is safe.
+ */
+const SHORT_TO_LONG: Readonly<Record<string, string>> = {
+  f: "force",
+  n: "no-verify",
+  r: "recursive",
+  i: "index-url",
+};
+const LONG_TO_SHORT: Readonly<Record<string, string>> = {
+  force: "f",
+  "no-verify": "n",
+  recursive: "r",
+  "index-url": "i",
+};
+
+/**
+ * Reconstruct a Word's static text, unwrapping single/double quotes and
+ * canonicalizing `$HOME`/`${HOME}` to `~`. Returns null if the word contains a
+ * truly dynamic segment (command substitution, arithmetic, a non-HOME parameter)
+ * — such a word can't be soundly reduced to a literal operation token.
+ */
+function normalizeParts(
+  parts: readonly MvdanNode[] | undefined,
+): string | null {
+  if (!parts) return null;
+  let out = "";
+  for (const p of parts) {
+    const t = sh.syntax.NodeType(p);
+    if (t === "Lit" || t === "SglQuoted") {
+      out += p.Value ?? "";
+    } else if (t === "DblQuoted") {
+      const inner = normalizeParts((p as MvdanWord).Parts);
+      if (inner === null) return null;
+      out += inner;
+    } else if (t === "ParamExp") {
+      // Canonicalize the home directory; any other parameter is dynamic.
+      if (p.Param?.Value === "HOME") out += "~";
+      else return null;
+    } else {
+      return null; // CmdSubst / ArithmExp / ProcSubst / … → dynamic
+    }
+  }
+  return out;
+}
+
+/** Normalize a command head to its basename, stripping one leading backslash. */
+function normalizeHead(raw: string): string {
+  const unescaped = raw.startsWith("\\") ? raw.slice(1) : raw;
+  const slash = unescaped.lastIndexOf("/");
+  return slash >= 0 ? unescaped.slice(slash + 1) : unescaped;
+}
+
+/** Build the canonical flag set for a leaf's args (short-cluster + alias expansion). */
+function buildFlags(args: readonly string[]): Set<string> {
+  const flags = new Set<string>();
+  const add = (name: string): void => {
+    if (!name) return;
+    flags.add(name);
+    if (name.length === 1 && SHORT_TO_LONG[name])
+      flags.add(SHORT_TO_LONG[name]);
+    const short = LONG_TO_SHORT[name];
+    if (short) flags.add(short);
+  };
+  for (const a of args) {
+    if (a.startsWith("--")) {
+      add(a.slice(2).split("=")[0] ?? "");
+    } else if (a.length > 1 && a[0] === "-") {
+      for (const ch of a.slice(1)) {
+        if (/[a-zA-Z]/.test(ch)) add(ch);
+      }
+    }
+  }
+  return flags;
+}
+
+/**
+ * Extract every simple command as a {@link NormalizedLeaf} — the operation-level
+ * twin of {@link leafCommands}. Same AST-backed structural coverage (a leaf nested
+ * in a pipeline / `&&` / subshell is still found), but each word is quote-unwrapped
+ * and $HOME-canonicalized, the head is reduced to its backslash-stripped basename,
+ * and flags are expanded to short+long canonical forms. A matcher built on this
+ * compares against the OPERATION rather than the surface tokens, so it is robust
+ * to quoting, interpreter path, backslash escaping, flag aliasing, and $HOME/~.
+ *
+ * Purely additive: reuses the same mvdan-sh parse, changes nothing above. Parse
+ * failure → []. A leaf with a dynamic head is skipped (can't be normalized).
+ */
+export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
+  let file: MvdanNode;
+  try {
+    file = sh.syntax.NewParser().Parse(command, "cmd.sh");
+  } catch {
+    return [];
+  }
+  const out: NormalizedLeaf[] = [];
+  sh.syntax.Walk(file, (node) => {
+    const leaf = normalizeCallExpr(node);
+    if (leaf) out.push(leaf);
+    return true;
+  });
+  return out;
+}
+
+/** Normalize a single CallExpr node to a {@link NormalizedLeaf}, or null if it isn't one / has a dynamic head. */
+function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
+  if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
+    return null;
+  const headRaw = normalizeParts(node.Args[0]?.Parts);
+  if (headRaw === null) return null; // dynamic head → not normalizable
+  const head = normalizeHead(headRaw);
+  const args = node.Args.slice(1)
+    .map((w) => normalizeParts(w.Parts))
+    .filter((w): w is string => w !== null);
+  const flags = buildFlags(args);
+  return {
+    head,
+    argv: [head, ...args],
+    args,
+    flags,
+    hasFlag: (...names) => names.some((n) => flags.has(n)),
+  };
 }
