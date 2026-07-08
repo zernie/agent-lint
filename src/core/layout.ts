@@ -29,6 +29,17 @@ export interface PluginLayout {
   readonly instructionFile: string;
   /** Surface dirs materialized into the sandbox, e.g. skills/agents/commands. */
   readonly surfaceDirs: readonly string[];
+  /**
+   * Project-level dir under which an END-USER (not a plugin author) keeps the
+   * same surfaces, e.g. `.claude` → `.claude/skills`, `.claude/agents`. When set,
+   * the loader reads each surface from BOTH `<root>/<surface>` (the plugin /
+   * skills-library shape) AND `<root>/<userSurfaceRoot>/<surface>` (the shape a
+   * plain Claude Code user has), normalizing to the same materialized key. Most
+   * Claude Code users are NOT publishing a plugin — their skills live here, so
+   * without this the loader would see an empty machine for a normal repo.
+   * Undefined ⇒ only the primary location is read (backwards-compatible).
+   */
+  readonly userSurfaceRoot?: string;
   // Where each model surface lives, by KIND — repo-relative dir names so the
   // scan/lint surface classifiers and the subagent-rule globs are layout-driven,
   // not hard-coded to Claude Code's `skills`/`agents`/`commands`. A harness that

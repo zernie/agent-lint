@@ -14,70 +14,58 @@
 
 ## RESUME HERE
 
-**Branch `claude/readme-eval-docs-fjwhhu`** → **PR #63 OPEN, merging-when-green.** This
-session: README eval-cost clarity + the **EXPERIMENTAL R3 disposable-service tier** + a
-**promptfoo migration path** + a hard **safety pass** + a **parse-don't-validate refactor** +
-a **code-quality dev skill**. Goal: "let a team run real side-effect + behavior skill evals on
-vigiles (on the sub) instead of promptfoo."
+**Branch `claude/vigiles-cost-analysis-9ko9mv`** (name is misleading — the work is
+ADOPTION FIXES, not cost analysis) → **PR #66 OPEN, merging-when-green.** This session acted
+on a skills-monorepo FIELD REPORT (a team ran vigiles on a 46-skill CI library with no
+`plugin.json` and hit blockers) — all 7 feedback points fixed.
 
-**MERGE STATE (resume here first):** PR #63 (`feat(experimental): R3 disposable-service eval
-tier + promptfoo migration guide`) is open; a scheduled **send_later check-in** (trigger
-`trig_01Vx1d6ziy5dyjc2fmXfp3Md`, ~23:06Z) re-checks CI and **squash-merges with a CLEAN message
-(NO session link) when all checks are green**, else re-arms. Session is **subscribed to PR #63
-activity**. If resuming: check `get_check_runs` for #63 — merge if green, else let the check-in
-handle it. Codex-bot posted 2 P2 review comments (both real, both FIXED — see below).
+**MERGE STATE (resume here first):** PR #66 open, **merging-when-green**; **subscribed to its
+activity**; a `send_later` check-in (trigger `trig_01HgpKfkov7BQAJNzHtMNEoq`, ~14:44Z) re-checks CI
+and **squash-merges into main with a CLEAN message (NO session link / model-id) when all 6 jobs
+green**, else re-arms. If resuming: `get_check_runs` for #66 → merge if green, then **unsubscribe**.
+Latest SHA `aa5526d` (a HANDOFF-refresh commit sits on top). CI jobs: validate/describe/check/test/
+e2e/harness; `test` runs ~5-7 min and is always last. The lone allowed failure anywhere is env-only
+`dialect-drift` (CI pins CC, so it passes in CI).
 
-**Shipped (commits on the branch):**
+**CODE-REVIEW LOOP (done):** Codex-bot reviewed every pushed commit and found **13 real P2 bugs
+across 5 rounds — ALL fixed + tested** (api-extractor surface, eslint void-expr, single-skill bundled
+resources, root-SKILL.md coverage + colocation, sharedDirs-from-repo-root, scoped harness detection,
+per-surface→repo-level fallback, hook-only + hooks-convention plugin shape, loadable-only surface
+count, foreign-repo sharedDirs root, query-suffix vs glob-skip). Codex then **hit its usage quota**
+(no more reviews incoming) — the loop ends by quota, NOT by proof of correctness. WATCH-OUT: the
+single-skill-dir targeting + `.claude`-fallback subsystem generated most siblings; classes are now
+closed + tested, but if a NEW real bug there surfaces, prefer a redesign or NARROWING the PR (drop
+single-skill-dir) over another patch.
 
-- `docs` (4c73cf8): README eval section leads with the caveman COST case + a real measured
-  verdict (762→842 out tok, +11%, correctness intact, $0 on sub).
-- `feat(experimental)` (1c52083): R3 tier under the quarantined **`vigiles/experimental`**
-  subpath (`experimental_` prefix + `@experimental` JSDoc + STABILITY note + api-extractor
-  tracked). `experimental_startServices` + `ServiceSpec`/`ServiceHandle`/`ServiceSession`/
-  `ContainerRuntime` port (`src/services.ts`) + a REAL Docker backend `makeDockerRuntime` /
-  `experimental_dockerRuntime` (`src/services-docker.ts`: pure builders + injected
-  `DockerExec`/`NetProbe` seams, mirroring `sandbox.ts`). PLUS the promptfoo migration guide
-  (`docs/migrating-from-promptfoo.md`) + example (`examples/harness/from-promptfoo.mjs`).
-- `feat(experimental)` (196b43e): `experimental_withServices` scope helper + measureArms
-  example (`examples/harness/measure-with-service.mjs`) + the **SAFETY pass** — fixed a
-  false-safety **egress OVERCLAIM** (egress is NOT pinned in the eval tier; the wall is
-  deferred), added loud safety warnings in docs + JSDoc + examples.
-- `test(experimental)` (305b77c): real-tcp readiness test + `examples-syntax.test.ts`.
-- `test` (59d4b1e): **graduated** `services.ts`/`services-docker.ts` into the 100% coverage
-  allowlist (real-daemon seams `v8 ignore`'d) + a real **integration tier**
-  (`src/services.integration.test.ts` — real Postgres migration, gated/skips without Docker).
-- `refactor(experimental)` (6b90895): **parse-don't-validate + irrepresentable illegal states**
-  — `parseDockerPort → number|undefined`, `ServiceReady` parsed once into a tagged `ReadyProbe`,
-  `ServiceHandle.port?/url?` (no magic `0`/`""`), exhaustive `switch`+`assertNever`.
-- `feat(dev)` (ebbb9d3): **code-quality dev skill** (`dev/skills/code-quality/`, in the
-  `vigiles-dev` plugin, NOT shipped) — SKILL.md + 5 technique references (parse-don't-validate,
-  illegal-states, exhaustive-matching, pure-functions, public-API), each grounded in the refactor.
-- `fix(experimental)` (407b289): the 2 Codex P2 fixes — `measure()` is SINGLE-arg
-  (checks/trials inside the one MeasureSpec; the example/doc wrongly passed a 2nd object) +
-  tcp readiness now honors the DECLARED port (`ReadyProbe.containerPort`).
-- `chore` (65f99de): removed a stray `.tmp-genh-cli-*` test dir + gitignored the scratch patterns.
+**Shipped (branch — `feat(scan)` + `fix(lint)` + docs):**
 
-Design record: `research/r3-disposable-services.md`. Public guide: `docs/measuring-skills.md`
-§ Experimental + § Safety. Migration: `docs/migrating-from-promptfoo.md`.
+- **P0-1** `loadPlugin` recognizes THREE repo shapes — published plugin / bare `skills/*` library /
+  plain `.claude/skills` user repo — via a new optional `PluginLayout.userSurfaceRoot` (`.claude`
+  in the CC adapter; core stays agnostic, `.claude` literal only in the adapter). Root `skills/`
+  WINS over `.claude/skills`. A single skill dir works. `LoadedPlugin.sources` maps each
+  materialized key → its real on-disk path. Reads the PROJECT `.claude` only, never `~/.claude`.
+- **P0-2** `vigiles lint` now SCOPES to an explicit dir arg (was: ignored the path, scanned the
+  whole repo → reported foreign surfaces). `runLint` resolves ONE `scanRoot` (single existing dir →
+  narrow; file / several / none → cwd, so **bare `lint` is byte-identical**) threaded into all 21
+  surface appliers (replaced `process.cwd()`). Bugfix — only `lint <dir>` changes.
+- **P1-3** skill-resources skips glob / placeholder refs (`* ? { } < >`) + `~/` home paths.
+- **P1-4** OPT-IN `sharedDirs` config — a ref whose first segment is a declared shared dir also
+  resolves at the repo root; scoped so nothing outside it is masked; default byte-identical.
+- **P2-6** lethal-trifecta advisory collapsed to one line per unit. **P2-7** `docs/skills-monorepo.md`.
 
-**DONE this session (was the open question):** graduated `src/services.ts` +
-`src/services-docker.ts` into the vitest **100% coverage allowlist** (real-daemon seams
-`v8 ignore`'d like `sandbox.ts`). Coverage gate passes locally.
+Files: `src/plugin-loader.ts`, `src/core/layout.ts`, `src/adapters/claude-code/layout.ts`,
+`src/scan.ts`, `src/core/skill-resources.ts`, `src/core/types.ts` (`sharedDirs`), `src/cli.ts`
+(scanRoot). Tests: `src/scan.test.ts`, `src/core/skill-resources.test.ts`, `src/scan-cli.test.ts`
+(lint-scoping e2e), `src/adapters/claude-code/plugin-loader.test.ts`.
 
-**NEXT STEPS (the R3 loop, deferred + documented, not blocking):**
+**NEXT (not blocking):** the feedback is fully addressed. The field report's exact "global
+`~/.claude` skills appeared" symptom couldn't be reproduced from code (their env) — P0-2's
+correct rooting closes it either way. Possible follow-up: the `init` ADOPT/untested discovery
+also walks cwd; P0-2 scopes the lint appliers, adopt-discovery is a separate pass.
 
-- per-trial container reset (needs an eval-loop hook in `eval.ts`; today services live
-  per-RUN → make the task self-contained or `trials: 1`).
-- the egress wall (skill reaches only model + service) — until it lands, R3 safety story is
-  "run in an isolated env + keep real creds out (recommend `ephemeralEnv`)".
-- first-class `services` option on `measureArms` + `ctx.service(name)` (today: compose via
-  `experimental_withServices`).
-- safe-default credential-scrub; a write-don't-run OSS-skill-through-R3 dogfood.
-
-**TEST STATUS:** Linux real-docker integration RUNS in CI (`ubuntu-latest` has Docker) via a
-gated `describe.skipIf(!dockerUp)` real-redis test. macOS UNTESTED (docs say Linux-first). No
-OSS-skill-through-R3 dogfood (inherently needs model auth). Experimental files sit OUTSIDE the
-100% coverage gate (deliberate — see the OPEN item).
+**TEST STATUS:** full vitest **2074 passed** locally; the only failure is env-only
+`dialect-drift.test.ts` (installed vs pinned CC — CI pins it). eslint/tsc/test:types/fmt/api all
+green locally.
 
 ## Don't re-read unless the task needs it
 
@@ -116,6 +104,16 @@ OSS-skill-through-R3 dogfood (inherently needs model auth). Experimental files s
 
 ## Decisions of record (don't relitigate)
 
+- **`sharedDirs` is OPT-IN by design** (P1-4). Resolving a bundled `SKILL.md` ref against the repo
+  root BY DEFAULT can mask a genuinely-missing bundled resource (a same-named file at root → false
+  negative). So only a ref whose first segment is a repo-DECLARED shared dir gets root resolution;
+  a repo that sets no `sharedDirs` is byte-identical to before.
+- **`lint <dir>` scoping is a BUGFIX, not a breaking change** (P0-2). The path was silently ignored;
+  now a single explicit dir narrows the scan. Bare `vigiles lint` (the CI-common case) stays
+  whole-repo / byte-identical. Only someone who passed a dir AND relied on the accidental whole-repo
+  scan sees narrower coverage.
+- **`userSurfaceRoot` / `.claude/skills` reading is PROJECT-only** — never `~/.claude`. Keeps CI
+  reproducible. The `.claude` literal lives in the CC adapter layout, not core (`core ⊄ adapter`).
 - Repo is PUBLIC → strategy is VAULT-ONLY (`doc-tiers`). HANDOFF/research/CLAUDE.md/README = public.
   **Never name a specific user/company/$ figure in the repo** — one such mention was scrubbed from
   branch history this session via `git reset --soft` + force-push-with-lease.
