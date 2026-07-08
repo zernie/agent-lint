@@ -797,7 +797,9 @@ describe("lint scopes surface checks to an explicit directory (P0-2)", () => {
       JSON.stringify({ rules: { "subagent-tool-contract": "warn" } }),
     );
   });
-  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+  afterAll(() => {
+    rmSync(repo, { recursive: true, force: true });
+  });
 
   it("lint pkgA reports pkgA's typo'd subagent tool", () => {
     const r = run("lint pkgA", repo);
