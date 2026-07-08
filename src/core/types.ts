@@ -367,6 +367,18 @@ export interface VigilesConfig {
    */
   exclude?: readonly string[];
   /**
+   * Top-level dir names shared across skills, e.g. `["scripts", "references"]`.
+   * OPT-IN: many skill libraries keep ONE top-level `scripts/`/`references/` tree
+   * rather than a copy beside every `SKILL.md`, so a bundled ref like
+   * `scripts/promptfoo/x.py` lives at the REPO ROOT. When a `SKILL.md` body ref's
+   * first path segment is a declared shared dir, `skill-resource-resolves` / audit
+   * ALSO resolves it against the repo root, not only the skill's own dir. Scoped
+   * to declared dirs on purpose: a repo that omits this key behaves exactly as
+   * before (skill-dir-only resolution), and a ref outside a shared dir is never
+   * masked by a same-named repo-root file. See feedback P1-4.
+   */
+  sharedDirs?: readonly string[];
+  /**
    * The harness(es) this repo targets — selects the compile dialect / skill
    * frontmatter profile / instruction-file shape, instead of sniffing the cwd.
    * A single name (`"codex"`) for the common single-harness repo, or an array

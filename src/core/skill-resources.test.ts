@@ -146,4 +146,65 @@ describe("skillResourceIssues", () => {
     expect(run(body, existsOnly("references/api.md"))).toEqual([]);
     expect(run(body, existsOnly())[0]?.resolved).toBe("references/api.md");
   });
+
+  it("skips a glob pattern (not a concrete file) — P1-3", () => {
+    // `references/*.md` is a directory convention, not a literal path. Both the
+    // inline-span and markdown-link forms must be skipped, never "missing".
+    const body = [
+      "All refs live under `references/*.md`.",
+      "See [the cards](references/*.md) for the list.",
+    ].join("\n");
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("skips angle-bracket + brace template placeholders — P1-3", () => {
+    const body = [
+      "Each linter has `references/linter-cards/{trivial,contextual}/<linter>.md`.",
+      "Tests live at `scripts/tests/test_assert_<target>_x.py`.",
+    ].join("\n");
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("skips a `~/`-rooted home/global ref (external to the repo) — P1-5", () => {
+    const body =
+      "Route via [docs](~/.claude/docs/foo.md) and `~/.claude/rules/bar.md`.";
+    expect(run(body, existsOnly())).toEqual([]);
+  });
+
+  it("resolves a declared shared-dir ref against the repo root — P1-4 (opt-in)", () => {
+    // `scripts/promptfoo/x.py` lives at the REPO ROOT, not beside the SKILL.md —
+    // the shared-tree shape. Only when `scripts` is a DECLARED shared dir does it
+    // resolve against the repo root; without that opt-in it's still "missing".
+    const REPO_ROOT = "/plugin";
+    const body = "Run `scripts/promptfoo/baseline_leak_scan.py` to check.";
+    const existsAtRepoRoot = (p: string): boolean =>
+      p === resolve(REPO_ROOT, "scripts/promptfoo/baseline_leak_scan.py");
+    // default (no sharedDirs) → unchanged, flagged missing
+    expect(run(body, existsAtRepoRoot)).toHaveLength(1);
+    // opt-in: `scripts` declared shared → resolves against repo root, not flagged
+    expect(
+      skillResourceIssues(body, SKILL_DIR, {
+        existsSync: existsAtRepoRoot,
+        repoRoot: REPO_ROOT,
+        sharedDirs: ["scripts", "references"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("does NOT mask a ref outside a declared shared dir — P1-4 safety", () => {
+    // Even with `scripts` shared, a ref under a DIFFERENT top dir (`references/`)
+    // that only exists at the repo root stays flagged — the opt-in can't silently
+    // suppress a genuinely-missing bundled resource outside the declared dirs.
+    const REPO_ROOT = "/plugin";
+    const body = "See `references/api.md`.";
+    const existsAtRepoRoot = (p: string): boolean =>
+      p === resolve(REPO_ROOT, "references/api.md");
+    expect(
+      skillResourceIssues(body, SKILL_DIR, {
+        existsSync: existsAtRepoRoot,
+        repoRoot: REPO_ROOT,
+        sharedDirs: ["scripts"], // references NOT declared shared
+      }),
+    ).toHaveLength(1);
+  });
 });

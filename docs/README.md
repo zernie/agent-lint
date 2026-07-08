@@ -10,6 +10,7 @@ How-to and reference docs for using vigiles. New here? Start with the
 ## Verify your instruction files (layer 1)
 
 - [`verifying-instruction-files.md`](verifying-instruction-files.md) — the full guide: the markdown→typed-spec ladder, the three rule types (`enforce` / `guidance` / `guard`), verified references + marks, and the before/after tables.
+- [`skills-monorepo.md`](skills-monorepo.md) — adopt vigiles in a CI-tested skill library or a plain `.claude/` repo (no `plugin.json`): the three repo shapes it loads, the `sharedDirs` opt-in, and what a `SKILL.md` body ref resolves.
 
 ## Guard the harness — compiled hooks
 

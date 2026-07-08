@@ -50,6 +50,22 @@ export interface SkillResourceFinding {
 export interface SkillResourceOptions {
   /** Injectable existence check (default: node:fs existsSync). */
   readonly existsSync?: (p: string) => boolean;
+  /**
+   * Repo root, used only together with `sharedDirs` (below). Off by default.
+   */
+  readonly repoRoot?: string;
+  /**
+   * OPT-IN shared-resource dirs — top-level dir names a repo shares across skills
+   * (`.vigilesrc.json` `sharedDirs`, e.g. `["scripts", "references"]`). Many skill
+   * libraries keep ONE top-level `scripts/` tree instead of a copy beside every
+   * SKILL.md, so a ref like `scripts/promptfoo/x.py` lives at the repo root. When
+   * a ref's FIRST path segment is a declared shared dir, it may ALSO resolve
+   * against `repoRoot`. Scoped to declared dirs on PURPOSE: a repo that sets no
+   * `sharedDirs` is byte-identical to before (skill-dir-only), and even with it a
+   * ref OUTSIDE a shared dir still can't be masked by a same-named repo-root file.
+   * The controlled fix for feedback P1-4 (opt-in, never a default behavior change).
+   */
+  readonly sharedDirs?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +113,17 @@ function localResourceTarget(rawTarget: string): string | null {
   // SKIP: variable tokens (`${CLAUDE_PLUGIN_ROOT}/x`, `$VAR/x`) — uncheckable,
   // and almost always a plugin-root or runtime path, not a bundled file.
   if (target.includes("$")) return null;
+  // SKIP: `~/`-rooted paths — the user's home / machine-global config, referenced
+  // intentionally from OUTSIDE the repo (JIT routing like `Read ~/.claude/docs/x.md`).
+  // Not a repo-bundled resource; unverifiable from the repo and never a "broken ref".
+  if (target === "~" || target.startsWith("~/")) return null;
+  // SKIP: globs and template placeholders — a ref carrying a glob metacharacter
+  // (`*`, `?`) or a brace/angle-bracket placeholder (`{trivial,…}`, `<linter>`) is a
+  // directory CONVENTION or an example, not a concrete file (`references/*.md`,
+  // `references/linter-cards/{a,b}/<linter>.md`). Resolving it as a literal path and
+  // reporting "missing" is a false positive — the biggest source of ref noise on a
+  // real authoring style (feedback P1-3).
+  if (/[*?{}<>]/.test(target)) return null;
 
   // Drop a URL fragment / query suffix so `references/api.md#auth` resolves to
   // the file. (Only after the scheme check above, so we never mangle a URL.)
@@ -176,6 +203,19 @@ export function skillResourceIssues(
   opts: SkillResourceOptions = {},
 ): SkillResourceFinding[] {
   const exists = opts.existsSync ?? nodeExistsSync;
+  const sharedDirs = new Set(opts.sharedDirs ?? []);
+  // A ref resolves if it exists under the skill's own dir. If (and only if) its
+  // first segment is a DECLARED shared dir, it may also resolve against the repo
+  // root — the opt-in shared-tree case. No shared dirs → skill-dir-only (unchanged).
+  const resolvesAnywhere = (rel: string): boolean => {
+    if (exists(resolve(skillDir, rel))) return true;
+    const firstSeg = rel.split("/")[0];
+    return (
+      opts.repoRoot !== undefined &&
+      sharedDirs.has(firstSeg) &&
+      exists(resolve(opts.repoRoot, rel))
+    );
+  };
   const findings: SkillResourceFinding[] = [];
   const seen = new Set<string>();
 
@@ -189,8 +229,7 @@ export function skillResourceIssues(
     if (inFence) continue;
 
     for (const c of candidatesInLine(lines[i], i + 1)) {
-      const full = resolve(skillDir, c.resolved);
-      if (exists(full)) continue;
+      if (resolvesAnywhere(c.resolved)) continue;
       // De-dupe the same missing file referenced several times in the body.
       const key = `${c.kind}:${c.resolved}`;
       if (seen.has(key)) continue;
