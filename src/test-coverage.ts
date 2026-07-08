@@ -148,6 +148,22 @@ function discoverSkills(
       ignored: content.includes(IGNORE_MARKER),
     });
   }
+  // Single-skill-directory target: a bare `SKILL.md` AT the base (the dir you
+  // pointed lint/audit at). The globs above only match `<skillDir>/*/SKILL.md`
+  // NESTED under the base, so without this the untested-skill check would silently
+  // vanish for exactly the single-skill target that scoping now supports.
+  const rootSkill = join(basePath, "SKILL.md");
+  if (existsSync(rootSkill)) {
+    const name = basename(basePath);
+    const content = read(rootSkill);
+    out.push({
+      kind: "skill",
+      path: "SKILL.md",
+      name,
+      tokens: [`${layout.skillDir}/${name}`, `:${name}`],
+      ignored: content.includes(IGNORE_MARKER),
+    });
+  }
   return out;
 }
 
@@ -253,7 +269,13 @@ function discoverTests(
 /** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
 function isColocated(surface: Surface, testPath: string): boolean {
   if (surface.kind === "skill") {
-    return testPath.startsWith(`${dirname(surface.path)}/`);
+    const dir = dirname(surface.path);
+    // A root `SKILL.md` (single-skill-dir target) lives at ".", so any TOP-LEVEL
+    // test is colocated — globSync returns those without a "./" prefix, which a
+    // bare `startsWith("./")` would miss (false "untested").
+    return dir === "."
+      ? dirname(testPath) === "."
+      : testPath.startsWith(`${dir}/`);
   }
   return (
     dirname(testPath) === dirname(surface.path) &&
@@ -314,10 +336,14 @@ export function findUntestedSurfaces(
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
 export function suggestedTestPath(surface: Surface): string {
+  // A root skill lives at ".", so drop the "./" prefix — the suggested path then
+  // matches what globSync actually discovers at the top level.
+  const dir = dirname(surface.path);
+  const prefix = dir === "." ? "" : `${dir}/`;
   if (surface.kind === "skill") {
-    return `${dirname(surface.path)}/${surface.name}.eval.mjs`;
+    return `${prefix}${surface.name}.eval.mjs`;
   }
-  return `${dirname(surface.path)}/${surface.name}.harness.mjs`;
+  return `${prefix}${surface.name}.harness.mjs`;
 }
 
 /** Format an untested-surface report as human-readable text. */

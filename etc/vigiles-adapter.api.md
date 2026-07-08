@@ -136,6 +136,7 @@ export interface PluginLayout {
     readonly settingsPath: string;
     readonly skillDir: string;
     readonly surfaceDirs: readonly string[];
+    readonly userSurfaceRoot?: string;
 }
 
 // @public

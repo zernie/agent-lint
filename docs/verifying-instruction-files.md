@@ -275,4 +275,5 @@ Everything vigiles compiles and lints is **deterministic** — same input, same 
 - [Linter support](linter-support.md) — the 7 catalogs + `generate-types` / `generate-schema`.
 - [CLI & CI reference](cli.md) · [Agent setup](agent-setup.md).
 - [Compiled hooks](compiled-hooks.md) — the deterministic **gate** instrument: author a hook that can't be wrong.
+- [Skills monorepo adoption](skills-monorepo.md) — a CI-tested skill library or a plain `.claude/` repo (no `plugin.json`).
 - [Testing your harness](harness-testing.md) — Layer 2.

@@ -6,7 +6,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 
 import { loadPlugin, resolveHarness } from "./plugin-loader.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
@@ -401,6 +401,85 @@ test("a fully-covered plugin (hooks + CLAUDE.md + skills) has no warnings", () =
   }
 });
 
+test("loadPlugin loads an end-user repo's .claude/skills (no plugin.json)", () => {
+  // The MAJORITY shape: a plain Claude Code user, skills under `.claude/skills/`,
+  // not a published plugin. Before this the loader saw an empty machine here.
+  const root = makeTmpDir("userrepo");
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), "# my project\n");
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: Investigate an incident\n---\n# rca\n",
+    );
+    const loaded = loadPlugin(root);
+    // materialized under the SAME canonical key as a repo-root skill would be
+    const key = join(".claude", "skills", "rca", "SKILL.md");
+    assert.ok(loaded.files[key], "the .claude/skills skill is loaded");
+    // real on-disk source recorded (the file lives UNDER .claude/, not repo root)
+    assert.equal(
+      loaded.sources[key],
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+    );
+    // not an empty machine
+    assert.ok(!loaded.warnings.some((w) => w.includes("nothing was loaded")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin prefers a repo-root skills/ over .claude/skills when both exist", () => {
+  // A plugin/library author's OWN local `.claude/skills` dev skills must not
+  // pollute the audit of what the plugin ships — the repo-root `skills/` wins.
+  const root = makeTmpDir("bothshapes");
+  try {
+    mkdirSync(join(root, "skills", "lib-skill"), { recursive: true });
+    writeFileSync(join(root, "skills", "lib-skill", "SKILL.md"), "# lib\n");
+    mkdirSync(join(root, ".claude", "skills", "user-skill"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, ".claude", "skills", "user-skill", "SKILL.md"),
+      "# user\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.equal(
+      files[join(".claude", "skills", "lib-skill", "SKILL.md")],
+      "# lib\n",
+      "the repo-root skill is loaded",
+    );
+    assert.equal(
+      files[join(".claude", "skills", "user-skill", "SKILL.md")],
+      undefined,
+      "the .claude/skills fallback is skipped when repo-root skills/ exists",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin loads a single skill directory (SKILL.md at the target root)", () => {
+  // Pointing `audit`/`test` at ONE skill dir — the natural thing to do — used to
+  // yield "no loadable surface". Now it materializes as a skill named by the dir.
+  const root = makeTmpDir("one-skill");
+  try {
+    writeFileSync(
+      join(root, "SKILL.md"),
+      "---\nname: solo\ndescription: A solo skill\n---\n# solo\n",
+    );
+    const loaded = loadPlugin(root);
+    const key = join(".claude", "skills", basename(root), "SKILL.md");
+    assert.ok(
+      loaded.files[key],
+      "the sole SKILL.md is materialized as a skill",
+    );
+    assert.equal(loaded.sources[key], join(root, "SKILL.md"));
+    assert.ok(!loaded.warnings.some((w) => w.includes("nothing was loaded")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
 test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
   // The repo's own .claude-plugin/plugin.json — proves the loader parses the
   // real shipped manifest, not just a fixture.
@@ -412,4 +491,157 @@ test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
     "token expanded",
   );
   assert.ok(typeof loaded.files["CLAUDE.md"] === "string", "CLAUDE.md loaded");
+});
+
+test("loadPlugin materializes a single skill dir's WHOLE subtree (bundled resources)", () => {
+  // Pointing at one skill dir must ship its bundled resources too, not just
+  // SKILL.md — else a single-skill harness test/eval runs against a harness
+  // missing the skill's own scripts/references.
+  const root = makeTmpDir("solo-skill");
+  try {
+    writeFileSync(
+      join(root, "SKILL.md"),
+      "---\nname: solo\ndescription: a solo skill\n---\nRun scripts/run.sh\n",
+    );
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    writeFileSync(join(root, "scripts", "run.sh"), "#!/usr/bin/env bash\n");
+    const { files, sources } = loadPlugin(root);
+    const name = basename(root);
+    const skillKey = join(".claude", "skills", name, "SKILL.md");
+    const resKey = join(".claude", "skills", name, "scripts", "run.sh");
+    assert.ok(files[skillKey], "SKILL.md materialized");
+    assert.ok(files[resKey], "bundled script materialized (not just SKILL.md)");
+    assert.equal(sources[resKey], join(root, "scripts", "run.sh"));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin falls back to .claude/skills when the root skills/ is EMPTY", () => {
+  // An empty (or unrelated) root `skills/` must NOT shadow real `.claude/skills`
+  // — else a plain user repo is reported empty (the F/0 this change fixes).
+  const root = makeTmpDir("empty-root-skills");
+  try {
+    mkdirSync(join(root, "skills"), { recursive: true }); // present but EMPTY
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: a real user skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "rca", "SKILL.md")],
+      "the real .claude/skills skill is read despite an empty root skills/",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin does NOT import project-local .claude/agents into a plugin", () => {
+  // A plugin/library repo (has a shipped root `skills/`) must not materialize a
+  // developer's local `.claude/agents` as if the plugin ships them.
+  const root = makeTmpDir("plugin-devagents");
+  try {
+    mkdirSync(join(root, "skills", "foo"), { recursive: true });
+    writeFileSync(
+      join(root, "skills", "foo", "SKILL.md"),
+      "---\nname: foo\ndescription: a shipped skill\n---\nbody\n",
+    );
+    mkdirSync(join(root, ".claude", "agents"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "agents", "dev.md"),
+      "---\nname: dev\ndescription: a local dev agent\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "foo", "SKILL.md")],
+      "the shipped root skill is loaded",
+    );
+    assert.ok(
+      !files[join(".claude", "agents", "dev.md")],
+      "a plugin's project-local .claude/agents dev agent is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin does NOT fall back to .claude for a manifest-backed (hook-only) plugin", () => {
+  // A hook-only plugin has a manifest + hooks but no root surface dirs; its
+  // project-local `.claude/skills` is dev-only and must not be imported as shipped
+  // just because there's no root `skills/`.
+  const root = makeTmpDir("hookonly-plugin");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "hookonly",
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }] },
+      }),
+    );
+    mkdirSync(join(root, ".claude", "skills", "dev"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "dev", "SKILL.md"),
+      "---\nname: dev\ndescription: a local dev skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      !files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a manifest-backed plugin's project-local .claude/skills is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin treats a hooks/hooks.json convention plugin as plugin-shaped (no .claude fallback)", () => {
+  // A hook-only plugin via the `hooks/hooks.json` convention (no manifest, no root
+  // surfaces) is still a plugin — its project-local `.claude/skills` is dev-only.
+  const root = makeTmpDir("hooksconv-plugin");
+  try {
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }] },
+      }),
+    );
+    mkdirSync(join(root, ".claude", "skills", "dev"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "dev", "SKILL.md"),
+      "---\nname: dev\ndescription: a local dev skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      !files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a hooks-convention plugin's project-local .claude/skills is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin ignores a stray non-loadable file in root skills/ (falls back to .claude/skills)", () => {
+  // A plain user repo may have a `skills/README.md` (or `.gitkeep`) but no real
+  // root skill; that stray file must NOT mark the root populated and shadow the
+  // real `.claude/skills` — only a `<name>/SKILL.md` counts as loadable.
+  const root = makeTmpDir("stray-root-skills");
+  try {
+    mkdirSync(join(root, "skills"), { recursive: true });
+    writeFileSync(join(root, "skills", "README.md"), "# not a skill\n");
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: a real user skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "rca", "SKILL.md")],
+      "a stray skills/README.md must not shadow the real .claude/skills",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
 });
