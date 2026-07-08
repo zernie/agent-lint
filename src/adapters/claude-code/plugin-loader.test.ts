@@ -595,3 +595,30 @@ test("loadPlugin does NOT fall back to .claude for a manifest-backed (hook-only)
     cleanupTmpDir(root);
   }
 });
+
+test("loadPlugin treats a hooks/hooks.json convention plugin as plugin-shaped (no .claude fallback)", () => {
+  // A hook-only plugin via the `hooks/hooks.json` convention (no manifest, no root
+  // surfaces) is still a plugin — its project-local `.claude/skills` is dev-only.
+  const root = makeTmpDir("hooksconv-plugin");
+  try {
+    mkdirSync(join(root, "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }] },
+      }),
+    );
+    mkdirSync(join(root, ".claude", "skills", "dev"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "dev", "SKILL.md"),
+      "---\nname: dev\ndescription: a local dev skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      !files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a hooks-convention plugin's project-local .claude/skills is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});

@@ -171,6 +171,18 @@ describe("skillResourceIssues", () => {
     expect(run(body, existsOnly())).toEqual([]);
   });
 
+  it("checks a bundled ref with a ?query suffix (not skipped as a glob) — P1-3", () => {
+    // `references/schema.json?raw=1` is a real bundled file with a query suffix;
+    // the `?` must NOT trigger the glob-skip — the file is still resolved/flagged.
+    const body = "See [schema](references/schema.json?raw=1) for the shape.";
+    // missing under the skill dir → flagged (resolves to the stripped path)
+    const flagged = run(body, existsOnly());
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].resolved).toBe("references/schema.json");
+    // present → resolves, not flagged
+    expect(run(body, existsOnly("references/schema.json"))).toEqual([]);
+  });
+
   it("resolves a declared shared-dir ref against the repo root — P1-4 (opt-in)", () => {
     // `scripts/promptfoo/x.py` lives at the REPO ROOT, not beside the SKILL.md —
     // the shared-tree shape. Only when `scripts` is a DECLARED shared dir does it
