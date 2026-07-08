@@ -237,20 +237,22 @@ function materializeSurfaces(
     counts[surface] = (counts[surface] ?? 0) + Object.keys(tree).length;
   }
   // The target IS a single skill directory (`<root>/SKILL.md`) — the natural
-  // thing to point `audit`/`test` at for one skill. Materialize it under the
-  // canonical skills key (named by the dir) so the classifier + resource checks
-  // see it; its bundled resources resolve against `root` via `sources`.
+  // thing to point `audit`/`test` at for one skill. Materialize the WHOLE skill
+  // dir under the canonical skills key (named by the dir), mirroring the
+  // `skills/<name>/` subtree readTree above — so its bundled resources
+  // (`scripts/`, `references/`, `assets/`) are present too, not just SKILL.md, and
+  // a single-skill harness test/eval runs against the skill's shipped files.
   const soleSkill = join(root, "SKILL.md");
   if (layout.skillDir && existsSync(soleSkill)) {
-    const key = join(
-      layout.materializeRoot,
-      layout.skillDir,
-      basename(root),
-      "SKILL.md",
-    );
-    files[key] = readFileSync(soleSkill, "utf-8");
-    sources[key] = soleSkill;
-    counts[layout.skillDir] = (counts[layout.skillDir] ?? 0) + 1;
+    const name = basename(root);
+    const tree = readTree(root, root); // keys relative to the skill dir itself
+    for (const [rel, content] of Object.entries(tree)) {
+      const key = join(layout.materializeRoot, layout.skillDir, name, rel);
+      files[key] = content;
+      sources[key] = join(root, rel);
+    }
+    counts[layout.skillDir] =
+      (counts[layout.skillDir] ?? 0) + Object.keys(tree).length;
   }
   return counts;
 }

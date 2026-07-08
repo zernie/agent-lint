@@ -166,6 +166,39 @@ test("scanPlugin loads a single skill directory passed directly", () => {
   }
 });
 
+test("sharedDirs resolve against sharedDirsRoot, not a scoped subdir (P1-4 + P0-2)", () => {
+  // The skill lives in a subdir; the shared `scripts/` tree is at the REPO root.
+  // A scoped scan (scanRoot = the subdir) must still resolve the shared ref
+  // against the repo root, not the subdir — else the two features conflict.
+  const repo = makeTmpDir("scan-shared-scoped");
+  try {
+    write(
+      repo,
+      "packages/foo/skills/rca/SKILL.md",
+      "---\nname: rca\ndescription: uses a shared script tree\n---\nRun `scripts/leak.py`.\n",
+    );
+    write(repo, "scripts/leak.py", "# shared tree at the repo root\n");
+    const sub = join(repo, "packages", "foo");
+    // With sharedDirsRoot = repo root → the shared ref resolves, no false flag.
+    const ok = scanPlugin(sub, undefined, undefined, {
+      sharedDirs: ["scripts"],
+      sharedDirsRoot: repo,
+    });
+    assert.equal(
+      ok.skills[0].resourceIssues.length,
+      0,
+      "scripts/leak.py resolves against the repo root, not the scoped subdir",
+    );
+    // Without sharedDirsRoot the subdir scan can't see the top-level tree → flags.
+    const bad = scanPlugin(sub, undefined, undefined, {
+      sharedDirs: ["scripts"],
+    });
+    assert.equal(bad.skills[0].resourceIssues.length, 1);
+  } finally {
+    cleanupTmpDir(repo);
+  }
+});
+
 test("subagent classification is layout-driven (ready for new harnesses)", () => {
   // A harness whose subagents live somewhere other than `agents/` — e.g.
   // OpenCode's `.opencode/agent`. Here: a flat `subagents/` dir, declared via

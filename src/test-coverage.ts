@@ -148,6 +148,22 @@ function discoverSkills(
       ignored: content.includes(IGNORE_MARKER),
     });
   }
+  // Single-skill-directory target: a bare `SKILL.md` AT the base (the dir you
+  // pointed lint/audit at). The globs above only match `<skillDir>/*/SKILL.md`
+  // NESTED under the base, so without this the untested-skill check would silently
+  // vanish for exactly the single-skill target that scoping now supports.
+  const rootSkill = join(basePath, "SKILL.md");
+  if (existsSync(rootSkill)) {
+    const name = basename(basePath);
+    const content = read(rootSkill);
+    out.push({
+      kind: "skill",
+      path: "SKILL.md",
+      name,
+      tokens: [`${layout.skillDir}/${name}`, `:${name}`],
+      ignored: content.includes(IGNORE_MARKER),
+    });
+  }
   return out;
 }
 
