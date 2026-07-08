@@ -492,3 +492,27 @@ test("loadPlugin reads the in-repo vigiles plugin (dogfood)", () => {
   );
   assert.ok(typeof loaded.files["CLAUDE.md"] === "string", "CLAUDE.md loaded");
 });
+
+test("loadPlugin materializes a single skill dir's WHOLE subtree (bundled resources)", () => {
+  // Pointing at one skill dir must ship its bundled resources too, not just
+  // SKILL.md — else a single-skill harness test/eval runs against a harness
+  // missing the skill's own scripts/references.
+  const root = makeTmpDir("solo-skill");
+  try {
+    writeFileSync(
+      join(root, "SKILL.md"),
+      "---\nname: solo\ndescription: a solo skill\n---\nRun scripts/run.sh\n",
+    );
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    writeFileSync(join(root, "scripts", "run.sh"), "#!/usr/bin/env bash\n");
+    const { files, sources } = loadPlugin(root);
+    const name = basename(root);
+    const skillKey = join(".claude", "skills", name, "SKILL.md");
+    const resKey = join(".claude", "skills", name, "scripts", "run.sh");
+    assert.ok(files[skillKey], "SKILL.md materialized");
+    assert.ok(files[resKey], "bundled script materialized (not just SKILL.md)");
+    assert.equal(sources[resKey], join(root, "scripts", "run.sh"));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});

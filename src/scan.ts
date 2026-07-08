@@ -514,6 +514,14 @@ interface SkillScanContext {
   readonly sources?: Record<string, string>;
   /** OPT-IN top-level shared-resource dirs (`.vigilesrc.json` `sharedDirs`). */
   readonly sharedDirs?: readonly string[];
+  /**
+   * The REPO root the `sharedDirs` are declared relative to (where `.vigilesrc.json`
+   * lives) — distinct from the scan `root`, which may be a scoped SUBDIR (e.g.
+   * `lint packages/foo`). A shared-dir ref resolves against THIS, not the subdir,
+   * so a scoped scan doesn't false-flag the top-level shared tree. Defaults to
+   * `root` (unchanged when scanning the repo root itself).
+   */
+  readonly sharedDirsRoot?: string;
 }
 
 function scanSkills(
@@ -522,6 +530,10 @@ function scanSkills(
   ctx: SkillScanContext,
 ): ScanSkill[] {
   const { root, materializeRoot, dialect, sharedDirs } = ctx;
+  // `sharedDirs` are declared relative to the REPO root (config location), which
+  // is `root` for a whole-repo scan but a PARENT when the scan is scoped to a
+  // subdir. Resolve them against that, not the scoped subdir.
+  const sharedDirsRoot = ctx.sharedDirsRoot ?? root;
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
@@ -547,7 +559,7 @@ function scanSkills(
     // repo that doesn't set it is byte-identical to before (no masking of a real
     // missing bundled resource). See feedback P1-4.
     const resourceIssues = skillResourceIssues(skillBody(md), skillDir, {
-      repoRoot: root,
+      repoRoot: sharedDirsRoot,
       sharedDirs,
     });
     // The lethal trifecta is a property of what a unit CAN do, which for a skill is
@@ -1169,7 +1181,7 @@ export function scanPlugin(
   dir: string,
   layout?: PluginLayout,
   dialect: HarnessDialect = claudeCodeDialect,
-  opts: { sharedDirs?: readonly string[] } = {},
+  opts: { sharedDirs?: readonly string[]; sharedDirsRoot?: string } = {},
 ): ScanReport {
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
@@ -1213,6 +1225,7 @@ export function scanPlugin(
     dialect,
     sources: loaded.sources,
     sharedDirs: opts.sharedDirs,
+    sharedDirsRoot: opts.sharedDirsRoot,
   });
   const puritySummary = summarizePurity(agents);
   const { trifectaFindings, skillResourceFindings, skillFenceFindings } =

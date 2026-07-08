@@ -3798,6 +3798,9 @@ function checkSkillResourceResolves(
   try {
     found = scanPlugin(scanRoot, adapter.layout, adapter.dialect, {
       sharedDirs: config?.sharedDirs,
+      // sharedDirs live at the repo root (config location = cwd), which may be a
+      // PARENT of a scoped scanRoot (`lint packages/foo`) — resolve them there.
+      sharedDirsRoot: process.cwd(),
     }).skillResourceIssues;
   } catch {
     return { issues: 0, errors: 0 };
@@ -6482,6 +6485,7 @@ async function main(): Promise<void> {
           : det.adapter;
         const report = scanPlugin(targets[0], adapter.layout, adapter.dialect, {
           sharedDirs: config.sharedDirs,
+          sharedDirsRoot: process.cwd(),
         });
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);

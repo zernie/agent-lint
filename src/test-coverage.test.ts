@@ -256,3 +256,16 @@ test("formatUntestedReport: clean vs flagged, suggestedTestPath", () => {
   assert.ok(formatUntestedReport(clean).startsWith("✓"));
   cleanupTmpDir(dir);
 });
+
+test("discovers a bare SKILL.md AT the base (single-skill-dir target)", () => {
+  // When lint/audit is pointed at one skill dir, the SKILL.md is at the base
+  // itself, not under `skills/*/`. Without this the untested-skill check would
+  // silently vanish for exactly that target.
+  const dir = makeTmpDir("cov-solo");
+  write(dir, "SKILL.md", "---\nname: solo\ndescription: x\n---\nbody\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  const found = report.untested.find((s) => s.kind === "skill");
+  assert.ok(found, "the root SKILL.md is reported as an untested skill");
+  assert.equal(found.path, "SKILL.md");
+  cleanupTmpDir(dir);
+});
