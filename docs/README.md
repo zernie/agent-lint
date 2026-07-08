@@ -39,8 +39,7 @@ The docs are grouped by what you're trying to do:
 
 - [`harnesses.md`](harnesses.md) — which harness vigiles targets and how you pick one (by import), plus the capability matrix.
 - [`authoring-an-adapter.md`](authoring-an-adapter.md) — teach vigiles a new harness: the five ports, a worked skeleton, validating with the conformance kit.
-- [`agent-setup.md`](agent-setup.md) — non-interactive setup for agents (what `init` does, hooks via settings.json, the recommended prompt).
-- [`agent-workflows.md`](agent-workflows.md) — per-agent recipes: Claude Code, Codex / Copilot, multi-agent, Cursor / Windsurf, CI.
+- [`agent-setup.md`](agent-setup.md) — agent setup & workflows in one guide: what `init` does, per-agent recipes (Claude Code / Codex / multi-agent / Cursor), non-interactive setup + fallback hooks, and CI.
 
 ## Reference — "the exact flag, symbol, or rule"
 

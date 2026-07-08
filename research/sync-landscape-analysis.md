@@ -82,7 +82,7 @@ ln -sf CLAUDE.md .windsurfrules
 ln -sf CLAUDE.md AGENTS.md  # if not already a target
 ```
 
-A `vigiles compile --symlink claude,cursor,windsurf` flag would be nicer ergonomics but doesn't add capability. Note in `docs/agent-workflows.md` and move on.
+A `vigiles compile --symlink claude,cursor,windsurf` flag would be nicer ergonomics but doesn't add capability. Note in `docs/agent-setup.md` and move on.
 
 Risk: symlink approach assumes all agents accept the same format. They mostly don't — Cursor wants `.mdc` with frontmatter, Cline wants different sections. Symlinking CLAUDE.md to `.cursorrules` gives a broken Cursor config. Ruler does format conversion correctly; ai-rules-sync skips that, which works for the trivial cases and fails silently for the rest.
 
@@ -161,7 +161,7 @@ New rule builder, parallel to `enforce()`, `guidance()`, `guard()`:
 - **Native multi-format emission** (Cursor `.mdc`, Cline `.clinerules`, etc.). Ruler does it well. Compose, don't reimplement. Doc this in README and move on.
 - **MCP server mode.** Speculative use case, no concrete pull. Hold.
 - **Enterprise cascading config.** Niche, complex, defer until a real user pulls for it. The org/repo override pattern is a 2027 problem at earliest.
-- **Symlink emission feature flag.** 3-line shell snippet in `docs/agent-workflows.md` is enough. A flag is no faster than documenting the snippet.
+- **Symlink emission feature flag.** 3-line shell snippet in `docs/agent-setup.md` is enough. A flag is no faster than documenting the snippet.
 
 ---
 

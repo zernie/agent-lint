@@ -1,4 +1,4 @@
-<!-- vigiles:sha256:8ea23fd86f5fe61f compiled from CLAUDE.md.spec.ts -->
+<!-- vigiles:sha256:5c949df55e9f02ce compiled from CLAUDE.md.spec.ts -->
 
 # CLAUDE.md
 
@@ -357,8 +357,7 @@ Two boundary rules are enforced by `eslint-plugin-boundaries` (rule `boundaries/
 - `docs/adapter-api.md` — vigiles/adapter API reference: every export of the authoring kit — the five port interfaces field-by-field (with Claude Code AND Codex example values), HarnessAdapter + the detect specificity contract, the conformance functions (checkAdapterConformance/assertAdapterConformance/assertAdapterLoadsHooks — signatures + what each checks/throws), the registry API (ADAPTERS/detectAdapter/detectAdapterResult/resolveAdapter/getAdapter), the programmatic apply path (compileAgent/loadPlugin with your ports), the third-party-adapter status (programmatic supported now; CLI auto-detect of external packages is planned), and the stability/semver note
 - `docs/authoring-an-adapter.md` — Third-party adapter authoring guide: the documented small lib (vigiles/adapter) for teaching vigiles a new harness — the five ports to implement, a worked myHarnessAdapter skeleton, validating with assertAdapterConformance, wiring it (library by import, CLI by registry), and what's still behaviour-not-descriptor (renderers/decision-decode/mock HTTP server). Linked from the root README (custom adapters welcome)
 - `docs/testing-matrix.md` — Testing matrix: every harness-testing use case mapped to its test tier (unit / cross-runner / type / integration-CI) and file, plus why the CLI examples are .mjs and the API is TypeScript
-- `docs/agent-workflows.md` — Agent-specific workflows (Claude Code, Codex, multi-agent, Cursor)
-- `docs/agent-setup.md` — Non-interactive agent setup guide (hooks via settings.json)
+- `docs/agent-setup.md` — Agent setup & workflows — one guide: what `init` does + auto-detection, per-agent recipes (Claude Code / Codex / multi-agent / Cursor), non-interactive setup + fallback hooks, the recommended agent prompt, and CI (absorbs the former agent-workflows.md)
 - `docs/spec-format.md` — Spec format reference (target, sections, rules)
 - `docs/railway-subagents.md` — Public guide to railway-oriented subagents: the typed Result<ok,err> outcome contract (result() on an agent()), what it compiles to (vigiles:ok/err blocks), composing flat workers (railway()/delegate()/recover), and asserting the outcome deterministically (assertAgentOk/Err/Result — no model judge). States the scope decision: railway is a SUBAGENT primitive (context boundary = parse-point), NOT skills; context:fork is the bridge. Links research/railway-subagents.md (design) + research/spec-syntax-and-railway-scope.md (the scope decision)
 - `docs/linter-support.md` — Linter support details (7 catalogs + generate-types/generate-schema)
