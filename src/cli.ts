@@ -3723,11 +3723,9 @@ function checkSkillResourceResolves(
     finding: { ref: string; line: number };
   }[];
   try {
-    found = scanPlugin(
-      process.cwd(),
-      adapter.layout,
-      adapter.dialect,
-    ).skillResourceIssues;
+    found = scanPlugin(process.cwd(), adapter.layout, adapter.dialect, {
+      sharedDirs: config?.sharedDirs,
+    }).skillResourceIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -6405,7 +6403,9 @@ async function main(): Promise<void> {
         const adapter = harnessFlag
           ? resolveAdapter(root, harnessFlag)
           : det.adapter;
-        const report = scanPlugin(targets[0], adapter.layout, adapter.dialect);
+        const report = scanPlugin(targets[0], adapter.layout, adapter.dialect, {
+          sharedDirs: config.sharedDirs,
+        });
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);
           if (!harnessFlag && det.ambiguousWith.length > 0) {

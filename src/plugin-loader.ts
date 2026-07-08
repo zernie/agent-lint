@@ -29,7 +29,7 @@
  * to preserve `loadPlugin(dir)` ergonomics and the public `vigiles/*` exports).
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { resolve, join, relative } from "node:path";
+import { resolve, join, relative, basename } from "node:path";
 
 import { parse as parseToml } from "@iarna/toml";
 
@@ -48,6 +48,15 @@ export interface LoadedPlugin {
    * read it in a test, or just to know what the deterministic run won't reach.
    */
   readonly warnings: readonly string[];
+  /**
+   * Map from a materialized `files` key to the ABSOLUTE on-disk path it was read
+   * from. A surface can be materialized under a canonical key (`.claude/skills/
+   * foo/SKILL.md`) while living on disk at a different root (the repo-root
+   * `skills/` OR the project-level `.claude/skills/`), so a consumer that needs
+   * the real dir (e.g. resolving a skill's bundled resources) must reverse-map
+   * through this instead of guessing from the key. Present for every surface file.
+   */
+  readonly sources: Record<string, string>;
 }
 
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
@@ -164,31 +173,86 @@ export function loadPlugin(
     : undefined;
 
   const files: Record<string, string> = {};
+  const sources: Record<string, string> = {};
   const instructions = join(root, layout.instructionFile);
   if (existsSync(instructions)) {
     files[layout.instructionFile] = readFileSync(instructions, "utf-8");
+    sources[layout.instructionFile] = instructions;
   }
-  // Materialize each project-level surface under the materialize root so the
-  // assembled context is present in the sandbox (best-effort — headless
-  // activation of plugin skills/subagents/commands is not guaranteed; the body
-  // is present for the agent to read either way). Counting what we materialize
-  // also lets us warn about surfaces the deterministic tier can't drive.
-  const counts: Record<string, number> = {};
-  for (const surface of layout.surfaceDirs) {
-    const dir = join(root, surface);
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
-    const tree = readTree(dir, root);
-    for (const [rel, content] of Object.entries(tree)) {
-      files[join(layout.materializeRoot, rel)] = content;
-    }
-    counts[surface] = Object.keys(tree).length;
-  }
+  const counts = materializeSurfaces(root, layout, files, sources);
 
   return {
     settings: resolvedHooks ? { hooks: resolvedHooks } : {},
     files,
+    sources,
     warnings: pluginWarnings(root, counts, resolvedHooks, files, layout),
   };
+}
+
+/**
+ * Materialize every model surface (skills/agents/commands) into `files`, keyed by
+ * a canonical `<materializeRoot>/<surface>/…` path, and record each file's real
+ * on-disk path in `sources`. Best-effort (headless activation of plugin
+ * skills/subagents/commands is not guaranteed; the body is present to read).
+ *
+ * Each surface is read from ONE of the two locations the layout knows about,
+ * primary-first: `<root>/<surface>` (the published-plugin / skills-library shape)
+ * when it exists, ELSE — when the layout declares one — the project-level
+ * `<root>/<userSurfaceRoot>/<surface>` (the shape a PLAIN Claude Code user has,
+ * not a plugin author). Preferring the primary means a plugin author's own local
+ * `.claude/skills` dev skills don't pollute the audit of what their plugin
+ * actually ships, while a plain user (no repo-root `skills/`) is still read. Plus
+ * the single-skill-directory case (`<root>/SKILL.md`), so pointing at one skill
+ * dir works. Whichever location is used normalizes to the same canonical key, so
+ * the classifier and every downstream detector see one shape regardless of where
+ * it lives on disk. Returns the per-surface counts (drives the surface warnings).
+ */
+function materializeSurfaces(
+  root: string,
+  layout: PluginLayout,
+  files: Record<string, string>,
+  sources: Record<string, string>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const isDir = (p: string): boolean =>
+    existsSync(p) && statSync(p).isDirectory();
+  for (const surface of layout.surfaceDirs) {
+    const primary = join(root, surface);
+    const userDir = layout.userSurfaceRoot
+      ? join(root, layout.userSurfaceRoot, surface)
+      : null;
+    // Primary wins; fall back to the user location only when the primary is absent.
+    const dir = isDir(primary)
+      ? primary
+      : userDir && isDir(userDir)
+        ? userDir
+        : null;
+    if (!dir) continue;
+    const tree = readTree(dir, dir); // keys relative to the surface dir itself
+    for (const [rel, content] of Object.entries(tree)) {
+      const key = join(layout.materializeRoot, surface, rel);
+      files[key] = content;
+      sources[key] = join(dir, rel);
+    }
+    counts[surface] = (counts[surface] ?? 0) + Object.keys(tree).length;
+  }
+  // The target IS a single skill directory (`<root>/SKILL.md`) — the natural
+  // thing to point `audit`/`test` at for one skill. Materialize it under the
+  // canonical skills key (named by the dir) so the classifier + resource checks
+  // see it; its bundled resources resolve against `root` via `sources`.
+  const soleSkill = join(root, "SKILL.md");
+  if (layout.skillDir && existsSync(soleSkill)) {
+    const key = join(
+      layout.materializeRoot,
+      layout.skillDir,
+      basename(root),
+      "SKILL.md",
+    );
+    files[key] = readFileSync(soleSkill, "utf-8");
+    sources[key] = soleSkill;
+    counts[layout.skillDir] = (counts[layout.skillDir] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /**

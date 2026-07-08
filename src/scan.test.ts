@@ -96,6 +96,76 @@ function fixture(): string {
   return dir;
 }
 
+test("scanPlugin discovers skills in an end-user .claude/skills repo (not a plugin)", () => {
+  // The majority shape: a plain CC user, skills under `.claude/skills/`, no
+  // plugin.json. Before this the report was empty (F/0 "no loadable surface").
+  const dir = makeTmpDir("scan-userrepo");
+  try {
+    write(dir, "CLAUDE.md", "# proj\n");
+    write(
+      dir,
+      ".claude/skills/rca/SKILL.md",
+      "---\nname: rca\ndescription: Investigate an incident with two signals\n---\n# rca\n",
+    );
+    write(
+      dir,
+      ".claude/agents/reviewer.md",
+      "---\nname: reviewer\ntools: Read\n---\nbody\n",
+    );
+    const r = scanPlugin(dir);
+    assert.equal(r.skills.length, 1, "the .claude/skills skill is discovered");
+    assert.equal(r.skills[0].name, "rca");
+    assert.ok(r.skills[0].hasDescription);
+    assert.equal(
+      r.agents.length,
+      1,
+      "the .claude/agents subagent is discovered",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("scanPlugin resolves a .claude/skills skill's bundled resource on real disk", () => {
+  // A `.claude/skills` skill materializes under the same canonical key as a
+  // repo-root one; its bundled resource must resolve against its REAL dir
+  // (`.claude/skills/rca/`), not a reverse-guessed `skills/rca/`.
+  const dir = makeTmpDir("scan-userres");
+  try {
+    write(dir, "CLAUDE.md", "# proj\n");
+    write(
+      dir,
+      ".claude/skills/rca/SKILL.md",
+      "---\nname: rca\ndescription: RCA with a helper script bundled beside it\n---\nRun `scripts/run.sh` first.\n",
+    );
+    write(dir, ".claude/skills/rca/scripts/run.sh", "#!/usr/bin/env bash\n");
+    const r = scanPlugin(dir);
+    assert.equal(
+      r.skills[0].resourceIssues.length,
+      0,
+      "the bundled scripts/run.sh resolves against the real .claude dir",
+    );
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
+test("scanPlugin loads a single skill directory passed directly", () => {
+  const dir = makeTmpDir("scan-oneskill");
+  try {
+    write(
+      dir,
+      "SKILL.md",
+      "---\nname: solo\ndescription: A single skill pointed at directly here\n---\n# solo\n",
+    );
+    const r = scanPlugin(dir);
+    assert.equal(r.skills.length, 1, "the sole SKILL.md is scanned as a skill");
+    assert.equal(r.skills[0].name, "solo");
+  } finally {
+    cleanupTmpDir(dir);
+  }
+});
+
 test("subagent classification is layout-driven (ready for new harnesses)", () => {
   // A harness whose subagents live somewhere other than `agents/` — e.g.
   // OpenCode's `.opencode/agent`. Here: a flat `subagents/` dir, declared via

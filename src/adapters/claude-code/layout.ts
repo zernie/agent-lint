@@ -13,6 +13,10 @@ export const claudeCodeLayout: PluginLayout = {
   settingsFormat: "json",
   instructionFile: "CLAUDE.md",
   surfaceDirs: ["skills", "agents", "commands"],
+  // A plain Claude Code USER keeps skills/agents/commands under `.claude/`, not at
+  // the repo root (that's the published-plugin shape). Read both so a normal repo
+  // isn't seen as an empty machine.
+  userSurfaceRoot: ".claude",
   skillDir: "skills",
   agentDir: "agents",
   commandDir: "commands",

@@ -505,6 +505,15 @@ interface SkillScanContext {
   readonly root: string;
   readonly materializeRoot: string;
   readonly dialect: HarnessDialect;
+  /**
+   * Materialized-key → real on-disk path (from `loadPlugin`). A surface can be
+   * materialized under a canonical key while living at a different root (repo-root
+   * `skills/` vs project-level `.claude/skills/`), so bundled-resource resolution
+   * uses the true dir from here rather than reverse-guessing from the key.
+   */
+  readonly sources?: Record<string, string>;
+  /** OPT-IN top-level shared-resource dirs (`.vigilesrc.json` `sharedDirs`). */
+  readonly sharedDirs?: readonly string[];
 }
 
 function scanSkills(
@@ -512,10 +521,13 @@ function scanSkills(
   cls: SurfaceClassifier,
   ctx: SkillScanContext,
 ): ScanSkill[] {
-  const { root, materializeRoot, dialect } = ctx;
+  const { root, materializeRoot, dialect, sharedDirs } = ctx;
   const out: ScanSkill[] = [];
   for (const [path, md] of Object.entries(files)) {
     if (!cls.isSkill(path)) continue;
+    // Prefer the real on-disk dir (a `.claude/skills/…` skill materializes under
+    // the same canonical key as a repo-root one, but lives elsewhere on disk).
+    const onDiskDir = ctx.sources?.[path];
     const fm = frontmatter(md);
     // A skill's trigger surface is its frontmatter `description` OR — when that's
     // absent — Claude Code's fallback to the first body paragraph. Only when
@@ -526,8 +538,18 @@ function scanSkills(
     // Bundled-resource refs resolve against the skill's OWN dir (resources ship
     // beside the SKILL.md), built from the plugin root + the file's ON-DISK dir
     // (the materialize-root prefix the loader added is stripped back off).
-    const skillDir = resolve(root, dirname(onDiskPath(path, materializeRoot)));
-    const resourceIssues = skillResourceIssues(skillBody(md), skillDir);
+    const skillDir = onDiskDir
+      ? dirname(onDiskDir)
+      : resolve(root, dirname(onDiskPath(path, materializeRoot)));
+    // Bundled refs resolve against the skill's OWN dir. A repo that shares a
+    // top-level tree across skills (`sharedDirs` in .vigilesrc.json) ALSO resolves
+    // a ref under one of those declared dirs against the repo root — OPT-IN, so a
+    // repo that doesn't set it is byte-identical to before (no masking of a real
+    // missing bundled resource). See feedback P1-4.
+    const resourceIssues = skillResourceIssues(skillBody(md), skillDir, {
+      repoRoot: root,
+      sharedDirs,
+    });
     // The lethal trifecta is a property of what a unit CAN do, which for a skill is
     // its declared `allowed-tools` (the CC skill tool contract). Only a model-
     // invocable skill can be hijacked by attacker content, so a user-invoked one is
@@ -1147,6 +1169,7 @@ export function scanPlugin(
   dir: string,
   layout?: PluginLayout,
   dialect: HarnessDialect = claudeCodeDialect,
+  opts: { sharedDirs?: readonly string[] } = {},
 ): ScanReport {
   const lay = layout ?? claudeCodeLayout;
   const cls = makeClassifier(lay);
@@ -1188,6 +1211,8 @@ export function scanPlugin(
     root: resolve(dir),
     materializeRoot: lay.materializeRoot,
     dialect,
+    sources: loaded.sources,
+    sharedDirs: opts.sharedDirs,
   });
   const puritySummary = summarizePurity(agents);
   const { trifectaFindings, skillResourceFindings, skillFenceFindings } =
@@ -1515,10 +1540,17 @@ export function formatScanReport(r: ScanReport): string {
   out.push(
     ...section(
       "Lethal trifecta (prompt-injection exfil risk)",
-      r.trifectaFindings.map(
-        (t) =>
-          `  ${t.finding.severity === "hard" ? "✗" : "⚠"} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`,
-      ),
+      // The section header already carries the count. HARD findings name their
+      // specific legs (keep the message). ADVISORY (inherits-all) findings all
+      // carry the SAME boilerplate paragraph — at bulk that's a wall of identical
+      // text, so collapse each to a one-liner (feedback P2-6). Gate on "no NEW
+      // trifecta" with `vigiles lint` (the lethal-trifecta rule), not by eyeballing.
+      r.trifectaFindings.map((t) => {
+        const mark = t.finding.severity === "hard" ? "✗" : "⚠";
+        return t.finding.severity === "hard"
+          ? `  ${mark} ${t.kind} ${t.name} (${t.path}): ${t.finding.message}`
+          : `  ${mark} ${t.kind} ${t.name} (${t.path}) — inherits-all contract holds all three legs (declare a tools list dropping one)`;
+      }),
     ),
   );
 

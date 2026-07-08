@@ -6,7 +6,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 
 import { loadPlugin, resolveHarness } from "./plugin-loader.js";
 import { makeTmpDir, cleanupTmpDir } from "../../core/test-utils.js";
@@ -396,6 +396,85 @@ test("a fully-covered plugin (hooks + CLAUDE.md + skills) has no warnings", () =
   const root = makePlugin();
   try {
     assert.deepEqual(loadPlugin(root).warnings, []);
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin loads an end-user repo's .claude/skills (no plugin.json)", () => {
+  // The MAJORITY shape: a plain Claude Code user, skills under `.claude/skills/`,
+  // not a published plugin. Before this the loader saw an empty machine here.
+  const root = makeTmpDir("userrepo");
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), "# my project\n");
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: Investigate an incident\n---\n# rca\n",
+    );
+    const loaded = loadPlugin(root);
+    // materialized under the SAME canonical key as a repo-root skill would be
+    const key = join(".claude", "skills", "rca", "SKILL.md");
+    assert.ok(loaded.files[key], "the .claude/skills skill is loaded");
+    // real on-disk source recorded (the file lives UNDER .claude/, not repo root)
+    assert.equal(
+      loaded.sources[key],
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+    );
+    // not an empty machine
+    assert.ok(!loaded.warnings.some((w) => w.includes("nothing was loaded")));
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin prefers a repo-root skills/ over .claude/skills when both exist", () => {
+  // A plugin/library author's OWN local `.claude/skills` dev skills must not
+  // pollute the audit of what the plugin ships — the repo-root `skills/` wins.
+  const root = makeTmpDir("bothshapes");
+  try {
+    mkdirSync(join(root, "skills", "lib-skill"), { recursive: true });
+    writeFileSync(join(root, "skills", "lib-skill", "SKILL.md"), "# lib\n");
+    mkdirSync(join(root, ".claude", "skills", "user-skill"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, ".claude", "skills", "user-skill", "SKILL.md"),
+      "# user\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.equal(
+      files[join(".claude", "skills", "lib-skill", "SKILL.md")],
+      "# lib\n",
+      "the repo-root skill is loaded",
+    );
+    assert.equal(
+      files[join(".claude", "skills", "user-skill", "SKILL.md")],
+      undefined,
+      "the .claude/skills fallback is skipped when repo-root skills/ exists",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin loads a single skill directory (SKILL.md at the target root)", () => {
+  // Pointing `audit`/`test` at ONE skill dir — the natural thing to do — used to
+  // yield "no loadable surface". Now it materializes as a skill named by the dir.
+  const root = makeTmpDir("one-skill");
+  try {
+    writeFileSync(
+      join(root, "SKILL.md"),
+      "---\nname: solo\ndescription: A solo skill\n---\n# solo\n",
+    );
+    const loaded = loadPlugin(root);
+    const key = join(".claude", "skills", basename(root), "SKILL.md");
+    assert.ok(
+      loaded.files[key],
+      "the sole SKILL.md is materialized as a skill",
+    );
+    assert.equal(loaded.sources[key], join(root, "SKILL.md"));
+    assert.ok(!loaded.warnings.some((w) => w.includes("nothing was loaded")));
   } finally {
     cleanupTmpDir(root);
   }
