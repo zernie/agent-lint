@@ -83,11 +83,11 @@ deterministic gate. The lethal-trifecta findings are summarized with a count (on
 line per unit); gate on "no NEW trifecta" via the `lethal-trifecta` lint rule
 rather than eyeballing the list.
 
-> **Known limitation.** When you pass an explicit path to `vigiles lint`
-> (e.g. `vigiles lint skills/one`), the surface rules (subagent contracts, skill
-> resources, MCP, …) currently scan the whole repo from the working directory, not
-> only that path. Run `lint` from the repo root and use `.vigilesrc.json` `exclude`
-> globs to scope out fixtures. Tightening per-path scoping is tracked.
+**Scoping.** `vigiles lint` (no path) lints the whole repo — the normal CI call.
+Pass a single directory (`vigiles lint packages/foo`) to scope every surface rule
+to just that subtree; a file, several paths, or none falls back to the whole repo.
+A surface outside the path you pass — and the machine-global `~/.claude` — never
+enters the report.
 
 ## See also
 
