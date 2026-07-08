@@ -566,3 +566,32 @@ test("loadPlugin does NOT import project-local .claude/agents into a plugin", ()
     cleanupTmpDir(root);
   }
 });
+
+test("loadPlugin does NOT fall back to .claude for a manifest-backed (hook-only) plugin", () => {
+  // A hook-only plugin has a manifest + hooks but no root surface dirs; its
+  // project-local `.claude/skills` is dev-only and must not be imported as shipped
+  // just because there's no root `skills/`.
+  const root = makeTmpDir("hookonly-plugin");
+  try {
+    mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "hookonly",
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "exit 0" }] }] },
+      }),
+    );
+    mkdirSync(join(root, ".claude", "skills", "dev"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "dev", "SKILL.md"),
+      "---\nname: dev\ndescription: a local dev skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      !files[join(".claude", "skills", "dev", "SKILL.md")],
+      "a manifest-backed plugin's project-local .claude/skills is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});

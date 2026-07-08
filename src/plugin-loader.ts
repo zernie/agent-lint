@@ -232,7 +232,14 @@ function materializeSurfaces(
   const rootHasEntries = [...rootTrees.values()].some(
     (t) => Object.keys(t).length > 0,
   );
-  const userRoot = !rootHasEntries ? layout.userSurfaceRoot : undefined;
+  // A manifest-backed plugin (`.claude-plugin/plugin.json`) is NEVER a plain user
+  // repo — even a HOOK-ONLY plugin with no root surface dirs ships from its
+  // manifest, not from a developer's project-local `.claude/`. Gate the user-
+  // surface fallback on BOTH no root-surface content AND no plugin manifest, so a
+  // plugin's dev `.claude/skills` / `.claude/agents` are never imported as shipped.
+  const isPluginShaped = existsSync(join(root, layout.manifestPath));
+  const userRoot =
+    !rootHasEntries && !isPluginShaped ? layout.userSurfaceRoot : undefined;
   for (const surface of layout.surfaceDirs) {
     let dir: string;
     let tree: Record<string, string>;
