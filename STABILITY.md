@@ -1,18 +1,20 @@
 # Stability
 
-> vigiles is **0.x**. This page states exactly what you can depend on today and
-> what may still move, so you can adopt the stable parts now without getting
-> surprised by a change to the parts that are still evolving.
+> vigiles is at **v12** — but read that as _"still moving fast,"_ not
+> _"battle-hardened."_ `semantic-release` cuts a **new major on every breaking
+> API change**, and there have been a lot of them. The number is an artifact of
+> how it ships, not a claim of maturity. This page says what I try hardest not
+> to break, and what's still in motion.
 
-Honest beats a fake 1.0: pre-1.0 semver keeps the deeper, still-moving surfaces
-free to improve while the parts most people actually use stay put.
+The steadiest contract is the **CLI** — the commands you run, their flags, and
+their exit codes. Most of the churn is in the library API underneath it.
 
 ## What's stable — depend on it
 
 - **The CLI** — the verbs (`init`, `compile`, `lint`, `test`, `eval`,
   `scan`, `generate`), their flags, and their **exit codes**
-  (`0` clean / `1` warn / `2` error). This is the narrowest, stablest contract
-  and what ~90% of users touch — including the GitHub Action, which wraps it.
+  (`0` clean / `1` warn / `2` error). This is the narrowest, steadiest contract
+  and the surface almost everyone touches — including the GitHub Action, which wraps it.
 - **The authoring + testing library entry points:**
   - `vigiles/spec` — the core builders (`enforce`, `guidance`, `claude`,
     `skill`, `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
