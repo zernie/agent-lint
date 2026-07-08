@@ -244,11 +244,15 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 
 **Not for you if** you want a model/capability benchmark or runtime guardrails in the request path — vigiles is build-/CI-time.
 
-## More
+## Docs
 
-**Docs** — **[What it catches and prevents →](docs/what-vigiles-catches.md)** · **[Verifying instruction files →](docs/verifying-instruction-files.md)** ([rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)) · **[Harness testing →](docs/harness-testing.md)** · **[Measuring skills →](docs/measuring-skills.md)** · **[CLI →](docs/cli.md)** · **[GitHub Action →](docs/github-action.md)** · **[Skills →](docs/skills.md)** · **[Plugin-author guide →](docs/for-plugin-authors.md)** · **[Docs index →](docs/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)**
+The **[docs index](docs/README.md)** is the full map, grouped by what you're doing:
 
-**Project** — **[Stability →](STABILITY.md)** · **[Related tools →](docs/related-tools.md)** · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+- **Guides** — [verify instruction files](docs/verifying-instruction-files.md) · [test your harness](docs/harness-testing.md) · [measure a skill](docs/measuring-skills.md) · [ship a plugin](docs/for-plugin-authors.md) · [Codex & other harnesses](docs/harnesses.md)
+- **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/)
+- **Explanation** — [what it catches](docs/what-vigiles-catches.md) · [how it compares](docs/comparison.md) · [FAQ](docs/faq.md)
+
+**Project** — [Stability](STABILITY.md) · [Related tools](docs/related-tools.md) · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## License
 
