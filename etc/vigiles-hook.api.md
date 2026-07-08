@@ -282,7 +282,9 @@ export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
 export interface NormalizedLeaf {
     readonly args: readonly string[];
     readonly argv: readonly string[];
+    readonly assigns: ReadonlyMap<string, string | null>;
     readonly flags: ReadonlySet<string>;
+    hasAssign(...names: readonly string[]): boolean;
     hasFlag(...names: readonly string[]): boolean;
     readonly head: string;
 }
