@@ -16,6 +16,7 @@ It does that by running the thing under test on both sides of an A/B and reading
 - [Worked example](#worked-example)
 - [The ecosystem benchmark — what works vs hype](#the-ecosystem-benchmark--what-works-vs-hype)
 - [Why you can afford to run it](#why-you-can-afford-to-run-it)
+- [Experimental: real side-effect testing](#experimental-real-side-effect-testing)
 - [See also](#see-also)
 
 ## The unit: an A/B on the same real task
@@ -41,9 +42,9 @@ This is `runEval` / `measureArms` — arms × trials → mean ± se, with Welch'
 ## Worked example
 
 ```typescript
-import { measureArms } from "vigiles/testing";
+import { runEval } from "vigiles/testing";
 
-const report = await measureArms({
+const report = await runEval({
   fixture: { "in.txt": "Implement a slug helper." },
   task: "Read in.txt, write slugify() to slug.js, then explain. Stop.",
   arms: {
@@ -60,6 +61,8 @@ const report = await measureArms({
 });
 // Read the per-arm delta: lower bill? target moved? correctness intact?
 ```
+
+> `runEval` takes a **`measure(ctx)` callback** that returns any numeric metrics (used above). Its sibling `measureArms` instead scores a **declarative `checks` array** (`output`/`judged`/`cost`/…) — reach for that when your A/B is a set of pass/fail assertions rather than custom numbers.
 
 Two ways to specify an arm:
 
@@ -106,7 +109,88 @@ A real-model run tells you **exactly what it spent**, so a paid run is never sil
 
 The numbers also live on the report — `report.usage` for a single run (`measure`, `measureTriggerRate`) or `report.arms[*].usage` per arm (`runEval`, `measureArms`) — and the `test-harness` skill relays them to you after any run it does on your behalf.
 
+## Experimental: real side-effect testing
+
+> ⚠️ **Experimental & unstable.** Import from `vigiles/experimental`. This surface is **not** covered by the [stability guarantee](../STABILITY.md) — it may change shape or be removed without a major-version bump. Don't build a production workflow on it yet.
+
+The tiers above cover a skill's **output** and its **side-effect safety** — did it call / not call a tool, write / not write a file — with no container. What they don't yet do turnkey is let a skill **actually perform a side effect against a real service and verify the resulting state**: apply a migration to a real Postgres, then check the row landed.
+
+That's this tier. vigiles **composes with a throwaway container** rather than reinventing a sandbox: a `ServiceSpec` declares a disposable service, it's started fresh, and it's force-removed on teardown.
+
+### ⚠️ Safety — read this before running R3
+
+R3 runs your skill **for real**, and a skill is model-driven — the model picks the actions, so it can do anything the run environment allows. vigiles gives you a **throwaway container and deletes it afterwards. That is the only isolation it provides.** It does **not** stop a skill from touching other systems your environment leaves reachable. **Treat an R3 run like running an untrusted script — the safety is on the environment you run it in, not on vigiles.**
+
+| Do                                                                                                                                                                    | Don't                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run it in a **disposable environment** — a CI job, a throwaway container/VM, or a dev box with no production access.                                                  | **Run it against production**, or in a shell where `DATABASE_URL` / `AWS_*` / `~/.ssh` point at real systems — a model that finds a real credential may use it. |
+| Point the task at the **disposable service's connection string only**.                                                                                                | Assume vigiles sandboxes the filesystem or network here — it provisions and disposes the **container**, nothing more.                                           |
+| **Scrub real credentials** from the run — pair it with the eval tier's `ephemeralEnv` (throwaway HOME + cleared env) so there are no prod keys for the model to find. | Rely on the `endpoints` as a network wall — that's a **future** hardening, not applied yet.                                                                     |
+
+- ✅ **Guaranteed:** the service is created fresh and force-removed on teardown, even on failure.
+- ❌ **Not guaranteed (yet):** filesystem/network confinement of the skill. Until the egress wall lands (skill reaches only the model + the service), **an isolated run environment is doing that job, and you must provide it.** If you can't isolate the environment, don't run R3 yet.
+
+### Using it
+
+`experimental_withServices` starts the services, runs your block, and disposes them even on failure:
+
+```typescript
+import {
+  experimental_withServices,
+  experimental_dockerRuntime,
+} from "vigiles/experimental";
+import { runEval } from "vigiles/testing";
+
+await experimental_withServices(
+  {
+    db: {
+      image: "postgres:16",
+      env: { POSTGRES_PASSWORD: "test", POSTGRES_DB: "app" },
+      port: 5432,
+      ready: { exec: "pg_isready -U postgres -h 127.0.0.1 -d app" }, // real server only
+      // inline SQL — the seed runs INSIDE the container, so it can't reach a
+      // schema.sql on your host (nothing mounts it). Keep the seed self-contained.
+      seed: "psql -U postgres -d app -c 'create table users (id int)'",
+    },
+  },
+  experimental_dockerRuntime,
+  async (svc) => {
+    // runEval — it takes a measure(ctx) callback + supports ephemeralEnv
+    return runEval({
+      // migration.sql must be in the run FIXTURE for the agent to read it —
+      // a bare filename in the task doesn't materialize the file.
+      fixture: { "migration.sql": "ALTER TABLE users ADD COLUMN age int;" },
+      // single arm — a baseline arm would share this DB and leave `age` behind,
+      // crediting the skill for free (per-arm reset is a later increment).
+      arms: { skill: { pluginDir: "./skills/migrator" } },
+      // full connection string incl. password — ephemeralEnv leaves no PGPASSWORD
+      task: `Apply migration.sql to postgresql://postgres:test@${svc.endpoints[0]}/app . Stop.`,
+      ephemeralEnv: true, // ⬅ recommended — scrub real creds from the run
+      measure: () => ({
+        // verify the REAL resulting DB state — R3's whole point
+        migrated: /(^|\n)age(\n|$)/.test(
+          svc.handles.db.exec(
+            "psql -U postgres -d app -tAc \"select column_name from information_schema.columns where table_name='users'\"",
+          ).stdout,
+        )
+          ? 1
+          : 0,
+      }),
+      // trials: 1 — per-RUN container lifecycle; a persistent side effect would
+      // make later trials pass for free until per-trial reset exists.
+      trials: 1,
+      model: "sonnet",
+    });
+  },
+);
+```
+
+Runnable versions: [`side-effect-r3.mjs`](../examples/harness/side-effect-r3.mjs) (the primitive) and [`measure-with-service.mjs`](../examples/harness/measure-with-service.mjs) (the `runEval` composition above).
+
+**What ships today vs later.** Today: the types, the `ContainerRuntime` port, `experimental_startServices` / `experimental_withServices`, and a Docker backend — all under `vigiles/experimental`. Deferred: a first-class `services` option on `measureArms` (+ `ctx.service(name)`), **per-trial** reset (today the container lives for the whole run — make your task self-contained or use `trials: 1`), and the egress wall. Requires Docker (Linux-first), stays an explicit opt-in, and is **never** part of `vigiles audit` — `audit` stays side-effect-free.
+
 ## See also
 
+- [Migrating from promptfoo](migrating-from-promptfoo.md) — move your existing skill evals onto the subscription, check by check.
 - [Testing your harness](harness-testing.md) — the deterministic tiers (no model) under this one.
 - [Verifying instruction files](verifying-instruction-files.md) — the lint layer, the free pre-filter to measurement.
