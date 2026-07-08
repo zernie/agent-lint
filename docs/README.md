@@ -49,6 +49,7 @@ How-to and reference docs for using vigiles. New here? Start with the
 ## Measure what works (layer 3)
 
 - [`measuring-skills.md`](measuring-skills.md) — A/B a skill, plugin, model, or rule change on real coding tasks: the metric triple (bill / target / blast-radius correctness), the worked `measureArms` example, the ecosystem benchmark, and why it's affordable on your subscription.
+- [`migrating-from-promptfoo.md`](migrating-from-promptfoo.md) — move existing skill evals onto the subscription: the concept + assertion mapping, a side-by-side worked example, and the honest gaps (redteam).
 - [`eval-architecture.md`](eval-architecture.md) — the cost model + the two testing verbs reconciled with what ships.
 
 ## Skills & agents
