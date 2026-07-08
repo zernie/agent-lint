@@ -269,3 +269,19 @@ test("discovers a bare SKILL.md AT the base (single-skill-dir target)", () => {
   assert.equal(found.path, "SKILL.md");
   cleanupTmpDir(dir);
 });
+
+test("a root SKILL.md is COVERED by a colocated eval (single-skill-dir target)", () => {
+  // A colocated `solo.eval.mjs` beside a root SKILL.md must count as coverage —
+  // globSync returns it without a "./" prefix, which the colocation check now
+  // handles for a "." dir. Else the documented single-skill target false-fails CI.
+  const dir = makeTmpDir("cov-solo-eval");
+  write(dir, "SKILL.md", "---\nname: solo\ndescription: x\n---\nbody\n");
+  write(dir, "solo.eval.mjs", "// colocated eval\n");
+  const report = findUntestedSurfaces({ basePath: dir });
+  assert.equal(
+    report.untested.filter((s) => s.kind === "skill").length,
+    0,
+    "the colocated solo.eval.mjs covers the root SKILL.md",
+  );
+  cleanupTmpDir(dir);
+});

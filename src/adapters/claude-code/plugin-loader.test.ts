@@ -516,3 +516,53 @@ test("loadPlugin materializes a single skill dir's WHOLE subtree (bundled resour
     cleanupTmpDir(root);
   }
 });
+
+test("loadPlugin falls back to .claude/skills when the root skills/ is EMPTY", () => {
+  // An empty (or unrelated) root `skills/` must NOT shadow real `.claude/skills`
+  // — else a plain user repo is reported empty (the F/0 this change fixes).
+  const root = makeTmpDir("empty-root-skills");
+  try {
+    mkdirSync(join(root, "skills"), { recursive: true }); // present but EMPTY
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: a real user skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "rca", "SKILL.md")],
+      "the real .claude/skills skill is read despite an empty root skills/",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});
+
+test("loadPlugin does NOT import project-local .claude/agents into a plugin", () => {
+  // A plugin/library repo (has a shipped root `skills/`) must not materialize a
+  // developer's local `.claude/agents` as if the plugin ships them.
+  const root = makeTmpDir("plugin-devagents");
+  try {
+    mkdirSync(join(root, "skills", "foo"), { recursive: true });
+    writeFileSync(
+      join(root, "skills", "foo", "SKILL.md"),
+      "---\nname: foo\ndescription: a shipped skill\n---\nbody\n",
+    );
+    mkdirSync(join(root, ".claude", "agents"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "agents", "dev.md"),
+      "---\nname: dev\ndescription: a local dev agent\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "foo", "SKILL.md")],
+      "the shipped root skill is loaded",
+    );
+    assert.ok(
+      !files[join(".claude", "agents", "dev.md")],
+      "a plugin's project-local .claude/agents dev agent is NOT materialized",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});

@@ -1382,24 +1382,14 @@ async function runLint(
 
   const files = findInstructionFiles(restArgs, config?.exclude);
 
-  // Resolve the active harness ONCE so the harness-specific checks below run
-  // against the right adapter's dialect (tool/event catalogs) and surfaces —
-  // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
-  // on a harness without subagents (Codex) rather than scanning nothing.
-  const harnessFlag = harnessFlagFrom(flags);
-  const lintSelection = resolveHarnessSelection({
-    root: process.cwd(),
-    flag: harnessFlag,
-    configHarness: normalizeHarnessList(config?.harness),
-  });
-  const adapter = lintSelection.adapter;
-
   // P0-2: scope the surface checks (subagent contracts, skill resources, MCP, …)
   // to an explicit DIRECTORY target when one is given, instead of always scanning
   // the whole working dir and reporting surfaces the user didn't point at. Only a
   // SINGLE existing directory narrows; a file / several paths / none → cwd, so
   // bare `vigiles lint` (the CI-common case) stays byte-identical. scanPlugin
   // reads only under this root, so a surface outside it can never enter the report.
+  // Computed BEFORE the harness resolves so auto-detection keys on the TARGET, not
+  // cwd — `lint path/to/codex-repo` picks that repo's harness, not the caller's.
   const positional = restArgs.filter((a) => !a.startsWith("--"));
   const scanRoot =
     positional.length === 1 &&
@@ -1407,6 +1397,20 @@ async function runLint(
     lstatSync(positional[0]).isDirectory()
       ? resolve(positional[0])
       : process.cwd();
+
+  // Resolve the active harness ONCE so the harness-specific checks below run
+  // against the right adapter's dialect (tool/event catalogs) and surfaces —
+  // not a hard-coded Claude Code default. A subagent-surface rule reports n/a
+  // on a harness without subagents (Codex) rather than scanning nothing. Detect
+  // against `scanRoot` (the target), so a scoped scan of another-harness repo
+  // uses that repo's layout/dialect.
+  const harnessFlag = harnessFlagFrom(flags);
+  const lintSelection = resolveHarnessSelection({
+    root: scanRoot,
+    flag: harnessFlag,
+    configHarness: normalizeHarnessList(config?.harness),
+  });
+  const adapter = lintSelection.adapter;
 
   // 1. Verify hashes and structure
   if (!silent) {

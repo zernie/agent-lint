@@ -269,7 +269,13 @@ function discoverTests(
 /** Colocated: a test inside a skill dir, or a name-prefixed sibling of an agent/hook. */
 function isColocated(surface: Surface, testPath: string): boolean {
   if (surface.kind === "skill") {
-    return testPath.startsWith(`${dirname(surface.path)}/`);
+    const dir = dirname(surface.path);
+    // A root `SKILL.md` (single-skill-dir target) lives at ".", so any TOP-LEVEL
+    // test is colocated — globSync returns those without a "./" prefix, which a
+    // bare `startsWith("./")` would miss (false "untested").
+    return dir === "."
+      ? dirname(testPath) === "."
+      : testPath.startsWith(`${dir}/`);
   }
   return (
     dirname(testPath) === dirname(surface.path) &&
@@ -330,10 +336,14 @@ export function findUntestedSurfaces(
 
 /** Suggested colocated test path for an untested surface (shown in the warning). */
 export function suggestedTestPath(surface: Surface): string {
+  // A root skill lives at ".", so drop the "./" prefix — the suggested path then
+  // matches what globSync actually discovers at the top level.
+  const dir = dirname(surface.path);
+  const prefix = dir === "." ? "" : `${dir}/`;
   if (surface.kind === "skill") {
-    return `${dirname(surface.path)}/${surface.name}.eval.mjs`;
+    return `${prefix}${surface.name}.eval.mjs`;
   }
-  return `${dirname(surface.path)}/${surface.name}.harness.mjs`;
+  return `${prefix}${surface.name}.harness.mjs`;
 }
 
 /** Format an untested-surface report as human-readable text. */
