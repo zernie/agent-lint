@@ -775,3 +775,40 @@ describe("audit default artifacts (html + json) written to cwd", () => {
     assert.ok(!existsSync(join(root, "vigiles-report.json")), "no json");
   });
 });
+
+describe("lint scopes surface checks to an explicit directory (P0-2)", () => {
+  let repo: string;
+  beforeAll(() => {
+    repo = mkdtempSync(join(tmpdir(), "vig-lint-scope-"));
+    // pkgA ships a subagent with a typo'd tool → subagent-tool-contract fires.
+    mkdirSync(join(repo, "pkgA", "agents"), { recursive: true });
+    writeFileSync(
+      join(repo, "pkgA", "agents", "bad.md"),
+      "---\nname: bad\ndescription: A reviewer subagent for pkgA here\ntools: Reat\n---\nReview.\n",
+    );
+    // pkgB is clean.
+    mkdirSync(join(repo, "pkgB", "agents"), { recursive: true });
+    writeFileSync(
+      join(repo, "pkgB", "agents", "ok.md"),
+      "---\nname: ok\ndescription: A clean reviewer subagent for pkgB here\ntools: Read\n---\nReview.\n",
+    );
+    writeFileSync(
+      join(repo, ".vigilesrc.json"),
+      JSON.stringify({ rules: { "subagent-tool-contract": "warn" } }),
+    );
+  });
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("lint pkgA reports pkgA's typo'd subagent tool", () => {
+    const r = run("lint pkgA", repo);
+    assert.match(r.stdout, /Reat/, "the scoped dir's own issue is reported");
+  });
+
+  it("lint pkgB does NOT leak pkgA's issue (scoped away)", () => {
+    const r = run("lint pkgB", repo);
+    assert.ok(
+      !/Reat/.test(r.stdout),
+      "a surface outside the passed dir must never enter the report",
+    );
+  });
+});

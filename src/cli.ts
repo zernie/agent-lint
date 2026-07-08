@@ -1394,6 +1394,20 @@ async function runLint(
   });
   const adapter = lintSelection.adapter;
 
+  // P0-2: scope the surface checks (subagent contracts, skill resources, MCP, …)
+  // to an explicit DIRECTORY target when one is given, instead of always scanning
+  // the whole working dir and reporting surfaces the user didn't point at. Only a
+  // SINGLE existing directory narrows; a file / several paths / none → cwd, so
+  // bare `vigiles lint` (the CI-common case) stays byte-identical. scanPlugin
+  // reads only under this root, so a surface outside it can never enter the report.
+  const positional = restArgs.filter((a) => !a.startsWith("--"));
+  const scanRoot =
+    positional.length === 1 &&
+    existsSync(positional[0]) &&
+    lstatSync(positional[0]).isDirectory()
+      ? resolve(positional[0])
+      : process.cwd();
+
   // 1. Verify hashes and structure
   if (!silent) {
     if (files.length > 0) {
@@ -1464,91 +1478,141 @@ async function runLint(
   // 7b. Untested-surface check — skills/agents/hooks shipping without a test or
   // eval. Warning by default (a nudge, exit 0); set rules.untested-{skill,agent,
   // hook} to "error" to gate CI. See src/test-coverage.ts and docs/rules/.
-  const untested = checkUntestedSurfaces(config, silent, adapter);
+  const untested = checkUntestedSurfaces(config, silent, adapter, scanRoot);
 
   // 7c. Subagent tool-contract check — cross-reference each subagent's `tools:`
   // rail against the harness catalog (the moat). n/a on a harness with no
   // subagents. Off by default unless a severity is configured; warning surfaces
   // a typo/never-available tool, error gates CI.
-  const toolContract = checkSubagentToolContracts(config, silent, adapter);
+  const toolContract = checkSubagentToolContracts(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7d. Hook-event check — a hook registered under an event the harness doesn't
   // define never fires. High-precision (close typos only). Off unless configured.
-  const hookEvents = checkHookEvents(config, silent, adapter);
+  const hookEvents = checkHookEvents(config, silent, adapter, scanRoot);
 
   // 7e. Subagent-frontmatter check — a subagent missing required frontmatter
   // (name + description) won't register. n/a on a harness with no subagents.
-  const frontmatter = checkFrontmatterSchema(config, silent, adapter);
+  const frontmatter = checkFrontmatterSchema(config, silent, adapter, scanRoot);
 
   // 7f. MCP-config check — a declared MCP server with no command/url can't start.
-  const mcpConfig = checkMcpConfig(config, silent, adapter);
+  const mcpConfig = checkMcpConfig(config, silent, adapter, scanRoot);
 
   // 7g. Skill-frontmatter — RECOMMEND explicit name/description on skills (a
   // reliable trigger surface). Best-practice nudge; skills load without it.
-  const skillFm = checkSkillFrontmatter(config, silent, adapter);
+  const skillFm = checkSkillFrontmatter(config, silent, adapter, scanRoot);
 
   // 7h. MCP tool-resolution — an `mcp__server__tool` in a contract whose server
   // the plugin doesn't declare can't resolve (the MCP half of the tool moat).
-  const mcpToolResolves = checkMcpToolResolves(config, silent, adapter);
+  const mcpToolResolves = checkMcpToolResolves(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7i. Hook-script existence — a hook command referencing a missing script file
   // never runs (matches Anthropic's own `claude plugin validate`).
-  const hookScripts = checkHookScriptExists(config, silent, adapter);
+  const hookScripts = checkHookScriptExists(config, silent, adapter, scanRoot);
 
   // 7j. Disallowed-tools — a `disallowedTools:` block-list typo blocks nothing
   // (the deny-side mirror of subagent-tool-contract; close-typo only).
-  const disallowedTools = checkDisallowedTools(config, silent, adapter);
+  const disallowedTools = checkDisallowedTools(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7k. Description-overlap — two model-invocable skills with near-identical
   // descriptions collide in the selector (deterministic NCD precision proxy).
-  const descriptionOverlap = checkDescriptionOverlap(config, silent, adapter);
+  const descriptionOverlap = checkDescriptionOverlap(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7k². Skill-description-budget — a model-invocable skill whose description is
   // so long the trigger signal is buried (heuristic proxy; degrades recall +
   // precision). Generous 500-char budget; warn-tier, never gates.
-  const descriptionBudget = checkDescriptionBudget(config, silent, adapter);
+  const descriptionBudget = checkDescriptionBudget(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7l. Frontmatter-valid — a `---` block that isn't valid YAML (warn; js-yaml is
   // stricter than some loaders, so verify before enforcing).
-  const frontmatterValid = checkFrontmatterValid(config, silent, adapter);
+  const frontmatterValid = checkFrontmatterValid(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7m. MCP hook-target — a `type: mcp_tool` hook action that's incomplete or
   // targets an undeclared server (the moat applied to the hook surface).
-  const mcpHookTargets = checkMcpHookTargets(config, silent, adapter);
+  const mcpHookTargets = checkMcpHookTargets(config, silent, adapter, scanRoot);
 
   // 7n. Prefer-compiled-hooks — ONE discovery nudge (not per-hook) toward
   // compiled `vigiles/hook` artifacts when hand-written hooks ship. Recommendation.
-  const preferCompiledHooks = checkPreferCompiledHooks(config, silent, adapter);
+  const preferCompiledHooks = checkPreferCompiledHooks(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7o. Lethal-trifecta — a unit (subagent / model-invocable skill) whose tools
   // hold all three legs (read-private + ingest-untrusted + exfiltrate) is a
   // prompt-injection exfil path (Rule of Two). Capability SET-intersection.
-  const lethalTrifecta = checkLethalTrifecta(config, silent, adapter);
+  const lethalTrifecta = checkLethalTrifecta(config, silent, adapter, scanRoot);
 
   // 7p. Skill-resource — a SKILL.md body referencing a bundled file that doesn't
   // exist on disk under the skill dir (the agent gets nothing). FP-safe.
-  const skillResources = checkSkillResourceResolves(config, silent, adapter);
+  const skillResources = checkSkillResourceResolves(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7q. Skill-missing-fence — a SKILL.md opening with `name:`/`description:` but no
   // `---` fence loads as plain body (invisible — no name/description/trigger).
-  const skillFence = checkSkillMissingFence(config, silent, adapter);
+  const skillFence = checkSkillMissingFence(config, silent, adapter, scanRoot);
 
   // 7r. Plugin-dir-layout — functional surface dirs (skills/agents/commands) nested
   // inside the `.claude-plugin/` manifest dir where the harness can't see them.
-  const pluginLayout = checkPluginDirLayout(config, silent, adapter);
+  const pluginLayout = checkPluginDirLayout(config, silent, adapter, scanRoot);
 
   // 7s. Delegation-trifecta — a lethal trifecta that emerges across a delegation
   // edge (a subagent's own ∪ delegated-to capability) though no single unit trips it.
-  const delegationTrifecta = checkDelegationTrifecta(config, silent, adapter);
+  const delegationTrifecta = checkDelegationTrifecta(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7t. Hook-block-ineffective — a hook that looks like it blocks but silently
   // doesn't (block decision on a non-blocking event, or the legacy `decision`
   // field on a permission-gated event). The #1 verified hook pain (#19009).
-  const hookBlock = checkHookBlockIneffective(config, silent, adapter);
+  const hookBlock = checkHookBlockIneffective(
+    config,
+    silent,
+    adapter,
+    scanRoot,
+  );
 
   // 7u. Hook-matcher — a hook `matcher` that never fires (tool-name typo, or a
   // malformed/undeclared MCP form).
-  const hookMatcher = checkHookMatcher(config, silent, adapter);
+  const hookMatcher = checkHookMatcher(config, silent, adapter, scanRoot);
 
   // 8. Validate vigiles builder calls inside markdown code blocks. Default
   // is to validate every ref; illustrative blocks opt out via
@@ -3197,6 +3261,7 @@ function checkUntestedSurfaces(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { untested: number; errors: number } {
   const rules = config?.rules;
   const skillSev = ruleSeverity(rules?.["untested-skill"]);
@@ -3214,7 +3279,7 @@ function checkUntestedSurfaces(
     ...ruleOptions<TestCoverageConfig>(rules?.["untested-hook"]),
   };
   const report = findUntestedSurfaces({
-    basePath: process.cwd(),
+    basePath: scanRoot,
     layout: adapter.layout,
     skills: skillSev !== false,
     agents: agentSev !== false,
@@ -3273,6 +3338,7 @@ function checkSubagentToolContracts(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["subagent-tool-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3293,7 +3359,7 @@ function checkSubagentToolContracts(
     toolIssues: readonly { message: string }[];
   }[];
   try {
-    agents = scanPlugin(process.cwd(), adapter.layout, adapter.dialect).agents;
+    agents = scanPlugin(scanRoot, adapter.layout, adapter.dialect).agents;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -3332,6 +3398,7 @@ function checkHookEvents(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-events"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3342,7 +3409,7 @@ function checkHookEvents(
   let found: readonly { message: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).hookEventIssues;
@@ -3370,6 +3437,7 @@ function checkFrontmatterSchema(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["subagent-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3384,7 +3452,7 @@ function checkFrontmatterSchema(
   }
   let found: readonly { message: string; path: string }[];
   try {
-    const r = scanPlugin(process.cwd(), adapter.layout, adapter.dialect);
+    const r = scanPlugin(scanRoot, adapter.layout, adapter.dialect);
     found = [...r.frontmatterIssues, ...r.frontmatterValueIssues];
   } catch {
     return { issues: 0, errors: 0 };
@@ -3415,13 +3483,14 @@ function checkSkillFrontmatter(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-frontmatter"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).skillMetaIssues;
@@ -3453,13 +3522,14 @@ function checkPreferCompiledHooks(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["prefer-compiled-hooks"]);
   if (!sev) return { issues: 0, errors: 0 };
   let count: number;
   try {
     count = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).manualHookCount;
@@ -3485,16 +3555,13 @@ function checkMcpConfig(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-config"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(
-      process.cwd(),
-      adapter.layout,
-      adapter.dialect,
-    ).mcpIssues;
+    found = scanPlugin(scanRoot, adapter.layout, adapter.dialect).mcpIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -3519,6 +3586,7 @@ function checkDisallowedTools(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["disallowed-tools-contract"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3529,7 +3597,7 @@ function checkDisallowedTools(
   let found: { message: string; path: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).agents.flatMap((a) =>
@@ -3566,13 +3634,14 @@ function checkFrontmatterValid(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["frontmatter-valid"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string; path: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).malformedFrontmatter;
@@ -3604,13 +3673,14 @@ function checkDescriptionOverlap(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["description-overlap"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).descriptionOverlaps;
@@ -3638,13 +3708,14 @@ function checkDescriptionBudget(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-description-budget"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { message: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).descriptionBudgetIssues;
@@ -3674,6 +3745,7 @@ function checkLethalTrifecta(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["lethal-trifecta"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3685,7 +3757,7 @@ function checkLethalTrifecta(
   }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).trifectaFindings;
@@ -3714,6 +3786,7 @@ function checkSkillResourceResolves(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-resource-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3723,7 +3796,7 @@ function checkSkillResourceResolves(
     finding: { ref: string; line: number };
   }[];
   try {
-    found = scanPlugin(process.cwd(), adapter.layout, adapter.dialect, {
+    found = scanPlugin(scanRoot, adapter.layout, adapter.dialect, {
       sharedDirs: config?.sharedDirs,
     }).skillResourceIssues;
   } catch {
@@ -3751,6 +3824,7 @@ function checkSkillMissingFence(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["skill-missing-fence"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3761,7 +3835,7 @@ function checkSkillMissingFence(
   }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).skillFenceIssues;
@@ -3790,13 +3864,14 @@ function checkPluginDirLayout(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["plugin-dir-layout"]);
   if (!sev) return { issues: 0, errors: 0 };
   let found: readonly { dir: string; message: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).pluginLayoutIssues;
@@ -3825,6 +3900,7 @@ function checkDelegationTrifecta(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["delegation-trifecta"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3834,7 +3910,7 @@ function checkDelegationTrifecta(
   }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).delegationTrifecta;
@@ -3863,6 +3939,7 @@ function checkHookBlockIneffective(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-block-ineffective"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3877,7 +3954,7 @@ function checkHookBlockIneffective(
   }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).hookBlockFindings;
@@ -3910,6 +3987,7 @@ function checkHookMatcher(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-matcher"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3920,7 +3998,7 @@ function checkHookMatcher(
   let found: readonly { message: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).hookMatcherFindings;
@@ -3948,6 +4026,7 @@ function checkMcpHookTargets(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-hook-target-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -3962,11 +4041,7 @@ function checkMcpHookTargets(
   }
   let found: readonly { message: string }[];
   try {
-    found = scanPlugin(
-      process.cwd(),
-      adapter.layout,
-      adapter.dialect,
-    ).mcpHookIssues;
+    found = scanPlugin(scanRoot, adapter.layout, adapter.dialect).mcpHookIssues;
   } catch {
     return { issues: 0, errors: 0 };
   }
@@ -3992,6 +4067,7 @@ function checkHookScriptExists(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["hook-script-exists"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -4007,7 +4083,7 @@ function checkHookScriptExists(
   let missing: { script: string }[];
   try {
     missing = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).hooks.filter((h) => h.status === "missing");
@@ -4039,6 +4115,7 @@ function checkMcpToolResolves(
   config: VigilesConfig | undefined,
   silent: boolean,
   adapter: HarnessAdapter,
+  scanRoot: string,
 ): { issues: number; errors: number } {
   const sev = ruleSeverity(config?.rules?.["mcp-tool-resolves"]);
   if (!sev) return { issues: 0, errors: 0 };
@@ -4054,7 +4131,7 @@ function checkMcpToolResolves(
   let found: { message: string; path: string }[];
   try {
     found = scanPlugin(
-      process.cwd(),
+      scanRoot,
       adapter.layout,
       adapter.dialect,
     ).agents.flatMap((a) =>
