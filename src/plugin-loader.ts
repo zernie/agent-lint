@@ -229,8 +229,21 @@ function materializeSurfaces(
   // falls back to the user surface (`<userSurfaceRoot>/…`, the plain Claude Code
   // user shape) — so an EMPTY or unrelated root `skills/` doesn't shadow the real
   // `.claude/skills`, and a per-surface mix can't half-import project-local dirs.
-  const rootHasEntries = [...rootTrees.values()].some(
-    (t) => Object.keys(t).length > 0,
+  // A surface counts as POPULATED only if it holds a LOADABLE file — a skill loads
+  // from `<name>/SKILL.md`, an agent/command from a `.md` file. A stray non-surface
+  // file (`skills/README.md`, `.gitkeep`) must NOT mark the root populated, else it
+  // shadows a plain user's real `.claude/skills` (recreating the F/0 this fixes).
+  const hasLoadable = (
+    surface: string,
+    tree: Record<string, string>,
+  ): boolean => {
+    const keys = Object.keys(tree);
+    return surface === layout.skillDir
+      ? keys.some((k) => basename(k) === "SKILL.md")
+      : keys.some((k) => k.endsWith(".md"));
+  };
+  const rootHasEntries = layout.surfaceDirs.some((s) =>
+    hasLoadable(s, rootTrees.get(s) ?? {}),
   );
   // A plugin is NEVER a plain user repo — even a HOOK-ONLY plugin with no root
   // surface dirs ships from its manifest / hooks convention, not from a

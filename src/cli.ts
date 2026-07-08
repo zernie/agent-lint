@@ -21,7 +21,7 @@ import {
   lstatSync,
   type Dirent,
 } from "node:fs";
-import { resolve, dirname, basename, relative } from "node:path";
+import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
 import { globSync } from "glob";
 import { generateTypes } from "./core/generate-types.js";
 import {
@@ -1371,6 +1371,22 @@ function verifyMarkdownModeRules(
  *   --summary   Print a single-line summary (for SessionStart hooks)
  *   --json      Print structured JSON report (for CI integration)
  */
+/**
+ * The repo root that `sharedDirs` resolve against. The caller's cwd (where
+ * `.vigilesrc.json` lives) is used ONLY when the scan target is INSIDE it — e.g.
+ * `lint packages/foo` from the repo root, where the shared tree is an ancestor of
+ * the scoped subdir. When the target is NOT under cwd (`lint path/to/other-repo`),
+ * we resolve against the TARGET itself, so a foreign-repo lint never lets the
+ * caller's own files satisfy the target's bundled resources (scoped-lint integrity).
+ */
+function sharedDirsRootFor(scanTarget: string): string {
+  const cwd = process.cwd();
+  const target = resolve(scanTarget);
+  const rel = relative(cwd, target);
+  const underCwd = rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  return underCwd ? cwd : target;
+}
+
 async function runLint(
   restArgs: string[],
   flags: string[],
@@ -3802,9 +3818,9 @@ function checkSkillResourceResolves(
   try {
     found = scanPlugin(scanRoot, adapter.layout, adapter.dialect, {
       sharedDirs: config?.sharedDirs,
-      // sharedDirs live at the repo root (config location = cwd), which may be a
-      // PARENT of a scoped scanRoot (`lint packages/foo`) — resolve them there.
-      sharedDirsRoot: process.cwd(),
+      // sharedDirs live at the repo root that OWNS the scan target — cwd for a
+      // scoped subdir of this repo, the target itself for a foreign-repo lint.
+      sharedDirsRoot: sharedDirsRootFor(scanRoot),
     }).skillResourceIssues;
   } catch {
     return { issues: 0, errors: 0 };
@@ -6489,7 +6505,7 @@ async function main(): Promise<void> {
           : det.adapter;
         const report = scanPlugin(targets[0], adapter.layout, adapter.dialect, {
           sharedDirs: config.sharedDirs,
-          sharedDirsRoot: process.cwd(),
+          sharedDirsRoot: sharedDirsRootFor(targets[0]),
         });
         if (!json) {
           console.log(`Detected harness: ${adapter.name}`);

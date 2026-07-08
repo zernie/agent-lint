@@ -622,3 +622,26 @@ test("loadPlugin treats a hooks/hooks.json convention plugin as plugin-shaped (n
     cleanupTmpDir(root);
   }
 });
+
+test("loadPlugin ignores a stray non-loadable file in root skills/ (falls back to .claude/skills)", () => {
+  // A plain user repo may have a `skills/README.md` (or `.gitkeep`) but no real
+  // root skill; that stray file must NOT mark the root populated and shadow the
+  // real `.claude/skills` — only a `<name>/SKILL.md` counts as loadable.
+  const root = makeTmpDir("stray-root-skills");
+  try {
+    mkdirSync(join(root, "skills"), { recursive: true });
+    writeFileSync(join(root, "skills", "README.md"), "# not a skill\n");
+    mkdirSync(join(root, ".claude", "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: a real user skill\n---\nbody\n",
+    );
+    const { files } = loadPlugin(root);
+    assert.ok(
+      files[join(".claude", "skills", "rca", "SKILL.md")],
+      "a stray skills/README.md must not shadow the real .claude/skills",
+    );
+  } finally {
+    cleanupTmpDir(root);
+  }
+});

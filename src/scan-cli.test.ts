@@ -814,3 +814,42 @@ describe("lint scopes surface checks to an explicit directory (P0-2)", () => {
     );
   });
 });
+
+describe("lint of a foreign repo does not satisfy target refs from the caller's cwd", () => {
+  let caller: string;
+  let target: string;
+  beforeAll(() => {
+    // The CALLER's repo declares sharedDirs and HAS scripts/foo.py.
+    caller = mkdtempSync(join(tmpdir(), "vig-caller-"));
+    mkdirSync(join(caller, "scripts"), { recursive: true });
+    writeFileSync(join(caller, "scripts", "foo.py"), "# caller's file\n");
+    writeFileSync(
+      join(caller, ".vigilesrc.json"),
+      JSON.stringify({
+        sharedDirs: ["scripts"],
+        rules: { "skill-resource-resolves": "warn" },
+      }),
+    );
+    // The TARGET repo (elsewhere) has a skill referencing scripts/foo.py, which
+    // is MISSING in the target. The caller's file must not satisfy it.
+    target = mkdtempSync(join(tmpdir(), "vig-target-"));
+    mkdirSync(join(target, "skills", "rca"), { recursive: true });
+    writeFileSync(
+      join(target, "skills", "rca", "SKILL.md"),
+      "---\nname: rca\ndescription: references a shared script\n---\nRun `scripts/foo.py`.\n",
+    );
+  });
+  afterAll(() => {
+    rmSync(caller, { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
+  });
+
+  it("flags the target's missing scripts/foo.py (not satisfied by the caller's copy)", () => {
+    const r = run(`lint ${target}`, caller);
+    assert.match(
+      r.stdout,
+      /foo\.py/,
+      "a foreign-repo lint resolves shared refs against the TARGET, not the caller's cwd",
+    );
+  });
+});
