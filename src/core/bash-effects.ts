@@ -548,27 +548,58 @@ const LONG_TO_SHORT: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Ablation switches for {@link leafCommandsNormalized} — each flag DISABLES one
+ * normalization step so its causal contribution can be measured in isolation
+ * (all others stay on). Every field defaults to `false` (= fully normalized), so
+ * the parameter is purely additive: `leafCommandsNormalized(cmd)` is unchanged.
+ *
+ * This exists for the paper's normalization ablation (which normalization step
+ * closes which evasion class?). It is NOT a production knob — a real guard always
+ * wants full normalization.
+ */
+export interface NormalizationAblation {
+  /** Disable quote-unwrap: quoted words keep their surrounding quote characters
+   * (`'--force'` stays `'--force'`), so a quoted flag/target no longer normalizes. */
+  readonly noUnquote?: boolean;
+  /** Disable interpreter-basename reduction: `/bin/rm` stays `/bin/rm` (not `rm`). */
+  readonly noBasename?: boolean;
+  /** Disable leading-backslash strip on the head: `\rm` stays `\rm` (not `rm`). */
+  readonly noBackslash?: boolean;
+  /** Disable short↔long flag-alias expansion: `-n` is recorded only as `n`, not `no-verify`. */
+  readonly noAlias?: boolean;
+  /** Disable `$HOME`→`~` canonicalization: a `$HOME` param becomes dynamic (word dropped). */
+  readonly noHomeCanon?: boolean;
+}
+
+/**
  * Reconstruct a Word's static text, unwrapping single/double quotes and
  * canonicalizing `$HOME`/`${HOME}` to `~`. Returns null if the word contains a
  * truly dynamic segment (command substitution, arithmetic, a non-HOME parameter)
  * — such a word can't be soundly reduced to a literal operation token.
+ *
+ * `abl` disables individual steps for the ablation study (default: all on).
  */
 function normalizeParts(
   parts: readonly MvdanNode[] | undefined,
+  abl: NormalizationAblation = {},
 ): string | null {
   if (!parts) return null;
   let out = "";
   for (const p of parts) {
     const t = sh.syntax.NodeType(p);
-    if (t === "Lit" || t === "SglQuoted") {
+    if (t === "Lit") {
       out += p.Value ?? "";
+    } else if (t === "SglQuoted") {
+      // Ablation: keep the quote characters so the token is not the bare flag/target.
+      out += abl.noUnquote ? `'${p.Value ?? ""}'` : p.Value ?? "";
     } else if (t === "DblQuoted") {
-      const inner = normalizeParts((p as MvdanWord).Parts);
+      const inner = normalizeParts((p as MvdanWord).Parts, abl);
       if (inner === null) return null;
-      out += inner;
+      out += abl.noUnquote ? `"${inner}"` : inner;
     } else if (t === "ParamExp") {
       // Canonicalize the home directory; any other parameter is dynamic.
-      if (p.Param?.Value === "HOME") out += "~";
+      // Ablation noHomeCanon: treat even $HOME as dynamic (word dropped).
+      if (p.Param?.Value === "HOME" && !abl.noHomeCanon) out += "~";
       else return null;
     } else {
       return null; // CmdSubst / ArithmExp / ProcSubst / … → dynamic
@@ -578,18 +609,24 @@ function normalizeParts(
 }
 
 /** Normalize a command head to its basename, stripping one leading backslash. */
-function normalizeHead(raw: string): string {
-  const unescaped = raw.startsWith("\\") ? raw.slice(1) : raw;
+function normalizeHead(raw: string, abl: NormalizationAblation = {}): string {
+  const unescaped =
+    !abl.noBackslash && raw.startsWith("\\") ? raw.slice(1) : raw;
+  if (abl.noBasename) return unescaped;
   const slash = unescaped.lastIndexOf("/");
   return slash >= 0 ? unescaped.slice(slash + 1) : unescaped;
 }
 
 /** Build the canonical flag set for a leaf's args (short-cluster + alias expansion). */
-function buildFlags(args: readonly string[]): Set<string> {
+function buildFlags(
+  args: readonly string[],
+  abl: NormalizationAblation = {},
+): Set<string> {
   const flags = new Set<string>();
   const add = (name: string): void => {
     if (!name) return;
     flags.add(name);
+    if (abl.noAlias) return; // Ablation: no short↔long alias expansion.
     if (name.length === 1 && SHORT_TO_LONG[name])
       flags.add(SHORT_TO_LONG[name]);
     const short = LONG_TO_SHORT[name];
@@ -618,8 +655,15 @@ function buildFlags(args: readonly string[]): Set<string> {
  *
  * Purely additive: reuses the same mvdan-sh parse, changes nothing above. Parse
  * failure → []. A leaf with a dynamic head is skipped (can't be normalized).
+ *
+ * `abl` disables individual normalization steps (default: none — full
+ * normalization). Used only by the paper's normalization ablation to isolate each
+ * step's causal contribution; production callers pass nothing.
  */
-export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
+export function leafCommandsNormalized(
+  command: string,
+  abl: NormalizationAblation = {},
+): NormalizedLeaf[] {
   let file: MvdanNode;
   try {
     file = sh.syntax.NewParser().Parse(command, "cmd.sh");
@@ -628,7 +672,7 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
   }
   const out: NormalizedLeaf[] = [];
   sh.syntax.Walk(file, (node) => {
-    const leaf = normalizeCallExpr(node);
+    const leaf = normalizeCallExpr(node, abl);
     if (leaf) out.push(leaf);
     return true;
   });
@@ -636,16 +680,19 @@ export function leafCommandsNormalized(command: string): NormalizedLeaf[] {
 }
 
 /** Normalize a single CallExpr node to a {@link NormalizedLeaf}, or null if it isn't one / has a dynamic head. */
-function normalizeCallExpr(node: MvdanNode): NormalizedLeaf | null {
+function normalizeCallExpr(
+  node: MvdanNode,
+  abl: NormalizationAblation = {},
+): NormalizedLeaf | null {
   if (sh.syntax.NodeType(node) !== "CallExpr" || !node.Args?.length)
     return null;
-  const headRaw = normalizeParts(node.Args[0]?.Parts);
+  const headRaw = normalizeParts(node.Args[0]?.Parts, abl);
   if (headRaw === null) return null; // dynamic head → not normalizable
-  const head = normalizeHead(headRaw);
+  const head = normalizeHead(headRaw, abl);
   const args = node.Args.slice(1)
-    .map((w) => normalizeParts(w.Parts))
+    .map((w) => normalizeParts(w.Parts, abl))
     .filter((w): w is string => w !== null);
-  const flags = buildFlags(args);
+  const flags = buildFlags(args, abl);
   return {
     head,
     argv: [head, ...args],

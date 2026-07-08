@@ -140,4 +140,7 @@ export type {
 // Operation-normalized leaf extraction — the robust matching primitive a
 // hardened guard is built on (see examples/harness/safe-bash-guard-v2.mjs).
 export { leafCommandsNormalized } from "./core/bash-effects.js";
-export type { NormalizedLeaf } from "./core/bash-effects.js";
+export type {
+  NormalizedLeaf,
+  NormalizationAblation,
+} from "./core/bash-effects.js";

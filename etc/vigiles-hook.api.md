@@ -273,10 +273,19 @@ export interface InlineProvider<Name extends string = string> {
 }
 
 // @public
-export function leafCommandsNormalized(command: string): NormalizedLeaf[];
+export function leafCommandsNormalized(command: string, abl?: NormalizationAblation): NormalizedLeaf[];
 
 // @public
 export type NeedSpec = ProviderName | InlineProvider | RegisteredRef;
+
+// @public
+export interface NormalizationAblation {
+    readonly noAlias?: boolean;
+    readonly noBackslash?: boolean;
+    readonly noBasename?: boolean;
+    readonly noHomeCanon?: boolean;
+    readonly noUnquote?: boolean;
+}
 
 // @public
 export interface NormalizedLeaf {
