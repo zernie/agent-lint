@@ -216,19 +216,33 @@ function materializeSurfaces(
   const counts: Record<string, number> = {};
   const isDir = (p: string): boolean =>
     existsSync(p) && statSync(p).isDirectory();
+  // Read each ROOT-level surface tree once (keys relative to the surface dir).
+  const rootTrees = new Map<string, Record<string, string>>();
   for (const surface of layout.surfaceDirs) {
-    const primary = join(root, surface);
-    const userDir = layout.userSurfaceRoot
-      ? join(root, layout.userSurfaceRoot, surface)
-      : null;
-    // Primary wins; fall back to the user location only when the primary is absent.
-    const dir = isDir(primary)
-      ? primary
-      : userDir && isDir(userDir)
-        ? userDir
-        : null;
-    if (!dir) continue;
-    const tree = readTree(dir, dir); // keys relative to the surface dir itself
+    const dir = join(root, surface);
+    if (isDir(dir)) rootTrees.set(surface, readTree(dir, dir));
+  }
+  // Decide the surface ROOT once, at the REPO level (NOT per surface): a repo that
+  // ships ANY root-level surface WITH ENTRIES is a plugin/library — read ONLY its
+  // root surfaces, so a plugin author's dev `.claude/agents` / `.claude/skills`
+  // never leak into the audit as if shipped. A repo with NO root-surface content
+  // falls back to the user surface (`<userSurfaceRoot>/…`, the plain Claude Code
+  // user shape) — so an EMPTY or unrelated root `skills/` doesn't shadow the real
+  // `.claude/skills`, and a per-surface mix can't half-import project-local dirs.
+  const rootHasEntries = [...rootTrees.values()].some(
+    (t) => Object.keys(t).length > 0,
+  );
+  const userRoot = !rootHasEntries ? layout.userSurfaceRoot : undefined;
+  for (const surface of layout.surfaceDirs) {
+    let dir: string;
+    let tree: Record<string, string>;
+    if (userRoot !== undefined) {
+      dir = join(root, userRoot, surface);
+      tree = isDir(dir) ? readTree(dir, dir) : {};
+    } else {
+      dir = join(root, surface);
+      tree = rootTrees.get(surface) ?? {};
+    }
     for (const [rel, content] of Object.entries(tree)) {
       const key = join(layout.materializeRoot, surface, rel);
       files[key] = content;
