@@ -132,7 +132,7 @@ This subagent — a helper your main agent hands work to — lists a tool that d
       apart, so the wrong one fires  (e.g. "agent-coder" ↔ "agent-tester", 83% alike)
 ```
 
-One popular plugin ships **45 pairs of skills** with near-identical descriptions. Your agent picks which skill to run by _reading_ those descriptions, so when two match it fires the wrong one. Still perfectly valid markdown.
+One popular plugin ships **45 pairs** of near-identical skill descriptions. Your agent picks a skill by _reading_ them — so when two match, it fires the wrong one. Still perfectly valid markdown.
 **[How triggering works →](docs/measuring-skills.md)**
 
 ## Proof 3 — it can quietly read your secrets and send them out
@@ -144,7 +144,7 @@ One popular plugin ships **45 pairs of skills** with near-identical descriptions
         · can send data out (Bash, WebFetch)
 ```
 
-Hand one subagent all three powers and a poisoned web page can tell it to read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 still looks like a B** — that's the point: a healthy-looking grade can hide a single subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
+Hand one subagent all three powers and a poisoned web page can make it read your `.env` and POST it anywhere — no exploit code, just the tools it was given. The **80 looks like a B** — and that's the trap: a healthy grade hiding a subagent that's a data-leak waiting to happen. vigiles spots it from the tool list alone, free, no model.
 
 That's the whole idea: it checks your harness against **reality, not style**. Every tool, hook, file, script, and skill you reference is verified to actually resolve — and where you name a linter rule, it's checked to exist _and_ be enabled (ESLint, Ruff, Clippy, and more).
 **[Everything it catches →](docs/what-vigiles-catches.md)** · point `audit` at a whole marketplace and it ranks every plugin the same way.
@@ -160,7 +160,7 @@ That's the whole idea: it checks your harness against **reality, not style**. Ev
 | `test`  | Does the harness behave?       | No — a scripted stand-in | Every commit             |
 | `eval`  | Does a skill actually help?    | Yes — your subscription  | On demand                |
 
-`audit` and `lint` share one engine. **`lint` is the CI gate** — it fails the build on broken references, bad tool contracts, dead hooks, and skill collisions (Proofs 1 and 2). **`audit`** runs those same checks, adds the Safety ring, renders the graded report, and can also run two opt-in _live_ checks (does your MCP server connect, do your skills fire). `test` and `eval` go past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath; you rarely run them by hand.)
+**One engine, two doors.** `audit` is the local report; **`lint` is the CI gate** that fails the build on the same deterministic checks — broken refs, bad tool contracts, dead hooks, skill collisions (Proofs 1–2). `test` and `eval` go further: past _does it exist_ to _does it work_. (`init` / `compile` / `eject` manage the spec layer underneath — you rarely run them by hand.)
 
 ### 🔎 Lint — your instructions stop lying
 
@@ -172,7 +172,7 @@ Every path, script, symbol, and rule verified against reality — plus tool cont
 A hook that blocks nothing, a skill that hijacks unrelated prompts, context that never reaches the model — each passes a naive "did it run?" check. That gap is **false confidence**: a guard that looks like it works and silently doesn't. vigiles tests the real thing — hooks block, skills fire, subagents finish what they promised, a stray `git push` is caught before it happens. It drives a scripted stand-in for the model, not a live call, so it needs no key and runs on every commit.
 **[How testing works →](docs/harness-testing.md)**
 
-### 📊 Eval — does a skill help, or just cost more?
+### 📊 Eval — the only way to put a real number on cost
 
 _"Caveman Mode cuts 65% of your tokens." Says who?_ vigiles A/Bs the claim on real coding tasks and hands you three numbers: the **token bill**, whether it hit its **target**, and whether your code still **works**.
 
@@ -237,18 +237,22 @@ Targets Claude Code and Codex out of the box, or [your own harness](docs/authori
 - **Is this a framework I have to build around?** No. It's a tool you run — like ESLint, Lighthouse, or `npm audit`. One command, a report, an optional CI gate. There's a library API for automation, but you never touch it to get value.
 - **Isn't this just a markdown linter?** No — it checks whether your instruction file is _true_ (every path/script/symbol/rule exists and is enabled), then tests and measures your harness. A style linter can't do any of that.
 - **Do I have to write TypeScript?** No — your agent writes the spec (`init` adopts your CLAUDE.md or AGENTS.md into one), or plain markdown lints with zero new files. Compiler-grade guarantees are opt-in, like TS's `strict` ([why?](docs/faq.md#why-are-the-strongest-guarantees-opt-in-not-the-default)).
-- **Is it stable enough to adopt?** Yes — the CLI is stable; only the library API is still evolving ([details](STABILITY.md)).
+- **Is it stable enough to adopt?** The CLI you run is small and rarely changes; the library API still moves between releases. The high version number is release automation (a new major per breaking change), not age — see [Stability](STABILITY.md).
 - **Non-JS repo?** `npx vigiles lint` verifies your CLAUDE.md or AGENTS.md with no install (Ruff/Clippy/Pylint/… too).
 
 **[Full FAQ →](docs/faq.md)**
 
 **Not for you if** you want a model/capability benchmark or runtime guardrails in the request path — vigiles is build-/CI-time.
 
-## More
+## Docs
 
-**Docs** — **[What it catches and prevents →](docs/what-vigiles-catches.md)** · **[Verifying instruction files →](docs/verifying-instruction-files.md)** ([rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix)) · **[Harness testing →](docs/harness-testing.md)** · **[Measuring skills →](docs/measuring-skills.md)** · **[CLI →](docs/cli.md)** · **[GitHub Action →](docs/github-action.md)** · **[Skills →](docs/skills.md)** · **[Plugin-author guide →](docs/for-plugin-authors.md)** · **[Docs index →](docs/README.md)** · **[API reference →](https://zernie.github.io/vigiles/)**
+The **[docs index](docs/README.md)** is the full map, grouped by what you're doing:
 
-**Project** — **[Stability →](STABILITY.md)** · **[Related tools →](docs/related-tools.md)** · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+- **Guides** — [verify instruction files](docs/verifying-instruction-files.md) · [test your harness](docs/harness-testing.md) · [measure a skill](docs/measuring-skills.md) · [ship a plugin](docs/for-plugin-authors.md) · [Codex & other harnesses](docs/harnesses.md)
+- **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/)
+- **Explanation** — [what it catches](docs/what-vigiles-catches.md) · [how it compares](docs/comparison.md) · [FAQ](docs/faq.md)
+
+**Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
 
 ## License
 

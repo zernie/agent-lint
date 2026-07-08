@@ -14,58 +14,50 @@
 
 ## RESUME HERE
 
-**Branch `claude/vigiles-cost-analysis-9ko9mv`** (name is misleading — the work is
-ADOPTION FIXES, not cost analysis) → **PR #66 OPEN, merging-when-green.** This session acted
-on a skills-monorepo FIELD REPORT (a team ran vigiles on a 46-skill CI library with no
-`plugin.json` and hit blockers) — all 7 feedback points fixed.
+**Branch `claude/skill-eval-cost-benefit-q4ivfp`** (name misleading — the work is a
+PUBLIC-DOCS REVAMP, not cost analysis) → **PR #67 OPEN, merging-when-green.** The user flagged the
+docs as over-claiming maturity + hard to scan; this session overhauled the README + docs.
 
-**MERGE STATE (resume here first):** PR #66 open, **merging-when-green**; **subscribed to its
-activity**; a `send_later` check-in (trigger `trig_01HgpKfkov7BQAJNzHtMNEoq`, ~14:44Z) re-checks CI
+**MERGE STATE (resume here first):** PR #67 open, **merging-when-green**; **subscribed to its
+activity**; a `send_later` check-in (trigger `trig_01LX727g2VMn1qpe7k31eJ1o`, ~21:18Z) re-checks CI
 and **squash-merges into main with a CLEAN message (NO session link / model-id) when all 6 jobs
-green**, else re-arms. If resuming: `get_check_runs` for #66 → merge if green, then **unsubscribe**.
-Latest SHA `aa5526d` (a HANDOFF-refresh commit sits on top). CI jobs: validate/describe/check/test/
-e2e/harness; `test` runs ~5-7 min and is always last. The lone allowed failure anywhere is env-only
-`dialect-drift` (CI pins CC, so it passes in CI).
+green**, else re-arms. If resuming: `get_check_runs` for #67 → merge if green, then **unsubscribe**.
+Latest SHA `f1d0a2d`. CI jobs: validate/describe/check/test/e2e/harness (`test` ~5-7 min, last).
+Lone allowed failure: env-only `dialect-drift` (CI pins CC → passes in CI).
 
-**CODE-REVIEW LOOP (done):** Codex-bot reviewed every pushed commit and found **13 real P2 bugs
-across 5 rounds — ALL fixed + tested** (api-extractor surface, eslint void-expr, single-skill bundled
-resources, root-SKILL.md coverage + colocation, sharedDirs-from-repo-root, scoped harness detection,
-per-surface→repo-level fallback, hook-only + hooks-convention plugin shape, loadable-only surface
-count, foreign-repo sharedDirs root, query-suffix vs glob-skip). Codex then **hit its usage quota**
-(no more reviews incoming) — the loop ends by quota, NOT by proof of correctness. WATCH-OUT: the
-single-skill-dir targeting + `.claude`-fallback subsystem generated most siblings; classes are now
-closed + tested, but if a NEW real bug there surfaces, prefer a redesign or NARROWING the PR (drop
-single-skill-dir) over another patch.
+**Shipped (branch — all `docs:`):**
 
-**Shipped (branch — `feat(scan)` + `fix(lint)` + docs):**
+- **Version honesty** — STABILITY.md + README FAQ claimed "0.x"; real npm version is **12.7.0**
+  (semantic-release cuts a major per breaking change). Fixed to v12 + honest framing. Root cause: the
+  `package.json` `0.0.0-semantically-released` placeholder misread as "0.x". Added `vigiles/linting`
+  to the stable entry-points list.
+- **README scannability** — `More` link-farm → 3 Diátaxis buckets + index pointer; collapsed the dense
+  audit/lint/test/eval reconciliation paragraph; trimmed Proof 2/3. Eval heading → "the only way to put
+  a real number on cost."
+- **docs/README.md** reorganized (Guides / Reference / Explanation) + 6 docs added that were missing
+  from the index (harnesses, adapter-api, authoring-an-adapter, railway-subagents, faq, what-vigiles-catches).
+- **Merges** — `related-tools`→`comparison`; `inline-mode`→`markdown-mode` (one no-spec on-ramp doc;
+  NB inline mode is LIVE — only FRONTMATTER mode is disabled); `agent-setup`+`agent-workflows`→one guide.
+- **`eval-architecture.md` (54KB design-of-record ADR) relocated `docs/`→`research/`** per doc-tiers:
+  5 public links repointed (testing-api / measuring-skills), research/src relative paths fixed, added to
+  research index + `status:`/`topic:` frontmatter, both `CLAUDE.md` + `research/CLAUDE.md` recompiled.
+- **Codex-bot review** caught 1 real bug (the compiler surface is `vigiles/linting`, not `vigiles/spec`) — fixed.
+- Kept standalone by JUDGMENT (merging would bloat, not help): `testing-matrix`, `migrating-from-promptfoo`.
 
-- **P0-1** `loadPlugin` recognizes THREE repo shapes — published plugin / bare `skills/*` library /
-  plain `.claude/skills` user repo — via a new optional `PluginLayout.userSurfaceRoot` (`.claude`
-  in the CC adapter; core stays agnostic, `.claude` literal only in the adapter). Root `skills/`
-  WINS over `.claude/skills`. A single skill dir works. `LoadedPlugin.sources` maps each
-  materialized key → its real on-disk path. Reads the PROJECT `.claude` only, never `~/.claude`.
-- **P0-2** `vigiles lint` now SCOPES to an explicit dir arg (was: ignored the path, scanned the
-  whole repo → reported foreign surfaces). `runLint` resolves ONE `scanRoot` (single existing dir →
-  narrow; file / several / none → cwd, so **bare `lint` is byte-identical**) threaded into all 21
-  surface appliers (replaced `process.cwd()`). Bugfix — only `lint <dir>` changes.
-- **P1-3** skill-resources skips glob / placeholder refs (`* ? { } < >`) + `~/` home paths.
-- **P1-4** OPT-IN `sharedDirs` config — a ref whose first segment is a declared shared dir also
-  resolves at the repo root; scoped so nothing outside it is masked; default byte-identical.
-- **P2-6** lethal-trifecta advisory collapsed to one line per unit. **P2-7** `docs/skills-monorepo.md`.
+Deleted: docs/{related-tools,inline-mode,agent-workflows,eval-architecture}.md (last one moved to research/).
 
-Files: `src/plugin-loader.ts`, `src/core/layout.ts`, `src/adapters/claude-code/layout.ts`,
-`src/scan.ts`, `src/core/skill-resources.ts`, `src/core/types.ts` (`sharedDirs`), `src/cli.ts`
-(scanRoot). Tests: `src/scan.test.ts`, `src/core/skill-resources.test.ts`, `src/scan-cli.test.ts`
-(lint-scoping e2e), `src/adapters/claude-code/plugin-loader.test.ts`.
+**REPO ABOUT (USER ACTION — no tool/API access to set it):** paste into Settings→About —
+desc "Like Lighthouse for your agent harness — verify your CLAUDE.md/AGENTS.md, skills & hooks are real,
+then test and measure they actually work. Claude Code + Codex.", website https://zernie.github.io/vigiles/,
+topics: claude-code codex agentic-coding ai-agents llm claude anthropic developer-tools cli linter testing
+evals typescript mcp skills.
 
-**NEXT (not blocking):** the feedback is fully addressed. The field report's exact "global
-`~/.claude` skills appeared" symptom couldn't be reproduced from code (their env) — P0-2's
-correct rooting closes it either way. Possible follow-up: the `init` ADOPT/untested discovery
-also walks cwd; P0-2 scopes the lint appliers, adopt-discovery is a separate pass.
+**NEXT (not blocking):** none required. Candidate follow-up: a deterministic `no-internal-links-in-public-docs`
+lint rule (P1 roadmap) — currently hand-enforced (this session verified it by grep).
 
-**TEST STATUS:** full vitest **2074 passed** locally; the only failure is env-only
-`dialect-drift.test.ts` (installed vs pinned CC — CI pins it). eslint/tsc/test:types/fmt/api all
-green locally.
+**TEST STATUS:** touched-gate dogfoods pass locally (research-index, self-command-refs, doc-command-coverage,
+orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links green. Full vitest not re-run
+(docs-only change); env-only `dialect-drift` still fails locally (CI pins CC).
 
 ## Don't re-read unless the task needs it
 

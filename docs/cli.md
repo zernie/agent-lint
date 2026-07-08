@@ -148,8 +148,7 @@ See the [rules matrix](verifying-instruction-files.md#the-validation-rules--the-
 `vigiles lint` accepts files **or a directory** (`vigiles lint .` discovers the
 instruction files under it); with no argument it discovers them from the repo root.
 
-See the [agent setup guide](agent-setup.md) and
-[agent workflows](agent-workflows.md).
+See the [agent setup & workflows guide](agent-setup.md).
 
 ### `compile [files...]` — harness selection
 
