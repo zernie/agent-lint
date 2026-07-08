@@ -97,6 +97,7 @@ export interface LoadedPlugin {
     readonly settings: {
         hooks?: unknown;
     };
+    readonly sources: Record<string, string>;
     readonly warnings: readonly string[];
 }
 
