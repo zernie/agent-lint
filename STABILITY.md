@@ -16,6 +16,8 @@ their exit codes. Most of the churn is in the library API underneath it.
   (`0` clean / `1` warn / `2` error). This is the narrowest, steadiest contract
   and the surface almost everyone touches — including the GitHub Action, which wraps it.
 - **The authoring + testing library entry points:**
+  - `vigiles/linting` — the compiler + reference verification
+    (`compileClaude`, `compileSkill`, …).
   - `vigiles/spec` — the core builders (`enforce`, `guidance`, `claude`,
     `skill`, `agent`, `file`, `cmd`, `ref`, `dir`, `glob`, `result`,
     `delegate`, `railway`).
