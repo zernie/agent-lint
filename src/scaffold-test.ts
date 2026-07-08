@@ -297,7 +297,7 @@ function safetySection(
 // --- Safety (deterministic) — generated from ${input.name}'s side-effecting tools: ${sideEffecting.join(", ")} ---
 // In a real run, replace this constructed Trace with a real \`runHarness\` /
 // \`measure\` turn (use interceptTools so a real model's attempt is DENIED, never
-// executed — see docs/eval-architecture.md). The checks below are derived from the
+// executed — see research/eval-architecture.md). The checks below are derived from the
 // declared tools contract — the agent's "hole" asserted to stay in its lane.
 {
   const trace = {

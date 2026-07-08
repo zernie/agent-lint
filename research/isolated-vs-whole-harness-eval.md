@@ -8,7 +8,7 @@ topic: eval
 > Research of record (2026-06-17). When you eval ONE skill/subagent, do you load
 > it **isolated** (only that skill) or load the **whole harness** (the user's
 > real skills + agents + hooks + CLAUDE.md, as they ship)? Companion to
-> [`docs/eval-architecture.md`](../docs/eval-architecture.md) and the trigger-rate
+> [`eval-architecture.md`](eval-architecture.md) and the trigger-rate
 > work in `src/eval.ts` (`measureTriggerRate`).
 
 ## Decision
@@ -97,7 +97,7 @@ as a gate.
 
 ## Affordability tie-in
 
-This dovetails with the subscription-cost thesis (`docs/eval-architecture.md`):
+This dovetails with the subscription-cost thesis (`eval-architecture.md`):
 isolated = small context = cheapest; near-neighbor = bounded; whole-harness =
 priciest, so it's a **release gate you run deliberately** — not the per-PR loop.
 

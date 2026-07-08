@@ -29,30 +29,62 @@ to plain markdown anytime — so graduating to a spec is never a one-way door.
 
 ## Inline `enforce` comments
 
-The minimum-commitment path: add a single HTML comment per rule, anywhere
-in your existing markdown.
+The minimum-commitment path: add a single HTML comment per rule, anywhere in
+your existing markdown. It's the vigiles equivalent of
+`// eslint-disable-next-line` — maximum incrementalism, zero new files.
 
 ```md
 <!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
 ```
 
-Only `enforce` is supported inline — the prose around the comment _is_ the
-guidance, so a `guidance` comment would be a tautology. The reference uses
-the same `<linter>/<rule>` format as everywhere else in vigiles.
+Three pieces, all required:
 
-This is the vigiles equivalent of `// eslint-disable-next-line`: maximum
-incrementalism, zero new files. For the full reference — fenced-block
-handling, scoped plugin names, graduating to a typed spec — see
-[docs/inline-mode.md](inline-mode.md).
+1. **`vigiles:enforce`** — only `enforce` is supported inline. The prose around the comment _is_ the guidance, so a `guidance` comment would be a tautology.
+2. **`<linter>/<rule>`** — the same reference format as `enforce()` in spec mode. All seven catalogs (ESLint, Stylelint, Ruff, Clippy, Pylint, RuboCop, Cedar), scoped plugin names (`eslint/@typescript-eslint/...`), and the vigiles-internal namespace (`vigiles/orphan-docs`) work here.
+3. **`"<why>"`** — a double-quoted string shown to the agent as context. No newlines or embedded quotes; if you need either, move to a spec.
+
+A fuller example:
+
+```md
+# My Project
+
+<!-- vigiles:enforce eslint/no-console "Route output through logger.ts" -->
+<!-- vigiles:enforce eslint/@typescript-eslint/no-floating-promises "Await or explicitly void" -->
+<!-- vigiles:enforce ruff/F401 "No unused imports" -->
+
+## Logging
+
+All application output must go through the shared logger module.
+```
 
 ### What `vigiles lint` catches
 
 - Verifies each rule reference against your real linter config.
-- Emits closest-match suggestions on typos:
-  `"no-consol"` → `did you mean "eslint/no-console"?`
+- Emits closest-match suggestions on typos: `"no-consol"` → `did you mean "eslint/no-console"?`
 - Flags rules that exist but are disabled in your linter config.
-- Emits `::error` annotations under GitHub Actions.
-- Exits with code 2 (hard error) on any failed rule, so CI fails fast.
+- Emits `::error` annotations under GitHub Actions; exits code 2 on any failed rule, so CI fails fast.
+
+### What it does _not_ do (vs a typed spec)
+
+- **No edit-time type safety.** A `.spec.ts` gets editor squiggles because rules are a type union; inline strings surface typos only at `vigiles lint` time (still before CI).
+- **No programmatic composition** — each comment stands alone.
+- **No NCD duplicate detection** — that runs on spec-mode files.
+
+That's all fine for the adoption on-ramp. When you outgrow it, graduate to a spec.
+
+### Mixing with a spec — don't
+
+A file is checked for inline rules **only when it isn't managed by a spec** (no sibling `<file>.spec.ts`, no `vigiles:sha256 … compiled from …` header). If both exist, the compiler overwrites the markdown on the next compile and your inline comments vanish. Pick one per file.
+
+### Graduating to a spec
+
+When a dozen inline rules start crowding the prose:
+
+```bash
+npx vigiles init --target=CLAUDE.md
+```
+
+That scaffolds a `CLAUDE.md.spec.ts` beside your `CLAUDE.md`. Copy the enforce rules into the `rules:` block, delete the inline comments, and run `vigiles compile` — the markdown is rebuilt with a `sha256` header, and future edits flow through the spec. `vigiles eject` reverses it anytime.
 
 ---
 
@@ -75,7 +107,6 @@ file.
 
 ## See also
 
-- [`inline-mode.md`](inline-mode.md) — the full inline-comment reference.
 - [`spec-format.md`](spec-format.md) — the typed `.spec.ts` source of truth.
 - [`verifying-instruction-files.md`](verifying-instruction-files.md) — the lint guide.
 

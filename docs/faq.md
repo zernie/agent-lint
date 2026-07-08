@@ -49,7 +49,7 @@ Test layer drives the real `claude` / `codex` CLI. You can even
 
 **Most of vigiles needs no model and no key.** Lint and the deterministic Test tiers run in milliseconds on every commit, free.
 
-The only thing that needs a model is a real-model **eval**. That runs on **your own Claude Pro/Max subscription** via the `claude` CLI — **$0 of metered API tokens**. Tools like promptfoo / DeepEval hit a metered API and bill per token on every run. See [the eval architecture](eval-architecture.md).
+The only thing that needs a model is a real-model **eval**. That runs on **your own Claude Pro/Max subscription** via the `claude` CLI — **$0 of metered API tokens**. Tools like promptfoo / DeepEval hit a metered API and bill per token on every run. See [measuring skills](measuring-skills.md).
 
 ## What does `vigiles audit` actually run — and why did it "find nothing"?
 

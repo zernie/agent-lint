@@ -490,7 +490,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   `measure` with `stubSkillBodies`, on **Sonnet** — the realistic selector, not
   haiku, which under-measures trigger-rate) as a per-PR gate, then the
   tool-call spy/fake keystone for side-effecting skills. Full model + ranked gap
-  roadmap in [`docs/eval-architecture.md`](../docs/eval-architecture.md). **HIGH**
+  roadmap in [`eval-architecture.md`](eval-architecture.md). **HIGH**
 - **PATH-shim / record-replay helper (fake-on-PATH)** — the R2 tier: a fake
   binary earlier on PATH that emits a result **recorded once** from the real tool
   and replayed deterministically (never model-synthesized — drift → false
@@ -511,7 +511,7 @@ so the realistic safety story is the **whole-unit floor + a stateful pre-hook**.
   CLAUDE.md/skill injection adds input every turn; a "compression" skill cuts
   output), so a single total can bless a net-negative change — SkillBenchmark's
   Caveman cut output yet 2–4×'d cost. The money story, and the data model is half
-  there. [eval-architecture](../docs/eval-architecture.md) · [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
+  there. [eval-architecture](eval-architecture.md) · [skill-eval-landscape](skill-eval-landscape.md) · **HIGH**
 - **Adversarial-gate check + eval→enforce bridge** — a first-class "ask the agent to
   skip the enforcement gate, assert it refuses" check (`notTool` shape); when it
   fails, point at the deterministic rail (pillar 2 → pillar 1). The highest-value

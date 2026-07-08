@@ -270,7 +270,7 @@ Everything vigiles compiles and lints is **deterministic** — same input, same 
 
 ## See also
 
-- [Markdown mode](markdown-mode.md) · [Inline mode](inline-mode.md) — the no-spec on-ramps.
+- [Markdown mode](markdown-mode.md) — the no-spec on-ramp (inline `<!-- vigiles:enforce -->` comments).
 - [Spec format reference](spec-format.md) — every section and rule kind.
 - [Linter support](linter-support.md) — the 7 catalogs + `generate-types` / `generate-schema`.
 - [CLI & CI reference](cli.md) · [Agent setup](agent-setup.md).

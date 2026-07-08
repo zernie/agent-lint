@@ -1,9 +1,14 @@
+---
+status: shipped
+topic: eval
+---
+
 # Eval architecture — how vigiles tests Claude Code harness features
 
 > Status: design of record (2026-06-16). Captures the conceptual model behind
 > the two testing verbs (`vigiles test` / `vigiles eval`), reconciles it with
 > what the codebase **already** ships, and ranks the genuine remaining gaps into
-> a build roadmap. Companion to [`harness-testing.md`](harness-testing.md) (the
+> a build roadmap. Companion to [`harness-testing.md`](../docs/harness-testing.md) (the
 > user guide).
 
 ## The kicker

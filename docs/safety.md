@@ -102,7 +102,7 @@ const report = measure(spec, {
 - ✅ **Sound for:** "did the agent _attempt_ X?" — safety gates, approval checks, "no paid call", "no push to the wrong branch". `notTool` is the **negative safety assertion** a completion-grading eval structurally can't make: it sees the agent's _decision to act_, not just its final text.
 - ⚠️ **Not for:** stubbing a tool to return a fake success and letting a multi-step flow continue. The model sees a block, so a sequence that needs the real result breaks. (Claude Code has no "skip-but-return-success" primitive for arbitrary tools; deny is the closest safe thing.)
 
-**Testing that an enforcement gate actually holds** — including under an adversarial prompt that asks the agent to skip it — is done with `notTool` + `output` checks in `measure`. The worked dogfood is [`examples/harness/dogfood/adversarial-gate.eval.mjs`](../examples/harness/dogfood/adversarial-gate.eval.mjs). When that eval shows a prose gate can be talked out of, the deterministic `PreToolUse` hook is the fix — see the eval→enforce bridge note in [`eval-architecture.md`](eval-architecture.md#the-adversarial-gate-test--worked-example-and-the-evalenforce-bridge).
+**Testing that an enforcement gate actually holds** — including under an adversarial prompt that asks the agent to skip it — is done with `notTool` + `output` checks in `measure`. The worked dogfood is [`examples/harness/dogfood/adversarial-gate.eval.mjs`](../examples/harness/dogfood/adversarial-gate.eval.mjs). When that eval shows a prose gate can be talked out of, the deterministic `PreToolUse` hook is the fix.
 
 ## At a glance — what's confined, per tier
 
@@ -139,7 +139,7 @@ Yes — `sandbox: false` is the explicit, greppable opt-out for code you trust, 
   opt-in-not-always-on argument, `recordEgress`, `egress: { allow }`, dogfood findings.
 - [`harness-testing.md`](harness-testing.md) — the three tiers and where the
   boundary sits.
-- [`eval-architecture.md`](eval-architecture.md) — `interceptTools`/`notTool` in the
-  eval design, with the intercept-≠-mock trade-off.
+- [`testing-api.md`](testing-api.md) — `interceptTools`/`notTool` in the
+  testing API, with the intercept-≠-mock trade-off.
 - [`src/sandbox.ts`](../src/sandbox.ts) · [`src/egress.ts`](../src/egress.ts) ·
   [`src/tool-intercept.ts`](../src/tool-intercept.ts) — the pure, tested seams.

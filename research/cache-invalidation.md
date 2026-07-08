@@ -10,7 +10,7 @@ topic: eval
 > (`src/eval-lock.ts`, 2026-06-30). Synthesizes how mature content-addressed
 > caches (Bazel, Turborepo, Nx, Gradle, ccache, Jest, webpack, ESLint) and LLM
 > caches (promptfoo, LangChain, Helicone) design keys + invalidation, then records
-> the decisions for vigiles. Companion to [`docs/eval-architecture.md`](../docs/eval-architecture.md).
+> the decisions for vigiles. Companion to [`eval-architecture.md`](eval-architecture.md).
 
 ## Two mechanisms, not one: CACHE (local speed) vs LOCK (CI staleness)
 
