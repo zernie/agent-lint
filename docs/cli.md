@@ -310,6 +310,17 @@ footgun), hook resolution (`ok` / `missing` / `unresolved`), command + MCP
 detection, and untested-surface counts. `--json` for CI; `--no-html` to skip the
 report file.
 
+It also prints a **rule inventory**: prose rules in your instruction file that
+map to an off-the-shelf lint rule (`no console.log`, `no any`, `no eslint-disable`,
+…), each marked _enforced_ (the rule is in your lint config), _likely enforced_
+(covered by a `recommended` preset), or _documented, not enforced_ — the last is a
+one-line config fix, and the HTML report gives you a copy-a-prompt button for it.
+Deterministic and safe: it reads the config **text** only — never resolves or
+executes it — and matches only whole rule-name/code tokens, so prose doesn't trip
+it (dogfooded across 20 large OSS repos to drive the false-positive rate to ~0).
+Multi-linter by shape (ESLint config today, plus oxlint/biome which share ESLint's
+rule names); Ruff/Clippy/Pylint/RuboCop/Stylelint mappings are additive data.
+
 **The safety battery is a [testing-API](harness-testing.md) capability, not an
 `audit` ring** — it _executes_ your `PreToolUse` hooks against a curated disaster
 catalog (force-push, `rm -rf`, `--no-verify`, secret-read, `curl|sh`) to prove
