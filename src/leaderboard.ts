@@ -234,6 +234,13 @@ export function computeIntegrityScore(deductions: readonly Deduction[]): {
   return { score: Math.max(0, 100 - penalty), penalty };
 }
 
+/** Resolve the terse "thing(s)" plural placeholder against a count:
+ * n===1 drops the "(s)" ("1 tool"); otherwise it becomes "s" ("3 tools").
+ * (Kept local — audit-score.ts has its own copy to avoid a circular import.) */
+function pluralizeLabel(n: number, label: string): string {
+  return label.replace(/\(s\)/g, n === 1 ? "" : "s");
+}
+
 /** Deterministic structural-health score for one scanned plugin. */
 export function scoreReport(r: ScanReport): {
   score: number;
@@ -255,7 +262,7 @@ export function scoreReport(r: ScanReport): {
   const issues: string[] = [];
   for (const d of deductions) {
     if (d.n === 0) continue;
-    issues.push(`${String(d.n)} ${d.label}`);
+    issues.push(`${String(d.n)} ${pluralizeLabel(d.n, d.label)}`);
   }
   // Sort issues by cost (worst first) so the report leads with what matters.
   issues.sort((a, b) => Number(b.split(" ")[0]) - Number(a.split(" ")[0]));
@@ -267,11 +274,13 @@ export function scoreReport(r: ScanReport): {
   const noContract = r.agents.filter((a) => a.tools === null).length;
   if (noContract > 0) {
     issues.push(
-      `${String(noContract)} agent(s) inherit all tools (no contract) (advisory)`,
+      `${String(noContract)} ${pluralizeLabel(noContract, "agent(s) inherit all tools (no contract) (advisory)")}`,
     );
   }
   if (r.untested > 0) {
-    issues.push(`${String(r.untested)} untested surface(s) (advisory)`);
+    issues.push(
+      `${String(r.untested)} ${pluralizeLabel(r.untested, "untested surface(s) (advisory)")}`,
+    );
   }
   return { score, issues };
 }

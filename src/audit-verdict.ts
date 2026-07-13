@@ -119,6 +119,13 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
+/** Resolve the scorer's terse "thing(s)" plural placeholder against a count —
+ * mirrors audit-score's `pluralizeLabel` so the verdict sentence reads "1 unit"
+ * / "3 units", never "1 unit(s)". */
+function pluralizeLabel(n: number, label: string): string {
+  return label.replace(/\(s\)/g, n === 1 ? "" : "s");
+}
+
 function fixNoun(n: number): string {
   return n === 1 ? "fix" : "fixes";
 }
@@ -341,7 +348,10 @@ function buildSentence(
       pointsToNextGrade,
     )} points below ${article(nextGrade)} ${nextGrade}.`;
   }
-  return `${score.grade} — ${String(dom.n)} ${dom.label}; fixing every deterministic finding still lands below ${article(
+  return `${score.grade} — ${String(dom.n)} ${pluralizeLabel(
+    dom.n,
+    dom.label,
+  )}; fixing every deterministic finding still lands below ${article(
     nextGrade,
   )} ${nextGrade}.`;
 }

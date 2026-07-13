@@ -205,7 +205,7 @@ describe("computeVerdict", () => {
     expect(v.pointsToNextGrade).toBe(10);
     expect(v.fixesToNextGrade).toBeNull();
     expect(v.perRecommendation).toEqual([]);
-    expect(v.sentence).toMatch(/^B — 1 unit\(s\) holding all three/);
+    expect(v.sentence).toMatch(/^B — 1 unit holding all three/);
     expect(v.sentence).toMatch(/still lands below an A\.$/);
   });
 

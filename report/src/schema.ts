@@ -129,6 +129,30 @@ export interface RuleInventoryItem {
   configFix: string;
 }
 
+export type RuleCategory = "reuse" | "hook" | "semantic" | "unrouted";
+export type RuleMechanism = "config-line" | "hook" | "prose" | "compile";
+
+/** One segmented, deterministically-routed rule (mirror of the CLI's RoutedRule). */
+export interface RoutedRule {
+  text: string;
+  quote: string;
+  file?: string;
+  lineStart: number;
+  lineEnd: number;
+  confidence: "high" | "medium";
+  category: RuleCategory;
+  mechanism: RuleMechanism;
+  rule?: string;
+  linter?: string;
+}
+
+/** The deterministic State-B routing preview (mirror of the CLI's RuleRouting). */
+export interface RuleRouting {
+  segmented: number;
+  counts: Record<RuleCategory, number>;
+  rules: RoutedRule[];
+}
+
 export interface AuditReport {
   meta: {
     schemaVersion: number;
@@ -164,4 +188,6 @@ export interface AuditReport {
    * Deterministic, no model. Present only when at least one intent resolved.
    */
   rulesInventory?: RuleInventoryItem[];
+  /** The deterministic State-B routing preview — segmented rules + category counts. */
+  ruleRouting?: RuleRouting;
 }

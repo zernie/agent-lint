@@ -19,6 +19,7 @@ import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
 import type { PluginScore } from "./leaderboard.js";
 import type { RuleInventoryItem } from "./rule-inventory.js";
+import type { RuleRouting } from "./rule-routing.js";
 
 /** The current schema version. Bump only on a BREAKING change to the shape. */
 export const AUDIT_SCHEMA_VERSION = 1;
@@ -129,6 +130,14 @@ export interface AuditReport {
    * version unchanged. See `research/audit-rule-compile-tier.md`.
    */
   readonly rulesInventory?: readonly RuleInventoryItem[];
+  /**
+   * The deterministic State-B routing PREVIEW — the instruction file segmented
+   * into atomic rules, each routed (reuse / hook / semantic / unrouted) to how
+   * it would be enforced, with per-category counts. No model, fs-only. Grounds
+   * the report's "compile" upsell in real numbers instead of generic copy.
+   * Present only when at least one atomic rule was segmented. Additive/optional.
+   */
+  readonly ruleRouting?: RuleRouting;
 }
 
 export interface BuildAuditReportOptions {
@@ -148,6 +157,11 @@ export interface BuildAuditReportOptions {
    * the instruction + config text). Omit/empty when nothing resolved.
    */
   readonly rulesInventory?: readonly RuleInventoryItem[];
+  /**
+   * The State-B routing preview the CLI computed via `routeRules`. Omit when
+   * nothing segmented.
+   */
+  readonly ruleRouting?: RuleRouting;
 }
 
 /** The one command that adopts every un-spec'd surface (bare `init`). */
@@ -213,6 +227,9 @@ export function buildAuditReport(
     ...(opts.observations ? { observations: opts.observations } : {}),
     ...(opts.rulesInventory && opts.rulesInventory.length
       ? { rulesInventory: opts.rulesInventory }
+      : {}),
+    ...(opts.ruleRouting && opts.ruleRouting.segmented > 0
+      ? { ruleRouting: opts.ruleRouting }
       : {}),
   };
 }

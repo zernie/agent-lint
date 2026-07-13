@@ -134,6 +134,7 @@ import {
   buildRuleInventory,
   type RuleInventoryItem,
 } from "./rule-inventory.js";
+import { routeRules, type RuleRouting } from "./rule-routing.js";
 import {
   runAdoptabilityTier,
   formatAdoptability,
@@ -2102,17 +2103,40 @@ function computeRuleInventory(
   instructionFile: string,
 ): RuleInventoryItem[] {
   try {
-    // Read EVERY agent instruction file present, not just the harness-native one
-    // — rules are often documented in AGENTS.md even under a claude-code harness.
-    let instructionText = "";
-    for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
-      const p = resolve(root, name);
-      if (existsSync(p)) instructionText += readFileSync(p, "utf-8") + "\n";
-    }
+    const instructionText = readInstructionText(root, instructionFile);
     if (!instructionText.trim()) return [];
     return buildRuleInventory(instructionText, collectLintConfigText(root));
   } catch {
     return [];
+  }
+}
+
+/** Read EVERY agent instruction file present (not just the harness-native one) —
+ * rules are often documented in AGENTS.md even under a claude-code harness. */
+function readInstructionText(root: string, instructionFile: string): string {
+  let instructionText = "";
+  for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
+    const p = resolve(root, name);
+    if (existsSync(p)) instructionText += readFileSync(p, "utf-8") + "\n";
+  }
+  return instructionText;
+}
+
+/** The deterministic State-B routing preview for `audit`: segment the instruction
+ * file(s) into atomic rules and route each (reuse / hook / semantic / unrouted) —
+ * NO model, fs-only. `undefined` when there's nothing to segment (kept off the
+ * report). Best-effort; a routing failure never breaks the audit. */
+function computeRuleRouting(
+  root: string,
+  instructionFile: string,
+): RuleRouting | undefined {
+  try {
+    const instructionText = readInstructionText(root, instructionFile);
+    if (!instructionText.trim()) return undefined;
+    const routing = routeRules(instructionText, instructionFile);
+    return routing.segmented > 0 ? routing : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -6659,6 +6683,7 @@ async function main(): Promise<void> {
             root,
             adapter.layout.instructionFile,
           ),
+          ruleRouting: computeRuleRouting(root, adapter.layout.instructionFile),
         });
         const sc = auditReport.score;
         const plan = optimize(report);

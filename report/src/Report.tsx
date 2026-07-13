@@ -29,15 +29,6 @@ function basename(dir: string): string {
   return parts[parts.length - 1] || dir;
 }
 
-/** Resolve the scorer's terse "N thing(s)" labels for display — "1 tool(s)" →
- * "1 tool", "3 tool(s)" → "3 tools" — so the report doesn't read as printf
- * output. Cosmetic only; the scorer's canonical strings are untouched. */
-function humanizeFinding(text: string): string {
-  const m = /^(\d+)\s/.exec(text);
-  const n = m ? Number(m[1]) : 2;
-  return text.replace(/\(s\)/g, n === 1 ? "" : "s");
-}
-
 /** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
  * passing only), so a fix card never masquerades as a clean signal. */
 function impactBand(points: number): Band {
@@ -138,7 +129,7 @@ function CategoryCell({ c }: { c: CategoryScore }) {
           <span className="text-na">advisory — not graded</span>
         ) : c.findings.length > 0 ? (
           <span className="line-clamp-2">
-            {humanizeFinding(c.findings[0])}
+            {c.findings[0]}
             {c.findings.length > 1 && (
               <span className="text-foreground">
                 {" "}
@@ -212,6 +203,7 @@ export function Report({ data }: { data: AuditReport }) {
     adoptable,
     observations,
     rulesInventory,
+    ruleRouting,
   } = data;
   const overall = score.empty ? null : score.overall;
 
@@ -284,9 +276,7 @@ export function Report({ data }: { data: AuditReport }) {
                       <ShieldAlert size={12} className="mr-1" />
                       safety
                     </Badge>
-                    <span className="text-muted-foreground">
-                      {humanizeFinding(f)}
-                    </span>
+                    <span className="text-muted-foreground">{f}</span>
                     <span className="ml-auto text-xs text-muted-foreground">
                       your call — no deterministic fix
                     </span>
@@ -298,7 +288,8 @@ export function Report({ data }: { data: AuditReport }) {
         );
       })()}
 
-      {rulesInventory && rulesInventory.length > 0 && (
+      {((rulesInventory && rulesInventory.length > 0) ||
+        (ruleRouting && ruleRouting.segmented > 0)) && (
         <>
           <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Your rules → enforced
@@ -308,19 +299,19 @@ export function Report({ data }: { data: AuditReport }) {
             lint rule — and whether it's actually enforced. The gap between what
             you wrote and what your config does.
           </p>
-          <RuleInventory data={rulesInventory} />
+          <RuleInventory data={rulesInventory ?? []} routing={ruleRouting} />
         </>
       )}
 
       {adoptability && (
         <>
           <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Adoptability
+            Broken references
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            What vigiles would catch in your repo — machine-verifiable
-            references in your instruction file checked against your actual
-            config.
+            Machine-verifiable references in your instruction file — files,
+            scripts, symbols — checked against your actual repo and config.
+            These don't resolve.
           </p>
           <Adoptability data={adoptability} />
         </>

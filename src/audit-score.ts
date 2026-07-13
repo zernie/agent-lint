@@ -91,6 +91,12 @@ interface Deduction {
   readonly label: string;
 }
 
+/** Resolve the terse "thing(s)" plural placeholder against a count:
+ * n===1 drops the "(s)" ("1 tool"); otherwise it becomes "s" ("3 tools"). */
+function pluralizeLabel(n: number, label: string): string {
+  return label.replace(/\(s\)/g, n === 1 ? "" : "s");
+}
+
 /** Apply deductions to a 100 base, clamped to [0,100], collecting non-zero labels. */
 function scoreFrom(deductions: readonly Deduction[]): {
   score: number;
@@ -101,7 +107,10 @@ function scoreFrom(deductions: readonly Deduction[]): {
   for (const d of deductions) {
     if (d.n <= 0) continue;
     penalty += d.n * d.weight;
-    findings.push({ n: d.n, text: `${String(d.n)} ${d.label}` });
+    findings.push({
+      n: d.n,
+      text: `${String(d.n)} ${pluralizeLabel(d.n, d.label)}`,
+    });
   }
   findings.sort((a, b) => b.n - a.n);
   return {

@@ -375,13 +375,13 @@ test("formatLeaderboard renders ranks, grades, and reasons", () => {
       name: "demo",
       score: 70,
       grade: "C",
-      issues: ["2 untested surface(s)"],
+      issues: ["2 untested surfaces"],
       report: report(),
     },
   ]);
   assert.ok(text.includes("demo"));
   assert.ok(text.includes("C"));
-  assert.ok(text.includes("2 untested surface(s)"));
+  assert.ok(text.includes("2 untested surfaces"));
 });
 
 test("formatLeaderboardMarkdown renders a publishable table", () => {
@@ -391,7 +391,7 @@ test("formatLeaderboardMarkdown renders a publishable table", () => {
       name: "demo",
       score: 70,
       grade: "C",
-      issues: ["2 untested surface(s)", "1 broken intra-plugin reference(s)"],
+      issues: ["2 untested surfaces", "1 broken intra-plugin reference"],
       report: report(),
     },
     {
@@ -404,7 +404,7 @@ test("formatLeaderboardMarkdown renders a publishable table", () => {
     },
   ]);
   assert.match(md, /\| # \| grade \| score \| plugin \| top issues \|/);
-  assert.match(md, /\| 1 \| C \| 70 \| `demo` \| 2 untested surface\(s\);/);
+  assert.match(md, /\| 1 \| C \| 70 \| `demo` \| 2 untested surfaces;/);
   assert.match(md, /`clean-one` \| — clean \|/); // no issues → clean
   assert.match(md, /Structural health only/);
 });
