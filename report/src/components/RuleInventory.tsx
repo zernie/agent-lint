@@ -15,9 +15,13 @@ const BTN =
  */
 function CopyPrompt({ item }: { item: RuleInventoryItem }) {
   const [copied, setCopied] = useState(false);
+  // A contradiction needs a DECISION prompt (the rule is present but disabled),
+  // not an "add this line" prompt — the config already mentions it.
   const prompt =
-    `In this repo, enable the ${item.linter} rule \`${item.rule}\` (set it to "error") in the lint config, ` +
-    `so the documented rule "${item.intent}" is actually enforced. Config to add: ${item.configFix}`;
+    item.configState === "contradiction"
+      ? `In this repo, the ${item.linter} rule \`${item.rule}\` is set to "off" in the lint config, but the instructions document "${item.intent}" as a rule. Resolve the contradiction: either remove the override so \`${item.rule}\` is enforced (${item.configFix}), or drop the documented rule if it's intentionally off.`
+      : `In this repo, enable the ${item.linter} rule \`${item.rule}\` (set it to "error") in the lint config, ` +
+        `so the documented rule "${item.intent}" is actually enforced. Config to add: ${item.configFix}`;
   const copy = (): void => {
     void navigator.clipboard?.writeText(prompt).then(
       () => {
@@ -147,18 +151,30 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
+        {/* A tool whose pitch is "your config lies about your rules" must not
+            round a maybe up to a yes: `enforced` and `preset-maybe` are counted
+            (and coloured) separately. */}
         <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">
-            {enforced.length + preset.length} of {total}
+          <span className={cn("font-semibold", TEXT.good)}>
+            {enforced.length}
           </span>{" "}
-          documented rules are enforced
+          of {total} enforced
+          {preset.length > 0 && (
+            <>
+              {" · "}
+              <span className="font-semibold text-foreground">
+                {preset.length}
+              </span>{" "}
+              likely via a preset
+            </>
+          )}
           {oneLine.length > 0 && (
             <>
               {" · "}
               <span className={cn("font-semibold", TEXT.warn)}>
                 {oneLine.length}
               </span>{" "}
-              one config line away
+              {oneLine.length === 1 ? "is" : "are"} one config line away
             </>
           )}
           {contradiction.length > 0 && (
@@ -178,7 +194,8 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
       </div>
 
       <div className="flex h-2 overflow-hidden rounded-full bg-border">
-        {seg(enforced.length + preset.length, BG.good)}
+        {seg(enforced.length, BG.good)}
+        {seg(preset.length, BG.na)}
         {seg(oneLine.length, BG.warn)}
         {seg(contradiction.length, BG.bad)}
       </div>
@@ -192,7 +209,8 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
               key={item.rule}
               item={item}
               tone="bad"
-              label="⛔ config turns it OFF — your call"
+              label="⛔ set to off in your config — your call"
+              action
             />
           ))}
         </div>
@@ -206,7 +224,7 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
               key={item.rule}
               item={item}
               tone="warn"
-              label="1-line fix"
+              label="enable in 1 line"
               action
             />
           ))}
@@ -255,7 +273,7 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
           </li>
           <li>
             <span className="font-mono text-foreground">⚙ synthesize</span> — a
-            custom rule, blind-gated before it's trusted
+            custom rule, checked against held-out examples before it's trusted
           </li>
           <li>
             <span className="font-mono text-foreground">⛓ hook</span> — action
@@ -267,7 +285,8 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
           </li>
         </ul>
         <p className="mt-2.5 text-xs text-muted-foreground">
-          CI afterwards is plain lint + hooks. $0, deterministic.
+          One model pass now; CI afterwards is plain lint + hooks — $0 and
+          deterministic.
           <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
             npx vigiles compile
           </code>
