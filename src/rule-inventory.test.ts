@@ -93,4 +93,22 @@ describe("buildRuleInventory", () => {
     );
     expect(items[0]?.configState).toBe("not-in-config");
   });
+
+  it("does NOT nudge a rule the author documents as intentionally off (opt-out)", () => {
+    // Real case: pmndrs/react-spring CLAUDE.md says no-explicit-any is off on
+    // purpose. Enforcing it would be wrong advice, so it's suppressed.
+    const items = buildRuleInventory(
+      "`@typescript-eslint/no-explicit-any` is **off** intentionally (variance).",
+      "",
+    );
+    expect(items).toEqual([]);
+  });
+
+  it("still nudges when the mention has no off/disable cue nearby", () => {
+    const items = buildRuleInventory(
+      "Never allow an explicit any — enforce `no-explicit-any` everywhere.",
+      "",
+    );
+    expect(items[0]?.configState).toBe("not-in-config");
+  });
 });
