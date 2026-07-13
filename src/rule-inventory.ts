@@ -274,6 +274,39 @@ function ruleInConfig(configText: string, rule: string): boolean {
   return variantsOf(rule).some((v) => matchesWholeToken(configText, v));
 }
 
+/** Index of the first WHOLE-token occurrence of `keyword` in `text` (the keyword
+ * itself, not the boundary char), or -1. */
+function firstTokenIndex(text: string, keyword: string): number {
+  const re = new RegExp(
+    `(^|[^\\w/@.-])(${escapeRe(keyword)})([^\\w/@.-]|$)`,
+    "i",
+  );
+  const m = re.exec(text);
+  return m ? m.index + m[1].length : -1;
+}
+
+/**
+ * Whether the matched mention is a documented opt-OUT ("`no-explicit-any` is off
+ * intentionally", "we disable X") rather than a norm to enforce. When the author
+ * deliberately turns a rule off, a not-in-config state is CONSISTENT, not a gap —
+ * nudging them to enable it is actively wrong advice (found dogfooding
+ * pmndrs/react-spring). Deterministic negation window around the matched token;
+ * conservative on purpose — only strong off/disable cues, so it never suppresses
+ * a genuine "enforce this" nudge. */
+function isDocumentedOptOut(text: string, keyword: string): boolean {
+  const idx = firstTokenIndex(text, keyword);
+  if (idx < 0) return false;
+  // Test the context on EITHER SIDE of the token, never the token itself — else
+  // the cue `disable` would match inside the rule name `eslint-disable` and
+  // self-suppress every mention of it. Left/right windows are separate strings.
+  // NB: `disabled` (full word) not `disable` — `disable` would match inside the
+  // rule name `eslint-disable`, which can appear in a NEIGHBOURING token's window.
+  const CUE = /\b(?:off|disabled|not enforced|not enabled|turned off)\b/i;
+  const left = text.slice(Math.max(0, idx - 48), idx);
+  const right = text.slice(idx + keyword.length, idx + keyword.length + 48);
+  return CUE.test(left) || CUE.test(right);
+}
+
 /** A `recommended`-style preset extend anywhere in the config text — evidence
  * that preset-enabled rules may already be on even when not named literally.
  * Coarse on purpose: presence of a preset downgrades a not-named preset rule to
@@ -295,7 +328,12 @@ export function buildRuleInventory(
       matchesWholeToken(instructionText, kw),
     );
     if (!matched) continue;
-    const configState: ConfigState = ruleInConfig(configText, m.rule)
+    const inConfig = ruleInConfig(configText, m.rule);
+    // A rule the author documents as deliberately OFF, and which really isn't in
+    // config, is consistent — not a gap. Skip it so we never nudge "enable X"
+    // against an intentional opt-out.
+    if (!inConfig && isDocumentedOptOut(instructionText, matched)) continue;
+    const configState: ConfigState = inConfig
       ? "in-config"
       : m.inRecommended && extendsRecommended(configText)
         ? "preset-maybe"
