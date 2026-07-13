@@ -201,6 +201,23 @@ const INTENT_MAP: readonly IntentMapping[] = [
     rule: "react-hooks/exhaustive-deps",
     configFix: '"react-hooks/exhaustive-deps": "error"',
   },
+  // Added from the hand-verified rule-adherence corpus (real repos: motion,
+  // mapbox) — both are documented in the wild and have an off-the-shelf rule.
+  {
+    intent: "no default exports",
+    linter: "eslint",
+    keywords: ["import/no-default-export", "no-default-export"],
+    rule: "import/no-default-export",
+    configFix: '"import/no-default-export": "error"',
+  },
+  {
+    intent: "no TODO / FIXME comments",
+    linter: "eslint",
+    keywords: ["no-warning-comments"],
+    rule: "no-warning-comments",
+    configFix:
+      '"no-warning-comments": ["error", {"terms": ["todo", "fixme"], "location": "anywhere"}]',
+  },
 ];
 
 /** Whether the mapped rule is visible in the lint config text (textual grep — imperfect, labelled). */

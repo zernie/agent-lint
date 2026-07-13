@@ -111,4 +111,13 @@ describe("buildRuleInventory", () => {
     );
     expect(items[0]?.configState).toBe("not-in-config");
   });
+
+  it("maps the corpus-added off-the-shelf rules (no-default-export, no-warning-comments)", () => {
+    const text =
+      "Enforce `import/no-default-export`. Ban `no-warning-comments`.";
+    const rules = buildRuleInventory(text, "")
+      .map((i) => i.rule)
+      .sort();
+    expect(rules).toEqual(["import/no-default-export", "no-warning-comments"]);
+  });
 });
