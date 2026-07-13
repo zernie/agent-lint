@@ -93,6 +93,15 @@ export interface LedgerSummary {
   recentDenials: LedgerDenial[];
 }
 
+export interface RuleInventoryItem {
+  intent: string;
+  linter: string;
+  matched: string;
+  rule: string;
+  configState: "in-config" | "not-in-config";
+  configFix: string;
+}
+
 export interface AuditReport {
   meta: {
     schemaVersion: number;
@@ -120,4 +129,10 @@ export interface AuditReport {
    * something is recorded.
    */
   observations?: LedgerSummary;
+  /**
+   * Prose rules in the harness that map to an off-the-shelf lint rule, and
+   * whether that rule is already in the config (the one-line-config-fix nudge).
+   * Deterministic, no model. Present only when at least one intent resolved.
+   */
+  rulesInventory?: RuleInventoryItem[];
 }

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
 import { Adopt } from "@/components/Adopt";
+import { RuleInventory } from "@/components/RuleInventory";
 import { Observations } from "@/components/Observations";
 import { band, TEXT, BG, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,7 @@ export function Report({ data }: { data: AuditReport }) {
     adoptability,
     adoptable,
     observations,
+    rulesInventory,
   } = data;
   const overall = score.empty ? null : score.overall;
   const b = band(overall);
@@ -175,6 +177,20 @@ export function Report({ data }: { data: AuditReport }) {
             <code className="mx-1 font-mono">.vigiles/runs.jsonl</code> ledger.
           </p>
           <Observations data={observations} />
+        </>
+      )}
+
+      {rulesInventory && rulesInventory.length > 0 && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Rule inventory
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Prose rules in your instruction file that map to an off-the-shelf
+            lint rule — and whether it's already enforced. Documented-but-not-
+            enforced ones are a one-line config fix away.
+          </p>
+          <RuleInventory data={rulesInventory} />
         </>
       )}
 
