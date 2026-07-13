@@ -189,7 +189,7 @@ const VERBS = new Set<string>([
 // --- Offset / line utilities ----------------------------------------------
 
 function computeLineOffsets(lines: readonly string[]): number[] {
-  const offsets: number[] = new Array(lines.length);
+  const offsets: number[] = new Array<number>(lines.length);
   let acc = 0;
   for (let i = 0; i < lines.length; i++) {
     offsets[i] = acc;
