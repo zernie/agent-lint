@@ -252,7 +252,11 @@ The **[docs index](docs/README.md)** is the full map, grouped by what you're doi
 - **Reference** — [CLI](docs/cli.md) · [rules matrix](docs/verifying-instruction-files.md#the-validation-rules--the-full-matrix) · [testing API](docs/testing-api.md) · [full API](https://zernie.github.io/vigiles/)
 - **Explanation** — [what it catches](docs/what-vigiles-catches.md) · [how it compares](docs/comparison.md) · [FAQ](docs/faq.md)
 
-**Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with) · companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need).
+**Project** — [Stability](STABILITY.md) · [Related tools](docs/comparison.md#what-vigiles-composes-with)
+
+<!-- The "companion to [Feedback Loop Is All You Need](https://zernie.com/blog/feedback-loop-is-all-you-need)"
+     link is temporarily removed while AgenticDev paper #1 is under blind review: repo → blog is a
+     deanonymization path (the reviewer-offer email links this repo). RESTORE after notification (2026-08-21). -->
 
 ## License
 
