@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   Check,
+  ShieldAlert,
 } from "lucide-react";
 import type {
   AuditReport,
@@ -26,6 +27,15 @@ import { cn } from "@/lib/utils";
 function basename(dir: string): string {
   const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);
   return parts[parts.length - 1] || dir;
+}
+
+/** Resolve the scorer's terse "N thing(s)" labels for display — "1 tool(s)" →
+ * "1 tool", "3 tool(s)" → "3 tools" — so the report doesn't read as printf
+ * output. Cosmetic only; the scorer's canonical strings are untouched. */
+function humanizeFinding(text: string): string {
+  const m = /^(\d+)\s/.exec(text);
+  const n = m ? Number(m[1]) : 2;
+  return text.replace(/\(s\)/g, n === 1 ? "" : "s");
 }
 
 /** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
@@ -123,11 +133,19 @@ function CategoryCell({ c }: { c: CategoryScore }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="min-h-8 text-[11px] leading-tight text-muted-foreground">
+      <div className="h-8 overflow-hidden text-[11px] leading-tight text-muted-foreground">
         {c.advisory ? (
           <span className="text-na">advisory — not graded</span>
         ) : c.findings.length > 0 ? (
-          c.findings.join("; ")
+          <span className="line-clamp-2">
+            {humanizeFinding(c.findings[0])}
+            {c.findings.length > 1 && (
+              <span className="text-foreground">
+                {" "}
+                · +{c.findings.length - 1} more
+              </span>
+            )}
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-good">
             <CheckCircle2 size={11} /> clean
@@ -244,6 +262,41 @@ export function Report({ data }: { data: AuditReport }) {
           clean.
         </Card>
       )}
+
+      {/* Safety findings have no auto-fix (the lethal-trifecta exfil path is a
+          design call, not a typo) — so they never appear as a ranked +N-pts card.
+          Surface them here as review items so the report's most severe finding
+          isn't buried in 11px category-strip text. */}
+      {(() => {
+        const safety = score.categories.find((c) => c.key === "Safety");
+        if (!safety || safety.advisory || safety.findings.length === 0)
+          return null;
+        return (
+          <>
+            <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Review — no auto-fix
+            </h2>
+            <div className="flex flex-col gap-2.5">
+              {safety.findings.map((f, i) => (
+                <Card key={i} className={cn("border-l-4 p-4", BORDER_L.bad)}>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge>
+                      <ShieldAlert size={12} className="mr-1" />
+                      safety
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      {humanizeFinding(f)}
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      your call — no deterministic fix
+                    </span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {rulesInventory && rulesInventory.length > 0 && (
         <>

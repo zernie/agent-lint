@@ -96,18 +96,18 @@ export const SAMPLE: AuditReport = {
     ],
   },
   adoptability: {
-    total: 5,
+    total: 7,
     broken: 2,
     brokenRefs: [
-      {
-        kind: "enforce",
-        ref: "@typescript-eslint/no-floating-promises",
-        issue: "rule not found in eslint config",
-      },
       {
         kind: "file",
         ref: "src/auth/login.ts",
         issue: "file does not exist",
+      },
+      {
+        kind: "dir",
+        ref: "packages/legacy/",
+        issue: "directory does not exist",
       },
     ],
   },
