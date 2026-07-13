@@ -17,6 +17,7 @@ import type { LedgerSummary } from "./observe.js";
 import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
 import type { PluginScore } from "./leaderboard.js";
+import type { RuleInventoryItem } from "./rule-inventory.js";
 
 /** The current schema version. Bump only on a BREAKING change to the shape. */
 export const AUDIT_SCHEMA_VERSION = 1;
@@ -110,6 +111,16 @@ export interface AuditReport {
    * the pure builder stays fs-free.
    */
   readonly observations?: LedgerSummary;
+  /**
+   * The deterministic rule-inventory teaser — prose rules in the harness that
+   * map to an off-the-shelf lint rule + whether that rule is already in the
+   * config (the one-line-config-fix nudge). No model, no config execution. The
+   * CLI computes it (reads the instruction + config text, calls
+   * `buildRuleInventory`) and passes it in, so the pure builder stays fs-free.
+   * Present only when at least one intent resolves. Additive/optional — schema
+   * version unchanged. See `research/audit-rule-compile-tier.md`.
+   */
+  readonly rulesInventory?: readonly RuleInventoryItem[];
 }
 
 export interface BuildAuditReportOptions {
@@ -124,6 +135,11 @@ export interface BuildAuditReportOptions {
    * when there's nothing to adopt.
    */
   readonly adoptableSurfaces?: readonly string[];
+  /**
+   * The rule-inventory items the CLI computed via `buildRuleInventory` (reading
+   * the instruction + config text). Omit/empty when nothing resolved.
+   */
+  readonly rulesInventory?: readonly RuleInventoryItem[];
 }
 
 /** The one command that adopts every un-spec'd surface (bare `init`). */
@@ -183,6 +199,9 @@ export function buildAuditReport(
     },
     ...(adoptable ? { adoptable } : {}),
     ...(opts.observations ? { observations: opts.observations } : {}),
+    ...(opts.rulesInventory && opts.rulesInventory.length
+      ? { rulesInventory: opts.rulesInventory }
+      : {}),
   };
 }
 
