@@ -80,7 +80,12 @@ const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no @ts-ignore / @ts-expect-error abuse",
     linter: "eslint",
-    keywords: ["@ts-ignore", "ts-expect-error", "ban-ts-comment"],
+    keywords: [
+      "@ts-ignore",
+      "ts-expect-error",
+      "ban-ts-comment",
+      "@typescript-eslint/ban-ts-comment",
+    ],
     rule: "@typescript-eslint/ban-ts-comment",
     configFix: '"@typescript-eslint/ban-ts-comment": "error"',
   },
@@ -155,21 +160,27 @@ const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no unused vars",
     linter: "eslint",
-    keywords: ["no-unused-vars"],
+    keywords: ["no-unused-vars", "@typescript-eslint/no-unused-vars"],
     rule: "@typescript-eslint/no-unused-vars",
     configFix: '"@typescript-eslint/no-unused-vars": "error"',
   },
   {
     intent: "no non-null assertion",
     linter: "eslint",
-    keywords: ["no-non-null-assertion"],
+    keywords: [
+      "no-non-null-assertion",
+      "@typescript-eslint/no-non-null-assertion",
+    ],
     rule: "@typescript-eslint/no-non-null-assertion",
     configFix: '"@typescript-eslint/no-non-null-assertion": "error"',
   },
   {
     intent: "no floating promises",
     linter: "eslint",
-    keywords: ["no-floating-promises"],
+    keywords: [
+      "no-floating-promises",
+      "@typescript-eslint/no-floating-promises",
+    ],
     rule: "@typescript-eslint/no-floating-promises",
     configFix: '"@typescript-eslint/no-floating-promises": "error"',
   },
