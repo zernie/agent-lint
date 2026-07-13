@@ -32,6 +32,13 @@ const report: AuditReport = {
       { key: "Tested", score: null, weight: 1, findings: ["n/a"] },
     ],
   },
+  verdict: {
+    sentence: "One one-line fix away from an A.",
+    grade: "B",
+    pointsToNextGrade: 9,
+    fixesToNextGrade: 1,
+    perRecommendation: [{ index: 0, pointsIfFixed: 9 }],
+  },
   recommendations: [
     {
       surface: "rev",
