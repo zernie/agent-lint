@@ -40,8 +40,10 @@
   SPINE = proof/demo-led. Real, screenshotable catches on shipped plugins, THEN
   mechanism. Every proof traces to a real dogfood run (research/dogfood/) — NEVER
   fabricate one. Order = most-RELATABLE first (broken tool ref → skill collision →
-  secrets-exfil gotcha last as the bite). The intro triplet maps 1:1 to the 3
-  proofs. Security is ONE dev-native GOTCHA proof, never the brand. Add a repro
+  rules-not-enforced → secrets-exfil gotcha LAST as the bite). The intro triplet
+  maps to the three "vibes break silently" proofs (1, 2, 4); Proof 3 (your rules →
+  enforced) pays off the TAGLINE's rule-follows-half-the-time pain. Security is ONE
+  dev-native GOTCHA proof, never the brand. Add a repro
   line ("run `npx vigiles audit <any-repo>` for your own") + a one-line note that
   examples use CC subagents but the checks run on Codex too. FALSE CONFIDENCE is
   the coined term (a guard that looks like it works and silently doesn't), defined
@@ -59,8 +61,11 @@
   block; ONE idea per sentence; NO internal vocabulary (moat/flywheel) / NO
   research/ links / NO enterprise/national-interest framing — name the user
   benefit; ~220-line body cap; push depth into docs/ and LINK it. Assets: the hero
-  vigiles-audit.png is a REAL current report (a community plugin as "my-plugin"),
-  C 72, five rings — re-render via headless Chromium if the UI changes.
+  vigiles-audit.png is a REPRESENTATIVE report ("my-plugin", C 77) — the verdict-
+  led header + ranked fixes + the "Your rules → enforced" section (the new rule-
+  compile capability). Re-render via headless Chromium if the UI changes: build
+  report/, screenshot report/dist/index.html (falls back to the sample fixture),
+  inject the dark :root tokens before </body> for the dark render.
 -->
 
 <p align="center">
@@ -102,16 +107,18 @@ It's free and open-source, runs entirely on your machine, and never bills per to
 ## What it caught
 
 <p align="center">
-  <img src="vigiles-audit.png" width="760" alt="vigiles audit report scoring my-plugin C (72/100): five categories scored A–F — Truthfulness, Triggering, Structure, Safety, Tested — with an inline fix card for a subagent declaring a tool that doesn't exist" />
+  <img src="vigiles-audit.png" width="760" alt="vigiles audit report for my-plugin: a verdict header reading 'Two one-line fixes away from a B.' next to a C (77/100) grade, a five-category strip (Truthfulness, Triggering, Structure, Safety, Tested), ranked fix cards with '+N pts' impact badges, and a 'Your rules → enforced' section showing a prose rule the config silently turns off" />
 </p>
 
-**Like Google's Lighthouse, but for your agent harness.** One command grades it A–F across five categories, every fix shown inline:
+**Like Google's Lighthouse, but for your agent harness.** One command grades it A–F across five categories, leads with a plain-English verdict — _"two one-line fixes away from a B"_ — and ranks every fix by the points it buys back:
 
 - **Truthfulness** — do the references resolve?
 - **Triggering** — do skills fire, without colliding?
 - **Structure** — are tool contracts and configs valid?
 - **Safety** — any way for the agent to leak your data?
 - **Tested** — does the harness ship tests?
+
+And it closes the loop from prose to enforcement: **your rules → enforced** maps each rule you wrote to the lint rule that actually enforces it — already on, one config line away, or silently turned off (below).
 
 These are real scans of public plugins — run `npx vigiles audit <any-repo>` for your own. The examples below use Claude Code subagents; the same checks run on Codex `AGENTS.md`, skills, and hooks. ↓
 
@@ -135,7 +142,18 @@ This subagent — a helper your main agent hands work to — lists a tool that d
 One popular plugin ships **45 pairs** of near-identical skill descriptions. Your agent picks a skill by _reading_ them — so when two match, it fires the wrong one. Still perfectly valid markdown.
 **[How triggering works →](docs/measuring-skills.md)**
 
-## Proof 3 — it can quietly read your secrets and send them out
+## Proof 3 — a rule you wrote that nothing enforces
+
+```text
+Your rules → enforced   2 of 5 · 2 one config line away · 1 contradicted by config
+    └ "always use ===" → eqeqeq is in your ESLint config, set to "off"
+       your CLAUDE.md says enforce it; your config quietly turns it off
+```
+
+You wrote the rule. Your agent treats it as gospel and follows it — until it doesn't, and nothing tells you which time. vigiles maps each prose rule to the off-the-shelf lint rule that _actually_ enforces it, then checks your config: on, **one line away**, or — the one people screenshot — documented but silently **turned off**. Deterministic, no model. Want the rest compiled — a custom rule for a rule no linter ships, a hook for `git push`, the judgment calls honestly left alone? That's the opt-in `compile` tier (one model pass, then CI is plain lint).
+**[How enforcement works →](docs/verifying-instruction-files.md)**
+
+## Proof 4 — it can quietly read your secrets and send them out
 
 ```text
 ◑ Safety   80  (80/100)
