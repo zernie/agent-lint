@@ -9,8 +9,9 @@
 >
 > ⚠️ **THIS FILE IS PUBLIC** (open-source repo). NO STRATEGY here — business
 > direction, monetization, competitive framing, and personal plans live ONLY in the
-> `startup/` vault. HANDOFF may POINT to the vault, never name or describe its
-> contents. NEVER name a specific user/company/figure here (public). (See `doc-tiers`.)
+> private `zernie/mine` repo under `vigiles/` (migrated 2026-07-13 from the old
+> git-crypt `startup/` vault). HANDOFF may say strategy exists there, never name or
+> describe its contents. NEVER name a specific user/company/figure here (public). (See `doc-tiers`.)
 
 ## RESUME HERE
 
@@ -61,7 +62,7 @@ orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links gre
 
 ## Don't re-read unless the task needs it
 
-- vault `startup/` — unlock + read `startup/README.md` for the ID→name index; strategy is there.
+- strategy KB — now in the PRIVATE `zernie/mine` repo under `vigiles/` (migrated 2026-07-13 from the old git-crypt `startup/` vault); `add_repo zernie/mine`, index in `vigiles/CLAUDE.md`.
 - `research/roadmap.md` — the front-door (technical) roadmap.
 
 ## Gotchas (still live)
@@ -88,8 +89,8 @@ orphans, inline) + build / integrity / orphan-docs / fmt / no-internal-links gre
   recompile (`node dist/cli.js compile <spec>`), NEVER hand-edit. (A PostToolUse hook recompiles.)
 - **COMMIT SIGNING is BROKEN in-container** (0-byte pubkey) → "Unverified"; email correct. Don't amend.
 - `dialect-drift.test.ts` fails LOCALLY (installed vs pinned claude-code); CI pins it. Env-only.
-- **VAULT (`startup/`)** git-crypt, LOCKED at session start; strategy is there. Filenames + commit
-  messages are PUBLIC → opaque IDs + generic `chore: vault` messages.
+- **Strategy KB MOVED (2026-07-13)** out of this repo → private `zernie/mine` repo, `vigiles/`
+  (plain text). No more git-crypt / `startup/` vault here; there is nothing to unlock.
 - **SCOPED-SESSION GITHUB ACCESS** — WebFetch blocked by net policy; WebSearch works. Cross-GitHub
   discovery via WebSearch or sourcegraph + `raw.githubusercontent`.
 - Commits/PR: NO session links / NO raw model-id strings. Conventional-Commit titles.
