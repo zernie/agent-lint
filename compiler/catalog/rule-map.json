@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "purpose": "Tier-1 mapping: agent-prose intent -> existing off-the-shelf lint rule. If a repo declares the intent in prose but the mapped rule is off/absent in its config, the remedy is a one-line config change, not synthesis.",
+    "sources": ["core = ESLint core", "ts = typescript-eslint", "plugin:<name> = eslint-plugin-<name>"],
+    "created": "2026-07-09"
+  },
+  "map": [
+    { "intent": "no console.log / use logger", "keywords": ["console.log", "console\\.", "no-console", "use the logger", "structured log"], "existing": ["core:no-console"], "config_fix": "\"no-console\": \"error\"" },
+    { "intent": "no any type", "keywords": ["\\bany\\b type", "no `any`", "no-explicit-any", "avoid any", "prefer unknown"], "existing": ["ts:@typescript-eslint/no-explicit-any"], "config_fix": "\"@typescript-eslint/no-explicit-any\": \"error\"" },
+    { "intent": "no eslint-disable / no linter suppressors", "keywords": ["eslint-disable", "no linter suppress", "suppressor", "do not suppress"], "existing": ["plugin:@eslint-community/eslint-comments:eslint-comments/no-use", "config:linterOptions.noInlineConfig"], "config_fix": "enable eslint-comments/no-use OR set linterOptions.noInlineConfig: true" },
+    { "intent": "no @ts-ignore / @ts-expect-error abuse", "keywords": ["@ts-ignore", "ts-expect-error", "ts-comment"], "existing": ["ts:@typescript-eslint/ban-ts-comment"], "config_fix": "\"@typescript-eslint/ban-ts-comment\": \"error\"" },
+    { "intent": "no hardcoded secrets", "keywords": ["hardcode", "secret", "api key", "apiKey", "token", "credential", "password"], "existing": ["plugin:no-secrets:no-secrets/no-secrets", "plugin:security:security/detect-*"], "config_fix": "add eslint-plugin-no-secrets rule no-secrets/no-secrets" },
+    { "intent": "no empty catch / no swallowed errors", "keywords": ["empty catch", "swallow", "silently", "catch block must"], "existing": ["core:no-empty (allowEmptyCatch:false)"], "config_fix": "\"no-empty\": [\"error\", {\"allowEmptyCatch\": false}]" },
+    { "intent": "no var / prefer const-let", "keywords": ["no var", "use const", "prefer const", "no-var"], "existing": ["core:no-var", "core:prefer-const"], "config_fix": "\"no-var\": \"error\"" },
+    { "intent": "strict equality ===", "keywords": ["===", "strict equal", "eqeqeq", "no =="], "existing": ["core:eqeqeq"], "config_fix": "\"eqeqeq\": \"error\"" },
+    { "intent": "template literals over concatenation", "keywords": ["template literal", "prefer-template", "no string concat"], "existing": ["core:prefer-template"], "config_fix": "\"prefer-template\": \"error\"" },
+    { "intent": "no debugger", "keywords": ["debugger", "no-debugger"], "existing": ["core:no-debugger"], "config_fix": "\"no-debugger\": \"error\"" },
+    { "intent": "restricted / deprecated imports", "keywords": ["do not import", "deprecated", "no-restricted-imports", "ban import", "restricted path"], "existing": ["core:no-restricted-imports", "plugin:import:import/no-restricted-paths", "plugin:boundaries:boundaries/element-types"], "config_fix": "\"no-restricted-imports\": [\"error\", {...}]" },
+    { "intent": "no circular deps", "keywords": ["circular", "cycle", "no-cycle"], "existing": ["plugin:import:import/no-cycle"], "config_fix": "\"import/no-cycle\": \"error\"" },
+    { "intent": "no barrel / index re-export files", "keywords": ["barrel", "index re-export", "no-namespace"], "existing": ["plugin:import:import/no-namespace", "core:no-restricted-imports (index)"], "config_fix": "restrict via no-restricted-imports patterns" },
+    { "intent": "function length / complexity caps", "keywords": ["under \\d+ lines", "max lines", "complexity", "keep functions small", "cyclomatic"], "existing": ["core:max-lines-per-function", "core:complexity", "core:max-depth", "core:max-params", "core:max-statements"], "config_fix": "\"max-lines-per-function\": [\"error\", 40]" },
+    { "intent": "no unused vars", "keywords": ["unused var", "no-unused-vars"], "existing": ["ts:@typescript-eslint/no-unused-vars", "core:no-unused-vars"], "config_fix": "\"@typescript-eslint/no-unused-vars\": \"error\"" },
+    { "intent": "no non-null assertion", "keywords": ["non-null", "!", "no-non-null-assertion"], "existing": ["ts:@typescript-eslint/no-non-null-assertion"], "config_fix": "\"@typescript-eslint/no-non-null-assertion\": \"error\"" },
+    { "intent": "no floating promises / await handling", "keywords": ["floating promise", "unhandled promise", "await", "no-floating-promises"], "existing": ["ts:@typescript-eslint/no-floating-promises"], "config_fix": "\"@typescript-eslint/no-floating-promises\": \"error\"" },
+    { "intent": "naming conventions", "keywords": ["naming convention", "prefix", "suffix", "camelCase", "PascalCase", "must be named"], "existing": ["ts:@typescript-eslint/naming-convention"], "config_fix": "\"@typescript-eslint/naming-convention\": [\"error\", {...}]", "note": "arbitrary/unusual prefixes may need a custom rule (synthesize tail)" },
+    { "intent": "accessibility (jsx-a11y)", "keywords": ["a11y", "accessib", "aria", "alt text"], "existing": ["plugin:jsx-a11y:jsx-a11y/*"], "config_fix": "extend plugin:jsx-a11y/recommended" },
+    { "intent": "react hooks deps", "keywords": ["exhaustive-deps", "hook dependencies", "useEffect deps"], "existing": ["plugin:react-hooks:react-hooks/exhaustive-deps"], "config_fix": "\"react-hooks/exhaustive-deps\": \"error\"" }
+  ],
+  "semantic_no_existing": [
+    "prefer composition over inheritance",
+    "single responsibility / one reason to change",
+    "write clear self-documenting code",
+    "keep it simple / avoid over-engineering",
+    "parse don't validate (true dataflow guarantee)",
+    "domain invariants / ubiquitous language"
+  ]
+}
