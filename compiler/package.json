@@ -1,0 +1,16 @@
+{
+  "name": "@vigiles/compiler",
+  "version": "0.0.1",
+  "type": "commonjs",
+  "private": true,
+  "description": "Opt-in tier: compile natural-language agent rules into self-tested lint rules, gated by a blind adversarial gold-set. Loaded only by vigiles's opt-in power tier, never by the deterministic default surface.",
+  "scripts": {
+    "gate": "node gate.js",
+    "demo": "node run-demo.js"
+  },
+  "dependencies": {
+    "@typescript-eslint/parser": "^8.63.0",
+    "eslint": "^9.39.4",
+    "typescript": "^6.0.3"
+  }
+}
