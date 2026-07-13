@@ -98,7 +98,7 @@ export interface RuleInventoryItem {
   linter: string;
   matched: string;
   rule: string;
-  configState: "in-config" | "not-in-config" | "preset-maybe";
+  configState: "in-config" | "not-in-config" | "preset-maybe" | "contradiction";
   configFix: string;
 }
 
