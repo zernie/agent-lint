@@ -69,4 +69,28 @@ describe("buildRuleInventory", () => {
     );
     expect(buildRuleInventory(text, "", { linters: ["ruff"] })).toEqual([]);
   });
+
+  it("treats base and @typescript-eslint/ variants as the same rule in config", () => {
+    const items = buildRuleInventory(
+      "enforce `no-unused-vars`",
+      'rules: { "@typescript-eslint/no-unused-vars": "error" }',
+    );
+    expect(items[0]?.configState).toBe("in-config");
+  });
+
+  it("marks a preset-enabled rule 'preset-maybe' (no false 'unenforced' alarm)", () => {
+    const items = buildRuleInventory(
+      "ban `no-explicit-any`",
+      'extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"]',
+    );
+    expect(items[0]?.configState).toBe("preset-maybe");
+  });
+
+  it("still flags a genuinely-absent non-preset rule as not-in-config", () => {
+    const items = buildRuleInventory(
+      "require `eqeqeq`",
+      'extends: ["eslint:recommended"]',
+    );
+    expect(items[0]?.configState).toBe("not-in-config");
+  });
 });

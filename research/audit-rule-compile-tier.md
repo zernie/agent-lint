@@ -19,12 +19,12 @@ audit report; offer the rest on demand. Prose becomes proof.
 
 ## Two surfaces (the whole design hinges on this split)
 
-| | DEFAULT audit (no consent) | OPT-IN tier (own-repo, consented) |
-| --- | --- | --- |
-| Runs a model? | **No** | **Yes — on the user's Claude sub ($0 metered, like `eval`)** |
-| Safe on a FOREIGN repo/marketplace? | Yes | No — own-repo only |
-| What it does | Cheap **divergence teaser** (deterministic): "some rules here map to lint rules your config has OFF" | Full analysis: extract every rule → classify → score → compile the easy ones → run → violations |
-| Consent | none | the **existing** `decideExecute` consent (audit already asks once at a TTY, remembers `audit.measure` in `.vigilesrc.json`) — extend its disclosure wording; NO new gate |
+|                                     | DEFAULT audit (no consent)                                                                           | OPT-IN tier (own-repo, consented)                                                                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runs a model?                       | **No**                                                                                               | **Yes — on the user's Claude sub ($0 metered, like `eval`)**                                                                                                             |
+| Safe on a FOREIGN repo/marketplace? | Yes                                                                                                  | No — own-repo only                                                                                                                                                       |
+| What it does                        | Cheap **divergence teaser** (deterministic): "some rules here map to lint rules your config has OFF" | Full analysis: extract every rule → classify → score → compile the easy ones → run → violations                                                                          |
+| Consent                             | none                                                                                                 | the **existing** `decideExecute` consent (audit already asks once at a TTY, remembers `audit.measure` in `.vigilesrc.json`) — extend its disclosure wording; NO new gate |
 
 The determinism guard exists ONLY for the default/foreign surface (vigiles's "audit is
 read-only, safe on any repo, no model" promise). The moment you opt in on your own repo,
@@ -37,7 +37,7 @@ dry-run → manifest). vigiles drives it and renders the result. Per rule:
 
 1. **Extract + classify** (model): atomic imperative rule → IR `{surface, polarity, target, exceptions}`.
 2. **Difficulty score 1–10** (model, one-shot): displayed on the per-rule button so the user
-   sees effort/cost *before* spending. **The number is a DISPLAY, never the auto gate** (see invariants).
+   sees effort/cost _before_ spending. **The number is a DISPLAY, never the auto gate** (see invariants).
 3. **Route by surface:**
    - `ast`/`imports` + **maps to an already-installed rule (tier-a reuse)** → the AUTO lane.
    - `ast`/`imports` needing a synthesized/meta-config checker (tier-b/c) → **button** (copy-command).
@@ -51,7 +51,7 @@ dry-run → manifest). vigiles drives it and renders the result. Per rule:
 ### The auto-showcase (the "wow", ≤3 rules)
 
 Auto-build lane = **tier-(a) direct-installed-rule reuse ONLY** (not "difficulty ≤3" — that
-would smuggle in leak-prone tier-b selectors that *look* easy). These are model-free to route,
+would smuggle in leak-prone tier-b selectors that _look_ easy). These are model-free to route,
 gate-trivial (the installed rule was validated upstream), fast. Cap ~3, sorted by hit count.
 Everything else waits for a button.
 
@@ -84,7 +84,7 @@ no-exec/no-model/tiny-blast-radius contract), queue mechanics.
    before its violations show.
 2. **Hooks NEVER auto-build, at any difficulty.** A bad lint rule = a false warning (annoying,
    reversible, CI-visible). A bad hook = blocked legit work OR **false safety** — which is
-   *literally vigiles's flagship finding* (copied hooks 2/7, compiled 7/7). Auto-installing an
+   _literally vigiles's flagship finding_ (copied hooks 2/7, compiled 7/7). Auto-installing an
    under-blocking hook reproduces the exact defect vigiles exists to expose. Free tier **WARNS
    only, creates nothing** (a green "hook created" makes users stop watching — the same
    false-safety failure). The explicit button may create an **experimental-labeled, own-repo,

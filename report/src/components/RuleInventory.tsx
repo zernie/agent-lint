@@ -51,14 +51,23 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
   return (
     <div className="space-y-2">
       {data.map((item) => {
-        const enforced = item.configState === "in-config";
+        // Three states. in-config → enforced (green ✓). preset-maybe → a
+        // `recommended` preset likely already enables it, so we neither claim
+        // it's off nor nudge (muted, no button — a false "unenforced" alarm on a
+        // preset-covered rule is exactly the FP the dogfood exposed).
+        // not-in-config → the actionable nudge (amber ●, copyable agent prompt).
+        const state = item.configState;
         return (
           <Card
             key={item.rule}
             className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 text-sm"
           >
-            {enforced ? (
+            {state === "in-config" ? (
               <Check size={16} className={TEXT.good} />
+            ) : state === "preset-maybe" ? (
+              <span className="text-lg leading-none text-muted-foreground">
+                ●
+              </span>
             ) : (
               <span className={cn("text-lg leading-none", TEXT.warn)}>●</span>
             )}
@@ -66,8 +75,12 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
             <code className="font-mono text-xs text-muted-foreground">
               {item.rule}
             </code>
-            {enforced ? (
+            {state === "in-config" ? (
               <span className={cn("text-xs", TEXT.good)}>enforced</span>
+            ) : state === "preset-maybe" ? (
+              <span className="text-xs text-muted-foreground">
+                likely enforced (preset)
+              </span>
             ) : (
               <>
                 <span className={cn("text-xs", TEXT.warn)}>
