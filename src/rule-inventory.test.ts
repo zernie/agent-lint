@@ -55,4 +55,18 @@ describe("buildRuleInventory", () => {
       buildRuleInventory("Prefer composition over inheritance. Be kind.", ""),
     ).toEqual([]);
   });
+
+  it("tags each item with its linter", () => {
+    const items = buildRuleInventory("no `console.log`", "");
+    expect(items).toHaveLength(1);
+    expect(items[0]?.linter).toBe("eslint");
+  });
+
+  it("honours the linters filter (ESLint intents suppressed for a non-eslint repo)", () => {
+    const text = "no `console.log`";
+    expect(buildRuleInventory(text, "", { linters: ["eslint"] })).toHaveLength(
+      1,
+    );
+    expect(buildRuleInventory(text, "", { linters: ["ruff"] })).toEqual([]);
+  });
 });

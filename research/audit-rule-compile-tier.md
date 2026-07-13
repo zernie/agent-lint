@@ -119,6 +119,19 @@ The paper artifact (the adversarial gate + blind gold-set + inter-rater measurem
 agent-rules-compiler and is UNAFFECTED — strengthened, actually: this tier is its real-world
 deployment (the gate powering LLM-authored rules against production code inside a shipped tool).
 
+## Build status (2026-07-13)
+
+- **DONE — the deterministic detector** (`src/rule-inventory.ts` + test): pure
+  `buildRuleInventory(instructionText, configText, {linters?})` → `RuleInventoryItem[]`.
+  FP-safe (rule-name/code-token keywords, whole-token match, every bare-word trigger
+  dropped; measured 107 raw garbage hits → 0). **Multi-linter by shape, ESLint-first by
+  data** — Ruff/Clippy/Pylint/RuboCop/Stylelint are additive entries, no code change; the
+  opt-in tier should resolve enablement via the existing `checkLinterRule` engine.
+- **NEXT:** wire `rulesInventory?` onto `AuditReport` (mirror `adoptable`) + a report
+  section + copy-command buttons (`Adopt.tsx`); then the opt-in model tier (drive
+  `compile-rules` → gate → run). Public README/docs update only once it renders for a user
+  (no vaporware).
+
 ## Provenance
 
 Two Fable red-team passes + the founder's refinements (difficulty score, hook handling,
