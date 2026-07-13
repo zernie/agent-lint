@@ -34,7 +34,7 @@ export type LinterName =
   | "stylelint";
 
 /** One prose→rule mapping for a single linter. `keywords` are rule-name/token-shaped. */
-interface IntentMapping {
+export interface IntentMapping {
   readonly intent: string;
   readonly linter: LinterName;
   /** Whole-token, code-shaped triggers only (no bare English words). */
@@ -57,7 +57,7 @@ interface IntentMapping {
  * ESLint-only today — Ruff/Clippy/Pylint/RuboCop/Stylelint entries append here
  * with their own `linter` + rule-name keywords, no code change.
  */
-const INTENT_MAP: readonly IntentMapping[] = [
+export const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no console.log / use the logger",
     linter: "eslint",
@@ -268,7 +268,7 @@ function escapeRe(s: string): string {
  * `` `no-console` `` and `enforce no-console;` but `no-console-x` does not,
  * and prose containing the substring elsewhere never trips it).
  */
-function matchesWholeToken(text: string, keyword: string): boolean {
+export function matchesWholeToken(text: string, keyword: string): boolean {
   const re = new RegExp(
     `(^|[^\\w/@.-])${escapeRe(keyword)}([^\\w/@.-]|$)`,
     "i",

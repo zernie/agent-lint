@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, ChevronRight, Zap, Sparkles } from "lucide-react";
-import type { RuleInventoryItem } from "@/schema";
+import type { RuleInventoryItem, RuleRouting, RuleCategory } from "@/schema";
 import { Card } from "@/components/ui/card";
 import { TEXT, BG } from "@/lib/band";
 import { cn } from "@/lib/utils";
@@ -135,7 +135,141 @@ function FoldedGroup({
  *      off-the-shelf lint rule, grouped by state so the actionable ones lead.
  *   2. A compile CTA describing the opt-in tier — never fabricated result rows.
  */
-export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
+/** The four routing rungs, in ladder order (config-line → hook → prose →
+ * compile), with the glyph + one-line meaning the compile CTA lists. */
+const ROUTE_META: Record<
+  RuleCategory,
+  { glyph: string; label: string; blurb: string }
+> = {
+  reuse: {
+    glyph: "↺",
+    label: "reuse",
+    blurb: "an off-the-shelf rule already exists → enable it",
+  },
+  hook: {
+    glyph: "⛓",
+    label: "hook",
+    blurb: "action rules a linter can't see (git push, rm -rf)",
+  },
+  semantic: {
+    glyph: "✎",
+    label: "prose",
+    blurb: "judgment calls, honestly left un-enforced",
+  },
+  unrouted: {
+    glyph: "✨",
+    label: "unrouted",
+    blurb:
+      "no deterministic route — compile decides (reuse / synthesize / prose)",
+  },
+};
+const ROUTE_ORDER: RuleCategory[] = ["reuse", "hook", "semantic", "unrouted"];
+
+/**
+ * The opt-in compile tier, grounded in the DETERMINISTIC routing preview when we
+ * have one: real per-category counts + a couple of example rules, so the upsell
+ * shows the reader THEIR rules routed — not a generic pitch. Falls back to the
+ * static description when no routing ran.
+ */
+function CompileCTA({ routing }: { routing?: RuleRouting }) {
+  // One representative example rule per non-reuse category (reuse is already the
+  // detailed hero above), quote trimmed for the line.
+  const exampleFor = (cat: RuleCategory): string | undefined =>
+    routing?.rules.find((r) => r.category === cat)?.text;
+
+  return (
+    <div className="rounded-lg border border-dashed border-border p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Sparkles size={15} className="text-muted-foreground" />
+        Compile — the full picture
+        <span className="text-xs font-normal text-muted-foreground">
+          opt-in · runs a model once
+        </span>
+      </div>
+      {routing && routing.segmented > 0 ? (
+        <>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            We segmented{" "}
+            <span className="font-semibold text-foreground">
+              {routing.segmented}
+            </span>{" "}
+            atomic {routing.segmented === 1 ? "rule" : "rules"} from your
+            instructions and routed each one — deterministically, no model:
+          </p>
+          <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+            {ROUTE_ORDER.filter((cat) => routing.counts[cat] > 0).map((cat) => {
+              const ex = exampleFor(cat);
+              return (
+                <li key={cat}>
+                  <span className="font-mono text-foreground">
+                    {ROUTE_META[cat].glyph} {routing.counts[cat]}{" "}
+                    {ROUTE_META[cat].label}
+                  </span>{" "}
+                  — {ROUTE_META[cat].blurb}
+                  {ex && (
+                    <span className="mt-0.5 block truncate pl-4 italic opacity-80">
+                      e.g. “{ex}”
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            <span className="font-mono text-foreground">compile</span> turns the
+            reuse + hook rows into config and hooks, and takes one model pass at
+            the <span className="font-mono text-foreground">unrouted</span>{" "}
+            rest. CI afterwards is plain lint + hooks — $0 and deterministic.
+            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
+              npx vigiles compile
+            </code>
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Segments your instruction file into atomic rules and routes each
+            one:
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+            <li>
+              <span className="font-mono text-foreground">↺ reuse</span> — an
+              off-the-shelf rule already exists → enable it
+            </li>
+            <li>
+              <span className="font-mono text-foreground">⚙ synthesize</span> —
+              a custom rule, checked against held-out examples before it's
+              trusted
+            </li>
+            <li>
+              <span className="font-mono text-foreground">⛓ hook</span> — action
+              rules a linter can't see (git push, rm -rf)
+            </li>
+            <li>
+              <span className="font-mono text-foreground">✎ prose</span> —
+              judgment calls, honestly left un-enforced
+            </li>
+          </ul>
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            One model pass now; CI afterwards is plain lint + hooks — $0 and
+            deterministic.
+            <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
+              npx vigiles compile
+            </code>
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function RuleInventory({
+  data,
+  routing,
+}: {
+  data: RuleInventoryItem[];
+  routing?: RuleRouting;
+}) {
   const enforced = data.filter((r) => r.configState === "in-config");
   const preset = data.filter((r) => r.configState === "preset-maybe");
   const oneLine = data.filter((r) => r.configState === "not-in-config");
@@ -253,45 +387,9 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
         </FoldedGroup>
       )}
 
-      {/* Zone 2 — the opt-in compile tier. Describes what it does; NO fabricated
-          result rows until it actually runs (honest by construction). */}
-      <div className="rounded-lg border border-dashed border-border p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Sparkles size={15} className="text-muted-foreground" />
-          Compile — the full picture
-          <span className="text-xs font-normal text-muted-foreground">
-            opt-in · runs a model once
-          </span>
-        </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          Segments your instruction file into atomic rules and routes each one:
-        </p>
-        <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-          <li>
-            <span className="font-mono text-foreground">↺ reuse</span> — an
-            off-the-shelf rule already exists → enable it
-          </li>
-          <li>
-            <span className="font-mono text-foreground">⚙ synthesize</span> — a
-            custom rule, checked against held-out examples before it's trusted
-          </li>
-          <li>
-            <span className="font-mono text-foreground">⛓ hook</span> — action
-            rules a linter can't see (git push, rm -rf)
-          </li>
-          <li>
-            <span className="font-mono text-foreground">✎ prose</span> —
-            judgment calls, honestly left un-enforced
-          </li>
-        </ul>
-        <p className="mt-2.5 text-xs text-muted-foreground">
-          One model pass now; CI afterwards is plain lint + hooks — $0 and
-          deterministic.
-          <code className="ml-2 rounded bg-border px-1.5 py-0.5 font-mono text-foreground">
-            npx vigiles compile
-          </code>
-        </p>
-      </div>
+      {/* Zone 2 — the opt-in compile tier, grounded in the deterministic routing
+          preview (real counts + examples) when present; static pitch otherwise. */}
+      <CompileCTA routing={routing} />
     </div>
   );
 }
