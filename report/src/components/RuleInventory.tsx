@@ -8,11 +8,19 @@ import { cn } from "@/lib/utils";
 const BTN =
   "inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-left text-xs font-medium hover:border-foreground disabled:opacity-60";
 
-/** Copy the one-line config fix to the clipboard (static-report affordance). */
-function CopyFix({ fix }: { fix: string }) {
+/**
+ * Copy a paste-ready agent prompt to the clipboard. vigiles users live in
+ * Claude Code / Codex, so the actionable affordance is an instruction the agent
+ * can execute — enable the rule in the real config — not a raw JSON snippet the
+ * user has to place by hand.
+ */
+function CopyPrompt({ item }: { item: RuleInventoryItem }) {
   const [copied, setCopied] = useState(false);
+  const prompt =
+    `In this repo, enable the ${item.linter} rule \`${item.rule}\` (set it to "error") in the lint config, ` +
+    `so the documented rule "${item.intent}" is actually enforced. Config to add: ${item.configFix}`;
   const copy = (): void => {
-    void navigator.clipboard?.writeText(fix).then(
+    void navigator.clipboard?.writeText(prompt).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -21,14 +29,14 @@ function CopyFix({ fix }: { fix: string }) {
     );
   };
   return (
-    <button type="button" onClick={copy} title={`Copy: ${fix}`} className={BTN}>
+    <button type="button" onClick={copy} title={prompt} className={BTN}>
       {copied ? (
         <Check size={14} className={TEXT.good} />
       ) : (
         <Copy size={14} className="text-muted-foreground" />
       )}
       <span className={cn(copied && TEXT.good)}>
-        {copied ? "copied!" : "copy config fix"}
+        {copied ? "copied!" : "copy agent prompt"}
       </span>
     </button>
   );
@@ -65,7 +73,7 @@ export function RuleInventory({ data }: { data: RuleInventoryItem[] }) {
                 <span className={cn("text-xs", TEXT.warn)}>
                   documented, not enforced
                 </span>
-                <CopyFix fix={item.configFix} />
+                <CopyPrompt item={item} />
               </>
             )}
           </Card>
