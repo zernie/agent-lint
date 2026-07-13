@@ -43,3 +43,10 @@ export const BORDER_L: Record<Band, string> = {
   bad: "border-l-bad",
   na: "border-l-na",
 };
+/** Full (all-sides) band border — literal class names so the JIT emits them. */
+export const BORDER: Record<Band, string> = {
+  good: "border-good",
+  warn: "border-warn",
+  bad: "border-bad",
+  na: "border-na",
+};
