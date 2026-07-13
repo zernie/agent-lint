@@ -34,10 +34,6 @@ bench/leaderboard/RESULTS.md
 /src/core/CLAUDE.md
 /research/CLAUDE.md
 
-# The startup/ vault is git-crypt-encrypted: when locked its files are binary
-# ciphertext prettier can't (and must not) parse. Always ignore it.
-startup/
-
 # Captured audit/dogfood output (a rendered HTML report + its JSON + terminal
 # .txt captures) — machine-generated artifacts kept as a reference record, exact
 # bytes, not formatter-owned (same class as the bench/ result snapshots above).

@@ -1,5 +1,0 @@
-# git-crypt — the startup/ vault is encrypted at rest in git.
-# Files under startup/ are AES-encrypted in the committed blobs (ciphertext on
-# GitHub) and decrypted locally only after `git-crypt unlock <keyfile>`.
-# See startup/README.md (once unlocked) for the workflow.
-startup/** filter=git-crypt diff=git-crypt
