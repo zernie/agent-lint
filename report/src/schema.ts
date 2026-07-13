@@ -33,6 +33,33 @@ export interface AuditScore {
   empty: boolean;
 }
 
+/** One recommendation's overall-points gain if its single fix is applied. */
+export interface RecommendationPoints {
+  /** Index into the `recommendations` array. */
+  index: number;
+  /** `overall(report − thisFinding) − overall(report)`, always ≥ 0. */
+  pointsIfFixed: number;
+}
+
+/**
+ * The audit verdict — a header sentence + per-recommendation `pointsIfFixed`,
+ * both derived by re-scoring (mirror of the CLI's `src/audit-verdict.ts`).
+ */
+export interface Verdict {
+  /** The header sentence — real numbers from the re-score + grade thresholds. */
+  sentence: string;
+  /** The current letter grade (echoed from the base score). */
+  grade: "A" | "B" | "C" | "D" | "F";
+  /** Points to the next-higher grade band, or null when already an A. */
+  pointsToNextGrade: number | null;
+  /**
+   * Minimal number of deterministic fixes whose combined removal crosses the
+   * next grade threshold, or null when the fix list can't close the gap / an A.
+   */
+  fixesToNextGrade: number | null;
+  perRecommendation: RecommendationPoints[];
+}
+
 export type OptimizeAction = "fix" | "differentiate";
 
 export interface Recommendation {
@@ -113,6 +140,8 @@ export interface AuditReport {
     generatedAt?: string;
   };
   score: AuditScore;
+  /** The verdict-led header data + per-recommendation `pointsIfFixed`. */
+  verdict: Verdict;
   recommendations: Recommendation[];
   inventory: AuditInventory;
   /** The adoption preview — present only when the model-gated tier ran. */

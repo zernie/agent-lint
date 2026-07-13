@@ -13,6 +13,7 @@
  */
 import { auditScore, type AuditScore } from "./audit-score.js";
 import { optimize, type Recommendation } from "./optimize.js";
+import { computeVerdict, type Verdict } from "./audit-verdict.js";
 import type { LedgerSummary } from "./observe.js";
 import type { AdoptabilityResult } from "./adoptability.js";
 import type { ScanReport, MarketplaceInfo } from "./scan.js";
@@ -87,6 +88,13 @@ export interface AuditReport {
   readonly meta: AuditReportMeta;
   /** The five deterministic category rings + the weighted overall + grade. */
   readonly score: AuditScore;
+  /**
+   * The one-line verdict + per-recommendation `pointsIfFixed`, both derived by
+   * RE-SCORING (never a hardcoded number). Drives the report's verdict-led header
+   * ("Two one-line fixes away from a B.") and the `+N pts` badges on fix cards.
+   * Pure/deterministic — always present.
+   */
+  readonly verdict: Verdict;
   /** The deterministic, ranked fixes (the inline recommendations). */
   readonly recommendations: readonly Recommendation[];
   readonly inventory: AuditInventory;
@@ -175,6 +183,9 @@ export function buildAuditReport(
   opts: BuildAuditReportOptions,
 ): AuditReport {
   const adoptable = buildAdoptable(opts.adoptableSurfaces);
+  const score = auditScore(report);
+  const recommendations = optimize(report).recommendations;
+  const verdict = computeVerdict({ report, score, recommendations });
   return {
     meta: {
       schemaVersion: AUDIT_SCHEMA_VERSION,
@@ -184,8 +195,9 @@ export function buildAuditReport(
       harness: opts.harness,
       dir: report.dir,
     },
-    score: auditScore(report),
-    recommendations: optimize(report).recommendations,
+    score,
+    verdict,
+    recommendations,
     inventory: {
       skills: report.skills.length,
       agents: report.agents.length,

@@ -43,6 +43,16 @@ export const SAMPLE: AuditReport = {
       },
     ],
   },
+  verdict: {
+    sentence: "Two one-line fixes away from a B.",
+    grade: "C",
+    pointsToNextGrade: 3,
+    fixesToNextGrade: 2,
+    perRecommendation: [
+      { index: 0, pointsIfFixed: 4 },
+      { index: 1, pointsIfFixed: 2 },
+    ],
+  },
   recommendations: [
     {
       surface: "reviewer",
@@ -100,4 +110,46 @@ export const SAMPLE: AuditReport = {
       },
     ],
   },
+  rulesInventory: [
+    {
+      intent: "strict equality ===",
+      linter: "eslint",
+      matched: "eqeqeq",
+      rule: "eqeqeq",
+      configState: "contradiction",
+      configFix: '"eqeqeq": "error"',
+    },
+    {
+      intent: "no console.log / use the logger",
+      linter: "eslint",
+      matched: "console.log",
+      rule: "no-console",
+      configState: "not-in-config",
+      configFix: '"no-console": "error"',
+    },
+    {
+      intent: "no debugger",
+      linter: "eslint",
+      matched: "no-debugger",
+      rule: "no-debugger",
+      configState: "not-in-config",
+      configFix: '"no-debugger": "error"',
+    },
+    {
+      intent: "no `any` type",
+      linter: "eslint",
+      matched: "no-explicit-any",
+      rule: "@typescript-eslint/no-explicit-any",
+      configState: "in-config",
+      configFix: '"@typescript-eslint/no-explicit-any": "error"',
+    },
+    {
+      intent: "no floating promises",
+      linter: "eslint",
+      matched: "no-floating-promises",
+      rule: "@typescript-eslint/no-floating-promises",
+      configState: "preset-maybe",
+      configFix: '"@typescript-eslint/no-floating-promises": "error"',
+    },
+  ],
 };

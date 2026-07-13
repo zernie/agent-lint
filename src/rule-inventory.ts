@@ -220,8 +220,17 @@ const INTENT_MAP: readonly IntentMapping[] = [
   },
 ];
 
-/** Whether the mapped rule is visible in the lint config text (textual grep — imperfect, labelled). */
-export type ConfigState = "in-config" | "not-in-config" | "preset-maybe";
+/**
+ * Whether the mapped rule is visible in the lint config text (textual grep —
+ * imperfect, labelled). `contradiction` is the sharpest state: the harness
+ * documents the rule as a norm, yet the config EXPLICITLY sets it to off/0 —
+ * the docs and the config disagree.
+ */
+export type ConfigState =
+  | "in-config"
+  | "not-in-config"
+  | "preset-maybe"
+  | "contradiction";
 
 /** One documented-intent → off-the-shelf-rule finding. */
 export interface RuleInventoryItem {
@@ -291,6 +300,25 @@ function ruleInConfig(configText: string, rule: string): boolean {
   return variantsOf(rule).some((v) => matchesWholeToken(configText, v));
 }
 
+/**
+ * Whether the rule (or a variant) is EXPLICITLY disabled in the config text —
+ * `"no-console": "off"`, `no-console: 0`, `"no-console": ["off", …]`. Distinct
+ * from mere presence ({@link ruleInConfig}): a documented rule that the config
+ * turns OFF is a contradiction (docs say enforce, config disables), not an
+ * enforcement. Textual only — never resolves/executes the config (the RCE path).
+ * Conservative: matches only a literal off/0 severity right after the rule key,
+ * so a real `"error"`/`"warn"`/`1`/`2` never trips it.
+ */
+function ruleSetOff(configText: string, rule: string): boolean {
+  return variantsOf(rule).some((v) => {
+    const re = new RegExp(
+      `["']?${escapeRe(v)}["']?\\s*:\\s*(?:\\[\\s*)?["']?(?:off|0)\\b`,
+      "i",
+    );
+    return re.test(configText);
+  });
+}
+
 /** Index of the first WHOLE-token occurrence of `keyword` in `text` (the keyword
  * itself, not the boundary char), or -1. */
 function firstTokenIndex(text: string, keyword: string): number {
@@ -345,16 +373,24 @@ export function buildRuleInventory(
       matchesWholeToken(instructionText, kw),
     );
     if (!matched) continue;
+    const off = ruleSetOff(configText, m.rule);
     const inConfig = ruleInConfig(configText, m.rule);
-    // A rule the author documents as deliberately OFF, and which really isn't in
-    // config, is consistent — not a gap. Skip it so we never nudge "enable X"
-    // against an intentional opt-out.
-    if (!inConfig && isDocumentedOptOut(instructionText, matched)) continue;
-    const configState: ConfigState = inConfig
-      ? "in-config"
-      : m.inRecommended && extendsRecommended(configText)
-        ? "preset-maybe"
-        : "not-in-config";
+    // A rule the author documents as deliberately OFF, and whose config agrees
+    // (absent, or literally set to off), is consistent — not a gap. Skip it so we
+    // never nudge "enable X" against an intentional opt-out, and never flag a
+    // documented opt-out as a contradiction.
+    if (isDocumentedOptOut(instructionText, matched) && (off || !inConfig)) {
+      continue;
+    }
+    // Precedence: an explicit off/0 is a contradiction even though the rule name
+    // is technically "in config" — so it must be checked before `in-config`.
+    const configState: ConfigState = off
+      ? "contradiction"
+      : inConfig
+        ? "in-config"
+        : m.inRecommended && extendsRecommended(configText)
+          ? "preset-maybe"
+          : "not-in-config";
     items.push({
       intent: m.intent,
       linter: m.linter,

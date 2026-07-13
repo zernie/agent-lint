@@ -112,6 +112,40 @@ describe("buildRuleInventory", () => {
     expect(items[0]?.configState).toBe("not-in-config");
   });
 
+  it("flags a documented rule the config explicitly turns OFF as a contradiction", () => {
+    // The docs say enforce it; the config disables it. The screenshot finding.
+    const text = "Never use `console.log` in shipped code.";
+    const config = 'export default [{ rules: { "no-console": "off" } }];';
+    const items = buildRuleInventory(text, config);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.configState).toBe("contradiction");
+  });
+
+  it("treats a `0` severity as off (contradiction), not as enforcement", () => {
+    const items = buildRuleInventory(
+      "Enforce strict equality `eqeqeq`.",
+      'rules: { "eqeqeq": 0 }',
+    );
+    expect(items[0]?.configState).toBe("contradiction");
+  });
+
+  it('does NOT read a real severity (2 / "error") as off', () => {
+    const items = buildRuleInventory(
+      "Enforce strict equality `eqeqeq`.",
+      'rules: { "eqeqeq": 2 }',
+    );
+    expect(items[0]?.configState).toBe("in-config");
+  });
+
+  it("does NOT flag an off rule as a contradiction when the docs document the opt-out", () => {
+    // Docs say it's off AND config sets it off → consistent, not a contradiction.
+    const items = buildRuleInventory(
+      "`@typescript-eslint/no-explicit-any` is **off** intentionally (variance).",
+      'rules: { "@typescript-eslint/no-explicit-any": "off" }',
+    );
+    expect(items).toEqual([]);
+  });
+
   it("maps the corpus-added off-the-shelf rules (no-default-export, no-warning-comments)", () => {
     const text =
       "Enforce `import/no-default-export`. Ban `no-warning-comments`.";
