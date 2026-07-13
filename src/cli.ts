@@ -131,6 +131,10 @@ import {
   type AuditReport,
 } from "./audit-report.js";
 import {
+  buildRuleInventory,
+  type RuleInventoryItem,
+} from "./rule-inventory.js";
+import {
   runAdoptabilityTier,
   formatAdoptability,
   type AdoptabilityResult,
@@ -2001,6 +2005,57 @@ function discoverAdoptableForAudit(
   }
   out.push(...discoverAdoptableSurfaces(root));
   return out;
+}
+
+/** Lint-config files whose CONTENTS (textual, NEVER executed) reveal which rules
+ * a repo has configured — read best-effort at the repo root for the rule-inventory
+ * teaser. Deliberately not `eslint.config.js`-resolved (that would execute it — the
+ * RCE path); we grep the raw text. */
+const RULE_INVENTORY_CONFIG_FILES = [
+  "eslint.config.js",
+  "eslint.config.mjs",
+  "eslint.config.cjs",
+  "eslint.config.ts",
+  ".eslintrc",
+  ".eslintrc.json",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".eslintrc.yml",
+  ".eslintrc.yaml",
+  "ruff.toml",
+  ".ruff.toml",
+  "pyproject.toml",
+  ".pylintrc",
+  "clippy.toml",
+  ".clippy.toml",
+  ".rubocop.yml",
+  ".stylelintrc",
+  ".stylelintrc.json",
+] as const;
+
+/** The deterministic rule-inventory teaser for `audit`: read the instruction file
+ * + lint-config TEXT (never executed) and map documented intents to off-the-shelf
+ * rules + whether they're already configured. Best-effort, fs-only; NO model, NO
+ * config execution — safe on any repo. Composition-root. */
+function computeRuleInventory(
+  root: string,
+  instructionFile: string,
+): RuleInventoryItem[] {
+  try {
+    const instrAbs = resolve(root, instructionFile);
+    const instructionText = existsSync(instrAbs)
+      ? readFileSync(instrAbs, "utf-8")
+      : "";
+    if (!instructionText) return [];
+    let configText = "";
+    for (const name of RULE_INVENTORY_CONFIG_FILES) {
+      const p = resolve(root, name);
+      if (existsSync(p)) configText += readFileSync(p, "utf-8") + "\n";
+    }
+    return buildRuleInventory(instructionText, configText);
+  } catch {
+    return [];
+  }
 }
 
 /** The terminal "adoptable surfaces" nudge — N un-spec'd surfaces + the create-all
@@ -6542,6 +6597,10 @@ async function main(): Promise<void> {
           vigilesVersion: getVersion(),
           adoptableSurfaces,
           observations: summarizeObservations(ledgerRecords),
+          rulesInventory: computeRuleInventory(
+            root,
+            adapter.layout.instructionFile,
+          ),
         });
         const sc = auditReport.score;
         const plan = optimize(report);
