@@ -1,56 +1,78 @@
+import { useEffect, useState } from "react";
 import {
-  AlertTriangle,
   CheckCircle2,
   Wrench,
   GitCompareArrows,
   ChevronRight,
+  Copy,
+  Check,
 } from "lucide-react";
-import type { AuditReport, CategoryScore, Recommendation } from "@/schema";
+import type {
+  AuditReport,
+  CategoryScore,
+  Recommendation,
+  Verdict,
+} from "@/schema";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Ring } from "@/components/Ring";
 import { Adoptability } from "@/components/Adoptability";
 import { Adopt } from "@/components/Adopt";
 import { RuleInventory } from "@/components/RuleInventory";
 import { Observations } from "@/components/Observations";
-import { band, TEXT, BG, BORDER_L } from "@/lib/band";
+import { band, type Band, TEXT, BG, BORDER, BORDER_L } from "@/lib/band";
 import { cn } from "@/lib/utils";
 
-function CategoryCard({ c }: { c: CategoryScore }) {
+/** The last path segment — the audited dir reads as a plugin name, not a path. */
+function basename(dir: string): string {
+  const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);
+  return parts[parts.length - 1] || dir;
+}
+
+/** Impact band for a fix: bigger score gain ⇒ hotter. Never green (green =
+ * passing only), so a fix card never masquerades as a clean signal. */
+function impactBand(points: number): Band {
+  if (points >= 8) return "bad";
+  if (points >= 3) return "warn";
+  return "na";
+}
+
+/** Copy a paste-ready agent prompt that applies this fix in the real repo. */
+function CopyFix({ r }: { r: Recommendation }) {
+  const [copied, setCopied] = useState(false);
+  const prompt = `In this repo, ${r.fix}. Context: ${r.rationale} (detector: ${r.detector}).`;
+  const copy = (): void => {
+    void navigator.clipboard?.writeText(prompt).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => undefined,
+    );
+  };
   return (
-    <Card className="flex flex-col items-center gap-3 p-5 text-center">
-      {/* Advisory categories (e.g. Tested) don't gate the grade, so they read as
-          neutral (na band) — never a failing/red ring that implies they drag it. */}
-      <Ring score={c.score} advisory={c.advisory} />
-      <div>
-        <div className="flex items-center justify-center gap-1.5 text-sm font-semibold">
-          {c.key}
-          {c.advisory && (
-            <Badge variant="outline" className="text-na">
-              advisory
-            </Badge>
-          )}
-        </div>
-        <div className="mt-1 min-h-8 text-xs text-muted-foreground">
-          {c.advisory && (
-            <div className="text-na">not graded — hardening signal</div>
-          )}
-          {c.findings.length > 0 ? (
-            c.findings.join("; ")
-          ) : (
-            <span className="inline-flex items-center gap-1 text-good">
-              <CheckCircle2 size={12} /> clean
-            </span>
-          )}
-        </div>
-      </div>
-    </Card>
+    <button
+      type="button"
+      onClick={copy}
+      title={prompt}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:border-foreground"
+    >
+      {copied ? (
+        <Check size={13} className={TEXT.good} />
+      ) : (
+        <Copy size={13} className="text-muted-foreground" />
+      )}
+      <span className={cn(copied && TEXT.good)}>
+        {copied ? "copied!" : "copy agent prompt"}
+      </span>
+    </button>
   );
 }
 
-function FixCard({ r }: { r: Recommendation }) {
+/** One ranked fix. `points` is the real re-score gain (`+N pts`); the left border
+ * + the badge encode impact, not confidence, so the eye lands on the big wins. */
+function FixCard({ r, points }: { r: Recommendation; points: number }) {
   const Icon = r.action === "fix" ? Wrench : GitCompareArrows;
-  const accent = r.confidence === "likely" ? "bad" : "warn";
+  const accent = impactBand(points);
   return (
     <Card className={cn("border-l-4 p-4", BORDER_L[accent])}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -59,22 +81,103 @@ function FixCard({ r }: { r: Recommendation }) {
           {r.action}
         </Badge>
         <strong>{r.surface}</strong>
+        {points > 0 && (
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-xs font-semibold",
+              TEXT[accent],
+            )}
+          >
+            +{points} pts
+          </span>
+        )}
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           {r.detector}
         </span>
       </div>
       <div className="mt-1.5 text-sm text-muted-foreground">{r.rationale}</div>
-      <div className="mt-1 text-sm text-good">→ {r.fix}</div>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm text-good">→ {r.fix}</span>
+        <CopyFix r={r} />
+      </div>
     </Card>
   );
 }
 
-function Stat({ n, label }: { n: number | string; label: string }) {
+/** A compact category cell — a thin band bar + score, so the five read as one
+ * scannable strip rather than five heavy rings competing with the verdict. */
+function CategoryCell({ c }: { c: CategoryScore }) {
+  const b: Band = c.advisory ? "na" : band(c.score);
+  const pct = c.score === null ? 0 : Math.max(0, Math.min(100, c.score));
   return (
-    <Card className="p-4 text-center">
-      <div className="text-2xl font-bold">{n}</div>
-      <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
+    <Card className="flex flex-col gap-2 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold">{c.key}</span>
+        <span className={cn("text-sm font-bold", TEXT[b])}>
+          {c.advisory ? "—" : c.score === null ? "n/a" : c.score}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-border">
+        <div
+          className={cn("h-full rounded-full", BG[b])}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="min-h-8 text-[11px] leading-tight text-muted-foreground">
+        {c.advisory ? (
+          <span className="text-na">advisory — not graded</span>
+        ) : c.findings.length > 0 ? (
+          c.findings.join("; ")
+        ) : (
+          <span className="inline-flex items-center gap-1 text-good">
+            <CheckCircle2 size={11} /> clean
+          </span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** The verdict-led hero: the grade + score as one badge, the re-scored verdict
+ * sentence as the headline, the plugin name + harness, and the trust line. */
+function VerdictHeader({
+  verdict,
+  overall,
+  dir,
+  harness,
+}: {
+  verdict: Verdict;
+  overall: number | null;
+  dir: string;
+  harness: string;
+}) {
+  const b = band(overall);
+  return (
+    <Card className="flex flex-col gap-5 p-7 sm:flex-row sm:items-center">
+      <div
+        className={cn(
+          "flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-2xl border-2",
+          BORDER[b],
+        )}
+      >
+        <span className={cn("text-5xl font-black leading-none", TEXT[b])}>
+          {verdict.grade}
+        </span>
+        <span className="mt-1 text-sm font-medium text-muted-foreground">
+          {overall === null ? "—" : `${overall}/100`}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold leading-snug tracking-tight sm:text-2xl">
+          {verdict.sentence}
+        </h1>
+        <div className="mt-2 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{basename(dir)}</span> ·{" "}
+          {harness}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">
+          deterministic · no model · nothing leaves your machine
+        </div>
       </div>
     </Card>
   );
@@ -83,6 +186,7 @@ function Stat({ n, label }: { n: number | string; label: string }) {
 export function Report({ data }: { data: AuditReport }) {
   const {
     score,
+    verdict,
     recommendations,
     inventory,
     meta,
@@ -92,46 +196,46 @@ export function Report({ data }: { data: AuditReport }) {
     rulesInventory,
   } = data;
   const overall = score.empty ? null : score.overall;
-  const b = band(overall);
+
+  useEffect(() => {
+    document.title =
+      overall === null
+        ? `vigiles — ${basename(meta.dir)}`
+        : `vigiles — ${score.grade} (${overall}) · ${basename(meta.dir)}`;
+  }, [overall, score.grade, meta.dir]);
+
+  // Points map, index-aligned to recommendations; rank fixes by real impact.
+  const pointsFor = (i: number): number =>
+    verdict.perRecommendation.find((p) => p.index === i)?.pointsIfFixed ?? 0;
+  const rankedFixes = recommendations
+    .map((r, i) => ({ r, points: pointsFor(i) }))
+    .sort((a, b) => b.points - a.points);
+
   return (
     <div className="mx-auto max-w-5xl px-6 pb-16 pt-10">
-      <Card className="flex items-center gap-7 p-7">
-        <Ring score={overall} size={128} stroke={11} />
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Harness audit</h1>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {meta.dir} · {meta.harness}
-          </div>
-          <div
-            className={cn(
-              "mt-3 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm font-semibold",
-              TEXT[b],
-            )}
-          >
-            <span className={cn("h-2 w-2 rounded-full", BG[b])} />
-            Harness health: {score.grade} ({score.overall}/100)
-          </div>
-        </div>
-      </Card>
+      <VerdictHeader
+        verdict={verdict}
+        overall={overall}
+        dir={meta.dir}
+        harness={meta.harness}
+      />
 
       <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         Categories
       </h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         {score.categories.map((c) => (
-          <CategoryCard key={c.key} c={c} />
+          <CategoryCell key={c.key} c={c} />
         ))}
       </div>
 
       <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-        {recommendations.length > 0
-          ? `Fixes (${recommendations.length})`
-          : "Fixes"}
+        {recommendations.length > 0 ? "Do these first" : "Fixes"}
       </h2>
-      {recommendations.length > 0 ? (
+      {rankedFixes.length > 0 ? (
         <div className="flex flex-col gap-2.5">
-          {recommendations.map((r, i) => (
-            <FixCard key={i} r={r} />
+          {rankedFixes.map(({ r, points }, i) => (
+            <FixCard key={i} r={r} points={points} />
           ))}
         </div>
       ) : (
@@ -139,6 +243,20 @@ export function Report({ data }: { data: AuditReport }) {
           <CheckCircle2 size={16} /> No deterministic fixes — the structure is
           clean.
         </Card>
+      )}
+
+      {rulesInventory && rulesInventory.length > 0 && (
+        <>
+          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Your rules → enforced
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Prose rules in your instruction file that map to an off-the-shelf
+            lint rule — and whether it's actually enforced. The gap between what
+            you wrote and what your config does.
+          </p>
+          <RuleInventory data={rulesInventory} />
+        </>
       )}
 
       {adoptability && (
@@ -168,37 +286,25 @@ export function Report({ data }: { data: AuditReport }) {
         </>
       )}
 
-      {rulesInventory && rulesInventory.length > 0 && (
-        <>
-          <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Rule inventory
-          </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Prose rules in your instruction file that map to an off-the-shelf
-            lint rule — and whether it's already enforced. Documented-but-not-
-            enforced ones are a one-line config fix away.
-          </p>
-          <RuleInventory data={rulesInventory} />
-        </>
-      )}
-
-      <h2 className="mb-3 mt-9 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-        What it ships
-      </h2>
-      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
-        <Stat n={inventory.skills} label="skills" />
-        <Stat n={inventory.agents} label="agents" />
-        <Stat n={inventory.hooks} label="hooks" />
-        <Stat n={inventory.commands} label="commands" />
-        <Stat n={inventory.mcp ? "yes" : "no"} label="MCP" />
-        <Stat n={inventory.untested} label="untested" />
+      {/* "What it ships" — demoted to a single meta line: it's context, not a
+          finding, so it no longer competes with the verdict + fixes for the eye. */}
+      <div className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="font-semibold uppercase tracking-widest">Ships</span>
+        <span>{inventory.skills} skills</span>
+        <span>{inventory.agents} agents</span>
+        <span>{inventory.hooks} hooks</span>
+        <span>{inventory.commands} commands</span>
+        <span>MCP {inventory.mcp ? "yes" : "no"}</span>
+        {inventory.untested > 0 && (
+          <span className={TEXT.warn}>{inventory.untested} untested</span>
+        )}
       </div>
 
-      {/* Optional, folded, and last on purpose: spec-adoption is a hardening
-          upsell, not a failure — surfacing "N surfaces not yet managed" high up
-          reads as a nag to a first-time reader. Collapsed by default. */}
+      {/* Optional, folded, last on purpose: spec-adoption is a hardening upsell,
+          not a failure — surfacing "N surfaces not yet managed" high up reads as
+          a nag to a first-time reader. Collapsed by default. */}
       {adoptable && adoptable.surfaces.length > 0 && (
-        <details className="group mt-9">
+        <details className="group mt-6">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
             <ChevronRight
               size={13}
@@ -215,9 +321,8 @@ export function Report({ data }: { data: AuditReport }) {
         </details>
       )}
 
-      <footer className="mt-12 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
-        <AlertTriangle size={12} /> Generated by vigiles — we run your harness,
-        not just read it.
+      <footer className="mt-12 text-center text-xs text-muted-foreground">
+        Generated by vigiles — we run your harness, not just read it.
       </footer>
     </div>
   );

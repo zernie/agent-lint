@@ -5,9 +5,10 @@ export const SAMPLE: AuditReport = {
   meta: {
     schemaVersion: 1,
     tool: "vigiles",
+    kind: "audit",
     vigilesVersion: "0.0.0",
     harness: "claude-code",
-    dir: "demo",
+    dir: "my-plugin",
   },
   score: {
     overall: 77,
