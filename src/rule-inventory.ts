@@ -43,6 +43,9 @@ interface IntentMapping {
   readonly rule: string;
   /** The one-line config change that turns it on. */
   readonly configFix: string;
+  /** True if a `recommended` preset typically enables this rule (so a bare
+   * recommended-extends is evidence it may already be on). */
+  readonly inRecommended?: boolean;
 }
 
 /**
@@ -67,6 +70,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
     linter: "eslint",
     keywords: ["no-explicit-any", "@typescript-eslint/no-explicit-any"],
     rule: "@typescript-eslint/no-explicit-any",
+    inRecommended: true,
     configFix: '"@typescript-eslint/no-explicit-any": "error"',
   },
   {
@@ -87,6 +91,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
       "@typescript-eslint/ban-ts-comment",
     ],
     rule: "@typescript-eslint/ban-ts-comment",
+    inRecommended: true,
     configFix: '"@typescript-eslint/ban-ts-comment": "error"',
   },
   {
@@ -101,6 +106,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
     linter: "eslint",
     keywords: ["no-empty"],
     rule: "no-empty",
+    inRecommended: true,
     configFix: '"no-empty": ["error", {"allowEmptyCatch": false}]',
   },
   {
@@ -129,6 +135,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
     linter: "eslint",
     keywords: ["no-debugger"],
     rule: "no-debugger",
+    inRecommended: true,
     configFix: '"no-debugger": "error"',
   },
   {
@@ -162,6 +169,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
     linter: "eslint",
     keywords: ["no-unused-vars", "@typescript-eslint/no-unused-vars"],
     rule: "@typescript-eslint/no-unused-vars",
+    inRecommended: true,
     configFix: '"@typescript-eslint/no-unused-vars": "error"',
   },
   {
@@ -172,6 +180,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
       "@typescript-eslint/no-non-null-assertion",
     ],
     rule: "@typescript-eslint/no-non-null-assertion",
+    inRecommended: true,
     configFix: '"@typescript-eslint/no-non-null-assertion": "error"',
   },
   {
@@ -182,6 +191,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
       "@typescript-eslint/no-floating-promises",
     ],
     rule: "@typescript-eslint/no-floating-promises",
+    inRecommended: true,
     configFix: '"@typescript-eslint/no-floating-promises": "error"',
   },
   {
@@ -194,7 +204,7 @@ const INTENT_MAP: readonly IntentMapping[] = [
 ];
 
 /** Whether the mapped rule is visible in the lint config text (textual grep — imperfect, labelled). */
-export type ConfigState = "in-config" | "not-in-config";
+export type ConfigState = "in-config" | "not-in-config" | "preset-maybe";
 
 /** One documented-intent → off-the-shelf-rule finding. */
 export interface RuleInventoryItem {
@@ -247,6 +257,31 @@ function matchesWholeToken(text: string, keyword: string): boolean {
  * "" if none). Returns one item per documented intent whose keyword resolves.
  * `not-in-config` items are the actionable nudges.
  */
+/** ESLint re-exports some core rules under `@typescript-eslint/`; treat the base
+ * and scoped names as the same rule when checking the config text (so a repo that
+ * has base `no-unused-vars` satisfies the `@typescript-eslint/no-unused-vars`
+ * intent, and vice-versa). oxlint/biome use the SAME rule names, so once their
+ * config files are in the read set this handles them for free. */
+function variantsOf(rule: string): string[] {
+  const TS = "@typescript-eslint/";
+  if (rule.startsWith(TS)) return [rule, rule.slice(TS.length)];
+  if (!rule.includes("/")) return [rule, TS + rule];
+  return [rule];
+}
+
+/** True if the rule (or a base/scoped variant) appears in the config text. */
+function ruleInConfig(configText: string, rule: string): boolean {
+  return variantsOf(rule).some((v) => matchesWholeToken(configText, v));
+}
+
+/** A `recommended`-style preset extend anywhere in the config text — evidence
+ * that preset-enabled rules may already be on even when not named literally.
+ * Coarse on purpose: presence of a preset downgrades a not-named preset rule to
+ * `preset-maybe` (no false "unenforced" alarm) rather than claiming it's off. */
+function extendsRecommended(configText: string): boolean {
+  return /recommended/i.test(configText);
+}
+
 export function buildRuleInventory(
   instructionText: string,
   configText: string,
@@ -260,9 +295,11 @@ export function buildRuleInventory(
       matchesWholeToken(instructionText, kw),
     );
     if (!matched) continue;
-    const configState: ConfigState = matchesWholeToken(configText, m.rule)
+    const configState: ConfigState = ruleInConfig(configText, m.rule)
       ? "in-config"
-      : "not-in-config";
+      : m.inRecommended && extendsRecommended(configText)
+        ? "preset-maybe"
+        : "not-in-config";
     items.push({
       intent: m.intent,
       linter: m.linter,
