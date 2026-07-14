@@ -91,28 +91,46 @@ export interface RouteOptions {
 
 /**
  * ACTION-rule cues — things a linter never sees (git, filesystem, shell,
- * process). A hook is the right gate, not a lint rule. Ported from the compiler's
- * classifier; deliberately specific so it doesn't grab a lint rule that merely
- * mentions a file.
+ * process). A hook is the right gate, not a lint rule. Widened to the article's
+ * measured surfaces (vcs / process / shell / redirect) — the narrow original
+ * (git-push + rm-rf only) reported ~2% hooks where the 252-rule hand-sort found
+ * **37%** (the largest bucket); it was missing push-to-branch, before-push,
+ * after-edit, tool-substitution, amend/rebase-pushed, and dependency guards.
+ * See `research/rule-compiler-multilang-design.md` §5b (the hook lane).
  */
 const HOOK_CUES: readonly RegExp[] = [
+  // — branch / push guards (vcs) —
   /\bgit\s+push\b/i,
-  // "push … to main/master/prod" — tolerate backticks/adverbs between (real
-  // phrasings: "push directly to `main`", "pushing straight to master").
-  /\bpush\w*\b[^.\n]{0,24}\b(main|master|prod)\b/i,
+  // "push … to main/master/prod/origin" — tolerate backticks/adverbs between.
+  /\bpush\w*\b[^.\n]{0,24}\b(main|master|prod|production|origin|development)\b/i,
   /\bforce[- ]?push/i,
+  /\bpush\w*\b[^.\n]{0,16}\bbranch/i,
+  // — protected paths (vcs) —
+  /\b(don'?t|do not|never)\s+(edit|modify|touch|change)\b[^.\n]{0,30}\b(generated|vendored|lock(file)?|\.pb\.|proto-gen|_mock|snapshot)/i,
+  /\bgenerated\s+files?\b/i,
+  // — sequencing / tests-before / after-edit (process) —
+  /\b(run|execute)\b[^.\n]{0,30}\b(tests?|lint|check|type-?check|format|prettier|ruff)\b[^.\n]{0,20}\bbefore\b/i,
+  /\bbefore\s+(you\s+|each\s+|every\s+)?(commit|push|merg|committing|pushing)/i,
+  /\brun\b[^.\n]{0,20}\btests?\b[^.\n]{0,14}\bbefore\b/i,
+  /\b(format|lint|check|run)\b[^.\n]{0,30}\b(after|immediately after)\b[^.\n]{0,16}\b(writ|edit)/i,
+  // — tool substitution / redirect —
+  /\b(never|do not|don'?t)\s+run\b[^.\n]{0,30}\b(directly|instead)\b/i,
+  /\b(never|do not|don'?t)\s+run\b[^.\n]{0,20}`?(eslint|prettier|npm|npx|cargo|yarn|pnpm|pip|black|ruff)\b/i,
+  /\buse\b\s+`?[\w:.-]+`?\s+(instead of|not|over|rather than)\s+`?(npm|npx|cargo|yarn|pnpm|eslint|prettier)\b/i,
+  // — commit content / history (vcs) —
+  /\b(amend|squash|rebase)\b[^.\n]{0,40}\b(pushed|review|remote|shared)\b/i,
   /--no-verify/i,
   /\bnever\s+commit\b/i,
-  // "before you/each/every commit", "before committing".
-  /\bbefore\s+(you\s+|each\s+|every\s+)?commit(ting)?\b/i,
-  /\brun\b[^.\n]{0,20}\btests?\b[^.\n]{0,14}\bbefore\b/i,
   /\bsigned-off-by\b/i,
-  /\b(don'?t|do not|never)\s+edit\b.*\b(generated|\.pb\.|_mock|proto-gen|lock)/i,
-  /\bgenerated\s+files?\b/i,
   /\bco[- ]?authored[- ]?by\b/i,
+  /\b(generated with|co-author)\b[^.\n]{0,24}\b(claude|footer|commit|pr)\b/i,
+  // — dependency / config guard —
+  /\b(never|do not|don'?t)\b[^.\n]{0,20}\bupdate\b[^.\n]{0,20}\b(depend|package\.json|lock)/i,
+  // — destructive / shell —
   /\brm\s+-rf\b/i,
   /\bcurl\b.*\|\s*(sh|bash)/i,
   /\bchmod\b/i,
+  /\bdestructive\s+git\b/i,
 ];
 
 /**
