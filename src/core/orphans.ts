@@ -16,6 +16,8 @@ import { readFileSync } from "node:fs";
 import { resolve, posix } from "node:path";
 import { globSync } from "glob";
 
+import type { PluginLayout } from "./layout.js";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -43,6 +45,14 @@ export interface FindOrphansOptions {
   readonly include?: readonly string[];
   /** Glob patterns to exclude within the include scope. */
   readonly exclude?: readonly string[];
+  /**
+   * Harnesses whose surface files (instruction file, `SKILL.md`, subagents,
+   * commands) are load-bearing by location and thus never orphan CANDIDATES
+   * (still counted as referencers). Injected by the CLI from the registered
+   * adapters so core stays harness-agnostic; a direct caller passes its own.
+   * Omitted ⇒ only the universal `SKILL.md` convention is exempt.
+   */
+  readonly layouts?: readonly PluginLayout[];
 }
 
 // ---------------------------------------------------------------------------
@@ -66,24 +76,41 @@ const DEFAULT_IGNORE = [
  */
 const DISABLE_RE = /<!--\s*vigiles-disable\s+orphan-docs\s*-->/;
 
+/** The one universal cross-harness skill-entry filename (CC + Codex). */
+const SKILL_FILE = "SKILL.md";
+
 /**
- * Files the HARNESS loads directly — an instruction file (`CLAUDE.md` /
- * `AGENTS.md`), a skill (`SKILL.md`), a subagent (`agents/*.md`), or a slash
- * command (`commands/*.md`) — are load-bearing by their NAME/LOCATION, not
- * because another `.md` links to them. They are categorically NOT docs, so they
- * are never orphans, even if a project broadens `orphans.include` to scan the
- * whole repo. (They are still scanned as REFERENCERS, so a real doc that only
- * a CLAUDE.md links to is still credited — this exemption only removes them from
- * the orphan-CANDIDATE set.)
+ * Files the HARNESS loads directly — its instruction file
+ * (`layout.instructionFile`, e.g. `CLAUDE.md` / `AGENTS.md`), a skill
+ * (`SKILL.md`), a subagent (`<agentDir>/*.md`), or a slash command
+ * (`<commandDir>/*.md`) — are load-bearing by their NAME/LOCATION, not because
+ * another `.md` links to them. They are categorically NOT docs, so they are
+ * never orphans even when `orphans.include` broadens to the whole repo.
+ *
+ * The surface names come from the INJECTED layouts, so core stays
+ * harness-agnostic — no Claude Code literal here; the CLI passes every
+ * registered adapter's layout, and `SKILL.md` is the one universal convention.
+ * (They are still scanned as REFERENCERS, so a real doc that only a `CLAUDE.md`
+ * links to is still credited — this exemption only removes them from the
+ * orphan-CANDIDATE set.)
  */
-function isHarnessLoadedFile(path: string): boolean {
+function isHarnessLoadedFile(
+  path: string,
+  layouts: readonly PluginLayout[],
+): boolean {
   const norm = normalizePath(path);
   const base = norm.slice(norm.lastIndexOf("/") + 1);
-  if (base === "CLAUDE.md" || base === "AGENTS.md" || base === "SKILL.md") {
-    return true;
+  if (base === SKILL_FILE) return true;
+  for (const layout of layouts) {
+    if (base === layout.instructionFile) return true;
+    // Subagent / slash-command surfaces the harness enumerates by directory.
+    for (const dir of [layout.agentDir, layout.commandDir]) {
+      if (dir && (norm.startsWith(`${dir}/`) || norm.includes(`/${dir}/`))) {
+        return true;
+      }
+    }
   }
-  // Subagent / slash-command surfaces the harness enumerates by directory.
-  return /(^|\/)(agents|commands)\//.test(norm);
+  return false;
 }
 
 // Match markdown links ](path.md) or ](path.md#anchor)
@@ -110,11 +137,12 @@ function collectDocs(
   basePath: string,
   include: readonly string[],
   ignore: readonly string[],
+  layouts: readonly PluginLayout[],
 ): Set<string> {
   const docs = new Set<string>();
   for (const pattern of include) {
     for (const p of globSync(pattern, { cwd: basePath, ignore: [...ignore] })) {
-      if (isHarnessLoadedFile(p)) continue; // instruction files are never orphans
+      if (isHarnessLoadedFile(p, layouts)) continue; // harness files are never orphans
       if (isOrphanExempt(resolve(basePath, p))) continue;
       docs.add(normalizePath(p));
     }
@@ -169,8 +197,9 @@ export function findOrphanDocs(options: FindOrphansOptions = {}): OrphanReport {
   const include = options.include ?? DEFAULT_INCLUDE;
   const userExclude = options.exclude ?? [];
   const ignore = [...DEFAULT_IGNORE, ...userExclude];
+  const layouts = options.layouts ?? [];
 
-  const allDocs = collectDocs(basePath, include, ignore);
+  const allDocs = collectDocs(basePath, include, ignore, layouts);
 
   const allMarkdown = globSync("**/*.md", {
     cwd: basePath,

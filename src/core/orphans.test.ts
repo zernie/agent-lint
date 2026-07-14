@@ -5,6 +5,15 @@ import { join } from "node:path";
 
 import { findOrphanDocs, formatOrphanReport } from "./orphans.js";
 import { makeTmpDir, cleanupTmpDir } from "./test-utils.js";
+import { claudeCodeLayout } from "../adapters/claude-code/layout.js";
+
+// Harness surfaces are injected (core stays harness-agnostic). Real usage passes
+// every registered adapter's layout; here we pass Claude Code plus a Codex-shaped
+// layout (AGENTS.md) to exercise the multi-harness instruction-file exemption.
+const HARNESS_LAYOUTS = [
+  claudeCodeLayout,
+  { ...claudeCodeLayout, name: "codex", instructionFile: "AGENTS.md" },
+];
 
 describe("findOrphanDocs()", () => {
   it("flags docs not referenced anywhere (default scope = docs/ only)", () => {
@@ -48,7 +57,11 @@ describe("findOrphanDocs()", () => {
       writeFileSync(join(dir, "rot.md"), "# nobody links me");
 
       // Broaden include to the whole repo — instruction files must stay exempt.
-      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: HARNESS_LAYOUTS,
+      });
       assert.deepEqual([...report.orphans], ["rot.md"]);
     } finally {
       cleanupTmpDir(dir);
@@ -64,7 +77,11 @@ describe("findOrphanDocs()", () => {
       // counts as a REFERENCER, so docs/guide.md is not an orphan.
       writeFileSync(join(dir, "CLAUDE.md"), "See [guide](docs/guide.md).");
 
-      const report = findOrphanDocs({ basePath: dir, include: ["**/*.md"] });
+      const report = findOrphanDocs({
+        basePath: dir,
+        include: ["**/*.md"],
+        layouts: HARNESS_LAYOUTS,
+      });
       assert.deepEqual([...report.orphans], []);
       assert.deepEqual([...report.referencedDocs], ["docs/guide.md"]);
     } finally {
