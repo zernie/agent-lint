@@ -309,3 +309,28 @@ export function routeRules(
   for (const r of rules) counts[r.category]++;
   return { segmented: segments.length, counts, rules };
 }
+
+/**
+ * Merge per-file routings into one. Each instruction source is routed SEPARATELY
+ * (so every rule keeps its OWN file path + line numbers — concatenating first
+ * would corrupt the provenance the preview promises), then folded here: rules
+ * concatenated, counts + segmented summed. Pure. `[]` → an empty routing.
+ */
+export function mergeRoutings(routings: readonly RuleRouting[]): RuleRouting {
+  const counts: Record<RuleCategory, number> = {
+    reuse: 0,
+    hook: 0,
+    meta: 0,
+    semantic: 0,
+    unrouted: 0,
+  };
+  const rules: RoutedRule[] = [];
+  let segmented = 0;
+  for (const r of routings) {
+    segmented += r.segmented;
+    rules.push(...r.rules);
+    for (const k of Object.keys(counts) as RuleCategory[])
+      counts[k] += r.counts[k];
+  }
+  return { segmented, counts, rules };
+}

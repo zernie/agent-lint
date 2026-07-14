@@ -64,7 +64,11 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
 **🟡 DOABLE CHEAPLY (spike-proven, not wired)**
 
 - Parse ALL instruction sources — nested `CLAUDE.md` (`globSync('**/CLAUDE.md')` already exists in
-  `cli.ts`) + `.claude/`. Today `readInstructionText` reads ROOT ONLY (misses 8 of 9 in this repo).
+  `cli.ts`) + `.claude/`. **PER-FILE ROUTING is now in place** (`gatherInstructionFiles` returns a
+  `{path,text}[]`, each routed separately + folded by `mergeRoutings`, so every rule keeps its OWN file +
+  line numbers — this also FIXED a latent provenance bug where concatenating root `CLAUDE.md` + `AGENTS.md`
+  offset the second file's line numbers). Remaining = adding nested sources to the list (a list-append) +
+  a FIXTURE-NOISE policy (skip `test/dogfood/`, `.tmp-*` — this repo has 9 `CLAUDE.md`, most are fixtures).
 
 **🔴 HARD (model-tier / later)**
 

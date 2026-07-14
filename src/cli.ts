@@ -134,7 +134,7 @@ import {
   buildRuleInventory,
   type RuleInventoryItem,
 } from "./rule-inventory.js";
-import { routeRules, type RuleRouting } from "./rule-routing.js";
+import { routeRules, mergeRoutings, type RuleRouting } from "./rule-routing.js";
 import { enumerateEslintCatalog } from "./core/rule-catalog.js";
 import {
   runAdoptabilityTier,
@@ -2104,7 +2104,11 @@ function computeRuleInventory(
   instructionFile: string,
 ): RuleInventoryItem[] {
   try {
-    const instructionText = readInstructionText(root, instructionFile);
+    // The inventory maps intents → rules; it has no per-file line provenance, so
+    // the concatenated text is fine here (unlike the routing preview below).
+    const instructionText = gatherInstructionFiles(root, instructionFile)
+      .map((f) => f.text)
+      .join("\n");
     if (!instructionText.trim()) return [];
     return buildRuleInventory(instructionText, collectLintConfigText(root));
   } catch {
@@ -2112,20 +2116,27 @@ function computeRuleInventory(
   }
 }
 
-/** Read EVERY agent instruction file present (not just the harness-native one) —
- * rules are often documented in AGENTS.md even under a claude-code harness. */
-// SCOPE (2026-07-14): reads the ROOT instruction files ONLY. Nested `CLAUDE.md`
+/** Gather EVERY agent instruction file present (not just the harness-native one) —
+ * rules are often documented in AGENTS.md even under a claude-code harness — as a
+ * list of {path, text} so each is routed SEPARATELY and keeps its OWN provenance
+ * (concatenating first would corrupt per-file line numbers). */
+// SCOPE (2026-07-14): gathers the ROOT instruction files ONLY. Nested `CLAUDE.md`
 // (subdirectory memory) and `.claude/` rule sources are IN SCOPE but NOT YET
-// gathered — this repo alone has 9 `CLAUDE.md` files and we read 1. Parsing all
-// sources is a foreign-safe, spike-proven next step (research/rule-compiler-
-// multilang-design.md §0). `globSync('**/CLAUDE.md')` already exists in this file.
-function readInstructionText(root: string, instructionFile: string): string {
-  let instructionText = "";
+// gathered — this repo alone has 9 `CLAUDE.md` files and we read 1. Adding them is
+// now a list-append (per-file routing is in place); the open question is the
+// fixture-noise policy (skip test/dogfood/.tmp dirs). research/rule-compiler-
+// multilang-design.md §0. `globSync('**/CLAUDE.md')` already exists in this file.
+function gatherInstructionFiles(
+  root: string,
+  instructionFile: string,
+): { path: string; text: string }[] {
+  const files: { path: string; text: string }[] = [];
   for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
     const p = resolve(root, name);
-    if (existsSync(p)) instructionText += readFileSync(p, "utf-8") + "\n";
+    if (existsSync(p))
+      files.push({ path: name, text: readFileSync(p, "utf-8") });
   }
-  return instructionText;
+  return files;
 }
 
 /** The deterministic State-B routing preview for `audit`: segment the instruction
@@ -2145,8 +2156,8 @@ function computeRuleRouting(
   harness: string,
 ): RuleRouting | undefined {
   try {
-    const instructionText = readInstructionText(root, instructionFile);
-    if (!instructionText.trim()) return undefined;
+    const files = gatherInstructionFiles(root, instructionFile);
+    if (files.every((f) => !f.text.trim())) return undefined;
     // Own-repo + consented + ESLint (claude-code) → enumerate the live catalog.
     const ownRepo = resolve(root) === resolve(process.cwd());
     const consented = loadConfig().audit?.measure === true;
@@ -2154,9 +2165,12 @@ function computeRuleRouting(
       harness === "claude-code" && ownRepo && consented
         ? (enumerateEslintCatalog(root) ?? undefined)
         : undefined;
-    const routing = routeRules(instructionText, instructionFile, {
-      availableRules,
-    });
+    // Route each source SEPARATELY (each rule keeps its own file + line numbers),
+    // then merge — so a CLAUDE.md rule and an AGENTS.md rule carry correct
+    // provenance instead of line numbers offset by a concatenation.
+    const routing = mergeRoutings(
+      files.map((f) => routeRules(f.text, f.path, { availableRules })),
+    );
     return routing.segmented > 0 ? routing : undefined;
   } catch {
     return undefined;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeRules } from "./rule-routing.js";
+import { routeRules, mergeRoutings } from "./rule-routing.js";
 
 describe("routeRules", () => {
   it("routes an off-the-shelf rule mention to reuse (config-line)", () => {
@@ -165,6 +165,42 @@ describe("routeRules", () => {
       r.counts.unrouted;
     expect(sum).toBe(r.segmented);
     expect(r.segmented).toBeGreaterThanOrEqual(4);
+  });
+
+  it("mergeRoutings folds per-file routings, preserving each rule's own provenance", () => {
+    // Two sources routed SEPARATELY — each rule keeps its OWN file + line numbers
+    // (concatenating first would offset the second file's lines).
+    const a = routeRules("# A\n\n- Never use `console.log`.\n", "CLAUDE.md");
+    const b = routeRules("# B\n\n- Never force-push to main.\n", "AGENTS.md");
+    const merged = mergeRoutings([a, b]);
+
+    expect(merged.segmented).toBe(a.segmented + b.segmented);
+    expect(merged.rules).toHaveLength(a.rules.length + b.rules.length);
+    // counts sum per-category
+    expect(merged.counts.reuse).toBe(a.counts.reuse + b.counts.reuse);
+    expect(merged.counts.hook).toBe(a.counts.hook + b.counts.hook);
+    // provenance is per-file, not a concatenated blob
+    expect(merged.rules.find((r) => r.rule === "no-console")?.file).toBe(
+      "CLAUDE.md",
+    );
+    expect(merged.rules.find((r) => r.category === "hook")?.file).toBe(
+      "AGENTS.md",
+    );
+    // both rules land on their own file's line 3 (not offset by the other file)
+    expect(merged.rules.every((r) => r.lineStart === 3)).toBe(true);
+  });
+
+  it("mergeRoutings of [] is an empty routing", () => {
+    const merged = mergeRoutings([]);
+    expect(merged.segmented).toBe(0);
+    expect(merged.rules).toEqual([]);
+    expect(merged.counts).toEqual({
+      reuse: 0,
+      hook: 0,
+      meta: 0,
+      semantic: 0,
+      unrouted: 0,
+    });
   });
 
   it("returns an empty routing for prose with no rules", () => {
