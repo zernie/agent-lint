@@ -25,6 +25,49 @@ topic: compiler
   (own-repo, on the user's sub, behind the existing `decideExecute` consent). This doc is
   mostly about the deterministic tier; it names precisely where the model tier takes over.
 
+## 0. Spike + honest scope (2026-07-14) — DYNAMIC catalog, not a static map
+
+A founder correction reframed the whole approach, and a spike (`scratchpad/spike.mjs`, run on THIS
+repo) confirmed it. **Do NOT hand-curate prose→rule mappings — that's a dead end.** The match target
+is the repo's **dynamic rule catalog**: enumerate the rules the linter ACTUALLY has and match prose
+against that. Spike numbers: one ESLint API call → **702 available rules** (292 core + 410 plugin:
+typescript-eslint / sonarjs / boundaries) vs the static `INTENT_MAP`'s ~23; 154 enabled → **548
+available-but-OFF** rules a documented norm could map to. And architecture is enforceable —
+`boundaries/{dependencies,element-types,entry-point}` + `no-restricted-imports` are in the catalog, so
+**"dir X may import dir Y" is `reuse`, NOT semantic**.
+
+The three-column scope, marked honestly (this section supersedes the INTENT_MAP-centric framing below):
+
+**✅ DONE (built today)**
+
+- Static `INTENT_MAP` fast-path (~23 rules) + segment + route (reuse/hook/meta/semantic/unrouted),
+  with the precision fixes (`INDEX-SMELL` veto, anti-context, decoration, meta category).
+- ENABLED-rule discovery (`generate-types`) for the `.d.ts` autocomplete.
+- The available-rule enumeration PRIMITIVES exist (`core/linters.ts` `builtinRules` +
+  `resolveEslintPluginRules`) — just not wired into the compile tier.
+- Custom-rule SYNTHESIS + adversarial gate (`compiler/`) — the model-tier engine for the residue.
+- `boundaries/dependencies` dogfooded (architecture rules are real + enforced).
+
+**🟡 DOABLE CHEAPLY (spike-proven, not wired)**
+
+- Use the DYNAMIC available-rule catalog as the match target (1 API call, 702 rules) — deterministic
+  match of prose that NAMES a rule against the LIVE catalog, replacing the hand-list AS THE STRATEGY.
+- Surface available-but-OFF rules ("you have this rule installed, it's off").
+- Route architecture / import intents to `reuse` (boundaries / import), not `semantic`.
+- Parse ALL instruction sources — nested `CLAUDE.md` (`globSync('**/CLAUDE.md')` already exists in
+  `cli.ts`) + `.claude/`. Today `readInstructionText` reads ROOT ONLY (misses 8 of 9 in this repo).
+
+**🔴 HARD (model-tier / later)**
+
+- Fuzzy SEMANTIC prose→catalog mapping ("keep functions small" → `max-lines-per-function`) — needs
+  the model tier (the deterministic tier only catches prose that NAMES a rule/token).
+- Custom-rule synthesis for the residue (`compiler/` has it, gated).
+- Cross-language Ruff/Pylint via the ConfigProbe / Intent→Realization model (§3) — still valid, but
+  SECONDARY to the dynamic-catalog reframe.
+
+**`INTENT_MAP` is DEMOTED** to a small high-precision alias enrichment for the top common rules
+(`console.log`↔`no-console`), NOT the strategy. Stop expanding it as if it were.
+
 ## 1. The corpus (what the ground truth changed)
 
 20 repos: 10 Python (ruff/pylint/pandas/home-assistant/airflow/django/salt/fastapi/pydantic/polars),

@@ -57,6 +57,12 @@ export interface IntentMapping {
  * ESLint-only today — Ruff/Clippy/Pylint/RuboCop/Stylelint entries append here
  * with their own `linter` + rule-name keywords, no code change.
  */
+// SCOPE (2026-07-14): this hand-curated list is a small high-precision FAST-PATH
+// (alias enrichment for the most common rules), NOT the strategy. The strategy is
+// the DYNAMIC available-rule catalog — enumerate the rules the repo's linter
+// ACTUALLY has (spike: 702 for this repo vs ~23 here) and match prose against
+// THAT, own-repo/consented since it executes the linter. Do NOT keep growing this
+// by hand. See research/rule-compiler-multilang-design.md §0.
 export const INTENT_MAP: readonly IntentMapping[] = [
   {
     intent: "no console.log / use the logger",

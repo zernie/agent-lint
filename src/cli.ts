@@ -2113,6 +2113,11 @@ function computeRuleInventory(
 
 /** Read EVERY agent instruction file present (not just the harness-native one) —
  * rules are often documented in AGENTS.md even under a claude-code harness. */
+// SCOPE (2026-07-14): reads the ROOT instruction files ONLY. Nested `CLAUDE.md`
+// (subdirectory memory) and `.claude/` rule sources are IN SCOPE but NOT YET
+// gathered — this repo alone has 9 `CLAUDE.md` files and we read 1. Parsing all
+// sources is a foreign-safe, spike-proven next step (research/rule-compiler-
+// multilang-design.md §0). `globSync('**/CLAUDE.md')` already exists in this file.
 function readInstructionText(root: string, instructionFile: string): string {
   let instructionText = "";
   for (const name of new Set([instructionFile, "CLAUDE.md", "AGENTS.md"])) {
