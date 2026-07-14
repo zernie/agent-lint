@@ -37,6 +37,7 @@ import {
   matchesWholeToken,
   type LinterName,
 } from "./rule-inventory.js";
+import type { RuleCatalog } from "./core/rule-catalog.js";
 
 /** How a routed rule would be enforced (a MECHANISM ladder, not a 1-10 score). */
 export type RuleCategory = "reuse" | "hook" | "meta" | "semantic" | "unrouted";
@@ -68,6 +69,9 @@ export interface RoutedRule {
   readonly rule?: string;
   /** reuse only: the linter that rule belongs to. */
   readonly linter?: LinterName;
+  /** reuse via the DYNAMIC catalog only: whether the rule is currently enabled in
+   * the repo's config (a disabled match is the "documented but OFF" nudge). */
+  readonly enabled?: boolean;
 }
 
 export interface RuleRouting {
@@ -87,6 +91,14 @@ export interface RouteOptions {
    * `"medium"` to include both.
    */
   readonly minConfidence?: "high" | "medium";
+  /**
+   * The repo's DYNAMIC available-rule catalog (from `enumerateEslintCatalog`).
+   * When provided (OWN-REPO / consented — it executes the linter), a bullet that
+   * NAMES any of the repo's real rules routes to `reuse` with its enabled state —
+   * not just the ~23 static `INTENT_MAP` aliases. Absent = foreign-safe default
+   * (static map only, no execution).
+   */
+  readonly availableRules?: RuleCatalog;
 }
 
 /**
@@ -188,17 +200,49 @@ interface Classification {
   readonly category: RuleCategory;
   readonly rule?: string;
   readonly linter?: LinterName;
+  readonly enabled?: boolean;
+}
+
+/**
+ * Backticked rule-id-shaped tokens a bullet names — `curly`, `curly: error` →
+ * `curly`, `@typescript-eslint/consistent-type-imports`, `no-only-tests/no-only-tests`.
+ * The leading id is taken (severity/args after a `:`/space are dropped), so the
+ * token can be looked up against the dynamic catalog.
+ */
+const CODE_SPAN_RE = /`([^`]+)`/g;
+function namedRuleTokens(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(CODE_SPAN_RE)) {
+    const id = m[1].trim().match(/^@?[a-z][\w-]*(?:\/[a-z][\w-]*)*/i);
+    if (id) out.push(id[0]);
+  }
+  return out;
 }
 
 /**
  * Route one atomic rule. Order matters: an ACTION cue (git push) wins over a
  * rule-name mention ("never commit console.log" is a hook, not a lint rule); a
  * META agent-instruction is pulled out before reuse so it isn't mismatched to a
- * rule; reuse (a concrete off-the-shelf rule) wins over a soft semantic cue.
+ * rule; the DYNAMIC catalog (if present) and the static `INTENT_MAP` both feed
+ * `reuse`; reuse wins over a soft semantic cue.
  */
-function classify(text: string): Classification {
+function classify(
+  text: string,
+  catalog?: ReadonlyMap<string, boolean>,
+): Classification {
   if (HOOK_CUES.some((re) => re.test(text))) return { category: "hook" };
   if (META_CUES.some((re) => re.test(text))) return { category: "meta" };
+  // Dynamic catalog: a bullet that NAMES one of the repo's real rules → reuse,
+  // carrying whether it's currently enabled (a disabled hit = the "documented but
+  // OFF" nudge). Own-repo only — catalog is present only when the linter was
+  // enumerated with consent.
+  if (catalog) {
+    for (const tok of namedRuleTokens(text)) {
+      const enabled = catalog.get(tok);
+      if (enabled !== undefined)
+        return { category: "reuse", rule: tok, enabled };
+    }
+  }
   for (const m of INTENT_MAP) {
     if (m.keywords.some((kw) => matchesWholeToken(text, kw))) {
       return { category: "reuse", rule: m.rule, linter: m.linter };
@@ -220,11 +264,14 @@ export function routeRules(
   options: RouteOptions = {},
 ): RuleRouting {
   const minConfidence = options.minConfidence ?? "high";
+  const catalog = options.availableRules
+    ? new Map(options.availableRules.rules.map((r) => [r.id, r.enabled]))
+    : undefined;
   const segments = segmentInstructions(instructionText, file).filter(
     (s) => minConfidence === "medium" || s.confidence === "high",
   );
   const rules: RoutedRule[] = segments.map((s) => {
-    const c = classify(s.text);
+    const c = classify(s.text, catalog);
     return {
       text: s.text,
       quote: s.exactQuote,
@@ -236,6 +283,7 @@ export function routeRules(
       mechanism: MECHANISM[c.category],
       ...(c.rule ? { rule: c.rule } : {}),
       ...(c.linter ? { linter: c.linter } : {}),
+      ...(c.enabled !== undefined ? { enabled: c.enabled } : {}),
     };
   });
   const counts: Record<RuleCategory, number> = {

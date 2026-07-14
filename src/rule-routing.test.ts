@@ -68,6 +68,44 @@ describe("routeRules", () => {
     expect(r.rules.some((x) => x.category === "unrouted")).toBe(false);
   });
 
+  it("dynamic catalog: a bullet naming ANY repo rule → reuse with enabled state", () => {
+    const availableRules = {
+      linter: "eslint" as const,
+      available: 2,
+      enabled: 1,
+      rules: [
+        {
+          id: "no-only-tests/no-only-tests",
+          plugin: "no-only-tests",
+          enabled: false,
+        },
+        { id: "boundaries/dependencies", plugin: "boundaries", enabled: true },
+      ],
+    };
+    const md = [
+      "## Rules",
+      "",
+      "- No `.only()` in tests (`no-only-tests/no-only-tests`)",
+      "- Never import an adapter from the core layer (`boundaries/dependencies`)",
+    ].join("\n");
+
+    // WITHOUT a catalog, the first bullet is unrouted (its `/` breaks the static
+    // INTENT_MAP whole-token match) — the exact named-but-hard case.
+    const bare = routeRules(md);
+    expect(bare.rules[0]?.category).toBe("unrouted");
+    expect(bare.rules[0]?.enabled).toBeUndefined();
+
+    // WITH the catalog, both route to reuse; the disabled one carries the
+    // "documented but OFF" nudge, and architecture (boundaries) is enforceable.
+    const r = routeRules(md, undefined, { availableRules });
+    const only = r.rules.find((x) => x.rule === "no-only-tests/no-only-tests");
+    expect(only?.category).toBe("reuse");
+    expect(only?.enabled).toBe(false);
+    const arch = r.rules.find((x) => x.rule === "boundaries/dependencies");
+    expect(arch?.category).toBe("reuse");
+    expect(arch?.enabled).toBe(true);
+  });
+
   it("carries provenance (line span + verbatim quote) from the segmenter", () => {
     const md = "# Style\n\n- Use `eqeqeq` everywhere.\n";
     const r = routeRules(md, "CLAUDE.md");
