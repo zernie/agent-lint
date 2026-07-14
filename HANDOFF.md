@@ -34,7 +34,7 @@ enforceable (`boundaries/dependencies` in the catalog → "dir X may import dir 
 semantic). `INTENT_MAP` is DEMOTED to a small alias fast-path. `research/rule-compiler-multilang-design.md`
 **§0** = the honest DONE / DOABLE-cheaply / HARD scope (read it).
 
-**Shipped this session (~14 commits):** design doc + §0 reframe/scope; `fix(segment)` precision (INDEX-SMELL
+**Shipped this session (~20 commits):** design doc + §0 reframe/scope; `fix(segment)` precision (INDEX-SMELL
 veto, anti-context, decoration/emoji/ordered, RULE_HEADING bug); `feat(rule-routing)` `meta` category +
 "hard to codify" bucket (incl. report UI); intents (+curly/consistent-type-imports/no-only-tests); SCOPE
 markers; `feat(segment)` RULE-NAME cue; **`feat(core)` `src/core/rule-catalog.ts`** (`enumerateEslintCatalog`,
@@ -46,19 +46,29 @@ catalog rule is rescued from the high-only drop (grounded in the catalog, not a 
 `feat(audit)` PER-FILE routing (`gatherInstructionFiles`→`{path,text}[]` + pure `mergeRoutings`) — FIXED a
 latent provenance bug (concatenating root CLAUDE.md+AGENTS.md offset the 2nd file's lines); (d) `feat(audit)`
 NESTED discovery — globs `**/CLAUDE.md`+`**/AGENTS.md`, reads real subdir memory, skips fixtures via pure
-`isFixturePath` (`src/instruction-sources.ts`, 100% cov; 4 kept / 5 skipped on this repo). tsc clean; all
-targeted suites green; only failure is the documented env-only `dialect-drift` (CI-pinned). **No PR yet.**
+`isFixturePath` (`src/instruction-sources.ts`, 100% cov; 4 kept / 5 skipped on this repo). Then a FABLE
+review + a 2-agent FAN-OUT dogfood (17 real OSS docs) drove the FINISH pass: (e) **S0/S1 marker pre-pass**
+(`extractMarkedRules`) — `**Enforced by:**`→reuse / `**Guard:**`→hook / `**Guidance only**`→classify'd body
+(promote-prose), consumed before the heuristic via a `skipLines` arg so 0 double-count; **vigiles's own
+CLAUDE.md 0 → 47 routed**; (f) **HOOK_CUES widened** (regenerate-on-change guard + commit/PR hygiene: +6
+real hooks, 0 FP); (g) **segmenter DESCRIPTION-LED reject** (deontic-guarded — the SAFE slice of the 39%
+noise); (h) **mirror double-count fix** (`dedupeInstructionFiles` realpath+hash) + `isFixturePath` case-
+insensitivity/`__mocks__`; (i) **report UI "⛔ documented but OFF" callout** (the catalog payoff). tsc clean;
+routing/segment/instruction-sources/cli/scan-cli/audit suites all green (only failure = env-only
+`dialect-drift`, CI-pinned). **No PR yet.**
 
-**GROUNDED REALITY:** deterministic TEXTUAL reuse ~2-3% (clean AGENTS.md omit generic lint rules by 2026
-best-practice → most content is project/process/semantic → correctly "hard"). WITH the live catalog +
-consent, a repo that NAMES rules (or an architecture rule like `boundaries/dependencies`) routes them to
-`reuse` with an ON/OFF nudge — incl. declarative bullets via the medium-rescue. vigiles's OWN structured
-CLAUDE.md still → 0 (uses `**Enforced by:**` lines, not rule-naming bullets — S0/S1 marker tier unbuilt).
+**GROUNDED REALITY (17-doc OSS fan-out):** foreign TEXTUAL reuse = 0% (real docs rarely NAME a lint rule →
+reuse needs the catalog, own-repo only), ~7% hook, ~90% "hard". A categorizer fan-out re-classed the 207
+"hard": **39% segmenter NOISE / 32% misroute / 29% genuinely hard** — the 93% overstated the problem, so the
+finish pass attacked noise + misroute (precision-first). vigiles's OWN doc now routes 47 (was 0) via S0/S1.
 
-**NEXT (in order):** (1) **`.claude/` rule sources** + a SUB-PROJECT refinement to `isFixturePath` (skip a
-nested file next to its own `package.json`/`.claude-plugin/` — it's a sub-project, not this repo's memory;
-data in the design-doc §0). (2) **S0/S1 structured tier** — route `**Enforced by**`-marked compiled docs
-(vigiles's own CLAUDE.md is 0 today). (3) Cross-language Ruff/Pylint (§3) — secondary to the catalog.
+**NEXT (in order):** (1) **`.claude/` rule sources** (a distinct source shape). (2) **`.claude-plugin/`-only
+sub-project refinement** to `isFixturePath` (NOT `package.json`-adjacency — Fable: that kills monorepo
+package memory). (3) **more segmenter over-emission** — the imperative-led "Use `path` for X" pointers +
+numbered how-to steps (the risky ~remaining half of the 39%; needs a labeled precision harness first). (4)
+**Cross-language Ruff/Pylint** (§3) — and Fable's nugget: ruff's catalog is FOREIGN-SAFE (static to the
+binary, TOML config is data not exec) → NO consent gate needed, cheaper than the ESLint path. (5) minor:
+"catalog skipped (not cwd)" notice for `vigiles audit <subdir>` in own repo.
 (4) Consider surfacing enabled-state ("documented but OFF") more prominently in the report UI.
 
 **Repro tools in `scratchpad/`:** `assess.mjs`/`probe.mjs`/`mini.mjs` run `routeRules` over

@@ -60,6 +60,27 @@ The three-column scope, marked honestly (this section supersedes the INTENT_MAP-
   textual path stays conservative. Closes the "route architecture/import intents even without a rule-name
   cue" gap for the OWN-REPO case; the foreign-safe declarative case (no catalog) stays a deliberate
   precision floor.
+- **S0/S1 STRUCTURED-MARKER pre-pass is LIVE (`extractMarkedRules` in `routeRules`).** A compiled/marked
+  doc declares its own routing via `**Enforced by:** \`rule\``(→reuse, rule-id verified vs catalog),`**Guard:**`(→hook),`**Guidance only**`(→body routed through`classify`, so a guidance that's really
+an action surfaces as a would-be hook — the promote-prose signal). Extracted BEFORE the heuristic pass and
+its body lines CONSUMED (a new `skipLines`arg to`segmentInstructions`) so nothing double-counts; each
+rule carries `source:'marker'|'heuristic'`. **vigiles's OWN CLAUDE.md went 0 → 47 routed** (5 reuse/6 hook/
+5 meta/31 semantic) — the embarrassing dogfood-zero is closed. Hand-written non-rule-id `Enforced by:`
+  values are a CLAIM, not emitted (Fable's gate).
+- **REPORT UI surfaces "documented but OFF"** (`report/src/components/RuleInventory.tsx`): the CompileCTA now
+  renders a `⛔ N documented but OFF` callout off the catalog `enabled:false` — the payoff of the catalog
+  work, previously computed but buried. `RoutedRule` mirror gains `enabled` + `source`.
+
+**OSS DOGFOOD (2026-07-14, fan-out over 17 real CLAUDE.md/AGENTS.md — the grounding):** foreign-safe TEXTUAL
+routing = 0% reuse (real docs almost never NAME a lint rule → reuse needs the catalog, own-repo only), ~7%
+hook, ~90% "hard". A categorizer fan-out re-classified the 207 "hard": **39% segmenter NOISE, 32% misrouted
+(hook/meta/semantic), only 29% genuinely hard** — so the 93% overstated the problem. Two grounded fixes
+shipped: (a) HOOK_CUES widened for the "run X when/after Y changes" guard (vigiles's own `guard()` shape) +
+commit/PR hygiene without a literal "commit" (co-author, semantic PR titles) — +6 real hooks, 0 FP; (b)
+segmenter DESCRIPTION-LED reject (`` `Foo` class in `x` executes … `` = an architecture sentence, not a
+rule), deontic-guarded so `` `const` is preferred `` survives — the SAFE slice of the 39%. Bug fixes from a
+design review: mirror double-count (a symlinked/byte-identical `CLAUDE.md`⇄`AGENTS.md` counted twice →
+`dedupeInstructionFiles` by realpath+hash) and `isFixturePath` case-sensitivity + `__mocks__`.
 
 **🟡 DOABLE CHEAPLY (spike-proven, not wired)**
 
